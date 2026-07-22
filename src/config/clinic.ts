@@ -10,10 +10,10 @@ export interface ClinicConfig {
 }
 
 export const clinicConfig: ClinicConfig = {
-  // Koordinat lokasi fisik klinik (Default: Surabaya Pusat)
+  // Koordinat lokasi fisik moms & baby spa (Default: Surabaya Pusat)
   lat: parseFloat(process.env.CLINIC_LAT || '-7.2574719'),
   lng: parseFloat(process.env.CLINIC_LNG || '112.7520883'),
-  name: process.env.CLINIC_NAME || 'Klinik Kecantikan Utama',
+  name: process.env.CLINIC_NAME || 'Kala Moms and Baby Spa',
 
   // Batas maksimal jangkauan pengiriman/treatment (dalam kilometer)
   maxDeliveryDistanceKm: 10.0,

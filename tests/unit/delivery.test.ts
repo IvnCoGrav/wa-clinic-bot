@@ -6,6 +6,7 @@ import { IOrsClient, RouteResult } from '../../src/integrations/ors/client';
 describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallback)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    process.env.ONGKIR_PROMO_DISCOUNT = '0';
   });
 
   describe('1. Haversine Standalone Formula Calculation', () => {
@@ -104,7 +105,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const customerCoords = { lat: -7.2625, lng: 112.7383 }; // ~1.7 km via Haversine
-      const res = await service.calculateDelivery(customerCoords);
+      const res = await service.calculateDelivery(customerCoords, { lat: -7.2574719, lng: 112.7520883 });
 
       expect(mockOrsClient.calculateRoute).toHaveBeenCalled();
       expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('[DELIVERY SERVICE FALLBACK]'));
@@ -171,6 +172,15 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(10.01);
       expect(res.isOutOfCoverage).toBe(true);
+    });
+
+    it('should apply ONGKIR_PROMO_DISCOUNT from environment variables', async () => {
+      process.env.ONGKIR_PROMO_DISCOUNT = '5000';
+      const service = createMockService(8000); // 8.0 km -> normal Rp 10.000
+      const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
+      expect(res.normalPrice).toBe(10000);
+      expect(res.promoPrice).toBe(5000);
+      expect(res.ongkir).toBe(5000);
     });
   });
 });

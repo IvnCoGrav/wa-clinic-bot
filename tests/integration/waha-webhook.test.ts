@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../../src/app';
 import { conversationService } from '../../src/services/conversation.service';
 import { customerService } from '../../src/services/customer.service';
+import { queueService } from '../../src/services/queue.service';
 import { FastifyInstance } from 'fastify';
 
 describe('WAHA Webhook & Guard Clause Integration Tests', () => {
@@ -17,6 +18,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
 
   afterAll(async () => {
     await app.close();
+    await queueService.close();
   });
 
   it('POST /webhook: process WAHA event message and apply idempotency', async () => {

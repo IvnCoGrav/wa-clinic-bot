@@ -4,6 +4,7 @@ import { llmIntentService } from '../../integrations/llm/intent';
 import { knowledgeBaseService } from '../../services/knowledge.service';
 import { llmResponseGenerator } from '../../integrations/llm/generator';
 import { conversationService } from '../../services/conversation.service';
+import { TEMPLATES } from '../../config/persona';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
@@ -17,8 +18,6 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   const intentResult = await llmIntentService.detectIntent(userText);
   console.log(`[INTENT DETECTED] Customer Message: "${userText}" -> Intent: ${intentResult.intent}`);
 
-  const reservationFormUrl = process.env.RESERVATION_FORM_URL || 'https://klinik-treatment.com/booking';
-
   switch (intentResult.intent) {
     case 'faq_question': {
       // 2. Query Knowledge Base menggunakan Postgres Full-Text Search ('simple')
@@ -28,7 +27,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks);
 
       // 4. JANGAN RESET / UBAH STATE: Tambahkan kalimat follow-up sesuai state saat ini!
-      const replyText = `${faqAnswer}\n\n---\nApakah Kakak tertarik untuk lanjut ke pengisian form reservasi sekarang? (Bisa dijawab: Mau / Kirim Link)`;
+      const replyText = `${faqAnswer}\n\n---\nApakah Bunda tertarik untuk lanjut ke pengisian list reservasi sekarang bund? (Bisa dijawab: Mau / Tertarik)`;
 
       return {
         nextState: ConversationState.AWAITING_INTEREST,
@@ -40,7 +39,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     case 'interested':
       return {
         nextState: ConversationState.RESERVATION_SENT,
-        replyText: `Terima kasih Kak! 🎉 Silakan isi form reservasi perawatan Kakak melalui link berikut:\n\n👉 ${reservationFormUrl}\n\nSetelah form terisi, tim kami akan segera mengonfirmasi pesanan Kakak. Sampai jumpa! ✨`,
+        replyText: TEMPLATES.reservationFormRequest(),
         shouldSendReply: true,
       };
 
@@ -53,7 +52,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
       return {
         nextState: ConversationState.HUMAN_HANDLING,
-        replyText: 'Baik Kak, saya cek jadwal ketersediaan terdekat dulu ya. Mohon tunggu sebentar, tim admin kami akan segera membalas percakapan ini secara langsung. 😊',
+        replyText: TEMPLATES.scheduleCheckHandoff(),
         shouldSendReply: true,
         isHumanHandling: true,
       };
@@ -61,7 +60,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     case 'not_interested':
       return {
         nextState: ConversationState.COMPLETED,
-        replyText: 'Baik Kak, tidak apa-apa. Terima kasih banyak sudah menghubungi Klinik Kecantikan kami! Jika sewaktu-waktu membutuhkan konsultasi atau perawatan, Kakak bisa menghubungi kami kembali. Have a great day! ✨',
+        replyText: 'Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨',
         shouldSendReply: true,
       };
 
@@ -69,7 +68,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     default:
       return {
         nextState: ConversationState.AWAITING_INTEREST,
-        replyText: `Apakah Kakak ingin melanjutkan ke pengisian form reservasi perawatan? 😊\n\n- Jika **mau/setuju**, balaskan "Mau"\n- Jika ada **pertanyaan/faq**, silakan tanyakan langsung ya.`,
+        replyText: `Apakah Bunda ingin melanjutkan ke pengisian list reservasi treatment? 😊\n\n- Jika **mau/setuju**, silakan balas "Mau"\n- Jika ada **pertanyaan**, silakan tanyakan langsung ke bidan ya bund.`,
         shouldSendReply: true,
       };
   }

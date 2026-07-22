@@ -5,15 +5,17 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export class LLMResponseGenerator {
-  private apiKey: string;
-  private baseUrl: string;
-  private model: string;
-
-  constructor() {
-    this.apiKey = process.env.LLM_API_KEY || '';
-    this.baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    this.model = process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+  private get apiKey(): string {
+    return process.env.LLM_API_KEY || '';
   }
+  private get baseUrl(): string {
+    return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  }
+  private get model(): string {
+    return process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+  }
+
+  constructor() {}
 
   /**
    * Menghasilkan balasan FAQ natural berdasarkan RAG (Persona + Context Chunks dari Knowledge Base).
@@ -36,13 +38,13 @@ export class LLMResponseGenerator {
               content: `${BOT_PERSONA_PROMPT}
 
 TUGAS UTAMA:
-Jawab pertanyaan customer tentang informasi/FAQ klinik berdasarkan Referensi Dokumen berikut:
+Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen berikut:
 
 ${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemukan)'}
 
 ATURAN BALASAN:
-- Jawab secara ramah, santun, dan informatif sesuai gaya bahasa klinik kecantikan.
-- Gunakan informasi dari referensi dokumen di atas. Jangan mengarang informasi di luar referensi.
+- Jawab secara ramah, santun, dan informatif sesuai gaya bahasa moms & baby spa.
+  - Gunakan informasi dari referensi dokumen di atas. Jangan mengarang informasi di luar referensi.
 - Jawab dengan singkat dan jelas.`,
             },
             {
@@ -74,7 +76,7 @@ ATURAN BALASAN:
       }
       return `${text} 😊`;
     }
-    return `Untuk informasi mengenai hal tersebut, Kakak bisa menanyakannya langsung atau tim kami siap membantu memberikan penjelasan lebih detail! ✨`;
+    return `Untuk informasi mengenai hal tersebut, Bunda bisa menanyakannya langsung atau tim kami siap membantu memberikan penjelasan lebih detail ya bund! ✨`;
   }
 }
 

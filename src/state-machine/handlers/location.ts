@@ -4,6 +4,7 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { deliveryService } from '../../services/delivery.service';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
+import { TEMPLATES } from '../../config/persona';
 
 /**
  * Handler untuk state AWAITING_LOCATION:
@@ -41,13 +42,18 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     if (delivery.isOutOfCoverage) {
       return {
         nextState: ConversationState.COMPLETED,
-        replyText: `${delivery.messageTemplate}\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak.`,
+        replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm }),
         shouldSendReply: true,
       };
     }
 
     // 5. Jika Dalam Jangkauan (<= 10 km)
-    const replyText = `${delivery.messageTemplate}\n\nApakah Anda tertarik untuk melakukan reservasi atau jadwal treatment sekarang? (Bisa dijawab: Mau / Tertarik / Mau lihat jadwal)`;
+    const replyText = TEMPLATES.ongkirInfo({
+      distanceKm: delivery.distanceKm,
+      normalPrice: delivery.normalPrice,
+      promoPrice: delivery.promoPrice,
+    });
+
     return {
       nextState: ConversationState.AWAITING_INTEREST,
       replyText,
@@ -61,7 +67,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   if (!textLocation) {
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: 'Mohon sebutkan nama kelurahan/desa Anda atau kirimkan Share Location via WhatsApp ya.',
+      replyText: TEMPLATES.askKelurahanDetail(),
       shouldSendReply: true,
     };
   }
@@ -82,7 +88,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
       return {
         nextState: ConversationState.HUMAN_HANDLING,
-        replyText: 'Terima kasih atas informasinya. Mohon maaf, sistem kami kesulitan mendeteksi detail kelurahan tersebut. Pesan Anda telah diteruskan ke tim Admin Customer Service kami untuk dibantu secara manual. Mohon tunggu sejenak ya! 🙏',
+        replyText: TEMPLATES.locationEscalation(),
         shouldSendReply: true,
         isHumanHandling: true,
       };
@@ -95,7 +101,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: `Lokasi "${textLocation}" yang Anda sebutkan masih terlalu umum. Mohon sebutkan **nama kelurahan/desa** Anda secara lebih spesifik, atau gunakan fitur Share Location WhatsApp ya! (Percobaan ${currentAttempts}/3)`,
+      replyText: TEMPLATES.askKelurahanRetry({ textLocation, currentAttempts }),
       shouldSendReply: true,
     };
   }
@@ -122,13 +128,18 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   if (delivery.isOutOfCoverage) {
     return {
       nextState: ConversationState.COMPLETED,
-      replyText: `${delivery.messageTemplate}\n\nTerima kasih sudah menghubungi kami! Kami akan menginfokan jika area Anda sudah masuk jangkauan kami kelak.`,
+      replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm }),
       shouldSendReply: true,
     };
   }
 
   // 5. Dalam Jangkauan (<= 10 km)
-  const replyText = `${delivery.messageTemplate}\n\nApakah Anda tertarik untuk reservasi jadwal perawatan sekarang? (Bisa dijawab: Mau / Tertarik / Mau lihat jadwal)`;
+  const replyText = TEMPLATES.ongkirInfo({
+    distanceKm: delivery.distanceKm,
+    normalPrice: delivery.normalPrice,
+    promoPrice: delivery.promoPrice,
+  });
+
   return {
     nextState: ConversationState.AWAITING_INTEREST,
     replyText,

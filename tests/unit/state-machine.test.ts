@@ -41,7 +41,7 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
 
     expect(result.nextState).toBe(ConversationState.AWAITING_LOCATION);
     expect(result.shouldSendReply).toBe(true);
-    expect(result.replyText).toContain('Selamat datang');
+    expect(result.replyText).toContain('Bidan Yusi');
   });
 
   it('2. AWAITING_LOCATION (Native Location): calculates ongkir and transitions to AWAITING_INTEREST', async () => {
@@ -103,7 +103,7 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
     expect(result.isHumanHandling).toBe(true);
     expect(updatedConv.previous_state).toBe(ConversationState.AWAITING_LOCATION);
-    expect(result.replyText || '').toContain('Admin');
+    expect(result.replyText || '').toContain('ongkir');
   });
 
   it('4. AWAITING_INTEREST -> HUMAN_HANDLING: asking_schedule intent saves previous_state', async () => {
