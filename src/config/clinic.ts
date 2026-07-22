@@ -10,7 +10,7 @@ export interface ClinicConfig {
 }
 
 export const clinicConfig: ClinicConfig = {
-  // Koordinat lokasi fisik moms & baby spa (Default: Surabaya Pusat)
+  // Koordinat lokasi fisik moms & baby spa (Default: Waru Sidoarjo)
   lat: parseFloat(process.env.CLINIC_LAT || '-7.2574719'),
   lng: parseFloat(process.env.CLINIC_LNG || '112.7520883'),
   name: process.env.CLINIC_NAME || 'Kala Moms and Baby Spa',

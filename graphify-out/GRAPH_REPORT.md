@@ -1,16 +1,16 @@
 # Graph Report - wa-clinic-bot  (2026-07-22)
 
 ## Corpus Check
-- 49 files · ~19,757 words
+- 52 files · ~27,590 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 284 nodes · 455 edges · 19 communities (16 shown, 3 thin omitted)
+- 289 nodes · 467 edges · 19 communities (17 shown, 2 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 2 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5a888a64`
+- Built from commit: `28425e3e`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -38,13 +38,15 @@
 3. `ConversationService` - 13 edges
 4. `IWahaClient` - 11 edges
 5. `WahaClient` - 11 edges
-6. `compilerOptions` - 10 edges
-7. `🔄 2. Histori Perjalanan Revisi (Chronological Revisions History)` - 10 edges
-8. `WhatsApp Clinic Automation Chatbot` - 10 edges
-9. `scripts` - 9 edges
-10. `GeocodingService` - 9 edges
+6. `GeocodingService` - 10 edges
+7. `compilerOptions` - 10 edges
+8. `🔄 2. Histori Perjalanan Revisi (Chronological Revisions History)` - 10 edges
+9. `WhatsApp Clinic Automation Chatbot` - 10 edges
+10. `scripts` - 9 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `main()` --calls--> `calculateHaversineDistance()`  [EXTRACTED]
+  scratch/test_subdistricts.ts → src/utils/haversine.ts
 - `buildApp()` --indirect_call--> `adminRoutes()`  [INFERRED]
   src/app.ts → src/routes/admin.route.ts
 - `buildApp()` --indirect_call--> `webhookRoutes()`  [INFERRED]
@@ -53,13 +55,11 @@
   src/cli/mock-waha-client.ts → src/integrations/waha/client.ts
 - `handleGreetingState()` --references--> `TEMPLATES`  [EXTRACTED]
   src/state-machine/handlers/greeting.ts → src/config/persona.ts
-- `handleInterestState()` --references--> `TEMPLATES`  [EXTRACTED]
-  src/state-machine/handlers/interest.ts → src/config/persona.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (19 total, 3 thin omitted)
+## Communities (19 total, 2 thin omitted)
 
 ### Community 0 - "TypingService"
 Cohesion: 0.09
@@ -70,16 +70,16 @@ Cohesion: 0.08
 Nodes (24): description, devDependencies, prisma, tsx, @types/node, typescript, vitest, main (+16 more)
 
 ### Community 2 - "machine.ts"
-Cohesion: 0.18
-Nodes (15): BRAND_IDENTITY, TEMPLATES, IntentDetectionResult, IntentType, WhatsAppIncomingMessage, ConversationService, memoryConversations, QueuePayload (+7 more)
+Cohesion: 0.20
+Nodes (13): BRAND_IDENTITY, TEMPLATES, WhatsAppIncomingMessage, ConversationService, memoryConversations, QueuePayload, handleGreetingState(), handleHumanHandlingState() (+5 more)
 
 ### Community 3 - "🔄 2. Histori Perjalanan Revisi (Chronological Revisions History)"
 Cohesion: 0.10
 Nodes (20): 📌 1. Ikhtisar Project & Tech Stack, 🔄 2. Histori Perjalanan Revisi (Chronological Revisions History), 🗺 3. Alur State Machine (Conversation Orchestrator), 📐 4. Skema Ongkir & Coverage Klinik (Surabaya), 💻 5. CLI Chat Simulator Mode (`npm run chat`), 🧪 6. Verification & Test Suite Summary, 📂 7. Struktur Folder Utama Project, Cara Menjalankan (+12 more)
 
 ### Community 4 - "delivery.service.ts"
-Cohesion: 0.19
-Nodes (9): ClinicConfig, IOrsClient, OrsClient, RouteResult, DeliveryCalculationResult, DeliveryService, calculateHaversineDistance(), Coordinates (+1 more)
+Cohesion: 0.16
+Nodes (12): main(), subdistricts, SubdistrictTest, ClinicConfig, IOrsClient, OrsClient, RouteResult, DeliveryCalculationResult (+4 more)
 
 ### Community 5 - "webhook.route.ts"
 Cohesion: 0.10
@@ -88,6 +88,10 @@ Nodes (16): buildApp(), globalForPrisma, WahaLocationPayload, WahaMessagePayload
 ### Community 6 - "knowledge.service.ts"
 Cohesion: 0.17
 Nodes (5): LLMResponseGenerator, KnowledgeBaseService, KnowledgeChunkResult, memoryKnowledgeChunks, chunkTextDocument()
+
+### Community 7 - "generator.ts"
+Cohesion: 0.22
+Nodes (3): IntentDetectionResult, IntentType, LLMIntentService
 
 ### Community 8 - "dependencies"
 Cohesion: 0.12
@@ -98,7 +102,7 @@ Cohesion: 0.15
 Nodes (12): src/**/*, compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, module, moduleResolution, outDir, rootDir (+4 more)
 
 ### Community 10 - "GeocodingService"
-Cohesion: 0.29
+Cohesion: 0.27
 Nodes (3): GeocodingService, googleMapsClient, ResolvedLocation
 
 ### Community 11 - "⚡ Panduan Setup & Running Lokal"
@@ -114,21 +118,21 @@ Cohesion: 0.13
 Nodes (14): 1. Latar Belakang & Masalah, 2. Tujuan Produk, 3. Target Pengguna, 4.1 Fase 1 — Conversation Engine (Status: Development selesai, menunggu testing manual), 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Didesain, belum dikerjakan), 4.3 Di Luar Scope (untuk saat ini), 4. Ruang Lingkup, 5. Alur Percakapan Utama (Ringkasan) (+6 more)
 
 ## Knowledge Gaps
-- **92 isolated node(s):** `name`, `version`, `description`, `main`, `build` (+87 more)
+- **95 isolated node(s):** `name`, `version`, `description`, `main`, `build` (+90 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `TypingService` connect `TypingService` to `machine.ts`?**
-  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+  _High betweenness centrality (0.052) - this node is a cross-community bridge._
 - **Why does `QueueService` connect `QueueService` to `machine.ts`, `webhook.route.ts`?**
   _High betweenness centrality (0.043) - this node is a cross-community bridge._
 - **Why does `ConversationService` connect `machine.ts` to `TypingService`, `webhook.route.ts`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.033) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _92 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _95 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `TypingService` be split into smaller, more focused modules?**
   _Cohesion score 0.08846153846153847 - nodes in this community are weakly interconnected._
 - **Should `scripts` be split into smaller, more focused modules?**

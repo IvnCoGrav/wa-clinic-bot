@@ -17,6 +17,9 @@ export class MessageService {
       return true;
     }
 
+    // Tambahkan ke memory store sebagai lock in-flight agar request paralel tertahan
+    memoryWaMessageIds.add(waMessageId);
+
     try {
       // 2. Query ke Prisma DB
       const existing = await prisma.message.findUnique({
@@ -24,7 +27,6 @@ export class MessageService {
       });
 
       if (existing) {
-        memoryWaMessageIds.add(waMessageId);
         return true;
       }
     } catch (error) {

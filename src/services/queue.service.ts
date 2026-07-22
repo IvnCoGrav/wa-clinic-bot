@@ -137,15 +137,20 @@ export class QueueService {
     const phone = payload.customer.phone;
 
     if (this.redisEnabled) {
-      const queueName = this.getShardQueueName(phone);
-      const queue = this.bullQueues.get(queueName);
-      if (queue) {
-        // Enqueue ke BullMQ
-        await queue.add('process_message', payload, {
-          // Cegah eksekusi ganda jika pesan identik masuk cepat (optional deduplication)
-          jobId: `job_${phone}_${payload.incomingMessage.id}`,
-        });
-        return;
+      try {
+        const queueName = this.getShardQueueName(phone);
+        const queue = this.bullQueues.get(queueName);
+        if (queue) {
+          // Enqueue ke BullMQ
+          await queue.add('process_message', payload, {
+            // Cegah eksekusi ganda jika pesan identik masuk cepat (optional deduplication)
+            jobId: `job_${phone}_${payload.incomingMessage.id}`,
+          });
+          return;
+        }
+      } catch (err) {
+        console.error(`[QUEUE ERROR] Failed to enqueue to BullMQ shard. Runtime fallback to In-Memory queue triggered. Error: ${(err as Error).message}`);
+        this.redisEnabled = false;
       }
     }
 

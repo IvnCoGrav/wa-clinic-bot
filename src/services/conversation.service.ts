@@ -71,7 +71,7 @@ export class ConversationService {
       );
 
       // Kembalikan ke state sebelumnya (restored from previous_state)
-      const restoredState = conversation.previous_state || ConversationState.AWAITING_INTEREST;
+      const restoredState = conversation.previous_state || ConversationState.INITIAL;
 
       conversation.is_human_handling = false;
       conversation.human_handling_since = null;

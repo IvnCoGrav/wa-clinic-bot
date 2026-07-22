@@ -30,7 +30,7 @@ Treatment :`;
     
     const res = result.reservation!;
     expect(res.name).toBe('Bunda Sendy');
-    expect(res.phone).toBe('08123456789');
+    expect(res.phone).toBe('628123456789');
     expect(res.address).toBe('Jl. Mawar No. 10');
     expect(res.kec).toBe('Sukolilo');
     expect(res.kota).toBe('Surabaya');

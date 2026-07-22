@@ -130,8 +130,8 @@ export class TypingService {
       if (para.length <= maxChars) {
         rawCandidates.push(para);
       } else {
-        // Split paragraf panjang berdasarkan kalimat tanpa memotong di tengah kalimat
-        const sentences = para.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [para];
+        // Split paragraf panjang berdasarkan kalimat tanpa memotong di tengah kalimat (dan menghindari split pada angka/desimal/ribuan)
+        const sentences = para.split(/(?<=[.!?])(?!\d)\s+/);
         let currentGroup = '';
 
         for (const sentence of sentences) {

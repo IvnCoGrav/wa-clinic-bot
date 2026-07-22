@@ -62,20 +62,53 @@ Kalau boleh tau rumahnya dimana ya bunda?. 😊`,
 
 Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻`,
 
+  greetingWithLocation: (params: { kelurahan: string; kecamatan: string }) =>
+    `Halo Bunda ! Selamat datang kembali di Kala Moms and Baby Spa. ✨
+    
+Apakah Bunda ingin memesan treatment homecare untuk lokasi yang sama dengan sebelumnya (**Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**)?
+
+Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim alamat baru Bunda ya. 😊`,
+
+  confirmFuzzyLocation: (params: { kelurahan: string; kecamatan: string }) =>
+    `Apakah yang Bunda maksud kelurahan **${params.kelurahan}**, Kec. **${params.kecamatan}**? 😊`,
+
+  askClarifyMixedSignal: () =>
+    `Mohon maaf bunda, saya agak kurang menangkap maksudnya. Apakah Bunda ingin menggunakan lokasi tersebut, atau ingin mengganti alamat? 😊`,
+
+  confirmLocationFailedRetry: (params: { kelurahan: string; kecamatan: string }) =>
+    `Mohon dikonfirmasi dulu ya, Bunda 😊 — Kelurahan **${params.kelurahan}**, Kec. **${params.kecamatan}** benar atau ingin ganti alamat?`,
+
   askKelurahanRetry: (params: { textLocation: string; currentAttempts: number }) =>
-    `Lokasi "${params.textLocation}" yang Anda sebutkan masih terlalu umum. Mohon sebutkan **nama kelurahan/desa** Anda secara lebih spesifik ya bunda, atau gunakan fitur Share Location WhatsApp! (Percobaan ${params.currentAttempts}/3)`,
+    `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`,
+
+  askKelurahanAmbiguous: (params: { kelurahanName: string; options: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
+    const optionsText = params.options
+      .map(opt => `- ${opt.Kelurahan_Desa}, Kec. ${opt.Kecamatan} (${opt.Kabupaten_Kota})`)
+      .join('\n');
+    return `Kalau boleh tau lebih tepatnya kelurahan/desa ${params.kelurahanName} di kecamatan mana ya bunda? Kami menemukan ada beberapa daerah dengan nama tersebut:\n\n${optionsText}\n\nMohon sebutkan nama kelurahan dan kecamatan Bunda secara lengkap agar kami tidak salah hitung ongkir ya bund! 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`;
+  },
 
   outOfCoverage: (params: { distanceKm: number }) =>
-    `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 10 km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
+    `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 30 km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
 
   // Catatan: pola asli pakai framing "harga normal -> promo", bukan tiering bersih.
   // Sesuaikan dengan aturan ongkir final kamu (ingat: logic ongkir masih sementara).
-  ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number }) =>
-    `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir ${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi ${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗`,
+  ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number }) => {
+    if (params.promoPrice === 0) {
+      return `Kabar baik bunda! Dilihat dari jaraknya kurang lebih ${params.distanceKm} km (masih dalam jangkauan < 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗`;
+    }
+    return `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗`;
+  },
 
   scheduleCheckHandoff: () => `kami cek jadwal dulu ya bunda 🙏🏻😊`,
 
   locationEscalation: () => `Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊`,
+
+  faqFollowUp: (faqAnswer: string) => `${faqAnswer}\n\nApakah Bunda tertarik untuk lanjut ke pengisian list reservasi treatment sekarang? 😊`,
+
+  interestUnrelatedFollowUp: () => `Apakah Bunda tertarik untuk lanjut mengisi list reservasi treatment homecare kami? 😊\n\nAtau jika ada hal yang ingin ditanyakan terlebih dahulu, silakan kabari kami ya, Bunda. Saya dengan senang hati siap membantu! 🤗`,
+
+  notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
   reservationFormRequest: () => `Berikut list untuk reservasi :
 
