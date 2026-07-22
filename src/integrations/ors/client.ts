@@ -75,7 +75,9 @@ export class OrsClient implements IOrsClient {
         timeout: this.timeoutMs,
       });
 
-      const summary = response.data?.features?.[0]?.properties?.summary;
+      const summary =
+        response.data?.routes?.[0]?.summary ||
+        response.data?.features?.[0]?.properties?.summary;
       if (!summary || typeof summary.distance !== 'number') {
         console.warn('[ORS API WARN] Invalid summary response from ORS API:', response.data);
         return null;

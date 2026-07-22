@@ -63,8 +63,8 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
         timestamp: '1700000000',
         type: 'location',
         location: {
-          latitude: -7.2625,
-          longitude: 112.7383,
+          latitude: -7.3450,
+          longitude: 112.7500,
         },
       },
     });

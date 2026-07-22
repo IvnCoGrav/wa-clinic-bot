@@ -1,22 +1,28 @@
 import { Client, AddressComponent } from '@googlemaps/google-maps-services-js';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { getStringSimilarity } from '../../utils/similarity';
 dotenv.config();
 
 export interface ResolvedLocation {
   isPrecise: boolean;
+  isFuzzyMatch?: boolean;
   kelurahan?: string;
   kecamatan?: string;
   kota?: string;
   lat?: number;
   lng?: number;
   formattedAddress?: string;
+  ambiguityResults?: any[];
 }
 
 const googleMapsClient = new Client({});
 
 /**
- * Service untuk menangani Geocoding (Teks -> Koordinat/Kelurahan)
- * dan Reverse Geocoding (Koordinat Lat/Lng -> Kelurahan/Alamat).
+ * Service untuk memproses input lokasi teks dari customer.
+ * Mengintegrasikan Google Maps Geocoding API sebagai default provider,
+ * dengan mock local database fallback untuk testing offline.
  */
 export class GeocodingService {
   private apiKey: string;
@@ -26,9 +32,7 @@ export class GeocodingService {
   }
 
   /**
-   * Geocode teks lokasi yang diketik customer (misal: "Gubeng, Surabaya").
-   * Memeriksa apakah komponen alamat sudah mencapai tingkat Kelurahan/Desa 
-   * (administrative_area_level_4, sublocality_level_1, atau neighborhood).
+   * Mengambil koordinat & informasi administratif dari input teks.
    */
   public async geocodeText(locationText: string): Promise<ResolvedLocation> {
     if (!this.apiKey || this.apiKey.startsWith('mock')) {
@@ -36,9 +40,13 @@ export class GeocodingService {
     }
 
     try {
+      const queryText = locationText.toLowerCase().includes('surabaya') 
+        ? locationText 
+        : `${locationText}, Surabaya`;
+
       const response = await googleMapsClient.geocode({
         params: {
-          address: locationText,
+          address: queryText,
           key: this.apiKey,
           components: { country: 'ID' }, // Batasi pencarian ke Indonesia
         },
@@ -83,8 +91,8 @@ export class GeocodingService {
         formattedAddress: topResult.formatted_address,
       };
     } catch (error) {
-      console.error('Error in Google Maps geocodeText:', error);
-      return { isPrecise: false };
+      console.error('Error in Google Maps geocodeText, falling back to local database:', error);
+      return this.mockGeocodeText(locationText);
     }
   }
 
@@ -141,12 +149,8 @@ export class GeocodingService {
         formattedAddress: topResult.formatted_address,
       };
     } catch (error) {
-      console.error('Error in Google Maps reverseGeocode:', error);
-      return {
-        isPrecise: true,
-        lat,
-        lng,
-      };
+      console.error('Error in Google Maps reverseGeocode, falling back to mockReverseGeocode:', error);
+      return this.mockReverseGeocode(lat, lng);
     }
   }
 
@@ -164,28 +168,179 @@ export class GeocodingService {
   }
 
   /**
-   * Mocking fallback saat API Key belum diisi / untuk unit test offline
+   * Geocode Mock Local Database Fallback untuk testing tanpa API key.
    */
-  private mockGeocodeText(text: string): ResolvedLocation {
-    const lower = text.toLowerCase();
+  private async mockGeocodeText(locationText: string): Promise<ResolvedLocation> {
+    const lower = locationText.toLowerCase().trim();
     
-    // Jika user mengetik hanya nama kota tanpa detail kelurahan
-    if (lower === 'surabaya' || lower === 'jakarta' || lower === 'bandung') {
+    // Pembersihan prefix/suffix teks lokasi
+    let cleanText = lower
+      .replace(/^(saya\s+)?di\s+/, '')
+      .replace(/^alamat\s+saya\s+di\s+/, '')
+      .replace(/^rumah\s+saya\s+di\s+/, '')
+      .replace(/^kelurahan\s+/, '')
+      .replace(/^desa\s+/, '')
+      .replace(/^kel\s+/, '')
+      .replace(/^ds\s+/, '')
+      .replace(/\s+(bund|bunda|ya|kak|min|mbak|mas|gan|sis|aja|saja|dong|kok|deh)\b/g, '')
+      .trim();
+
+    // Hapus conversational redirect wrappers (seperti "ganti ke", "salah alamat di")
+    cleanText = cleanText
+      .replace(/.*(ganti|pindah|ubah|salah|yang\s+bener|alamat)\s+(ke|di|hanya|saja)\s+/i, '')
+      .trim();
+
+    // 1. Coba cocokkan dengan local subdistricts JSON database
+    try {
+      const filePath = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
+      if (fs.existsSync(filePath)) {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        
+        // Cek jika input customer sama dengan nama Kecamatan luas
+        const kecNames = new Set(data.map((d: any) => d.Kecamatan.toLowerCase()));
+        const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
+        if (kecNames.has(cleanText) && !hasExplicitKelurahan) {
+          return {
+            isPrecise: false,
+            kota: cleanText,
+          };
+        }
+
+        // --- ATURAN PRESEDEN 1: EXACT MATCH ---
+        const exactMatches = data.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === cleanText);
+        if (exactMatches.length > 0) {
+          if (exactMatches.length === 1) {
+            const match = exactMatches[0];
+            const coords = match.Koordinat.split(',');
+            const lat = parseFloat(coords[0].trim());
+            const lng = parseFloat(coords[1].trim());
+            return {
+              isPrecise: true,
+              kelurahan: match.Kelurahan_Desa,
+              kecamatan: match.Kecamatan,
+              kota: match.Kabupaten_Kota,
+              lat,
+              lng,
+              formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+            };
+          } else {
+            return {
+              isPrecise: false,
+              ambiguityResults: exactMatches,
+            };
+          }
+        }
+
+        // --- ATURAN PRESEDEN 2: FUZZY MATCH (Sorensen-Dice >= 0.80) ---
+        const fuzzyCandidates = data.map((d: any) => {
+          const kelName = d.Kelurahan_Desa.toLowerCase();
+          const similarity = getStringSimilarity(cleanText, kelName);
+          return { item: d, similarity };
+        }).filter((c: any) => c.similarity >= 0.80);
+
+        if (fuzzyCandidates.length > 0) {
+          // Kelompokkan kandidat berdasarkan kombinasi Kelurahan + Kecamatan unik
+          const uniqueCombinations = new Map<string, any>();
+          for (const cand of fuzzyCandidates) {
+            const key = `${cand.item.Kelurahan_Desa.toLowerCase()}_${cand.item.Kecamatan.toLowerCase()}`;
+            if (!uniqueCombinations.has(key)) {
+              uniqueCombinations.set(key, cand.item);
+            }
+          }
+
+          if (uniqueCombinations.size === 1) {
+            // Tepat 1 kelurahan unik -> single fuzzy match confirmation
+            const match = Array.from(uniqueCombinations.values())[0];
+            const coords = match.Koordinat.split(',');
+            const lat = parseFloat(coords[0].trim());
+            const lng = parseFloat(coords[1].trim());
+            return {
+              isPrecise: false,
+              isFuzzyMatch: true,
+              kelurahan: match.Kelurahan_Desa,
+              kecamatan: match.Kecamatan,
+              kota: match.Kabupaten_Kota,
+              lat,
+              lng,
+              formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+            };
+          } else if (uniqueCombinations.size > 1) {
+            // Lebih dari 1 kelurahan unik -> alur ambiguitas pilih-kecamatan
+            return {
+              isPrecise: false,
+              ambiguityResults: Array.from(uniqueCombinations.values()),
+            };
+          }
+        }
+
+        // --- ATURAN PRESEDEN 3: SUBSTRING MATCH / SCORING LAMA ---
+        const candidates = data.map((d: any) => {
+          const kelName = d.Kelurahan_Desa.toLowerCase();
+          const kecName = d.Kecamatan.toLowerCase();
+          const kotaName = d.Kabupaten_Kota.toLowerCase();
+          
+          let score = 0;
+          if (cleanText.includes(kelName)) {
+            score += 10;
+            if (cleanText.startsWith(kelName)) {
+              score += 5;
+            }
+          }
+          if (score === 0) return { item: d, score: 0 };
+
+          if (cleanText.includes(kecName)) {
+            score += 2;
+          }
+          if (cleanText.includes(kotaName)) {
+            score += 1;
+          }
+          return { item: d, score };
+        }).filter((c: any) => c.score >= 10);
+
+        if (candidates.length > 0) {
+          const maxScore = Math.max(...candidates.map((c: any) => c.score));
+          const bestCandidates = candidates.filter((c: any) => c.score === maxScore).map((c: any) => c.item);
+
+          if (bestCandidates.length === 1) {
+            const match = bestCandidates[0];
+            const coords = match.Koordinat.split(',');
+            const lat = parseFloat(coords[0].trim());
+            const lng = parseFloat(coords[1].trim());
+            return {
+              isPrecise: true,
+              kelurahan: match.Kelurahan_Desa,
+              kecamatan: match.Kecamatan,
+              kota: match.Kabupaten_Kota,
+              lat,
+              lng,
+              formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+            };
+          }
+
+          if (bestCandidates.length > 1) {
+            return {
+              isPrecise: false,
+              ambiguityResults: bestCandidates,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[LOCAL GEOCODING ERROR]', e);
+    }
+
+    // 2. Cek apakah ini kata yang tidak presisi (nama kota atau kecamatan luas)
+    const impreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
+    if (impreciseWords.includes(cleanText)) {
       return {
         isPrecise: false,
-        kota: text,
+        kota: cleanText,
       };
     }
 
-    // Jika user memberikan detail kelurahan (misal "Kelurahan Gubeng", "Gubeng, Surabaya")
+    // Default fallback: kembalikan isPrecise: false jika tidak ada kecocokan
     return {
-      isPrecise: true,
-      kelurahan: 'Gubeng',
-      kecamatan: 'Gubeng',
-      kota: 'Surabaya',
-      lat: -7.2721,
-      lng: 112.7578,
-      formattedAddress: `${text}, Surabaya, Jawa Timur`,
+      isPrecise: false,
     };
   }
 

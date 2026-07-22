@@ -18,12 +18,16 @@ export interface DeliveryCalculationResult {
  * 1. Utama    : OpenRouteService (ORS) Directions API (profile: cycling-electric)
  * 2. Fallback  : Formula Haversine manual (jika ORS API error/timeout/unreachable)
  * 
- * ATURAN TARIF ONGKIR & THRESHOLD JARAK:
+ * ATURAN TARIF ONGKIR & THRESHOLD JARAK BARU (REVISI KEDUA):
  * -----------------------------------------------------------------------
- * 1. Jarak 0.0 km s/d 5.0 km   : FREE / GRATIS (Rp 0)
- * 2. Jarak > 5.0 km s/d 6.0 km  : Rp 5.000
- * 3. Jarak > 6.0 km s/d 10.0 km : Rp 10.000
- * 4. Jarak > 10.0 km            : LUAR JANGKAUAN (isOutOfCoverage = true)
+ * 1. Jarak 0.0 km s/d 5.0 km     : FREE / GRATIS (Rp 0)
+ * 2. Jarak > 5.0 km s/d 7.0 km    : Rp 15.000 (Promo: Potongan Rp 10.000 -> Net Rp 5.000)
+ * 3. Jarak > 7.0 km s/d 10.0 km   : Rp 15.000 (Promo: Potongan Rp 5.000 -> Net Rp 10.000)
+ * 4. Jarak > 10.0 km s/d 15.0 km  : Rp 15.000 (Promo: Potongan Rp 5.000 -> Net Rp 10.000)
+ * 5. Jarak > 15.0 km s/d 20.0 km  : Rp 20.000 (Promo: Potongan Rp 5.000 -> Net Rp 15.000)
+ * 6. Jarak > 20.0 km s/d 25.0 km  : Rp 25.000 (Promo: Potongan Rp 5.000 -> Net Rp 20.000)
+ * 7. Jarak > 25.0 km s/d 30.0 km  : Rp 30.000 (Promo: Potongan Rp 5.000 -> Net Rp 25.000)
+ * 8. Jarak > 30.0 km              : LUAR JANGKAUAN (isOutOfCoverage = true)
  */
 export class DeliveryService {
   private orsClient: IOrsClient;
@@ -65,22 +69,19 @@ export class DeliveryService {
     }
 
     // 3. Evaluasi threshold jarak & tentukan tarif ongkir
-    const { normalPrice, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm);
+    const { normalPrice, promoDiscount, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm);
 
-    // Hitung promoPrice dengan diskon dinamis dari env
-    const promoDiscount = parseInt(process.env.ONGKIR_PROMO_DISCOUNT || '5000', 10);
+    // Hitung promoPrice dengan diskon
     const promoPrice = Math.max(0, normalPrice - promoDiscount);
 
     // 4. Construct message template
     let messageTemplate = '';
     if (distanceKm <= 5.0) {
       messageTemplate = `Kabar baik! Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami (masih dalam jangkauan < 5 km), sehingga layanan kami GRATIS ongkir!`;
-    } else if (distanceKm <= 6.0) {
-      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp5.000 (Promo: Rp${promoPrice}).`;
-    } else if (distanceKm <= 10.0) {
-      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp10.000 (Promo: Rp${promoPrice}).`;
+    } else if (!isOutOfCoverage) {
+      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp${normalPrice.toLocaleString('id-ID')} (Promo: Rp${promoPrice.toLocaleString('id-ID')}).`;
     } else {
-      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 10 km).`;
+      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 30 km).`;
     }
 
     return {
@@ -96,15 +97,30 @@ export class DeliveryService {
   /**
    * Pembantu untuk menghitung tarif ongkir langsung dari nilai numerik distanceKm
    */
-  public calculateOngkirByDistance(distanceKm: number): { normalPrice: number; isOutOfCoverage: boolean } {
+  public calculateOngkirByDistance(distanceKm: number): { normalPrice: number; promoDiscount: number; isOutOfCoverage: boolean } {
     if (distanceKm <= 5.0) {
-      return { normalPrice: 0, isOutOfCoverage: false };
-    } else if (distanceKm <= 6.0) {
-      return { normalPrice: 5000, isOutOfCoverage: false };
+      return { normalPrice: 0, promoDiscount: 0, isOutOfCoverage: false };
+    } else if (distanceKm <= 7.0) {
+      // 5-7 km: Rp 15.000, promo discount Rp 10.000 -> net Rp 5.000
+      return { normalPrice: 15000, promoDiscount: 10000, isOutOfCoverage: false };
     } else if (distanceKm <= 10.0) {
-      return { normalPrice: 10000, isOutOfCoverage: false };
+      // 7-10 km: Rp 15.000, promo discount Rp 5.000 -> net Rp 10.000
+      return { normalPrice: 15000, promoDiscount: 5000, isOutOfCoverage: false };
+    } else if (distanceKm <= 15.0) {
+      // 10-15 km: Rp 15.000, promo discount Rp 5.000 -> net Rp 10.000
+      return { normalPrice: 15000, promoDiscount: 5000, isOutOfCoverage: false };
+    } else if (distanceKm <= 20.0) {
+      // 15-20 km: Rp 20.000, promo discount Rp 5.000 -> net Rp 15.000
+      return { normalPrice: 20000, promoDiscount: 5000, isOutOfCoverage: false };
+    } else if (distanceKm <= 25.0) {
+      // 20-25 km: Rp 25.000, promo discount Rp 5.000 -> net Rp 20.000
+      return { normalPrice: 25000, promoDiscount: 5000, isOutOfCoverage: false };
+    } else if (distanceKm <= 30.0) {
+      // 25-30 km: Rp 30.000, promo discount Rp 5.000 -> net Rp 25.000
+      return { normalPrice: 30000, promoDiscount: 5000, isOutOfCoverage: false };
     } else {
-      return { normalPrice: 0, isOutOfCoverage: true };
+      // > 30.0 km: di luar jangkauan
+      return { normalPrice: 0, promoDiscount: 0, isOutOfCoverage: true };
     }
   }
 }

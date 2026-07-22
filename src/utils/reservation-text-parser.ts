@@ -28,7 +28,9 @@ export function parseReservationText(rawText: string): ParseResult {
     return { success: false, error: 'Teks reservasi kosong.', missingFields: ['rawText'] };
   }
 
-  const normalizedText = rawText.replace(/\r\n/g, '\n');
+  // Bersihkan formatting markdown WhatsApp (*, _, ~, `)
+  const cleanedFormattingText = rawText.replace(/[*_~`]/g, '');
+  const normalizedText = cleanedFormattingText.replace(/\r\n/g, '\n');
   const lines = normalizedText.split('\n');
 
   let name = '';
@@ -153,11 +155,17 @@ export function parseReservationText(rawText: string): ParseResult {
     bookingDate = tryParseIndonesianDate(dateStr);
   }
 
+  // Normalisasi Nomor HP: hilangkan non-digit, 08xx -> 628xx
+  let normalizedPhone = phone.replace(/\D/g, '');
+  if (normalizedPhone.startsWith('0')) {
+    normalizedPhone = '62' + normalizedPhone.substring(1);
+  }
+
   return {
     success: true,
     reservation: {
       name,
-      phone,
+      phone: normalizedPhone,
       address,
       kec,
       kota,
