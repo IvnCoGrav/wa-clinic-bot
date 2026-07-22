@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment & secrets — JANGAN PERNAH commit file ini
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Prisma
+# (migration files TETAP di-commit, jangan gitignore folder migrations/)
+prisma/*.db
+prisma/dev.db*
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test & coverage
+coverage/
+.vitest-cache/
+
+# Graphify generated output (regenerate lokal, tidak perlu di-versioning)
+graphify-out/
+.graphify/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# WAHA session data (kalau session store di-mount ke folder lokal)
+.wwebjs_auth/
+sessions/
+
+# Misc
+*.tmp
+*.temp
