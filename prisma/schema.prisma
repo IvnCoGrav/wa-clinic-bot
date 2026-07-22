@@ -27,6 +27,12 @@ enum SourceType {
   DOCUMENT
 }
 
+enum TreatmentCategory {
+  BABY
+  MOMS
+  BOTH
+}
+
 model Customer {
   id                 String         @id @default(uuid())
   phone              String         @unique
@@ -43,6 +49,7 @@ model Customer {
   created_at         DateTime       @default(now())
   updated_at         DateTime       @updatedAt
   conversations      Conversation[]
+  reservations       Reservation[]
 
   @@map("customers")
 }
@@ -86,4 +93,19 @@ model KnowledgeChunk {
   created_at    DateTime   @default(now())
 
   @@map("knowledge_chunks")
+}
+
+model Reservation {
+  id                 String            @id @default(uuid())
+  customer_id        String
+  customer           Customer          @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  treatment_category TreatmentCategory
+  treatment_detail   String?
+  booking_date       DateTime?
+  raw_text           String?
+  status             String            @default("pending")
+  created_at         DateTime          @default(now())
+  updated_at         DateTime          @updatedAt
+
+  @@map("reservations")
 }

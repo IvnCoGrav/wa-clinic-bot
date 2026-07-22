@@ -51,7 +51,7 @@ describe('Typing Simulation & Humanizer Service Unit Tests (Final Revision)', ()
 
   describe('2. Reading & Typing Delay Jitter Verification', () => {
     it('should generate different reading delay values on consecutive calls due to jitter', () => {
-      const text = 'Halo admin, saya mau tanya lokasi klinik kecantikan';
+      const text = 'Halo Bidan, saya mau tanya lokasi moms & baby spa';
       const delays = new Set<number>();
 
       for (let i = 0; i < 10; i++) {
@@ -62,7 +62,7 @@ describe('Typing Simulation & Humanizer Service Unit Tests (Final Revision)', ()
     });
 
     it('should generate different typing delay values on consecutive calls due to jitter', () => {
-      const text = 'Klinik kami berada di Surabaya Pusat dengan berbagai layanan perawatan.';
+      const text = 'Moms & baby spa kami melayani homecare di Surabaya dengan berbagai layanan.';
       const delays = new Set<number>();
 
       for (let i = 0; i < 10; i++) {
@@ -75,11 +75,11 @@ describe('Typing Simulation & Humanizer Service Unit Tests (Final Revision)', ()
 
   describe('3. Bubble Splitting Logic with MaxChars=130 & MaxCount=4', () => {
     it('should split long FAQ response (~350-400 chars) into 3-4 bubbles without losing content', () => {
-      const faqReply = `Terima kasih Kak! Untuk treatment Facial Glowing, perawatan ini membutuhkan waktu sekitar 60 hingga 90 menit.
+      const faqReply = `Terima kasih Bunda! Untuk treatment pijat bayi, perawatan ini membutuhkan waktu sekitar 60 hingga 90 menit.
 
 Perawatan ini meliputi pembersihan komedo mendalam, pengerjaan serum glowing dengan alat ultrasound, masker shooting, serta pijat relaksasi wajah.
 
-Apakah Kakak berminat untuk mengisi form reservasi sekarang?`;
+Apakah Bunda berminat untuk mengisi form reservasi sekarang?`;
 
       const bubbles = typingService.splitIntoBubbles(faqReply);
 
@@ -89,7 +89,7 @@ Apakah Kakak berminat untuk mengisi form reservasi sekarang?`;
 
       // Verifikasi seluruh teks asli tetap ada di dalam gabungan bubble
       const joinedBubbles = bubbles.join(' ');
-      expect(joinedBubbles).toContain('Facial Glowing');
+      expect(joinedBubbles).toContain('pijat bayi');
       expect(joinedBubbles).toContain('ultrasound');
       expect(joinedBubbles).toContain('form reservasi');
     });
@@ -106,7 +106,7 @@ Apakah Kakak berminat untuk mengisi form reservasi sekarang?`;
         chatId: '628123456789@c.us',
         incomingMessageId: 'msg_success_1',
         incomingText: 'Halo',
-        replyText: 'Halo Kak! Selamat datang.', // 1 bubble
+        replyText: 'Halo Bunda! Selamat datang.', // 1 bubble
       });
 
       expect(result.success).toBe(true);
@@ -128,7 +128,7 @@ Apakah Kakak berminat untuk mengisi form reservasi sekarang?`;
         chatId: '628123456789@c.us',
         incomingMessageId: 'msg_error_active',
         incomingText: 'Halo',
-        replyText: 'Halo Kak',
+        replyText: 'Halo Bunda',
       });
 
       expect(result.success).toBe(false);
@@ -150,11 +150,11 @@ Apakah Kakak berminat untuk mengisi form reservasi sekarang?`;
         return true;
       });
 
-      const replyText = `Bubble 1: Halo Kak, selamat datang di Klinik Kecantikan kami.
+      const replyText = `Bubble 1: Halo Bunda, selamat datang di Kala Moms and Baby Spa.
 
-Bubble 2: Kami punya promo diskon 50% untuk treatment Facial Glowing minggu ini.
+Bubble 2: Kami punya promo diskon untuk treatment pijat bayi minggu ini.
 
-Bubble 3: Apakah Kakak tertarik untuk booking jadwal perawatan?`;
+Bubble 3: Apakah Bunda tertarik untuk booking jadwal treatment?`;
 
       const result = await typingService.simulateHumanReply({
         chatId: '628123456789@c.us',

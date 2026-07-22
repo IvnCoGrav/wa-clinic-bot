@@ -3,7 +3,7 @@ import { WahaWebhookEvent } from '../integrations/waha/types';
 import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
-import { stateMachine } from '../state-machine/machine';
+import { queueService } from '../services/queue.service';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -84,8 +84,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
     }
 
-    // Jalankan State Machine Engine
-    await stateMachine.processMessage({
+    // Masukkan pesan ke antrian pemrosesan sekuensial per customer
+    await queueService.enqueueMessage({
       customer,
       conversation,
       incomingMessage,
