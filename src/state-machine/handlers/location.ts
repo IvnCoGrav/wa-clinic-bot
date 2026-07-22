@@ -75,6 +75,26 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   // 1. Geocode teks lokasi via Google Maps API
   const resolved = await geocodingService.geocodeText(textLocation);
 
+  // --- KASUS C: FUZZY MATCH TUNGGAL (LOCATION_CONFIRMED) ---
+  if (resolved.isFuzzyMatch && resolved.lat && resolved.lng) {
+    await customerService.updateCustomerPendingLocation(customer.id, {
+      kelurahan: resolved.kelurahan || null,
+      kecamatan: resolved.kecamatan || null,
+      kota: resolved.kota || null,
+      lat: resolved.lat,
+      lng: resolved.lng,
+    });
+
+    return {
+      nextState: ConversationState.LOCATION_CONFIRMED,
+      replyText: TEMPLATES.confirmFuzzyLocation({
+        kelurahan: resolved.kelurahan || '',
+        kecamatan: resolved.kecamatan || '',
+      }),
+      shouldSendReply: true,
+    };
+  }
+
   // 2. Jika lokasi TIDAK Presisi (belum sampai tingkat kelurahan/desa)
   if (!resolved.isPrecise || !resolved.lat || !resolved.lng) {
     const currentAttempts = (conversation.location_attempts || 0) + 1;
@@ -99,9 +119,31 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       locationAttempts: currentAttempts,
     });
 
+    if (resolved.ambiguityResults && resolved.ambiguityResults.length > 0) {
+      const kelName = resolved.ambiguityResults[0].Kelurahan_Desa;
+      return {
+        nextState: ConversationState.AWAITING_LOCATION,
+        replyText: TEMPLATES.askKelurahanAmbiguous({ kelurahanName: kelName, options: resolved.ambiguityResults }),
+        shouldSendReply: true,
+      };
+    }
+
+    const cleanLocationName = textLocation.toLowerCase()
+      .replace(/^(saya\s+)?di\s+/, '')
+      .replace(/^alamat\s+saya\s+di\s+/, '')
+      .replace(/^rumah\s+saya\s+di\s+/, '')
+      .replace(/^kelurahan\s+/, '')
+      .replace(/^desa\s+/, '')
+      .replace(/\s+(bund|bunda|ya|kak|min|mbak|mas|gan|sis)\b/g, '')
+      .trim();
+
+    const capitalizedLocationName = cleanLocationName
+      ? cleanLocationName.charAt(0).toUpperCase() + cleanLocationName.slice(1)
+      : textLocation;
+
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: TEMPLATES.askKelurahanRetry({ textLocation, currentAttempts }),
+      replyText: TEMPLATES.askKelurahanRetry({ textLocation: capitalizedLocationName, currentAttempts }),
       shouldSendReply: true,
     };
   }

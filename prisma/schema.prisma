@@ -45,6 +45,11 @@ model Customer {
   distance_km        Float?
   ongkir             Int?
   is_out_of_coverage Boolean        @default(false)
+  pending_kelurahan  String?
+  pending_kecamatan  String?
+  pending_kota       String?
+  pending_lat        Float?
+  pending_lng        Float?
   status             String         @default("active")
   created_at         DateTime       @default(now())
   updated_at         DateTime       @updatedAt

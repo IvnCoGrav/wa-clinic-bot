@@ -7,6 +7,20 @@ import { parseReservationText } from '../utils/reservation-text-parser';
 export const memoryReservations = new Map<string, any>();
 
 export async function adminRoutes(fastify: FastifyInstance) {
+  // --- REVISI USER: API Key Auth Layer (Fail-Closed) ---
+  fastify.addHook('preHandler', async (request, reply) => {
+    const adminKey = process.env.ADMIN_API_KEY;
+    if (!adminKey) {
+      return reply.status(401).send({ error: 'Unauthorized: Admin API Key is not configured on the server.' });
+    }
+
+    // Fastify/Node headers are case-insensitive by default. We check x-api-key header and query param.
+    const clientKey = request.headers['x-api-key'] || (request.query as any)?.apiKey;
+    if (clientKey !== adminKey) {
+      return reply.status(401).send({ error: 'Unauthorized: Invalid or missing X-API-KEY header.' });
+    }
+  });
+
   /**
    * GET /api/admin/human-handling-conversations
    * REST Endpoint untuk melihat daftar percakapan yang aktif diserahkan ke Human Agent.

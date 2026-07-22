@@ -89,4 +89,54 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
   });
+
+  it('POST /webhook: should verify X-Webhook-Secret signature security token', async () => {
+    // Set secret token
+    process.env.WAHA_WEBHOOK_SECRET = 'my_secret_token_abc';
+
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_secret_msg_${Date.now()}`,
+        from: '628999111222@c.us',
+        fromMe: false,
+        timestamp: 1700000000,
+        body: 'test webhook secret',
+      },
+    };
+
+    // 1. Tanpa header -> 401
+    const resNoHeader = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+    expect(resNoHeader.statusCode).toBe(401);
+
+    // 2. Header salah -> 401
+    const resWrongHeader = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      headers: {
+        'x-webhook-secret': 'wrong_token',
+      },
+      payload,
+    });
+    expect(resWrongHeader.statusCode).toBe(401);
+
+    // 3. Header benar -> 200
+    const resValidHeader = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      headers: {
+        'x-webhook-secret': 'my_secret_token_abc',
+      },
+      payload,
+    });
+    expect(resValidHeader.statusCode).toBe(200);
+
+    // Cleanup env
+    delete process.env.WAHA_WEBHOOK_SECRET;
+  });
 });

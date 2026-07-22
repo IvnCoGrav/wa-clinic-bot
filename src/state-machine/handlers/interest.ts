@@ -14,6 +14,25 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   const { incomingMessage, conversation } = ctx;
   const userText = incomingMessage.text?.body || '';
 
+  const lower = userText.toLowerCase().trim();
+
+  // Kalibrasi Redirect: Pemicu butuh kata kunci aksi (ganti, pindah, dsb) + di/ke, atau direct query
+  const hasChangeKeyword = /(ganti|pindah|salah|ubah|bukan|yang\s+bener|alamat)/i.test(userText);
+  const isConversationalLocation = hasChangeKeyword && (
+    /di\s+/i.test(lower) || 
+    /ke\s+/i.test(lower)
+  );
+  const isDirectLocationQuery = /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
+                                /^ongkir\s+ke\s+[a-z]+/i.test(userText.trim()) || 
+                                /^rumah\s+saya\s+di\s+[a-z]+/i.test(userText.trim()) || 
+                                /^kalau\s+di\s+[a-z]+/i.test(userText.trim());
+
+  if (incomingMessage.type === 'location' || isConversationalLocation || isDirectLocationQuery) {
+    console.log(`[LOCATION REDIRECT] Redirecting location query/change "${userText}" to handleLocationState.`);
+    const { handleLocationState } = await import('./location');
+    return handleLocationState(ctx);
+  }
+
   // 1. Deteksi Intent (5 Intent Classifier)
   const intentResult = await llmIntentService.detectIntent(userText);
   console.log(`[INTENT DETECTED] Customer Message: "${userText}" -> Intent: ${intentResult.intent}`);
@@ -27,7 +46,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks);
 
       // 4. JANGAN RESET / UBAH STATE: Tambahkan kalimat follow-up sesuai state saat ini!
-      const replyText = `${faqAnswer}\n\n---\nApakah Bunda tertarik untuk lanjut ke pengisian list reservasi sekarang bund? (Bisa dijawab: Mau / Tertarik)`;
+      const replyText = TEMPLATES.faqFollowUp(faqAnswer);
 
       return {
         nextState: ConversationState.AWAITING_INTEREST,
@@ -60,7 +79,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     case 'not_interested':
       return {
         nextState: ConversationState.COMPLETED,
-        replyText: 'Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨',
+        replyText: TEMPLATES.notInterestedReply(),
         shouldSendReply: true,
       };
 
@@ -68,7 +87,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     default:
       return {
         nextState: ConversationState.AWAITING_INTEREST,
-        replyText: `Apakah Bunda ingin melanjutkan ke pengisian list reservasi treatment? 😊\n\n- Jika **mau/setuju**, silakan balas "Mau"\n- Jika ada **pertanyaan**, silakan tanyakan langsung ke bidan ya bund.`,
+        replyText: TEMPLATES.interestUnrelatedFollowUp(),
         shouldSendReply: true,
       };
   }

@@ -14,6 +14,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
    * Termasuk IDEMPOTENCY CHECK (`wa_message_id`) & EXPLICIT GUARD CLAUSE for HUMAN HANDLING.
    */
   fastify.post('/webhook', async (request: FastifyRequest<{ Body: WahaWebhookEvent }>, reply: FastifyReply) => {
+    // --- SECURITY VERIFICATION (X-Webhook-Secret) ---
+    const webhookSecret = process.env.WAHA_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const clientSecret = request.headers['x-webhook-secret'] || request.headers['x-waha-signature'];
+      if (!clientSecret || clientSecret !== webhookSecret) {
+        console.warn(`[SECURITY WARNING] Unauthorized webhook access attempt from IP: ${request.ip}`);
+        return reply.status(401).send({ error: 'Unauthorized: Invalid or missing webhook secret token.' });
+      }
+    }
+
     const event = request.body;
 
     // Filter hanya event "message" atau "message.any"

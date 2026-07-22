@@ -74,7 +74,15 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
       );
 
       const content = response.data.choices[0].message.content;
-      const parsed = JSON.parse(content);
+      
+      let cleanContent = content.trim();
+      if (cleanContent.startsWith('```')) {
+        cleanContent = cleanContent.replace(/^```(json)?\n?/, '');
+        cleanContent = cleanContent.replace(/\n?```$/, '');
+      }
+      cleanContent = cleanContent.trim();
+      
+      const parsed = JSON.parse(cleanContent);
 
       return {
         intent: parsed.intent || 'other',

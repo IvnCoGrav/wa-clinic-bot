@@ -102,7 +102,7 @@ async function startSimulator() {
         }
 
         incomingMessage = {
-          id: `cli_msg_${msgCounter++}`,
+          id: `cli_msg_${Date.now()}_${msgCounter++}`,
           chatId: dummyChatId,
           from: dummyPhone,
           type: 'location',
@@ -115,7 +115,7 @@ async function startSimulator() {
         };
       } else {
         incomingMessage = {
-          id: `cli_msg_${msgCounter++}`,
+          id: `cli_msg_${Date.now()}_${msgCounter++}`,
           chatId: dummyChatId,
           from: dummyPhone,
           type: 'text',
