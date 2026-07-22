@@ -4,7 +4,9 @@ import { IOrsClient, orsClient as defaultOrsClient } from '../integrations/ors/c
 
 export interface DeliveryCalculationResult {
   distanceKm: number;
-  ongkir: number;
+  ongkir: number; // Map ke promoPrice untuk database/state-machine
+  normalPrice: number;
+  promoPrice: number;
   isOutOfCoverage: boolean;
   messageTemplate: string;
 }
@@ -31,11 +33,11 @@ export class DeliveryService {
   }
 
   /**
-   * Menghitung ongkir berdasarkan jarak dari titik lokasi klinik ke koordinat customer.
+   * Menghitung ongkir berdasarkan jarak dari titik lokasi moms & baby spa ke koordinat customer.
    * Menggunakan ORS Directions API sebagai sumber utama, dengan fallback ke Haversine.
    * 
    * @param customerCoords Koordinat latitude & longitude customer
-   * @param clinicCoords (Opsional) Koordinat klinik. Jika tidak diisi, menggunakan default clinicConfig.
+   * @param clinicCoords (Opsional) Koordinat moms & baby spa. Jika tidak diisi, menggunakan default clinicConfig.
    */
   public async calculateDelivery(
     customerCoords: Coordinates,
@@ -63,23 +65,29 @@ export class DeliveryService {
     }
 
     // 3. Evaluasi threshold jarak & tentukan tarif ongkir
-    const { ongkir, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm);
+    const { normalPrice, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm);
+
+    // Hitung promoPrice dengan diskon dinamis dari env
+    const promoDiscount = parseInt(process.env.ONGKIR_PROMO_DISCOUNT || '5000', 10);
+    const promoPrice = Math.max(0, normalPrice - promoDiscount);
 
     // 4. Construct message template
     let messageTemplate = '';
     if (distanceKm <= 5.0) {
-      messageTemplate = `Kabar baik! Lokasi Anda berjarak ${distanceKm} km dari klinik kami (masih dalam jangkauan < 5 km), sehingga layanan kami GRATIS ongkir!`;
+      messageTemplate = `Kabar baik! Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami (masih dalam jangkauan < 5 km), sehingga layanan kami GRATIS ongkir!`;
     } else if (distanceKm <= 6.0) {
-      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari klinik kami. Biaya ongkir untuk area ini adalah Rp5.000.`;
+      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp5.000 (Promo: Rp${promoPrice}).`;
     } else if (distanceKm <= 10.0) {
-      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari klinik kami. Biaya ongkir untuk area ini adalah Rp10.000.`;
+      messageTemplate = `Lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp10.000 (Promo: Rp${promoPrice}).`;
     } else {
-      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm} km dari klinik kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 10 km).`;
+      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm} km dari moms & baby spa kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 10 km).`;
     }
 
     return {
       distanceKm,
-      ongkir,
+      ongkir: promoPrice, // Map ke promoPrice untuk database/state-machine
+      normalPrice,
+      promoPrice,
       isOutOfCoverage,
       messageTemplate,
     };
@@ -88,15 +96,15 @@ export class DeliveryService {
   /**
    * Pembantu untuk menghitung tarif ongkir langsung dari nilai numerik distanceKm
    */
-  public calculateOngkirByDistance(distanceKm: number): { ongkir: number; isOutOfCoverage: boolean } {
+  public calculateOngkirByDistance(distanceKm: number): { normalPrice: number; isOutOfCoverage: boolean } {
     if (distanceKm <= 5.0) {
-      return { ongkir: 0, isOutOfCoverage: false };
+      return { normalPrice: 0, isOutOfCoverage: false };
     } else if (distanceKm <= 6.0) {
-      return { ongkir: 5000, isOutOfCoverage: false };
+      return { normalPrice: 5000, isOutOfCoverage: false };
     } else if (distanceKm <= 10.0) {
-      return { ongkir: 10000, isOutOfCoverage: false };
+      return { normalPrice: 10000, isOutOfCoverage: false };
     } else {
-      return { ongkir: 0, isOutOfCoverage: true };
+      return { normalPrice: 0, isOutOfCoverage: true };
     }
   }
 }
