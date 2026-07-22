@@ -1,0 +1,23 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+export interface ClinicConfig {
+  lat: number;
+  lng: number;
+  name: string;
+  maxDeliveryDistanceKm: number;
+  humanHandlingTimeoutHours: number;
+}
+
+export const clinicConfig: ClinicConfig = {
+  // Koordinat lokasi fisik klinik (Default: Surabaya Pusat)
+  lat: parseFloat(process.env.CLINIC_LAT || '-7.2574719'),
+  lng: parseFloat(process.env.CLINIC_LNG || '112.7520883'),
+  name: process.env.CLINIC_NAME || 'Klinik Kecantikan Utama',
+
+  // Batas maksimal jangkauan pengiriman/treatment (dalam kilometer)
+  maxDeliveryDistanceKm: 10.0,
+
+  // Timeout auto-release status human handling (dalam jam)
+  humanHandlingTimeoutHours: parseFloat(process.env.HUMAN_HANDLING_TIMEOUT_HOURS || '6'),
+};

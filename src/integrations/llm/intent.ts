@@ -1,0 +1,118 @@
+import axios from 'axios';
+import { BOT_PERSONA_PROMPT } from '../../config/persona';
+import dotenv from 'dotenv';
+dotenv.config();
+
+export type IntentType = 'interested' | 'not_interested' | 'asking_schedule' | 'faq_question' | 'other';
+
+export interface IntentDetectionResult {
+  intent: IntentType;
+  confidence: number;
+}
+
+/**
+ * Service untuk deteksi intent respons pengguna berbasis LLM terstruktur JSON (5 Intent).
+ */
+export class LLMIntentService {
+  private apiKey: string;
+  private baseUrl: string;
+  private model: string;
+
+  constructor() {
+    this.apiKey = process.env.LLM_API_KEY || '';
+    this.baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+    this.model = process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+  }
+
+  /**
+   * Klasifikasi intent pesan pengguna ke dalam 5 intent:
+   * 1. faq_question     : Menanyakan FAQ / info perawatan / harga / manfaat / durasi / cara kerja / perawatan apa saja
+   * 2. asking_schedule  : Menanyakan ketersediaan hari/jam spesifik ("apakah hari Senin bisa?", "bisa jam 2?")
+   * 3. interested       : Tertarik reservasi / setuju / mau lanjut booking
+   * 4. not_interested   : Menolak / batal / tidak berminat
+   * 5. other            : Lainnya / tidak spesifik
+   */
+  public async detectIntent(userMessageText: string): Promise<IntentDetectionResult> {
+    if (!this.apiKey || this.apiKey.startsWith('mock')) {
+      return this.ruleBasedFallbackIntent(userMessageText);
+    }
+
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/chat/completions`,
+        {
+          model: this.model,
+          response_format: { type: 'json_object' },
+          messages: [
+            {
+              role: 'system',
+              content: `${BOT_PERSONA_PROMPT}
+
+Anda adalah Intent Classifier untuk percakapan WhatsApp Klinik Kecantikan.
+Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format JSON strictly {"intent": "interested" | "not_interested" | "asking_schedule" | "faq_question" | "other"}:
+
+- "faq_question": Jika pengguna menanyakan informasi umum/FAQ klinik, seperti manfaat treatment, jenis perawatan, harga, durasi, atau pertanyaan seputar estetika (contoh: "facial glowing itu buat apa?", "ada perawatan buat acne ga?", "berapa harga treatmentnya?", "treatmentnya sakit ga?").
+- "asking_schedule": Jika pengguna menanyakan ketersediaan hari/jam/jadwal spesifik (contoh: "apakah hari Senin bisa?", "bisa booking besok jam 3 sore?").
+- "interested": Jika pengguna menyatakan mau, berminat, setuju, atau ingin kirim link reservasi (contoh: "mau dong", "kirim link reservasi", "setuju", "boleh").
+- "not_interested": Jika pengguna menolak, batal, atau keberatan (contoh: "ga jadi", "batal", "nanti saja").
+- "other": Kategori lainnya.`,
+            },
+            {
+              role: 'user',
+              content: userMessageText,
+            },
+          ],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const content = response.data.choices[0].message.content;
+      const parsed = JSON.parse(content);
+
+      return {
+        intent: parsed.intent || 'other',
+        confidence: 0.95,
+      };
+    } catch (error) {
+      console.warn('[LLM INTENT ERROR] Using fallback rule-based classifier:', (error as Error).message);
+      return this.ruleBasedFallbackIntent(userMessageText);
+    }
+  }
+
+  private ruleBasedFallbackIntent(text: string): IntentDetectionResult {
+    const lower = text.toLowerCase();
+
+    // 1. Deteksi FAQ / Pertanyaan Info
+    const faqKeywords = ['apa', 'berapa', 'fasilitas', 'manfaat', 'harga', 'biaya', 'fungsi', 'treatment', 'facial', 'acne', 'jerawat', 'glowing', 'bagus', 'mana'];
+    if (faqKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('apa') || lower.includes('berapa') || lower.includes('ada'))) {
+      return { intent: 'faq_question', confidence: 0.9 };
+    }
+
+    // 2. Deteksi Pertanyaan Jadwal Spesifik
+    const scheduleKeywords = ['jadwal', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'besok', 'lusa', 'bisa jam'];
+    if (scheduleKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('bisa'))) {
+      return { intent: 'asking_schedule', confidence: 0.9 };
+    }
+
+    // 3. Deteksi Tertarik
+    const interestedKeywords = ['mau', 'tertarik', 'boleh', 'oke', 'ok', 'ya', 'yes', 'booking', 'daftar', 'setuju', 'kirim link'];
+    if (interestedKeywords.some((kw) => lower.includes(kw))) {
+      return { intent: 'interested', confidence: 0.95 };
+    }
+
+    // 4. Deteksi Tidak Tertarik
+    const notInterestedKeywords = ['ga', 'gak', 'tidak', 'mahal', 'batal', 'nanti', 'kemahalan', 'enggak'];
+    if (notInterestedKeywords.some((kw) => lower.includes(kw))) {
+      return { intent: 'not_interested', confidence: 0.9 };
+    }
+
+    return { intent: 'other', confidence: 0.5 };
+  }
+}
+
+export const llmIntentService = new LLMIntentService();
