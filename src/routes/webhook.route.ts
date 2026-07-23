@@ -7,6 +7,7 @@ import { queueService } from '../services/queue.service';
 import { wahaClient } from '../integrations/waha/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { ConversationState } from '@prisma/client';
+import { abuseDetectionService } from '../services/abuse-detection.service';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -65,6 +66,20 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
     let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
+    // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
+    if (customer.status === 'blocked') {
+      console.warn(`[BLOCKED ACCESS] Blocked customer ${phone} attempted to send a message. Logging to audit and dropping response.`);
+      await messageService.logMessage({
+        tenantId: DEFAULT_TENANT_ID,
+        conversationId: conversation.id,
+        direction: 'INBOUND',
+        content: payload.body || '[LOCATION/MEDIA]',
+        waMessageId,
+        payloadRaw: payload,
+      });
+      return reply.status(200).send({ status: 'BLOCKED' });
+    }
+
     // Converted standardized incoming message format
     const incomingMessage: any = {
       id: waMessageId,
@@ -120,6 +135,27 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
         return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
       }
+    }
+
+    // --- ABUSE DETECTION CHECK (Sebelum antrean / queue) ---
+    const abuseResult = await abuseDetectionService.checkAndProcessAbuse(
+      customer,
+      conversation,
+      incomingMessage.text?.body || '',
+      DEFAULT_TENANT_ID
+    );
+
+    if (abuseResult.blocked) {
+      // Log pesan pemicu blokir ke audit trail
+      await messageService.logMessage({
+        tenantId: DEFAULT_TENANT_ID,
+        conversationId: conversation.id,
+        direction: 'INBOUND',
+        content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+        waMessageId,
+        payloadRaw: payload,
+      });
+      return reply.status(200).send({ status: 'BLOCKED' });
     }
 
     // Masukkan pesan ke antrian pemrosesan sekuensial per customer
