@@ -277,4 +277,44 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ success: true, count: mockFlagged.length, data: mockFlagged, note: 'Fallback in-memory mode' });
     }
   });
+
+  /**
+   * GET /api/admin/services
+   * REST Endpoint untuk melihat daftar seluruh layanan/treatment (harga, durasi, usia, promo)
+   */
+  fastify.get('/api/admin/services', async (request, reply) => {
+    const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
+    const services = treatmentCatalogService.getAllServices(false);
+    return reply.status(200).send({ success: true, count: services.length, data: services });
+  });
+
+  /**
+   * POST /api/admin/services
+   * REST Endpoint untuk menambah/mengedit data layanan (persiapan untuk UI Admin)
+   */
+  fastify.post('/api/admin/services', async (request: FastifyRequest<{ Body: any }>, reply: FastifyReply) => {
+    const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
+    const serviceData = request.body;
+
+    if (!serviceData || !serviceData.id || !serviceData.name || serviceData.originalPrice === undefined) {
+      return reply.status(400).send({
+        error: 'Data layanan tidak lengkap. Required fields: id, name, originalPrice, promoPrice, durationMinutes, ageTier, category',
+      });
+    }
+
+    const updated = treatmentCatalogService.upsertService({
+      id: serviceData.id,
+      name: serviceData.name,
+      category: serviceData.category || 'BABY',
+      ageTier: serviceData.ageTier || { minAgeMonths: 0, maxAgeMonths: null, label: 'Umum' },
+      durationMinutes: Number(serviceData.durationMinutes) || 45,
+      originalPrice: Number(serviceData.originalPrice) || 0,
+      promoPrice: Number(serviceData.promoPrice) || 0,
+      description: serviceData.description || '',
+      isActive: serviceData.isActive ?? true,
+    });
+
+    return reply.status(200).send({ success: true, message: 'Service saved successfully', data: updated });
+  });
 }
+

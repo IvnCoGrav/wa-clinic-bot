@@ -71,15 +71,11 @@ Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai �
 
   greetingWithLocation: (params: { kelurahan: string; kecamatan: string; skipGreeting?: boolean }) => {
     if (params.skipGreeting) {
-      return `Apakah Bunda ingin memesan treatment homecare untuk lokasi yang sama dengan sebelumnya (**Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**)?
-
-Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim alamat baru Bunda ya. 😊`;
+      return `Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**? Atau ada alamat baru? 😊`;
     }
-    return `Halo Bunda ! Selamat datang kembali di Kala Moms and Baby Spa. ✨
+    return `Halo Bunda! Selamat datang kembali di Kala Moms and Baby Spa. ✨
     
-Apakah Bunda ingin memesan treatment homecare untuk lokasi yang sama dengan sebelumnya (**Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**)?
-
-Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim alamat baru Bunda ya. 😊`;
+Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**? Atau ada alamat baru? 😊`;
   },
 
   confirmFuzzyLocation: (params: { kelurahan: string; kecamatan: string }) =>
@@ -89,7 +85,7 @@ Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim al
     `Mohon maaf bunda, saya agak kurang menangkap maksudnya. Apakah Bunda ingin menggunakan lokasi tersebut, atau ingin mengganti alamat? 😊`,
 
   confirmLocationFailedRetry: (params: { kelurahan: string; kecamatan: string }) =>
-    `Mohon dikonfirmasi dulu ya, Bunda 😊 — Kelurahan **${params.kelurahan}**, Kec. **${params.kecamatan}** benar atau ingin ganti alamat?`,
+    `Mohon dikonfirmasi dulu ya Bunda 😊 — untuk lokasinya di Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan} sudah benar atau mau pakai alamat lain ya bund?`,
 
   askKelurahanRetry: (params: { textLocation: string; currentAttempts: number }) =>
     `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`,
