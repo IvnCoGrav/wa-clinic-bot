@@ -38,7 +38,16 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   // Prioritas Override Utama: Jika ada input lokasi baru (Pin atau teks lokasi langsung)
   if (isPin || isLocationText) {
     const { handleLocationState } = await import('./location');
-    return handleLocationState(ctx);
+    const result = await handleLocationState(ctx);
+
+    // Perbaikan Poin 3b: Jika customer baru (belum punya kelurahan confirmed)
+    const hasConfirmedLocation = !!customer.kelurahan;
+    if (!hasConfirmedLocation && result.replyText) {
+      const intro = `Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\n`;
+      result.replyText = intro + result.replyText;
+    }
+
+    return result;
   }
 
   // Hitung skipGreeting (apakah chat terakhir berjarak < 48 jam)

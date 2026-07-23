@@ -2,13 +2,23 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { knowledgeBaseService } from '../services/knowledge.service';
 import { parseReservationText } from '../utils/reservation-text-parser';
+import { customerService } from '../services/customer.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import crypto from 'crypto';
 
 // In-Memory fallback store for reservations during unit testing/offline database modes
 export const memoryReservations = new Map<string, any>();
 
+function safeCompare(a: string, b: string): boolean {
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+  const hashA = crypto.createHash('sha256').update(aBuffer).digest();
+  const hashB = crypto.createHash('sha256').update(bBuffer).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
+
 export async function adminRoutes(fastify: FastifyInstance) {
-  // --- REVISI USER: API Key Auth Layer (Fail-Closed) ---
+  // --- REVISI USER: API Key Auth Layer (Fail-Closed & Constant-Time comparison) ---
   fastify.addHook('preHandler', async (request, reply) => {
     const adminKey = process.env.ADMIN_API_KEY;
     if (!adminKey) {
@@ -16,8 +26,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     // Fastify/Node headers are case-insensitive by default. We check x-api-key header and query param.
-    const clientKey = request.headers['x-api-key'] || (request.query as any)?.apiKey;
-    if (clientKey !== adminKey) {
+    const clientKey = (request.headers['x-api-key'] || (request.query as any)?.apiKey) as string;
+    if (!clientKey || !safeCompare(clientKey, adminKey)) {
       return reply.status(401).send({ error: 'Unauthorized: Invalid or missing X-API-KEY header.' });
     }
   });
@@ -214,6 +224,57 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
       }
       return reply.status(404).send({ success: false, error: 'Reservation not found' });
+    }
+  });
+
+  /**
+   * POST /api/admin/customer/:id/block
+   * REST Endpoint untuk memblokir customer secara manual
+   */
+  fastify.post('/api/admin/customer/:id/block', async (request: FastifyRequest<{ Params: { id: string }; Body: { reason: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const { reason } = request.body || {};
+    if (!reason) {
+      return reply.status(400).send({ error: 'reason is required' });
+    }
+
+    try {
+      const customer = await customerService.blockCustomer(id, reason, DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, data: customer });
+    } catch (error: any) {
+      return reply.status(404).send({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * POST /api/admin/customer/:id/unblock
+   * REST Endpoint untuk membuka blokir customer
+   */
+  fastify.post('/api/admin/customer/:id/unblock', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+
+    try {
+      const customer = await customerService.unblockCustomer(id, DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, data: customer });
+    } catch (error: any) {
+      return reply.status(404).send({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/customers/flagged
+   * REST Endpoint untuk melihat percakapan yang di-flag untuk review
+   */
+  fastify.get('/api/admin/customers/flagged', async (request, reply) => {
+    try {
+      const flaggedConversations = await prisma.conversation.findMany({
+        where: { review_flagged: true, tenant_id: DEFAULT_TENANT_ID },
+        include: { customer: true },
+      });
+      return reply.status(200).send({ success: true, count: flaggedConversations.length, data: flaggedConversations });
+    } catch (error) {
+      const mockFlagged: any[] = [];
+      return reply.status(200).send({ success: true, count: mockFlagged.length, data: mockFlagged, note: 'Fallback in-memory mode' });
     }
   });
 }
