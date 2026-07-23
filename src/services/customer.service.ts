@@ -43,6 +43,8 @@ export class CustomerService {
           ongkir: null,
           is_out_of_coverage: false,
           status: 'active',
+          block_reason: null,
+          blocked_at: null,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -273,6 +275,60 @@ export class CustomerService {
     } catch (error) {
       console.error('[PROMOTE TRANSACTION ERROR] Failed to promote pending location:', error);
       return { success: false, error: (error as Error).message };
+    }
+  }
+
+  /**
+   * Blokir customer secara manual / otomatis
+   */
+  public async blockCustomer(customerId: string, reason: string, tenantId: string): Promise<any> {
+    try {
+      return await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+          status: 'blocked',
+          block_reason: reason,
+          blocked_at: new Date(),
+        },
+      });
+    } catch (error) {
+      // Memory fallback update
+      for (const [phone, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
+          cust.status = 'blocked';
+          cust.block_reason = reason;
+          cust.blocked_at = new Date();
+          return cust;
+        }
+      }
+      throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+    }
+  }
+
+  /**
+   * Buka blokir customer
+   */
+  public async unblockCustomer(customerId: string, tenantId: string): Promise<any> {
+    try {
+      return await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+          status: 'active',
+          block_reason: null,
+          blocked_at: null,
+        },
+      });
+    } catch (error) {
+      // Memory fallback update
+      for (const [phone, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
+          cust.status = 'active';
+          cust.block_reason = null;
+          cust.blocked_at = null;
+          return cust;
+        }
+      }
+      throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
     }
   }
 }
