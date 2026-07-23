@@ -94,6 +94,7 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 - Pembayaran online / payment gateway
 - Multi-cabang klinik (asumsi saat ini: satu titik lokasi klinik)
 - Vector/embedding search untuk knowledge base (dimulai dari full-text search sederhana; upgrade jika volume FAQ bertambah signifikan atau akurasi retrieval terbukti kurang)
+- Integrasi resmi WhatsApp Business API (WABA) Meta (Prioritas ultra-minor, ditunda hingga migrasi SaaS multi-tenant diaktifkan)
 
 ---
 
