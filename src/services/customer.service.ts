@@ -6,17 +6,18 @@ const memoryCustomers = new Map<string, any>();
 
 export class CustomerService {
   /**
-   * Cari customer berdasarkan nomor telepon unik, atau buat record baru jika belum ada.
+   * Cari customer berdasarkan nomor telepon unik dan tenantId, atau buat record baru jika belum ada.
    */
-  public async getOrCreateCustomer(phone: string, name?: string): Promise<any> {
+  public async getOrCreateCustomer(phone: string, name: string | undefined, tenantId: string): Promise<any> {
     try {
-      let customer = await prisma.customer.findUnique({
-        where: { phone },
+      let customer = await prisma.customer.findFirst({
+        where: { phone, tenant_id: tenantId },
       });
 
       if (!customer) {
         customer = await prisma.customer.create({
           data: {
+            tenant_id: tenantId,
             phone,
             name: name || null,
           },
@@ -30,6 +31,7 @@ export class CustomerService {
       if (!memoryCustomers.has(phone)) {
         const mockCustomer = {
           id: `cust_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          tenant_id: tenantId,
           phone,
           name: name || null,
           kelurahan: null,
@@ -64,9 +66,17 @@ export class CustomerService {
       distanceKm?: number;
       ongkir?: number;
       isOutOfCoverage?: boolean;
-    }
+    },
+    tenantId: string
   ): Promise<any> {
     try {
+      const existing = await prisma.customer.findFirst({
+        where: { id: customerId, tenant_id: tenantId },
+      });
+      if (!existing) {
+        throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+      }
+
       return await prisma.customer.update({
         where: { id: customerId },
         data: {
@@ -83,7 +93,7 @@ export class CustomerService {
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
-        if (cust.id === customerId) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
           Object.assign(cust, {
             kelurahan: data.kelurahan ?? cust.kelurahan,
             kecamatan: data.kecamatan ?? cust.kecamatan,
@@ -113,9 +123,17 @@ export class CustomerService {
       kota?: string | null;
       lat?: number | null;
       lng?: number | null;
-    }
+    },
+    tenantId: string
   ): Promise<any> {
     try {
+      const existing = await prisma.customer.findFirst({
+        where: { id: customerId, tenant_id: tenantId },
+      });
+      if (!existing) {
+        throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+      }
+
       return await prisma.customer.update({
         where: { id: customerId },
         data: {
@@ -129,7 +147,7 @@ export class CustomerService {
     } catch (error) {
       // Fallback in-memory
       for (const [phone, cust] of memoryCustomers.entries()) {
-        if (cust.id === customerId) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
           Object.assign(cust, {
             pending_kelurahan: data.kelurahan !== undefined ? data.kelurahan : cust.pending_kelurahan,
             pending_kecamatan: data.kecamatan !== undefined ? data.kecamatan : cust.pending_kecamatan,
@@ -148,14 +166,18 @@ export class CustomerService {
   /**
    * Membersihkan data lokasi pending pada customer
    */
-  public async clearPendingLocation(customerId: string): Promise<any> {
-    return this.updateCustomerPendingLocation(customerId, {
-      kelurahan: null,
-      kecamatan: null,
-      kota: null,
-      lat: null,
-      lng: null,
-    });
+  public async clearPendingLocation(customerId: string, tenantId: string): Promise<any> {
+    return this.updateCustomerPendingLocation(
+      customerId,
+      {
+        kelurahan: null,
+        kecamatan: null,
+        kota: null,
+        lat: null,
+        lng: null,
+      },
+      tenantId
+    );
   }
 
   /**
@@ -175,7 +197,8 @@ export class CustomerService {
       distanceKm: number;
       ongkir: number;
       isOutOfCoverage: boolean;
-    }>
+    }>,
+    tenantId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
       // Hitung rute/jarak & ongkir terlebih dahulu
@@ -187,6 +210,13 @@ export class CustomerService {
       try {
         // Lakukan atomic transaction menggunakan Prisma
         await prisma.$transaction(async (tx) => {
+          const existing = await tx.customer.findFirst({
+            where: { id: customerId, tenant_id: tenantId },
+          });
+          if (!existing) {
+            throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+          }
+
           await tx.customer.update({
             where: { id: customerId },
             data: {
@@ -213,7 +243,7 @@ export class CustomerService {
         console.warn('[PROMOTE FALLBACK] Database transaction failed, using in-memory promotion fallback.');
         let found = false;
         for (const [phone, cust] of memoryCustomers.entries()) {
-          if (cust.id === customerId) {
+          if (cust.id === customerId && cust.tenant_id === tenantId) {
             Object.assign(cust, {
               kelurahan: pendingData.pending_kelurahan,
               kecamatan: pendingData.pending_kecamatan,

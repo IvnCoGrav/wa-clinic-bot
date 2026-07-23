@@ -3,7 +3,9 @@ import { buildApp } from '../../src/app';
 import { conversationService } from '../../src/services/conversation.service';
 import { customerService } from '../../src/services/customer.service';
 import { queueService } from '../../src/services/queue.service';
+import { wahaClient } from '../../src/integrations/waha/client';
 import { FastifyInstance } from 'fastify';
+import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 describe('WAHA Webhook & Guard Clause Integration Tests', () => {
   let app: FastifyInstance;
@@ -59,14 +61,21 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
 
   it('POST /webhook: Explicit Guard Clause prevents LLM/bot replies when is_human_handling is active', async () => {
     const phone = `628777${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Human Test Customer');
-    const conversation = await conversationService.getOrCreateConversation(customer.id);
+    const customer = await customerService.getOrCreateCustomer(phone, 'Human Test Customer', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     // Update conversation state in conversationService memory map
-    await conversationService.updateConversationState(conversation.id, {
-      isHumanHandling: true,
-      humanHandlingSince: new Date(),
-    });
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        isHumanHandling: true,
+        humanHandlingSince: new Date(),
+      },
+      DEFAULT_TENANT_ID
+    );
+
+    // Pasang label hold di mock WAHA agar terdeteksi masih dalam hold
+    await wahaClient.addLabel(`${phone}@c.us`, 'hold');
 
     const payload = {
       event: 'message',

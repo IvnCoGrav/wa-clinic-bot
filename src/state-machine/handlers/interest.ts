@@ -5,13 +5,15 @@ import { knowledgeBaseService } from '../../services/knowledge.service';
 import { llmResponseGenerator } from '../../integrations/llm/generator';
 import { conversationService } from '../../services/conversation.service';
 import { TEMPLATES } from '../../config/persona';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
  * Mengklasifikasikan respons pengguna (Interested, FAQ Question, Asking Schedule, Not Interested, Other).
  */
 export async function handleInterestState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
-  const { incomingMessage, conversation } = ctx;
+  const { incomingMessage, customer, conversation } = ctx;
+  const tenantId = ctx.tenantId || customer?.tenant_id || DEFAULT_TENANT_ID;
   const userText = incomingMessage.text?.body || '';
 
   const lower = userText.toLowerCase().trim();
@@ -40,7 +42,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   switch (intentResult.intent) {
     case 'faq_question': {
       // 2. Query Knowledge Base menggunakan Postgres Full-Text Search ('simple')
-      const relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3);
+      const relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3, tenantId);
 
       // 3. Generate balasan FAQ natural berbasis RAG + Persona
       const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks);
@@ -56,6 +58,13 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     }
 
     case 'interested':
+      if (!customer.kelurahan || !customer.lat || !customer.lng) {
+        return {
+          nextState: ConversationState.AWAITING_LOCATION,
+          replyText: `Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊`,
+          shouldSendReply: true,
+        };
+      }
       return {
         nextState: ConversationState.RESERVATION_SENT,
         replyText: TEMPLATES.reservationFormRequest(),
@@ -66,7 +75,9 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       // Eskalasi ke Human Handling + simpan previous_state = AWAITING_INTEREST
       await conversationService.escalateToHumanHandling(
         conversation,
-        `Customer bertanya jadwal spesifik: "${userText}"`
+        customer.phone,
+        `Customer bertanya jadwal spesifik: "${userText}"`,
+        tenantId
       );
 
       return {
