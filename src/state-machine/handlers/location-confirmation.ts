@@ -4,6 +4,7 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { deliveryService } from '../../services/delivery.service';
 import { customerService } from '../../services/customer.service';
 import { TEMPLATES } from '../../config/persona';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 /**
  * Handler untuk state LOCATION_CONFIRMED:
@@ -12,6 +13,7 @@ import { TEMPLATES } from '../../config/persona';
  */
 export async function handleLocationConfirmationState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
   const { incomingMessage, customer, conversation } = ctx;
+  const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
   const userText = incomingMessage.text?.body || '';
   const lower = userText.toLowerCase().trim();
 
@@ -66,12 +68,13 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
         },
         async (coords) => {
           return deliveryService.calculateDelivery(coords);
-        }
+        },
+        tenantId
       );
 
       if (promoteResult.success) {
         // Ambil data customer terupdate setelah commit transaksi
-        const updatedCustomer = await customerService.getOrCreateCustomer(customer.phone);
+        const updatedCustomer = await customerService.getOrCreateCustomer(customer.phone, customer.name || undefined, tenantId);
         
         // JIKA Jarak di luar jangkauan (>30 km)
         if (updatedCustomer.is_out_of_coverage) {
@@ -93,6 +96,7 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
             promoPrice: delivery.promoPrice,
           }),
           shouldSendReply: true,
+          sendPricelistImage: true,
         };
       } else {
         // Fallback jika transaksi gagal/calculateDelivery error di tengah jalan
@@ -113,7 +117,7 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
 
   // 4. NEGATIVE CHECK -> Bersihkan data pending dan minta input ulang kelurahan
   if (isNegative) {
-    await customerService.clearPendingLocation(customer.id);
+    await customerService.clearPendingLocation(customer.id, tenantId);
     return {
       nextState: ConversationState.AWAITING_LOCATION,
       replyText: TEMPLATES.askKelurahanDetail(),

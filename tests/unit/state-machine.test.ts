@@ -4,6 +4,7 @@ import { stateMachine } from '../../src/state-machine/machine';
 import { conversationService } from '../../src/services/conversation.service';
 import { customerService } from '../../src/services/customer.service';
 import { geocodingService } from '../../src/integrations/google-maps/geocoding';
+import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 describe('State Machine & Conversation Orchestrator Unit Tests', () => {
   beforeEach(() => {
@@ -15,21 +16,26 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
 
   it('1. INITIAL -> AWAITING_LOCATION: Greeting on new customer message', async () => {
     const phone = `62811${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Budi');
-    const conversation = await conversationService.getOrCreateConversation(customer.id);
-    await conversationService.updateConversationState(conversation.id, {
-      currentState: ConversationState.INITIAL,
-      previousState: null,
-      locationAttempts: 0,
-      isHumanHandling: false,
-    });
+    const customer = await customerService.getOrCreateCustomer(phone, 'Budi', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        currentState: ConversationState.INITIAL,
+        previousState: null,
+        locationAttempts: 0,
+        isHumanHandling: false,
+      },
+      DEFAULT_TENANT_ID
+    );
     customer.kelurahan = null;
     customer.lat = null;
     customer.lng = null;
 
     const result = await stateMachine.processMessage({
+      tenantId: DEFAULT_TENANT_ID,
       customer,
-      conversation: await conversationService.getOrCreateConversation(customer.id),
+      conversation: await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID),
       incomingMessage: {
         id: `msg_init_${Date.now()}`,
         from: phone,
@@ -46,15 +52,20 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
 
   it('2. AWAITING_LOCATION (Native Location): calculates ongkir and transitions to AWAITING_INTEREST', async () => {
     const phone = `62822${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Siti');
-    const conversation = await conversationService.getOrCreateConversation(customer.id);
-    await conversationService.updateConversationState(conversation.id, {
-      currentState: ConversationState.AWAITING_LOCATION,
-    });
+    const customer = await customerService.getOrCreateCustomer(phone, 'Siti', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        currentState: ConversationState.AWAITING_LOCATION,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const activeConv = await conversationService.getOrCreateConversation(customer.id);
+    const activeConv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const result = await stateMachine.processMessage({
+      tenantId: DEFAULT_TENANT_ID,
       customer,
       conversation: activeConv,
       incomingMessage: {
@@ -77,16 +88,21 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
     vi.spyOn(geocodingService, 'geocodeText').mockResolvedValue({ isPrecise: false });
 
     const phone = `62833${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Andi');
-    const conversation = await conversationService.getOrCreateConversation(customer.id);
-    await conversationService.updateConversationState(conversation.id, {
-      currentState: ConversationState.AWAITING_LOCATION,
-      locationAttempts: 2,
-    });
+    const customer = await customerService.getOrCreateCustomer(phone, 'Andi', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        currentState: ConversationState.AWAITING_LOCATION,
+        locationAttempts: 2,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const activeConv = await conversationService.getOrCreateConversation(customer.id);
+    const activeConv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const result = await stateMachine.processMessage({
+      tenantId: DEFAULT_TENANT_ID,
       customer,
       conversation: activeConv,
       incomingMessage: {
@@ -98,7 +114,7 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
       },
     });
 
-    const updatedConv = await conversationService.getOrCreateConversation(customer.id);
+    const updatedConv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
     expect(result.isHumanHandling).toBe(true);
@@ -108,15 +124,20 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
 
   it('4. AWAITING_INTEREST -> HUMAN_HANDLING: asking_schedule intent saves previous_state', async () => {
     const phone = `62844${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Dewi');
-    const conversation = await conversationService.getOrCreateConversation(customer.id);
-    await conversationService.updateConversationState(conversation.id, {
-      currentState: ConversationState.AWAITING_INTEREST,
-    });
+    const customer = await customerService.getOrCreateCustomer(phone, 'Dewi', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        currentState: ConversationState.AWAITING_INTEREST,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const activeConv = await conversationService.getOrCreateConversation(customer.id);
+    const activeConv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const result = await stateMachine.processMessage({
+      tenantId: DEFAULT_TENANT_ID,
       customer,
       conversation: activeConv,
       incomingMessage: {
@@ -128,7 +149,7 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
       },
     });
 
-    const updatedConv = await conversationService.getOrCreateConversation(customer.id);
+    const updatedConv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
     expect(result.isHumanHandling).toBe(true);
@@ -137,19 +158,23 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
 
   it('5. AUTO-RELEASE TIMEOUT: Restores current_state to previous_state after > 6 hours timeout', async () => {
     const phone = `62855${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Eko');
-    const conversation = await conversationService.getOrCreateConversation(customer.id);
+    const customer = await customerService.getOrCreateCustomer(phone, 'Eko', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     const sevenHoursAgo = new Date(Date.now() - 7 * 60 * 60 * 1000);
-    await conversationService.updateConversationState(conversation.id, {
-      currentState: ConversationState.HUMAN_HANDLING,
-      previousState: ConversationState.AWAITING_LOCATION,
-      isHumanHandling: true,
-      humanHandlingSince: sevenHoursAgo,
-    });
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        currentState: ConversationState.HUMAN_HANDLING,
+        previousState: ConversationState.AWAITING_LOCATION,
+        isHumanHandling: true,
+        humanHandlingSince: sevenHoursAgo,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const convBefore = await conversationService.getOrCreateConversation(customer.id);
-    const autoReleaseResult = conversationService.checkAndApplyAutoRelease(convBefore);
+    const convBefore = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    const autoReleaseResult = conversationService.checkAndApplyAutoRelease(convBefore, DEFAULT_TENANT_ID);
 
     expect(autoReleaseResult.released).toBe(true);
     expect(autoReleaseResult.updatedConversation.is_human_handling).toBe(false);

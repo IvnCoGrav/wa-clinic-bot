@@ -36,6 +36,7 @@ GAYA BAHASA:
   Palet emoji yang konsisten dipakai: 😊 🤗 🙏🏻 ☺️ 🥰 ✨ 🤍 🐣
   Jangan pakai emoji yang playful/lucu (😂🤣) atau yang tidak sesuai konteks kesehatan/perawatan.
 - Selalu tunjukkan empati genuine terkait kondisi bayi/anak/ibu hamil, jangan terdengar generic.
+- Customer terkadang memanggilmu dengan sebutan "bubid" (kependekan dari "bu bidan") atau "Bidan Yusi". Kenali panggilan ini sebagai sapaan hangat kepadamu.
 - Kalau tidak yakin jawaban FAQ, jangan mengarang — arahkan untuk konfirmasi manual
   ("boleh saya cek dulu ya bund, nanti saya kabari").
 
@@ -44,6 +45,7 @@ YANG TIDAK BOLEH DILAKUKAN:
 - Jangan berikan saran medis definitif (misal diagnosa, dosis obat) — itu di luar
   kewenangan chatbot, arahkan ke konsultasi langsung dengan bidan/tenaga medis.
 - Jangan ubah harga/ongkir di luar aturan yang sudah dikonfigurasi sistem.
+- Jangan pernah memulai pesan/jawaban dengan salam pembuka/greeting seperti "Halo Bund", "Halo Bunda", "Selamat pagi", dll, kecuali diinstruksikan. Langsung jawab inti jawaban secara ramah.
 `;
 
 // =========================================================================
@@ -51,23 +53,34 @@ YANG TIDAK BOLEH DILAKUKAN:
 // =========================================================================
 
 export const TEMPLATES = {
-  greeting: () => `Halo Bunda ! ✨
+  greeting: (params?: { skipGreeting?: boolean }) => {
+    if (params?.skipGreeting) {
+      return `Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare). Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
+    }
+    return `Halo Bunda ! ✨
 Terima kasih sudah menghubungi kami.
 
 Perkenalkan, saya ${BRAND_IDENTITY.botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).
 
-Kalau boleh tau rumahnya dimana ya bunda?. 😊`,
+Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
+  },
 
   askKelurahanDetail: () => `Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻
 
 Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻`,
 
-  greetingWithLocation: (params: { kelurahan: string; kecamatan: string }) =>
-    `Halo Bunda ! Selamat datang kembali di Kala Moms and Baby Spa. ✨
+  greetingWithLocation: (params: { kelurahan: string; kecamatan: string; skipGreeting?: boolean }) => {
+    if (params.skipGreeting) {
+      return `Apakah Bunda ingin memesan treatment homecare untuk lokasi yang sama dengan sebelumnya (**Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**)?
+
+Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim alamat baru Bunda ya. 😊`;
+    }
+    return `Halo Bunda ! Selamat datang kembali di Kala Moms and Baby Spa. ✨
     
 Apakah Bunda ingin memesan treatment homecare untuk lokasi yang sama dengan sebelumnya (**Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**)?
 
-Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim alamat baru Bunda ya. 😊`,
+Bunda bisa balas **"Iya/Lanjut"** jika lokasi sama, atau langsung ketik/kirim alamat baru Bunda ya. 😊`;
+  },
 
   confirmFuzzyLocation: (params: { kelurahan: string; kecamatan: string }) =>
     `Apakah yang Bunda maksud kelurahan **${params.kelurahan}**, Kec. **${params.kecamatan}**? 😊`,

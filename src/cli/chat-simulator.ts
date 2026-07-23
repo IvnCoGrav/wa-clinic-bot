@@ -5,6 +5,7 @@ import { ConversationStateMachine } from '../state-machine/machine';
 import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
 import { ConversationState } from '@prisma/client';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 async function startSimulator() {
   const mockClient = new MockWAHAClient();
@@ -45,23 +46,27 @@ async function startSimulator() {
       }
 
       if (input === '/reset') {
-        const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester');
-        const conversation = await conversationService.getOrCreateConversation(customer.id);
-        await conversationService.updateConversationState(conversation.id, {
-          currentState: ConversationState.INITIAL,
-          previousState: null,
-          locationAttempts: 0,
-          isHumanHandling: false,
-          humanHandlingSince: null,
-        });
+        const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID);
+        const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+        await conversationService.updateConversationState(
+          conversation.id,
+          {
+            currentState: ConversationState.INITIAL,
+            previousState: null,
+            locationAttempts: 0,
+            isHumanHandling: false,
+            humanHandlingSince: null,
+          },
+          DEFAULT_TENANT_ID
+        );
         console.log('\x1b[32m[SYSTEM] State percakapan berhasil di-reset ke INITIAL.\x1b[0m\n');
         promptUser();
         return;
       }
 
       if (input === '/state') {
-        const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester');
-        const conversation = await conversationService.getOrCreateConversation(customer.id);
+        const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID);
+        const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
         console.log('\x1b[35m\n--- [INTERNAL STATE DEBUG] ---');
         console.log(`Customer Phone    : ${customer.phone}`);
         console.log(`Current State     : ${conversation.current_state}`);
@@ -127,11 +132,12 @@ async function startSimulator() {
       }
 
       try {
-        const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester');
-        const conversation = await conversationService.getOrCreateConversation(customer.id);
+        const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID);
+        const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
         // Process state machine message
         await cliStateMachine.processMessage({
+          tenantId: DEFAULT_TENANT_ID,
           customer,
           conversation,
           incomingMessage,

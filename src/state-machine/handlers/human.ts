@@ -3,6 +3,7 @@ import { StateHandlerContext, StateHandlerResult } from '../types';
 import { conversationService } from '../../services/conversation.service';
 import { handleLocationState } from './location';
 import { handleInterestState } from './interest';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 /**
  * Handler untuk state HUMAN_HANDLING:
@@ -10,10 +11,11 @@ import { handleInterestState } from './interest';
  * bot DIAM / TIDAK membalas otomatis. Jika sudah > 6 jam, kembalikan ke previous_state!
  */
 export async function handleHumanHandlingState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
-  const { conversation } = ctx;
+  const { conversation, customer } = ctx;
+  const tenantId = ctx.tenantId || customer?.tenant_id || DEFAULT_TENANT_ID;
 
   // 1. Periksa apakah timeout 6 jam sudah terlampaui (Auto-release evaluation)
-  const autoRelease = conversationService.checkAndApplyAutoRelease(conversation);
+  const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, tenantId);
 
   // 2. Jika AUTO-RELEASE Terjadi:
   if (autoRelease.released) {

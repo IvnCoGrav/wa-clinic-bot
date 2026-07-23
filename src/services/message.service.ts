@@ -9,21 +9,23 @@ export class MessageService {
    * Pengecekan Idempotensi: Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
    * Mengembalikan true jika pesan SUDAH PERNAH diproses sebelumnya (duplicate/retry).
    */
-  public async isDuplicateMessage(waMessageId: string): Promise<boolean> {
+  public async isDuplicateMessage(waMessageId: string, tenantId: string): Promise<boolean> {
     if (!waMessageId) return false;
 
+    const memoryKey = `${tenantId}:${waMessageId}`;
+
     // 1. Cek memory store dulu
-    if (memoryWaMessageIds.has(waMessageId)) {
+    if (memoryWaMessageIds.has(memoryKey)) {
       return true;
     }
 
     // Tambahkan ke memory store sebagai lock in-flight agar request paralel tertahan
-    memoryWaMessageIds.add(waMessageId);
+    memoryWaMessageIds.add(memoryKey);
 
     try {
       // 2. Query ke Prisma DB
-      const existing = await prisma.message.findUnique({
-        where: { wa_message_id: waMessageId },
+      const existing = await prisma.message.findFirst({
+        where: { wa_message_id: waMessageId, tenant_id: tenantId },
       });
 
       if (existing) {
@@ -45,14 +47,16 @@ export class MessageService {
     content: string;
     waMessageId?: string;
     payloadRaw?: any;
+    tenantId: string;
   }) {
     if (data.waMessageId) {
-      memoryWaMessageIds.add(data.waMessageId);
+      memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
     }
 
     try {
       return await prisma.message.create({
         data: {
+          tenant_id: data.tenantId,
           conversation_id: data.conversationId,
           direction: data.direction,
           content: data.content,

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { knowledgeBaseService } from '../services/knowledge.service';
 import { parseReservationText } from '../utils/reservation-text-parser';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 // In-Memory fallback store for reservations during unit testing/offline database modes
 export const memoryReservations = new Map<string, any>();
@@ -28,7 +29,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/human-handling-conversations', async (request, reply) => {
     try {
       const activeHumanHandling = await prisma.conversation.findMany({
-        where: { is_human_handling: true },
+        where: { is_human_handling: true, tenant_id: DEFAULT_TENANT_ID },
         include: {
           customer: true,
           messages: {
@@ -64,7 +65,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Body must contain non-empty faqs array [{question, answer}]' });
     }
 
-    const importedCount = await knowledgeBaseService.importFaqs(faqs);
+    const importedCount = await knowledgeBaseService.importFaqs(faqs, DEFAULT_TENANT_ID);
     return reply.status(200).send({
       success: true,
       message: `Successfully imported ${importedCount} FAQ pairs into Knowledge Base`,
@@ -81,7 +82,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'documentName and textContent are required' });
     }
 
-    const chunkCount = await knowledgeBaseService.importDocument(documentName, textContent);
+    const chunkCount = await knowledgeBaseService.importDocument(documentName, textContent, DEFAULT_TENANT_ID);
     return reply.status(200).send({
       success: true,
       message: `Successfully imported document "${documentName}" into ${chunkCount} knowledge chunks`,
@@ -111,6 +112,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     try {
       const reservation = await prisma.reservation.create({
         data: {
+          tenant_id: DEFAULT_TENANT_ID,
           customer_id: customerId,
           treatment_category: parsed.treatmentCategory,
           treatment_detail: parsed.treatmentDetail,
@@ -124,6 +126,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       // Memory Fallback jika database offline
       const mockReservation = {
         id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        tenant_id: DEFAULT_TENANT_ID,
         customer_id: customerId,
         treatment_category: parsed.treatmentCategory,
         treatment_detail: parsed.treatmentDetail,
@@ -149,6 +152,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.patch('/api/admin/reservation/:id/confirm', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = request.params;
     try {
+      const existing = await prisma.reservation.findFirst({
+        where: { id, tenant_id: DEFAULT_TENANT_ID },
+      });
+      if (!existing) {
+        throw new Error('Reservation not found');
+      }
+
       const reservation = await prisma.reservation.update({
         where: { id },
         data: { status: 'confirmed' },
@@ -156,7 +166,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ success: true, data: reservation });
     } catch (error) {
       const mock = memoryReservations.get(id);
-      if (mock) {
+      if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
         mock.status = 'confirmed';
         mock.updated_at = new Date();
         memoryReservations.set(id, mock);
@@ -183,6 +193,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     try {
+      const existing = await prisma.reservation.findFirst({
+        where: { id, tenant_id: DEFAULT_TENANT_ID },
+      });
+      if (!existing) {
+        throw new Error('Reservation not found');
+      }
+
       const reservation = await prisma.reservation.update({
         where: { id },
         data: { booking_date: parsedDate },
@@ -190,7 +207,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ success: true, data: reservation });
     } catch (error) {
       const mock = memoryReservations.get(id);
-      if (mock) {
+      if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
         mock.booking_date = parsedDate;
         mock.updated_at = new Date();
         memoryReservations.set(id, mock);

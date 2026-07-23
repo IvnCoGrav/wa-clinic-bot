@@ -7,6 +7,7 @@ const DOC_SOURCE_TYPE = (SourceType && SourceType.DOCUMENT) ? SourceType.DOCUMEN
 
 export interface KnowledgeChunkResult {
   id: string;
+  tenantId?: string;
   sourceType: SourceType;
   title: string;
   content: string;
@@ -16,6 +17,7 @@ export interface KnowledgeChunkResult {
 // In-Memory store fallback untuk offline / test environment
 const memoryKnowledgeChunks: Array<{
   id: string;
+  tenantId: string;
   sourceType: SourceType;
   title: string;
   content: string;
@@ -27,7 +29,7 @@ export class KnowledgeBaseService {
    * Bulk import FAQ (Pertanyaan & Jawaban).
    * 1 row per pasangan FAQ.
    */
-  public async importFaqs(faqs: Array<{ question: string; answer: string }>): Promise<number> {
+  public async importFaqs(faqs: Array<{ question: string; answer: string }>, tenantId: string): Promise<number> {
     let count = 0;
     for (const faq of faqs) {
       const title = faq.question.trim();
@@ -36,6 +38,7 @@ export class KnowledgeBaseService {
       try {
         await prisma.knowledgeChunk.create({
           data: {
+            tenant_id: tenantId,
             source_type: FAQ_SOURCE_TYPE,
             title,
             content,
@@ -45,6 +48,7 @@ export class KnowledgeBaseService {
         // Fallback memory
         memoryKnowledgeChunks.push({
           id: `chunk_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          tenantId,
           sourceType: FAQ_SOURCE_TYPE,
           title,
           content,
@@ -58,7 +62,7 @@ export class KnowledgeBaseService {
   /**
    * Import file dokumen teks: auto-extract dan chunking per ~500-800 karakter tanpa potong kalimat.
    */
-  public async importDocument(documentName: string, textContent: string): Promise<number> {
+  public async importDocument(documentName: string, textContent: string, tenantId: string): Promise<number> {
     const chunks = chunkTextDocument(textContent);
     let count = 0;
 
@@ -69,6 +73,7 @@ export class KnowledgeBaseService {
       try {
         await prisma.knowledgeChunk.create({
           data: {
+            tenant_id: tenantId,
             source_type: DOC_SOURCE_TYPE,
             title,
             content: chunkText,
@@ -78,6 +83,7 @@ export class KnowledgeBaseService {
       } catch (error) {
         memoryKnowledgeChunks.push({
           id: `chunk_doc_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          tenantId,
           sourceType: DOC_SOURCE_TYPE,
           title,
           content: chunkText,
@@ -90,19 +96,19 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * Query Postgres Full-Text Search menggunakan dictionary 'simple' (User Bug Fix #1 & #2).
-   * Mengambil top N chunk paling relevan.
+   * Query Postgres Full-Text Search menggunakan dictionary 'simple'.
+   * Mengambil top N chunk paling relevan untuk tenant tertentu.
    */
-  public async searchRelevantChunks(userQuery: string, limit = 3): Promise<KnowledgeChunkResult[]> {
+  public async searchRelevantChunks(userQuery: string, limit = 3, tenantId: string): Promise<KnowledgeChunkResult[]> {
     if (!userQuery || userQuery.trim().length === 0) return [];
 
     try {
-      // Execute raw SQL using Postgres FTS with 'simple' dictionary
+      // Execute raw SQL using Postgres FTS with 'simple' dictionary filtered by tenant_id
       const rawResults = await prisma.$queryRaw<any[]>`
-        SELECT id, source_type as "sourceType", title, content, document_name as "documentName",
+        SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
                ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', ${userQuery})) as rank
         FROM knowledge_chunks
-        WHERE to_tsvector('simple', content) @@ plainto_tsquery('simple', ${userQuery})
+        WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ plainto_tsquery('simple', ${userQuery})
         ORDER BY rank DESC
         LIMIT ${limit};
       `;
@@ -110,6 +116,7 @@ export class KnowledgeBaseService {
       if (rawResults && rawResults.length > 0) {
         return rawResults.map((r) => ({
           id: r.id,
+          tenantId: r.tenantId,
           sourceType: r.sourceType,
           title: r.title,
           content: r.content,
@@ -123,6 +130,7 @@ export class KnowledgeBaseService {
     // In-Memory Keyword Fallback Search
     const lower = userQuery.toLowerCase();
     const matches = memoryKnowledgeChunks.filter((chunk) => {
+      if (chunk.tenantId !== tenantId) return false;
       const text = `${chunk.title} ${chunk.content}`.toLowerCase();
       const keywords = lower.split(/\s+/);
       return keywords.some((kw) => kw.length > 2 && text.includes(kw));

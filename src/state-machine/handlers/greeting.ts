@@ -9,24 +9,42 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
  * Mengimplementasikan retensi lokasi tersimpan, deteksi override pin/teks langsung, dan kata kunci afirmatif.
  */
 export async function handleGreetingState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
-  const { customer, incomingMessage } = ctx;
+  const { customer, conversation, incomingMessage } = ctx;
   const userText = incomingMessage.text?.body || '';
   const lower = userText.toLowerCase().trim();
 
   // 1. Deteksi apakah customer langsung mengirim share-location pin
   const isPin = incomingMessage.type === 'location' && incomingMessage.location;
   
-  // 2. Deteksi teks lokasi terarah (Direct Location Query)
-  const isLocationText = /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
-                         /^ongkir\s+ke\s+[a-z]+/i.test(userText.trim()) || 
-                         /^rumah\s+saya\s+di\s+[a-z]+/i.test(userText.trim()) || 
-                         /^kalau\s+di\s+[a-z]+/i.test(userText.trim());
+  // 2. Deteksi teks lokasi terarah (Direct Location Query / Geocoding Dini)
+  const hasLocationKeyword = /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
+                             /^ongkir\s+ke\s+[a-z]+/i.test(userText.trim()) || 
+                             /^rumah\s+saya\s+di\s+[a-z]+/i.test(userText.trim()) || 
+                             /^kalau\s+di\s+[a-z]+/i.test(userText.trim());
+
+  // Jalankan geocodeText untuk melihat apakah teks memuat alamat/kelurahan valid secara langsung
+  let hasValidGeocode = false;
+  try {
+    const resolved = await geocodingService.geocodeText(userText);
+    if (resolved.isPrecise || resolved.isFuzzyMatch || (resolved.ambiguityResults && resolved.ambiguityResults.length > 0)) {
+      hasValidGeocode = true;
+    }
+  } catch (err) {
+    console.error('Failed to geocode greeting text:', err);
+  }
+
+  const isLocationText = hasLocationKeyword || hasValidGeocode;
 
   // Prioritas Override Utama: Jika ada input lokasi baru (Pin atau teks lokasi langsung)
   if (isPin || isLocationText) {
     const { handleLocationState } = await import('./location');
     return handleLocationState(ctx);
   }
+
+  // Hitung skipGreeting (apakah chat terakhir berjarak < 48 jam)
+  const lastInteraction = conversation.last_message_at;
+  const isNew = !lastInteraction || (lastInteraction.getTime() === conversation.created_at.getTime());
+  const skipGreeting = !isNew && (Date.now() - new Date(lastInteraction).getTime() < 48 * 60 * 60 * 1000);
 
   // 3. RETENSI LOKASI: Jika customer sudah memiliki lokasi confirmed sebelumnya
   if (customer.kelurahan && customer.lat && customer.lng) {
@@ -49,13 +67,14 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
       replyText: TEMPLATES.greetingWithLocation({
         kelurahan: customer.kelurahan,
         kecamatan: customer.kecamatan || '',
+        skipGreeting,
       }),
       shouldSendReply: true,
     };
   }
 
   // 4. Default Greeting Baru (Belum punya lokasi)
-  const greetingText = TEMPLATES.greeting();
+  const greetingText = TEMPLATES.greeting({ skipGreeting });
 
   return {
     nextState: ConversationState.AWAITING_LOCATION,

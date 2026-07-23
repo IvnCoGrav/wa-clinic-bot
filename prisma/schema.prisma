@@ -35,6 +35,7 @@ enum TreatmentCategory {
 
 model Customer {
   id                 String         @id @default(uuid())
+  tenant_id          String         @default("default-tenant")
   phone              String         @unique
   name               String?
   kelurahan          String?
@@ -56,11 +57,13 @@ model Customer {
   conversations      Conversation[]
   reservations       Reservation[]
 
+  @@index([tenant_id])
   @@map("customers")
 }
 
 model Conversation {
   id                   String            @id @default(uuid())
+  tenant_id            String            @default("default-tenant")
   customer_id          String
   customer             Customer          @relation(fields: [customer_id], references: [id], onDelete: Cascade)
   current_state        ConversationState @default(INITIAL)
@@ -73,11 +76,13 @@ model Conversation {
   updated_at           DateTime          @updatedAt
   messages             Message[]
 
+  @@index([tenant_id])
   @@map("conversations")
 }
 
 model Message {
   id              String       @id @default(uuid())
+  tenant_id       String       @default("default-tenant")
   conversation_id String
   conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
   wa_message_id   String?      @unique
@@ -86,22 +91,26 @@ model Message {
   payload_raw     Json?
   created_at      DateTime     @default(now())
 
+  @@index([tenant_id])
   @@map("messages")
 }
 
 model KnowledgeChunk {
   id            String     @id @default(uuid())
+  tenant_id     String     @default("default-tenant")
   source_type   SourceType
   title         String
   content       String
   document_name String?
   created_at    DateTime   @default(now())
 
+  @@index([tenant_id])
   @@map("knowledge_chunks")
 }
 
 model Reservation {
   id                 String            @id @default(uuid())
+  tenant_id          String            @default("default-tenant")
   customer_id        String
   customer           Customer          @relation(fields: [customer_id], references: [id], onDelete: Cascade)
   treatment_category TreatmentCategory
@@ -112,5 +121,6 @@ model Reservation {
   created_at         DateTime          @default(now())
   updated_at         DateTime          @updatedAt
 
+  @@index([tenant_id])
   @@map("reservations")
 }
