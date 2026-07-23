@@ -37,6 +37,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
         distanceKm: delivery.distanceKm,
         ongkir: delivery.ongkir,
         isOutOfCoverage: delivery.isOutOfCoverage,
+        zipcode: resolved.zipcode,
       },
       tenantId
     );
@@ -92,6 +93,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
         kota: resolved.kota || null,
         lat: resolved.lat,
         lng: resolved.lng,
+        zipcode: resolved.zipcode || null,
       },
       tenantId
     );
@@ -180,6 +182,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       distanceKm: delivery.distanceKm,
       ongkir: delivery.ongkir,
       isOutOfCoverage: delivery.isOutOfCoverage,
+      zipcode: resolved.zipcode,
     },
     tenantId
   );

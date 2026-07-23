@@ -10,14 +10,14 @@ const faqs = [
   },
   {
     "question": "Apakah yang melakukan pijat adalah bidan bersertifikat?",
-    "answer": "Benar Bunda, treatment dilakukan oleh bidan kami."
+    "answer": "Benar Bunda, treatment dilakukan oleh bidan bersertifikat dan berpengalaman bund."
   },
   {
     "question": "Berapa lama durasi treatment?",
     "answer": "Untuk treatment pijat bayi sekitar 40 menit. Untuk oksitosin massage fullbody (moms) sekitar 60 menit. Untuk paket laktasi, pijat punggung sekitar 30 menit dan pijat payudara sekitar 20-25 menit."
   },
   {
-    "question": "Anak saya sedang pilek/batuk pilek, apakah masih bisa dipijat?",
+    "question": "Anak saya sedang pilek/batuk pilek / bapil, apakah masih bisa dipijat?",
     "answer": "Masih bisa Bunda, kami sarankan pakai treatment pijat bayi pulih ceria untuk membantu meredakan gejala bapil-nya."
   },
   {

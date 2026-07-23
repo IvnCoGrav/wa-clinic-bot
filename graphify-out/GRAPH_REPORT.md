@@ -1,16 +1,16 @@
 # Graph Report - wa-clinic-bot  (2026-07-23)
 
 ## Corpus Check
-- 66 files · ~68,072 words
+- 68 files · ~44,946 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 351 nodes · 627 edges · 21 communities (17 shown, 4 thin omitted)
+- 365 nodes · 654 edges · 21 communities (16 shown, 5 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 2 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4d0adf38`
+- Built from commit: `38b0a965`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -35,7 +35,7 @@
 - LLMResponseGenerator
 
 ## God Nodes (most connected - your core abstractions)
-1. `WahaClient` - 21 edges
+1. `WahaClient` - 23 edges
 2. `CustomerService` - 19 edges
 3. `TypingService` - 18 edges
 4. `ConversationService` - 16 edges
@@ -49,27 +49,23 @@
 ## Surprising Connections (you probably didn't know these)
 - `main()` --calls--> `calculateHaversineDistance()`  [EXTRACTED]
   scratch/test_subdistricts.ts → src/utils/haversine.ts
+- `main()` --references--> `@prisma/client`  [EXTRACTED]
+  src/cli/reset-customer.ts → package.json
 - `buildApp()` --indirect_call--> `adminRoutes()`  [INFERRED]
   src/app.ts → src/routes/admin.route.ts
 - `buildApp()` --indirect_call--> `webhookRoutes()`  [INFERRED]
   src/app.ts → src/routes/webhook.route.ts
 - `MockWAHAClient` --implements--> `IWahaClient`  [EXTRACTED]
   src/cli/mock-waha-client.ts → src/integrations/waha/client.ts
-- `handleGreetingState()` --references--> `TEMPLATES`  [EXTRACTED]
-  src/state-machine/handlers/greeting.ts → src/config/persona.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (21 total, 4 thin omitted)
+## Communities (21 total, 5 thin omitted)
 
 ### Community 0 - "TypingService"
 Cohesion: 0.08
 Nodes (7): startSimulator(), MockWAHAClient, IWahaClient, HumanReplyParams, HumanReplyResult, TypingService, ConversationStateMachine
-
-### Community 1 - "scripts"
-Cohesion: 0.18
-Nodes (11): devDependencies, prisma, tsx, @types/node, typescript, vitest, prisma, tsx (+3 more)
 
 ### Community 2 - "machine.ts"
 Cohesion: 0.25
@@ -84,16 +80,16 @@ Cohesion: 0.16
 Nodes (12): main(), subdistricts, SubdistrictTest, ClinicConfig, IOrsClient, OrsClient, RouteResult, DeliveryCalculationResult (+4 more)
 
 ### Community 5 - "webhook.route.ts"
-Cohesion: 0.09
-Nodes (16): buildApp(), WahaLocationPayload, WahaMessagePayload, WahaWebhookEvent, adminRoutes(), memoryReservations, safeCompare(), webhookRoutes() (+8 more)
+Cohesion: 0.10
+Nodes (11): buildApp(), WahaLocationPayload, WahaMessagePayload, WahaWebhookEvent, webhookRoutes(), AbuseDetectionService, ConversationService, CustomerService (+3 more)
 
 ### Community 6 - "knowledge.service.ts"
-Cohesion: 0.12
-Nodes (9): faqs, globalForPrisma, KnowledgeBaseService, memoryKnowledgeChunks, memoryWaMessageIds, MessageService, AdminReplyBuffer, SelfLearningService (+1 more)
+Cohesion: 0.11
+Nodes (14): faqs, globalForPrisma, adminRoutes(), memoryReservations, safeCompare(), KnowledgeBaseService, memoryKnowledgeChunks, AdminReplyBuffer (+6 more)
 
 ### Community 8 - "dependencies"
-Cohesion: 0.06
-Nodes (31): axios, bullmq, dotenv, fastify, @googlemaps/google-maps-services-js, ioredis, dependencies, axios (+23 more)
+Cohesion: 0.04
+Nodes (44): axios, bullmq, dotenv, fastify, @googlemaps/google-maps-services-js, ioredis, dependencies, axios (+36 more)
 
 ### Community 9 - "compilerOptions"
 Cohesion: 0.15
@@ -120,24 +116,24 @@ Cohesion: 0.19
 Nodes (6): AgeTier, ClinicServiceItem, DEFAULT_CLINIC_SERVICES, serviceCatalog, TreatmentCatalogService, TreatmentCategoryType
 
 ## Knowledge Gaps
-- **108 isolated node(s):** `name`, `version`, `description`, `main`, `build` (+103 more)
+- **109 isolated node(s):** `name`, `version`, `description`, `main`, `build` (+104 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **5 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `WahaClient` connect `generator.ts` to `TypingService`, `machine.ts`, `GeocodingService`, `webhook.route.ts`?**
-  _High betweenness centrality (0.061) - this node is a cross-community bridge._
-- **Why does `adminRoutes()` connect `webhook.route.ts` to `treatment-catalog.service.ts`?**
-  _High betweenness centrality (0.053) - this node is a cross-community bridge._
-- **Why does `CustomerService` connect `webhook.route.ts` to `TypingService`, `machine.ts`, `GeocodingService`?**
-  _High betweenness centrality (0.041) - this node is a cross-community bridge._
+  _High betweenness centrality (0.067) - this node is a cross-community bridge._
+- **Why does `adminRoutes()` connect `knowledge.service.ts` to `treatment-catalog.service.ts`, `webhook.route.ts`?**
+  _High betweenness centrality (0.051) - this node is a cross-community bridge._
+- **Why does `TypingService` connect `TypingService` to `machine.ts`?**
+  _High betweenness centrality (0.039) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _108 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _109 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `TypingService` be split into smaller, more focused modules?**
-  _Cohesion score 0.08461538461538462 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08170731707317073 - nodes in this community are weakly interconnected._
 - **Should `🔄 2. Histori Perjalanan Revisi (Chronological Revisions History)` be split into smaller, more focused modules?**
   _Cohesion score 0.09523809523809523 - nodes in this community are weakly interconnected._
 - **Should `webhook.route.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.0931174089068826 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09982174688057041 - nodes in this community are weakly interconnected._

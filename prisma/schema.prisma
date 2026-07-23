@@ -51,6 +51,8 @@ model Customer {
   pending_kota       String?
   pending_lat        Float?
   pending_lng        Float?
+  zipcode            String?
+  pending_zipcode    String?
   status             String         @default("active")
   block_reason       String?
   blocked_at         DateTime?

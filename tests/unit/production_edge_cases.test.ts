@@ -979,4 +979,89 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_GROUP_MESSAGE' });
   });
+
+  it('30. should successfully parse filled-out reservation form when in RESERVATION_SENT state', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    
+    // Set customer location agar tidak ditolak
+    await customerService.updateCustomerLocation(cust.id, {
+      kelurahan: 'Peneleh',
+      kecamatan: 'Genteng',
+      kota: 'Surabaya',
+      lat: -7.25,
+      lng: 112.74,
+    }, DEFAULT_TENANT_ID);
+
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    conversation.current_state = ConversationState.RESERVATION_SENT;
+    
+    const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
+      customer: cust,
+      conversation,
+      incomingMessage: {
+        id: 'msg_res_form_submit',
+        from: phone,
+        chatId: `${phone}@c.us`,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        text: {
+          body: `Berikut list untuk reservasi : 
+
+Hari dan tanggal :  23 Juni 2026
+Nama Bunda: shafira Alif Fitrah
+Alamat & Shareloc : pandean 2/27 RT 2 RW 13, Kel. Peneleh
+
+Kec : Genteng
+Kota : Surabaya
+No. Hp : 081217639971
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi : Danish Alzam Khalfani
+Usia Bayi/Anak : 1 bulan 2 hari
+Treatment : paket selapan ceria`
+        },
+      },
+    };
+    
+    const res = await testStateMachine.processMessage(ctx);
+    expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
+    expect(res.isHumanHandling).toBe(true);
+    expect(res.replyText).toContain('Data reservasi sudah kami terima ya Bund');
+    
+    // Pastikan status percakapan di-escalate ke HUMAN_HANDLING
+    const updatedConv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    expect(updatedConv.is_human_handling).toBe(true);
+  });
+
+  it('31. should return validation warning if reservation form lacks required fields', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    conversation.current_state = ConversationState.RESERVATION_SENT;
+    
+    const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
+      customer: cust,
+      conversation,
+      incomingMessage: {
+        id: 'msg_res_form_incomplete',
+        from: phone,
+        chatId: `${phone}@c.us`,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        text: {
+          body: `Berikut list untuk reservasi : 
+Nama Bunda: shafira Alif Fitrah`
+        },
+      },
+    };
+    
+    const res = await testStateMachine.processMessage(ctx);
+    expect(res.nextState).toBe(ConversationState.RESERVATION_SENT);
+    expect(res.replyText).toContain('kurang lengkap. Mohon isi bagian berikut');
+  });
 });

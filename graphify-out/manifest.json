@@ -1,7 +1,7 @@
 {
   "package.json": {
-    "mtime": 1784783137.6722133,
-    "ast_hash": "658c1dbee8ad652bf520d6f0052ddba4",
+    "mtime": 1784784513.939077,
+    "ast_hash": "a3daf0d7028a62d13dbabe928fd18699",
     "semantic_hash": ""
   },
   "prisma/migrations/20260721070211_init/migration.sql": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "src/config/persona.ts": {
-    "mtime": 1784780722.7342515,
-    "ast_hash": "c6e81899f430f6c2d7ecb1e7ec431616",
+    "mtime": 1784815605.4791317,
+    "ast_hash": "a6973281358231dd11e4ffba34a176d1",
     "semantic_hash": ""
   },
   "src/db/client.ts": {
@@ -45,8 +45,8 @@
     "semantic_hash": ""
   },
   "src/integrations/google-maps/geocoding.ts": {
-    "mtime": 1784720753.238888,
-    "ast_hash": "c0acd8affe7d9fad27495dd22eff0ddf",
+    "mtime": 1784813035.0084527,
+    "ast_hash": "e427ab1f666e6a27e20e63dbeec82f31",
     "semantic_hash": ""
   },
   "src/integrations/llm/generator.ts": {
@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "src/integrations/waha/client.ts": {
-    "mtime": 1784772599.1558242,
-    "ast_hash": "2382e5099d329b1edc4341f46429ea16",
+    "mtime": 1784812109.9640105,
+    "ast_hash": "cca08a7465324bfb431ee3d2668096be",
     "semantic_hash": ""
   },
   "src/integrations/waha/types.ts": {
@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "src/routes/webhook.route.ts": {
-    "mtime": 1784784067.6740272,
-    "ast_hash": "c0d24885c11e682eba9cfc28c9346a6e",
+    "mtime": 1784813964.8139412,
+    "ast_hash": "fa928c3b4a851fdb749e3062eca94c33",
     "semantic_hash": ""
   },
   "src/services/conversation.service.ts": {
@@ -105,13 +105,13 @@
     "semantic_hash": ""
   },
   "src/services/customer.service.ts": {
-    "mtime": 1784774056.6062381,
-    "ast_hash": "238da49d2e9557a1de6c82401dc545f1",
+    "mtime": 1784813077.7321887,
+    "ast_hash": "d4b23bf2545385f7ea91ae87d180cc90",
     "semantic_hash": ""
   },
   "src/services/delivery.service.ts": {
-    "mtime": 1784695314.0827255,
-    "ast_hash": "610aa23d57118895c9269dd5c83a3112",
+    "mtime": 1784815620.0966885,
+    "ast_hash": "ce79a6962bfc097b37cb4964fd40d599",
     "semantic_hash": ""
   },
   "src/services/knowledge.service.ts": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "src/services/typing.service.ts": {
-    "mtime": 1784698900.7275958,
-    "ast_hash": "e4aa2e1b749db338fe5859f3da2e8390",
+    "mtime": 1784812532.3612554,
+    "ast_hash": "8499d67adfdd6580b1eb01057960c927",
     "semantic_hash": ""
   },
   "src/state-machine/handlers/greeting.ts": {
@@ -140,18 +140,18 @@
     "semantic_hash": ""
   },
   "src/state-machine/handlers/interest.ts": {
-    "mtime": 1784784060.0289962,
-    "ast_hash": "3b09faff0b8b7da80dd40369f99565fe",
+    "mtime": 1784815051.2588418,
+    "ast_hash": "6ca9ee459b46b4bbc233879287980518",
     "semantic_hash": ""
   },
   "src/state-machine/handlers/location.ts": {
-    "mtime": 1784772565.8880477,
-    "ast_hash": "22b5d149d10b4d374df61d8f6ef86ee2",
+    "mtime": 1784813125.0919788,
+    "ast_hash": "4bc2a05ab9dd5fe2f84ecda10dca3a49",
     "semantic_hash": ""
   },
   "src/state-machine/machine.ts": {
-    "mtime": 1784772452.1204557,
-    "ast_hash": "709316d84f313cc25822abf0e2bf5d3d",
+    "mtime": 1784811660.2758398,
+    "ast_hash": "d30c4ef4c43cf9d5f6f2f6a3a337295d",
     "semantic_hash": ""
   },
   "src/state-machine/types.ts": {
@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "tests/integration/waha-webhook.test.ts": {
-    "mtime": 1784772501.532889,
-    "ast_hash": "8b31214e677f8d9946a6aec7bb10f19f",
+    "mtime": 1784813972.9692807,
+    "ast_hash": "f37da8b5ab1ce0878966c4cf5ae4e1f1",
     "semantic_hash": ""
   },
   "tests/unit/delivery.test.ts": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "tests/unit/typing.test.ts": {
-    "mtime": 1784692162.5541992,
-    "ast_hash": "ab197bfdb9e2ff46735eca315f58d07e",
+    "mtime": 1784812550.5891478,
+    "ast_hash": "cce3740994b63e2de724efa1798ea6de",
     "semantic_hash": ""
   },
   "tsconfig.json": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "PRD.md": {
-    "mtime": 1784774401.5239177,
-    "ast_hash": "5f42d547716a79ecc1abb57878327a7b",
+    "mtime": 1784794665.0592115,
+    "ast_hash": "169f3be51cef6e3b706315dfeffd7bcf",
     "semantic_hash": ""
   },
   "scratch/test_subdistricts.ts": {
@@ -270,8 +270,8 @@
     "semantic_hash": ""
   },
   "src/state-machine/handlers/location-confirmation.ts": {
-    "mtime": 1784780726.1633146,
-    "ast_hash": "86d222aab9822d24519894205a8eb957",
+    "mtime": 1784813150.0262377,
+    "ast_hash": "d63abe0258499194a38d3e384a152256",
     "semantic_hash": ""
   },
   "src/utils/similarity.ts": {
@@ -285,8 +285,8 @@
     "semantic_hash": ""
   },
   "tests/unit/production_edge_cases.test.ts": {
-    "mtime": 1784774132.8628821,
-    "ast_hash": "55782d10b2660fb38a0a7787821cc9b6",
+    "mtime": 1784815055.8716507,
+    "ast_hash": "1a767b451c42e1dac85a2adb03635fa1",
     "semantic_hash": ""
   },
   "prisma/migrations/20260723015246_add_tenant_id_slot/migration.sql": {
@@ -309,14 +309,9 @@
     "ast_hash": "e49a5247e96db7bc774ae0664c87f1bb",
     "semantic_hash": ""
   },
-  "assets/pricelist_spa.jpg": {
-    "mtime": 1784725980.1884398,
-    "ast_hash": "39a75190e8655e13ccc2f816ba9a7ac4",
-    "semantic_hash": ""
-  },
   "src/cli/seed-faq.ts": {
-    "mtime": 1784783133.7032592,
-    "ast_hash": "9be83613b8e5c86590cae703c4dfa786",
+    "mtime": 1784816306.0157804,
+    "ast_hash": "1aa225a1d1fbad10a46648038a75da9e",
     "semantic_hash": ""
   },
   "src/services/self-learning.service.ts": {
@@ -337,6 +332,16 @@
   "tests/unit/treatment-catalog.test.ts": {
     "mtime": 1784783123.78581,
     "ast_hash": "87c841c028c280c4a95e651f600b06db",
+    "semantic_hash": ""
+  },
+  "src/cli/reset-customer.ts": {
+    "mtime": 1784811233.3519225,
+    "ast_hash": "8ee3109ba55d8511f89292c55563b3d9",
+    "semantic_hash": ""
+  },
+  "src/services/google-contacts.service.ts": {
+    "mtime": 1784812673.5975974,
+    "ast_hash": "bb5d54dcae87fe4c2a531a32ad4e2344",
     "semantic_hash": ""
   }
 }

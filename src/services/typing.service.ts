@@ -115,11 +115,112 @@ export class TypingService {
       return [text ? text.trim() : ''];
     }
 
-    const maxCount = parseInt(process.env.HUMANIZER_BUBBLE_MAX_COUNT || '4', 10);
-    const maxChars = parseInt(process.env.HUMANIZER_BUBBLE_MAX_CHARS || '130', 10);
+    const trimmed = text.trim();
+    const singleThreshold = parseInt(process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS || '350', 10);
+    const maxCount = parseInt(process.env.HUMANIZER_BUBBLE_MAX_COUNT || '2', 10);
+    const maxChars = parseInt(process.env.HUMANIZER_BUBBLE_MAX_CHARS || '250', 10);
 
-    // 1. Split berdasarkan paragraf (\n\n)
-    const paragraphs = text
+    // 1. JIKA singleThreshold > 0 DAN panjang teks di bawah threshold: Kirim sebagai 1 bubble tunggal!
+    if (singleThreshold > 0 && trimmed.length <= singleThreshold) {
+      return [trimmed];
+    }
+
+    // 2. JIKA singleThreshold > 0: Gunakan pembagian bubble seimbang (target 2 bubble)
+    if (singleThreshold > 0) {
+      const paragraphs = trimmed
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      if (paragraphs.length >= 2) {
+        // Cek apakah ada paragraph yang dimulai dengan kata kunci konklusi form reservasi (prioritas pemisahan semantik)
+        const concludingKeywords = [
+          'mohon bisa diisi',
+          'mohon diisi',
+          'mohon untuk mengisi',
+          'harap diisi',
+          'silakan diisi',
+          'silahkan diisi',
+          'mohon diisi ya',
+          'mohon bisa diisi ya'
+        ];
+
+        let targetSplitIndex = -1;
+        for (let i = 0; i < paragraphs.length; i++) {
+          const lowerP = paragraphs[i].toLowerCase();
+          const match = concludingKeywords.some((keyword) => lowerP.startsWith(keyword));
+          if (match) {
+            targetSplitIndex = i;
+            break;
+          }
+        }
+
+        if (targetSplitIndex > 0) {
+          const firstBubble = paragraphs.slice(0, targetSplitIndex).join('\n\n');
+          const secondBubble = paragraphs.slice(targetSplitIndex).join('\n\n');
+          return [firstBubble, secondBubble];
+        }
+
+        if (maxCount === 2) {
+          let bestIndex = 0;
+          let minDiff = Infinity;
+          let totalLen = trimmed.length;
+          let leftLen = 0;
+
+          for (let i = 0; i < paragraphs.length - 1; i++) {
+            leftLen += paragraphs[i].length + 2;
+            const rightLen = totalLen - leftLen;
+            const diff = Math.abs(leftLen - rightLen);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestIndex = i;
+            }
+          }
+
+          const firstBubble = paragraphs.slice(0, bestIndex + 1).join('\n\n');
+          const secondBubble = paragraphs.slice(bestIndex + 1).join('\n\n');
+          return [firstBubble, secondBubble];
+        } else {
+          const head = paragraphs.slice(0, maxCount - 1);
+          const tail = paragraphs.slice(maxCount - 1).join('\n\n');
+          return [...head, tail];
+        }
+      }
+
+      // Jika hanya ada 1 paragraf tetapi panjang, bagi berdasarkan kalimat
+      const sentences = trimmed.split(/(?<=[.!?])(?!\d)\s+/).map(s => s.trim()).filter(Boolean);
+      if (sentences.length >= 2) {
+        if (maxCount === 2) {
+          let bestIndex = 0;
+          let minDiff = Infinity;
+          let totalLen = trimmed.length;
+          let leftLen = 0;
+
+          for (let i = 0; i < sentences.length - 1; i++) {
+            leftLen += sentences[i].length + 1;
+            const rightLen = totalLen - leftLen;
+            const diff = Math.abs(leftLen - rightLen);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestIndex = i;
+            }
+          }
+
+          const firstBubble = sentences.slice(0, bestIndex + 1).join(' ');
+          const secondBubble = sentences.slice(bestIndex + 1).join(' ');
+          return [firstBubble, secondBubble];
+        } else {
+          const head = sentences.slice(0, maxCount - 1);
+          const tail = sentences.slice(maxCount - 1).join(' ');
+          return [...head, tail];
+        }
+      }
+
+      return [trimmed];
+    }
+
+    // 3. BACKWARD COMPATIBLE FALLBACK (Jika singleThreshold === 0): Gunakan cara lama (maxChars greedy split)
+    const paragraphs = trimmed
       .split(/\n\s*\n/)
       .map((p) => p.trim())
       .filter(Boolean);
@@ -130,19 +231,18 @@ export class TypingService {
       if (para.length <= maxChars) {
         rawCandidates.push(para);
       } else {
-        // Split paragraf panjang berdasarkan kalimat tanpa memotong di tengah kalimat (dan menghindari split pada angka/desimal/ribuan)
         const sentences = para.split(/(?<=[.!?])(?!\d)\s+/);
         let currentGroup = '';
 
         for (const sentence of sentences) {
-          const trimmed = sentence.trim();
-          if (!trimmed) continue;
+          const trimmedSent = sentence.trim();
+          if (!trimmedSent) continue;
 
-          if ((currentGroup + ' ' + trimmed).trim().length <= maxChars) {
-            currentGroup = currentGroup ? `${currentGroup} ${trimmed}` : trimmed;
+          if ((currentGroup + ' ' + trimmedSent).trim().length <= maxChars) {
+            currentGroup = currentGroup ? `${currentGroup} ${trimmedSent}` : trimmedSent;
           } else {
             if (currentGroup) rawCandidates.push(currentGroup.trim());
-            currentGroup = trimmed;
+            currentGroup = trimmedSent;
           }
         }
         if (currentGroup.trim()) {
@@ -151,9 +251,8 @@ export class TypingService {
       }
     }
 
-    if (rawCandidates.length === 0) return [text.trim()];
+    if (rawCandidates.length === 0) return [trimmed];
 
-    // 2. Gabungkan jika jumlah bubble kandidat melebihi maxCount (maksimal 4 bubble)
     if (rawCandidates.length > maxCount) {
       const head = rawCandidates.slice(0, maxCount - 1);
       const tail = rawCandidates.slice(maxCount - 1).join('\n\n');

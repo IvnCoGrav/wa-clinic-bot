@@ -42,6 +42,8 @@ export class CustomerService {
           distance_km: null,
           ongkir: null,
           is_out_of_coverage: false,
+          zipcode: null,
+          pending_zipcode: null,
           status: 'active',
           block_reason: null,
           blocked_at: null,
@@ -68,6 +70,7 @@ export class CustomerService {
       distanceKm?: number;
       ongkir?: number;
       isOutOfCoverage?: boolean;
+      zipcode?: string;
     },
     tenantId: string
   ): Promise<any> {
@@ -90,6 +93,7 @@ export class CustomerService {
           distance_km: data.distanceKm,
           ongkir: data.ongkir,
           is_out_of_coverage: data.isOutOfCoverage ?? false,
+          zipcode: data.zipcode,
         },
       });
     } catch (error) {
@@ -105,6 +109,7 @@ export class CustomerService {
             distance_km: data.distanceKm ?? cust.distance_km,
             ongkir: data.ongkir ?? cust.ongkir,
             is_out_of_coverage: data.isOutOfCoverage ?? cust.is_out_of_coverage,
+            zipcode: data.zipcode !== undefined ? data.zipcode : cust.zipcode,
             updated_at: new Date(),
           });
           return cust;
@@ -125,6 +130,7 @@ export class CustomerService {
       kota?: string | null;
       lat?: number | null;
       lng?: number | null;
+      zipcode?: string | null;
     },
     tenantId: string
   ): Promise<any> {
@@ -144,6 +150,7 @@ export class CustomerService {
           pending_kota: data.kota,
           pending_lat: data.lat,
           pending_lng: data.lng,
+          pending_zipcode: data.zipcode,
         },
       });
     } catch (error) {
@@ -156,6 +163,7 @@ export class CustomerService {
             pending_kota: data.kota !== undefined ? data.kota : cust.pending_kota,
             pending_lat: data.lat !== undefined ? data.lat : cust.pending_lat,
             pending_lng: data.lng !== undefined ? data.lng : cust.pending_lng,
+            pending_zipcode: data.zipcode !== undefined ? data.zipcode : cust.pending_zipcode,
             updated_at: new Date(),
           });
           return cust;
@@ -177,6 +185,7 @@ export class CustomerService {
         kota: null,
         lat: null,
         lng: null,
+        zipcode: null,
       },
       tenantId
     );
@@ -194,6 +203,7 @@ export class CustomerService {
       pending_kota: string;
       pending_lat: number;
       pending_lng: number;
+      pending_zipcode?: string | null;
     },
     deliveryCalculator: (coords: { lat: number; lng: number }) => Promise<{
       distanceKm: number;
@@ -227,6 +237,7 @@ export class CustomerService {
               kota: pendingData.pending_kota,
               lat: pendingData.pending_lat,
               lng: pendingData.pending_lng,
+              zipcode: pendingData.pending_zipcode || null,
               distance_km: delivery.distanceKm,
               ongkir: delivery.ongkir,
               is_out_of_coverage: delivery.isOutOfCoverage,
@@ -237,6 +248,7 @@ export class CustomerService {
               pending_kota: null,
               pending_lat: null,
               pending_lng: null,
+              pending_zipcode: null,
             },
           });
         });
@@ -252,6 +264,7 @@ export class CustomerService {
               kota: pendingData.pending_kota,
               lat: pendingData.pending_lat,
               lng: pendingData.pending_lng,
+              zipcode: pendingData.pending_zipcode || null,
               distance_km: delivery.distanceKm,
               ongkir: delivery.ongkir,
               is_out_of_coverage: delivery.isOutOfCoverage,
@@ -261,6 +274,7 @@ export class CustomerService {
               pending_kota: null,
               pending_lat: null,
               pending_lng: null,
+              pending_zipcode: null,
               updated_at: new Date(),
             });
             found = true;
