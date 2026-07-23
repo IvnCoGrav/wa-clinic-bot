@@ -148,4 +148,36 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     // Cleanup env
     delete process.env.WAHA_WEBHOOK_SECRET;
   });
+
+  it('POST /webhook: should bypass messages from numbers labeled as Admin', async () => {
+    const adminPhone = `628111222333`;
+    const chatId = `${adminPhone}@c.us`;
+
+    // Pasang label Admin di mock WAHA
+    await wahaClient.addLabel(chatId, 'Admin');
+
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_admin_msg_${Date.now()}`,
+        from: chatId,
+        fromMe: false,
+        timestamp: 1700000000,
+        body: 'Halo ini pegawai/admin',
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_ADMIN' });
+
+    // Hapus label Admin setelah pengujian
+    await wahaClient.removeLabel(chatId, 'Admin');
+  });
 });

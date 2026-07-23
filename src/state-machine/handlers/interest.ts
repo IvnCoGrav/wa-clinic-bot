@@ -35,6 +35,62 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     return handleLocationState(ctx);
   }
 
+  // 0. Cek jika di state RESERVATION_SENT dan customer mengirimkan form reservasi
+  if (conversation.current_state === ConversationState.RESERVATION_SENT) {
+    const isFormSubmission = lower.includes('berikut list untuk reservasi') || 
+                             lower.includes('pilihan treatment');
+                             
+    if (isFormSubmission) {
+      const { parseReservationText } = await import('../../utils/reservation-text-parser');
+      const parseResult = parseReservationText(userText);
+
+      if (parseResult.success && parseResult.reservation) {
+        const parsed = parseResult.reservation;
+        // Simpan reservasi ke database
+        try {
+          const { prisma } = await import('../../db/client');
+          await prisma.reservation.create({
+            data: {
+              tenant_id: tenantId,
+              customer_id: customer.id,
+              treatment_category: parsed.treatmentCategory,
+              treatment_detail: parsed.treatmentDetail,
+              booking_date: parsed.bookingDate,
+              raw_text: userText,
+              status: 'pending',
+            },
+          });
+        } catch (dbErr) {
+          // Abaikan error DB untuk in-memory fallback
+        }
+
+        // Eskalasi ke human handling untuk konfirmasi jadwal manual oleh admin
+        await conversationService.escalateToHumanHandling(
+          conversation,
+          customer.phone,
+          `Formulir reservasi telah diisi oleh customer: "${parsed.treatmentDetail}"`,
+          tenantId
+        );
+
+        return {
+          nextState: ConversationState.HUMAN_HANDLING,
+          replyText: `Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊`,
+          shouldSendReply: true,
+          isHumanHandling: true,
+        };
+      } else {
+        // Jika format kurang lengkap, minta lengkapi field yang kurang
+        const missing = parseResult.missingFields || [];
+        const missingStr = missing.join(', ');
+        return {
+          nextState: ConversationState.RESERVATION_SENT,
+          replyText: `Maaf Bunda, data reservasi yang dikirimkan kurang lengkap. Mohon isi bagian berikut ya bund: ${missingStr}. Terima kasih! 😊`,
+          shouldSendReply: true,
+        };
+      }
+    }
+  }
+
   // 1. Deteksi Intent (5 Intent Classifier)
   const intentResult = await llmIntentService.detectIntent(userText);
   console.log(`[INTENT DETECTED] Customer Message: "${userText}" -> Intent: ${intentResult.intent}`);

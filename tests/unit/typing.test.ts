@@ -3,14 +3,35 @@ import { typingService } from '../../src/services/typing.service';
 import { wahaClient } from '../../src/integrations/waha/client';
 
 describe('Typing Simulation & Humanizer Service Unit Tests (Final Revision)', () => {
+  let oldSingleThreshold: string | undefined;
+  let oldMaxCount: string | undefined;
+  let oldMaxChars: string | undefined;
+
   beforeEach(() => {
     vi.restoreAllMocks();
     typingService.setSpeedFactor(100); // 100x speed factor untuk unit testing agar tidak timeout
+
+    oldSingleThreshold = process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS;
+    oldMaxCount = process.env.HUMANIZER_BUBBLE_MAX_COUNT;
+    oldMaxChars = process.env.HUMANIZER_BUBBLE_MAX_CHARS;
+
+    process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS = '0'; // force split
+    process.env.HUMANIZER_BUBBLE_MAX_COUNT = '4';
+    process.env.HUMANIZER_BUBBLE_MAX_CHARS = '130';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     typingService.setSpeedFactor(1); // Restore speed factor
+
+    if (oldSingleThreshold !== undefined) process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS = oldSingleThreshold;
+    else delete process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS;
+
+    if (oldMaxCount !== undefined) process.env.HUMANIZER_BUBBLE_MAX_COUNT = oldMaxCount;
+    else delete process.env.HUMANIZER_BUBBLE_MAX_COUNT;
+
+    if (oldMaxChars !== undefined) process.env.HUMANIZER_BUBBLE_MAX_CHARS = oldMaxChars;
+    else delete process.env.HUMANIZER_BUBBLE_MAX_CHARS;
   });
 
   describe('1. WPM Proportionality & Cap Ratio Verification', () => {
@@ -92,6 +113,50 @@ Apakah Bunda berminat untuk mengisi form reservasi sekarang?`;
       expect(joinedBubbles).toContain('pijat bayi');
       expect(joinedBubbles).toContain('ultrasound');
       expect(joinedBubbles).toContain('form reservasi');
+    });
+
+    it('should split reservation form semantically right before the concluding keyword', () => {
+      const reservationForm = `Berikut list untuk reservasi :
+
+Hari dan tanggal :
+Nama Bunda:
+Alamat & Shareloc :
+Kec :
+Kota :
+No. Hp :
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi :
+Usia Bayi/Anak :
+Treatment :
+
+Pilihan treatment (Moms) :
+Usia Kehamilan (Jika hamil):
+Treatment :
+
+Mohon bisa diisi Bunda 😊
+Cancel / Pembatalan Harap minimal H-3 jam
+
+H-1 sebelum treatment akan kami reminder kembali bunda 🥰
+Terimakasih.  ☺️`;
+
+      // Set environment mock to target 2 bubbles
+      const oldSingle = process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS;
+      process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS = '350';
+
+      try {
+        const bubbles = typingService.splitIntoBubbles(reservationForm);
+
+        expect(bubbles.length).toBe(2);
+        expect(bubbles[0]).toContain('Pilihan treatment (Moms) :');
+        expect(bubbles[0]).not.toContain('Mohon bisa diisi');
+        expect(bubbles[1]).toContain('Mohon bisa diisi');
+        expect(bubbles[1]).toContain('Terimakasih.');
+      } finally {
+        if (oldSingle) process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS = oldSingle;
+        else delete process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS;
+      }
     });
   });
 

@@ -65,6 +65,7 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
           pending_kota: customer.pending_kota || '',
           pending_lat: customer.pending_lat,
           pending_lng: customer.pending_lng,
+          pending_zipcode: customer.pending_zipcode || null,
         },
         async (coords) => {
           return deliveryService.calculateDelivery(coords);

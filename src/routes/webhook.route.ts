@@ -5,6 +5,7 @@ import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
 import { wahaClient } from '../integrations/waha/client';
+import { googleContactsService } from '../services/google-contacts.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { ConversationState } from '@prisma/client';
 import { abuseDetectionService } from '../services/abuse-detection.service';
@@ -79,13 +80,30 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
     }
 
-    // Extrak nomor HP internasional dari chatId WAHA (misal "628123456789@c.us" -> "628123456789")
+    // Extrak nomor HP internasional dari JID WAHA (misal "79903991054369@lid" -> "6285794210526")
     const chatId = payload.from;
-    const phone = chatId.replace(/@.*$/, '');
+
+    // --- REVISI USER: BYPASS EMPLOYEE/ADMIN CHATS ---
+    const labels = await wahaClient.getChatLabels(chatId);
+    if (labels.some(l => l.toLowerCase() === 'admin')) {
+      console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
+      return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+    }
+
+    const phone = await wahaClient.getPhoneNumberFromLid(chatId);
     const contactName = payload._data?.notifyName;
 
     // Ambil/Buat record Customer & Conversation
     const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+
+    // Cek apakah customer baru saja dibuat (< 5 detik lalu) untuk memicu auto-save ke Google Contacts
+    const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
+    if (isNewCustomer) {
+      googleContactsService.createContact(phone, contactName).catch((err) => {
+        console.error('[GOOGLE CONTACTS] Unhandled rejection:', err);
+      });
+    }
+
     let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---

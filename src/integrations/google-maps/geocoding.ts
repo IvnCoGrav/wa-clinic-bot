@@ -15,6 +15,7 @@ export interface ResolvedLocation {
   lng?: number;
   formattedAddress?: string;
   ambiguityResults?: any[];
+  zipcode?: string;
 }
 
 const googleMapsClient = new Client({});
@@ -77,6 +78,7 @@ export class GeocodingService {
 
       const lat = topResult.geometry.location.lat;
       const lng = topResult.geometry.location.lng;
+      const zipcode = this.extractComponent(components, ['postal_code']);
 
       // Presisi jika kelurahan/desa berhasil terdeteksi
       const isPrecise = Boolean(kelurahan);
@@ -89,6 +91,7 @@ export class GeocodingService {
         lat,
         lng,
         formattedAddress: topResult.formatted_address,
+        zipcode,
       };
     } catch (error) {
       console.error('Error in Google Maps geocodeText, falling back to local database:', error);
@@ -139,6 +142,8 @@ export class GeocodingService {
         'locality',
       ]);
 
+      const zipcode = this.extractComponent(components, ['postal_code']);
+
       return {
         isPrecise: true,
         kelurahan: kelurahan || 'Area Terdaftar',
@@ -147,6 +152,7 @@ export class GeocodingService {
         lat,
         lng,
         formattedAddress: topResult.formatted_address,
+        zipcode,
       };
     } catch (error) {
       console.error('Error in Google Maps reverseGeocode, falling back to mockReverseGeocode:', error);
@@ -222,6 +228,7 @@ export class GeocodingService {
               lat,
               lng,
               formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+              zipcode: match.Kode_Pos,
             };
           } else {
             return {
@@ -254,7 +261,7 @@ export class GeocodingService {
             const coords = match.Koordinat.split(',');
             const lat = parseFloat(coords[0].trim());
             const lng = parseFloat(coords[1].trim());
-            return {
+             return {
               isPrecise: false,
               isFuzzyMatch: true,
               kelurahan: match.Kelurahan_Desa,
@@ -263,6 +270,7 @@ export class GeocodingService {
               lat,
               lng,
               formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+              zipcode: match.Kode_Pos,
             };
           } else if (uniqueCombinations.size > 1) {
             // Lebih dari 1 kelurahan unik -> alur ambiguitas pilih-kecamatan
@@ -314,6 +322,7 @@ export class GeocodingService {
               lat,
               lng,
               formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+              zipcode: match.Kode_Pos,
             };
           }
 
@@ -353,6 +362,7 @@ export class GeocodingService {
       lat,
       lng,
       formattedAddress: `Lat: ${lat}, Lng: ${lng}, Gubeng, Surabaya`,
+      zipcode: '60281',
     };
   }
 }

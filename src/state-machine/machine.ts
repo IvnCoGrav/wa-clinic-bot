@@ -131,6 +131,20 @@ export class ConversationStateMachine {
       tenantId
     );
 
+    // --- TEMPORARY SAFETY NET: INTERCEPT & APPROVE VIA TERMINAL ---
+    if (process.env.TERMINAL_APPROVAL_ENABLED === 'true' && process.env.NODE_ENV !== 'test' && result.shouldSendReply && result.replyText) {
+      const finalReply = await this.promptTerminal(
+        result.replyText,
+        incomingMessage.text?.body || (incomingMessage.location ? '[SHARE LOCATION]' : '[MEDIA]'),
+        customer.phone
+      );
+      if (finalReply === null) {
+        result.shouldSendReply = false;
+      } else {
+        result.replyText = finalReply;
+      }
+    }
+
     // 5. Kirim Balasan Otomatis via Typing Simulation Service jika required
     if (result.shouldSendReply && result.replyText) {
       // Memulai alur simulasi ngetik manusia: sendSeen -> reading delay -> per bubble (startTyping -> typing delay -> stopTyping -> sendText)
@@ -153,13 +167,49 @@ export class ConversationStateMachine {
 
         // Kirim Pricelist Image jika diinstruksikan oleh state handler
         if (result.sendPricelistImage) {
-          const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'https://raw.githubusercontent.com/IvnCoGrav/wa-clinic-bot/master/assets/pricelist_spa.jpg';
+          const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
           await wahaClient.sendImage(chatId, pricelistUrl, "Pricelist Kala Moms & Baby Spa 🌸");
         }
       }
     }
 
     return result;
+  }
+
+  private promptTerminal(proposedReply: string, incomingText: string, phone: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const readline = require('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      console.log('\n============================================================');
+      console.log(`🌸 [SAFETY NET INTERCEPTED]`);
+      console.log(`   Customer: ${phone}`);
+      console.log(`   Pesan Masuk: "${incomingText}"`);
+      console.log(`------------------------------------------------------------`);
+      console.log(`   Proposed Bot Reply:`);
+      console.log(proposedReply);
+      console.log(`------------------------------------------------------------`);
+      console.log(`Pilihan:`);
+      console.log(`  - Tekan [Enter] atau ketik 'y' untuk SETUJU dan kirim`);
+      console.log(`  - Ketik 'n' untuk BATALKAN pengiriman`);
+      console.log(`  - Ketik kalimat kustom Anda di bawah ini untuk OVERRIDE balasan`);
+      console.log('============================================================');
+
+      rl.question('Masukkan pilihan / pesan kustom Anda: ', (answer: string) => {
+        rl.pause(); // Pause stream instead of closing, preserving process.stdin for subsequent inputs and avoiding tsx watch EOF crash
+        const clean = answer.trim();
+        if (clean === '' || clean.toLowerCase() === 'y') {
+          resolve(proposedReply);
+        } else if (clean.toLowerCase() === 'n') {
+          resolve(null);
+        } else {
+          resolve(clean);
+        }
+      });
+    });
   }
 }
 
