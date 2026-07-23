@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
 **Versi:** 2.0  
-**Status:** Fase 1 logic-complete (termasuk hardening keamanan & edge case), menunggu testing manual WAHA  
+**Status:** Fase 1 & Fase 3 logic-complete (termasuk hardening keamanan, edge case, & integrasi multitenancy), menunggu testing manual WAHA  
 **Terakhir diperbarui:** 23 Juli 2026
 
 ---
@@ -53,15 +53,29 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 16 | Penolakan input lokasi setingkat kecamatan/kota tanpa nama kelurahan (bot minta detail lebih spesifik) | ✅ Selesai |
 | 17 | Deteksi kalimat afirmasi/negasi kompleks (termasuk mixed-signal seperti "iya bener tapi bukan itu") untuk konfirmasi lokasi | ✅ Selesai |
 | 18 | Reset otomatis data lokasi pending (bukan yang sudah confirmed) setelah idle 24 jam tanpa respon | ✅ Selesai |
-| 19 | Proteksi endpoint admin dengan ADMIN_API_KEY (fail-closed jika key tidak diset) | ✅ Selesai — perlu security review independen, lihat Section 8 |
+| 19 | Proteksi endpoint admin dengan ADMIN_API_KEY (fail-closed jika key tidak diset) | ✅ Selesai |
 | 20 | Status blocked pada customer (bypass otomatis, bot tidak membalas) | ⚠️ Placeholder — mekanisme penentuan siapa/bagaimana customer di-block belum ditentukan, lihat Section 8 |
 | 21 | Struktur data disiapkan untuk multi-tenant di masa depan (tenant_id di semua tabel, default single-tenant) — bukan fitur SaaS aktif, murni persiapan arsitektur | ✅ Selesai |
 
+#### 4.1.1 Fitur Tambahan "Fase 3" (Status: Development & Verification Selesai)
+
+| # | Fitur | Status |
+|---|---|---|
+| 22 | Peredaman greeting "Halo Bunda" jika ada percakapan aktif <48 jam terakhir | ✅ Selesai |
+| 23 | Kirim gambar pricelist otomatis (`assets/pricelist_spa.jpg`) saat lokasi terkonfirmasi | ✅ Selesai |
+| 24 | Deteksi lokasi dini: jika pesan pertama customer sudah mengandung alamat/kelurahan valid, langsung diproses ke geocoding tanpa query kosong | ✅ Selesai |
+| 25 | Proteksi form reservasi: form tidak dikirim jika `customer.kelurahan` masih kosong | ✅ Selesai |
+| 26 | Dukungan alias "bubid" (bu bidan) sebagai sapaan ke bot | ✅ Selesai |
+| 27 | Label WAHA "hold" otomatis saat eskalasi ke human + auto-resume jika label dihapus manual oleh admin | ✅ Selesai |
+| 28 | Filter pesan dari grup WhatsApp (`@g.us`) diabaikan | ✅ Selesai |
+
 **Belum selesai / pending sebelum Fase 1 dianggap tuntas:**
-- Testing manual end-to-end dengan WAHA aktif (koneksi QR, typing indicator nyata, share location asli, akurasi jawaban FAQ) — saat ini baru divalidasi lewat CLI Chat Simulator
+- Testing manual end-to-end dengan WAHA aktif (koneksi QR, typing indicator nyata, share location asli, akurasi jawaban FAQ) — saat ini baru divalidasi lewat CLI Chat Simulator & Vitest
 - Import data FAQ & dokumen asli milik klinik (draft FAQ sudah disiapkan berdasarkan transkrip chat asli, menunggu review & import final)
 - Security review independen untuk ADMIN_API_KEY (lihat Section 8)
 - Keputusan bisnis: mekanisme customer blocked (lihat Section 8)
+
+---
 
 #### 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Didesain, belum dikerjakan)
 
@@ -89,10 +103,10 @@ Customer chat pertama kali
   → Lokasi lengkap?   
       Tidak → minta detail kelurahan/desa (maks 3x percobaan, lalu eskalasi)  
       Ya (teks lengkap / share location) → lanjut  
-  → Hitung jarak & ongkir, informasikan ke customer  
+  → Hitung jarak & ongkir, kirim info ongkir + pricelist image  
   → Customer tertarik?  
-      Ya → kirim form reservasi  
-      Tanya jadwal spesifik → eskalasi ke human, bot senyap untuk thread ini  
+      Ya → kirim form reservasi (hanya jika lokasi confirmed)  
+      Tanya jadwal spesifik → eskalasi ke human + pasang label "hold", bot senyap untuk thread ini  
       Tanya hal lain (FAQ) → jawab pakai knowledge base, lanjutkan state semula  
   → Form terisi → admin konfirmasi manual → simpan ke Google Calendar (Fase 2)
 
@@ -164,7 +178,7 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 ### 10. Batasan & Risiko yang Diketahui
 - WAHA bersifat unofficial (bukan API resmi Meta) — berisiko session terputus sewaktu-waktu dan perlu monitoring/reconnect manual.
 - Full-text search knowledge base mengandalkan kecocokan kata, bukan makna.
-- Auto-release human handling murni berbasis waktu (6 jam).
+- Auto-release human handling murni berbasis waktu (6 jam) dan berbasis hilangnya label `"hold"` di chat.
 - Semua follow-up otomatis di Fase 2 perlu mekanisme berhenti otomatis begitu ada transaksi baru.
 - In-Memory Queue fallback aktif otomatis di production kalau Redis down — bot tetap jalan, tapi pesan yang sedang diantri di memory tidak persisten.
 - ADMIN_API_KEY belum melalui security review independen.
@@ -174,14 +188,21 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 
 ---
 
-### 11. Kriteria Selesai (Definition of Done) Fase 1
-**Status saat ini:** Logic-complete, belum production-ready. Semua logic bisnis sudah tervalidasi lewat CLI Chat Simulator & Vitest, tapi integrasi WhatsApp asli (WAHA) belum pernah diuji langsung.
+### 11. Kriteria Selesai (Definition of Done) Fase 1 & Fase 3
+**Status saat ini:** Logic-complete untuk Fase 1 & 3, menunggu testing manual WAHA. Semua logic bisnis sudah tervalidasi lewat CLI Chat Simulator & Vitest.
 
 **Sudah tervalidasi (via CLI Chat Simulator & unit test):**
 - [x] State machine, retry counter, kalkulasi ongkir, parser reservasi — seluruhnya lolos unit test & CLI simulation
 - [x] `persona.ts` terisi dengan gaya bahasa final (template dari transkrip asli + draft follow-up)
 - [x] ORS integration + fallback Haversine dicek berjalan normal
 - [x] Single-Tenant Slot Pattern (`tenant_id` di schema, service layer, queue, dan test suite)
+- [x] Meredam greeting "Halo Bunda" pada window <48 jam
+- [x] Lampiran gambar pricelist saat kirim ongkir
+- [x] Deteksi dini alamat di pesan pertama via geocoding
+- [x] Proteksi link reservasi dari kelurahan kosong
+- [x] Alias sapaan "bubid" (bu bidan)
+- [x] Auto-label "hold" pada eskalasi & auto-resume saat label dilepas di WAHA
+- [x] Pengabaian group chat (@g.us)
 
 **Belum tervalidasi — WAJIB dicek di WhatsApp asli sebelum go-live:**
 - [ ] Koneksi WAHA stabil, QR ter-scan, session aktif
