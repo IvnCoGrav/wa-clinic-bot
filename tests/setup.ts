@@ -8,6 +8,7 @@ vi.mock('../src/db/client', () => {
     prisma: {
       customer: {
         findUnique: mockReject,
+        findFirst: mockReject,
         create: mockReject,
         update: mockReject,
       },

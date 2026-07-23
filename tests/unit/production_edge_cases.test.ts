@@ -8,6 +8,9 @@ import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { prisma } from '../../src/db/client';
 import { ConversationState } from '@prisma/client';
 import { deliveryService } from '../../src/services/delivery.service';
+import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
+import { wahaClient } from '../../src/integrations/waha/client';
+import { llmIntentService } from '../../src/integrations/llm/intent';
 
 // Mock LLM services secara global untuk mencegah panggilan API nyata / timeout
 vi.mock('../../src/integrations/llm/intent', () => {
@@ -101,16 +104,20 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
   it('7. should rollback transaction completely if calculateDelivery throws error during promotion', async () => {
     // Buat customer mock
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     
     // Set pending location
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Wedi',
-      kecamatan: 'Gedangan',
-      kota: 'Sidoarjo',
-      lat: -7.38636,
-      lng: 112.746,
-    });
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Wedi',
+        kecamatan: 'Gedangan',
+        kota: 'Sidoarjo',
+        lat: -7.38636,
+        lng: 112.746,
+      },
+      DEFAULT_TENANT_ID
+    );
 
     // Panggil promotePendingLocation dengan calculator yang melempar error
     const result = await customerService.promotePendingLocation(
@@ -124,14 +131,15 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
       },
       async () => {
         throw new Error('ORS API is completely down/timeout');
-      }
+      },
+      DEFAULT_TENANT_ID
     );
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('ORS API is completely down');
 
     // Ambil data customer dari memory/DB dan pastikan data confirmed tetap null, pending tetap utuh!
-    const verifiedCust = await customerService.getOrCreateCustomer(phone);
+    const verifiedCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     expect(verifiedCust.kelurahan).toBeNull();
     expect(verifiedCust.pending_kelurahan).toBe('Wedi');
   });
@@ -143,27 +151,35 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
     
     // 1. Customer sudah memiliki confirmed location (Alamat lama)
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-      distanceKm: 8.21,
-      ongkir: 10000,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+        distanceKm: 8.21,
+        ongkir: 10000,
+      },
+      DEFAULT_TENANT_ID
+    );
 
     // 2. Customer mencoba ganti lokasi baru, masuk ke pending location
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Ngingas',
-      kecamatan: 'Waru',
-      kota: 'Sidoarjo',
-      lat: -7.3512,
-      lng: 112.741,
-    });
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Ngingas',
+        kecamatan: 'Waru',
+        kota: 'Sidoarjo',
+        lat: -7.3512,
+        lng: 112.741,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     
     // Set status menunggu konfirmasi
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
@@ -173,6 +189,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
     // Panggil processMessage untuk men-trigger timeout reset
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -191,7 +208,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(res.nextState).toBe(ConversationState.INITIAL);
 
     // Ambil customer terbaru
-    const finalCust = await customerService.getOrCreateCustomer(phone);
+    const finalCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     
     // Data confirmed alamat lama TIDAK BOLEH HILANG/TERRESET!
     expect(finalCust.kelurahan).toBe('Keputih');
@@ -205,14 +222,15 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
   // =========================================================================
   it('14. should bypass processing immediately (early return) if customer status is "blocked"', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     
     // Set status ke blocked
     cust.status = 'blocked';
 
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -236,13 +254,14 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
   // =========================================================================
   it('15. should NOT redirect location in handleInterestState on conversational text without change keywords', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     
     // Set state ke AWAITING_INTEREST
     conversation.current_state = ConversationState.AWAITING_INTEREST;
 
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -265,12 +284,13 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('16. should redirect location in handleInterestState when change keywords + location is mentioned', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     
     conversation.current_state = ConversationState.AWAITING_INTEREST;
 
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -294,19 +314,24 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
   // =========================================================================
   it('9b. should override old location retention greeting when customer sends a location pin directly', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+      },
+      DEFAULT_TENANT_ID
+    );
     
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.INITIAL;
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -322,7 +347,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     const res = await testStateMachine.processMessage(ctx);
     expect(res.nextState).toBe(ConversationState.AWAITING_INTEREST);
     
-    const finalCust = await customerService.getOrCreateCustomer(phone);
+    const finalCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     expect(finalCust.kelurahan).toBe('Gubeng');
   });
 
@@ -336,19 +361,24 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('11. should trigger mixed-signal clarification when customer says yes and no in LOCATION_CONFIRMED', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Wedi',
-      kecamatan: 'Gedangan',
-      kota: 'Sidoarjo',
-      lat: -7.38636,
-      lng: 112.746,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Wedi',
+        kecamatan: 'Gedangan',
+        kota: 'Sidoarjo',
+        lat: -7.38636,
+        lng: 112.746,
+      },
+      DEFAULT_TENANT_ID
+    );
     
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -368,19 +398,24 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('12. should override mixed signal and geocode new location if new location is explicitly mentioned', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Wedi',
-      kecamatan: 'Gedangan',
-      kota: 'Sidoarjo',
-      lat: -7.38636,
-      lng: 112.746,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Wedi',
+        kecamatan: 'Gedangan',
+        kota: 'Sidoarjo',
+        lat: -7.38636,
+        lng: 112.746,
+      },
+      DEFAULT_TENANT_ID
+    );
     
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -396,25 +431,30 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     const res = await testStateMachine.processMessage(ctx);
     expect(res.nextState).toBe(ConversationState.AWAITING_INTEREST);
     
-    const finalCust = await customerService.getOrCreateCustomer(phone);
+    const finalCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     expect(finalCust.kelurahan).toBe('Ngingas');
   });
 
   it('13. should perform lenient override in LOCATION_CONFIRMED state even without change keywords', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Wedi',
-      kecamatan: 'Gedangan',
-      kota: 'Sidoarjo',
-      lat: -7.38636,
-      lng: 112.746,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Wedi',
+        kecamatan: 'Gedangan',
+        kota: 'Sidoarjo',
+        lat: -7.38636,
+        lng: 112.746,
+      },
+      DEFAULT_TENANT_ID
+    );
     
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -433,19 +473,24 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('17. should trigger no-match fallback and re-prompt for location confirmation on irrelevant chat in LOCATION_CONFIRMED', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Wedi',
-      kecamatan: 'Gedangan',
-      kota: 'Sidoarjo',
-      lat: -7.38636,
-      lng: 112.746,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Wedi',
+        kecamatan: 'Gedangan',
+        kota: 'Sidoarjo',
+        lat: -7.38636,
+        lng: 112.746,
+      },
+      DEFAULT_TENANT_ID
+    );
     
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -465,19 +510,24 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('18. should successfully promote pending location to confirmed when customer replies ya', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Wedi',
-      kecamatan: 'Gedangan',
-      kota: 'Sidoarjo',
-      lat: -7.38636,
-      lng: 112.746,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Wedi',
+        kecamatan: 'Gedangan',
+        kota: 'Sidoarjo',
+        lat: -7.38636,
+        lng: 112.746,
+      },
+      DEFAULT_TENANT_ID
+    );
     
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -493,7 +543,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     const res = await testStateMachine.processMessage(ctx);
     expect(res.nextState).toBe(ConversationState.AWAITING_INTEREST);
     
-    const finalCust = await customerService.getOrCreateCustomer(phone);
+    const finalCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     expect(finalCust.kelurahan).toBe('Wedi');
     expect(finalCust.pending_kelurahan).toBeNull();
     expect(finalCust.ongkir).toBe(5000); // Wedi Gedangan is 2.22 km (Promo Ongkir Rp5.000)
@@ -532,16 +582,20 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
   // =========================================================================
   it('20. should retain all reservation records (no deletion/modification) during 24h idle timeout reset', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     conversation.last_message_at = new Date(Date.now() - 25 * 60 * 60 * 1000);
 
@@ -552,6 +606,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     memoryReservations.set(reservationId, mockReservation);
 
     const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -568,7 +623,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(res.nextState).toBe(ConversationState.AWAITING_LOCATION);
 
     // Ambil customer & reservasi
-    const finalCust = await customerService.getOrCreateCustomer(phone);
+    const finalCust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     expect(finalCust.pending_kelurahan).toBeNull();
     
     const retrievedRes = memoryReservations.get(reservationId);
@@ -581,20 +636,25 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('21. should parse realistic conversational affirmative variations ("iyaa bener", "ok bos") and reject particle "ya" in questions', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     
     // a. Uji "iyaa bener bund" -> Terdeteksi afirmatif (unanchored "bener" match)
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     const ctx1: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -610,17 +670,22 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(res1.nextState).toBe(ConversationState.AWAITING_INTEREST);
 
     // Reset pending location untuk tes berikutnya
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-    });
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+      },
+      DEFAULT_TENANT_ID
+    );
 
     // b. Uji "ok bos" -> Terdeteksi afirmatif (unanchored "ok" match)
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     const ctx2: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -636,17 +701,22 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(res2.nextState).toBe(ConversationState.AWAITING_INTEREST);
 
     // Reset pending location untuk tes berikutnya
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-    });
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+      },
+      DEFAULT_TENANT_ID
+    );
 
     // c. Uji "berapa ya kak?" -> Harusnya memicu fallback (karena "ya" sebagai partikel tanya dikesampingkan dari pencocokan afirmatif)
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
     const ctx3: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -688,20 +758,25 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
   it('23. should exclude ya ampun and ya elah interjections from affirmative signals using negative lookahead', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
-    const cust = await customerService.getOrCreateCustomer(phone);
-    await customerService.updateCustomerPendingLocation(cust.id, {
-      kelurahan: 'Keputih',
-      kecamatan: 'Sukolilo',
-      kota: 'Surabaya',
-      lat: -7.2917,
-      lng: 112.798,
-    });
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    await customerService.updateCustomerPendingLocation(
+      cust.id,
+      {
+        kelurahan: 'Keputih',
+        kecamatan: 'Sukolilo',
+        kota: 'Surabaya',
+        lat: -7.2917,
+        lng: 112.798,
+      },
+      DEFAULT_TENANT_ID
+    );
 
-    const conversation = await conversationService.getOrCreateConversation(cust.id);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     conversation.current_state = ConversationState.LOCATION_CONFIRMED;
 
     // Uji "ya ampun..." -> Harusnya memicu fallback karena "ya ampun" dikecualikan!
     const ctx1: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -719,6 +794,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
 
     // Uji "ya elah..." -> Dikecualikan!
     const ctx2: any = {
+      tenantId: DEFAULT_TENANT_ID,
       customer: cust,
       conversation,
       incomingMessage: {
@@ -733,5 +809,173 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     const res2 = await testStateMachine.processMessage(ctx2);
     expect(res2.nextState).toBe(ConversationState.LOCATION_CONFIRMED);
     expect(res2.replyText).toContain('Mohon dikonfirmasi dulu ya');
+  });
+
+  it('24. should suppress greeting "Halo Bunda" when last interaction is < 48 hours ago', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+
+    // a. Set last_message_at to 1 hour ago
+    conversation.last_message_at = new Date(Date.now() - 60 * 60 * 1000);
+    conversation.current_state = ConversationState.INITIAL;
+
+    const ctx1: any = {
+      tenantId: DEFAULT_TENANT_ID,
+      customer: cust,
+      conversation,
+      incomingMessage: {
+        id: 'msg_greet_suppress',
+        from: phone,
+        chatId: `${phone}@c.us`,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        text: { body: 'halo' },
+      },
+    };
+
+    const res1 = await testStateMachine.processMessage(ctx1);
+    expect(res1.replyText).not.toContain('Halo Bunda');
+    expect(res1.replyText).toContain('Kami melayani Treatment moms & Baby');
+
+    // b. Set last_message_at to 3 days ago (should show full greeting)
+    conversation.last_message_at = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    conversation.current_state = ConversationState.INITIAL;
+    const res2 = await testStateMachine.processMessage(ctx1);
+    expect(res2.replyText).toContain('Halo Bunda');
+  });
+
+  it('25. should block reservation form delivery and redirect to location query if customer kelurahan is unknown', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    conversation.current_state = ConversationState.AWAITING_INTEREST;
+
+    // customer.kelurahan is null!
+    const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
+      customer: cust,
+      conversation,
+      incomingMessage: {
+        id: 'msg_res_guard',
+        from: phone,
+        chatId: `${phone}@c.us`,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        text: { body: 'saya mau booking' },
+      },
+    };
+
+    const intentSpy = vi.spyOn(llmIntentService, 'detectIntent').mockResolvedValue({ intent: 'interested' } as any);
+    const res = await testStateMachine.processMessage(ctx);
+    intentSpy.mockRestore();
+
+    expect(res.nextState).toBe(ConversationState.AWAITING_LOCATION);
+    expect(res.replyText).toContain('mohon informasikan detail kelurahan/desa');
+  });
+
+  it('26. should perform early location geocoding check on the first greeting message', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    conversation.current_state = ConversationState.INITIAL;
+
+    // Kirim "Keputihh" (fuzzy match untuk Keputih, unik di Surabaya) langsung di greeting pertama
+    const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
+      customer: cust,
+      conversation,
+      incomingMessage: {
+        id: 'msg_early_location',
+        from: phone,
+        chatId: `${phone}@c.us`,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        text: { body: 'Keputihh' },
+      },
+    };
+
+    const res = await testStateMachine.processMessage(ctx);
+    expect(res.nextState).toBe(ConversationState.LOCATION_CONFIRMED);
+    expect(res.replyText).toContain('Apakah yang Bunda maksud kelurahan **Keputih**');
+  });
+
+  it('27. should automatically add label "hold" to chat room on human handling escalation', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+
+    await conversationService.escalateToHumanHandling(conversation, phone, 'test escalation', DEFAULT_TENANT_ID);
+
+    const labels = await wahaClient.getChatLabels(`${phone}@c.us`);
+    expect(labels).toContain('hold');
+  });
+
+  it('28. should auto-resume bot handling when webhook receives message and hold label is missing from WAHA', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+
+    // Escalate ke human handling (otomatis pasang label 'hold')
+    await conversationService.escalateToHumanHandling(conversation, phone, 'test escalation', DEFAULT_TENANT_ID);
+
+    // Cek hold label terpasang
+    let labels = await wahaClient.getChatLabels(`${phone}@c.us`);
+    expect(labels).toContain('hold');
+
+    // Simulasi admin menghapus label 'hold' di WAHA
+    await wahaClient.removeLabel(`${phone}@c.us`, 'hold');
+
+    // Kirim pesan webhook
+    const app = buildApp();
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `msg_auto_resume_${Date.now()}`,
+        from: `${phone}@c.us`,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: 'halo bot',
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Karena label hold sudah dilepas, pesan diproses (EVENT_PROCESSED)
+    expect(JSON.parse(res.body)).toEqual({ status: 'EVENT_PROCESSED' });
+
+    // Assert database conversation tidak lagi di status HUMAN_HANDLING
+    const updatedConv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    expect(updatedConv.is_human_handling).toBe(false);
+  });
+
+  it('29. should ignore incoming group messages ending with @g.us', async () => {
+    const app = buildApp();
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `msg_group_${Date.now()}`,
+        from: '12036302485739@g.us',
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: 'halo semuanya',
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_GROUP_MESSAGE' });
   });
 });

@@ -5,6 +5,7 @@ import { deliveryService } from '../../services/delivery.service';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
 import { TEMPLATES } from '../../config/persona';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 /**
  * Handler untuk state AWAITING_LOCATION:
@@ -12,6 +13,7 @@ import { TEMPLATES } from '../../config/persona';
  */
 export async function handleLocationState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
   const { incomingMessage, customer, conversation } = ctx;
+  const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
 
   // --- KASUS A: CUSTOMER MENGIRIM SHARE LOCATION NATIVE WHATSAPP ---
   if (incomingMessage.type === 'location' && incomingMessage.location) {
@@ -24,19 +26,23 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     const delivery = await deliveryService.calculateDelivery({ lat: latitude, lng: longitude });
 
     // 3. Update data customer di Database
-    await customerService.updateCustomerLocation(customer.id, {
-      kelurahan: resolved.kelurahan,
-      kecamatan: resolved.kecamatan,
-      kota: resolved.kota,
-      lat: latitude,
-      lng: longitude,
-      distanceKm: delivery.distanceKm,
-      ongkir: delivery.ongkir,
-      isOutOfCoverage: delivery.isOutOfCoverage,
-    });
+    await customerService.updateCustomerLocation(
+      customer.id,
+      {
+        kelurahan: resolved.kelurahan,
+        kecamatan: resolved.kecamatan,
+        kota: resolved.kota,
+        lat: latitude,
+        lng: longitude,
+        distanceKm: delivery.distanceKm,
+        ongkir: delivery.ongkir,
+        isOutOfCoverage: delivery.isOutOfCoverage,
+      },
+      tenantId
+    );
 
     // Reset attempt counter
-    await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 });
+    await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 }, tenantId);
 
     // 4. Jika Luar Jangkauan (>10 km)
     if (delivery.isOutOfCoverage) {
@@ -58,6 +64,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       nextState: ConversationState.AWAITING_INTEREST,
       replyText,
       shouldSendReply: true,
+      sendPricelistImage: true,
     };
   }
 
@@ -77,13 +84,17 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
   // --- KASUS C: FUZZY MATCH TUNGGAL (LOCATION_CONFIRMED) ---
   if (resolved.isFuzzyMatch && resolved.lat && resolved.lng) {
-    await customerService.updateCustomerPendingLocation(customer.id, {
-      kelurahan: resolved.kelurahan || null,
-      kecamatan: resolved.kecamatan || null,
-      kota: resolved.kota || null,
-      lat: resolved.lat,
-      lng: resolved.lng,
-    });
+    await customerService.updateCustomerPendingLocation(
+      customer.id,
+      {
+        kelurahan: resolved.kelurahan || null,
+        kecamatan: resolved.kecamatan || null,
+        kota: resolved.kota || null,
+        lat: resolved.lat,
+        lng: resolved.lng,
+      },
+      tenantId
+    );
 
     return {
       nextState: ConversationState.LOCATION_CONFIRMED,
@@ -103,7 +114,9 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     if (currentAttempts >= 3) {
       await conversationService.escalateToHumanHandling(
         conversation,
-        `Gagal deteksi presisi kelurahan setelah ${currentAttempts}x percobaan teks: "${textLocation}"`
+        customer.phone,
+        `Gagal deteksi presisi kelurahan setelah ${currentAttempts}x percobaan teks: "${textLocation}"`,
+        tenantId
       );
 
       return {
@@ -115,9 +128,13 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     }
 
     // Jika belum 3x, update counter dan minta nama kelurahan secara spesifik
-    await conversationService.updateConversationState(conversation.id, {
-      locationAttempts: currentAttempts,
-    });
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        locationAttempts: currentAttempts,
+      },
+      tenantId
+    );
 
     if (resolved.ambiguityResults && resolved.ambiguityResults.length > 0) {
       const kelName = resolved.ambiguityResults[0].Kelurahan_Desa;
@@ -152,19 +169,23 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   const delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
 
   // Update DB Customer
-  await customerService.updateCustomerLocation(customer.id, {
-    kelurahan: resolved.kelurahan,
-    kecamatan: resolved.kecamatan,
-    kota: resolved.kota,
-    lat: resolved.lat,
-    lng: resolved.lng,
-    distanceKm: delivery.distanceKm,
-    ongkir: delivery.ongkir,
-    isOutOfCoverage: delivery.isOutOfCoverage,
-  });
+  await customerService.updateCustomerLocation(
+    customer.id,
+    {
+      kelurahan: resolved.kelurahan,
+      kecamatan: resolved.kecamatan,
+      kota: resolved.kota,
+      lat: resolved.lat,
+      lng: resolved.lng,
+      distanceKm: delivery.distanceKm,
+      ongkir: delivery.ongkir,
+      isOutOfCoverage: delivery.isOutOfCoverage,
+    },
+    tenantId
+  );
 
   // Reset location attempt counter
-  await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 });
+  await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 }, tenantId);
 
   // 4. Jika Luar Jangkauan (>10 km)
   if (delivery.isOutOfCoverage) {
@@ -186,5 +207,6 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     nextState: ConversationState.AWAITING_INTEREST,
     replyText,
     shouldSendReply: true,
+    sendPricelistImage: true,
   };
 }

@@ -4,6 +4,9 @@ import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
+import { wahaClient } from '../integrations/waha/client';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { ConversationState } from '@prisma/client';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -37,10 +40,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ status: 'IGNORED_OUTBOUND' });
     }
 
+    // --- FILTER CHAT GRUP (Abaikan group messages) ---
+    const isGroup = (payload.from && payload.from.endsWith('@g.us')) || 
+                    (payload.chatId && payload.chatId.endsWith('@g.us'));
+    if (isGroup) {
+      return reply.status(200).send({ status: 'IGNORED_GROUP_MESSAGE' });
+    }
+
     const waMessageId = payload.id;
 
     // --- REVISI USER #3: IDEMPOTENCY CHECK ---
-    const isDuplicate = await messageService.isDuplicateMessage(waMessageId);
+    const isDuplicate = await messageService.isDuplicateMessage(waMessageId, DEFAULT_TENANT_ID);
     if (isDuplicate) {
       console.log(`[IDEMPOTENCY SKIP] WAHA Message ID ${waMessageId} has already been processed. Skipping retry.`);
       return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
@@ -52,8 +62,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     const contactName = payload._data?.notifyName;
 
     // Ambil/Buat record Customer & Conversation
-    const customer = await customerService.getOrCreateCustomer(phone, contactName);
-    let conversation = await conversationService.getOrCreateConversation(customer.id);
+    const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+    let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     // Converted standardized incoming message format
     const incomingMessage: any = {
@@ -73,29 +83,48 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
     // --- REVISI USER #4: EXPLICIT GUARD CLAUSE UNTUK HUMAN HANDLING ---
     // Memeriksa apakah timeout auto-release 6 jam sudah terlampaui terlebih dahulu
-    const autoRelease = conversationService.checkAndApplyAutoRelease(conversation);
+    const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, DEFAULT_TENANT_ID);
     conversation = autoRelease.updatedConversation;
 
     // JIKA is_human_handling === true (dan belum timed out):
-    // TEGASKAN SECARA EKSPLISIT BAHWA BOT KELUAR / SILENT & LLM CLASSIFIER TIDAK DIPANGGIL SAMA SEKALI!
     if (conversation.is_human_handling) {
-      console.log(`[EXPLICIT GUARD CLAUSE] Conversation ${conversation.id} is in HUMAN_HANDLING mode. Logging inbound message and BYPASSING all LLM & auto-replies.`);
+      // Periksa apakah admin telah melepas label 'hold' di WhatsApp
+      const currentLabels = await wahaClient.getChatLabels(chatId);
+      const hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
 
-      // Log pesan ke DB Audit Trail
-      await messageService.logMessage({
-        conversationId: conversation.id,
-        direction: 'INBOUND',
-        content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
-        waMessageId: waMessageId,
-        payloadRaw: payload,
-      });
+      if (!hasHoldLabel) {
+        console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
+        const restoredState = conversation.previous_state || ConversationState.INITIAL;
+        conversation = await conversationService.updateConversationState(
+          conversation.id,
+          {
+            currentState: restoredState,
+            isHumanHandling: false,
+            humanHandlingSince: null,
+          },
+          DEFAULT_TENANT_ID
+        );
+      } else {
+        console.log(`[EXPLICIT GUARD CLAUSE] Conversation ${conversation.id} is in HUMAN_HANDLING mode. Logging inbound message and BYPASSING all LLM & auto-replies.`);
 
-      // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
-      return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
+        // Log pesan ke DB Audit Trail
+        await messageService.logMessage({
+          tenantId: DEFAULT_TENANT_ID,
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+          waMessageId: waMessageId,
+          payloadRaw: payload,
+        });
+
+        // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
+        return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
+      }
     }
 
     // Masukkan pesan ke antrian pemrosesan sekuensial per customer
     await queueService.enqueueMessage({
+      tenantId: DEFAULT_TENANT_ID,
       customer,
       conversation,
       incomingMessage,

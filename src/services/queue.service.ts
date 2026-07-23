@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export interface QueuePayload {
+  tenantId: string;
   customer: any;
   conversation: any;
   incomingMessage: any;
@@ -94,9 +95,10 @@ export class QueueService {
       const worker = new Worker(
         queueName,
         async (job: Job<QueuePayload>) => {
-          const { customer, conversation, incomingMessage } = job.data;
-          console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${customer.phone}`);
+          const { tenantId, customer, conversation, incomingMessage } = job.data;
+          console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${customer.phone} (Tenant: ${tenantId})`);
           await stateMachine.processMessage({
+            tenantId,
             customer,
             conversation,
             incomingMessage,
@@ -188,8 +190,9 @@ export class QueueService {
     const payload = queue.shift()!;
 
     try {
-      console.log(`[QUEUE Memory-Fallback] Processing message for customer: ${phone} (Queue depth: ${queue.length})`);
+      console.log(`[QUEUE Memory-Fallback] Processing message for customer: ${phone} (Tenant: ${payload.tenantId}, Queue depth: ${queue.length})`);
       await stateMachine.processMessage({
+        tenantId: payload.tenantId,
         customer: payload.customer,
         conversation: payload.conversation,
         incomingMessage: payload.incomingMessage,

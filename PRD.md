@@ -1,8 +1,10 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
-**Versi:** 1.0  
-**Status:** Fase 1 selesai development, menunggu testing manual & persona content  
-**Terakhir diperbarui:** 22 Juli 2026
+**Versi:** 2.0  
+**Status:** Fase 1 logic-complete (termasuk hardening keamanan & edge case), menunggu testing manual WAHA  
+**Terakhir diperbarui:** 23 Juli 2026
+
+---
 
 ### 1. Latar Belakang & Masalah
 Bisnis klinik treatment saat ini menangani percakapan calon customer secara manual di WhatsApp — mulai dari sapaan awal, penentuan lokasi customer, kalkulasi ongkir, sampai follow-up pasca treatment. Proses manual ini punya beberapa masalah:
@@ -11,15 +13,21 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 - Tidak ada sistem terstruktur untuk tracking customer yang "hilang" (belum purchase, belum booking treatment lanjutan)
 - Kalkulasi ongkir manual rawan human error
 
+---
+
 ### 2. Tujuan Produk
 - Mengotomasi percakapan awal customer (sapaan → lokasi → ongkir → reservasi) tanpa kehilangan sentuhan personal
 - Memastikan tidak ada follow-up yang terlewat lewat sistem terjadwal otomatis
 - Menjaga keputusan yang butuh judgment manusia (konfirmasi jadwal, approval reservasi) tetap di tangan admin/agent
 - Menyediakan jawaban FAQ otomatis yang konsisten tanpa membebani admin untuk pertanyaan repetitif
 
+---
+
 ### 3. Target Pengguna
 - **Primary user:** Calon customer / customer existing klinik yang chat via WhatsApp
 - **Internal user:** Admin/pemilik klinik yang mengelola konfirmasi reservasi dan menangani pertanyaan jadwal spesifik
+
+---
 
 ### 4. Ruang Lingkup
 
@@ -39,13 +47,21 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 10 | Bot mensimulasikan perilaku mengetik manusia (typing indicator + delay proporsional) sebelum kirim pesan | ✅ Selesai |
 | 11 | Bot bisa menjawab pertanyaan FAQ berdasarkan knowledge base (FAQ + dokumen) tanpa mengganggu alur state yang sedang berjalan | ✅ Selesai |
 | 12 | Integrasi WhatsApp menggunakan WAHA (self-hosted) | ✅ Selesai |
-| 13 | Pesan masuk diproses lewat antrian (queue), bukan diproses paralel tanpa kontrol — memastikan (a) satu customer tidak dibalas tumpang tindih kalau kirim pesan cepat berturut-turut, dan (b) total pengiriman pesan ke seluruh customer dibatasi (throttle) supaya tidak memicu rate limit/flag di WAHA | 🔧 Perlu ditambahkan |
+| 13 | Pesan masuk diproses lewat antrian (sharded queue, FIFO per nomor customer, fallback in-memory jika Redis down) | ✅ Selesai |
+| 14 | Sistem menghitung jarak lewat OpenRouteService (rute kendaraan asli), fallback ke Haversine kalau ORS gagal/timeout | ✅ Selesai |
+| 15 | Fuzzy matching nama kelurahan (Sorensen-Dice similarity, threshold 0.80) untuk toleransi typo/variasi penulisan lokasi | ✅ Selesai |
+| 16 | Penolakan input lokasi setingkat kecamatan/kota tanpa nama kelurahan (bot minta detail lebih spesifik) | ✅ Selesai |
+| 17 | Deteksi kalimat afirmasi/negasi kompleks (termasuk mixed-signal seperti "iya bener tapi bukan itu") untuk konfirmasi lokasi | ✅ Selesai |
+| 18 | Reset otomatis data lokasi pending (bukan yang sudah confirmed) setelah idle 24 jam tanpa respon | ✅ Selesai |
+| 19 | Proteksi endpoint admin dengan ADMIN_API_KEY (fail-closed jika key tidak diset) | ✅ Selesai — perlu security review independen, lihat Section 8 |
+| 20 | Status blocked pada customer (bypass otomatis, bot tidak membalas) | ⚠️ Placeholder — mekanisme penentuan siapa/bagaimana customer di-block belum ditentukan, lihat Section 8 |
+| 21 | Struktur data disiapkan untuk multi-tenant di masa depan (tenant_id di semua tabel, default single-tenant) — bukan fitur SaaS aktif, murni persiapan arsitektur | ✅ Selesai |
 
 **Belum selesai / pending sebelum Fase 1 dianggap tuntas:**
-- Pengisian konten `persona.ts` (gaya bahasa & tone bot)
-- Implementasi message queue (lihat poin 13) — ditemukan sebagai isu di sistem berjalan: saat ini semua pesan masuk diproses bersamaan tanpa urutan/kontrol
-- Testing manual end-to-end dengan WAHA aktif (koneksi QR, typing indicator nyata, share location asli, akurasi jawaban FAQ)
-- Import data FAQ & dokumen asli milik klinik (bukan data dummy)
+- Testing manual end-to-end dengan WAHA aktif (koneksi QR, typing indicator nyata, share location asli, akurasi jawaban FAQ) — saat ini baru divalidasi lewat CLI Chat Simulator
+- Import data FAQ & dokumen asli milik klinik (draft FAQ sudah disiapkan berdasarkan transkrip chat asli, menunggu review & import final)
+- Security review independen untuk ADMIN_API_KEY (lihat Section 8)
+- Keputusan bisnis: mekanisme customer blocked (lihat Section 8)
 
 #### 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Didesain, belum dikerjakan)
 
@@ -65,57 +81,115 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 - Multi-cabang klinik (asumsi saat ini: satu titik lokasi klinik)
 - Vector/embedding search untuk knowledge base (dimulai dari full-text search sederhana; upgrade jika volume FAQ bertambah signifikan atau akurasi retrieval terbukti kurang)
 
+---
+
 ### 5. Alur Percakapan Utama (Ringkasan)
-```mermaid
-graph TD
-    A[Customer chat pertama kali] --> B[Bot sapa + tanya lokasi]
-    B --> C{Lokasi lengkap?}
-    C -->|Tidak| D[Minta detail kelurahan/desa]
-    D --> E{Maks 3x percobaan?}
-    E -->|Ya| F[Eskalasi ke Human]
-    E -->|Tidak| B
-    C -->|Ya teks/share location| G[Hitung jarak & ongkir, informasikan]
-    G --> H{Customer tertarik?}
-    H -->|Ya| I[Kirim form reservasi]
-    H -->|Tanya jadwal spesifik| J[Eskalasi ke human, bot senyap]
-    H -->|Tanya hal lain FAQ| K[Jawab pakai knowledge base, lanjutkan state semula]
-    I --> L[Form terisi]
-    L --> M[Admin konfirmasi manual]
-    M --> N[Simpan ke Google Calendar - Fase 2]
-```
+Customer chat pertama kali  
+  → Bot sapa + tanya lokasi  
+  → Lokasi lengkap?   
+      Tidak → minta detail kelurahan/desa (maks 3x percobaan, lalu eskalasi)  
+      Ya (teks lengkap / share location) → lanjut  
+  → Hitung jarak & ongkir, informasikan ke customer  
+  → Customer tertarik?  
+      Ya → kirim form reservasi  
+      Tanya jadwal spesifik → eskalasi ke human, bot senyap untuk thread ini  
+      Tanya hal lain (FAQ) → jawab pakai knowledge base, lanjutkan state semula  
+  → Form terisi → admin konfirmasi manual → simpan ke Google Calendar (Fase 2)
+
+---
 
 ### 6. Data yang Disimpan
-- **Customer:** nomor telepon, nama, lokasi (kelurahan/kecamatan/kota, koordinat), jarak & ongkir terhitung, status keanggotaan
+- **Customer:** nomor telepon, nama, lokasi (kelurahan/kecamatan/kota, koordinat), jarak & ongkir terhitung, status keanggotaan (termasuk placeholder status blocked)
 - **Conversation:** status percakapan saat ini, apakah sedang ditangani manusia
 - **Message log:** seluruh histori pesan masuk/keluar (untuk audit dan debugging)
 - **Knowledge base:** kumpulan FAQ dan potongan dokumen referensi untuk menjawab pertanyaan customer
 - **Reservasi & treatment (Fase 2):** jadwal, status konfirmasi, riwayat treatment, status repeat order
 
-### 7. Aturan Bisnis Kunci
-- **Kalkulasi ongkir (bersifat sementara/interim):**
-  
-  | Jarak dari klinik | Ongkir |
-  |---|---|
-  | 0 – 5 km | Gratis |
-  | >5 – 6 km | Rp 5.000 |
-  | >6 – 10 km | Rp 10.000 |
-  | >10 km | Di luar jangkauan |
+*Semua tabel di atas memiliki kolom `tenant_id` (default satu nilai tetap) sebagai persiapan arsitektur multi-tenant di masa depan — lihat Section 6.1.*
 
-  *Catatan penting: Logic tiering di atas adalah aturan sementara untuk Fase 1. Ke depan akan ada UI/sistem terpisah untuk menghitung ongkir yang akan menggantikan formula Haversine ini. Karena itu, `delivery.service.ts` harus tetap diperlakukan sebagai modul yang mudah diganti (isolated, tidak di-hardcode ke banyak tempat lain).*
+#### 6.1 Catatan Arsitektur: Single-Tenant Slot Pattern
+Sistem ini murni single-tenant (satu bisnis, tanpa auth multi-pengguna, tanpa billing). Namun sebagai persiapan murah kalau ke depan ada rencana menjadikan ini produk SaaS multi-tenant, seluruh tabel database dan service layer sudah disiapkan dengan parameter `tenant_id` wajib (tanpa default tersembunyi di level fungsi, supaya kesalahan filtering gagal terlihat/error, bukan diam-diam salah tenant). Ini bukan fitur SaaS aktif — tidak ada dashboard, tidak ada resolusi tenant dinamis, tidak ada auth per-tenant. Kalau nanti ada demand nyata untuk SaaS, migrasinya jadi jauh lebih murah karena data layer sudah siap.
+
+---
+
+### 7. Tech Stack
+| Layer | Teknologi |
+|---|---|
+| Runtime & Bahasa | Node.js (v20+) + TypeScript |
+| Web Framework | Fastify |
+| Database & ORM | PostgreSQL + Prisma ORM |
+| Full-Text Search | Postgres native (`to_tsvector('simple', ...)`) untuk knowledge base |
+| Message Queue | BullMQ + Redis (sharded FIFO per nomor customer), fallback in-memory kalau Redis down |
+| Integrasi WhatsApp | WAHA (WhatsApp HTTP API, self-hosted) |
+| Geocoding | Google Maps Geocoding API |
+| Perhitungan Jarak/Rute | OpenRouteService Directions API, fallback formula Haversine |
+| LLM Engine | OpenAI-compatible API via SumoPod (akun milik pemilik bisnis) |
+| Testing | Vitest (unit & integration) |
+| Deployment | Docker (Dockerfile + docker-compose) |
+
+---
+
+### 8. Fitur Hardening & Edge Case
+Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening berikut untuk menangani skenario percakapan dunia nyata yang lebih kompleks:
+- **Fuzzy matching lokasi:** pencocokan nama kelurahan pakai similarity Sorensen-Dice (threshold 0.80) untuk toleransi typo/variasi penulisan.
+- **Penolakan lokasi terlalu umum:** kalau customer cuma sebut kecamatan/kota (tanpa kelurahan), bot minta detail lebih spesifik — diuji terhadap puluhan nama kecamatan/kota di area Sidoarjo-Surabaya.
+- **Deteksi afirmasi/negasi kompleks:** menangani variasi bahasa natural seperti "iya bener", "ok bos", "iya bener tapi bukan itu" (mixed-signal), termasuk mengabaikan interjeksi ("ya ampun", "ya elah") supaya tidak salah dianggap sebagai konfirmasi.
+- **Reset idle 24 jam:** data lokasi yang statusnya masih pending (belum dikonfirmasi customer) otomatis direset kalau tidak ada aktivitas 24 jam; data yang sudah confirmed tidak terpengaruh.
+- **Keamanan endpoint admin:** proteksi `ADMIN_API_KEY` dengan perilaku fail-closed (menolak akses kalau key tidak diset, bukan malah default terbuka).
+- **Status blocked:** kolom & bypass logic sudah ada di level kode, tapi mekanisme bisnisnya belum diputuskan (lihat Section 10 — risiko).
+
+---
+
+### 9. Aturan Bisnis Kunci
+- **Kalkulasi ongkir (bersifat sementara/interim):** jarak dihitung via rute OpenRouteService (fallback Haversine jika ORS gagal):
+  
+  | Jarak dari klinik | Ongkir Normal | Potongan Promo | Ongkir Promo (Net) |
+  |---|---|---|---|
+  | 0 – 5.0 km | Rp 0 | – | Gratis |
+  | >5.0 – 7.0 km | Rp 15.000 | Rp 10.000 | Rp 5.000 |
+  | >7.0 – 10.0 km | Rp 15.000 | Rp 5.000 | Rp 10.000 |
+  | >10.0 – 15.0 km | Rp 15.000 | Rp 5.000 | Rp 10.000 |
+  | >15.0 – 20.0 km | Rp 20.000 | Rp 5.000 | Rp 15.000 |
+  | >20.0 – 25.0 km | Rp 25.000 | Rp 5.000 | Rp 20.000 |
+  | >25.0 – 30.0 km | Rp 30.000 | Rp 5.000 | Rp 25.000 |
+  | >30.0 km | Di luar jangkauan | – | – |
+
+  *Titik koordinat klinik: Lat -7.34886, Lng 112.751677.*  
+  *Catatan penting: Logic tiering di atas adalah aturan sementara untuk Fase 1. Ke depan akan ada UI/sistem terpisah untuk menghitung ongkir. Karena itu, `delivery.service.ts` harus tetap diperlakukan sebagai modul yang mudah diganti (isolated, tidak di-hardcode ke banyak tempat lain).*
 - **Follow-up belum purchase:** hari ke-3, ke-7, ke-14 sejak kontak terakhir tanpa transaksi.
 - **Follow-up treatment lanjutan:** bulan ke-1, ke-2, ke-3 sejak treatment terakhir; jika tidak ada respon sampai bulan ke-3 → status lost.
 
-### 8. Batasan & Risiko yang Diketahui
-- WAHA bersifat unofficial (bukan API resmi Meta) — berisiko session terputus sewaktu-waktu.
+---
+
+### 10. Batasan & Risiko yang Diketahui
+- WAHA bersifat unofficial (bukan API resmi Meta) — berisiko session terputus sewaktu-waktu dan perlu monitoring/reconnect manual.
 - Full-text search knowledge base mengandalkan kecocokan kata, bukan makna.
 - Auto-release human handling murni berbasis waktu (6 jam).
 - Semua follow-up otomatis di Fase 2 perlu mekanisme berhenti otomatis begitu ada transaksi baru.
+- In-Memory Queue fallback aktif otomatis di production kalau Redis down — bot tetap jalan, tapi pesan yang sedang diantri di memory tidak persisten.
+- ADMIN_API_KEY belum melalui security review independen.
+- Status customer blocked masih placeholder.
+- Fuzzy matching kelurahan (threshold 0.80) berisiko false-positive jika ada dua nama kelurahan mirip di kecamatan berbeda.
+- Reset idle 24 jam hanya berlaku untuk data lokasi pending.
 
-### 9. Kriteria Selesai (Definition of Done) Fase 1
-- [ ] `persona.ts` terisi dengan gaya bahasa final
+---
+
+### 11. Kriteria Selesai (Definition of Done) Fase 1
+**Status saat ini:** Logic-complete, belum production-ready. Semua logic bisnis sudah tervalidasi lewat CLI Chat Simulator & Vitest, tapi integrasi WhatsApp asli (WAHA) belum pernah diuji langsung.
+
+**Sudah tervalidasi (via CLI Chat Simulator & unit test):**
+- [x] State machine, retry counter, kalkulasi ongkir, parser reservasi — seluruhnya lolos unit test & CLI simulation
+- [x] `persona.ts` terisi dengan gaya bahasa final (template dari transkrip asli + draft follow-up)
+- [x] ORS integration + fallback Haversine dicek berjalan normal
+- [x] Single-Tenant Slot Pattern (`tenant_id` di schema, service layer, queue, dan test suite)
+
+**Belum tervalidasi — WAJIB dicek di WhatsApp asli sebelum go-live:**
 - [ ] Koneksi WAHA stabil, QR ter-scan, session aktif
-- [ ] Typing indicator terbukti muncul di WhatsApp asli
-- [ ] Share location asli berhasil ditangkap dan dikonversi ke ongkir yang benar
+- [ ] Payload webhook WAHA beneran cocok dengan yang di-assume di kode
+- [ ] Typing indicator terbukti muncul di WhatsApp asli, jeda antar-bubble kelihatan natural
+- [ ] Share location asli (native WA) berhasil ditangkap dan dikonversi ke ongkir yang benar
+- [ ] Kirim beberapa pesan cepat berturut-turut dari satu nomor, pastikan queue memproses berurutan tanpa balasan tumpang tindih
 - [ ] Minimal satu pertanyaan FAQ asli dari data klinik terjawab dengan akurat
 - [ ] FAQ & dokumen asli klinik (bukan dummy) sudah diimport
-- [ ] Message queue aktif: teruji tidak ada balasan tumpang tindih ke satu customer yang chat cepat berturut-turut, dan pengiriman ke banyak customer sekaligus berjalan terkontrol (tidak simultan tanpa batas)
+- [ ] Security review independen untuk ADMIN_API_KEY
+- [ ] Keputusan bisnis dibuat untuk mekanisme customer blocked

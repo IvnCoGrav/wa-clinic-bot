@@ -38,4 +38,22 @@ export class MockWAHAClient implements IWahaClient {
     console.log(`\x1b[36m\x1b[1mBot:\x1b[0m \x1b[36m${text}\x1b[0m\n`);
     return true;
   }
+
+  public async sendImage(chatId: string, fileUrl: string, caption?: string): Promise<boolean> {
+    process.stdout.write('\r\x1b[K');
+    console.log(`\x1b[36m\x1b[1mBot [IMAGE]:\x1b[0m \x1b[36m${caption || fileUrl}\x1b[0m\n`);
+    return true;
+  }
+
+  public async addLabel(chatId: string, labelId: string): Promise<boolean> {
+    return true;
+  }
+
+  public async removeLabel(chatId: string, labelId: string): Promise<boolean> {
+    return true;
+  }
+
+  public async getChatLabels(chatId: string): Promise<string[]> {
+    return [];
+  }
 }

@@ -17,5 +17,6 @@
   "15": "vitest.config.ts",
   "16": "WhatsApp Clinic Automation Chatbot",
   "17": "QueueService",
-  "18": "setup.ts"
+  "18": "setup.ts",
+  "19": "ConversationService"
 }
