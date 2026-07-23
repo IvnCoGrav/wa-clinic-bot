@@ -1,0 +1,35 @@
+# Graphify Ignore File
+# Exclude large, generated, or non-essential files from AST and semantic indexing to save AI tokens.
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build and temporary outputs
+dist/
+build/
+*.tsbuildinfo
+*.log
+
+# Project assets / media (images, videos, weights)
+assets/
+*.jpg
+*.png
+*.gif
+*.mp4
+
+# SQLite / Prisma DB binaries
+prisma/*.db
+prisma/dev.db*
+
+# Graphify's own output folder
+graphify-out/
+.graphify/
+
+# Git metadata
+.git/
+.gitignore
+
+# Env files
+.env
+.env.example
