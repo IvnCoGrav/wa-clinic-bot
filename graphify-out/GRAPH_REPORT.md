@@ -1,16 +1,16 @@
-# Graph Report - wa-clinic-bot  (2026-07-22)
+# Graph Report - wa-clinic-bot  (2026-07-23)
 
 ## Corpus Check
-- 57 files · ~32,562 words
+- 66 files · ~68,072 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 300 nodes · 516 edges · 20 communities (18 shown, 2 thin omitted)
+- 351 nodes · 627 edges · 21 communities (17 shown, 4 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 2 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `42d346fa`
+- Built from commit: `4d0adf38`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -31,19 +31,20 @@
 - WhatsAppClient
 - WhatsApp Clinic Automation Chatbot
 - QueueService
-- ConversationService
+- treatment-catalog.service.ts
+- LLMResponseGenerator
 
 ## God Nodes (most connected - your core abstractions)
-1. `TypingService` - 18 edges
-2. `GeocodingService` - 14 edges
-3. `ConversationService` - 14 edges
-4. `CustomerService` - 14 edges
-5. `QueueService` - 14 edges
-6. `IWahaClient` - 11 edges
-7. `WahaClient` - 11 edges
-8. `DeliveryService` - 10 edges
-9. `StateHandlerContext` - 10 edges
-10. `compilerOptions` - 10 edges
+1. `WahaClient` - 21 edges
+2. `CustomerService` - 19 edges
+3. `TypingService` - 18 edges
+4. `ConversationService` - 16 edges
+5. `IWahaClient` - 15 edges
+6. `GeocodingService` - 14 edges
+7. `QueueService` - 14 edges
+8. `WhatsApp Clinic Automation Chatbot` - 12 edges
+9. `MockWAHAClient` - 11 edges
+10. `scripts` - 10 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `main()` --calls--> `calculateHaversineDistance()`  [EXTRACTED]
@@ -60,47 +61,47 @@
 ## Import Cycles
 - None detected.
 
-## Communities (20 total, 2 thin omitted)
+## Communities (21 total, 4 thin omitted)
 
 ### Community 0 - "TypingService"
-Cohesion: 0.09
-Nodes (8): startSimulator(), MockWAHAClient, IWahaClient, WahaClient, HumanReplyParams, HumanReplyResult, TypingService, ConversationStateMachine
+Cohesion: 0.08
+Nodes (7): startSimulator(), MockWAHAClient, IWahaClient, HumanReplyParams, HumanReplyResult, TypingService, ConversationStateMachine
 
 ### Community 1 - "scripts"
-Cohesion: 0.08
-Nodes (24): description, devDependencies, prisma, tsx, @types/node, typescript, vitest, main (+16 more)
+Cohesion: 0.18
+Nodes (11): devDependencies, prisma, tsx, @types/node, typescript, vitest, prisma, tsx (+3 more)
 
 ### Community 2 - "machine.ts"
-Cohesion: 0.36
-Nodes (10): BRAND_IDENTITY, TEMPLATES, WhatsAppIncomingMessage, handleGreetingState(), handleHumanHandlingState(), handleInterestState(), handleLocationConfirmationState(), handleLocationState() (+2 more)
+Cohesion: 0.25
+Nodes (13): BRAND_IDENTITY, TEMPLATES, WhatsAppIncomingMessage, memoryConversations, QueuePayload, handleGreetingState(), handleHumanHandlingState(), handleInterestState() (+5 more)
 
 ### Community 3 - "🔄 2. Histori Perjalanan Revisi (Chronological Revisions History)"
 Cohesion: 0.10
 Nodes (20): 📌 1. Ikhtisar Project & Tech Stack, 🔄 2. Histori Perjalanan Revisi (Chronological Revisions History), 🗺 3. Alur State Machine (Conversation Orchestrator), 📐 4. Skema Ongkir & Coverage Klinik (Surabaya), 💻 5. CLI Chat Simulator Mode (`npm run chat`), 🧪 6. Verification & Test Suite Summary, 📂 7. Struktur Folder Utama Project, Cara Menjalankan (+12 more)
 
 ### Community 4 - "delivery.service.ts"
-Cohesion: 0.15
-Nodes (13): main(), subdistricts, SubdistrictTest, ClinicConfig, IOrsClient, OrsClient, RouteResult, memoryConversations (+5 more)
+Cohesion: 0.16
+Nodes (12): main(), subdistricts, SubdistrictTest, ClinicConfig, IOrsClient, OrsClient, RouteResult, DeliveryCalculationResult (+4 more)
 
 ### Community 5 - "webhook.route.ts"
-Cohesion: 0.14
-Nodes (12): buildApp(), globalForPrisma, adminRoutes(), memoryReservations, webhookRoutes(), KnowledgeBaseService, memoryKnowledgeChunks, ParsedReservation (+4 more)
+Cohesion: 0.09
+Nodes (16): buildApp(), WahaLocationPayload, WahaMessagePayload, WahaWebhookEvent, adminRoutes(), memoryReservations, safeCompare(), webhookRoutes() (+8 more)
 
-### Community 7 - "generator.ts"
-Cohesion: 0.22
-Nodes (3): IntentDetectionResult, IntentType, LLMIntentService
+### Community 6 - "knowledge.service.ts"
+Cohesion: 0.12
+Nodes (9): faqs, globalForPrisma, KnowledgeBaseService, memoryKnowledgeChunks, memoryWaMessageIds, MessageService, AdminReplyBuffer, SelfLearningService (+1 more)
 
 ### Community 8 - "dependencies"
-Cohesion: 0.12
-Nodes (17): axios, bullmq, dotenv, fastify, @googlemaps/google-maps-services-js, ioredis, dependencies, axios (+9 more)
+Cohesion: 0.06
+Nodes (31): axios, bullmq, dotenv, fastify, @googlemaps/google-maps-services-js, ioredis, dependencies, axios (+23 more)
 
 ### Community 9 - "compilerOptions"
 Cohesion: 0.15
 Nodes (12): src/**/*, compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, module, moduleResolution, outDir, rootDir (+4 more)
 
 ### Community 10 - "GeocodingService"
-Cohesion: 0.13
-Nodes (8): GeocodingService, googleMapsClient, ResolvedLocation, CustomerService, memoryCustomers, getStringSimilarity(), mockTypingService, testStateMachine
+Cohesion: 0.11
+Nodes (9): GeocodingService, googleMapsClient, ResolvedLocation, IntentDetectionResult, IntentType, LLMIntentService, getStringSimilarity(), mockTypingService (+1 more)
 
 ### Community 11 - "⚡ Panduan Setup & Running Lokal"
 Cohesion: 0.25
@@ -111,36 +112,32 @@ Cohesion: 0.25
 Nodes (7): WebhookVerificationQuery, WhatsAppLocationPayload, WhatsAppTextPayload, WhatsAppWebhookChange, WhatsAppWebhookEntry, WhatsAppWebhookPayload, WhatsAppWebhookValue
 
 ### Community 16 - "WhatsApp Clinic Automation Chatbot"
-Cohesion: 0.13
-Nodes (14): 1. Latar Belakang & Masalah, 2. Tujuan Produk, 3. Target Pengguna, 4.1 Fase 1 — Conversation Engine (Status: Development selesai, menunggu testing manual), 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Didesain, belum dikerjakan), 4.3 Di Luar Scope (untuk saat ini), 4. Ruang Lingkup, 5. Alur Percakapan Utama (Ringkasan) (+6 more)
+Cohesion: 0.11
+Nodes (18): 10. Batasan & Risiko yang Diketahui, 11. Kriteria Selesai (Definition of Done) Fase 1, 1. Latar Belakang & Masalah, 2. Tujuan Produk, 3. Target Pengguna, 4.1.1 Fitur Tambahan "Fase 3" (Status: Development & Verification Selesai), 4.1 Fase 1 — Conversation Engine (Status: Development selesai, menunggu testing manual), 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Didesain, belum dikerjakan) (+10 more)
 
-### Community 17 - "QueueService"
-Cohesion: 0.21
-Nodes (3): QueuePayload, QueueService, stateMachine
-
-### Community 19 - "ConversationService"
-Cohesion: 0.17
-Nodes (6): WahaLocationPayload, WahaMessagePayload, WahaWebhookEvent, ConversationService, memoryWaMessageIds, MessageService
+### Community 19 - "treatment-catalog.service.ts"
+Cohesion: 0.19
+Nodes (6): AgeTier, ClinicServiceItem, DEFAULT_CLINIC_SERVICES, serviceCatalog, TreatmentCatalogService, TreatmentCategoryType
 
 ## Knowledge Gaps
-- **97 isolated node(s):** `name`, `version`, `description`, `main`, `build` (+92 more)
+- **108 isolated node(s):** `name`, `version`, `description`, `main`, `build` (+103 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TypingService` connect `TypingService` to `machine.ts`?**
-  _High betweenness centrality (0.052) - this node is a cross-community bridge._
-- **Why does `QueueService` connect `QueueService` to `ConversationService`, `webhook.route.ts`?**
-  _High betweenness centrality (0.042) - this node is a cross-community bridge._
-- **Why does `ConversationService` connect `ConversationService` to `TypingService`, `machine.ts`, `delivery.service.ts`, `webhook.route.ts`, `GeocodingService`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+- **Why does `WahaClient` connect `generator.ts` to `TypingService`, `machine.ts`, `GeocodingService`, `webhook.route.ts`?**
+  _High betweenness centrality (0.061) - this node is a cross-community bridge._
+- **Why does `adminRoutes()` connect `webhook.route.ts` to `treatment-catalog.service.ts`?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `CustomerService` connect `webhook.route.ts` to `TypingService`, `machine.ts`, `GeocodingService`?**
+  _High betweenness centrality (0.041) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `description` to the rest of the system?**
-  _97 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _108 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `TypingService` be split into smaller, more focused modules?**
-  _Cohesion score 0.08846153846153847 - nodes in this community are weakly interconnected._
-- **Should `scripts` be split into smaller, more focused modules?**
-  _Cohesion score 0.08 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08461538461538462 - nodes in this community are weakly interconnected._
 - **Should `🔄 2. Histori Perjalanan Revisi (Chronological Revisions History)` be split into smaller, more focused modules?**
   _Cohesion score 0.09523809523809523 - nodes in this community are weakly interconnected._
+- **Should `webhook.route.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.0931174089068826 - nodes in this community are weakly interconnected._

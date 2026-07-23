@@ -102,7 +102,7 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
         // Fallback jika transaksi gagal/calculateDelivery error di tengah jalan
         return {
           nextState: ConversationState.LOCATION_CONFIRMED,
-          replyText: `Ada gangguan teknis sebentar bunda 🙏 mohon maaf, bisa diulangi jawab "Iya" atau ketik alamat kembali bund? 😊`,
+          replyText: `Ada gangguan teknis sebentar bunda 🙏 mohon maaf, bisa diulangi sebutkan alamat Bunda kembali ya bund? 😊`,
           shouldSendReply: true,
         };
       }

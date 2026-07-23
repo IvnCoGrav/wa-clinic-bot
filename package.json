@@ -1,6 +1,6 @@
 {
   "name": "wa-clinic-bot",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "WhatsApp Automation Chatbot Engine for Clinic Treatment",
   "main": "dist/app.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "seed:faq": "tsx src/cli/seed-faq.ts"
   },
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.0",

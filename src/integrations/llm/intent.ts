@@ -3,7 +3,7 @@ import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import dotenv from 'dotenv';
 dotenv.config();
 
-export type IntentType = 'interested' | 'not_interested' | 'asking_schedule' | 'faq_question' | 'other';
+export type IntentType = 'interested' | 'not_interested' | 'asking_schedule' | 'faq_question' | 'medical_query' | 'complaint' | 'other';
 
 export interface IntentDetectionResult {
   intent: IntentType;
@@ -55,6 +55,8 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
 
 - "faq_question": Jika pengguna menanyakan informasi umum/FAQ moms & baby spa, seperti manfaat treatment, jenis perawatan, harga, durasi, atau pertanyaan seputar pijat dan treatment (contoh: "pijat bayi itu buat apa?", "ada pijat ibu hamil ga?", "berapa harga treatmentnya?", "pijat bayi boleh dari umur berapa?").
 - "asking_schedule": Jika pengguna menanyakan ketersediaan hari/jam/jadwal spesifik (contoh: "apakah hari Senin bisa?", "bisa booking besok jam 3 sore?").
+- "medical_query": Jika pengguna menanyakan keluhan medis, masalah kesehatan bayi/ibu, dosis obat, atau saran medis (contoh: "anak saya demam dikasih apa ya", "ada obat batuk bayi?", "bekas jahitan melahirkan perih").
+- "complaint": Jika pengguna mengeluhkan layanan, komplain, kecewa, atau kesalahan (contoh: "tindik telinganya miring", "kok bidannya belum sampai", "nyasar ya mbak").
 - "interested": Jika pengguna menyatakan mau, berminat, setuju, atau ingin kirim list reservasi (contoh: "mau dong", "kirim format booking", "setuju", "boleh").
 - "not_interested": Jika pengguna menolak, batal, atau keberatan (contoh: "ga jadi", "batal", "nanti saja").
 - "other": Kategori lainnya.`,
@@ -97,25 +99,37 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
   private ruleBasedFallbackIntent(text: string): IntentDetectionResult {
     const lower = text.toLowerCase();
 
-    // 1. Deteksi Pertanyaan Jadwal Spesifik
+    // 1. Deteksi Keluhan / Komplain
+    const complaintKeywords = ['miring', 'ketinggian', 'telat', 'nyasar', 'kecewa', 'kurang pas', 'salah', 'tidak pas', 'komplain'];
+    if (complaintKeywords.some((kw) => lower.includes(kw))) {
+      return { intent: 'complaint', confidence: 0.9 };
+    }
+
+    // 2. Deteksi Keluhan Medis / Kesehatan
+    const medicalKeywords = ['demam', 'panas', 'kejang', 'paracetamol', 'obat', 'sakit', 'nyeri', 'perih', 'sesak', 'grok', 'lendir', 'dahak'];
+    if (medicalKeywords.some((kw) => lower.includes(kw)) && (lower.includes('obat') || lower.includes('sakit') || lower.includes('kasih') || lower.includes('bisa') || lower.includes('?'))) {
+      return { intent: 'medical_query', confidence: 0.9 };
+    }
+
+    // 3. Deteksi Pertanyaan Jadwal Spesifik
     const scheduleKeywords = ['jadwal', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'besok', 'lusa', 'bisa jam'];
     if (scheduleKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('bisa'))) {
       return { intent: 'asking_schedule', confidence: 0.9 };
     }
 
-    // 2. Deteksi FAQ / Pertanyaan Info
+    // 4. Deteksi FAQ / Pertanyaan Info
     const faqKeywords = ['apa', 'berapa', 'fasilitas', 'manfaat', 'harga', 'biaya', 'fungsi', 'treatment', 'facial', 'acne', 'jerawat', 'glowing', 'bagus', 'mana'];
     if (faqKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('apa') || lower.includes('berapa') || lower.includes('ada'))) {
       return { intent: 'faq_question', confidence: 0.9 };
     }
 
-    // 3. Deteksi Tertarik
+    // 5. Deteksi Tertarik
     const interestedKeywords = ['mau', 'tertarik', 'boleh', 'oke', 'ok', 'ya', 'yes', 'booking', 'daftar', 'setuju', 'kirim link'];
     if (interestedKeywords.some((kw) => lower.includes(kw))) {
       return { intent: 'interested', confidence: 0.95 };
     }
 
-    // 4. Deteksi Tidak Tertarik
+    // 6. Deteksi Tidak Tertarik
     const notInterestedKeywords = ['ga', 'gak', 'tidak', 'mahal', 'batal', 'nanti', 'kemahalan', 'enggak'];
     if (notInterestedKeywords.some((kw) => lower.includes(kw))) {
       return { intent: 'not_interested', confidence: 0.9 };

@@ -40,9 +40,40 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   console.log(`[INTENT DETECTED] Customer Message: "${userText}" -> Intent: ${intentResult.intent}`);
 
   switch (intentResult.intent) {
+    case 'medical_query':
+    case 'complaint':
+      // Eskalasi langsung ke Human secara senyap (tanpa balas chat bot)
+      await conversationService.escalateToHumanHandling(
+        conversation,
+        customer.phone,
+        `Customer menyampaikan keluhan medis/komplain: "${userText}"`,
+        tenantId
+      );
+      return {
+        nextState: ConversationState.HUMAN_HANDLING,
+        shouldSendReply: false,
+        isHumanHandling: true,
+      };
+
     case 'faq_question': {
       // 2. Query Knowledge Base menggunakan Postgres Full-Text Search ('simple')
       const relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3, tenantId);
+
+      // Jika tidak ada FAQ yang cocok sama sekali, lempar ke manusia tanpa balas chat
+      if (relevantChunks.length === 0) {
+        console.log(`[FAQ ESCALATION] No relevant chunks found for: "${userText}". Escalating silently.`);
+        await conversationService.escalateToHumanHandling(
+          conversation,
+          customer.phone,
+          `Pertanyaan FAQ tidak terjawab di database: "${userText}"`,
+          tenantId
+        );
+        return {
+          nextState: ConversationState.HUMAN_HANDLING,
+          shouldSendReply: false,
+          isHumanHandling: true,
+        };
+      }
 
       // 3. Generate balasan FAQ natural berbasis RAG + Persona
       const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks);
