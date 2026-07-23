@@ -36,8 +36,30 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     }
 
     const payload = event.payload;
-    if (!payload || payload.fromMe) {
-      // Abaikan pesan dari bot sendiri (fromMe === true)
+    if (!payload) {
+      return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
+    }
+
+    if (payload.fromMe) {
+      // Outbound message check for self-learning
+      const customerJid = payload.chatId || (payload as any).to || payload.from;
+      if (customerJid) {
+        const phone = customerJid.replace(/@.*$/, '');
+        const customer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+        if (customer) {
+          const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+          if (conversation && conversation.is_human_handling) {
+            // This is an admin/human reply! Let's record and learn from it
+            const adminReplyText = payload.body || '';
+            if (adminReplyText.trim()) {
+              console.log(`[SELF-LEARNING] Captured admin outbound reply to customer ${phone}: "${adminReplyText}"`);
+              const { selfLearningService } = await import('../services/self-learning.service');
+              selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
+                .catch(err => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
+            }
+          }
+        }
+      }
       return reply.status(200).send({ status: 'IGNORED_OUTBOUND' });
     }
 

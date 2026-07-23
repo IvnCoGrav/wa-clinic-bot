@@ -1,0 +1,273 @@
+export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
+
+export interface AgeTier {
+  minAgeMonths: number;        // Batas minimal usia (dalam bulan), misal 0
+  maxAgeMonths: number | null; // Batas maksimal usia (dalam bulan), null jika tidak ada batas (misal > 24 bulan atau dewasa)
+  label: string;               // Label deskriptif kelompok usia (misal: "0 - 6 Bulan", "> 24 Bulan", "Ibu Hamil / Nifas")
+}
+
+export interface ClinicServiceItem {
+  id: string;                  // Identifier unik treatment, misal: "baby-massage-0-6"
+  name: string;                // Nama layanan/treatment
+  category: TreatmentCategoryType;
+  ageTier: AgeTier;
+  durationMinutes: number;     // Durasi pengerjaan treatment (dalam menit)
+  originalPrice: number;       // Harga Asli (Rp)
+  promoPrice: number;          // Harga Promo / Khusus (Rp)
+  description: string;         // Deskripsi detail & manfaat treatment
+  isActive: boolean;           // Status keaktifan layanan
+}
+
+/**
+ * Data awal (Seed / In-Memory File Data) katalog layanan clinic.
+ * Di masa depan, data ini bisa disinkronkan atau di-manage via UI Admin / Database.
+ */
+const serviceCatalog: Map<string, ClinicServiceItem> = new Map();
+
+// Default data catalog
+// Default data catalog
+export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
+  {
+    id: 'baby-massage-ceria',
+    name: 'Pijat Bayi Ceria (Rileksasi)',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
+    durationMinutes: 40,
+    originalPrice: 80000,
+    promoPrice: 60000,
+    description: 'Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks.',
+    isActive: true,
+  },
+  {
+    id: 'baby-massage-pulih-ceria',
+    name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
+    durationMinutes: 40,
+    originalPrice: 90000,
+    promoPrice: 70000,
+    description: 'Pijat terapi khusus bayi flu, batuk, pilek, rewel, susah BAB, kembung atau kolik dengan menggunakan double aromaterapi dan titik pijat khusus.',
+    isActive: true,
+  },
+  {
+    id: 'kids-massage-ceria',
+    name: 'Pijat Kids Ceria',
+    category: 'KIDS',
+    ageTier: { minAgeMonths: 24, maxAgeMonths: 84, label: '2 - 7 Tahun' },
+    durationMinutes: 45,
+    originalPrice: 110000,
+    promoPrice: 90000,
+    description: 'Pijat relaksasi tubuh anak untuk mendukung pertumbuhan tulang dan otot yang sehat serta meredakan kelelahan setelah beraktivitas.',
+    isActive: true,
+  },
+  {
+    id: 'baby-massage-lahap-juara',
+    name: 'Pijat Lahap Juara (Nafsu Makan)',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
+    durationMinutes: 40,
+    originalPrice: 90000,
+    promoPrice: 70000,
+    description: 'Pijat khusus untuk membantu meningkatkan nafsu makan si kecil dan menjaga kebugaran tubuh.',
+    isActive: true,
+  },
+  {
+    id: 'baby-paket-selapan',
+    name: 'Paket Selapan (Newborn Care)',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 2, label: 'Newborn (0 - 40 Hari)' },
+    durationMinutes: 45,
+    originalPrice: 100000,
+    promoPrice: 80000,
+    description: 'Pijat khusus bayi baru lahir (newborn) usia 0-40 hari untuk merangsang pertumbuhan awal, kebugaran, dan relaksasi setelah lahir.',
+    isActive: true,
+  },
+  {
+    id: 'moms-prenatal-massage',
+    name: 'Prenatal Massage (Pijat Hamil)',
+    category: 'MOMS',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Ibu Hamil (Trimester 2 & 3)' },
+    durationMinutes: 60,
+    originalPrice: 130000,
+    promoPrice: 105000,
+    description: 'Pijat aman khusus ibu hamil usia kandungan di atas 12 minggu untuk meredakan pegal di punggung, pinggang, kaki bengkak, serta mengurangi stres.',
+    isActive: true,
+  },
+  {
+    id: 'moms-oksitosin-fullbody',
+    name: 'Oksitosin Massage Fullbody',
+    category: 'MOMS',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Ibu Pasca Melahirkan / Nifas' },
+    durationMinutes: 60,
+    originalPrice: 130000,
+    promoPrice: 105000,
+    description: 'Pijat punggung dan leher fullbody untuk membantu merangsang hormon oksitosin sehingga produksi ASI lebih lancar dan badan ibu lebih rileks.',
+    isActive: true,
+  },
+  {
+    id: 'moms-oksitosin-partial',
+    name: 'Oksitosin Massage Non-Fullbody',
+    category: 'MOMS',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Ibu Menyusui' },
+    durationMinutes: 40,
+    originalPrice: 70000,
+    promoPrice: 50000,
+    description: 'Pijat punggung parsial untuk merangsang produksi ASI.',
+    isActive: true,
+  },
+  {
+    id: 'moms-paket-laktasi',
+    name: 'Paket Laktasi (Breast Massage)',
+    category: 'MOMS',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Ibu Menyusui' },
+    durationMinutes: 45,
+    originalPrice: 100000,
+    promoPrice: 80000,
+    description: 'Pijat area payudara untuk memperlancar sumbatan ASI dan meningkatkan produksi ASI secara optimal.',
+    isActive: true,
+  },
+  {
+    id: 'moms-laktasi-oksitosin-full',
+    name: 'Breast + Oksitoksin Fullbody Massage',
+    category: 'MOMS',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Ibu Menyusui / Nifas' },
+    durationMinutes: 75,
+    originalPrice: 190000,
+    promoPrice: 155000,
+    description: 'Paket kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI.',
+    isActive: true,
+  },
+  {
+    id: 'baby-tindik',
+    name: 'Tindik Telinga Bayi',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 12, label: 'Bayi 0 - 12 Bulan' },
+    durationMinutes: 15,
+    originalPrice: 70000,
+    promoPrice: 50000,
+    description: 'Layanan tindik telinga bayi secara manual menggunakan anting steril langsung secara aman.',
+    isActive: true,
+  },
+  {
+    id: 'baby-cukur',
+    name: 'Cukur Rambut Bayi',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 12, label: 'Bayi 0 - 12 Bulan' },
+    durationMinutes: 15,
+    originalPrice: 25000,
+    promoPrice: 15000,
+    description: 'Layanan mencukur rambut bayi dengan alat steril / milik customer sendiri secara bersih.',
+    isActive: true,
+  },
+  {
+    id: 'baby-cukur-pijat-terapi',
+    name: 'Cukur + Pijat Terapi',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: 12, label: 'Bayi 0 - 12 Bulan' },
+    durationMinutes: 55,
+    originalPrice: 115000,
+    promoPrice: 85000,
+    description: 'Paket hemat kombinasi cukur rambut bayi dan pijat terapi bayi.',
+    isActive: true,
+  },
+  {
+    id: 'add-on-sinar-moksa',
+    name: 'Sinar Moksa (Add-on)',
+    category: 'BOTH',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Semua Usia' },
+    durationMinutes: 15,
+    originalPrice: 15000,
+    promoPrice: 10000,
+    description: 'Terapi tambahan sinar inframerah (moksa) hangat untuk membantu mengencerkan dahak, lendir ingus, dan melegakan pernapasan.',
+    isActive: true,
+  },
+  {
+    id: 'add-on-nebulizer',
+    name: 'Nebulizer (Terapi Uap Add-on)',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Semua Usia' },
+    durationMinutes: 20,
+    originalPrice: 50000,
+    promoPrice: 35000,
+    description: 'Terapi uap nebulizer tambahan untuk melegakan tenggorokan dan mengencerkan dahak.',
+    isActive: true,
+  },
+  {
+    id: 'add-on-nebulizer-obat',
+    name: 'Nebulizer + Obat (Terapi Uap Lengkap)',
+    category: 'BABY',
+    ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Semua Usia' },
+    durationMinutes: 20,
+    originalPrice: 85000,
+    promoPrice: 65000,
+    description: 'Terapi uap nebulizer lengkap dengan obat khusus untuk meredakan batuk pilek dan sesak napas.',
+    isActive: true,
+  }
+];
+
+// Inisialisasi map katalog
+DEFAULT_CLINIC_SERVICES.forEach((item) => {
+  serviceCatalog.set(item.id, item);
+});
+
+export class TreatmentCatalogService {
+  /**
+   * Mengambil semua daftar layanan/treatment yang aktif
+   */
+  public getAllServices(onlyActive = true): ClinicServiceItem[] {
+    const list = Array.from(serviceCatalog.values());
+    if (onlyActive) {
+      return list.filter((s) => s.isActive);
+    }
+    return list;
+  }
+
+  /**
+   * Mengambil detail layanan berdasarkan ID
+   */
+  public getServiceById(id: string): ClinicServiceItem | undefined {
+    return serviceCatalog.get(id);
+  }
+
+  /**
+   * Filter layanan berdasarkan kategori ('BABY', 'KIDS', 'MOMS', 'BOTH')
+   */
+  public getServicesByCategory(category: TreatmentCategoryType): ClinicServiceItem[] {
+    return this.getAllServices().filter((s) => s.category === category || s.category === 'BOTH');
+  }
+
+  /**
+   * Filter layanan bayi/anak berdasarkan usia (dalam bulan)
+   */
+  public getServicesByAge(ageInMonths: number): ClinicServiceItem[] {
+    return this.getAllServices().filter((s) => {
+      if (s.category === 'MOMS') return false;
+      const { minAgeMonths, maxAgeMonths } = s.ageTier;
+      if (ageInMonths < minAgeMonths) return false;
+      if (maxAgeMonths !== null && ageInMonths > maxAgeMonths) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Menambahkan atau meng-update data layanan baru (Dipersiapkan untuk UI Admin mendatang)
+   */
+  public upsertService(service: ClinicServiceItem): ClinicServiceItem {
+    serviceCatalog.set(service.id, service);
+    return service;
+  }
+
+  /**
+   * Format ringkasan katalog harga & promo menjadi teks bersih untuk WhatsApp / LLM
+   */
+  public formatCatalogText(): string {
+    const services = this.getAllServices();
+    return services
+      .map((s) => {
+        return `• *${s.name}*\n  Usia: ${s.ageTier.label}\n  Durasi: ${s.durationMinutes} menit\n  Harga Normal: Rp${s.originalPrice.toLocaleString('id-ID')} | Promo: Rp${s.promoPrice.toLocaleString('id-ID')}\n  Deskripsi: ${s.description}`;
+      })
+      .join('\n\n');
+  }
+}
+
+export const treatmentCatalogService = new TreatmentCatalogService();
