@@ -100,7 +100,21 @@ HUMAN_HANDLING_TIMEOUT_HOURS=6
 RESERVATION_FORM_URL="https://klinik-treatment.com/booking"
 ```
 
-### 2. Jalankan dengan Docker Compose
+### 2. Jalankan WAHA Docker (NOWEB Engine)
+
+Chatbot ini merekomendasikan penggunaan **WAHA versi NOWEB (Baileys Engine)** karena sangat hemat memori RAM (~100 MB) dan stabil untuk produksi. Jalankan perintah terminal berikut untuk menyalakannya:
+
+```bash
+docker run -d \
+  --name waha \
+  -p 3001:3000 \
+  -e WHATSAPP_API_KEY=my_waha_api_key_secret \
+  devlikeapro/waha:noweb
+```
+
+### 3. Jalankan Aplikasi dengan Docker Compose
+
+Untuk menyalakan database PostgreSQL dan server bot:
 
 ```bash
 docker-compose up -d --build
