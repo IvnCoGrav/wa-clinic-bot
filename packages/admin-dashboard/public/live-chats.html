@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Chat Monitor & Human Override | Kala Baby & Moms Spa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --accent-pink: #ec4899;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(to right, #ef4444, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    .nav-links {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      transition: all 0.2s;
+    }
+
+    .nav-link.active {
+      color: var(--accent-pink);
+      background: rgba(236, 72, 153, 0.15);
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .badge-emergency {
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      animation: pulse 1.5s infinite;
+    }
+
+    .badge-standard {
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .chat-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+    }
+
+    .msg-item {
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .msg-inbound { color: #38bdf8; }
+    .msg-outbound { color: #a7f3d0; }
+
+    .btn-release {
+      background: var(--success);
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-release:hover { opacity: 0.9; }
+
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Live Chat Monitor & Human Override Control</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Pemantauan Percakapan Aktif Penanganan Manusia & Pengembalian Bot</p>
+      </div>
+    </header>
+
+    <div class="nav-links">
+      <a href="staging.html" class="nav-link">📋 3-Table Staging Reviewer</a>
+      <a href="live-chats.html" class="nav-link active">💬 Live Chat Monitor</a>
+    </div>
+
+    <div id="chats-list">
+      <div class="empty-state">Memuat daftar percakapan aktif...</div>
+    </div>
+  </div>
+
+  <script>
+    async function loadLiveChats() {
+      const container = document.getElementById('chats-list');
+
+      try {
+        const res = await fetch('/api/admin/human-handling-conversations');
+        const result = await res.json();
+
+        if (!result.success || !result.data || result.data.length === 0) {
+          container.innerHTML = `<div class="empty-state">✅ Tidak ada percakapan aktif yang sedang di-hold manusia saat ini. Seluruh alur dianimasikan oleh bot.</div>`;
+          return;
+        }
+
+        let html = '';
+        result.data.forEach(conv => {
+          const isMedical = conv.escalation_reason === 'medical_concern';
+          const sinceTime = conv.human_handling_since ? new Date(conv.human_handling_since) : new Date();
+          const minsAgo = Math.round((new Date() - sinceTime) / 60000);
+
+          html += `
+            <div class="card" id="conv-card-${conv.id}">
+              <div class="card-header">
+                <div>
+                  <strong style="font-size: 1.1rem; margin-right: 0.5rem;">${conv.customer?.name || 'Customer'}</strong>
+                  <span style="color: var(--text-muted); font-size: 0.9rem;">(${conv.customer?.phone || 'Nomor HP'})</span>
+                </div>
+                <div>
+                  ${isMedical ? '<span class="badge-emergency">🚨 MEDICAL EMERGENCY</span>' : '<span class="badge-standard">👤 STANDARD HUMAN HANDLING</span>'}
+                </div>
+              </div>
+
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                Diserahkan ke manusia sejak: <strong>${minsAgo} menit yang lalu</strong> | State Sebelum Eskalasi: <code>${conv.previous_state || 'INITIAL'}</code>
+              </div>
+
+              <div class="chat-box">
+                ${(conv.messages || []).map(m => `
+                  <div class="msg-item ${m.direction === 'INBOUND' ? 'msg-inbound' : 'msg-outbound'}">
+                    <strong>${m.direction === 'INBOUND' ? 'Customer' : 'Admin/Bot'}:</strong> ${m.content}
+                  </div>
+                `).join('')}
+              </div>
+
+              <div style="display: flex; justify-content: flex-end;">
+                <button class="btn-release" onclick="confirmAndRelease('${conv.id}', ${isMedical})">
+                  ${isMedical ? '🏥 Bidan: Release & Kembalikan ke Bot' : '▶️ Release Kembali ke Bot'}
+                </button>
+              </div>
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state">Gagal memuat live chat. Silakan periksa koneksi server.</div>`;
+      }
+    }
+
+    async function confirmAndRelease(conversationId, isMedical) {
+      if (isMedical) {
+        const confirmed = confirm('⚠️ KONFIRMASI BIDAN:\n\nApakah kondisi medis si kecil / Bunda pada percakapan ini sudah selesai ditangani secara lengkap oleh Bidan/Admin?');
+        if (!confirmed) return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/conversation/${conversationId}/release`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await res.json();
+        alert(result.message || 'Percakapan berhasil di-release kembali ke bot.');
+        document.getElementById(`conv-card-${conversationId}`)?.remove();
+      } catch (err) {
+        alert('Gagal me-release percakapan.');
+      }
+    }
+
+    loadLiveChats();
+    setInterval(loadLiveChats, 5000);
+  </script>
+</body>
+</html>

@@ -9,8 +9,14 @@ import { googleContactsService } from '../services/google-contacts.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { ConversationState } from '@prisma/client';
 import { abuseDetectionService } from '../services/abuse-detection.service';
+import { contextStorage } from '../utils/context';
+import { memoryAdClicks } from './tracking.route';
+import { prisma } from '../db/client';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { normalizeWahaJid } from '../utils/jid';
 dotenv.config();
+
 
 export async function webhookRoutes(fastify: FastifyInstance) {
   /**
@@ -19,193 +25,280 @@ export async function webhookRoutes(fastify: FastifyInstance) {
    * Termasuk IDEMPOTENCY CHECK (`wa_message_id`) & EXPLICIT GUARD CLAUSE for HUMAN HANDLING.
    */
   fastify.post('/webhook', async (request: FastifyRequest<{ Body: WahaWebhookEvent }>, reply: FastifyReply) => {
-    // --- SECURITY VERIFICATION (X-Webhook-Secret) ---
-    const webhookSecret = process.env.WAHA_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const clientSecret = request.headers['x-webhook-secret'] || request.headers['x-waha-signature'];
-      if (!clientSecret || clientSecret !== webhookSecret) {
-        console.warn(`[SECURITY WARNING] Unauthorized webhook access attempt from IP: ${request.ip}`);
-        return reply.status(401).send({ error: 'Unauthorized: Invalid or missing webhook secret token.' });
+    const correlationId = crypto.randomUUID();
+    return contextStorage.run({ correlationId }, async () => {
+      // --- SECURITY VERIFICATION (X-Webhook-Secret) ---
+      const webhookSecret = process.env.WAHA_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const clientSecret = request.headers['x-webhook-secret'] || request.headers['x-waha-signature'];
+        if (!clientSecret || clientSecret !== webhookSecret) {
+          console.warn(`[SECURITY WARNING] Unauthorized webhook access attempt from IP: ${request.ip}`);
+          return reply.status(401).send({ error: 'Unauthorized: Invalid or missing webhook secret token.' });
+        }
       }
-    }
 
-    const event = request.body;
+      const event = request.body;
 
-    // Filter hanya event "message" atau "message.any"
-    if (!event || (event.event !== 'message' && event.event !== 'message.any')) {
-      return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
-    }
+      // Filter hanya event "message" atau "message.any"
+      if (!event || (event.event !== 'message' && event.event !== 'message.any')) {
+        return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
+      }
 
-    const payload = event.payload;
-    if (!payload) {
-      return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
-    }
+      const payload = event.payload;
+      if (!payload) {
+        return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
+      }
 
-    if (payload.fromMe) {
-      // Outbound message check for self-learning
-      const customerJid = payload.chatId || (payload as any).to || payload.from;
-      if (customerJid) {
-        const phone = customerJid.replace(/@.*$/, '');
-        const customer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
-        if (customer) {
-          const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-          if (conversation && conversation.is_human_handling) {
-            // This is an admin/human reply! Let's record and learn from it
-            const adminReplyText = payload.body || '';
-            if (adminReplyText.trim()) {
-              console.log(`[SELF-LEARNING] Captured admin outbound reply to customer ${phone}: "${adminReplyText}"`);
-              const { selfLearningService } = await import('../services/self-learning.service');
-              selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
-                .catch(err => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
+      if (payload.fromMe) {
+        // Outbound message check for self-learning & MedicalFaqStaging capture
+        const customerJid = payload.chatId || (payload as any).to || payload.from;
+        if (customerJid) {
+          const phone = customerJid.replace(/@.*$/, '');
+          const customer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+          if (customer) {
+            const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+            if (conversation && conversation.is_human_handling) {
+              const adminReplyText = payload.body || '';
+
+              // CRITICAL FILTER: Ignore bot automated emergency/waiting templates
+              const isBotAutoReply = 
+                adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
+                adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
+                adminReplyText.includes('Pricelist Kala Moms & Baby Spa') ||
+                adminReplyText.startsWith('[AUTOMATED]');
+
+              if (adminReplyText.trim() && !isBotAutoReply) {
+                // 1. Self Learning Capture
+                console.log(`[SELF-LEARNING] Captured admin manual outbound reply to customer ${phone}: "${adminReplyText}"`);
+                const { selfLearningService } = await import('../services/self-learning.service');
+                selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
+                  .catch(err => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
+
+                // 2. Component 4: MedicalFaqStaging Capture Hook
+                if (conversation.escalation_reason === 'medical_concern') {
+                  console.log(`[MEDICAL FAQ STAGING CAPTURE] Capturing manual bidan reply for customer ${phone}`);
+                  const lastInbound = await messageService.getLastInboundMessage(conversation.id, DEFAULT_TENANT_ID);
+                  const rawQuestion = lastInbound?.content || 'Pertanyaan medis customer';
+
+                  try {
+                    await prisma.medicalFaqStaging.create({
+                      data: {
+                        tenant_id: DEFAULT_TENANT_ID,
+                        conversation_id: conversation.id,
+                        customer_phone: phone,
+                        raw_question: rawQuestion,
+                        bidan_raw_reply: adminReplyText,
+                        status: 'PENDING',
+                      },
+                    });
+                  } catch (err: any) {
+                    console.error('[MEDICAL FAQ STAGING ERROR] Failed to create staging record:', err.message);
+                  }
+                }
+              }
             }
           }
         }
+        return reply.status(200).send({ status: 'IGNORED_OUTBOUND' });
       }
-      return reply.status(200).send({ status: 'IGNORED_OUTBOUND' });
-    }
 
-    // --- FILTER CHAT GRUP (Abaikan group messages) ---
-    const isGroup = (payload.from && payload.from.endsWith('@g.us')) || 
-                    (payload.chatId && payload.chatId.endsWith('@g.us'));
-    if (isGroup) {
-      return reply.status(200).send({ status: 'IGNORED_GROUP_MESSAGE' });
-    }
 
-    const waMessageId = payload.id;
+      // --- FILTER CHAT GRUP (Abaikan group messages) ---
+      const isGroup = (payload.from && payload.from.endsWith('@g.us')) || 
+                      (payload.chatId && payload.chatId.endsWith('@g.us'));
+      if (isGroup) {
+        return reply.status(200).send({ status: 'IGNORED_GROUP_MESSAGE' });
+      }
 
-    // --- REVISI USER #3: IDEMPOTENCY CHECK ---
-    const isDuplicate = await messageService.isDuplicateMessage(waMessageId, DEFAULT_TENANT_ID);
-    if (isDuplicate) {
-      console.log(`[IDEMPOTENCY SKIP] WAHA Message ID ${waMessageId} has already been processed. Skipping retry.`);
-      return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
-    }
+      const waMessageId = payload.id;
 
-    // Extrak nomor HP internasional dari JID WAHA (misal "79903991054369@lid" -> "6285794210526")
-    const chatId = payload.from;
+      // --- REVISI USER #3: IDEMPOTENCY CHECK ---
+      const isDuplicate = await messageService.isDuplicateMessage(waMessageId, DEFAULT_TENANT_ID);
+      if (isDuplicate) {
+        console.log(`[IDEMPOTENCY SKIP] WAHA Message ID ${waMessageId} has already been processed. Skipping retry.`);
+        return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
+      }
 
-    // --- REVISI USER: BYPASS EMPLOYEE/ADMIN CHATS ---
-    const labels = await wahaClient.getChatLabels(chatId);
-    if (labels.some(l => l.toLowerCase() === 'admin')) {
-      console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
-      return reply.status(200).send({ status: 'IGNORED_ADMIN' });
-    }
+      // Extrak nomor HP internasional dari JID WAHA (misal "79903991054369@lid" -> "6285794210526")
+      const chatId = payload.from;
 
-    const phone = await wahaClient.getPhoneNumberFromLid(chatId);
-    const contactName = payload._data?.notifyName;
+      // --- REVISI USER: BYPASS EMPLOYEE/ADMIN CHATS ---
+      const labels = await wahaClient.getChatLabels(chatId);
+      if (labels.some(l => l.toLowerCase() === 'admin')) {
+        console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
+        return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+      }
+      const phone = (await wahaClient.getPhoneNumberFromLid(chatId)) || normalizeWahaJid(chatId);
+      const contactName = payload._data?.notifyName;
 
-    // Ambil/Buat record Customer & Conversation
-    const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
 
-    // Cek apakah customer baru saja dibuat (< 5 detik lalu) untuk memicu auto-save ke Google Contacts
-    const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
-    if (isNewCustomer) {
-      googleContactsService.createContact(phone, contactName).catch((err) => {
-        console.error('[GOOGLE CONTACTS] Unhandled rejection:', err);
-      });
-    }
+      // Periksa apakah customer baru (belum ada record di database)
+      const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+      const isNewCustomerRecord = !existingCustomer;
 
-    let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+      // Ambil/Buat record Customer & Conversation
+      const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
 
-    // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
-    if (customer.status === 'blocked') {
-      console.warn(`[BLOCKED ACCESS] Blocked customer ${phone} attempted to send a message. Logging to audit and dropping response.`);
-      await messageService.logMessage({
-        tenantId: DEFAULT_TENANT_ID,
-        conversationId: conversation.id,
-        direction: 'INBOUND',
-        content: payload.body || '[LOCATION/MEDIA]',
-        waMessageId,
-        payloadRaw: payload,
-      });
-      return reply.status(200).send({ status: 'BLOCKED' });
-    }
+      // Cek apakah customer baru saja dibuat (< 5 detik lalu) untuk memicu auto-save ke Google Contacts
+      const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
+      if (isNewCustomer) {
+        googleContactsService.createContact(phone, contactName).catch((err) => {
+          console.error('[GOOGLE CONTACTS] Unhandled rejection:', err);
+        });
+      }
 
-    // Converted standardized incoming message format
-    const incomingMessage: any = {
-      id: waMessageId,
-      from: phone,
-      chatId,
-      timestamp: String(payload.timestamp || Math.floor(Date.now() / 1000)),
-      type: payload.location ? 'location' : 'text',
-      text: payload.body ? { body: payload.body } : undefined,
-      location: payload.location
-        ? {
-            latitude: payload.location.latitude,
-            longitude: payload.location.longitude,
+      let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+      // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
+      if (customer.status === 'blocked') {
+        console.warn(`[BLOCKED ACCESS] Blocked customer ${phone} attempted to send a message. Logging to audit and dropping response.`);
+        await messageService.logMessage({
+          tenantId: DEFAULT_TENANT_ID,
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          content: payload.body || '[LOCATION/MEDIA]',
+          waMessageId,
+          payloadRaw: payload,
+        });
+        return reply.status(200).send({ status: 'BLOCKED' });
+      }
+
+      // Converted standardized incoming message format
+      const incomingMessage: any = {
+        id: waMessageId,
+        from: phone,
+        chatId,
+        timestamp: String(payload.timestamp || Math.floor(Date.now() / 1000)),
+        type: payload.location ? 'location' : 'text',
+        text: payload.body ? { body: payload.body } : undefined,
+        location: payload.location
+          ? {
+              latitude: payload.location.latitude,
+              longitude: payload.location.longitude,
+            }
+          : undefined,
+      };
+
+      // --- ATTRIBUTION CHECK ---
+      const bodyText = incomingMessage.text?.body || '';
+      const promoMatch = bodyText.match(/Promo\[(\w+)\]/i);
+      if (isNewCustomerRecord && promoMatch) {
+        const trackingCode = promoMatch[1];
+        // 1. Cek memory fallback first (untuk unit testing/database offline)
+        const memClick = memoryAdClicks.get(trackingCode);
+        if (memClick) {
+          if (!memClick.matchedAt) {
+            memClick.matchedAt = new Date();
+            memClick.customerId = customer.id;
+            console.log(`[ATTRIBUTION SUCCESS - MEMORY] Linked trackingCode ${trackingCode} to new customer ${phone} (ID: ${customer.id})`);
+          } else {
+            console.log(`[ATTRIBUTION SKIP - MEMORY] TrackingCode ${trackingCode} has already been matched.`);
           }
-        : undefined,
-    };
+        } else {
+          // 2. Prisma DB Atomic updateMany (menghindari race condition)
+          try {
+            const updateResult = await prisma.adClick.updateMany({
+              where: {
+                trackingCode,
+                matchedAt: null,
+              },
+              data: {
+                matchedAt: new Date(),
+                customerId: customer.id,
+              },
+            });
+            if (updateResult.count === 1) {
+              console.log(`[ATTRIBUTION SUCCESS] Linked trackingCode ${trackingCode} to new customer ${phone} (ID: ${customer.id})`);
+            } else {
+              console.log(`[ATTRIBUTION SKIP] TrackingCode ${trackingCode} is invalid or already matched.`);
+            }
+          } catch (err: any) {
+            console.error('[ATTRIBUTION ERROR] Failed to update AdClick attribution:', err.message);
+          }
+        }
+      }
 
-    // --- REVISI USER #4: EXPLICIT GUARD CLAUSE UNTUK HUMAN HANDLING ---
-    // Memeriksa apakah timeout auto-release 6 jam sudah terlampaui terlebih dahulu
-    const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, DEFAULT_TENANT_ID);
-    conversation = autoRelease.updatedConversation;
+      // --- MESSAGE-REWRITE: Strip kode tracking dari body sebelum masuk state machine ---
+      // Ini HARUS dilakukan setelah attribution block agar kode sudah dicatat ke DB,
+      // tapi sebelum state machine membaca incomingMessage.text.body.
+      // "Promo[a7] halo bunda" → "halo bunda"  |  "Promo[a7]" (saja) → "Halo"
+      if (promoMatch && incomingMessage.text) {
+        const stripped = bodyText.replace(/Promo\[\w+\]/gi, '').trim();
+        incomingMessage.text.body = stripped || 'Halo';
+      }
 
-    // JIKA is_human_handling === true (dan belum timed out):
-    if (conversation.is_human_handling) {
-      // Periksa apakah admin telah melepas label 'hold' di WhatsApp
-      const currentLabels = await wahaClient.getChatLabels(chatId);
-      const hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
 
-      if (!hasHoldLabel) {
-        console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
-        const restoredState = conversation.previous_state || ConversationState.INITIAL;
-        conversation = await conversationService.updateConversationState(
-          conversation.id,
-          {
-            currentState: restoredState,
-            isHumanHandling: false,
-            humanHandlingSince: null,
-          },
-          DEFAULT_TENANT_ID
-        );
-      } else {
-        console.log(`[EXPLICIT GUARD CLAUSE] Conversation ${conversation.id} is in HUMAN_HANDLING mode. Logging inbound message and BYPASSING all LLM & auto-replies.`);
+      // --- REVISI USER #4: EXPLICIT GUARD CLAUSE UNTUK HUMAN HANDLING ---
+      // Memeriksa apakah timeout auto-release 6 jam sudah terlampaui terlebih dahulu
+      const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, DEFAULT_TENANT_ID);
+      conversation = autoRelease.updatedConversation;
 
-        // Log pesan ke DB Audit Trail
+      // JIKA is_human_handling === true (dan belum timed out):
+      if (conversation.is_human_handling) {
+        // Periksa apakah admin telah melepas label 'hold' di WhatsApp
+        const currentLabels = await wahaClient.getChatLabels(chatId);
+        const hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
+
+        if (!hasHoldLabel) {
+          console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
+          const restoredState = conversation.previous_state || ConversationState.INITIAL;
+          conversation = await conversationService.updateConversationState(
+            conversation.id,
+            {
+              currentState: restoredState,
+              isHumanHandling: false,
+              humanHandlingSince: null,
+            },
+            DEFAULT_TENANT_ID
+          );
+        } else {
+          console.log(`[EXPLICIT GUARD CLAUSE] Conversation ${conversation.id} is in HUMAN_HANDLING mode. Logging inbound message and BYPASSING all LLM & auto-replies.`);
+
+          // Log pesan ke DB Audit Trail
+          await messageService.logMessage({
+            tenantId: DEFAULT_TENANT_ID,
+            conversationId: conversation.id,
+            direction: 'INBOUND',
+            content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
+            waMessageId: waMessageId,
+            payloadRaw: payload,
+          });
+
+          // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
+          return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
+        }
+      }
+
+      // --- ABUSE DETECTION CHECK (Sebelum antrean / queue) ---
+      const abuseResult = await abuseDetectionService.checkAndProcessAbuse(
+        customer,
+        conversation,
+        incomingMessage.text?.body || '',
+        DEFAULT_TENANT_ID
+      );
+
+      if (abuseResult.blocked) {
+        // Log pesan pemicu blokir ke audit trail
         await messageService.logMessage({
           tenantId: DEFAULT_TENANT_ID,
           conversationId: conversation.id,
           direction: 'INBOUND',
           content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
-          waMessageId: waMessageId,
+          waMessageId,
           payloadRaw: payload,
         });
-
-        // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
-        return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
+        return reply.status(200).send({ status: 'BLOCKED' });
       }
-    }
 
-    // --- ABUSE DETECTION CHECK (Sebelum antrean / queue) ---
-    const abuseResult = await abuseDetectionService.checkAndProcessAbuse(
-      customer,
-      conversation,
-      incomingMessage.text?.body || '',
-      DEFAULT_TENANT_ID
-    );
-
-    if (abuseResult.blocked) {
-      // Log pesan pemicu blokir ke audit trail
-      await messageService.logMessage({
+      // Masukkan pesan ke antrian pemrosesan sekuensial per customer
+      await queueService.enqueueMessage({
         tenantId: DEFAULT_TENANT_ID,
-        conversationId: conversation.id,
-        direction: 'INBOUND',
-        content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
-        waMessageId,
-        payloadRaw: payload,
+        customer,
+        conversation,
+        incomingMessage,
       });
-      return reply.status(200).send({ status: 'BLOCKED' });
-    }
 
-    // Masukkan pesan ke antrian pemrosesan sekuensial per customer
-    await queueService.enqueueMessage({
-      tenantId: DEFAULT_TENANT_ID,
-      customer,
-      conversation,
-      incomingMessage,
+      return reply.status(200).send({ status: 'EVENT_PROCESSED' });
     });
-
-    return reply.status(200).send({ status: 'EVENT_PROCESSED' });
   });
 }

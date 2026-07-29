@@ -1,10 +1,13 @@
 import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { KnowledgeChunkResult } from '../../services/knowledge.service';
+import { CircuitBreaker } from '../../utils/circuit-breaker';
 import dotenv from 'dotenv';
 dotenv.config();
 
 export class LLMResponseGenerator {
+  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[]], string>;
+
   private get apiKey(): string {
     return process.env.LLM_API_KEY || '';
   }
@@ -15,7 +18,49 @@ export class LLMResponseGenerator {
     return process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
   }
 
-  constructor() {}
+  constructor() {
+    this.llmBreaker = new CircuitBreaker(
+      async (userQuestion: string, contextText: string, contextChunks: KnowledgeChunkResult[]) => {
+        const response = await axios.post(
+          `${this.baseUrl}/chat/completions`,
+          {
+            model: this.model,
+            messages: [
+              {
+                role: 'system',
+                content: `${BOT_PERSONA_PROMPT}
+
+TUGAS UTAMA:
+Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen berikut:
+
+${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemukan)'}
+
+ATURAN BALASAN:
+- Jawab secara ramah, santun, dan informatif sesuai gaya bahasa moms & baby spa.
+  - Gunakan informasi dari referensi dokumen di atas. Jangan mengarang informasi di luar referensi.
+- Jawab dengan singkat dan jelas.`,
+              },
+              {
+                role: 'user',
+                content: userQuestion,
+              },
+            ],
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 8000,
+          }
+        );
+        return response.data.choices[0].message.content.trim();
+      },
+      async (userQuestion: string, contextText: string, contextChunks: KnowledgeChunkResult[]) => {
+        return this.fallbackFaqResponse(userQuestion, contextChunks);
+      }
+    );
+  }
 
   /**
    * Menghasilkan balasan FAQ natural berdasarkan RAG (Persona + Context Chunks dari Knowledge Base).
@@ -28,40 +73,7 @@ export class LLMResponseGenerator {
     }
 
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/chat/completions`,
-        {
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content: `${BOT_PERSONA_PROMPT}
-
-TUGAS UTAMA:
-Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen berikut:
-
-${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemukan)'}
-
-ATURAN BALASAN:
-- Jawab secara ramah, santun, dan informatif sesuai gaya bahasa moms & baby spa.
-  - Gunakan informasi dari referensi dokumen di atas. Jangan mengarang informasi di luar referensi.
-- Jawab dengan singkat dan jelas.`,
-            },
-            {
-              role: 'user',
-              content: userQuestion,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      return response.data.choices[0].message.content.trim();
+      return await this.llmBreaker.execute(userQuestion, contextText, contextChunks);
     } catch (error) {
       console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);
       return this.fallbackFaqResponse(userQuestion, contextChunks);

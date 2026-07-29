@@ -8,21 +8,43 @@ export class CustomerService {
   /**
    * Cari customer berdasarkan nomor telepon unik dan tenantId, atau buat record baru jika belum ada.
    */
-  public async getOrCreateCustomer(phone: string, name: string | undefined, tenantId: string): Promise<any> {
+  public async getOrCreateCustomer(
+    phone: string,
+    name: string | undefined,
+    tenantId: string,
+    options?: { skipFollowUpScheduling?: boolean }
+  ): Promise<any> {
     try {
       let customer = await prisma.customer.findFirst({
         where: { phone, tenant_id: tenantId },
       });
 
       if (!customer) {
-        customer = await prisma.customer.create({
+        const newCustomer = await prisma.customer.create({
           data: {
             tenant_id: tenantId,
             phone,
             name: name || null,
           },
         });
+
+        if (newCustomer) {
+          customer = newCustomer;
+          // skipFollowUpScheduling: true saat dipanggil dari migration service
+          // agar legacy customer tidak mendapat follow-up NO_PURCHASE yang tidak relevan.
+          if (!options?.skipFollowUpScheduling) {
+            try {
+              const { followUpService } = await import('./follow-up.service');
+              await followUpService.createNoPurchaseFollowUps(customer.id, tenantId);
+            } catch (err) {
+              console.error('[Customer Service] Failed to trigger follow-up creation:', err);
+            }
+          }
+        } else {
+          throw new Error('Database create returned null/undefined');
+        }
       }
+
 
       memoryCustomers.set(phone, customer);
       return customer;
@@ -343,6 +365,20 @@ export class CustomerService {
         }
       }
       throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+    }
+  }
+
+  /**
+   * Cari customer berdasarkan nomor telepon
+   */
+  public async getCustomerByPhone(phone: string, tenantId: string): Promise<any> {
+    try {
+      const customer = await prisma.customer.findFirst({
+        where: { phone, tenant_id: tenantId },
+      });
+      return customer || memoryCustomers.get(phone) || null;
+    } catch (error) {
+      return memoryCustomers.get(phone) || null;
     }
   }
 }

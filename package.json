@@ -12,16 +12,22 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "seed:faq": "tsx src/cli/seed-faq.ts"
+    "seed:faq": "tsx src/cli/seed-faq.ts",
+    "scrape:all": "tsx src/cli/scrape-all.ts"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^8.1.1",
     "@googlemaps/google-maps-services-js": "^3.4.0",
     "@prisma/client": "^5.19.1",
+    "@types/sanitize-html": "^2.16.1",
     "axios": "^1.7.5",
     "bullmq": "^5.80.10",
+    "cheerio": "^1.2.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
+    "googleapis": "^173.0.0",
     "ioredis": "^5.11.1",
+    "sanitize-html": "^2.17.6",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -61,7 +61,14 @@ export class ConversationService {
       return { released: false, updatedConversation: conversation };
     }
 
+    // EXPLICIT GUARD: 6-hour auto-release is DISABLED for medical_concern escalation to protect customer safety
+    if (conversation.escalation_reason === 'medical_concern') {
+      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to medical_concern. 6-hour auto-release is DISABLED.`);
+      return { released: false, updatedConversation: conversation };
+    }
+
     const since = new Date(conversation.human_handling_since).getTime();
+
     const now = new Date().getTime();
     const hoursElapsed = (now - since) / (1000 * 60 * 60);
 

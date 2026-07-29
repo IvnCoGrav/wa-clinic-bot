@@ -207,15 +207,21 @@ Sekadar menyapa dan menanyakan kabar Bunda setelah treatment kemarin, bagaimana 
 Semoga Bunda dan si Kecil selalu dalam keadaan sehat dan tenang ya🤗
 Apabila membutuhkan jadwal treatment lanjutan atau ada perkembangan lainnya, silakan kabari kami ya, Bunda 😊🙏`,
 
-  // Follow-up bulan ke-1 untuk treatment lanjutan
-  nextTreatmentFollowUp: (params: { name: string; childrenSummary: string }) =>
-    `Halo bunda ${params.name}😊
+  // Follow-up bulan ke-1 untuk treatment lanjutan (array varian)
+  nextTreatmentFollowUp: [
+    (params: { name: string; childrenSummary: string }) => `Halo bunda ${params.name}😊
 
 Gimana kabarnya ${params.childrenSummary}? Semoga makin aktif dan sehat yaa 🤍
 
 Nggak kerasa ya bun, sudah sekitar 1 bulan sejak terakhir massage. Di fase ini bagus banget untuk lanjut lagi supaya tumbuh kembangnya tetap optimal ✨
 
 Kebetulan minggu ini masih ada beberapa jadwal kosong. Kalau bunda mau, saya bisa bantu aturkan jadwal untuk treatment lagi bunda di minggu ini. 🙏😊`,
+    (params: { name: string; childrenSummary: string }) => `Halo Bunda ${params.name} 🤗
+
+Apa kabar ${params.childrenSummary}? Semoga sehat-sehat terus ya 🤍
+
+Sudah cukup lama nih sejak treatment terakhir. Kalau Bunda mau lanjut lagi, kami masih ada slot kosong yang bisa diatur sesuai jadwal Bunda 😊`
+  ],
 
   paymentFollowUp: (params: { name: string }) =>
     `Selamat pagi Bunda ${params.name} 🥰
@@ -226,30 +232,53 @@ Apabila sudah transfer, mohon berkenan mengirimkan bukti pembayarannya ya bunda 
 
   // =======================================================================
   // Follow-up BELUM PURCHASE — hari ke-3, 7, 14 sejak kontak terakhir
-  // DRAFT oleh AI, belum divalidasi dengan gaya bahasa asli Bidan Yusi.
-  // Silakan direview/diedit sebelum dipakai production.
+  // Array varian: dipilih random tiap broadcast supaya tidak identik semua.
   // =======================================================================
 
-  followUpNoPurchaseDay3: (params: { name: string }) =>
-    `Halo Bunda ${params.name} 😊
+  followUpNoPurchaseDay3: [
+    (params: { name: string }) => `Halo Bunda ${params.name} 😊
 
-Sekadar mau follow up soal treatment yang kemarin sempat ditanyakan. Kalau Bunda masih berminat, kami masih ada slot kosong minggu ini Bund 🤗
+Sekadar mau follow up soal treatment yang kemarin sempat ditanyakan. Kalau Bunda masih berminat, kami masih ada slot kosong minggu ini lho 🤗
 
 Kalau ada pertanyaan lain seputar treatmentnya, jangan sungkan tanya ya bund ☺️`,
+    (params: { name: string }) => `Hai Bunda ${params.name} 🤍
 
-  followUpNoPurchaseDay7: (params: { name: string }) =>
-    `Halo lagi Bunda ${params.name} 🤍
+Mau nanya, gimana pertimbangannya soal treatment kemarin? Kami masih ada jadwal kosong kalau Bunda mau lanjut booking 😊
+
+Ada yang mau ditanyakan dulu, boleh banget bund, siap bantu jelasin 🙏🏻`,
+    (params: { name: string }) => `Selamat siang Bunda ${params.name} 😊
+
+Ijin follow up soal treatment yang kemarin ya bund. Kalau masih tertarik, kabarin kami aja, nanti dibantu carikan jadwal yang pas 🤗`
+  ],
+
+  followUpNoPurchaseDay7: [
+    (params: { name: string }) => `Halo lagi Bunda ${params.name} 🤍
 
 Masih inget kami nggak nih bund 😊 Kebetulan beberapa hari ini masih ada jadwal kosong, kalau Bunda mau jadwalkan treatment untuk si Kecil atau Bunda sendiri, kami siap bantu kapan aja 🤗
 
 Kalau ada yang mau ditanyakan dulu soal treatment kami, boleh banget bund, saya bantu jelasin 🙏🏻`,
+    (params: { name: string }) => `Halo Bunda ${params.name} 😊
 
-  followUpNoPurchaseDay14: (params: { name: string }) =>
-    `Halo Bunda ${params.name} 😊
+Udah seminggu ya sejak terakhir kita ngobrol soal treatment. Kalau Bunda masih mikir-mikir, nggak masalah bund, kami tetap siap bantu kapanpun Bunda siap 🤗
+
+Ada yang bisa saya bantu jelaskan lagi soal treatmentnya? 🙏🏻`,
+    (params: { name: string }) => `Hai Bunda ${params.name} 🥰
+
+Kami masih inget Bunda lho 😊 Kalau masih berminat sama treatment yang kemarin dibahas, kabarin kami ya, jadwal masih ada kok 🤗`
+  ],
+
+  followUpNoPurchaseDay14: [
+    (params: { name: string }) => `Halo Bunda ${params.name} 😊
 
 Mohon maaf kalau kami kelihatan sering follow up ya bund 🙏🏻 Ini follow up terakhir dari kami dulu, biar nggak mengganggu Bunda.
 
 Kalau nanti Bunda berkenan atau butuh treatment untuk si Kecil / Bunda sendiri, kami dengan senang hati siap bantu kapan pun — tinggal chat kami lagi aja ya bund 🤗🥰
 
 Terima kasih banyak sudah menghubungi Kala, semoga Bunda dan keluarga selalu sehat ☺️`,
+    (params: { name: string }) => `Halo Bunda ${params.name} 🤍
+
+Ini follow up terakhir kami ya bund, biar Bunda nggak merasa terus-terusan dikejar 🙏🏻 Kapanpun Bunda butuh treatment, pintu kami selalu terbuka.
+
+Terima kasih sudah pernah menghubungi Kala Moms and Baby Spa, semoga Bunda dan si Kecil sehat selalu 🥰`
+  ],
 };

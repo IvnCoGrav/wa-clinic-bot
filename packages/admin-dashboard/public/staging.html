@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control Center — 3-Table Staging Reviewer | Kala Baby & Moms Spa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --accent-pink: #ec4899;
+      --accent-purple: #8b5cf6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(to right, #f472b6, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    .status-badge {
+      padding: 0.4rem 0.8rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.75rem 1.25rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      color: var(--accent-pink);
+      border-bottom-color: var(--accent-pink);
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(236, 72, 153, 0.15);
+      color: var(--accent-pink);
+      margin-right: 0.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+    input, textarea {
+      width: 100%;
+      padding: 0.75rem;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.95rem;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1rem;
+    }
+
+    .btn {
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s;
+    }
+
+    .btn-approve { background: var(--success); color: #fff; }
+    .btn-reject { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.4); }
+    .btn:hover { opacity: 0.85; }
+
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Control Center — 3-Table Staging Reviewer</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Review & Kurasi Draf FAQ Medis, FAQ Umum, dan Migrasi Customer</p>
+      </div>
+      <div class="status-badge" id="session-status">Session Active (HttpOnly Cookie)</div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('medical')">🏥 FAQ Medis (Bidan Queue)</button>
+      <button class="tab-btn" onclick="switchTab('general')">💬 FAQ Umum (Admin Queue)</button>
+      <button class="tab-btn" onclick="switchTab('legacy')">📦 Migrasi Customer (Leads Queue)</button>
+    </div>
+
+    <div id="tab-content">
+      <div class="empty-state">Memuat data staging...</div>
+    </div>
+  </div>
+
+  <script>
+    let currentTab = 'medical';
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      loadStagingData();
+    }
+
+    async function loadStagingData() {
+      const contentDiv = document.getElementById('tab-content');
+      let endpoint = '/api/admin/medical-faq-staging';
+      if (currentTab === 'general') endpoint = '/api/admin/general-faq-staging';
+      if (currentTab === 'legacy') endpoint = '/api/admin/legacy-staging';
+
+      try {
+        const res = await fetch(endpoint, {
+          headers: { 'Accept': 'application/json' }
+        });
+        const result = await res.json();
+
+        if (!result.success || !result.data || result.data.length === 0) {
+          contentDiv.innerHTML = `<div class="empty-state">Tidak ada kandidat antrean ${currentTab} staging yang menunggu review.</div>`;
+          return;
+        }
+
+        let html = '';
+        result.data.forEach(item => {
+          if (currentTab === 'medical') {
+            html += `
+              <div class="card" id="card-${item.id}">
+                <div class="card-header">
+                  <div>
+                    ${(item.symptoms_tagged || []).map(s => `<span class="tag">🚨 ${s}</span>`).join('')}
+                    <span style="font-size:0.8rem; color:var(--text-muted)">Customer: ${item.customer_phone}</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Pertanyaan Mentah Customer:</label>
+                  <input type="text" value="${item.raw_question || ''}" readonly />
+                </div>
+                <div class="form-group">
+                  <label>Balasan Mentah Bidan (Internal Chat):</label>
+                  <input type="text" value="${item.bidan_raw_reply || ''}" readonly />
+                </div>
+                <div class="form-group">
+                  <label>Formulansi Pertanyaan Umum (Wajib Diisi Bidan):</label>
+                  <input type="text" id="gq-${item.id}" value="${item.general_question || item.raw_question || ''}" placeholder="Masukkan versi umum pertanyaan..." />
+                </div>
+                <div class="form-group">
+                  <label>Formulansi Jawaban Resmi FAQ (Wajib Diisi Bidan):</label>
+                  <textarea id="ga-${item.id}" rows="3" placeholder="Masukkan jawaban medis resmi...">${item.general_answer || item.bidan_raw_reply || ''}</textarea>
+                </div>
+                <div class="btn-group">
+                  <button class="btn btn-reject" onclick="reviewItem('${item.id}', 'REJECTED')">Tolak (Reject)</button>
+                  <button class="btn btn-approve" onclick="reviewMedicalItem('${item.id}', 'APPROVED')">Setujui & Tambah ke FAQ (Approve)</button>
+                </div>
+              </div>
+            `;
+          } else if (currentTab === 'general') {
+            html += `
+              <div class="card" id="card-${item.id}">
+                <div class="card-header">
+                  <span class="tag">Kategori: ${item.category || 'general'}</span>
+                </div>
+                <div class="form-group">
+                  <label>Pertanyaan Mentah Customer:</label>
+                  <input type="text" value="${item.raw_question || ''}" readonly />
+                </div>
+                <div class="form-group">
+                  <label>Formulansi Pertanyaan Umum:</label>
+                  <input type="text" id="gq-${item.id}" value="${item.general_question || item.raw_question || ''}" />
+                </div>
+                <div class="form-group">
+                  <label>Formulansi Jawaban Umum:</label>
+                  <textarea id="ga-${item.id}" rows="3">${item.general_answer || item.raw_answer || ''}</textarea>
+                </div>
+                <div class="btn-group">
+                  <button class="btn btn-reject" onclick="reviewGeneralItem('${item.id}', 'REJECTED')">Tolak</button>
+                  <button class="btn btn-approve" onclick="reviewGeneralItem('${item.id}', 'APPROVED')">Setujui & Commit ke FAQ</button>
+                </div>
+              </div>
+            `;
+          } else if (currentTab === 'legacy') {
+            html += `
+              <div class="card" id="card-${item.id}">
+                <div class="card-header">
+                  <span class="tag">Customer Lead</span>
+                  <span style="font-size:0.8rem; color:var(--text-muted)">${item.customer_phone}</span>
+                </div>
+                <div class="form-group">
+                  <label>Nama Customer:</label>
+                  <input type="text" value="${item.customer_name || 'Customer Lama'}" readonly />
+                </div>
+                <div class="btn-group">
+                  <button class="btn btn-reject" onclick="commitLegacyItem('${item.id}', 'REJECTED')">Tolak</button>
+                  <button class="btn btn-approve" onclick="commitLegacyItem('${item.id}', 'COMMITTED')">Commit ke Database Customer</button>
+                </div>
+              </div>
+            `;
+          }
+        });
+
+        contentDiv.innerHTML = html;
+      } catch (err) {
+        contentDiv.innerHTML = `<div class="empty-state">Gagal memuat data staging. Silakan login ulang.</div>`;
+      }
+    }
+
+    async function reviewMedicalItem(id, status) {
+      const gq = document.getElementById(`gq-${id}`).value;
+      const ga = document.getElementById(`ga-${id}`).value;
+
+      if (status === 'APPROVED' && (!gq || !ga)) {
+        alert('Formulansi Pertanyaan & Jawaban Umum WAJIB diisi sebelum disetujui!');
+        return;
+      }
+
+      await fetch(`/api/admin/medical-faq-staging/${id}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, generalQuestion: gq, generalAnswer: ga })
+      });
+
+      document.getElementById(`card-${id}`).remove();
+    }
+
+    async function reviewGeneralItem(id, status) {
+      const gq = document.getElementById(`gq-${id}`).value;
+      const ga = document.getElementById(`ga-${id}`).value;
+
+      await fetch(`/api/admin/general-faq-staging/${id}/review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, generalQuestion: gq, generalAnswer: ga })
+      });
+
+      document.getElementById(`card-${id}`).remove();
+    }
+
+    async function commitLegacyItem(id, status) {
+      await fetch(`/api/admin/legacy-staging/${id}/commit`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+
+      document.getElementById(`card-${id}`).remove();
+    }
+
+    loadStagingData();
+  </script>
+</body>
+</html>

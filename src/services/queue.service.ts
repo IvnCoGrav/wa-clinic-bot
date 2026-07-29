@@ -19,9 +19,14 @@ export class QueueService {
   private bullWorkers: Map<string, Worker> = new Map();
   private shardsCount: number = 5;
 
+  // Pause/Resume state for WAHA disconnection resilience
+  private isPaused: boolean = false;
+  private pauseTimestamp: number | null = null;
+
   // In-Memory Queue Fallback properties
   private memoryQueues: Map<string, QueuePayload[]> = new Map();
   private memoryProcessing: Set<string> = new Set();
+
 
   constructor() {
     this.shardsCount = parseInt(process.env.QUEUE_SHARDS || '5', 10);
@@ -218,6 +223,68 @@ export class QueueService {
   }
 
   /**
+   * Menghentikan sementara antrian pemrosesan saat WAHA terputus (DISCONNECTED/STOPPED).
+   * Notifikasi otomatis dikirim via AlertService.
+   */
+  public async pauseQueue(): Promise<void> {
+    if (this.isPaused) return;
+
+    this.isPaused = true;
+    this.pauseTimestamp = Date.now();
+
+    for (const queue of this.bullQueues.values()) {
+      await queue.pause().catch(() => {});
+    }
+
+    const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+    await alertService.notifyAlert({
+      type: AlertType.WAHA_DISCONNECTED,
+      severity: AlertSeverity.CRITICAL,
+      message: 'WAHA session disconnected or stopped. Outbound message queue PAUSED to prevent lost messages.',
+    });
+
+    console.warn('⚠️ [QUEUE PAUSED] Message processing paused due to WAHA disconnection.');
+  }
+
+  /**
+   * Melanjutkan kembali antrian pemrosesan saat WAHA terhubung kembali (WORKING/CONNECTED).
+   */
+  public async resumeQueue(): Promise<void> {
+    if (!this.isPaused) return;
+
+    this.isPaused = false;
+    this.pauseTimestamp = null;
+
+    for (const queue of this.bullQueues.values()) {
+      await queue.resume().catch(() => {});
+    }
+
+    const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+    await alertService.notifyAlert({
+      type: AlertType.WAHA_DISCONNECTED,
+      severity: AlertSeverity.INFO,
+      message: 'WAHA session reconnected. Resuming outbound message queue processing.',
+    });
+
+    console.log('⚡ [QUEUE RESUMED] Message processing resumed after WAHA reconnection.');
+  }
+
+  public isQueuePaused(): boolean {
+    return this.isPaused;
+  }
+
+  /**
+   * Mengevaluasi apakah job peka waktu (misal Reminder H-1) sudah kedaluwarsa (> 6 jam pasca downtime).
+   * Jika > 6 jam: kembalikan true (diberi status SKIPPED_EXPIRED). Jika <= 6 jam: kembalikan false.
+   */
+  public isJobExpired(scheduledTime: Date | number, isTimeSensitive = false): boolean {
+    if (!isTimeSensitive) return false;
+    const scheduledMs = typeof scheduledTime === 'number' ? scheduledTime : scheduledTime.getTime();
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    return Date.now() - scheduledMs > SIX_HOURS_MS;
+  }
+
+  /**
    * Helper untuk menutup seluruh koneksi queue/worker (dipakai saat shutdown server)
    */
   public async close(): Promise<void> {
@@ -243,3 +310,4 @@ export class QueueService {
 }
 
 export const queueService = new QueueService();
+

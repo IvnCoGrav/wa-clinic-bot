@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Health & Outbound Queue Monitor | Kala Baby & Moms Spa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --accent-pink: #ec4899;
+      --accent-purple: #8b5cf6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(to right, #10b981, #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    .nav-links {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      transition: all 0.2s;
+    }
+
+    .nav-link.active {
+      color: var(--accent-pink);
+      background: rgba(236, 72, 153, 0.15);
+    }
+
+    .grid-health {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 1rem;
+      padding: 1.5rem;
+    }
+
+    .metric-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-top: 0.5rem;
+      color: var(--success);
+    }
+
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>System Health & Outbound Queue Monitor</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Pemantauan Real-Time Koneksi WAHA, Redis Queue, Haversine Engine, dan Alert System</p>
+      </div>
+    </header>
+
+    <div class="nav-links">
+      <a href="staging.html" class="nav-link">📋 3-Table Staging</a>
+      <a href="live-chats.html" class="nav-link">💬 Live Chat</a>
+      <a href="ai-models.html" class="nav-link">🤖 AI Model Registry</a>
+      <a href="health.html" class="nav-link active">🩺 System Health</a>
+    </div>
+
+    <div class="grid-health" id="health-metrics">
+      <div class="card">
+        <label>WAHA WhatsApp Gateway Session</label>
+        <div class="metric-value" id="waha-val">Memuat...</div>
+      </div>
+      <div class="card">
+        <label>Redis Outbound Message Queue</label>
+        <div class="metric-value" id="redis-val" style="color: var(--warning);">Memuat...</div>
+      </div>
+      <div class="card">
+        <label>Haversine Distance Engine (1.25x Multiplier)</label>
+        <div class="metric-value" id="haversine-val">Memuat...</div>
+      </div>
+      <div class="card">
+        <label>Telegram Emergency Medical Alerts</label>
+        <div class="metric-value" id="telegram-val">Memuat...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadHealthData() {
+      try {
+        const res = await fetch('/api/admin/health');
+        const result = await res.json();
+
+        if (result.success && result.data) {
+          document.getElementById('waha-val').innerText = `✅ ${result.data.wahaStatus}`;
+          document.getElementById('redis-val').innerText = `⚡ ${result.data.redisQueue}`;
+          document.getElementById('haversine-val').innerText = `📍 ${result.data.haversineLocationEngine}`;
+          document.getElementById('telegram-val').innerText = `🔔 ${result.data.telegramEmergencyAlerts}`;
+        }
+      } catch (err) {
+        document.getElementById('health-metrics').innerHTML = `<div class="empty-state">Gagal terhubung ke API System Health.</div>`;
+      }
+    }
+
+    loadHealthData();
+    setInterval(loadHealthData, 10000);
+  </script>
+</body>
+</html>

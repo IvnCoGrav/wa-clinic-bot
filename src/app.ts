@@ -2,8 +2,13 @@ import Fastify from 'fastify';
 import dotenv from 'dotenv';
 import { webhookRoutes } from './routes/webhook.route';
 import { adminRoutes } from './routes/admin.route';
+import { healthRoutes } from './routes/health.route';
+import { trackingRoutes } from './routes/tracking.route';
+import rateLimit from '@fastify/rate-limit';
+import { initializeConsoleWrapper } from './utils/context';
 
 dotenv.config();
+initializeConsoleWrapper();
 
 export function buildApp() {
   if (!process.env.ADMIN_API_KEY) {
@@ -21,18 +26,39 @@ export function buildApp() {
 
   const app = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL || 'info',
+      level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),
     },
   });
 
-  // Register Webhook & Admin Routes
+
+  // Register Rate Limiting (global, admin routes have the tightest budget)
+  app.register(rateLimit, {
+    max: 30,
+    timeWindow: '1 minute',
+    keyGenerator: (request) => {
+      const apiKey = request.headers['x-api-key'] as string;
+      const clientIp = request.ip;
+      if (apiKey) {
+        return `${apiKey}-${clientIp}`;
+      }
+      return clientIp;
+    },
+
+    errorResponseBuilder: (request, context) => {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded. Please try again in ${context.after}.`,
+      };
+    },
+  });
+
+
+  // Register Webhook, Admin, Health, & Tracking Routes
   app.register(webhookRoutes);
   app.register(adminRoutes);
-
-  // Health check route
-  app.get('/health', async () => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
-  });
+  app.register(healthRoutes);
+  app.register(trackingRoutes);
 
   return app;
 }

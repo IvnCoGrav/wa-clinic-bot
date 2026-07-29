@@ -69,6 +69,21 @@ export class MessageService {
       return null;
     }
   }
+
+  /**
+   * Mengambil pesan inbound (masuk) terakhir dari customer untuk thread percakapan tertentu.
+   */
+  public async getLastInboundMessage(conversationId: string, tenantId: string): Promise<any> {
+    try {
+      return await prisma.message.findFirst({
+        where: { conversation_id: conversationId, tenant_id: tenantId, direction: Direction.INBOUND },
+        orderBy: { created_at: 'desc' },
+      });
+    } catch (error) {
+      return null;
+    }
+  }
 }
+
 
 export const messageService = new MessageService();

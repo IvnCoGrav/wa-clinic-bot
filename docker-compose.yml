@@ -19,9 +19,31 @@ services:
       - CLINIC_LNG=${CLINIC_LNG:-112.7520883}
       - HUMAN_HANDLING_TIMEOUT_HOURS=${HUMAN_HANDLING_TIMEOUT_HOURS:-6}
       - RESERVATION_FORM_URL=${RESERVATION_FORM_URL:-https://klinik-treatment.com/booking}
+      - TRACKING_API_KEY=${TRACKING_API_KEY}
+      - FB_PIXEL_ID=${FB_PIXEL_ID}
+      - FB_CAPI_ACCESS_TOKEN=${FB_CAPI_ACCESS_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Click Catcher — microservice perantara untuk menangkap atribusi klik iklan Meta
+  # dan meredirect customer ke WhatsApp dengan tracking code.
+  # Dokumentasi: packages/click-catcher/README.md
+  click-catcher:
+    build:
+      context: ./packages/click-catcher
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      # Gunakan nama service Docker 'app' agar bisa berkomunikasi via internal network
+      - TRACKING_API_BASE_URL=http://app:3000
+      - TRACKING_API_KEY=${TRACKING_API_KEY}
+      - FB_PIXEL_ID=${FB_PIXEL_ID}
+      - DEFAULT_WHATSAPP_PHONE=${DEFAULT_WHATSAPP_PHONE}
+    depends_on:
+      - app
 
   postgres:
     image: postgres:16-alpine
