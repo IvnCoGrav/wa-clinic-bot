@@ -1,1 +1,1 @@
-export { TenantHtmlService, ServerTrackingConfig } from '../../packages/click-catcher/src/html-sanitizer';
+export { TenantHtmlService, ServerTrackingConfig } from './html-sanitizer';

@@ -77,6 +77,7 @@ model Conversation {
   location_attempts    Int               @default(0)
   is_human_handling    Boolean           @default(false)
   human_handling_since DateTime?
+  escalation_reason    String?
   review_flagged       Boolean           @default(false)
   last_message_at      DateTime          @default(now())
   created_at           DateTime          @default(now())

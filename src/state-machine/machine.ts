@@ -93,7 +93,7 @@ export class ConversationStateMachine {
         try {
           const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
           const alertService = new AlertService();
-          await alertService.triggerAlert({
+          await alertService.notifyAlert({
             type: isHigh ? AlertType.MEDICAL_EMERGENCY_HIGH : AlertType.MEDICAL_CONCERN_MEDIUM,
             severity: isHigh ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
             message: `[MEDICAL ALERT ${medicalResult.severity}] Customer: ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}. Text: "${incomingText}"`,

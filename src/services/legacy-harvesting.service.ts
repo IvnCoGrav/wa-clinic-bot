@@ -95,8 +95,8 @@ export class LegacyHarvestingService {
       if (existingMedical) return true;
 
       // 3. Check official KnowledgeBase FAQ
-      const existingFaq = await prisma.faqItem.findFirst({
-        where: { tenant_id: tenantId, question: { contains: cleaned.substring(0, 20) } },
+      const existingFaq = await prisma.knowledgeChunk.findFirst({
+        where: { tenant_id: tenantId, title: { contains: cleaned.substring(0, 20) } },
       });
       if (existingFaq) return true;
     } catch (err) {
@@ -148,7 +148,7 @@ export class LegacyHarvestingService {
 
         for (let i = 0; i < Math.min(chats.length, 10); i++) {
           const chat = chats[i];
-          const messages = await wahaClient.getMessages(chat.id || chat.jid, 20);
+          const messages = await wahaClient.getMessages(chat.id, 20);
           activeHarvestingJob.totalMessagesScanned += messages.length;
 
           for (let j = 0; j < messages.length - 1; j++) {
@@ -173,15 +173,19 @@ export class LegacyHarvestingService {
 
               // 4. Sub-Part B Lead/Purchase Extraction (using parseReservationText)
               const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
-              if (reservationDetails.customer_name || reservationDetails.treatment_name) {
+              if (reservationDetails.success && reservationDetails.reservation) {
                 try {
                   await prisma.legacyStaging.create({
                     data: {
-                      tenant_id: tenantId,
-                      customer_phone: chat.id.replace(/@.*$/, ''),
-                      customer_name: reservationDetails.customer_name || 'Customer Lama',
-                      parsed_data: JSON.parse(JSON.stringify(reservationDetails)),
+                      tenantId: tenantId,
+                      phoneNumber: chat.id.replace(/@.*$/, ''),
+                      name: reservationDetails.reservation.name || 'Customer Lama',
+                      extractedLocation: reservationDetails.reservation.address || null,
+                      leadCreatedAt: new Date(),
+                      extractedReservationJson: JSON.parse(JSON.stringify(reservationDetails.reservation)),
                       status: 'PENDING',
+                      rawMessagesCount: 2,
+                      rawMessagesJson: JSON.parse(JSON.stringify([currentMsg, nextMsg])),
                     },
                   });
                   activeHarvestingJob.legacyLeadsExtractedCount++;
