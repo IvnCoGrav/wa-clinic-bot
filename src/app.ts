@@ -76,5 +76,11 @@ if (require.main === module) {
     console.log(`\n🚀 WhatsApp Clinic Bot Engine listening on ${address}`);
     console.log(`📌 Webhook URL: ${address}/webhook`);
     console.log(`📌 Admin Endpoint: ${address}/api/admin/human-handling-conversations\n`);
+
+    // Start background WAHA status monitor
+    import('./services/waha-monitor.service').then(({ WahaMonitorService }) => {
+      WahaMonitorService.getInstance().start();
+    }).catch(e => console.error('[MONITOR START ERROR]', e));
   });
 }
+
