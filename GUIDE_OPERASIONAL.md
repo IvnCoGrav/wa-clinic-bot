@@ -14,12 +14,20 @@ Panduan ini menjelaskan langkah demi langkah untuk menjalankan aplikasi **WAHA W
    ```
 
 ### 2. Jalankan WAHA (WhatsApp Gateway)
-Jalankan WAHA engine via Docker dengan kredensial resmi (Gunakan perintah satu baris berikut untuk Windows PowerShell/CMD):
-```powershell
-docker run -d --name waha -p 3001:3000 -e WHATSAPP_SWAGGER_USERNAME=admin -e WHATSAPP_SWAGGER_PASSWORD=admin12345 -e WAHA_DASHBOARD_USERNAME=admin -e WAHA_DASHBOARD_PASSWORD=admin12345 -e WAHA_API_KEY=my_waha_api_key_secret devlikeapro/waha:noweb
+Jalankan WAHA engine menggunakan Docker Compose yang telah dipasang pin versi spesifik untuk menghindari regresi noise handshake (bug issue #2198).
+
+```bash
+# Jalankan container WAHA via Docker Compose
+docker compose up -d waha
 ```
-> [!TIP]
-> **Mengatasi Bentrok Kontainer:** Jika muncul error *Conflict* (nama "/waha" sudah digunakan), hapus terlebih dahulu kontainer lama dengan menjalankan `docker rm -f waha` kemudian jalankan kembali perintah `docker run` di atas.
+
+> [!IMPORTANT]
+> **Catatan Pinning Versi (Keamanan Operasional):**
+> - Project ini mem-pin image WAHA ke versi spesifik **`devlikeapro/waha:noweb-2026.7.2`** di dalam `docker-compose.yml`.
+> - **JANGAN** pernah mengubah tag ke `:latest` di server produksi karena NOWEB sering kali mengalami pemblokiran handshake dari WhatsApp.
+> - Versi `2026.7.2` memperkenalkan perbaikan penting dan variabel `WAHA_NOWEB_WA_VERSION_FORCE` untuk memaksa bypass enkripsi handshake yang usang.
+> - **Prosedur Upgrade Masa Depan:** Sebelum melakukan upgrade versi WAHA di masa depan, pastikan untuk membaca [Changelog Resmi WAHA](https://waha.devlike.pro/docs/overview/changelog/) dan mengujinya di lingkungan staging terlebih dahulu.
+
 
 #### 📲 Langkah Menautkan WhatsApp via Dashboard WAHA:
 1. Buka browser dan akses: 👉 **`http://localhost:3001/dashboard/`**

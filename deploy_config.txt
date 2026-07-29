@@ -1,0 +1,17 @@
+# Deployment & Version Pinning Notes — WAHA Clinic Bot
+
+## Pinned Versions
+*   **WAHA Container Image:** `devlikeapro/waha:noweb-2026.7.2` (Engine: NOWEB)
+*   **Database:** `postgres:16-alpine`
+*   **Backend Node Version:** `>=20.x`
+
+## Historical Version Context & Fixes
+*   **2026-07-29 (Update to WAHA 2026.7.2):**
+    *   **Reason:** WAHA NOWEB version `2026.7.1` had a critical regressive bug where connection to WhatsApp Web servers failed during the Noise Handshake process (reference: GitHub issue `devlikeapro/waha#2198` and similar historical regressions like `#1495`, `#1509`). Sesi tersangkut secara permanen di status `STARTING`.
+    *   **Resolution:** Image was pinned to `devlikeapro/waha:noweb-2026.7.2` in `docker-compose.yml`, which resolves this regressive bug and exposes the new `WAHA_NOWEB_WA_VERSION_FORCE` env var to override WhatsApp Web client version fingerprints in case of future blockages.
+    *   **Alert Integration:** Added the `WAHA_SESSION_STUCK_STARTING` CRITICAL alert trigger to the monitoring daemon to catch any future startup stuck issues immediately.
+
+## Operational Upgrade Protocols
+1.  **Changelog Inspection:** Before executing any docker updates or pulling new images, check the official WAHA Changelog at `https://waha.devlike.pro/docs/overview/changelog/` to screen for breaking changes.
+2.  **Staging-First Validation:** Never upgrade the WAHA image in the production environment directly. Verify all session statuses (`WORKING`, `SCAN_QR_CODE`) and message webhook processing in the staging environment first.
+3.  **No Late-Tagging:** Do not use the `:latest` or `:noweb` tags without version numbers in production deployments. Always use the fully qualified version-pinned tags to prevent automatic updates from introducing breaking changes.
