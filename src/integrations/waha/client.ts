@@ -2,6 +2,21 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
+export interface WahaChat {
+  id: string;
+  name?: string;
+  unreadCount?: number;
+}
+
+export interface WahaMessage {
+  id: string;
+  body: string;
+  from: string;
+  fromMe: boolean;
+  timestamp: number;
+  type: string;
+}
+
 export interface IWahaClient {
   sendSeen(chatId: string, messageId?: string): Promise<boolean>;
   startTyping(chatId: string): Promise<boolean>;
@@ -11,6 +26,9 @@ export interface IWahaClient {
   addLabel(chatId: string, labelName: string): Promise<boolean>;
   removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
+  getSessionStatus(): Promise<string>;
+  getChats(): Promise<WahaChat[]>;
+  getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
 }
 
 /**
@@ -218,6 +236,8 @@ export class WahaClient implements IWahaClient {
 
   // --- MOCK LABELS FOR TESTING ---
   public mockLabels: Map<string, string[]> = new Map();
+  public mockChats: WahaChat[] = [];
+  public mockMessages: Map<string, WahaMessage[]> = new Map();
 
   /**
    * Mengirim media/gambar ke WAHA API (/api/sendImage)
@@ -240,7 +260,8 @@ export class WahaClient implements IWahaClient {
         // Fetch remote image lewat axios sebagai arraybuffer
         const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
         base64Data = Buffer.from(response.data, 'binary').toString('base64');
-        mimetype = response.headers['content-type'] || 'image/jpeg';
+        mimetype = String(response.headers['content-type'] || 'image/jpeg');
+
 
         const urlPathname = new URL(url).pathname;
         const lastSegment = urlPathname.substring(urlPathname.lastIndexOf('/') + 1);
@@ -403,6 +424,80 @@ export class WahaClient implements IWahaClient {
     } catch (error: any) {
       console.warn(`[WAHA API ERROR] getChatLabels failed for ${targetChatId}:`, error?.response?.data || error.message);
       return [];
+    }
+  }
+
+  /**
+   * Mengambil daftar chat dari WAHA (GET /api/chats)
+   */
+  public async getChats(): Promise<WahaChat[]> {
+    if (this.shouldMock) {
+      return this.mockChats;
+    }
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/chats`,
+        {
+          headers: this.headers,
+          params: { session: this.session },
+          timeout: this.timeoutMs,
+        }
+      );
+      return response.data || [];
+    } catch (error: any) {
+      console.error('[WAHA API ERROR] getChats failed:', error?.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Mengambil histori pesan dari chat tertentu (GET /api/messages)
+   */
+  public async getMessages(chatId: string, limit = 100): Promise<WahaMessage[]> {
+    const targetChatId = await this.resolveActiveJid(chatId);
+
+    if (this.shouldMock) {
+      const msgs = this.mockMessages.get(targetChatId) || [];
+      return msgs.slice(0, limit);
+    }
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/messages`,
+        {
+          headers: this.headers,
+          params: {
+            chatId: targetChatId,
+            limit,
+            session: this.session,
+          },
+          timeout: this.timeoutMs,
+        }
+      );
+      return response.data || [];
+    } catch (error: any) {
+      console.error(`[WAHA API ERROR] getMessages failed for ${targetChatId}:`, error?.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Mengecek status session WAHA saat ini.
+   * Mengembalikan string status session (e.g. "WORKING", "FAILED", "STOPPED", etc.) atau "DISCONNECTED" jika unreachable.
+   */
+  public async getSessionStatus(): Promise<string> {
+    if (this.shouldMock) {
+      return 'WORKING';
+    }
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/sessions/${this.session}`,
+        { headers: this.headers, timeout: 5000 }
+      );
+      return response.data?.status || 'UNKNOWN';
+    } catch (err) {
+      return 'DISCONNECTED';
     }
   }
 }

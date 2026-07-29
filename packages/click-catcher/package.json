@@ -1,0 +1,20 @@
+{
+  "name": "@wa-clinic/click-catcher",
+  "version": "1.0.0",
+  "description": "Minimal ad click attribution capture & redirect server for wa-clinic-bot",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "fastify": "^4.26.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

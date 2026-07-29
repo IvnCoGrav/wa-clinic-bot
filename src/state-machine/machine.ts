@@ -48,27 +48,117 @@ export class ConversationStateMachine {
       payloadRaw: incomingMessage,
     });
 
+    // In-memory rewriting for Promo[CODE] greeting trigger
+    if (incomingMessage.text?.body && /Promo\[(\w+)\]/i.test(incomingMessage.text.body)) {
+      incomingMessage.text.body = 'Halo';
+    }
+
+    // --- GATE KELAS 🏥: MEDICAL CONCERN DETECTION ENGINE ---
+    const incomingText = incomingMessage.text?.body || '';
+    const { MedicalDetectionService } = await import('../services/medical-detection.service');
+    const medicalResult = MedicalDetectionService.detectMedicalConcern(incomingText);
+
+    if (medicalResult.isMedical) {
+      const { knowledgeBaseService } = await import('../services/knowledge.service');
+      const approvedFaqMatch = await knowledgeBaseService.findMatchingFaq(incomingText, tenantId);
+
+      // Exemption: If approved medical FAQ matches, allow bot to answer facts from approved FAQ
+      if (approvedFaqMatch && (approvedFaqMatch as any).category === 'medical' && (approvedFaqMatch as any).status === 'APPROVED') {
+        console.log(`[MEDICAL FAQ EXEMPTION] Approved medical FAQ found for "${incomingText}". Proceeding with official FAQ response.`);
+      } else {
+        const isHigh = medicalResult.severity === 'HIGH';
+        console.log(`[MEDICAL ESCALATION] Severity ${medicalResult.severity} detected for customer ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}`);
+
+        // Set conversation to HUMAN_HANDLING with escalation_reason = 'medical_concern'
+        conversation.is_human_handling = true;
+        conversation.human_handling_since = new Date();
+        conversation.escalation_reason = 'medical_concern';
+
+        await conversationService.updateConversationState(
+          conversation.id,
+          {
+            currentState: ConversationState.HUMAN_HANDLING,
+            isHumanHandling: true,
+            escalationReason: 'medical_concern',
+          },
+          tenantId
+        );
+
+        // Emergency template based on severity (HIGH vs MEDIUM)
+        const replyText = isHigh
+          ? 'Bunda, untuk kondisi darurat seperti ini mohon segera bawa si kecil ke IGD/Rumah Sakit terdekat atau hubungi layanan darurat 119 ya Bunda. Tim Bidan & CS kami juga akan segera menghubungi Bunda secara langsung.'
+          : 'Bunda, untuk pertimbangan kondisi kesehatan si kecil, Bidan & CS kami akan segera membalas pesan Bunda secara langsung. Mohon tunggu sebentar ya Bunda.';
+
+        // Dispatch Real-Time Alert to Telegram / Emergency Log
+        try {
+          const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+          const alertService = new AlertService();
+          await alertService.triggerAlert({
+            type: isHigh ? AlertType.MEDICAL_EMERGENCY_HIGH : AlertType.MEDICAL_CONCERN_MEDIUM,
+            severity: isHigh ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
+            message: `[MEDICAL ALERT ${medicalResult.severity}] Customer: ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}. Text: "${incomingText}"`,
+            metadata: {
+              customerPhone: customer.phone,
+              detectedSymptoms: medicalResult.detectedSymptoms,
+              incomingText,
+            },
+          });
+        } catch (alertErr: any) {
+          console.error('[EMERGENCY LOG FALLBACK] Failed to trigger alert for medical emergency:', alertErr.message);
+        }
+
+        // Send 1x template reply and then remain SILENT
+        const chatId = (incomingMessage as any).chatId || `${customer.phone}@c.us`;
+        await this.typingSvc.simulateHumanReply({
+          chatId,
+          incomingMessageId: incomingMessage.id,
+          incomingText,
+          replyText,
+        });
+
+        await messageService.logMessage({
+          tenantId,
+          conversationId: conversation.id,
+          direction: Direction.OUTBOUND,
+          content: replyText,
+        });
+
+        return {
+          nextState: ConversationState.HUMAN_HANDLING,
+          shouldSendReply: false,
+          isHumanHandling: true,
+        };
+      }
+    }
+
+
     // 2. Cek Auto-Release Timeout terlebih dahulu jika sedang Human Handling
     const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, tenantId);
     let activeConversation = autoRelease.updatedConversation;
 
-    // --- PENGECEKAN IDLE TIMEOUT > 24 JAM ---
+    // --- PENGECEKAN IDLE TIMEOUT > 24 JAM ATAU 5 MENIT UNTUK LOCATION_CONFIRMED ---
     const IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-    const isIdleTooLong = activeConversation.last_message_at &&
-      (Date.now() - new Date(activeConversation.last_message_at).getTime() > IDLE_TIMEOUT_MS);
+    const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 menit
 
-    if (isIdleTooLong && activeConversation.current_state !== ConversationState.INITIAL && !activeConversation.is_human_handling) {
-      console.log(`[IDLE TIMEOUT] Resetting conversation ${activeConversation.id} from ${activeConversation.current_state} to INITIAL.`);
-      
-      // Clean up pending location jika di-reset dari LOCATION_CONFIRMED
-      if (activeConversation.current_state === ConversationState.LOCATION_CONFIRMED) {
-        await customerService.clearPendingLocation(customer.id, tenantId);
-        customer.pending_kelurahan = null;
-        customer.pending_kecamatan = null;
-        customer.pending_kota = null;
-        customer.pending_lat = null;
-        customer.pending_lng = null;
+    const lastMsgTime = activeConversation.last_message_at ? new Date(activeConversation.last_message_at).getTime() : 0;
+    const isIdleTooLong = lastMsgTime > 0 && (Date.now() - lastMsgTime > IDLE_TIMEOUT_MS);
+    const isConfirmationTimeout = activeConversation.current_state === ConversationState.LOCATION_CONFIRMED &&
+      lastMsgTime > 0 && (Date.now() - lastMsgTime > CONFIRMATION_TIMEOUT_MS);
+
+    if ((isIdleTooLong || isConfirmationTimeout) && activeConversation.current_state !== ConversationState.INITIAL && !activeConversation.is_human_handling) {
+      if (isConfirmationTimeout) {
+        console.log(`[CONFIRMATION TIMEOUT] Resetting conversation ${activeConversation.id} from LOCATION_CONFIRMED to INITIAL due to 5-minute inactivity.`);
+      } else {
+        console.log(`[IDLE TIMEOUT] Resetting conversation ${activeConversation.id} from ${activeConversation.current_state} to INITIAL.`);
       }
+      
+      // Clean up pending location jika di-reset
+      await customerService.clearPendingLocation(customer.id, tenantId);
+      customer.pending_kelurahan = null;
+      customer.pending_kecamatan = null;
+      customer.pending_kota = null;
+      customer.pending_lat = null;
+      customer.pending_lng = null;
 
       await conversationService.updateConversationState(
         activeConversation.id,

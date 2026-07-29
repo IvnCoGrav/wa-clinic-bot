@@ -8,6 +8,7 @@ export interface DeliveryCalculationResult {
   normalPrice: number;
   promoPrice: number;
   isOutOfCoverage: boolean;
+  isEstimated?: boolean;
   messageTemplate: string;
 }
 
@@ -16,7 +17,7 @@ export interface DeliveryCalculationResult {
  * 
  * SUMBER DISTANCE:
  * 1. Utama    : OpenRouteService (ORS) Directions API (profile: cycling-electric)
- * 2. Fallback  : Formula Haversine manual (jika ORS API error/timeout/unreachable)
+ * 2. Fallback  : Formula Haversine manual dengan Circuity Multiplier (1.25x untuk memperhitungkan kelengkungan jalan)
  * 
  * ATURAN TARIF ONGKIR & THRESHOLD JARAK BARU (REVISI KEDUA):
  * -----------------------------------------------------------------------
@@ -38,7 +39,7 @@ export class DeliveryService {
 
   /**
    * Menghitung ongkir berdasarkan jarak dari titik lokasi moms & baby spa ke koordinat customer.
-   * Menggunakan ORS Directions API sebagai sumber utama, dengan fallback ke Haversine.
+   * Menggunakan ORS Directions API sebagai sumber utama, dengan fallback ke Haversine + 1.25x circuity factor.
    * 
    * @param customerCoords Koordinat latitude & longitude customer
    * @param clinicCoords (Opsional) Koordinat moms & baby spa. Jika tidak diisi, menggunakan default clinicConfig.
@@ -48,6 +49,7 @@ export class DeliveryService {
     clinicCoords: Coordinates = { lat: clinicConfig.lat, lng: clinicConfig.lng }
   ): Promise<DeliveryCalculationResult> {
     let distanceKm: number;
+    let isEstimated = false;
 
     // 1. Coba hit OpenRouteService (ORS) Directions API
     const orsResult = await this.orsClient.calculateRoute(
@@ -60,12 +62,16 @@ export class DeliveryService {
     if (orsResult && typeof orsResult.distanceMeters === 'number') {
       // Konversi meter ke km (presisi 2 desimal)
       distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(2));
+      isEstimated = false;
     } else {
-      // 2. FALLBACK: Jika ORS API gagal/timeout/error/unreachable, gunakan formula Haversine
+      // 2. FALLBACK: Jika ORS API gagal/timeout/error/unreachable, gunakan formula Haversine + 1.25x Circuity Factor
       console.warn(
-        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine formula distance.`
+        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with 1.25x circuity multiplier.`
       );
-      distanceKm = calculateHaversineDistance(clinicCoords, customerCoords);
+      const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
+      // Circuity Factor 1.25x memperhitungkan kelengkungan rute jalan darat dibanding garis lurus
+      distanceKm = parseFloat((straightLineKm * 1.25).toFixed(2));
+      isEstimated = true;
     }
 
     // 3. Evaluasi threshold jarak & tentukan tarif ongkir
@@ -90,9 +96,11 @@ export class DeliveryService {
       normalPrice,
       promoPrice,
       isOutOfCoverage,
+      isEstimated,
       messageTemplate,
     };
   }
+
 
   /**
    * Pembantu untuk menghitung tarif ongkir langsung dari nilai numerik distanceKm

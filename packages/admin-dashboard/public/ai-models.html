@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Model Registry Manager | Kala Baby & Moms Spa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --accent-pink: #ec4899;
+      --accent-purple: #8b5cf6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(to right, #8b5cf6, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    .nav-links {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      transition: all 0.2s;
+    }
+
+    .nav-link.active {
+      color: var(--accent-pink);
+      background: rgba(236, 72, 153, 0.15);
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+    select, input {
+      width: 100%;
+      padding: 0.75rem;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.95rem;
+    }
+
+    .badge-locked {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      padding: 0.3rem 0.6rem;
+      border-radius: 0.375rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-save {
+      background: var(--accent-purple);
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-save:hover { opacity: 0.85; }
+
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>AI Model Registry Manager</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Manajemen Pemetaan AI Task-to-Model Dinamis & Enforcement Security Guard</p>
+      </div>
+    </header>
+
+    <div class="nav-links">
+      <a href="staging.html" class="nav-link">📋 3-Table Staging</a>
+      <a href="live-chats.html" class="nav-link">💬 Live Chat</a>
+      <a href="ai-models.html" class="nav-link active">🤖 AI Model Registry</a>
+      <a href="health.html" class="nav-link">🩺 System Health</a>
+    </div>
+
+    <div id="models-list">
+      <div class="empty-state">Memuat data model registry...</div>
+    </div>
+  </div>
+
+  <script>
+    const supportedProviders = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic'];
+
+    async function loadModels() {
+      const container = document.getElementById('models-list');
+
+      try {
+        const res = await fetch('/api/admin/ai-models');
+        const result = await res.json();
+
+        if (!result.success || !result.data) {
+          container.innerHTML = `<div class="empty-state">Gagal memuat daftar model registry.</div>`;
+          return;
+        }
+
+        let html = '';
+        result.data.forEach(cfg => {
+          const isLocked = cfg.task === 'MEDICAL_CHECK';
+
+          html += `
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <strong style="font-size: 1.1rem; color: var(--accent-pink);">${cfg.task}</strong>
+                  <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">${cfg.description}</p>
+                </div>
+                <div>
+                  ${isLocked ? '<span class="badge-locked">🔒 LOCKED — Deterministik (Regex/Keywords)</span>' : '<span style="color: var(--success); font-weight:600; font-size:0.85rem;">✅ Switchable</span>'}
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                  <label>AI Provider:</label>
+                  ${isLocked ? `<input type="text" value="${cfg.provider}" disabled />` : `
+                    <select id="prov-${cfg.task}">
+                      ${supportedProviders.map(p => `<option value="${p}" ${p === cfg.provider ? 'selected' : ''}>${p}</option>`).join('')}
+                    </select>
+                  `}
+                </div>
+                <div class="form-group">
+                  <label>Model Name:</label>
+                  <input type="text" id="model-${cfg.task}" value="${cfg.modelName}" ${isLocked ? 'disabled' : ''} />
+                </div>
+              </div>
+
+              ${!isLocked ? `
+                <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                  <button class="btn-save" onclick="saveModelConfig('${cfg.task}')">💾 Simpan Perubahan Model</button>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state">Gagal terhubung ke API AI Model Registry.</div>`;
+      }
+    }
+
+    async function saveModelConfig(task) {
+      const provider = document.getElementById(`prov-${task}`).value;
+      const modelName = document.getElementById(`model-${task}`).value;
+
+      try {
+        const res = await fetch(`/api/admin/ai-models/${task}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, modelName })
+        });
+        const result = await res.json();
+
+        if (res.ok) {
+          alert(`✅ Success: ${result.message}`);
+          loadModels();
+        } else {
+          alert(`❌ Error: ${result.error}`);
+        }
+      } catch (err) {
+        alert('Gagal menyimpan perubahan model.');
+      }
+    }
+
+    loadModels();
+  </script>
+</body>
+</html>

@@ -52,3 +52,8 @@ sessions/
 # Misc
 *.tmp
 *.temp
+
+# packages/click-catcher — monorepo sub-package
+packages/click-catcher/node_modules/
+packages/click-catcher/dist/
+packages/click-catcher/.env

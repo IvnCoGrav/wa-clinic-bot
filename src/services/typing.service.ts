@@ -4,8 +4,8 @@ dotenv.config();
 
 export interface HumanReplyParams {
   chatId: string;
-  incomingMessageId: string;
-  incomingText: string;   // untuk hitung reading delay
+  incomingMessageId?: string;
+  incomingText?: string;   // untuk hitung reading delay
   replyText: string;      // teks balasan yang akan di-bubble-split
 }
 
@@ -297,10 +297,14 @@ export class TypingService {
     try {
       // Step 1: Send Seen & Reading Delay
       if (isEnabled) {
-        await this.client.sendSeen(chatId, incomingMessageId);
+        if (incomingMessageId) {
+          await this.client.sendSeen(chatId, incomingMessageId).catch(() => {});
+        }
 
-        const readingDelayMs = this.calculateReadingDelay(incomingText);
-        await this.sleep(readingDelayMs);
+        if (incomingText) {
+          const readingDelayMs = this.calculateReadingDelay(incomingText);
+          await this.sleep(readingDelayMs);
+        }
       }
 
       // Step 2: Loop sending bubbles dengan indikator mengetik per bubble

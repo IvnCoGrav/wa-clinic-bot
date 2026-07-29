@@ -60,6 +60,8 @@ model Customer {
   updated_at         DateTime       @updatedAt
   conversations      Conversation[]
   reservations       Reservation[]
+  follow_ups         FollowUp[]
+  adClick            AdClick?
 
   @@index([tenant_id])
   @@map("customers")
@@ -121,11 +123,184 @@ model Reservation {
   treatment_category TreatmentCategory
   treatment_detail   String?
   booking_date       DateTime?
-  raw_text           String?
-  status             String            @default("pending")
-  created_at         DateTime          @default(now())
-  updated_at         DateTime          @updatedAt
+  raw_text                 String?
+  status                   String            @default("pending")
+  google_calendar_event_id String?
+  is_repeat_order          Boolean           @default(false)
+  created_at               DateTime          @default(now())
+  updated_at               DateTime          @updatedAt
 
   @@index([tenant_id])
   @@map("reservations")
 }
+
+enum FollowUpType {
+  NO_PURCHASE
+  NEXT_TREATMENT
+}
+
+enum FollowUpStatus {
+  PENDING
+  QUEUED
+  SENT
+  CANCELLED
+}
+
+model FollowUp {
+  id           String         @id @default(uuid())
+  tenant_id    String         @default("default-tenant")
+  customer_id  String
+  customer     Customer       @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  type         FollowUpType
+  stage        Int            // 1 | 2 | 3
+  scheduled_at DateTime
+  sent_at      DateTime?
+  status       FollowUpStatus @default(PENDING)
+  created_at   DateTime       @default(now())
+  updated_at   DateTime       @updatedAt
+
+  @@index([tenant_id])
+  @@index([status, scheduled_at])
+  @@map("follow_ups")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  tenant_id      String   @default("default-tenant")
+  admin_key      String
+  admin_identity String?
+  action         String
+  target_id      String?
+  payload        String?
+  ip_address     String?
+  created_at     DateTime @default(now())
+
+  @@index([tenant_id])
+  @@map("audit_logs")
+}
+
+model AdClick {
+  id           String    @id @default(cuid())
+  trackingCode String?   @unique
+
+  fbclid       String?
+  fbp          String?
+  fbc          String?
+  ipAddress    String?
+  userAgent    String?
+  landingUrl   String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  phone        String?
+  matchedAt    DateTime?
+  customerId   String?   @unique
+  customer     Customer? @relation(fields: [customerId], references: [id])
+  createdAt    DateTime  @default(now())
+  tenant_id    String
+
+  @@index([tenant_id])
+  @@index([trackingCode])
+  @@map("ad_clicks")
+}
+
+enum StagingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMMITTED
+}
+
+model LegacyStaging {
+  id                       String        @id @default(uuid())
+  tenantId                 String        @default("default")
+  phoneNumber              String        @unique
+  name                     String?
+  extractedLocation        String?
+  leadCreatedAt            DateTime
+  firstPurchaseAt          DateTime?
+  extractedReservationJson Json?
+  status                   StagingStatus @default(PENDING)
+  rawMessagesCount         Int           @default(0)
+  rawMessagesJson          Json
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("legacy_staging")
+}
+
+enum LandingType {
+  STRUCTURED_JSON
+  RAW_HTML
+}
+
+model Tenant {
+  id                     String      @id @default(uuid())
+  slug                   String      @unique
+  name                   String
+  whatsapp_number        String      @default("6287751148065")
+  meta_pixel_id          String?
+  meta_capi_access_token String?
+  landing_type           LandingType @default(STRUCTURED_JSON)
+  landing_content        Json?
+  raw_html_content       String?
+  created_at             DateTime    @default(now())
+  updated_at             DateTime    @updatedAt
+
+  @@index([slug])
+  @@map("tenants")
+}
+
+enum StagingReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+
+model MedicalFaqStaging {
+  id               String              @id @default(uuid())
+  tenant_id        String              @default("default-tenant")
+  conversation_id  String?
+  customer_phone   String
+  raw_question     String
+  bidan_raw_reply  String?
+  general_question String?
+  general_answer   String?
+  symptoms_tagged  String[]
+  status           StagingReviewStatus @default(PENDING)
+  reviewed_by      String?
+  reviewed_at      DateTime?
+  created_at       DateTime            @default(now())
+  updated_at       DateTime            @updatedAt
+
+  @@index([tenant_id])
+  @@index([status])
+  @@map("medical_faq_staging")
+}
+
+model GeneralFaqStaging {
+  id               String              @id @default(uuid())
+  tenant_id        String              @default("default-tenant")
+  conversation_id  String?
+  raw_question     String
+  raw_answer       String?
+  general_question String?
+  general_answer   String?
+  category         String              @default("general")
+  status           StagingReviewStatus @default(PENDING)
+  reviewed_by      String?
+  reviewed_at      DateTime?
+  created_at       DateTime            @default(now())
+  updated_at       DateTime            @updatedAt
+
+  @@index([tenant_id])
+  @@index([status])
+  @@map("general_faq_staging")
+}
+
+
+
+

@@ -49,7 +49,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         // Simpan reservasi ke database
         try {
           const { prisma } = await import('../../db/client');
-          await prisma.reservation.create({
+          const reservation = await prisma.reservation.create({
             data: {
               tenant_id: tenantId,
               customer_id: customer.id,
@@ -60,6 +60,9 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
               status: 'pending',
             },
           });
+
+          const { followUpService } = await import('../../services/follow-up.service');
+          await followUpService.onReservationCreated(customer.id, reservation.id, tenantId);
         } catch (dbErr) {
           // Abaikan error DB untuk in-memory fallback
         }

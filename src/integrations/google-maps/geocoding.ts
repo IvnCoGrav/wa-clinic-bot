@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { getStringSimilarity } from '../../utils/similarity';
+import { CircuitBreaker } from '../../utils/circuit-breaker';
 dotenv.config();
 
 export interface ResolvedLocation {
@@ -27,9 +28,30 @@ const googleMapsClient = new Client({});
  */
 export class GeocodingService {
   private apiKey: string;
+  public geocodeBreaker: CircuitBreaker<[any], any>;
+  public reverseGeocodeBreaker: CircuitBreaker<[any], any>;
 
   constructor() {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY || '';
+
+    this.geocodeBreaker = new CircuitBreaker(
+      async (params: any) => googleMapsClient.geocode(params),
+      // Cast to any: fallback returns ResolvedLocation which callers detect via 'isPrecise' in response.
+      // This avoids needing to fake GeocodeResponseData shape while preserving runtime correctness.
+      async (params: any): Promise<any> => {
+        const locationText = params.params.address.replace(', Surabaya', '');
+        return this.mockGeocodeText(locationText);
+      }
+    );
+
+    this.reverseGeocodeBreaker = new CircuitBreaker(
+      async (params: any) => googleMapsClient.reverseGeocode(params),
+      async (params: any): Promise<any> => {
+        const { lat, lng } = params.params.latlng;
+        return this.mockReverseGeocode(lat, lng);
+      }
+    );
+
   }
 
   /**
@@ -45,13 +67,17 @@ export class GeocodingService {
         ? locationText 
         : `${locationText}, Surabaya`;
 
-      const response = await googleMapsClient.geocode({
+      const response = await this.geocodeBreaker.execute({
         params: {
           address: queryText,
           key: this.apiKey,
           components: { country: 'ID' }, // Batasi pencarian ke Indonesia
         },
       });
+
+      if (response && 'isPrecise' in response) {
+        return response;
+      }
 
       if (!response.data.results || response.data.results.length === 0) {
         return { isPrecise: false };
@@ -108,12 +134,16 @@ export class GeocodingService {
     }
 
     try {
-      const response = await googleMapsClient.reverseGeocode({
+      const response = await this.reverseGeocodeBreaker.execute({
         params: {
           latlng: { lat, lng },
           key: this.apiKey,
         },
       });
+
+      if (response && 'isPrecise' in response) {
+        return response;
+      }
 
       if (!response.data.results || response.data.results.length === 0) {
         return {

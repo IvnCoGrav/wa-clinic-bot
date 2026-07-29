@@ -56,4 +56,16 @@ export class MockWAHAClient implements IWahaClient {
   public async getChatLabels(chatId: string): Promise<string[]> {
     return [];
   }
+
+  public async getSessionStatus(): Promise<string> {
+    return 'WORKING';
+  }
+
+  public async getChats(): Promise<import('../integrations/waha/client').WahaChat[]> {
+    return [];
+  }
+
+  public async getMessages(chatId: string, limit?: number): Promise<import('../integrations/waha/client').WahaMessage[]> {
+    return [];
+  }
 }

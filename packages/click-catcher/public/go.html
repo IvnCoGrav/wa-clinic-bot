@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>__CLINIC_NAME__ — Layanan Home-Treatment Pijat Bayi & Moms</title>
+  
+  <!-- Premium Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Meta Pixel Code -->
+  <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '__FB_PIXEL_ID__');
+    fbq('track', 'PageView');
+  </script>
+  <noscript>
+    <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=__FB_PIXEL_ID__&ev=PageView&noscript=1"/>
+  </noscript>
+  <!-- End Meta Pixel Code -->
+
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --accent-color: #10b981;
+      --accent-hover: #059669;
+      --accent-glow: rgba(16, 185, 129, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
+    }
+
+    .landing-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      padding: 2.5rem 2rem;
+      border-radius: 28px;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.4rem 1rem;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      border-radius: 50px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 1.5rem;
+    }
+
+    .brand-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #ffffff 0%, #d1d5db 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subheadline {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+
+    .benefits-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      margin-bottom: 2rem;
+      text-align: left;
+    }
+
+    .benefit-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      font-size: 0.95rem;
+    }
+
+    .benefit-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .cta-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      width: 100%;
+      padding: 1.1rem 2rem;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 16px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 10px 25px var(--accent-glow);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      text-decoration: none;
+    }
+
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 30px var(--accent-glow);
+      background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    }
+
+    .cta-button:active {
+      transform: translateY(0);
+    }
+
+    .footer-note {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="landing-card">
+    <div class="badge">🌿 Official Home-Care Treatment</div>
+    <h1 class="brand-title">__HEADLINE__</h1>
+    <p class="subheadline">__SUBHEADLINE__</p>
+
+    <div class="benefits-list" id="benefits-container">
+      <!-- Dynamic benefits injected here -->
+      __BENEFITS_HTML__
+    </div>
+
+    <!-- Single CTA Button with mandatory id="wa-cta" contract -->
+    <a href="#" class="cta-button" id="wa-cta">
+      <span>💬 Chat via WhatsApp</span>
+    </a>
+
+    <div class="footer-note">
+      🔒 Layanan terenkripsi & aman. Anda akan terhubung langsung ke CS __CLINIC_NAME__.
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const trackingApiBaseUrl = '__TRACKING_API_BASE_URL__';
+      const trackingApiKey = '__TRACKING_API_KEY__';
+      const defaultPhone = '__DEFAULT_WHATSAPP_PHONE__';
+      const tenantId = '__TENANT_ID__';
+      const tenantSlug = '__TENANT_SLUG__';
+
+      // Helper untuk mengambil query param dari URL
+      function getQueryParam(name) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(name);
+      }
+
+      // Helper untuk mendapatkan cookie Meta (_fbp / _fbc)
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+      }
+
+      // Capture URL parameters & Meta cookies
+      const fbclid = getQueryParam('fbclid');
+      const utmSource = getQueryParam('utm_source');
+      const utmMedium = getQueryParam('utm_medium');
+      const utmCampaign = getQueryParam('utm_campaign');
+      const fbp = getCookie('_fbp');
+      const fbc = getCookie('_fbc');
+
+      const ctaBtn = document.getElementById('wa-cta');
+      let isRedirecting = false;
+
+      // Fail-open Fallback Redirect Handler
+      function executeFallbackRedirect(phone) {
+        if (isRedirecting) return;
+        isRedirecting = true;
+        const targetPhone = phone || defaultPhone;
+        const fallbackUrl = `https://wa.me/${targetPhone}?text=Halo%20Bunda%2C%20saya%20tertarik%20dengan%20layanan%20home-treatment`;
+        window.location.href = fallbackUrl;
+      }
+
+      // Single Click Contract on #wa-cta button
+      if (ctaBtn) {
+        ctaBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+
+          if (isRedirecting) return;
+
+          ctaBtn.style.opacity = '0.7';
+          ctaBtn.innerText = 'Menghubungkan...';
+
+          // Set 2-second fail-open safety timeout
+          const safetyTimeout = setTimeout(function() {
+            executeFallbackRedirect(defaultPhone);
+          }, 2000);
+
+          if (!trackingApiBaseUrl || !trackingApiKey) {
+            clearTimeout(safetyTimeout);
+            executeFallbackRedirect(defaultPhone);
+            return;
+          }
+
+          const payload = {
+            fbclid: fbclid || null,
+            fbp: fbp || null,
+            fbc: fbc || null,
+            landingUrl: window.location.href,
+            utmSource: utmSource || null,
+            utmMedium: utmMedium || null,
+            utmCampaign: utmCampaign || null,
+            tenantId: tenantId || 'DEFAULT_TENANT_ID',
+            slug: tenantSlug || 'default',
+          };
+
+          fetch(`${trackingApiBaseUrl}/api/tracking/click`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Tracking-Api-Key': trackingApiKey,
+            },
+            body: JSON.stringify(payload),
+          })
+          .then(function(res) {
+            if (!res.ok) throw new Error('API Response Error');
+            return res.json();
+          })
+          .then(function(data) {
+            clearTimeout(safetyTimeout);
+            if (isRedirecting) return;
+            isRedirecting = true;
+
+            const trackingCode = data.trackingCode || 'promo';
+            const redirectUrl = `https://wa.me/${defaultPhone}?text=Promo%5B${trackingCode}%5D%20Halo%20Bunda%2C%20saya%20tertarik%20dengan%20layanan%20home-treatment`;
+            window.location.href = redirectUrl;
+          })
+          .catch(function(err) {
+            console.error('Tracking API Failed:', err);
+            clearTimeout(safetyTimeout);
+            executeFallbackRedirect(defaultPhone);
+          });
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
