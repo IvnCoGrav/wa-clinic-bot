@@ -63,7 +63,7 @@ export class WahaClient implements IWahaClient {
   private get shouldMock(): boolean {
     return (
       process.env.NODE_ENV === 'test' ||
-      (this.baseUrl.includes('localhost') && (!this.apiKey || this.apiKey === 'my_waha_api_key_secret'))
+      process.env.WAHA_MOCK === 'true'
     );
   }
 
