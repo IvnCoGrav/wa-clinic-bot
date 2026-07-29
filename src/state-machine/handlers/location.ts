@@ -70,15 +70,25 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // --- KASUS B: CUSTOMER MENGIRIM TEKS LOKASI ---
-  const textLocation = incomingMessage.text?.body?.trim() || '';
+  const rawTextLocation = incomingMessage.text?.body?.trim() || '';
 
-  if (!textLocation) {
+  if (!rawTextLocation) {
     return {
       nextState: ConversationState.AWAITING_LOCATION,
       replyText: TEMPLATES.askKelurahanDetail(),
       shouldSendReply: true,
     };
   }
+
+  // Bersihkan teks dari awalan query yang tidak relevan untuk geocoding
+  const textLocation = rawTextLocation.toLowerCase()
+    .replace(/^(kalau\s+)?(ke|di)\s+/gi, '')
+    .replace(/^(alamat\s+|rumah\s+)?saya\s+(di|ke)\s+/gi, '')
+    .replace(/^(ongkir\s+|tarif\s+|biaya\s+|kirim\s+|pengiriman\s+)(ke|di)\s+/gi, '')
+    .replace(/^(kelurahan\s+|desa\s+|kecamatan\s+)/gi, '')
+    .replace(/\s+(bund|bunda|ya|kak|ka|min|mbak|mas|gan|sis|dong|kah|\?)\b/gi, '')
+    .replace(/\?/g, '')
+    .trim();
 
   // 1. Geocode teks lokasi via Google Maps API
   const resolved = await geocodingService.geocodeText(textLocation);

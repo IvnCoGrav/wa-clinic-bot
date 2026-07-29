@@ -282,6 +282,34 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(res.nextState).not.toBe(ConversationState.LOCATION_CONFIRMED);
   });
 
+  it('15b. should redirect to location in handleInterestState when user asks "Kalau ke wedoro ka ?"', async () => {
+    const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    
+    conversation.current_state = ConversationState.AWAITING_INTEREST;
+
+    const ctx: any = {
+      tenantId: DEFAULT_TENANT_ID,
+      customer: cust,
+      conversation,
+      incomingMessage: {
+        id: 'msg_redirect_cal_15b',
+        from: phone,
+        chatId: `${phone}@c.us`,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        type: 'text',
+        text: { body: 'Kalau ke wedoro ka ?' },
+      },
+    };
+
+    const res = await testStateMachine.processMessage(ctx);
+    
+    // Harus ter-redirect dan terproses langsung menjadi AWAITING_INTEREST karena Wedoro adalah kelurahan valid & presisi di DB
+    expect(res.nextState).toBe(ConversationState.AWAITING_INTEREST);
+    expect(res.replyText).toContain('ongkir');
+  });
+
   it('16. should redirect location in handleInterestState when change keywords + location is mentioned', async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
     const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);

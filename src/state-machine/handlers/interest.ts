@@ -24,10 +24,11 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     /di\s+/i.test(lower) || 
     /ke\s+/i.test(lower)
   );
-  const isDirectLocationQuery = /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
-                                /^ongkir\s+ke\s+[a-z]+/i.test(userText.trim()) || 
-                                /^rumah\s+saya\s+di\s+[a-z]+/i.test(userText.trim()) || 
-                                /^kalau\s+di\s+[a-z]+/i.test(userText.trim());
+  const isDirectLocationQuery = 
+    /^(saya\s+)?(di|ke)\s+[a-z0-9]/i.test(userText.trim()) || 
+    /^(ongkir|tarif|biaya|kirim|pengiriman)\s+(ke|di)\s+/i.test(userText.trim()) || 
+    /^rumah\s+saya\s+(di|ke)\s+/i.test(userText.trim()) || 
+    /^kalau\s+(di|ke)\s+/i.test(userText.trim());
 
   if (incomingMessage.type === 'location' || isConversationalLocation || isDirectLocationQuery) {
     console.log(`[LOCATION REDIRECT] Redirecting location query/change "${userText}" to handleLocationState.`);
