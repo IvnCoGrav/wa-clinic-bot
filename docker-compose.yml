@@ -67,6 +67,8 @@ services:
     restart: always
     ports:
       - "3001:3000"
+    volumes:
+      - waha_sessions:/app/.sessions
     environment:
       - WHATSAPP_SWAGGER_USERNAME=admin
       - WHATSAPP_SWAGGER_PASSWORD=admin12345
@@ -78,3 +80,4 @@ services:
 
 volumes:
   postgres_data:
+  waha_sessions:
