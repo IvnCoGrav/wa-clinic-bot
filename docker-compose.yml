@@ -62,5 +62,19 @@ services:
       timeout: 5s
       retries: 5
 
+  waha:
+    image: devlikeapro/waha:noweb-2026.7.2
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - WHATSAPP_SWAGGER_USERNAME=admin
+      - WHATSAPP_SWAGGER_PASSWORD=admin12345
+      - WAHA_DASHBOARD_USERNAME=admin
+      - WAHA_DASHBOARD_PASSWORD=admin12345
+      - WAHA_API_KEY=my_waha_api_key_secret
+      # - WAHA_NOWEB_WA_VERSION_FORCE=2.3000.1012359200
+
+
 volumes:
   postgres_data:
