@@ -217,12 +217,44 @@
         const result = await res.json();
 
         if (!result.success || !result.data || result.data.length === 0) {
-          contentDiv.innerHTML = `<div class="empty-state">Tidak ada kandidat antrean ${currentTab} staging yang menunggu review.</div>`;
+          if (currentTab === 'legacy') {
+            contentDiv.innerHTML = `
+              <div class="card" style="background: linear-gradient(to right, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.15)); border: 1px solid var(--border-color); margin-bottom: 2rem;">
+                <h3 style="font-size: 1.1rem; font-weight: 700; color: #fff;">🌾 Panen AI & Scrape Chat Lama dari WhatsApp</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; margin-bottom: 1rem;">
+                  Memicu engine ekstraksi Q&A dan pembelian dari histori pesan WhatsApp sebelumnya di WAHA secara asinkron.
+                </p>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <button class="btn btn-approve" style="background: var(--accent-purple);" onclick="triggerHarvesting()">🚀 Mulai Panen Chat Sekarang</button>
+                  <div id="harvesting-status" style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">Status: IDLE</div>
+                </div>
+              </div>
+              <div class="empty-state">Tidak ada kandidat antrean ${currentTab} staging yang menunggu review.</div>
+            `;
+          } else {
+            contentDiv.innerHTML = `<div class="empty-state">Tidak ada kandidat antrean ${currentTab} staging yang menunggu review.</div>`;
+          }
           return;
         }
 
         let html = '';
+        if (currentTab === 'legacy') {
+          html += `
+            <div class="card" style="background: linear-gradient(to right, rgba(16, 185, 129, 0.15), rgba(56, 189, 248, 0.15)); border: 1px solid var(--border-color); margin-bottom: 2rem;">
+              <h3 style="font-size: 1.1rem; font-weight: 700; color: #fff;">🌾 Panen AI & Scrape Chat Lama dari WhatsApp</h3>
+              <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; margin-bottom: 1rem;">
+                Memicu engine ekstraksi Q&A dan pembelian dari histori pesan WhatsApp sebelumnya di WAHA secara asinkron.
+              </p>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <button class="btn btn-approve" style="background: var(--accent-purple);" onclick="triggerHarvesting()">🚀 Mulai Panen Chat Sekarang</button>
+                <div id="harvesting-status" style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">Status: IDLE</div>
+              </div>
+            </div>
+          `;
+        }
+
         result.data.forEach(item => {
+
           if (currentTab === 'medical') {
             html += `
               <div class="card" id="card-${item.id}">
@@ -345,6 +377,52 @@
       document.getElementById(`card-${id}`).remove();
     }
 
+    async function triggerHarvesting() {
+      const statusDiv = document.getElementById('harvesting-status');
+      if (!statusDiv) return;
+      statusDiv.innerText = 'Status: STARTING...';
+
+      try {
+        const res = await fetch('/api/admin/harvest/legacy-chat', { method: 'POST' });
+        const result = await res.json();
+        if (res.ok) {
+          statusDiv.innerText = 'Status: RUNNING';
+          pollHarvestingStatus();
+        } else {
+          statusDiv.innerText = `Status: ERROR (${result.error || 'Failed'})`;
+        }
+      } catch (err) {
+        statusDiv.innerText = 'Status: ERROR (Koneksi gagal)';
+      }
+    }
+
+    async function pollHarvestingStatus() {
+      const statusDiv = document.getElementById('harvesting-status');
+      if (!statusDiv) return;
+
+      const interval = setInterval(async () => {
+        const currentStatusDiv = document.getElementById('harvesting-status');
+        if (!currentStatusDiv) {
+          clearInterval(interval);
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/admin/harvest/status');
+          const result = await res.json();
+          if (result.success && result.data) {
+            currentStatusDiv.innerText = `Status: ${result.data.status} (Diproses: ${result.data.processedCount || 0} pesan)`;
+            if (result.data.status !== 'RUNNING') {
+              clearInterval(interval);
+              loadStagingData(); // Reload list to show newly harvested items
+            }
+          }
+        } catch (err) {
+          // Ignore
+        }
+      }, 3000);
+    }
+
     async function logoutAdmin() {
       await fetch('/api/admin/auth/logout', { method: 'POST' });
       window.location.href = 'login.html';
@@ -352,6 +430,7 @@
 
     loadStagingData();
   </script>
+
 </body>
 </html>
 

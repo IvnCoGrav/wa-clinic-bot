@@ -105,10 +105,26 @@
       <a href="#" onclick="logoutAdmin()" class="nav-link" style="color: var(--danger);">🚪 Logout</a>
     </div>
 
+    <!-- Global Controls Card -->
+    <div class="card" style="margin-bottom: 2rem; background: linear-gradient(to right, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2)); border: 1px solid rgba(255,255,255,0.2);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 style="font-size: 1.2rem; font-weight: 700; color: #fff;">🤖 Status Chatbot AI Responder</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">Matikan chatbot untuk mengarahkan seluruh percakapan masuk ke CS/Bidan secara manual.</p>
+        </div>
+        <div>
+          <button id="toggle-bot-btn" style="padding: 0.5rem 1.5rem; border-radius: 0.5rem; border: none; font-size: 1rem; font-weight: 700; cursor: pointer; color: #fff; background: var(--success);" onclick="toggleGlobalBot()">ACTIVE (ON)</button>
+        </div>
+      </div>
+    </div>
+
     <div class="grid-health" id="health-metrics">
       <div class="card">
         <label>WAHA WhatsApp Gateway Session</label>
         <div class="metric-value" id="waha-val">Memuat...</div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.5rem;">
+          Pairing QR Code: Buka dashboard WAHA di <a href="http://localhost:3001" target="_blank" style="color: var(--accent-pink); text-decoration: underline;">http://localhost:3001</a> lalu scan kode QR untuk menghubungkan WhatsApp.
+        </p>
       </div>
       <div class="card">
         <label>Redis Outbound Message Queue</label>
@@ -137,8 +153,49 @@
           document.getElementById('haversine-val').innerText = `📍 ${result.data.haversineLocationEngine}`;
           document.getElementById('telegram-val').innerText = `🔔 ${result.data.telegramEmergencyAlerts}`;
         }
+
+        // Fetch global bot settings
+        const settingsRes = await fetch('/api/admin/settings');
+        const settings = await settingsRes.json();
+        if (settings.success) {
+          updateBotToggleButton(settings.globalBotActive);
+        }
       } catch (err) {
         document.getElementById('health-metrics').innerHTML = `<div class="empty-state">Gagal terhubung ke API System Health.</div>`;
+      }
+    }
+
+    function updateBotToggleButton(isActive) {
+      const btn = document.getElementById('toggle-bot-btn');
+      if (isActive) {
+        btn.innerText = 'ACTIVE (ON)';
+        btn.style.background = 'var(--success)';
+      } else {
+        btn.innerText = 'PAUSED (OFF)';
+        btn.style.background = 'var(--danger)';
+      }
+      btn.dataset.active = isActive;
+    }
+
+    async function toggleGlobalBot() {
+      const btn = document.getElementById('toggle-bot-btn');
+      const currentlyActive = btn.dataset.active === 'true';
+      const targetState = !currentlyActive;
+
+      try {
+        const res = await fetch('/api/admin/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ globalBotActive: targetState })
+        });
+        const result = await res.json();
+        if (res.ok) {
+          updateBotToggleButton(result.globalBotActive);
+        } else {
+          alert(`Error: ${result.error}`);
+        }
+      } catch (err) {
+        alert('Gagal mengubah status chatbot.');
       }
     }
 
@@ -149,6 +206,7 @@
 
     loadHealthData();
     setInterval(loadHealthData, 10000);
+
   </script>
 </body>
 </html>

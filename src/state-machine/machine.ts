@@ -175,9 +175,26 @@ export class ConversationStateMachine {
     let result: StateHandlerResult;
 
     // 3. Routing ke State Handler yang sesuai
+    const { AiModelConfigService } = await import('../config/ai-models.config');
+    if (!AiModelConfigService.globalBotActive && !activeConversation.is_human_handling) {
+      console.log(`[GLOBAL BOT DEACTIVATED] Bypassing bot responder and routing customer ${customer.phone} directly to human handling.`);
+      await conversationService.updateConversationState(
+        activeConversation.id,
+        {
+          currentState: ConversationState.HUMAN_HANDLING,
+          isHumanHandling: true,
+          escalationReason: 'global_bot_disabled',
+        },
+        tenantId
+      );
+      activeConversation.is_human_handling = true;
+      activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+    }
+
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation };
     if (activeConversation.is_human_handling) {
       result = await handleHumanHandlingState(handlerCtx);
+
     } else {
       switch (activeConversation.current_state) {
         case ConversationState.INITIAL:

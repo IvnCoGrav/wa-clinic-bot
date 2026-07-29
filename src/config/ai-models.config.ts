@@ -77,10 +77,13 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
 export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic'];
 
 export class AiModelConfigService {
+  static globalBotActive = true;
+
   /**
    * Mengambil konfigurasi AI Model untuk task tertentu
    */
   static getModelConfig(task: AiTaskType): AiTaskModelConfig {
+
     const config = defaultTaskModelRegistry.get(task);
     if (!config) {
       return {

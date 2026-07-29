@@ -1173,9 +1173,61 @@ export async function adminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/settings
+   * Mengambil setting global chatbot
+   */
+  fastify.get('/api/admin/settings', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { AiModelConfigService } = await import('../config/ai-models.config');
+    return reply.status(200).send({
+      success: true,
+      globalBotActive: AiModelConfigService.globalBotActive,
+    });
+  });
+
+  /**
+   * PATCH /api/admin/settings
+   * Mengupdate setting global chatbot (AI ON/OFF)
+   */
+  fastify.patch(
+    '/api/admin/settings',
+    async (
+      request: FastifyRequest<{
+        Body: { globalBotActive: boolean };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { globalBotActive } = request.body || {};
+      if (globalBotActive === undefined || typeof globalBotActive !== 'boolean') {
+        return reply.status(400).send({ error: 'Body must contain globalBotActive boolean value.' });
+      }
+
+      const { AiModelConfigService } = await import('../config/ai-models.config');
+      const oldVal = AiModelConfigService.globalBotActive;
+      AiModelConfigService.globalBotActive = globalBotActive;
+
+      // Log audit action
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'GLOBAL_BOT_TOGGLE',
+        targetId: 'SYSTEM',
+        payload: { oldVal, newVal: globalBotActive },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: `Status respon AI bot otomatis berhasil diubah menjadi: ${globalBotActive ? 'ON' : 'OFF'}.`,
+        globalBotActive,
+      });
+    }
+  );
+
+  /**
    * GET /api/admin/health
    * Modul 5.7: System Health & Outbound Queue Monitor API
    */
+
   fastify.get('/api/admin/health', async (request: FastifyRequest, reply: FastifyReply) => {
     return reply.status(200).send({
       success: true,
