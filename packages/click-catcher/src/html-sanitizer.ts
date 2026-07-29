@@ -95,7 +95,7 @@ export class TenantHtmlService {
       allowedSchemes: ['http', 'https', 'mailto', 'tel', 'data'],
       allowProtocolRelative: false,
       transformTags: {
-        'style': (tagName, attribs) => {
+        'style': (tagName: string, attribs: Record<string, string>) => {
           return { tagName, attribs };
         }
       }
