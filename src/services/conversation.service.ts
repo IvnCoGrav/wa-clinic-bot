@@ -114,6 +114,7 @@ export class ConversationService {
       locationAttempts?: number;
       isHumanHandling?: boolean;
       humanHandlingSince?: Date | null;
+      escalationReason?: string | null;
     },
     tenantId: string
   ): Promise<any> {
@@ -126,6 +127,7 @@ export class ConversationService {
     if (updates.locationAttempts !== undefined) dataToUpdate.location_attempts = updates.locationAttempts;
     if (updates.isHumanHandling !== undefined) dataToUpdate.is_human_handling = updates.isHumanHandling;
     if (updates.humanHandlingSince !== undefined) dataToUpdate.human_handling_since = updates.humanHandlingSince;
+    if (updates.escalationReason !== undefined) dataToUpdate.escalation_reason = updates.escalationReason;
 
     try {
       const existing = await prisma.conversation.findFirst({

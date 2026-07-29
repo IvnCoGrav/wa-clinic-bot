@@ -22,7 +22,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
   // --- REVISI SECURITY: Origin Isolation & Dual Auth Middleware (X-API-KEY or HttpOnly Cookie Session) ---
   fastify.addHook('preHandler', async (request, reply) => {
     // 1. Layer 1 Origin Isolation Guard: Block /admin/* on pages.kalababyspa.online
-    const hostHeader = (request.headers.host || request.hostname || request.headers['x-forwarded-host'] || '').toLowerCase();
+    const xForwardedHost = request.headers['x-forwarded-host'];
+    const hostVal = Array.isArray(xForwardedHost) ? xForwardedHost[0] : xForwardedHost;
+    const hostHeader = (request.headers.host || request.hostname || hostVal || '').toLowerCase();
     if (hostHeader.includes('pages.kalababyspa.online') && (request.url.includes('/admin') || request.url.includes('/api/admin'))) {
       console.warn(`[ORIGIN ISOLATION GUARD] Blocked admin access attempt on tenant landing domain (${hostHeader}${request.url})`);
       return reply.status(404).send({ error: 'Not Found' });

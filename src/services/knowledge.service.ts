@@ -138,6 +138,71 @@ export class KnowledgeBaseService {
 
     return matches.slice(0, limit);
   }
+
+  /**
+   * Menambahkan FAQ item baru ke database knowledge_chunks (official Knowledge Base)
+   */
+  public async addFaqItem(params: {
+    tenantId: string;
+    category: string;
+    question: string;
+    answer: string;
+    status?: string;
+  }): Promise<any> {
+    const title = params.question.trim();
+    const content = `Pertanyaan: ${params.question.trim()}\nJawaban: ${params.answer.trim()}`;
+    
+    try {
+      return await prisma.knowledgeChunk.create({
+        data: {
+          tenant_id: params.tenantId,
+          source_type: FAQ_SOURCE_TYPE,
+          title,
+          content,
+        },
+      });
+    } catch (error) {
+      const newItem = {
+        id: `chunk_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        tenantId: params.tenantId,
+        sourceType: FAQ_SOURCE_TYPE,
+        title,
+        content,
+      };
+      memoryKnowledgeChunks.push(newItem);
+      return newItem;
+    }
+  }
+
+  /**
+   * Mencari kecocokan FAQ medis yang sudah disetujui di tabel MedicalFaqStaging
+   */
+  public async findMatchingFaq(userQuery: string, tenantId: string): Promise<any> {
+    try {
+      const match = await prisma.medicalFaqStaging.findFirst({
+        where: {
+          tenant_id: tenantId,
+          status: 'APPROVED',
+          OR: [
+            { raw_question: { contains: userQuery, mode: 'insensitive' } },
+            { general_question: { contains: userQuery, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (match) {
+        return {
+          id: match.id,
+          category: 'medical',
+          status: 'APPROVED',
+          question: match.general_question,
+          answer: match.general_answer,
+        };
+      }
+    } catch (e) {
+      console.warn('[findMatchingFaq fallback]', e);
+    }
+    return null;
+  }
 }
 
 export const knowledgeBaseService = new KnowledgeBaseService();
