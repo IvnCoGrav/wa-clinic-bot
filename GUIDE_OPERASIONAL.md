@@ -14,15 +14,33 @@ Panduan ini menjelaskan langkah demi langkah untuk menjalankan aplikasi **WAHA W
    ```
 
 ### 2. Jalankan WAHA (WhatsApp Gateway)
-Jalankan WAHA engine via Docker:
-```bash
-docker run -d \
-  --name waha \
-  -p 3001:3000 \
-  -e WHATSAPP_API_KEY=my_waha_api_key_secret \
-  devlikeapro/waha:noweb
+Jalankan WAHA engine via Docker dengan kredensial resmi (Gunakan perintah satu baris berikut untuk Windows PowerShell/CMD):
+```powershell
+docker run -d --name waha -p 3001:3000 -e WHATSAPP_SWAGGER_USERNAME=admin -e WHATSAPP_SWAGGER_PASSWORD=admin12345 -e WAHA_DASHBOARD_USERNAME=admin -e WAHA_DASHBOARD_PASSWORD=admin12345 -e WAHA_API_KEY=my_waha_api_key_secret devlikeapro/waha:noweb
 ```
-*Gunakan browser untuk membuka `http://localhost:3001` untuk memindai kode QR WhatsApp.*
+> [!TIP]
+> **Mengatasi Bentrok Kontainer:** Jika muncul error *Conflict* (nama "/waha" sudah digunakan), hapus terlebih dahulu kontainer lama dengan menjalankan `docker rm -f waha` kemudian jalankan kembali perintah `docker run` di atas.
+
+#### 📲 Langkah Menautkan WhatsApp via Dashboard WAHA:
+1. Buka browser dan akses: 👉 **`http://localhost:3001/dashboard/`**
+2. **Login Pop-Up (Basic Auth):**
+   - **Username:** `admin`
+   - **Password:** `admin12345`
+3. **Form Isian Session WAHA:**
+   - **Name:** `default`
+   - **WAHA API Key:** `my_waha_api_key_secret` (Sesuai dengan parameter `WAHA_API_KEY` saat menjalankan docker).
+   - **Metadata:** Kosongkan saja (tidak perlu diisi).
+    - **Webhook:**
+     - **URL:** `http://host.docker.internal:3000/webhook` (Penting: gunakan `host.docker.internal` agar kontainer Docker WAHA dapat menghubungi server Fastify yang berjalan di Windows host Anda).
+     - **Events:** Centang/Pilih `message` atau `message.any`.
+     - **Secret:** Masukkan nilai `WAHA_WEBHOOK_SECRET` dari file `.env` Anda jika dikonfigurasi (kosongkan jika tidak ada).
+   - Klik **Start** / **Save**.
+4. **Scan QR Code:**
+   - Klik tombol **Scan QR** di layar.
+   - Buka aplikasi **WhatsApp** di HP Anda ➔ **Pengaturan / Titik Tiga** ➔ **Perangkat Tertaut (*Linked Devices*)** ➔ **Tautkan Perangkat (*Link a Device*)**.
+   - Arahkan kamera HP ke QR Code hingga status berubah menjadi **`WORKING`**.
+
+
 
 ### 3. Mulai Server Bot
 Jalankan server Node.js Fastify dalam mode development:
