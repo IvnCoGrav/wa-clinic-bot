@@ -14,16 +14,17 @@ Panduan ini menjelaskan langkah demi langkah untuk menjalankan aplikasi **WAHA W
    ```
 
 ### 2. Jalankan WAHA (WhatsApp Gateway)
-Jalankan WAHA engine menggunakan Docker Compose yang telah dipasang pin versi spesifik untuk menghindari regresi noise handshake (bug issue #2198).
+Jalankan WAHA engine menggunakan Docker Compose yang telah dipasang pin versi spesifik serta dilengkapi **volume penyimpanan sesi permanen** (`waha_sessions` dipetakan ke `/app/.sessions`) untuk menghindari regresi noise handshake serta mencegah log-out akun WhatsApp secara tidak sengaja saat kontainer Docker mati/di-restart.
 
 ```bash
-# Jalankan container WAHA via Docker Compose
+# Jalankan container WAHA via Docker Compose (kini dengan volume sesi permanen)
 docker compose up -d waha
 ```
 
 > [!IMPORTANT]
-> **Catatan Pinning Versi (Keamanan Operasional):**
-> - Project ini mem-pin image WAHA ke versi spesifik **`devlikeapro/waha:noweb-2026.7.2`** di dalam `docker-compose.yml`.
+> **Catatan Sesi Permanen & Pinning Versi (Keamanan Operasional):**
+> - **Sesi Permanen:** Data login QR Anda disimpan secara permanen di volume Docker `waha_sessions`. Anda tidak perlu mengulang scan QR ataupun khawatir mengalami logout mendadak di HP saat kontainer di-restart/di-build ulang.
+> - **Catatan Pinning Versi:** Project ini mem-pin image WAHA ke versi spesifik **`devlikeapro/waha:noweb-2026.7.2`** di dalam `docker-compose.yml`.
 > - **JANGAN** pernah mengubah tag ke `:latest` di server produksi karena NOWEB sering kali mengalami pemblokiran handshake dari WhatsApp.
 > - Versi `2026.7.2` memperkenalkan perbaikan penting dan variabel `WAHA_NOWEB_WA_VERSION_FORCE` untuk memaksa bypass enkripsi handshake yang usang.
 > - **Prosedur Upgrade Masa Depan:** Sebelum melakukan upgrade versi WAHA di masa depan, pastikan untuk membaca [Changelog Resmi WAHA](https://waha.devlike.pro/docs/overview/changelog/) dan mengujinya di lingkungan staging terlebih dahulu.
