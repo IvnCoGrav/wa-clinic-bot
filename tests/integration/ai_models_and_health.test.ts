@@ -69,7 +69,8 @@ describe('Modul 5.6 & 5.7 — AI Model Registry & System Health Integration Test
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
-    expect(body.data.wahaStatus).toBe('CONNECTED');
+    expect(body.data.wahaStatus).toBe('WORKING');
+
     expect(body.data.haversineLocationEngine).toContain('MULTIPLIER');
   });
 });

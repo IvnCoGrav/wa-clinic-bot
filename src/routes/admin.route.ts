@@ -1229,11 +1229,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
    */
 
   fastify.get('/api/admin/health', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { wahaClient } = await import('../integrations/waha/client');
+    const wahaStatus = await wahaClient.getSessionStatus();
     return reply.status(200).send({
       success: true,
       timestamp: new Date().toISOString(),
       data: {
-        wahaStatus: 'CONNECTED',
+        wahaStatus,
         redisQueue: 'IN_MEMORY_FALLBACK_ACTIVE',
         haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
         telegramEmergencyAlerts: 'CONFIGURED',
@@ -1241,6 +1243,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       },
     });
   });
+
 
   // Serve admin HTML files manually (no extra packages needed)
   const fs = await import('fs/promises');
