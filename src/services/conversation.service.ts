@@ -161,7 +161,13 @@ export class ConversationService {
   /**
    * Transisi ke HUMAN_HANDLING: Otomatis menyimpan state saat ini ke previous_state
    */
-  public async escalateToHumanHandling(conversation: any, phone: string, reason: string, tenantId: string): Promise<any> {
+  public async escalateToHumanHandling(
+    conversation: any,
+    phone: string,
+    reason: string,
+    tenantId: string,
+    escalationReason?: string
+  ): Promise<any> {
     console.log(`[HUMAN HANDOFF] Conversation ${conversation.id} escalated to human handling. Reason: ${reason}`);
 
     const currentStateBeforeEscalation = conversation.current_state;
@@ -181,6 +187,7 @@ export class ConversationService {
         previousState: currentStateBeforeEscalation,
         isHumanHandling: true,
         humanHandlingSince: new Date(),
+        escalationReason: escalationReason || undefined,
       },
       tenantId
     );
