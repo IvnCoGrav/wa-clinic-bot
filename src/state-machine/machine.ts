@@ -74,14 +74,12 @@ export class ConversationStateMachine {
         conversation.human_handling_since = new Date();
         conversation.escalation_reason = 'medical_concern';
 
-        await conversationService.updateConversationState(
-          conversation.id,
-          {
-            currentState: ConversationState.HUMAN_HANDLING,
-            isHumanHandling: true,
-            escalationReason: 'medical_concern',
-          },
-          tenantId
+        await conversationService.escalateToHumanHandling(
+          conversation,
+          customer.phone,
+          `Kondisi medis terdeteksi (Severity: ${medicalResult.severity})`,
+          tenantId,
+          'medical_concern'
         );
 
         // Emergency template based on severity (HIGH vs MEDIUM)
