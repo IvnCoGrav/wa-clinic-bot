@@ -28,10 +28,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'Not Found' });
     }
 
-    // 2. Allow unauthenticated access to /api/admin/auth/login
-    if (request.url === '/api/admin/auth/login' && request.method === 'POST') {
+    // 2. Allow unauthenticated access to /api/admin/auth/login and static HTML pages
+    if (request.url.startsWith('/admin/') || (request.url === '/api/admin/auth/login' && request.method === 'POST')) {
       return;
     }
+
 
     const adminKey = process.env.ADMIN_API_KEY;
     if (!adminKey) {
@@ -1188,7 +1189,28 @@ export async function adminRoutes(fastify: FastifyInstance) {
       },
     });
   });
+
+  // Serve admin HTML files manually (no extra packages needed)
+  const fs = await import('fs/promises');
+  const path = await import('path');
+
+  fastify.get('/admin/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
+    const { filename } = request.params;
+    if (!/^[a-z0-9-]+\.html$/.test(filename)) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+
+    try {
+      const filePath = path.join(__dirname, '../../packages/admin-dashboard/public', filename);
+      const content = await fs.readFile(filePath, 'utf-8');
+      reply.type('text/html');
+      return reply.send(content);
+    } catch (err) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+  });
 }
+
 
 
 

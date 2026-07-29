@@ -118,4 +118,16 @@ describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', ()
     });
     expect(resCommit.statusCode).toBe(200);
   });
+
+  it('4. Static HTML Serving: GET /admin/login.html MUST be accessible without credentials', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/login.html',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.body).toContain('Login Control Center');
+  });
 });
+
