@@ -901,15 +901,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
 
 
-  /**
-   * GET /api/admin/legacy-staging
-   * Mengambil daftar draf migrasi lead/transaksi customer lama
-   */
   fastify.get('/api/admin/legacy-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const items = await prisma.legacyStaging.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
-        orderBy: { created_at: 'desc' },
+        where: { tenantId: DEFAULT_TENANT_ID, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
       });
       return reply.status(200).send({ success: true, data: items });
     } catch (err: any) {
@@ -939,11 +935,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
           data: { status: (status || 'COMMITTED') as any },
         });
 
-        if (status === 'COMMITTED' && item.customer_phone) {
-          await customerService.createOrUpdateCustomer(item.customer_phone, {
-            name: item.customer_name || undefined,
-            tenant_id: DEFAULT_TENANT_ID,
-          });
+        if (status === 'COMMITTED' && item.phoneNumber) {
+          await customerService.getOrCreateCustomer(
+            item.phoneNumber,
+            item.name || undefined,
+            DEFAULT_TENANT_ID
+          );
         }
 
         return reply.status(200).send({ success: true, message: `Data migrasi customer berhasil di-commit (${status}).`, data: item });
