@@ -148,8 +148,11 @@
     </header>
 
     <div class="nav-links">
-      <a href="staging.html" class="nav-link">📋 3-Table Staging Reviewer</a>
+      <a href="staging.html" class="nav-link">📋 3-Table Staging</a>
       <a href="live-chats.html" class="nav-link active">💬 Live Chat Monitor</a>
+      <a href="ai-models.html" class="nav-link">🤖 AI Model Registry</a>
+      <a href="health.html" class="nav-link">🩺 System Health</a>
+      <a href="#" onclick="logoutAdmin()" class="nav-link" style="color: var(--danger);">🚪 Logout</a>
     </div>
 
     <div id="chats-list">
@@ -234,8 +237,14 @@
       }
     }
 
+    async function logoutAdmin() {
+      await fetch('/api/admin/auth/logout', { method: 'POST' });
+      window.location.href = 'login.html';
+    }
+
     loadLiveChats();
     setInterval(loadLiveChats, 5000);
   </script>
 </body>
 </html>
+

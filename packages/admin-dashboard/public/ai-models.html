@@ -132,6 +132,7 @@
       <a href="live-chats.html" class="nav-link">💬 Live Chat</a>
       <a href="ai-models.html" class="nav-link active">🤖 AI Model Registry</a>
       <a href="health.html" class="nav-link">🩺 System Health</a>
+      <a href="#" onclick="logoutAdmin()" class="nav-link" style="color: var(--danger);">🚪 Logout</a>
     </div>
 
     <div id="models-list">
@@ -223,7 +224,13 @@
       }
     }
 
+    async function logoutAdmin() {
+      await fetch('/api/admin/auth/logout', { method: 'POST' });
+      window.location.href = 'login.html';
+    }
+
     loadModels();
   </script>
 </body>
 </html>
+
