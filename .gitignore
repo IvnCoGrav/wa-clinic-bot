@@ -57,3 +57,10 @@ sessions/
 packages/click-catcher/node_modules/
 packages/click-catcher/dist/
 packages/click-catcher/.env
+
+# Local agent tools & credentials (ignore from git)
+.agents/
+.rtk/
+caveman/
+skills-lock.json
+
