@@ -97,6 +97,23 @@ export class ConversationService {
         tenantId
       ).catch((err) => console.error('Failed to sync auto-release to DB:', err));
 
+      // Remove label "hold" from WhatsApp/WAHA chat (dinonaktifkan di production sampai tervalidasi live)
+      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+      if (enableHoldLabel) {
+        try {
+          const { wahaClient } = require('../integrations/waha/client');
+          prisma.customer.findUnique({ where: { id: conversation.customer_id } })
+            .then((customer: any) => {
+              if (customer) {
+                wahaClient.removeLabel(`${customer.phone}@c.us`, 'hold')
+                  .catch((err: any) => console.error('[LABEL ERROR] Failed to remove hold label on auto-release:', err.message));
+              }
+            });
+        } catch (err: any) {
+          console.error('[LABEL ERROR] Failed to initiate hold label removal on auto-release:', err.message);
+        }
+      }
+
       return { released: true, updatedConversation: conversation };
     }
 
@@ -172,12 +189,17 @@ export class ConversationService {
 
     const currentStateBeforeEscalation = conversation.current_state;
 
-    // Tambahkan label "hold" secara otomatis ke chat WAHA
-    try {
-      const { wahaClient } = await import('../integrations/waha/client');
-      await wahaClient.addLabel(`${phone}@c.us`, 'hold');
-    } catch (err: any) {
-      console.warn(`[LABEL ERROR] Failed to auto-add hold label during escalation:`, err.message);
+    // Tambahkan label "hold" secara otomatis ke chat WAHA (dinonaktifkan di production sampai tervalidasi live)
+    const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+    if (enableHoldLabel) {
+      try {
+        const { wahaClient } = await import('../integrations/waha/client');
+        await wahaClient.addLabel(`${phone}@c.us`, 'hold');
+      } catch (err: any) {
+        console.warn(`[LABEL ERROR] Failed to auto-add hold label during escalation:`, err.message);
+      }
+    } else {
+      console.log(`[LABEL SKIP] Skipping hold label addition in production (feature flag disabled).`);
     }
 
     return await this.updateConversationState(

@@ -65,37 +65,50 @@ Server akan berjalan di port `3000` (atau port sesuai `.env` Anda).
 Semua antarmuka dashboard admin kini dilayani langsung oleh server Fastify di origin lokal. 
 
 1. Buka browser Anda dan akses halaman login:
-   👉 **`http://localhost:3000/admin/login.html`**
-2. Masukkan password admin yang Anda daftarkan pada `ADMIN_API_KEY` di file `.env`.
-3. Isi kolom **Identitas Pemeriksa** (contoh: *Bidan Kenanga* atau *Admin Utama*).
-4. Klik **Masuk ke Sistem**. Browser Anda akan otomatis mendapatkan cookie `admin_session` yang aman dan Anda akan diarahkan ke halaman staging utama.
+   👉 **`http://localhost:3000/admin/login`** (atau legacy: **`http://localhost:3000/admin/login.html`**)
+2. Masukkan kredensial berikut:
+   - **Email / Username:** `admin@kalamomsspa.com` (Bisa diisi email/username apa saja bebas, karena di fase single-tenant ini backend hanya mencocokkan password).
+   - **Password:** Masukkan nilai `ADMIN_API_KEY` dari file `.env` Anda (secara default di file `.env` lokal Anda adalah: **`admin_prod_key_123`**).
+3. Klik **Sign In** (atau isi form di legacy page). Browser Anda akan otomatis mendapatkan cookie `admin_session` yang aman dan Anda akan diarahkan ke dashboard utama.
 
 ---
 
-## 🧭 Daftar Rute Dashboard Admin yang Dapat Diakses
+## 🖥️ Menu Dashboard React SPA Modern (/admin/*)
 
-Setelah berhasil login, Anda dapat mengakses dashboard-dashboard berikut langsung melalui menu navigasi di bagian atas halaman:
+Dashboard admin modern kini menggunakan React SPA dengan tampilan premium (dark glassmorphic):
 
-### 1. 🏥 3-Table Staging Reviewer
-- **URL:** `http://localhost:3000/admin/staging.html`
-- **Fungsi:** 
-  - **Tab FAQ Medis:** Meninjau keluhan medis yang di-hold oleh bidan. Bidan wajib menulis ulang pertanyaan umum dan jawaban resmi sebelum klik **Approve** untuk melatih bot.
-  - **Tab FAQ Umum:** Meninjau dan menyunting draf FAQ non-medis hasil panen AI dari riwayat chat.
-  - **Tab Migrasi Customer:** Menyetujui data customer lama hasil ekstraksi teks pemesanan agar disimpan ke database resmi.
+1. **Overview & Analytics (`/admin/overview`):**
+   - Menampilkan total chat masuk, jumlah reservasi, taksiran omset, rasio konversi (conversion rate), status engine WAHA, status Redis queue (fallback in-memory), dan grafik visual lalu lintas chat.
+2. **Reservations & Calendar (`/admin/reservations`):**
+   - Menampilkan tabel reservasi interaktif (filter: Pending, Confirmed, Completed, Cancelled).
+   - Dilengkapi Calendar View untuk melihat jadwal reservasi.
+   - Detail modal pasien memuat alamat kelurahan/kecamatan, biaya ongkir, jarak km, dan tombol manual sync Google Calendar (terdapat indikator mock mode).
+3. **Knowledge Base Manager (`/admin/knowledge-base`):**
+   - Form bulk import FAQ Q&A.
+   - Uploader dokumen SOP untuk di-chunk otomatis oleh backend.
+   - Log pertanyaan tertunda (mock UI demo).
+4. **AI Sandbox Simulator (`/admin/sandbox`):**
+   - Simulator chat RAG secara real-time.
+   - Inspector data (chunks vector database yang dipanggil, skor similarity, system prompt, dan latency).
+   - Toggle simulasi outage **SumoPod (LLM API OUTAGE)** untuk memverifikasi handling fallback.
+5. **Operational Settings (`/admin/settings`):**
+   - Global chatbot active toggle (ON/OFF).
+   - Peta & Branch Coordinate Picker (UI Demo Only).
+   - Tabel Delivery Fee Tiering (UI Demo Only).
+   - Editor broadcast campaign & jam operasional (UI Demo Only).
 
-### 2. 💬 Live Chat Monitor & Human Override
-- **URL:** `http://localhost:3000/admin/live-chats.html`
-- **Fungsi:** 
-  - Memantau semua percakapan yang saat ini berstatus **`is_human_handling: true`** (diambil alih manusia).
-  - Menampilkan badge merah berkedip `🚨 MEDICAL EMERGENCY` untuk kasus darurat medis.
-  - Tombol **Release**: Mengembalikan penanganan chat ke bot (menggunakan *Option A* yang memulihkan state percakapan ke kondisi sebelum eskalasi). Khusus untuk eskalasi medis, bidan wajib menyetujui dialog konfirmasi keselamatan sebelum chat di-release.
+---
 
-### 3. 🤖 AI Model Registry Manager
-- **URL:** `http://localhost:3000/admin/ai-models.html`
-- **Fungsi:** 
-  - Melihat dan mengubah model AI yang aktif per task (`HARVESTING`, `CHAT_REPLY`, dll).
-  - Dilengkapi *Validation Guard* (hanya menerima provider terdaftar) dan *Lock Guard* (mengunci task `MEDICAL_CHECK` agar selalu berjalan di atas mesin deteksi deterministik demi keselamatan pasien).
+## 🧭 Daftar Rute Legacy HTML Admin (Dukungan Kompatibilitas)
 
-### 🩺 4. System Health Monitor
-- **URL:** `http://localhost:3000/admin/health.html`
-- **Fungsi:** Memantau status koneksi WAHA, status Redis Queue (Fallback In-Memory), status Haversine location engine, dan riwayat alert Telegram.
+Sistem tetap melayani rute HTML lama untuk kompatibilitas pengujian:
+- **🏥 3-Table Staging Reviewer:** `http://localhost:3000/admin/staging.html`
+- **💬 Live Chat Monitor:** `http://localhost:3000/admin/live-chats.html`
+- **🤖 AI Model Registry Manager:** `http://localhost:3000/admin/ai-models.html`
+- **🩺 System Health Monitor:** `http://localhost:3000/admin/health.html`
+
+---
+
+## ⚙️ Variabel Konfigurasi Baru (.env)
+
+- **`ENABLE_WAHA_HOLD_LABEL`** (Boolean, default `false` di production): Set `true` jika ingin mengaktifkan sinkronisasi label "hold" WAHA ke HP admin WhatsApp secara otomatis saat terjadi eskalasi human handling. Secara default dinonaktifkan di production untuk menjaga kestabilan operasional sampai tervalidasi live.

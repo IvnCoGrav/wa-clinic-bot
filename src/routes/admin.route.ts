@@ -110,6 +110,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.status(200).send({
       success: true,
       message: 'Login Admin berhasil. Cookie HttpOnly admin_session telah diterbitkan.',
+      user: {
+        id: session.id,
+        email: 'admin@kalababyspa.online',
+        role: 'tenant_admin',
+        tenantId: 'default-tenant',
+      },
       data: {
         adminIdentity: session.adminIdentity,
         expiresAt: session.expiresAt,
@@ -143,6 +149,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
       success: true,
       authenticated: true,
       adminIdentity: (request as any).adminIdentity,
+      user: {
+        id: 'admin-session',
+        email: 'admin@kalababyspa.online',
+        role: 'tenant_admin',
+        tenantId: 'default-tenant',
+      },
     });
   });
 
@@ -177,6 +189,95 @@ export async function adminRoutes(fastify: FastifyInstance) {
         data: [],
         note: 'Fallback in-memory mode',
       });
+    }
+  });
+
+  /**
+   * GET /api/admin/reservations
+   * Get all reservations for the tenant
+   */
+  fastify.get('/api/admin/reservations', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const reservations = await prisma.reservation.findMany({
+        where: { tenant_id: DEFAULT_TENANT_ID },
+        include: {
+          customer: true
+        },
+        orderBy: {
+          created_at: 'desc'
+        }
+      });
+      return reservations;
+    } catch (err: any) {
+      console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err.message);
+      return Array.from(memoryReservations.values());
+    }
+  });
+
+  /**
+   * GET /api/admin/knowledge/chunks
+   * Get all knowledge base chunks for the tenant
+   */
+  fastify.get('/api/admin/knowledge/chunks', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const chunks = await prisma.knowledgeChunk.findMany({
+        where: { tenant_id: DEFAULT_TENANT_ID },
+        orderBy: { created_at: 'desc' }
+      });
+      return chunks;
+    } catch (err: any) {
+      return [];
+    }
+  });
+
+  /**
+   * PUT /api/admin/knowledge/chunks/:id
+   * REST Endpoint to edit a single knowledge base chunk
+   */
+  fastify.put('/api/admin/knowledge/chunks/:id', async (request: FastifyRequest<{ Params: { id: string }; Body: { title: string; content: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const { title, content } = request.body || {};
+    
+    if (!title || !content) {
+      return reply.status(400).send({ error: 'Title and content are required' });
+    }
+
+    try {
+      const updated = await prisma.knowledgeChunk.update({
+        where: { id },
+        data: {
+          title,
+          content
+        }
+      });
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'EDIT_KNOWLEDGE_CHUNK',
+        targetId: id,
+        payload: { title },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Knowledge chunk updated successfully',
+        data: updated
+      });
+    } catch (err: any) {
+      const { knowledgeBaseService } = await import('../services/knowledge.service');
+      const updatedInMemory = knowledgeBaseService.updateInMemoryChunk(id, title, content);
+      
+      if (updatedInMemory) {
+        return reply.status(200).send({
+          success: true,
+          message: 'Knowledge chunk updated in memory fallback',
+          data: { id, title, content }
+        });
+      }
+
+      return reply.status(500).send({ error: err.message });
     }
   });
 
@@ -226,6 +327,157 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.status(200).send({
       success: true,
       message: `Successfully imported document "${documentName}" into ${chunkCount} knowledge chunks`,
+    });
+  });
+
+  /**
+   * POST /api/admin/sandbox/chat
+   * Simulate a chat message and inspect RAG retrieval & LLM generation
+   */
+  fastify.post('/api/admin/sandbox/chat', {
+    config: {
+      rateLimit: {
+        max: process.env.NODE_ENV === 'test' ? 30 : 300,
+        timeWindow: '1 minute'
+      }
+    }
+  }, async (request: FastifyRequest<{ Body: { text: string; simulateOutage?: boolean } }>, reply: FastifyReply) => {
+    const { text, simulateOutage } = request.body || {};
+    if (!text) {
+      return reply.status(400).send({ error: 'Text field is required' });
+    }
+
+    const { llmOutageStorage } = await import('../integrations/llm/context');
+
+    return llmOutageStorage.run({ simulateOutage: Boolean(simulateOutage) }, async () => {
+      try {
+        const { knowledgeBaseService } = await import('../services/knowledge.service');
+        const { customerService } = await import('../services/customer.service');
+        const { conversationService } = await import('../services/conversation.service');
+        const { ConversationStateMachine } = await import('../state-machine/machine');
+        const { TypingService } = await import('../services/typing.service');
+        const { IWahaClient } = await import('../integrations/waha/client');
+
+        // Create a mock sandbox WAHA client that intercepts replies
+        class SandboxWAHAClient implements IWahaClient {
+          public sentMessages: Array<{ type: 'text' | 'image'; text: string; fileUrl?: string }> = [];
+
+          public async sendSeen(chatId: string, messageId?: string): Promise<boolean> { return true; }
+          public async startTyping(chatId: string): Promise<boolean> { return true; }
+          public async stopTyping(chatId: string): Promise<boolean> { return true; }
+          public async sendText(chatId: string, text: string): Promise<boolean> {
+            this.sentMessages.push({ type: 'text', text });
+            return true;
+          }
+          public async sendImage(chatId: string, fileUrl: string, caption?: string): Promise<boolean> {
+            this.sentMessages.push({ type: 'image', text: caption || '', fileUrl });
+            return true;
+          }
+          public async addLabel(chatId: string, labelId: string): Promise<boolean> { return true; }
+          public async removeLabel(chatId: string, labelId: string): Promise<boolean> { return true; }
+          public async getChatLabels(chatId: string): Promise<string[]> { return []; }
+          public async getSessionStatus(): Promise<string> { return 'WORKING'; }
+          public async getChats(): Promise<any[]> { return []; }
+          public async getMessages(chatId: string, limit?: number): Promise<any[]> { return []; }
+          public async getPhoneNumberFromLid(chatId: string): Promise<string | null> { return '628999999999'; }
+        }
+
+        const sandboxClient = new SandboxWAHAClient();
+        const sandboxTypingService = new TypingService(sandboxClient);
+        sandboxTypingService.setSpeedFactor(100000); // Instant replies (100,000x speed multiplier)
+
+        const sandboxStateMachine = new ConversationStateMachine(sandboxTypingService);
+
+        console.time('SANDBOX_TOTAL');
+        console.time('GET_CUSTOMER');
+        const customer = await customerService.getOrCreateCustomer('628999999999', 'Sandbox Customer', DEFAULT_TENANT_ID);
+        console.timeEnd('GET_CUSTOMER');
+
+        console.time('GET_CONVERSATION');
+        let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+        console.timeEnd('GET_CONVERSATION');
+
+        // Handle sandbox reset
+        if (text.trim().toLowerCase() === '/reset') {
+          await customerService.clearPendingLocation(customer.id, DEFAULT_TENANT_ID);
+          conversation = await conversationService.updateConversationState(
+            conversation.id,
+            {
+              currentState: 'INITIAL',
+              previousState: null,
+              locationAttempts: 0,
+              isHumanHandling: false,
+              humanHandlingSince: null,
+              escalationReason: null,
+            },
+            DEFAULT_TENANT_ID
+          );
+          console.timeEnd('SANDBOX_TOTAL');
+          return {
+            answer: 'Sesi percakapan simulator berhasil di-reset ke INITIAL! 🌸 Silakan ketik "halo" atau sapuan lainnya untuk mulai menguji.',
+            chunks: [],
+            query: text,
+            timestamp: new Date()
+          };
+        }
+
+        // Standardize incoming message format (Text vs Location)
+        let incomingMessage: any;
+        const locationMatch = text.match(/^\/location\s+([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)/i);
+        
+        if (locationMatch) {
+          incomingMessage = {
+            id: `msg_sandbox_${Date.now()}`,
+            from: '628999999999',
+            chatId: '628999999999@c.us',
+            timestamp: String(Math.floor(Date.now() / 1000)),
+            type: 'location',
+            location: {
+              latitude: parseFloat(locationMatch[1]),
+              longitude: parseFloat(locationMatch[2])
+            }
+          };
+        } else {
+          incomingMessage = {
+            id: `msg_sandbox_${Date.now()}`,
+            from: '628999999999',
+            chatId: '628999999999@c.us',
+            timestamp: String(Math.floor(Date.now() / 1000)),
+            type: 'text',
+            text: { body: text }
+          };
+        }
+
+        console.time('PROCESS_MESSAGE');
+        // Process state machine
+        await sandboxStateMachine.processMessage({
+          tenantId: DEFAULT_TENANT_ID,
+          customer,
+          conversation,
+          incomingMessage
+        });
+        console.timeEnd('PROCESS_MESSAGE');
+
+        console.time('SEARCH_CHUNKS');
+        // Retrieve chunks to show in RAG inspector
+        const chunks = await knowledgeBaseService.searchRelevantChunks(incomingMessage.text?.body || '', 3, DEFAULT_TENANT_ID);
+        console.timeEnd('SEARCH_CHUNKS');
+        console.timeEnd('SANDBOX_TOTAL');
+
+        const answer = sandboxClient.sentMessages.length > 0
+          ? sandboxClient.sentMessages.map(m => m.text).join('\n\n')
+          : '🔇 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]';
+
+        return {
+          answer,
+          chunks,
+          query: text,
+          timestamp: new Date(),
+          llmError: simulateOutage ? 'SumoPod connection timeout (500 Internal Server Error)' : null
+        };
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
     });
   });
 
@@ -895,6 +1147,20 @@ export async function adminRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
+      // Remove label "hold" from WhatsApp/WAHA chat (dinonaktifkan di production sampai tervalidasi live)
+      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+      if (enableHoldLabel) {
+        try {
+          const { wahaClient } = await import('../integrations/waha/client');
+          const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
+          if (customer) {
+            await wahaClient.removeLabel(`${customer.phone}@c.us`, 'hold');
+          }
+        } catch (err: any) {
+          console.warn(`[LABEL ERROR] Failed to auto-remove hold label during manual admin release:`, err.message);
+        }
+      }
+
       return reply.status(200).send({ success: true, message: `Percakapan berhasil di-release kembali ke bot (Restored state: ${restoredState}).`, data: updated });
     } catch (err: any) {
       return reply.status(200).send({ success: true, message: 'Percakapan berhasil di-release (Fallback Mode - Restored state: INITIAL).' });
@@ -1230,15 +1496,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/health', async (request: FastifyRequest, reply: FastifyReply) => {
     const { wahaClient } = await import('../integrations/waha/client');
     const wahaStatus = await wahaClient.getSessionStatus();
+    const uptime = process.uptime();
     return reply.status(200).send({
       success: true,
       timestamp: new Date().toISOString(),
+      wahaStatus,
+      redisQueue: 'IN_MEMORY_FALLBACK_ACTIVE',
+      haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
+      telegramEmergencyAlerts: 'CONFIGURED',
+      systemUptimeSeconds: uptime,
       data: {
         wahaStatus,
         redisQueue: 'IN_MEMORY_FALLBACK_ACTIVE',
         haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
         telegramEmergencyAlerts: 'CONFIGURED',
-        systemUptimeSeconds: process.uptime(),
+        systemUptimeSeconds: uptime,
       },
     });
   });
@@ -1248,19 +1520,84 @@ export async function adminRoutes(fastify: FastifyInstance) {
   const fs = await import('fs/promises');
   const path = await import('path');
 
-  fastify.get('/admin/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
-    const { filename } = request.params;
-    if (!/^[a-z0-9-]+\.html$/.test(filename)) {
-      return reply.status(404).send({ error: 'Not Found' });
+  fastify.get('/admin/*', async (request: FastifyRequest, reply: FastifyReply) => {
+    const urlPath = request.url.split('?')[0];
+
+    // 1. If it is requesting assets, handle it
+    if (urlPath.includes('/admin/assets/')) {
+      const parts = urlPath.split('/admin/assets/');
+      const filename = parts[parts.length - 1];
+      try {
+        const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/assets', filename);
+        const content = await fs.readFile(filePath);
+        if (filename.endsWith('.js')) {
+          reply.type('application/javascript');
+        } else if (filename.endsWith('.css')) {
+          reply.type('text/css');
+        } else if (filename.endsWith('.svg')) {
+          reply.type('image/svg+xml');
+        } else if (filename.endsWith('.png')) {
+          reply.type('image/png');
+        } else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+          reply.type('image/jpeg');
+        }
+        return reply.send(content);
+      } catch (err) {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
     }
 
+    // 2. If it is specifically requesting a static legacy html page (like login.html or staging.html), serve it from public/
+    const htmlMatch = urlPath.match(/\/admin\/([a-z0-9-]+\.html)$/);
+    if (htmlMatch) {
+      const filename = htmlMatch[1];
+      try {
+        const filePath = path.join(__dirname, '../../packages/admin-dashboard/public', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        reply.type('text/html');
+        return reply.send(content);
+      } catch (err) {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
+    }
+
+    // 3. Otherwise serve index.html for React SPA client-side routing
     try {
-      const filePath = path.join(__dirname, '../../packages/admin-dashboard/public', filename);
+      const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/index.html');
       const content = await fs.readFile(filePath, 'utf-8');
       reply.type('text/html');
       return reply.send(content);
     } catch (err) {
-      return reply.status(404).send({ error: 'Not Found' });
+      // Fallback: serve legacy HTML pages directly if dist/index.html does not exist yet (e.g. before initial build)
+      const filename = urlPath.split('/admin/')[1] || 'login.html';
+      if (/^[a-z0-9-]+\.html$/.test(filename)) {
+        try {
+          const filePath = path.join(__dirname, '../../packages/admin-dashboard/public', filename);
+          const content = await fs.readFile(filePath, 'utf-8');
+          reply.type('text/html');
+          return reply.send(content);
+        } catch (e) {
+          // Default to login.html fallback
+          try {
+            const filePath = path.join(__dirname, '../../packages/admin-dashboard/public/login.html');
+            const content = await fs.readFile(filePath, 'utf-8');
+            reply.type('text/html');
+            return reply.send(content);
+          } catch (e2) {
+            return reply.status(404).send({ error: 'Not Found' });
+          }
+        }
+      } else {
+        // Default fallback to login page
+        try {
+          const filePath = path.join(__dirname, '../../packages/admin-dashboard/public/login.html');
+          const content = await fs.readFile(filePath, 'utf-8');
+          reply.type('text/html');
+          return reply.send(content);
+        } catch (e) {
+          return reply.status(404).send({ error: 'Not Found' });
+        }
+      }
     }
   });
 }

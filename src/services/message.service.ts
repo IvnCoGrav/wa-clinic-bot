@@ -83,6 +83,22 @@ export class MessageService {
       return null;
     }
   }
+
+  /**
+   * Mengambil pesan-pesan terakhir untuk percakapan tertentu (terurut kronologis).
+   */
+  public async getRecentMessages(conversationId: string, limit: number, tenantId: string): Promise<any[]> {
+    try {
+      const messages = await prisma.message.findMany({
+        where: { conversation_id: conversationId, tenant_id: tenantId },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+      });
+      return messages.reverse(); // Kembalikan ke urutan kronologis (lama -> baru)
+    } catch (error) {
+      return [];
+    }
+  }
 }
 
 

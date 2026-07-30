@@ -49,7 +49,7 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 12 | Integrasi WhatsApp menggunakan WAHA (self-hosted) | ✅ Selesai |
 | 13 | Pesan masuk diproses lewat antrian (sharded queue, FIFO per nomor customer, fallback in-memory jika Redis down) | ✅ Selesai |
 | 14 | Sistem menghitung jarak lewat OpenRouteService (rute kendaraan asli), fallback ke Haversine kalau ORS gagal/timeout | ✅ Selesai |
-| 15 | Fuzzy matching nama kelurahan (Sorensen-Dice similarity, threshold 0.80) untuk toleransi typo/variasi penulisan lokasi | ✅ Selesai |
+| 15 | Fuzzy matching nama lokasi berbasis n-gram Candidate Spans & Gazetteer (Sorensen-Dice similarity dengan dual threshold: 0.75 untuk kelurahan, 0.82 untuk kecamatan) untuk toleransi typo/variasi kalimat alami | ✅ Selesai |
 | 16 | Penolakan input lokasi setingkat kecamatan/kota tanpa nama kelurahan (bot minta detail lebih spesifik) | ✅ Selesai |
 | 17 | Deteksi kalimat afirmasi/negasi kompleks (termasuk mixed-signal seperti "iya bener tapi bukan itu") untuk konfirmasi lokasi | ✅ Selesai |
 | 18 | Reset otomatis data lokasi pending (bukan yang sudah confirmed) setelah idle 24 jam tanpa respon | ✅ Selesai |
@@ -146,7 +146,7 @@ Sistem ini murni single-tenant (satu bisnis, tanpa auth multi-pengguna, tanpa bi
 
 ### 8. Fitur Hardening & Edge Case
 Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening berikut untuk menangani skenario percakapan dunia nyata yang lebih kompleks:
-- **Fuzzy matching lokasi:** pencocokan nama kelurahan pakai similarity Sorensen-Dice (threshold 0.80) untuk toleransi typo/variasi penulisan.
+- **Fuzzy matching lokasi:** pencocokan nama lokasi berbasis n-gram Candidate Spans & Gazetteer (Sorensen-Dice similarity dengan dual threshold: 0.75 untuk kelurahan, 0.82 untuk kecamatan) untuk toleransi typo/variasi kalimat alami, disaring menggunakan stop-words percakapan Indonesia untuk mencegah adjacency palsu.
 - **Penolakan lokasi terlalu umum:** kalau customer cuma sebut kecamatan/kota (tanpa kelurahan), bot minta detail lebih spesifik — diuji terhadap puluhan nama kecamatan/kota di area Sidoarjo-Surabaya.
 - **Deteksi afirmasi/negasi kompleks:** menangani variasi bahasa natural seperti "iya bener", "ok bos", "iya bener tapi bukan itu" (mixed-signal), termasuk mengabaikan interjeksi ("ya ampun", "ya elah") supaya tidak salah dianggap sebagai konfirmasi.
 - **Reset idle 24 jam:** data lokasi yang statusnya masih pending (belum dikonfirmasi customer) otomatis direset kalau tidak ada aktivitas 24 jam; data yang sudah confirmed tidak terpengaruh.
@@ -186,7 +186,7 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - In-Memory Queue fallback aktif otomatis di production kalau Redis down — bot tetap jalan, tapi pesan yang sedang diantri di memory tidak persisten; kalau server restart di tengah kondisi ini, pesan bisa hilang. Ada critical alert log kalau ini terjadi, tapi belum ada mekanisme replay/recovery otomatis.
 - ADMIN_API_KEY belum melalui security review independen — implementasi (fail-closed behavior, constant-time comparison, coverage proteksi di semua endpoint admin) dibangun di sesi terpisah dan belum diverifikasi ulang. Wajib direview sebelum endpoint admin diakses dari luar jaringan lokal/trusted.
 - Status customer blocked masih placeholder — kolom dan bypass logic-nya sudah ada di kode, tapi mekanisme bisnis (siapa yang berwenang block, lewat endpoint mana, kriteria apa) belum ditentukan. Jangan mengandalkan fitur ini sampai keputusan bisnisnya jelas dan endpoint untuk mengelolanya dibangun.
-- Fuzzy matching kelurahan (Sorensen-Dice, threshold 0.80) berisiko salah cocokkan nama kelurahan yang mirip tapi berbeda (misal dua kelurahan dengan nama hampir sama di kecamatan berbeda) — kalau ini terjadi, ongkir dan penentuan area jadi salah tanpa customer maupun admin sadar. Perlu dipantau di awal produksi apakah threshold 0.80 ini menghasilkan false-positive match yang mengganggu.
+- Fuzzy matching lokasi (Candidate Spans & Gazetteer, dual threshold: 0.75 kelurahan, 0.82 kecamatan) berisiko salah cocokkan nama kelurahan yang mirip tapi berbeda (misal dua kelurahan dengan nama hampir sama di kecamatan berbeda) — kalau ini terjadi, ongkir dan penentuan area jadi salah tanpa customer maupun admin sadar. Perlu dipantau di awal produksi apakah threshold ini menghasilkan false-positive match yang mengganggu.
 - Reset idle 24 jam hanya berlaku untuk data lokasi pending (belum dikonfirmasi), bukan data yang sudah confirmed — pastikan pemahaman ini konsisten kalau ada perubahan logic ke depan, supaya tidak keliru menghapus data lokasi yang sudah valid.
 - Auto-save Google Contacts (fitur 29) masih nonaktif secara default — sebelum diaktifkan, pastikan OAuth credential Google disimpan sebagai secret (bukan plaintext di repo), dan pertimbangkan implikasi privasi: data kontak customer (nomor HP, nama) akan tersimpan permanen di akun Google pribadi/bisnis pemilik, di luar kendali sistem database utama. Kalau nanti bisnis ini di-handover atau akun Google berganti, data ini perlu ditangani terpisah dari migrasi database.
 
