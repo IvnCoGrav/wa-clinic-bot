@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
+import { llmOutageStorage } from './context';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -35,11 +36,17 @@ export class LLMIntentService {
    * 5. other            : Lainnya / tidak spesifik
    */
   public async detectIntent(userMessageText: string): Promise<IntentDetectionResult> {
+    const store = llmOutageStorage.getStore();
+    if (store?.simulateOutage) {
+      throw new Error('SumoPod connection timeout (500 Internal Server Error)');
+    }
+
     if (!this.apiKey || this.apiKey.startsWith('mock')) {
       return this.ruleBasedFallbackIntent(userMessageText);
     }
 
     try {
+      console.time('LLM_INTENT_API_CALL');
       const response = await axios.post(
         `${this.baseUrl}/chat/completions`,
         {
@@ -49,10 +56,10 @@ export class LLMIntentService {
             {
               role: 'system',
                content: `${BOT_PERSONA_PROMPT}
-
+ 
 Anda adalah Intent Classifier untuk percakapan WhatsApp Kala Moms and Baby Spa.
 Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format JSON strictly {"intent": "interested" | "not_interested" | "asking_schedule" | "faq_question" | "other"}:
-
+ 
 - "faq_question": Jika pengguna menanyakan informasi umum/FAQ moms & baby spa, seperti manfaat treatment, jenis perawatan, harga, durasi, atau pertanyaan seputar pijat dan treatment (contoh: "pijat bayi itu buat apa?", "ada pijat ibu hamil ga?", "berapa harga treatmentnya?", "pijat bayi boleh dari umur berapa?").
 - "asking_schedule": Jika pengguna menanyakan ketersediaan hari/jam/jadwal spesifik (contoh: "apakah hari Senin bisa?", "bisa booking besok jam 3 sore?").
 - "medical_query": Jika pengguna menanyakan keluhan medis, masalah kesehatan bayi/ibu, dosis obat, atau saran medis (contoh: "anak saya demam dikasih apa ya", "ada obat batuk bayi?", "bekas jahitan melahirkan perih").
@@ -72,8 +79,10 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
           },
+          timeout: 8000,
         }
       );
+      console.timeEnd('LLM_INTENT_API_CALL');
 
       const content = response.data.choices[0].message.content;
       

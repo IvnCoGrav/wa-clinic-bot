@@ -437,14 +437,13 @@ export class WahaClient implements IWahaClient {
 
     try {
       const response = await axios.get(
-        `${this.baseUrl}/api/chats`,
+        `${this.baseUrl}/api/${this.session}/chats`,
         {
           headers: this.headers,
-          params: { session: this.session },
           timeout: this.timeoutMs,
         }
       );
-      return response.data || [];
+      return response.data?.value || response.data || [];
     } catch (error: any) {
       console.error('[WAHA API ERROR] getChats failed:', error?.response?.data || error.message);
       return [];
@@ -475,7 +474,7 @@ export class WahaClient implements IWahaClient {
           timeout: this.timeoutMs,
         }
       );
-      return response.data || [];
+      return response.data?.value || response.data || [];
     } catch (error: any) {
       console.error(`[WAHA API ERROR] getMessages failed for ${targetChatId}:`, error?.response?.data || error.message);
       return [];

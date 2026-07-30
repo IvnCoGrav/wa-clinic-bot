@@ -62,6 +62,7 @@ model Customer {
   reservations       Reservation[]
   follow_ups         FollowUp[]
   adClick            AdClick?
+  pricelist_sent     Boolean        @default(false)
 
   @@index([tenant_id])
   @@map("customers")

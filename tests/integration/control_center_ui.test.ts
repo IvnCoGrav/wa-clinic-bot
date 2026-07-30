@@ -8,6 +8,8 @@ describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', ()
   beforeEach(() => {
     vi.restoreAllMocks();
     process.env.ADMIN_API_KEY = 'test_admin_key_999';
+    process.env.HUMANIZER_ENABLED = 'false';
+    process.env.LLM_API_KEY = 'mock';
   });
 
   it('1. Origin Isolation Guard: Accessing /admin/* on pages.kalababyspa.online MUST return 404 Not Found', async () => {
@@ -128,6 +130,91 @@ describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', ()
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('text/html');
     expect(response.body).toContain('Login Control Center');
+  });
+
+  it('5. Sandbox Chat Simulator Integration Test: 1 message sent via sandbox UI produces IDENTICAL state transition and output to webhook simulation', async () => {
+    const testPhone = '628991234567';
+    
+    const { customerService } = await import('../../src/services/customer.service');
+    const { conversationService } = await import('../../src/services/conversation.service');
+    const { DEFAULT_TENANT_ID } = await import('../../src/config/tenant');
+    const { ConversationState } = await import('@prisma/client');
+    
+    const customer = await customerService.getOrCreateCustomer(testPhone, 'Mock Integration Customer', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    
+    // 1. Reset state to INITIAL
+    await conversationService.updateConversationState(conversation.id, {
+      currentState: ConversationState.INITIAL,
+      previousState: null,
+      locationAttempts: 0,
+      isHumanHandling: false,
+    }, DEFAULT_TENANT_ID);
+
+    // 2. Call Webhook `/webhook`
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `msg_webhook_${Date.now()}`,
+        from: `${testPhone}@c.us`,
+        fromMe: false,
+        timestamp: Math.floor(Date.now() / 1000),
+        body: 'halo',
+        _data: { notifyName: 'Tester' },
+      },
+    };
+
+    const resWebhook = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+    
+    expect(resWebhook.statusCode).toBe(200);
+    
+    // Wait for background worker processing
+    await new Promise(resolve => setTimeout(resolve, 150));
+    
+    const convAfterWebhook = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    expect(convAfterWebhook.current_state).toBe(ConversationState.AWAITING_LOCATION);
+
+    // 3. Reset state back to INITIAL for Sandbox Test
+    await conversationService.updateConversationState(conversation.id, {
+      currentState: ConversationState.INITIAL,
+      previousState: null,
+      locationAttempts: 0,
+      isHumanHandling: false,
+    }, DEFAULT_TENANT_ID);
+
+    // 4. Call Sandbox `/api/admin/sandbox/chat`
+    const sandboxCustomer = await customerService.getOrCreateCustomer('628999999999', 'Sandbox Customer', DEFAULT_TENANT_ID);
+    const sandboxConversation = await conversationService.getOrCreateConversation(sandboxCustomer.id, DEFAULT_TENANT_ID);
+    
+    await conversationService.updateConversationState(sandboxConversation.id, {
+      currentState: ConversationState.INITIAL,
+      previousState: null,
+      locationAttempts: 0,
+      isHumanHandling: false,
+    }, DEFAULT_TENANT_ID);
+
+    const resSandbox = await app.inject({
+      method: 'POST',
+      url: '/api/admin/sandbox/chat',
+      headers: {
+        'x-api-key': 'test_admin_key_999'
+      },
+      payload: {
+        text: 'halo'
+      }
+    });
+
+    expect(resSandbox.statusCode).toBe(200);
+    const data = JSON.parse(resSandbox.body);
+    expect(data.answer).toContain('Perkenalkan, saya Bidan Yusi');
+    
+    const convAfterSandbox = await conversationService.getOrCreateConversation(sandboxCustomer.id, DEFAULT_TENANT_ID);
+    expect(convAfterSandbox.current_state).toBe(ConversationState.AWAITING_LOCATION);
   });
 });
 

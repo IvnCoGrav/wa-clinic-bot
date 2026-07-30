@@ -176,14 +176,12 @@ export class ConversationStateMachine {
     const { AiModelConfigService } = await import('../config/ai-models.config');
     if (!AiModelConfigService.globalBotActive && !activeConversation.is_human_handling) {
       console.log(`[GLOBAL BOT DEACTIVATED] Bypassing bot responder and routing customer ${customer.phone} directly to human handling.`);
-      await conversationService.updateConversationState(
-        activeConversation.id,
-        {
-          currentState: ConversationState.HUMAN_HANDLING,
-          isHumanHandling: true,
-          escalationReason: 'global_bot_disabled',
-        },
-        tenantId
+      await conversationService.escalateToHumanHandling(
+        activeConversation,
+        customer.phone,
+        'Global bot disabled',
+        tenantId,
+        'global_bot_disabled'
       );
       activeConversation.is_human_handling = true;
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
@@ -270,10 +268,34 @@ export class ConversationStateMachine {
           content: result.replyText,
         });
 
-        // Kirim Pricelist Image jika diinstruksikan oleh state handler
+        // Kirim Pricelist Image jika diinstruksikan oleh state handler (hanya 1x per customer)
         if (result.sendPricelistImage) {
-          const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
-          await wahaClient.sendImage(chatId, pricelistUrl, "Pricelist Kala Moms & Baby Spa 🌸");
+          try {
+            const { prisma } = await import('../db/client');
+            const dbCustomer = await prisma.customer.findUnique({
+              where: { id: customer.id }
+            });
+            const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
+
+            if (!alreadySent) {
+              const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
+              await wahaClient.sendImage(chatId, pricelistUrl, "Pricelist Kala Moms & Baby Spa 🌸");
+
+              if (dbCustomer) {
+                await prisma.customer.update({
+                  where: { id: customer.id },
+                  data: { pricelist_sent: true }
+                });
+                customer.pricelist_sent = true;
+              }
+            } else {
+              console.log(`[PRICELIST SKIPPED] Pricelist image was already sent to customer ${customer.phone}. Skipping duplicate send.`);
+            }
+          } catch (dbErr: any) {
+            console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
+            const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
+            await wahaClient.sendImage(chatId, pricelistUrl, "Pricelist Kala Moms & Baby Spa 🌸");
+          }
         }
       }
     }

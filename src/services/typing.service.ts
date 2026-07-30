@@ -288,7 +288,7 @@ export class TypingService {
    */
   public async simulateHumanReply(params: HumanReplyParams): Promise<HumanReplyResult> {
     const { chatId, incomingMessageId, incomingText, replyText } = params;
-    const isEnabled = (process.env.HUMANIZER_ENABLED ?? 'true') !== 'false';
+    const isEnabled = (process.env.HUMANIZER_ENABLED ?? 'true') !== 'false' && this.speedFactor >= 0.01;
 
     let bubblesSent = 0;
     let typingStopped = true; // Status awal typing mati/stop
@@ -316,7 +316,12 @@ export class TypingService {
           await this.client.startTyping(chatId);
 
           const typingDelayMs = this.calculateTypingDelay(bubbleContent);
+          const adjustedMs = Math.round(typingDelayMs / this.speedFactor);
+          console.log(`[TYPING DELAY] Bubble ${i + 1}: original=${typingDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedMs}ms`);
+          
+          console.time(`TYPING_DELAY_BUBBLE_${i + 1}`);
           await this.sleep(typingDelayMs);
+          console.timeEnd(`TYPING_DELAY_BUBBLE_${i + 1}`);
 
           await this.client.stopTyping(chatId);
           typingStopped = true; // Status typing di-stop secara normal
@@ -333,7 +338,12 @@ export class TypingService {
         // Inter-bubble delay jika masih ada bubble berikutnya
         if (isEnabled && i < bubbles.length - 1) {
           const interBubbleDelayMs = this.calculateInterBubbleDelay();
+          const adjustedInter = Math.round(interBubbleDelayMs / this.speedFactor);
+          console.log(`[INTER-BUBBLE DELAY] Between bubble ${i + 1} and ${i + 2}: original=${interBubbleDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedInter}ms`);
+          
+          console.time(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`);
           await this.sleep(interBubbleDelayMs);
+          console.timeEnd(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`);
         }
       }
 

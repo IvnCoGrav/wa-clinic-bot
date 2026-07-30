@@ -175,20 +175,27 @@ export class LegacyHarvestingService {
               const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
               if (reservationDetails.success && reservationDetails.reservation) {
                 try {
-                  await prisma.legacyStaging.create({
-                    data: {
-                      tenantId: tenantId,
-                      phoneNumber: chat.id.replace(/@.*$/, ''),
-                      name: reservationDetails.reservation.name || 'Customer Lama',
-                      extractedLocation: reservationDetails.reservation.address || null,
-                      leadCreatedAt: new Date(),
-                      extractedReservationJson: JSON.parse(JSON.stringify(reservationDetails.reservation)),
-                      status: 'PENDING',
-                      rawMessagesCount: 2,
-                      rawMessagesJson: JSON.parse(JSON.stringify([currentMsg, nextMsg])),
-                    },
+                  const phoneNum = chat.id.replace(/@.*$/, '');
+                  const existingLead = await prisma.legacyStaging.findUnique({
+                    where: { phoneNumber: phoneNum }
                   });
-                  activeHarvestingJob.legacyLeadsExtractedCount++;
+
+                  if (!existingLead) {
+                    await prisma.legacyStaging.create({
+                      data: {
+                        tenantId: tenantId,
+                        phoneNumber: phoneNum,
+                        name: reservationDetails.reservation.name || 'Customer Lama',
+                        extractedLocation: reservationDetails.reservation.address || null,
+                        leadCreatedAt: new Date(),
+                        extractedReservationJson: JSON.parse(JSON.stringify(reservationDetails.reservation)),
+                        status: 'PENDING',
+                        rawMessagesCount: 2,
+                        rawMessagesJson: JSON.parse(JSON.stringify([currentMsg, nextMsg])),
+                      },
+                    });
+                    activeHarvestingJob.legacyLeadsExtractedCount++;
+                  }
                 } catch (err: any) {
                   // Fallback for mock mode
                 }

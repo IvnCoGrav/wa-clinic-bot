@@ -135,8 +135,8 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         };
       }
 
-      // 3. Generate balasan FAQ natural berbasis RAG + Persona
-      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks);
+      // 3. Generate balasan FAQ natural berbasis RAG + Persona (dengan history & reasoning)
+      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks, conversation.id, tenantId);
 
       // 4. JANGAN RESET / UBAH STATE: Tambahkan kalimat follow-up sesuai state saat ini!
       const replyText = TEMPLATES.faqFollowUp(faqAnswer);

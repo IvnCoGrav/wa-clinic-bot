@@ -6,6 +6,10 @@ import { getStringSimilarity } from '../../utils/similarity';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 dotenv.config();
 
+const INDONESIAN_STOP_WORDS = new Set([
+  'saya', 'kamu', 'dia', 'mereka', 'kita', 'kami', 'anda', 'bunda', 'bund', 'kak', 'kakak', 'min', 'admin', 'sis', 'gan', 'mbak', 'mas', 'ya', 'ampun', 'elah', 'yaelah', 'yaampun', 'kok', 'gitu', 'sih', 'dong', 'saja', 'aja', 'mahal', 'murah', 'ongkir', 'ongkirnya', 'tarif', 'tarifnya', 'biaya', 'biayanya', 'ongkos', 'ongkosnya', 'harga', 'harganya', 'berapa', 'berapaan', 'kena', 'hitung', 'itung', 'cek', 'info', 'tanya', 'lokasi', 'alamat', 'rumah', 'jalan', 'gang', 'no', 'nomor', 'rt', 'rw', 'kelurahan', 'kecamatan', 'kabupaten', 'kota', 'desa', 'dusun', 'provinsi', 'homecare', 'spa', 'treatment', 'massage', 'pijat', 'booking', 'reservasi', 'jadwal', 'hari', 'tanggal', 'bulan', 'tahun', 'jam', 'waktu', 'bisa', 'mau', 'ingin', 'akan', 'sudah', 'belum', 'tidak', 'bukan', 'ada', 'tidakada', 'gratis', 'free', 'promo', 'diskon', 'banget', 'sangat', 'sekali', 'itu', 'ini', 'yang', 'dari', 'ke', 'di', 'pada', 'untuk', 'dengan', 'atau', 'dan', 'adalah', 'seperti', 'kalau', 'kalo', 'jika', 'bila', 'karena', 'sebab', 'tetapi', 'tapi', 'namun', 'melayani', 'panggil', 'datang', 'selamat', 'pagi', 'siang', 'sore', 'malam', 'halo', 'hola', 'hei', 'helo', 'assalamualaikum', 'salam', 'permisi', 'terima', 'kasih', 'terimakasih', 'thank', 'you'
+]);
+
 export interface ResolvedLocation {
   isPrecise: boolean;
   isFuzzyMatch?: boolean;
@@ -17,6 +21,7 @@ export interface ResolvedLocation {
   formattedAddress?: string;
   ambiguityResults?: any[];
   zipcode?: string;
+  matchedSpan?: string;
 }
 
 const googleMapsClient = new Client({});
@@ -58,11 +63,11 @@ export class GeocodingService {
    * Mengambil koordinat & informasi administratif dari input teks.
    */
   public async geocodeText(locationText: string): Promise<ResolvedLocation> {
-    if (!this.apiKey || this.apiKey.startsWith('mock')) {
-      return this.mockGeocodeText(locationText);
-    }
-
+    console.time('GEOCODING_TOTAL');
     try {
+      if (!this.apiKey || this.apiKey.startsWith('mock')) {
+        return this.mockGeocodeText(locationText);
+      }
       const queryText = locationText.toLowerCase().includes('surabaya') 
         ? locationText 
         : `${locationText}, Surabaya`;
@@ -122,6 +127,8 @@ export class GeocodingService {
     } catch (error) {
       console.error('Error in Google Maps geocodeText, falling back to local database:', error);
       return this.mockGeocodeText(locationText);
+    } finally {
+      console.timeEnd('GEOCODING_TOTAL');
     }
   }
 
@@ -204,6 +211,155 @@ export class GeocodingService {
   }
 
   /**
+   * Comparator untuk menentukan kandidat match mana yang lebih baik (tie-breaking).
+   */
+  private isBetterMatch(
+    candidate: { score: number; level: 'kelurahan' | 'kecamatan'; matchedSpan: string },
+    current: { score: number; level: 'kelurahan' | 'kecamatan'; matchedSpan: string } | null
+  ): boolean {
+    if (!current) return true;
+    if (candidate.score !== current.score) {
+      return candidate.score > current.score;
+    }
+    if (candidate.level !== current.level) {
+      return candidate.level === 'kelurahan'; // 'kelurahan' wins over 'kecamatan' (more specific)
+    }
+    const candWords = candidate.matchedSpan.split(' ').length;
+    const currWords = current.matchedSpan.split(' ').length;
+    if (candWords !== currWords) {
+      return candWords > currWords; // prefer spans with more words
+    }
+    return candidate.matchedSpan.length > current.matchedSpan.length; // prefer longer spans (character length)
+  }
+
+  /**
+   * Memecah teks menjadi semua kombinasi n-gram kandidat.
+   * Tetap menggunakan kata asli dari urutan kalimat untuk menghindari adjacency palsu,
+   * lalu mengabaikan span yang seluruhnya berisi kata-kata stop words.
+   */
+  private generateCandidateSpans(text: string, maxWords = 4): string[] {
+    const cleanText = text.replace(/[,.!?()\-+;:]/g, ' ');
+    const words = cleanText.split(/\s+/)
+      .map(w => w.trim().toLowerCase())
+      .filter(w => w.length > 0);
+      
+    const spans: string[] = [];
+    
+    for (let len = 1; len <= maxWords; len++) {
+      for (let i = 0; i <= words.length - len; i++) {
+        const rawSpanWords = words.slice(i, i + len);
+        
+        // Skip span jika SELURUH kata di dalamnya adalah stop word atau terlalu pendek (<3 karakter)
+        const isAllNoise = rawSpanWords.every(w => w.length < 3 || INDONESIAN_STOP_WORDS.has(w));
+        if (isAllNoise) {
+          continue;
+        }
+
+        const span = rawSpanWords.join(' ').trim();
+        if (span) {
+          spans.push(span);
+        }
+      }
+    }
+    return Array.from(new Set(spans)).sort((a, b) => {
+      const aWords = a.split(' ').length;
+      const bWords = b.split(' ').length;
+      if (aWords !== bWords) {
+        return bWords - aWords;
+      }
+      return b.length - a.length;
+    });
+  }
+
+  /**
+   * Mencari entri gazetteer terbaik berdasarkan candidate spans.
+   * kelurahanThreshold = 0.75: untuk menangani typo ejaan kelurahan (misal 'kenjern' vs 'kenjeran' Dice=0.769).
+   * kecamatanThreshold = 0.82: batas lebih ketat karena nama kecamatan cenderung pendek (misal 'candi', 'waru') rawan false positive.
+   */
+  private findBestGazetteerMatch(
+    rawText: string,
+    data: any[],
+    kelurahanThreshold = 0.75,
+    kecamatanThreshold = 0.82
+  ): {
+    item: any;
+    score: number;
+    level: 'kelurahan' | 'kecamatan';
+    matchedSpan: string;
+  } | null {
+    const spans = this.generateCandidateSpans(rawText);
+    let bestMatch: {
+      item: any;
+      score: number;
+      level: 'kelurahan' | 'kecamatan';
+      matchedSpan: string;
+    } | null = null;
+
+    for (const span of spans) {
+      const lowerSpan = span.toLowerCase();
+      
+      for (const entry of data) {
+        const kelName = entry.Kelurahan_Desa.toLowerCase();
+        const kecName = entry.Kecamatan.toLowerCase();
+        const combinedName1 = `${entry.Kelurahan_Desa} ${entry.Kecamatan}`.toLowerCase();
+        const combinedName2 = `${entry.Kecamatan} ${entry.Kelurahan_Desa}`.toLowerCase();
+
+        // 1. Check Kecamatan
+        if (lowerSpan === kecName) {
+          const cand = { item: entry, score: 1.0, level: 'kecamatan' as const, matchedSpan: span };
+          if (this.isBetterMatch(cand, bestMatch)) {
+            bestMatch = cand;
+          }
+        } else {
+          const similarity = getStringSimilarity(lowerSpan, kecName);
+          if (similarity >= kecamatanThreshold) {
+            const cand = { item: entry, score: similarity, level: 'kecamatan' as const, matchedSpan: span };
+            if (this.isBetterMatch(cand, bestMatch)) {
+              bestMatch = cand;
+            }
+          }
+        }
+
+        // 2. Check Kelurahan
+        if (lowerSpan === kelName) {
+          const cand = { item: entry, score: 1.0, level: 'kelurahan' as const, matchedSpan: span };
+          if (this.isBetterMatch(cand, bestMatch)) {
+            bestMatch = cand;
+          }
+        } else {
+          const similarity = getStringSimilarity(lowerSpan, kelName);
+          if (similarity >= kelurahanThreshold) {
+            const cand = { item: entry, score: similarity, level: 'kelurahan' as const, matchedSpan: span };
+            if (this.isBetterMatch(cand, bestMatch)) {
+              bestMatch = cand;
+            }
+          }
+        }
+
+        // 3. Check combined Kelurahan + Kecamatan
+        if (lowerSpan === combinedName1 || lowerSpan === combinedName2) {
+          const cand = { item: entry, score: 1.0, level: 'kelurahan' as const, matchedSpan: span };
+          if (this.isBetterMatch(cand, bestMatch)) {
+            bestMatch = cand;
+          }
+        } else {
+          const sim1 = getStringSimilarity(lowerSpan, combinedName1);
+          const sim2 = getStringSimilarity(lowerSpan, combinedName2);
+          const maxSim = Math.max(sim1, sim2);
+          if (maxSim >= kelurahanThreshold) {
+            const cand = { item: entry, score: maxSim, level: 'kelurahan' as const, matchedSpan: span };
+            if (this.isBetterMatch(cand, bestMatch)) {
+              bestMatch = cand;
+            }
+          }
+        }
+      }
+    }
+
+    return bestMatch;
+  }
+
+  /**
    * Geocode Mock Local Database Fallback untuk testing tanpa API key.
    */
   private async mockGeocodeText(locationText: string): Promise<ResolvedLocation> {
@@ -232,6 +388,88 @@ export class GeocodingService {
       if (fs.existsSync(filePath)) {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         
+        // --- PRIORITAS: N-GRAM GAZEETTEER MATCH ---
+        const bestMatch = this.findBestGazetteerMatch(lower, data);
+        if (bestMatch) {
+          const { item, score, level, matchedSpan } = bestMatch;
+          
+          if (level === 'kecamatan') {
+            const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
+            if (!hasExplicitKelurahan) {
+              return {
+                isPrecise: false,
+                kota: matchedSpan,
+                matchedSpan,
+              };
+            }
+          } else {
+            // Find all entries for this kelurahan (to handle ambiguity if there are duplicates)
+            const matchedKelurahanLower = item.Kelurahan_Desa.toLowerCase();
+            
+            // Check if this kelurahan name is also a broad kecamatan name in Sidoarjo/Surabaya
+            const kecNames = new Set(data.map((d: any) => d.Kecamatan.toLowerCase()));
+            const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
+            if (kecNames.has(matchedKelurahanLower) && !hasExplicitKelurahan) {
+              return {
+                isPrecise: false,
+                kota: matchedSpan,
+                matchedSpan,
+              };
+            }
+
+            const exactMatches = data.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === matchedKelurahanLower);
+            
+            if (exactMatches.length > 0) {
+              // Check if user input explicitly mentions one of the kecamatans to resolve ambiguity
+              const matchesWithKec = exactMatches.filter(m => lower.includes(m.Kecamatan.toLowerCase()));
+              
+              if (matchesWithKec.length === 1) {
+                const match = matchesWithKec[0];
+                const coords = match.Koordinat.split(',');
+                const lat = parseFloat(coords[0].trim());
+                const lng = parseFloat(coords[1].trim());
+                const isExact = score === 1.0;
+                return {
+                  isPrecise: isExact,
+                  isFuzzyMatch: !isExact,
+                  kelurahan: match.Kelurahan_Desa,
+                  kecamatan: match.Kecamatan,
+                  kota: match.Kabupaten_Kota,
+                  lat,
+                  lng,
+                  formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+                  zipcode: match.Kode_Pos,
+                  matchedSpan,
+                };
+              } else if (exactMatches.length === 1) {
+                const match = exactMatches[0];
+                const coords = match.Koordinat.split(',');
+                const lat = parseFloat(coords[0].trim());
+                const lng = parseFloat(coords[1].trim());
+                const isExact = score === 1.0;
+                return {
+                  isPrecise: isExact,
+                  isFuzzyMatch: !isExact,
+                  kelurahan: match.Kelurahan_Desa,
+                  kecamatan: match.Kecamatan,
+                  kota: match.Kabupaten_Kota,
+                  lat,
+                  lng,
+                  formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+                  zipcode: match.Kode_Pos,
+                  matchedSpan,
+                };
+              } else {
+                return {
+                  isPrecise: false,
+                  ambiguityResults: exactMatches,
+                  matchedSpan,
+                };
+              }
+            }
+          }
+        }
+
         // Cek jika input customer sama dengan nama Kecamatan luas
         const kecNames = new Set(data.map((d: any) => d.Kecamatan.toLowerCase()));
         const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');

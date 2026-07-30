@@ -26,6 +26,19 @@ const memoryKnowledgeChunks: Array<{
 
 export class KnowledgeBaseService {
   /**
+   * Update a chunk directly in memory store (fallback/testing).
+   */
+  public updateInMemoryChunk(id: string, title: string, content: string): boolean {
+    const idx = memoryKnowledgeChunks.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      memoryKnowledgeChunks[idx].title = title;
+      memoryKnowledgeChunks[idx].content = content;
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Bulk import FAQ (Pertanyaan & Jawaban).
    * 1 row per pasangan FAQ.
    */

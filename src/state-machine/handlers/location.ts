@@ -80,12 +80,27 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
+  const cleanLower = rawTextLocation.toLowerCase();
+  const greetingWords = ['halo', 'hola', 'hi', 'hei', 'p', 'assalamualaikum', 'salam', 'pagi', 'siang', 'sore', 'malam', 'permisi'];
+  if (greetingWords.includes(cleanLower)) {
+    return {
+      nextState: ConversationState.AWAITING_LOCATION,
+      replyText: `Bunda, mohon sebutkan nama Kelurahan dan Kecamatan Bunda ya bund (atau kirim share location) agar kami bisa bantu cek ongkirnya 😊🙏`,
+      shouldSendReply: true,
+    };
+  }
+
   // Bersihkan teks dari awalan query yang tidak relevan untuk geocoding
   const textLocation = rawTextLocation.toLowerCase()
     .replace(/^(kalau\s+)?(ke|di)\s+/gi, '')
     .replace(/^(alamat\s+|rumah\s+)?saya\s+(di|ke)\s+/gi, '')
     .replace(/^(ongkir\s+|tarif\s+|biaya\s+|kirim\s+|pengiriman\s+)(ke|di)\s+/gi, '')
     .replace(/^(kelurahan\s+|desa\s+|kecamatan\s+)/gi, '')
+    // Bersihkan pertanyaan harga/tarif di bagian belakang secara agresif
+    .replace(/[,.]?\s*(kena|ongkir|ongkirnya|tarif|tarifnya|biaya|biayanya|harga|harganya|ongkos|ongkosnya)\s+.*$/gi, '')
+    .replace(/[,.]?\s*berapa\s+.*$/gi, '')
+    .replace(/[,.]?\s*berapa$/gi, '')
+    // Bersihkan sapaan dan partikel tanya di bagian belakang
     .replace(/\s+(bund|bunda|ya|kak|ka|min|mbak|mas|gan|sis|dong|kah|\?)\b/gi, '')
     .replace(/\?/g, '')
     .trim();
@@ -166,9 +181,9 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       .replace(/\s+(bund|bunda|ya|kak|min|mbak|mas|gan|sis)\b/g, '')
       .trim();
 
-    const capitalizedLocationName = cleanLocationName
-      ? cleanLocationName.charAt(0).toUpperCase() + cleanLocationName.slice(1)
-      : textLocation;
+    const capitalizedLocationName = resolved.matchedSpan
+      ? resolved.matchedSpan.charAt(0).toUpperCase() + resolved.matchedSpan.slice(1)
+      : (cleanLocationName ? cleanLocationName.charAt(0).toUpperCase() + cleanLocationName.slice(1) : textLocation);
 
     return {
       nextState: ConversationState.AWAITING_LOCATION,
