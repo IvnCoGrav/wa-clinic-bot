@@ -4,7 +4,7 @@
  * without hunting through codebase, and exposed for UI management.
  */
 
-export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING';
+export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION';
 
 export interface AiTaskModelConfig {
   task: AiTaskType;
@@ -13,6 +13,7 @@ export interface AiTaskModelConfig {
   description: string;
   maxTokens: number;
   temperature: number;
+  confidenceThreshold?: number;
 }
 
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
@@ -70,6 +71,18 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       description: 'Digunakan untuk membantu pembersihan nama dan data sensitif dari teks.',
       maxTokens: 512,
       temperature: 0.0,
+    },
+  ],
+  [
+    'INTENT_CLASSIFICATION',
+    {
+      task: 'INTENT_CLASSIFICATION',
+      provider: process.env.AI_PROVIDER_NLU || 'MiniMax',
+      modelName: process.env.AI_MODEL_NLU || 'MiniMax-M2.7-highspeed',
+      description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
+      maxTokens: 256,
+      temperature: 0.1,
+      confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
     },
   ],
 ]);

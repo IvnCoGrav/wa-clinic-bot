@@ -187,7 +187,24 @@ export class ConversationStateMachine {
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
     }
 
-    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation };
+    // --- GATE 2 🧠: STRUCTURED NLU INTENT & ENTITY CLASSIFICATION ---
+    let nluResult = undefined;
+    if (!activeConversation.is_human_handling && incomingText) {
+      try {
+        const { NluClassifierService } = await import('../services/nlu-classifier.service');
+        const { messageService } = await import('../services/message.service');
+        const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, 5, tenantId);
+        const historyFormatted = recentDbMsgs.map((m) => ({
+          role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+          content: m.content || '',
+        }));
+        nluResult = await NluClassifierService.classifyMessage(incomingText, historyFormatted);
+      } catch (err: any) {
+        console.error('[NLU CLASSIFICATION ERROR IN MACHINE]:', err.message);
+      }
+    }
+
+    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult };
     if (activeConversation.is_human_handling) {
       result = await handleHumanHandlingState(handlerCtx);
 

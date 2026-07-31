@@ -1,4 +1,5 @@
 import { Client, AddressComponent } from '@googlemaps/google-maps-services-js';
+import axios from 'axios';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -383,6 +384,7 @@ export class GeocodingService {
       .trim();
 
     // 1. Coba cocokkan dengan local subdistricts JSON database
+    let kecamatanOnlyFallback: ResolvedLocation | null = null;
     try {
       const filePath = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
       if (fs.existsSync(filePath)) {
@@ -396,7 +398,8 @@ export class GeocodingService {
           if (level === 'kecamatan') {
             const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
             if (!hasExplicitKelurahan) {
-              return {
+              // Simpan sebagai fallback, jangan return langsung — coba LLM dulu
+              kecamatanOnlyFallback = {
                 isPrecise: false,
                 kota: matchedSpan,
                 matchedSpan,
@@ -410,7 +413,8 @@ export class GeocodingService {
             const kecNames = new Set(data.map((d: any) => d.Kecamatan.toLowerCase()));
             const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
             if (kecNames.has(matchedKelurahanLower) && !hasExplicitKelurahan) {
-              return {
+              // Simpan sebagai fallback, jangan return langsung — coba LLM dulu
+              kecamatanOnlyFallback = {
                 isPrecise: false,
                 kota: matchedSpan,
                 matchedSpan,
@@ -615,6 +619,17 @@ export class GeocodingService {
       };
     }
 
+    // 3. LLM Fallback: coba resolve via LLM jika gazetteer gagal
+    const llmResult = await this.llmResolveLocation(locationText);
+    if (llmResult) {
+      return llmResult;
+    }
+
+    // 4. Return kecamatan-only fallback jika ada (dari match kecamatan tanpa kelurahan)
+    if (kecamatanOnlyFallback) {
+      return kecamatanOnlyFallback;
+    }
+
     // Default fallback: kembalikan isPrecise: false jika tidak ada kecocokan
     return {
       isPrecise: false,
@@ -632,6 +647,184 @@ export class GeocodingService {
       formattedAddress: `Lat: ${lat}, Lng: ${lng}, Gubeng, Surabaya`,
       zipcode: '60281',
     };
+  }
+
+  /**
+   * LLM Fallback: Resolve lokasi teks yang tidak ter-deteksi oleh gazetteer.
+   * Menggunakan LLM untuk identifikasi kelurahan/kecamatan/kota, lalu cross-check ke gazetteer.
+   */
+  private async llmResolveLocation(locationText: string): Promise<ResolvedLocation | null> {
+    const apiKey = process.env.LLM_API_KEY || '';
+    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const model = process.env.AI_MODEL_NLU || 'gpt-4.1-nano';
+
+    if (!apiKey || apiKey.startsWith('mock')) {
+      return null;
+    }
+
+    if (locationText.trim().length < 3) {
+      return null;
+    }
+
+    try {
+      console.time('LLM_GEOCODE_API_CALL');
+
+      const systemPrompt = `Anda adalah asisten geocoding untuk area Sidoarjo dan Surabaya, Jawa Timur, Indonesia.
+Tugas: Identifikasi nama kelurahan/desa, kecamatan, dan kota/kabupaten dari teks lokasi yang diberikan.
+
+CONTOH:
+- "brebek waru" → kelurahan: "Berbek", kecamatan: "Waru", kota: "Kabupaten Sidoarjo"
+- "rundeng" → kelurahan: "Rundeng", kecamatan: "Simokerto", kota: "Surabaya"
+- "mulyosari" → kelurahan: "Mulyosari", kecamatan: "Sedati", kota: "Kabupaten Sidoarjo"
+- "sidoklumpuk" → kelurahan: "Sidoklumpuk", kecamatan: "Waru", kota: "Kabupaten Sidoarjo"
+
+ATURAN:
+- Hanya return JSON, tanpa penjelasan tambahan
+- Jika lokasi tidak dikenali atau terlalu vagu, return null untuk semua field
+- Fokus pada area Sidoarjo dan Surabaya saja
+- Nama kelurahan harus nama resmi dari data administrasi, bukan nama dusun/RT
+
+OUTPUT JSON:
+{
+  "kelurahan": "nama kelurahan atau null",
+  "kecamatan": "nama kecamatan atau null",
+  "kota": "nama kota/kabupaten atau null"
+}`;
+
+      const response = await axios.post(
+        `${baseUrl}/chat/completions`,
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Lokasi: "${locationText}"` },
+          ],
+          temperature: 0.1,
+          max_tokens: 128,
+          response_format: { type: 'json_object' },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 8000,
+        }
+      );
+
+      console.timeEnd('LLM_GEOCODE_API_CALL');
+
+      let content = response.data?.choices?.[0]?.message?.content?.trim();
+      
+      // Handle DeepSeek reasoning models: content kosong, jawaban di reasoning_content
+      if (!content) {
+        const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';
+        // Coba extract JSON dari reasoning content
+        const jsonMatch = reasoning.match(/\{[\s\S]*?"kelurahan"[\s\S]*?\}/);
+        if (jsonMatch) {
+          content = jsonMatch[0];
+          console.log(`[LLM GEOCODE] Extracted JSON from reasoning_content`);
+        }
+      }
+
+      if (!content) {
+        return null;
+      }
+
+      const parsed = JSON.parse(content);
+      if (!parsed.kelurahan && !parsed.kecamatan) {
+        return null;
+      }
+
+      console.log(`[LLM GEOCODE] Resolved "${locationText}" → ${JSON.stringify(parsed)}`);
+
+      // Cross-check ke gazetteer untuk ambil koordinat
+      return this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota);
+    } catch (error: any) {
+      console.warn(`[LLM GEOCODE ERROR] Failed to resolve "${locationText}":`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Cross-check hasil LLM ke gazetteer untuk ambil koordinat.
+   */
+  private crossCheckGazetteer(
+    kelurahan?: string | null,
+    kecamatan?: string | null,
+    kota?: string | null
+  ): ResolvedLocation | null {
+    try {
+      const filePath = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
+      if (!fs.existsSync(filePath)) {
+        return null;
+      }
+
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+      // Cari berdasarkan kelurahan + kecamatan
+      if (kelurahan) {
+        const kelLower = kelurahan.toLowerCase();
+        const matches = data.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === kelLower);
+
+        if (matches.length === 1) {
+          const match = matches[0];
+          const coords = match.Koordinat.split(',');
+          return {
+            isPrecise: true,
+            kelurahan: match.Kelurahan_Desa,
+            kecamatan: match.Kecamatan,
+            kota: match.Kabupaten_Kota,
+            lat: parseFloat(coords[0].trim()),
+            lng: parseFloat(coords[1].trim()),
+            formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+            zipcode: match.Kode_Pos,
+          };
+        }
+
+        // Ambiguitas: ada beberapa kelurahan dengan nama sama
+        if (matches.length > 1 && kecamatan) {
+          const kecLower = kecamatan.toLowerCase();
+          const exact = matches.find((m: any) => m.Kecamatan.toLowerCase() === kecLower);
+          if (exact) {
+            const coords = exact.Koordinat.split(',');
+            return {
+              isPrecise: true,
+              kelurahan: exact.Kelurahan_Desa,
+              kecamatan: exact.Kecamatan,
+              kota: exact.Kabupaten_Kota,
+              lat: parseFloat(coords[0].trim()),
+              lng: parseFloat(coords[1].trim()),
+              formattedAddress: `${exact.Kelurahan_Desa}, ${exact.Kecamatan}, ${exact.Kabupaten_Kota}`,
+              zipcode: exact.Kode_Pos,
+            };
+          }
+        }
+      }
+
+      // Fallback: cari berdasarkan kecamatan saja
+      if (kecamatan) {
+        const kecLower = kecamatan.toLowerCase();
+        const match = data.find((d: any) => d.Kecamatan.toLowerCase() === kecLower);
+        if (match) {
+          const coords = match.Koordinat.split(',');
+          return {
+            isPrecise: false,
+            kecamatan: match.Kecamatan,
+            kota: match.Kabupaten_Kota,
+            lat: parseFloat(coords[0].trim()),
+            lng: parseFloat(coords[1].trim()),
+            formattedAddress: `${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+          };
+        }
+      }
+
+      console.log(`[LLM GEOCODE] Cross-check: "${kelurahan}" not found in gazetteer`);
+      return null;
+    } catch (e) {
+      console.error('[LLM GEOCODE CROSS-CHECK ERROR]', e);
+      return null;
+    }
   }
 }
 

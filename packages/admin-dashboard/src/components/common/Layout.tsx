@@ -13,7 +13,9 @@ import {
   AlertCircle, 
   CheckCircle,
   Menu,
-  X
+  X,
+  MessageSquare,
+  Volume2
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -47,8 +49,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navItems = [
     { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
     { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
+    { name: 'Clinic Services', path: '/admin/services', icon: Activity },
     { name: 'Knowledge Base', path: '/admin/knowledge-base', icon: BookOpen },
     { name: 'AI Sandbox Simulator', path: '/admin/sandbox', icon: Terminal },
+    { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },
+    { name: 'AI Persona settings', path: '/admin/persona', icon: Volume2 },
     { name: 'Operational Settings', path: '/admin/settings', icon: SettingsIcon },
   ];
 

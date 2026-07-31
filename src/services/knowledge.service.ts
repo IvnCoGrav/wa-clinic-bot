@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { SourceType } from '@prisma/client';
 import { chunkTextDocument } from '../utils/text-chunker';
+import { getStringSimilarity } from '../utils/similarity';
 
 const FAQ_SOURCE_TYPE = (SourceType && SourceType.FAQ) ? SourceType.FAQ : ('FAQ' as any);
 const DOC_SOURCE_TYPE = (SourceType && SourceType.DOCUMENT) ? SourceType.DOCUMENT : ('DOCUMENT' as any);
@@ -115,16 +116,37 @@ export class KnowledgeBaseService {
   public async searchRelevantChunks(userQuery: string, limit = 3, tenantId: string): Promise<KnowledgeChunkResult[]> {
     if (!userQuery || userQuery.trim().length === 0) return [];
 
+    const cleanQuery = userQuery
+      .toLowerCase()
+      .replace(/[^a-zA-Z0-9\s]/g, ' ')
+      .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|min|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|gimana|bagaimana|siapa)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const queryToSearch = cleanQuery.length > 0 ? cleanQuery : userQuery;
+
     try {
-      // Execute raw SQL using Postgres FTS with 'simple' dictionary filtered by tenant_id
-      const rawResults = await prisma.$queryRaw<any[]>`
+      // 1. Try websearch_to_tsquery with cleanQuery (robust against extra natural language stop words)
+      let rawResults = await prisma.$queryRaw<any[]>`
         SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
-               ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', ${userQuery})) as rank
+               ts_rank(to_tsvector('simple', content), websearch_to_tsquery('simple', ${queryToSearch})) as rank
         FROM knowledge_chunks
-        WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ plainto_tsquery('simple', ${userQuery})
+        WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ websearch_to_tsquery('simple', ${queryToSearch})
         ORDER BY rank DESC
         LIMIT ${limit};
       `;
+
+      // 2. Fallback to plainto_tsquery with raw userQuery if clean search yields no results
+      if (!rawResults || rawResults.length === 0) {
+        rawResults = await prisma.$queryRaw<any[]>`
+          SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
+                 ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', ${userQuery})) as rank
+          FROM knowledge_chunks
+          WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ plainto_tsquery('simple', ${userQuery})
+          ORDER BY rank DESC
+          LIMIT ${limit};
+        `;
+      }
 
       if (rawResults && rawResults.length > 0) {
         return rawResults.map((r) => ({
@@ -215,6 +237,77 @@ export class KnowledgeBaseService {
       console.warn('[findMatchingFaq fallback]', e);
     }
     return null;
+  }
+
+  /**
+   * Pengecekan duplikat FAQ terhadap database KnowledgeChunk resmi.
+   * Threshold default: 0.70 (70% Sorensen-Dice similarity).
+   */
+  public async checkDuplicateFaq(
+    userQuestion: string,
+    tenantId: string,
+    similarityThreshold = 0.70
+  ): Promise<{ isDuplicate: boolean; matchedChunk?: KnowledgeChunkResult; similarity: number }> {
+    if (!userQuestion || userQuestion.trim().length === 0) {
+      return { isDuplicate: false, similarity: 0 };
+    }
+
+    let chunks: KnowledgeChunkResult[] = [];
+    try {
+      const dbChunks = await prisma.knowledgeChunk.findMany({
+        where: { tenant_id: tenantId },
+      });
+      chunks = dbChunks.map((c) => ({
+        id: c.id,
+        tenantId: c.tenant_id,
+        sourceType: c.source_type,
+        title: c.title,
+        content: c.content,
+        documentName: c.document_name,
+      }));
+    } catch (err) {
+      chunks = memoryKnowledgeChunks.filter((c) => c.tenantId === tenantId);
+    }
+
+    if (chunks.length === 0 && memoryKnowledgeChunks.length > 0) {
+      chunks = memoryKnowledgeChunks.filter((c) => c.tenantId === tenantId);
+    }
+
+    let bestMatch: KnowledgeChunkResult | undefined = undefined;
+    let highestSim = 0;
+
+    const qLower = userQuestion.toLowerCase().trim();
+
+    for (const chunk of chunks) {
+      const titleSim = getStringSimilarity(qLower, chunk.title.toLowerCase().trim());
+
+      let contentQuestion = chunk.content;
+      if (chunk.content.includes('Pertanyaan:') && chunk.content.includes('Jawaban:')) {
+        const parts = chunk.content.split('Jawaban:');
+        contentQuestion = parts[0].replace('Pertanyaan:', '').trim();
+      }
+      const contentSim = getStringSimilarity(qLower, contentQuestion.toLowerCase().trim());
+      const sim = Math.max(titleSim, contentSim);
+
+      if (sim > highestSim) {
+        highestSim = sim;
+        bestMatch = chunk;
+      }
+    }
+
+    if (highestSim >= similarityThreshold && bestMatch) {
+      return {
+        isDuplicate: true,
+        matchedChunk: bestMatch,
+        similarity: highestSim,
+      };
+    }
+
+    return {
+      isDuplicate: false,
+      matchedChunk: bestMatch,
+      similarity: highestSim,
+    };
   }
 }
 

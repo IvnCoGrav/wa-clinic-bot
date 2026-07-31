@@ -63,6 +63,7 @@ model Customer {
   follow_ups         FollowUp[]
   adClick            AdClick?
   pricelist_sent     Boolean        @default(false)
+  is_sandbox_test    Boolean        @default(false)
 
   @@index([tenant_id])
   @@map("customers")
@@ -260,6 +261,7 @@ enum StagingReviewStatus {
   APPROVED
   REJECTED
   NEEDS_REVISION
+  EXISTING_MATCH
 }
 
 model MedicalFaqStaging {
@@ -273,6 +275,8 @@ model MedicalFaqStaging {
   general_answer   String?
   symptoms_tagged  String[]
   status           StagingReviewStatus @default(PENDING)
+  matched_chunk_id String?
+  matched_similarity Float?
   reviewed_by      String?
   reviewed_at      DateTime?
   created_at       DateTime            @default(now())
@@ -293,6 +297,8 @@ model GeneralFaqStaging {
   general_answer   String?
   category         String              @default("general")
   status           StagingReviewStatus @default(PENDING)
+  matched_chunk_id String?
+  matched_similarity Float?
   reviewed_by      String?
   reviewed_at      DateTime?
   created_at       DateTime            @default(now())
