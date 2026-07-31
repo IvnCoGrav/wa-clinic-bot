@@ -77,8 +77,7 @@ describe('E2E: Customer Chat → Lokasi → Ongkir → Reservasi (7 Case)', () =
   beforeEach(() => {
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.LLM_API_KEY = 'mock_key';
-    mockDelivery();
-    vi.restoreAllMocks();
+    // CATATAN: JANGAN panggil vi.restoreAllMocks() — merusak mock prisma (setup.ts)
     mockDelivery();
   });
 
@@ -176,6 +175,17 @@ Treatment : Pijat Bayi Pulih Ceria`);
   });
 
   it('CASE 4 — Lokasi tersimpan + afirmasi → langsung ke reservasi tanpa tanya lokasi lagi', async () => {
+    const geocodeMock = vi.spyOn(geocodingService, 'geocodeText');
+    geocodeMock.mockImplementation(async (text: string) => {
+      if (/wedoro|waru/i.test(text)) {
+        return {
+          isPrecise: true, kelurahan: 'Wedoro', kecamatan: 'Waru', kota: 'Kabupaten Sidoarjo',
+          lat: -7.348395, lng: 112.7494759, formattedAddress: 'Wedoro, Waru',
+        };
+      }
+      return { isPrecise: false };
+    });
+
     const ctx = await newCustomer('628813', 'Bunda Test4');
     // Customer lama: sudah punya lokasi confirmed
     await customerService.updateCustomerLocation(
@@ -299,5 +309,103 @@ Treatment : Pijat Bayi Pulih Ceria`);
 
     const r4 = await sendText(ctxRefreshed, 'mau booking');
     expect(r4.nextState).toBe(ConversationState.RESERVATION_SENT);
+  });
+});
+
+describe('E2E: Prefill Form Reservasi + Simpan Nama Kontak', () => {
+  beforeEach(() => {
+    process.env.HUMANIZER_ENABLED = 'false';
+    process.env.LLM_API_KEY = 'mock_key';
+    // CATATAN: JANGAN panggil vi.restoreAllMocks() di sini —
+    // itu akan mereset mock prisma (vi.fn) ke return undefined,
+    // sehingga memory fallback di updateCustomerName tidak terpicu.
+    mockDelivery();
+  });
+
+  it('Form reservasi terisi otomatis (kecamatan, kota, no hp) — customer tinggal isi sisanya', async () => {
+    vi.spyOn(geocodingService, 'geocodeText').mockResolvedValue({
+      isPrecise: true, kelurahan: 'Wedoro', kecamatan: 'Waru', kota: 'Kabupaten Sidoarjo',
+      lat: -7.348395, lng: 112.7494759, formattedAddress: 'Wedoro, Waru, Kabupaten Sidoarjo',
+    });
+
+    const ctx = await newCustomer('628820', 'Bunda Prefill');
+    const phone = ctx.phone;
+
+    await sendText(ctx, 'halo');
+    await sendText(ctx, 'saya di wedoro waru');
+    const r3 = await sendText(ctx, 'mau booking');
+
+    expect(r3.nextState).toBe(ConversationState.RESERVATION_SENT);
+    // Form harus sudah terisi kecamatan, kota, dan no hp customer
+    expect(r3.replyText).toContain('Kec : Waru');
+    expect(r3.replyText).toContain('Kota : Kabupaten Sidoarjo');
+    expect(r3.replyText).toContain(`No. Hp : ${phone}`);
+    expect(r3.replyText).toContain('sudah terisi otomatis');
+  });
+
+  it('Setelah customer kirim form reservasi, nama kontak tersimpan sebagai "Bunda {nama} {kecamatan}"', async () => {
+    vi.spyOn(geocodingService, 'geocodeText').mockResolvedValue({
+      isPrecise: true, kelurahan: 'Wedoro', kecamatan: 'Waru', kota: 'Kabupaten Sidoarjo',
+      lat: -7.348395, lng: 112.7494759, formattedAddress: 'Wedoro, Waru, Kabupaten Sidoarjo',
+    });
+
+    const ctx = await newCustomer('628821', 'Bunda Kontak');
+    const phone = ctx.phone;
+
+    await sendText(ctx, 'halo');
+    await sendText(ctx, 'saya di wedoro waru');
+    await sendText(ctx, 'mau booking');
+
+    const r4 = await sendText(ctx, `Berikut list untuk reservasi:
+Hari dan tanggal : 20 Agustus 2026
+Nama Bunda: Sari
+Alamat & Shareloc : Jl. Raya Wedoro
+Kec : Waru
+Kota : Sidoarjo
+No. Hp : 08123456789
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Raka
+Usia Bayi/Anak : 8 bulan
+Treatment : Pijat Bayi Ceria`);
+
+    expect(r4.nextState).toBe(ConversationState.HUMAN_HANDLING);
+
+    // Nama customer harus ter-update jadi "Bunda Sari Waru"
+    const updated = await customerService.getOrCreateCustomer(phone, 'Bunda Kontak', DEFAULT_TENANT_ID);
+    expect(updated.name).toBe('Bunda Sari Waru');
+  });
+
+  it('Nama kontak TIDAK diubah jika customer tidak mengisi nama di form', async () => {
+    vi.spyOn(geocodingService, 'geocodeText').mockResolvedValue({
+      isPrecise: true, kelurahan: 'Wedoro', kecamatan: 'Waru', kota: 'Kabupaten Sidoarjo',
+      lat: -7.348395, lng: 112.7494759, formattedAddress: 'Wedoro, Waru, Kabupaten Sidoarjo',
+    });
+
+    const ctx = await newCustomer('628822', 'Bunda Tanpa Nama');
+    const phone = ctx.phone;
+
+    await sendText(ctx, 'halo');
+    await sendText(ctx, 'saya di wedoro waru');
+    await sendText(ctx, 'mau booking');
+
+    const r4 = await sendText(ctx, `Berikut list untuk reservasi:
+Hari dan tanggal : 21 Agustus 2026
+Nama Bunda: 
+Alamat & Shareloc : Wedoro
+Kec : Waru
+Kota : Sidoarjo
+No. Hp : 08123456780
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Rara
+Usia Bayi/Anak : 5 bulan
+Treatment : Pijat Bayi Pulih Ceria`);
+
+    // Form dengan nama kosong → parser menolak (missing field) → tetap RESERVATION_SENT
+    expect(r4.nextState).toBe(ConversationState.RESERVATION_SENT);
+    expect(r4.replyText).toMatch(/Nama Bunda/i);
+
+    // Nama tetap "Bunda Tanpa Nama" (tidak diubah)
+    const updated = await customerService.getOrCreateCustomer(phone, 'Bunda Tanpa Nama', DEFAULT_TENANT_ID);
+    expect(updated.name).toBe('Bunda Tanpa Nama');
   });
 });

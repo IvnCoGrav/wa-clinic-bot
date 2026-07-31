@@ -369,6 +369,27 @@ export class CustomerService {
   }
 
   /**
+   * Update nama kontak customer (misal: "Bunda Sari" / "Bunda Sari Waru")
+   */
+  public async updateCustomerName(customerId: string, name: string, tenantId: string): Promise<any> {
+    try {
+      return await prisma.customer.update({
+        where: { id: customerId },
+        data: { name },
+      });
+    } catch (error) {
+      // Memory fallback update
+      for (const [phone, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
+          cust.name = name;
+          return cust;
+        }
+      }
+      throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+    }
+  }
+
+  /**
    * Cari customer berdasarkan nomor telepon
    */
   public async getCustomerByPhone(phone: string, tenantId: string): Promise<any> {
