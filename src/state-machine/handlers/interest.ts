@@ -18,6 +18,20 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
   const lower = userText.toLowerCase().trim();
 
+  // --- MIXED-SIGNAL DETECTION ---
+  // Deteksi pola "afirmasi + tapi/tetapi/tp + negasi" → minta klarifikasi
+  const hasAffirmWord = /\b(iya|yup|ok|oke|bener|betul|lanjut|benar|yes|sip|gpp|ho.?oh)\b/i.test(lower);
+  const hasNegateWord = /\b(bukan|ga|gak|tidak|no|salah|enggak|beda|berubah)\b/i.test(lower);
+  const hasConjunction = /\b(tapi|tetapi|tp|cuma|akan\s+tapi|tapi\s+kok|tapi\s+kan)\b/i.test(lower);
+  
+  if (hasAffirmWord && hasNegateWord && hasConjunction) {
+    return {
+      nextState: ConversationState.AWAITING_INTEREST,
+      replyText: `Maaf Bunda, sepertinya ada yang kurang tepat. Bunda ingin mengubah lokasi atau informasi lainnya? Bisa diperjelas lagi ya bund. 😊`,
+      shouldSendReply: true,
+    };
+  }
+
   // Kalibrasi Redirect: Pemicu butuh kata kunci aksi (ganti, pindah, dsb) + di/ke, atau direct query
   const hasChangeKeyword = /(ganti|pindah|salah|ubah|bukan|yang\s+bener|alamat)/i.test(userText);
   const isConversationalLocation = hasChangeKeyword && (

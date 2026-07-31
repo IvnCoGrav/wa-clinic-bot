@@ -232,17 +232,8 @@ export const Settings: React.FC = () => {
               </span>
             </div>
             
-            {/* Out of scope Alert banner */}
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-2 text-[10px]">
-              <AlertTriangle className="flex-shrink-0 mt-0.5" size={14} />
-              <div>
-                <p className="font-bold">UI Demo Only (Belum Tersambung Backend Tier 2.4)</p>
-                <p className="mt-0.5 text-amber-500/80">
-                  Data tiering ongkir yang diinput di sini hanya tersimpan lokal di browser dan belum terintegrasi dengan backend delivery.service.ts.
-                </p>
-              </div>
-            </div>            <p className="text-xs text-slate-400 leading-relaxed">
-              Tentukan tarif biaya pengiriman (ongkir) normal dan potongan promo berdasarkan jarak haversine rute dari koordinat spa ke lokasi customer.
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Tentukan tarif biaya pengiriman (ongkir) normal dan potongan promo berdasarkan jarak haversine rute dari koordinat spa ke lokasi customer. Editor lengkap dengan simulasi ada di menu <span className="text-pink-400 font-semibold">Delivery Fee</span>.
             </p>
 
             <div className="space-y-3">

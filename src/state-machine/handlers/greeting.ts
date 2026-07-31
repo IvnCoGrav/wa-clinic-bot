@@ -16,6 +16,7 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
  */
 export async function handleGreetingState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
   const { customer, conversation, incomingMessage } = ctx;
+  const tenantId = ctx.tenantId || customer.tenant_id || 'default';
   const userText = incomingMessage.text?.body || '';
   const lower = userText.toLowerCase().trim();
 
@@ -119,6 +120,30 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
 
   // --- NLU CONFLICT RESOLUTION: State = INITIAL (fresh customer), NLU detected sela price/faq ---
   const nlu = ctx.nluResult;
+
+  // BUG #3 FIX: Eskalasi jadwal spesifik harus trigger di SEMUA state, termasuk INITIAL.
+  // Cek intent dari NLU (termasuk fallback regex) DAN regex langsung untuk robust.
+  // Flag: ESCALATE_SCHEDULE_IN_INITIAL (default: true sesuai PRD Section 4.1 poin 8)
+  const shouldEscalateSchedule = process.env.ESCALATE_SCHEDULE_IN_INITIAL !== 'false';
+  const nluHasAskSchedule = nlu?.intents?.includes('ask_schedule') || false;
+  const regexHasAskSchedule = /(\bjadwal\b|\bslot\b|\bbuka\b|\bhari\b|\btanggal\b|\bjam\b)/i.test(lower) &&
+                              /\b(senin|selasa|rabu|kamis|jumat|jumat|sabtu|minggu|besok|lusa|jam\s*\d|pukul\s*\d)\b/i.test(lower);
+  if ((nluHasAskSchedule || regexHasAskSchedule) && shouldEscalateSchedule) {
+    const { conversationService } = await import('../../services/conversation.service');
+    await conversationService.escalateToHumanHandling(
+      conversation,
+      customer.phone,
+      `Customer bertanya jadwal spesifik: "${userText}" (state: INITIAL)`,
+      tenantId
+    );
+    return {
+      nextState: ConversationState.HUMAN_HANDLING,
+      replyText: TEMPLATES.scheduleCheckHandoff(),
+      shouldSendReply: true,
+      isHumanHandling: true,
+    };
+  }
+
   if (nlu && !nlu.isFallback && nlu.confidence >= 0.6) {
     const hasAskPrice = nlu.intents.includes('ask_price');
     const hasFaqQuestion = nlu.intents.includes('faq_question');
