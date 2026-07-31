@@ -14,6 +14,7 @@ const INDONESIAN_STOP_WORDS = new Set([
 export interface ResolvedLocation {
   isPrecise: boolean;
   isFuzzyMatch?: boolean;
+  isLlmResolved?: boolean;
   kelurahan?: string;
   kecamatan?: string;
   kota?: string;
@@ -383,6 +384,19 @@ export class GeocodingService {
       .replace(/.*(ganti|pindah|ubah|salah|yang\s+bener|alamat)\s+(ke|di|hanya|saja)\s+/i, '')
       .trim();
 
+    // --- HARD GATE: Kecamatan/Kota-only tanpa kelurahan → TOLAK, minta detail ---
+    // Pindahkan dari bawah ke sini SEBELUM gazetteer/LLM processing.
+    // "waru" = kecamatan → harus ditolak, jangan coba resolve via LLM.
+    // TAPI: kalau user pakai prefix "kelurahan/desa/kel/ds", jangan ditolak.
+    const hasExplicitKelurahanPrefix = /^(kelurahan|desa|kel|ds)\s+/i.test(lower);
+    const impreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
+    if (cleanText.length > 0 && impreciseWords.includes(cleanText) && !hasExplicitKelurahanPrefix) {
+      return {
+        isPrecise: false,
+        kota: cleanText,
+      };
+    }
+
     // 1. Coba cocokkan dengan local subdistricts JSON database
     let kecamatanOnlyFallback: ResolvedLocation | null = null;
     try {
@@ -610,15 +624,6 @@ export class GeocodingService {
       console.error('[LOCAL GEOCODING ERROR]', e);
     }
 
-    // 2. Cek apakah ini kata yang tidak presisi (nama kota atau kecamatan luas)
-    const impreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
-    if (impreciseWords.includes(cleanText)) {
-      return {
-        isPrecise: false,
-        kota: cleanText,
-      };
-    }
-
     // 3. LLM Fallback: coba resolve via LLM jika gazetteer gagal
     const llmResult = await this.llmResolveLocation(locationText);
     if (llmResult) {
@@ -663,6 +668,20 @@ export class GeocodingService {
     }
 
     if (locationText.trim().length < 3) {
+      return null;
+    }
+
+    // Validasi input: skip LLM jika input terlalu generik/tidak mengandung indikasi lokasi
+    const cleanedInput = locationText.toLowerCase()
+      .replace(/\s+(bund|bunda|ya|kak|min|mbak|mas|gan|sis|aja|saja|dong|kok|deh)\b/g, '')
+      .replace(/^(saya\s+)?di\s+/, '')
+      .trim();
+
+    // Jika input bersih terlalu pendek (<2 karakter) atau hanya kata tanya/filler, skip LLM
+    // Normalisasi multi-spasi jadi 1 spasi untuk pola seperti "gtau ah"
+    const normalizedForCheck = cleanedInput.replace(/\s+/g, ' ').trim();
+    const fillerPatterns = /^(gtau\s*ah?|ga\s+tau|gak\s+tau|tidak\s+tau|ntau|sana|sini|gitu|gini|gtw|tauh?|ah|eh|oh|ih|uh|ya|iy|ok|oke|ga|gk|g|gitu\s+deh|ya\s+gitu\s+deh|lah|udah|dah|gapaham|gatau|nggak\s*tahu)$/i;
+    if (normalizedForCheck.length < 2 || fillerPatterns.test(normalizedForCheck)) {
       return null;
     }
 
@@ -739,7 +758,11 @@ OUTPUT JSON:
       console.log(`[LLM GEOCODE] Resolved "${locationText}" → ${JSON.stringify(parsed)}`);
 
       // Cross-check ke gazetteer untuk ambil koordinat
-      return this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota);
+      const gazetteerResult = this.crossCheckGazetteer(parsed.kelurahan, parsed.kecamatan, parsed.kota);
+      if (gazetteerResult) {
+        gazetteerResult.isLlmResolved = true;
+      }
+      return gazetteerResult;
     } catch (error: any) {
       console.warn(`[LLM GEOCODE ERROR] Failed to resolve "${locationText}":`, error.message);
       return null;

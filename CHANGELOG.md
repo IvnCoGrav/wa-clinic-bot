@@ -6,6 +6,19 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [1.7.0] — 2026-07-31
+
+### Added — UI Delivery Fee Tiering
+- **`packages/admin-dashboard/src/pages/tenant/DeliveryTiers.tsx`**: Halaman baru untuk mengelola tarif ongkir homecare.
+  - Editor tier jarak (maxDist, fee normal, potongan promo) dengan hitung net otomatis
+  - Simulasi ongkir live — input jarak → tampilkan tier & yang dibayar customer
+  - Validasi berurutan (maxDist harus naik), tombol quick-pick jarak (3/5/8/12/18/25 km)
+  - Auto-sort sebelum simpan, tersimpan ke `delivery_tiers_custom.json`
+- **Route**: `/admin/delivery` + menu sidebar "Delivery Fee".
+- **Fix `Settings.tsx`**: Hapus banner "UI Demo Only (Belum Tersambung Backend)" — backend `/api/admin/delivery-tiers` sudah tersambung.
+
+---
+
 ## [1.6.0] — 2026-07-31
 
 ### Added — LLM Geocoding Fallback

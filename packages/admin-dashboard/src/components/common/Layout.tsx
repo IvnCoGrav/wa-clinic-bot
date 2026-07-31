@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   MessageSquare,
-  Volume2
+  Volume2,
+  Truck
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,6 +51,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
     { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
     { name: 'Clinic Services', path: '/admin/services', icon: Activity },
+    { name: 'Delivery Fee', path: '/admin/delivery', icon: Truck },
     { name: 'Knowledge Base', path: '/admin/knowledge-base', icon: BookOpen },
     { name: 'AI Sandbox Simulator', path: '/admin/sandbox', icon: Terminal },
     { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },

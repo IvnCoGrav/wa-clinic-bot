@@ -14,6 +14,7 @@ const LiveChatMonitor = lazy(() => import('./pages/tenant/LiveChatMonitor').then
 const Settings = lazy(() => import('./pages/tenant/Settings').then(m => ({ default: m.Settings })));
 const ClinicServices = lazy(() => import('./pages/tenant/ClinicServices').then(m => ({ default: m.ClinicServices })));
 const AiPersona = lazy(() => import('./pages/tenant/AiPersona').then(m => ({ default: m.AiPersona })));
+const DeliveryTiers = lazy(() => import('./pages/tenant/DeliveryTiers').then(m => ({ default: m.DeliveryTiers })));
 
 export const App: React.FC = () => {
   return (
@@ -68,6 +69,13 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <ClinicServices />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/delivery" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <DeliveryTiers />
                 </Layout>
               </ProtectedRoute>
             } />
