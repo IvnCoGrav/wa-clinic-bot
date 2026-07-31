@@ -82,6 +82,21 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
           // Abaikan error DB untuk in-memory fallback
         }
 
+        // Simpan nama kontak customer: "Bunda {nama} {kecamatan}"
+        // Hanya update jika customer mengisi nama di form reservasi
+        const customerName = parsed.name?.trim();
+        if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
+          const kecamatan = customer.kecamatan || '';
+          const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+          console.log(`[CONTACT SAVE] Saving customer name as contact: "${contactName}"`);
+          try {
+            const { customerService } = await import('../../services/customer.service');
+            await customerService.updateCustomerName(customer.id, contactName, tenantId);
+          } catch (nameErr: any) {
+            console.warn('[CONTACT SAVE] Failed to update customer name:', nameErr.message);
+          }
+        }
+
         // Eskalasi ke human handling untuk konfirmasi jadwal manual oleh admin
         await conversationService.escalateToHumanHandling(
           conversation,
@@ -227,7 +242,11 @@ ${catalogText}`,
       }
       return {
         nextState: ConversationState.RESERVATION_SENT,
-        replyText: TEMPLATES.reservationFormRequest(),
+        replyText: TEMPLATES.reservationFormRequest({
+          kecamatan: customer.kecamatan || undefined,
+          kota: customer.kota || undefined,
+          phone: customer.phone || undefined,
+        }),
         shouldSendReply: true,
       };
 
