@@ -56,6 +56,7 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 19 | Proteksi endpoint admin dengan ADMIN_API_KEY (fail-closed jika key tidak diset, constant-time comparison via SHA-256 + crypto.timingSafeEqual) | ✅ Selesai, security review lolos |
 | 20 | Status blocked pada customer: auto-block untuk pola spam/abuse yang jelas (flood, link tak diminta, pesan identik berulang saat human handling), manual block via endpoint admin untuk kasus lain. Bot silent total (tidak membalas apapun) untuk customer blocked. Kata kasar di-flag (review manual) pakai word-boundary match, bukan auto-block | ✅ Selesai (8 test, termasuk verifikasi anti-false-positive) |
 | 21 | Struktur data disiapkan untuk multi-tenant di masa depan (tenant_id di semua tabel, default single-tenant) — bukan fitur SaaS aktif, murni persiapan arsitektur | ✅ Selesai |
+| 22 | LLM Fallback untuk geocoding: resolved lokasi via DeepSeek V4 Flash saat gazetteer gagal (typo, dusun/RT, nama tidak umum), cross-check ke gazetteer untuk koordinat exact | ✅ Selesai |
 
 **Belum selesai / pending sebelum Fase 1 dianggap tuntas:**
 - Testing manual end-to-end dengan WAHA aktif (koneksi QR, typing indicator nyata, share location asli, akurasi jawaban FAQ) — saat ini baru divalidasi lewat CLI Chat Simulator

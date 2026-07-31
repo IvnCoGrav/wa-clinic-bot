@@ -6,6 +6,35 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [1.6.0] — 2026-07-31
+
+### Added — LLM Geocoding Fallback
+- **`src/integrations/google-maps/geocoding.ts`**: Tambah method `llmResolveLocation()` sebagai fallback saat gazetteer fuzzy match gagal (typo, dusun/RT, nama tidak umum).
+- **Model**: DeepSeek V4 Flash via SumoPod (`AI_MODEL_NLU` env var).
+- **Cross-check**: Hasil LLM di-validasi ke gazetteer untuk ambil koordinat exact.
+- **DeepSeek reasoning support**: Handle `reasoning_content` field untuk reasoning models.
+- **Guard conditions**: Input ≥ 3 karakter, API key tersedia, tidak dalam outage.
+- **Circuit breaker**: Wrap LLM call untuk resilience.
+
+### Added — NLU Model Configuration
+- **`src/config/ai-models.config.ts`**: Tambah `AI_MODEL_NLU` env var untuk model NLU classification.
+- **Default**: `deepseek-v4-flash` (cepat, murah, reasoning capability).
+
+### Added — Documentation
+- **`docs/DEAD_CODE_GOOGLE_MAPS.md`**: Dokumentasi kode Google Maps yang tidak terpakai dan opsi keputusan.
+- **`opencode.json`**: Konfigurasi 9router untuk opencode.
+
+### Changed — Geocoding Flow
+- **Alur baru**: Gazetteer → LLM fallback → Minta detail (behavior lama).
+- **Prioritas**: Gazetteer tetap utama untuk koordinat exact, LLM hanya untuk understanding.
+- **Google Maps API**: Tidak diperlukan (gazetteer + LLM sudah cukup).
+
+### Test Results
+- **10 test cases**: 7/10 berhasil resolve lokasi via LLM fallback.
+- **Akurasi koordinat**: Gazetteer ±10m vs LLM ±5km (hybrid approach optimal).
+
+---
+
 ## [1.5.0] — 2026-07-25
 
 ### Fixed — Message Rewrite (Body Strip)
