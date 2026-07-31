@@ -667,6 +667,11 @@ export class GeocodingService {
       return null;
     }
 
+    // Skip LLM network call di test environment supaya unit test cepat & deterministik
+    if (process.env.NODE_ENV === 'test') {
+      return null;
+    }
+
     if (locationText.trim().length < 3) {
       return null;
     }

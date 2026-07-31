@@ -167,8 +167,29 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       // 2. Query Knowledge Base menggunakan Postgres Full-Text Search ('simple')
       const relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3, tenantId);
 
-      // Jika tidak ada FAQ yang cocok sama sekali, lempar ke manusia tanpa balas chat
-      if (relevantChunks.length === 0) {
+      // 2b. Jika FAQ tidak match, FALLBACK ke katalog treatment sebagai konteks LLM.
+      // Data treatment (durasi, usia, deskripsi, manfaat) dijadikan knowledge — TANPA harga.
+      let chunksToUse = relevantChunks;
+      if (chunksToUse.length === 0) {
+        const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+        const catalogText = treatmentCatalogService.formatCatalogText(false); // tanpa harga
+        if (catalogText && catalogText.trim().length > 0) {
+          chunksToUse = [{
+            id: 'treatment-catalog',
+            tenantId,
+            sourceType: 'catalog' as any,
+            title: 'Katalog Layanan Treatment Kala Moms and Baby Spa',
+            content: `Pertanyaan: Informasi layanan/treatment yang tersedia.
+Jawaban: Berikut daftar treatment yang kami sediakan:
+${catalogText}`,
+            documentName: 'treatment-catalog',
+          }];
+          console.log(`[FAQ CATALOG FALLBACK] No KB match for "${userText}", injecting treatment catalog as context.`);
+        }
+      }
+
+      // Jika tidak ada FAQ yang cocok dan tidak ada katalog, lempar ke manusia tanpa balas chat
+      if (chunksToUse.length === 0) {
         console.log(`[FAQ ESCALATION] No relevant chunks found for: "${userText}". Escalating silently.`);
         await conversationService.escalateToHumanHandling(
           conversation,
@@ -184,7 +205,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       }
 
       // 3. Generate balasan FAQ natural berbasis RAG + Persona (dengan history & reasoning)
-      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, relevantChunks, conversation.id, tenantId);
+      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId);
 
       // 4. JANGAN RESET / UBAH STATE: Tambahkan kalimat follow-up sesuai state saat ini!
       const replyText = TEMPLATES.faqFollowUp(faqAnswer);
