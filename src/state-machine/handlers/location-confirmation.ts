@@ -39,10 +39,17 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
     return handleLocationState(ctx);
   }
 
-  const isAffirmative = /\b(iya|yup|ok|oke|bener|betul|lanjut|benar|yes|sip|gpp)\b/i.test(lower) || 
+  // NLU Enhancement: augment regex detection with NLU intent classification
+  const nluConfident = ctx.nluResult && !ctx.nluResult.isFallback && (ctx.nluResult?.confidence || 0) >= 0.6;
+  const nluAffirm = nluConfident && ctx.nluResult!.intents.includes('affirmation');
+  const nluNegate = nluConfident && ctx.nluResult!.intents.includes('negation');
+
+  const isAffirmative = nluAffirm ||
+                        /\b(iya|yup|ok|oke|bener|betul|lanjut|benar|yes|sip|gpp)\b/i.test(lower) || 
                         /^ya\b(?!\s*(ampun|elah|udah|deh|lord|allah|kali|gitu|begitu|tapi|bukan|salah|kok|sih))/i.test(lower) || 
                         lower.includes('👍');
-  const isNegative = /\b(bukan|ga|gak|tidak|no|salah|enggak)\b/i.test(lower) || lower.includes('👎') || lower.includes('❌');
+  const isNegative = nluNegate ||
+                     /\b(bukan|ga|gak|tidak|no|salah|enggak)\b/i.test(lower) || lower.includes('👎') || lower.includes('❌');
 
   if (isAffirmative && isNegative) {
     return {

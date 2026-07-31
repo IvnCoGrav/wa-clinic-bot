@@ -15,6 +15,11 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   const { incomingMessage, customer, conversation } = ctx;
   const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
 
+  // NLU Enhancement: if NLU classified this as provide_location and extracted a clean location_text entity,
+  // use that entity text for geocoding instead of the raw message body for higher precision.
+  const nluLocationText = ctx.nluResult?.entities?.location_text;
+  const nluConfident = ctx.nluResult && !ctx.nluResult.isFallback && (ctx.nluResult.confidence || 0) >= 0.6;
+
   // --- KASUS A: CUSTOMER MENGIRIM SHARE LOCATION NATIVE WHATSAPP ---
   if (incomingMessage.type === 'location' && incomingMessage.location) {
     const { latitude, longitude } = incomingMessage.location;
@@ -70,7 +75,8 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // --- KASUS B: CUSTOMER MENGIRIM TEKS LOKASI ---
-  const rawTextLocation = incomingMessage.text?.body?.trim() || '';
+  // Use NLU entity if available for cleaner geocoding input
+  const rawTextLocation = (nluConfident && nluLocationText) ? nluLocationText : (incomingMessage.text?.body?.trim() || '');
 
   if (!rawTextLocation) {
     return {

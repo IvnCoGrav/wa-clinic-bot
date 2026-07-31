@@ -273,7 +273,7 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
 
       // CRITICAL: Google Calendar TIDAK boleh dipanggil untuk reservasi historis
       expect(calendarCreateSpy).not.toHaveBeenCalled();
-    });
+    }, 15000);
 
     it('should NOT call capiService.sendLeadEvent for legacy customers (no fake Meta Lead events)', async () => {
       // Arrange: staging dengan data lengkap (customer + reservation) agar

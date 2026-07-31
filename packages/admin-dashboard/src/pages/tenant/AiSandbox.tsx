@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { 
   Send, 
@@ -22,8 +22,17 @@ interface ChatMessage {
 }
 
 export const AiSandbox: React.FC = () => {
+  const [sandboxPhone, setSandboxPhone] = useState<string>(() => {
+    let stored = sessionStorage.getItem('sandbox_phone');
+    if (!stored) {
+      stored = '6289999' + Math.floor(100000 + Math.random() * 900000);
+      sessionStorage.setItem('sandbox_phone', stored);
+    }
+    return stored;
+  });
+
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { sender: 'bot', content: 'Halo Bunda! Saya asisten AI Kala Moms & Baby Spa. Silakan coba kirim pertanyaan di bawah untuk menguji respon RAG & Persona saya! 🌸', timestamp: new Date() }
+    { sender: 'bot', content: `Halo Bunda! Saya asisten AI Kala Moms & Baby Spa (Sesi Baru ${sandboxPhone.substring(7)}). Silakan coba kirim pertanyaan di bawah untuk menguji respon RAG & Persona saya! 🌸`, timestamp: new Date() }
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,6 +53,39 @@ export const AiSandbox: React.FC = () => {
   const [editingTitle, setEditingTitle] = useState('');
   const [editingContent, setEditingContent] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [editingPersona, setEditingPersona] = useState(false);
+  const [personaText, setPersonaText] = useState('');
+  const [personaLoading, setPersonaLoading] = useState(false);
+
+  const loadPersona = async () => {
+    try {
+      const res = await apiRequest('/api/admin/persona');
+      setPersonaText(res.persona || '');
+      setInspectorData((prev: any) => ({ ...prev, systemPrompt: res.persona || prev.systemPrompt }));
+    } catch (err) {
+      console.error('Failed to load persona:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadPersona();
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleNewCleanSession = () => {
+    const newPhone = '6289999' + Math.floor(100000 + Math.random() * 900000);
+    sessionStorage.setItem('sandbox_phone', newPhone);
+    setSandboxPhone(newPhone);
+    setMessages([
+      { sender: 'bot', content: `Sesi simulator baru dimulai (ID: ${newPhone.substring(7)})! Customer baru, state bersih dari INITIAL 🌸`, timestamp: new Date() }
+    ]);
+  };
 
   const handleStartEdit = (chunk: any) => {
     setEditingChunkId(chunk.id || chunk.title); // Use chunk.id, fallback to title
@@ -86,6 +128,28 @@ export const AiSandbox: React.FC = () => {
     }
   };
 
+  const handleSavePersona = async () => {
+    if (!personaText.trim() || personaLoading) return;
+    const isConfirmed = window.confirm(
+      "⚠️ PERINGATAN:\n\nPerubahan ini bersifat PERMANEN dan langsung mengubah SYSTEM PERSONA PROMPT bot AI Anda secara live.\n\nIni akan memengaruhi cara bot merespon seluruh chat customer asli Anda di WhatsApp produksi.\n\nApakah Anda yakin ingin menyimpan perubahan persona ini?"
+    );
+    if (!isConfirmed) return;
+
+    setPersonaLoading(true);
+    try {
+      await apiRequest('/api/admin/persona', {
+        method: 'POST',
+        body: JSON.stringify({ persona: personaText })
+      });
+      setEditingPersona(false);
+      setInspectorData((prev: any) => ({ ...prev, systemPrompt: personaText }));
+    } catch (err: any) {
+      alert(`Gagal menyimpan perubahan persona: ${err.message}`);
+    } finally {
+      setPersonaLoading(false);
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || loading) return;
@@ -103,7 +167,7 @@ export const AiSandbox: React.FC = () => {
     try {
       const data = await apiRequest('/api/admin/sandbox/chat', {
         method: 'POST',
-        body: JSON.stringify({ text: userText, simulateOutage: sumoPodOutage })
+        body: JSON.stringify({ text: userText, simulateOutage: sumoPodOutage, sandboxPhone })
       });
 
       const endTime = Date.now();
@@ -146,15 +210,26 @@ export const AiSandbox: React.FC = () => {
           <p className="text-slate-400">Test AI response, inspect vector retrieval, and simulate server failure conditions</p>
         </div>
 
-        {/* SumoPod Outage Toggle */}
-        <div className="flex items-center space-x-3 bg-slate-900/60 border border-white/5 px-4 py-2 rounded-xl">
-          <span className="text-xs font-semibold text-slate-300">Simulate SumoPod Outage</span>
+        <div className="flex items-center space-x-3">
           <button
-            onClick={() => setSumoPodOutage(!sumoPodOutage)}
-            className={`w-11 h-6 rounded-full transition-all relative ${sumoPodOutage ? 'bg-rose-500' : 'bg-slate-700'}`}
+            onClick={handleNewCleanSession}
+            className="px-3.5 py-2 bg-pink-500/10 hover:bg-pink-500 text-pink-400 hover:text-white border border-pink-500/20 rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
+            title="Start new isolated sandbox customer session"
           >
-            <div className={`absolute top-1 left-1 bg-white h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-5' : ''}`}></div>
+            <Sparkles size={14} />
+            <span>Mulai Sesi Bersih Baru</span>
           </button>
+
+          {/* SumoPod Outage Toggle */}
+          <div className="flex items-center space-x-3 bg-slate-900/60 border border-white/5 px-4 py-2 rounded-xl">
+            <span className="text-xs font-semibold text-slate-300">Simulate SumoPod Outage</span>
+            <button
+              onClick={() => setSumoPodOutage(!sumoPodOutage)}
+              className={`w-11 h-6 rounded-full transition-all relative ${sumoPodOutage ? 'bg-rose-500' : 'bg-slate-700'}`}
+            >
+              <div className={`absolute top-1 left-1 bg-white h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-5' : ''}`}></div>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -210,6 +285,7 @@ export const AiSandbox: React.FC = () => {
                 </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Form input */}
@@ -344,13 +420,58 @@ export const AiSandbox: React.FC = () => {
 
               {/* System Persona prompt */}
               <div className="space-y-2">
-                <span className="text-xs font-semibold text-slate-400 block uppercase flex items-center space-x-1">
-                  <Cpu size={12} />
-                  <span>Active System Persona Prompt</span>
-                </span>
-                <pre className="p-3 bg-slate-950 border border-white/5 rounded-xl text-[10px] text-slate-500 font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
-                  {inspectorData.systemPrompt}
-                </pre>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-slate-400 block uppercase flex items-center space-x-1">
+                    <Cpu size={12} />
+                    <span>Active System Persona Prompt</span>
+                  </span>
+                  {!editingPersona ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPersona(true)}
+                      className="px-2 py-1 rounded bg-white/5 hover:bg-pink-500/10 text-slate-400 hover:text-pink-400 text-[10px] font-bold transition flex items-center space-x-1"
+                    >
+                      <Edit3 size={10} />
+                      <span>Edit Persona</span>
+                    </button>
+                  ) : (
+                    <div className="flex space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPersona(false);
+                          setPersonaText(inspectorData.systemPrompt || '');
+                        }}
+                        className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[10px] font-bold transition flex items-center space-x-1"
+                      >
+                        <X size={10} />
+                        <span>Cancel</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSavePersona}
+                        disabled={personaLoading}
+                        className="px-2 py-1 rounded bg-pink-500 hover:bg-pink-600 text-white text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50"
+                      >
+                        <Save size={10} />
+                        <span>{personaLoading ? 'Saving...' : 'Save'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {editingPersona ? (
+                  <textarea
+                    rows={12}
+                    value={personaText}
+                    onChange={(e) => setPersonaText(e.target.value)}
+                    className="w-full p-3 rounded-xl bg-slate-950 border border-white/10 text-[10px] text-white focus:outline-none focus:border-pink-500 leading-relaxed font-mono"
+                  />
+                ) : (
+                  <pre className="p-3 bg-slate-950 border border-white/5 rounded-xl text-[10px] text-slate-500 font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
+                    {inspectorData.systemPrompt}
+                  </pre>
+                )}
               </div>
 
             </div>

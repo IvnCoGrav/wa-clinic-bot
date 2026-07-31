@@ -1,6 +1,59 @@
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
 import { IOrsClient, orsClient as defaultOrsClient } from '../integrations/ors/client';
+import fs from 'fs';
+import path from 'path';
+
+export interface DeliveryTier {
+  id: number;
+  maxDist: number; // Jarak maksimum dalam km
+  fee: number;     // Ongkir normal
+  promoDiscount: number; // Potongan diskon promo
+}
+
+const TIERS_FILE = path.join(process.cwd(), 'delivery_tiers_custom.json');
+
+const DEFAULT_TIERS: DeliveryTier[] = [
+  { id: 1, maxDist: 5, fee: 0, promoDiscount: 0 },
+  { id: 2, maxDist: 7, fee: 15000, promoDiscount: 10000 },
+  { id: 3, maxDist: 10, fee: 15000, promoDiscount: 5000 },
+  { id: 4, maxDist: 15, fee: 15000, promoDiscount: 5000 },
+  { id: 5, maxDist: 20, fee: 20000, promoDiscount: 5000 },
+  { id: 6, maxDist: 25, fee: 25000, promoDiscount: 5000 },
+  { id: 7, maxDist: 30, fee: 30000, promoDiscount: 5000 }
+];
+
+export let activeDeliveryTiers: DeliveryTier[] = [];
+
+export function loadDeliveryTiers() {
+  try {
+    if (fs.existsSync(TIERS_FILE)) {
+      const data = fs.readFileSync(TIERS_FILE, 'utf-8');
+      activeDeliveryTiers = JSON.parse(data);
+    } else {
+      fs.writeFileSync(TIERS_FILE, JSON.stringify(DEFAULT_TIERS, null, 2));
+      activeDeliveryTiers = [...DEFAULT_TIERS];
+    }
+  } catch (err) {
+    console.error('Failed to load active delivery tiers:', err);
+    activeDeliveryTiers = [...DEFAULT_TIERS];
+  }
+}
+
+export function saveDeliveryTiers(tiers: DeliveryTier[]) {
+  try {
+    fs.writeFileSync(TIERS_FILE, JSON.stringify(tiers, null, 2));
+    activeDeliveryTiers = [...tiers];
+    return true;
+  } catch (err) {
+    console.error('Failed to save delivery tiers:', err);
+    return false;
+  }
+}
+
+// Initial load
+loadDeliveryTiers();
+
 
 export interface DeliveryCalculationResult {
   distanceKm: number;
@@ -102,34 +155,18 @@ export class DeliveryService {
   }
 
 
-  /**
-   * Pembantu untuk menghitung tarif ongkir langsung dari nilai numerik distanceKm
-   */
   public calculateOngkirByDistance(distanceKm: number): { normalPrice: number; promoDiscount: number; isOutOfCoverage: boolean } {
-    if (distanceKm <= 5.0) {
-      return { normalPrice: 0, promoDiscount: 0, isOutOfCoverage: false };
-    } else if (distanceKm <= 7.0) {
-      // 5-7 km: Rp 15.000, promo discount Rp 10.000 -> net Rp 5.000
-      return { normalPrice: 15000, promoDiscount: 10000, isOutOfCoverage: false };
-    } else if (distanceKm <= 10.0) {
-      // 7-10 km: Rp 15.000, promo discount Rp 5.000 -> net Rp 10.000
-      return { normalPrice: 15000, promoDiscount: 5000, isOutOfCoverage: false };
-    } else if (distanceKm <= 15.0) {
-      // 10-15 km: Rp 15.000, promo discount Rp 5.000 -> net Rp 10.000
-      return { normalPrice: 15000, promoDiscount: 5000, isOutOfCoverage: false };
-    } else if (distanceKm <= 20.0) {
-      // 15-20 km: Rp 20.000, promo discount Rp 5.000 -> net Rp 15.000
-      return { normalPrice: 20000, promoDiscount: 5000, isOutOfCoverage: false };
-    } else if (distanceKm <= 25.0) {
-      // 20-25 km: Rp 25.000, promo discount Rp 5.000 -> net Rp 20.000
-      return { normalPrice: 25000, promoDiscount: 5000, isOutOfCoverage: false };
-    } else if (distanceKm <= 30.0) {
-      // 25-30 km: Rp 30.000, promo discount Rp 5.000 -> net Rp 25.000
-      return { normalPrice: 30000, promoDiscount: 5000, isOutOfCoverage: false };
-    } else {
-      // > 30.0 km: di luar jangkauan
-      return { normalPrice: 0, promoDiscount: 0, isOutOfCoverage: true };
+    const sortedTiers = [...activeDeliveryTiers].sort((a, b) => a.maxDist - b.maxDist);
+    const matchingTier = sortedTiers.find(t => distanceKm <= t.maxDist);
+    
+    if (matchingTier) {
+      return { 
+        normalPrice: matchingTier.fee, 
+        promoDiscount: matchingTier.promoDiscount, 
+        isOutOfCoverage: false 
+      };
     }
+    return { normalPrice: 0, promoDiscount: 0, isOutOfCoverage: true };
   }
 }
 

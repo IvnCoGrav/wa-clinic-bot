@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
 
 export interface AgeTier {
@@ -18,10 +21,8 @@ export interface ClinicServiceItem {
   isActive: boolean;           // Status keaktifan layanan
 }
 
-/**
- * Data awal (Seed / In-Memory File Data) katalog layanan clinic.
- * Di masa depan, data ini bisa disinkronkan atau di-manage via UI Admin / Database.
- */
+const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
+
 const serviceCatalog: Map<string, ClinicServiceItem> = new Map();
 
 // Default data catalog
@@ -206,9 +207,38 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
 ];
 
 // Inisialisasi map katalog
-DEFAULT_CLINIC_SERVICES.forEach((item) => {
-  serviceCatalog.set(item.id, item);
-});
+export function loadServices() {
+  try {
+    if (fs.existsSync(SERVICES_FILE)) {
+      const data = fs.readFileSync(SERVICES_FILE, 'utf-8');
+      const list: ClinicServiceItem[] = JSON.parse(data);
+      serviceCatalog.clear();
+      list.forEach((item) => serviceCatalog.set(item.id, item));
+    } else {
+      fs.writeFileSync(SERVICES_FILE, JSON.stringify(DEFAULT_CLINIC_SERVICES, null, 2));
+      serviceCatalog.clear();
+      DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
+    }
+  } catch (err) {
+    console.error('Failed to load clinic services from file:', err);
+    serviceCatalog.clear();
+    DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
+  }
+}
+
+export function saveServices() {
+  try {
+    const list = Array.from(serviceCatalog.values());
+    fs.writeFileSync(SERVICES_FILE, JSON.stringify(list, null, 2));
+    return true;
+  } catch (err) {
+    console.error('Failed to save clinic services to file:', err);
+    return false;
+  }
+}
+
+// Initial load
+loadServices();
 
 export class TreatmentCatalogService {
   /**
@@ -250,11 +280,23 @@ export class TreatmentCatalogService {
   }
 
   /**
-   * Menambahkan atau meng-update data layanan baru (Dipersiapkan untuk UI Admin mendatang)
+   * Menambahkan atau meng-update data layanan baru
    */
   public upsertService(service: ClinicServiceItem): ClinicServiceItem {
     serviceCatalog.set(service.id, service);
+    saveServices();
     return service;
+  }
+
+  /**
+   * Menghapus layanan
+   */
+  public deleteService(id: string): boolean {
+    const deleted = serviceCatalog.delete(id);
+    if (deleted) {
+      saveServices();
+    }
+    return deleted;
   }
 
   /**

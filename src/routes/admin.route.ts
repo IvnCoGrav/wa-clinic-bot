@@ -224,11 +224,126 @@ export async function adminRoutes(fastify: FastifyInstance) {
         where: { tenant_id: DEFAULT_TENANT_ID },
         orderBy: { created_at: 'desc' }
       });
-      return chunks;
+      return reply.status(200).send({ success: true, data: chunks });
     } catch (err: any) {
-      return [];
+      return reply.status(200).send({ success: true, data: [] });
     }
   });
+
+  /**
+   * GET /api/admin/knowledge/unanswered
+   * Fetch all active human-handling conversations with unresolved_faq reason
+   */
+  fastify.get('/api/admin/knowledge/unanswered', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const unanswered = await prisma.conversation.findMany({
+        where: {
+          tenant_id: DEFAULT_TENANT_ID,
+          is_human_handling: true,
+          escalation_reason: 'unresolved_faq'
+        },
+        include: {
+          customer: true,
+          messages: {
+            orderBy: { created_at: 'desc' },
+            take: 1
+          }
+        },
+        orderBy: { last_message_at: 'desc' }
+      });
+
+      const data = unanswered.map(c => ({
+        id: c.id,
+        phone: c.customer.phone,
+        name: c.customer.name || 'Bunda',
+        question: c.messages[0]?.content || 'Pertanyaan tidak ditemukan',
+        createdAt: c.messages[0]?.created_at || c.updated_at
+      }));
+
+      return reply.status(200).send({ success: true, data });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, data: [] });
+    }
+  });
+
+  /**
+   * POST /api/admin/knowledge/unanswered/:id/resolve
+   * Resolve an unanswered question by answering it, saving to live FAQ, and replying to the customer.
+   */
+  fastify.post(
+    '/api/admin/knowledge/unanswered/:id/resolve',
+    {
+      config: {
+        rateLimit: {
+          max: 100,
+          timeWindow: '1 minute'
+        }
+      }
+    },
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { answer: string; category?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { answer, category = 'general' } = request.body || {};
+
+      if (!answer) {
+        return reply.status(400).send({ success: false, error: 'Answer is required' });
+      }
+
+      try {
+        const conversation = await prisma.conversation.findUnique({
+          where: { id },
+          include: { customer: true, messages: { orderBy: { created_at: 'desc' }, take: 1 } }
+        });
+
+        if (!conversation) {
+          return reply.status(404).send({ success: false, error: 'Conversation not found' });
+        }
+
+        const rawQuestion = conversation.messages[0]?.content || 'Pertanyaan';
+
+        // 1. Save to Live FAQ chunks
+        await knowledgeBaseService.addFaqItem({
+          tenantId: DEFAULT_TENANT_ID,
+          category,
+          question: rawQuestion,
+          answer,
+          status: 'APPROVED',
+        });
+
+        // 2. Release conversation back to bot
+        await prisma.conversation.update({
+          where: { id },
+          data: {
+            is_human_handling: false,
+            human_handling_since: null,
+            escalation_reason: null
+          }
+        });
+
+        // 3. Send outbound reply to user via WAHA
+        const { wahaClient } = await import('../integrations/waha/client');
+        await wahaClient.sendText(`${conversation.customer.phone}@c.us`, answer);
+
+        // 4. Log message to audit trail
+        const { messageService } = await import('../services/message.service');
+        await messageService.logMessage({
+          conversationId: id,
+          direction: 'OUTBOUND',
+          content: answer,
+          tenantId: DEFAULT_TENANT_ID
+        });
+
+        return reply.status(200).send({ success: true, message: 'Pertanyaan berhasil dijawab dan disimpan ke FAQ.' });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
 
   /**
    * PUT /api/admin/knowledge/chunks/:id
@@ -277,6 +392,27 @@ export async function adminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/knowledge/chunks/:id
+   * REST Endpoint to delete a single knowledge base chunk
+   */
+  fastify.delete('/api/admin/knowledge/chunks/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    try {
+      await prisma.knowledgeChunk.delete({ where: { id } });
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'DELETE_KNOWLEDGE_CHUNK',
+        targetId: id,
+        ipAddress: request.ip,
+      });
+      return reply.status(200).send({ success: true, message: 'Knowledge chunk deleted successfully' });
+    } catch (err: any) {
       return reply.status(500).send({ error: err.message });
     }
   });
@@ -341,11 +477,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
         timeWindow: '1 minute'
       }
     }
-  }, async (request: FastifyRequest<{ Body: { text: string; simulateOutage?: boolean } }>, reply: FastifyReply) => {
-    const { text, simulateOutage } = request.body || {};
+  }, async (request: FastifyRequest<{ Body: { text: string; simulateOutage?: boolean; sandboxPhone?: string } }>, reply: FastifyReply) => {
+    const { text, simulateOutage, sandboxPhone } = request.body || {};
     if (!text) {
       return reply.status(400).send({ error: 'Text field is required' });
     }
+    const targetPhone = sandboxPhone || '628999999999';
 
     const { llmOutageStorage } = await import('../integrations/llm/context');
 
@@ -358,7 +495,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
         const { TypingService } = await import('../services/typing.service');
         const { IWahaClient } = await import('../integrations/waha/client');
 
-        // Create a mock sandbox WAHA client that intercepts replies
         class SandboxWAHAClient implements IWahaClient {
           public sentMessages: Array<{ type: 'text' | 'image'; text: string; fileUrl?: string }> = [];
 
@@ -379,23 +515,24 @@ export async function adminRoutes(fastify: FastifyInstance) {
           public async getSessionStatus(): Promise<string> { return 'WORKING'; }
           public async getChats(): Promise<any[]> { return []; }
           public async getMessages(chatId: string, limit?: number): Promise<any[]> { return []; }
-          public async getPhoneNumberFromLid(chatId: string): Promise<string | null> { return '628999999999'; }
+          public async getPhoneNumberFromLid(chatId: string): Promise<string | null> { return targetPhone; }
         }
 
         const sandboxClient = new SandboxWAHAClient();
         const sandboxTypingService = new TypingService(sandboxClient);
-        sandboxTypingService.setSpeedFactor(100000); // Instant replies (100,000x speed multiplier)
+        sandboxTypingService.setSpeedFactor(100000);
 
         const sandboxStateMachine = new ConversationStateMachine(sandboxTypingService);
 
-        console.time('SANDBOX_TOTAL');
-        console.time('GET_CUSTOMER');
-        const customer = await customerService.getOrCreateCustomer('628999999999', 'Sandbox Customer', DEFAULT_TENANT_ID);
-        console.timeEnd('GET_CUSTOMER');
+        const customer = await customerService.getOrCreateCustomer(targetPhone, 'Sandbox Customer', DEFAULT_TENANT_ID);
+        try {
+          await prisma.customer.update({
+            where: { id: customer.id },
+            data: { is_sandbox_test: true }
+          });
+        } catch (e) {}
 
-        console.time('GET_CONVERSATION');
         let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-        console.timeEnd('GET_CONVERSATION');
 
         // Handle sandbox reset
         if (text.trim().toLowerCase() === '/reset') {
@@ -412,24 +549,22 @@ export async function adminRoutes(fastify: FastifyInstance) {
             },
             DEFAULT_TENANT_ID
           );
-          console.timeEnd('SANDBOX_TOTAL');
           return {
-            answer: 'Sesi percakapan simulator berhasil di-reset ke INITIAL! 🌸 Silakan ketik "halo" atau sapuan lainnya untuk mulai menguji.',
+            answer: 'Sesi percakapan simulator berhasil di-reset ke INITIAL! 🌸 Silakan ketik "halo" atau sapaan lainnya untuk mulai menguji.',
             chunks: [],
             query: text,
             timestamp: new Date()
           };
         }
 
-        // Standardize incoming message format (Text vs Location)
         let incomingMessage: any;
         const locationMatch = text.match(/^\/location\s+([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)/i);
         
         if (locationMatch) {
           incomingMessage = {
             id: `msg_sandbox_${Date.now()}`,
-            from: '628999999999',
-            chatId: '628999999999@c.us',
+            from: targetPhone,
+            chatId: `${targetPhone}@c.us`,
             timestamp: String(Math.floor(Date.now() / 1000)),
             type: 'location',
             location: {
@@ -440,33 +575,26 @@ export async function adminRoutes(fastify: FastifyInstance) {
         } else {
           incomingMessage = {
             id: `msg_sandbox_${Date.now()}`,
-            from: '628999999999',
-            chatId: '628999999999@c.us',
+            from: targetPhone,
+            chatId: `${targetPhone}@c.us`,
             timestamp: String(Math.floor(Date.now() / 1000)),
             type: 'text',
             text: { body: text }
           };
         }
 
-        console.time('PROCESS_MESSAGE');
-        // Process state machine
         await sandboxStateMachine.processMessage({
           tenantId: DEFAULT_TENANT_ID,
           customer,
           conversation,
           incomingMessage
         });
-        console.timeEnd('PROCESS_MESSAGE');
 
-        console.time('SEARCH_CHUNKS');
-        // Retrieve chunks to show in RAG inspector
         const chunks = await knowledgeBaseService.searchRelevantChunks(incomingMessage.text?.body || '', 3, DEFAULT_TENANT_ID);
-        console.timeEnd('SEARCH_CHUNKS');
-        console.timeEnd('SANDBOX_TOTAL');
 
         const answer = sandboxClient.sentMessages.length > 0
           ? sandboxClient.sentMessages.map(m => m.text).join('\n\n')
-          : '🔇 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]';
+          : '🌸 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]';
 
         return {
           answer,
@@ -476,9 +604,35 @@ export async function adminRoutes(fastify: FastifyInstance) {
           llmError: simulateOutage ? 'SumoPod connection timeout (500 Internal Server Error)' : null
         };
       } catch (err: any) {
-        return reply.status(500).send({ error: err.message });
+        return {
+          answer: `Error processing sandbox message: ${err.message}`,
+          chunks: [],
+          query: text,
+          timestamp: new Date(),
+          llmError: err.message
+        };
       }
     });
+  });
+
+  /**
+   * POST /api/admin/sandbox/cleanup
+   * Cleanup old or dummy sandbox test records
+   */
+  fastify.post('/api/admin/sandbox/cleanup', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const deleted = await prisma.customer.deleteMany({
+        where: {
+          OR: [
+            { is_sandbox_test: true },
+            { phone: { startsWith: '6289999' } }
+          ]
+        }
+      });
+      return reply.status(200).send({ success: true, message: `Successfully cleaned up ${deleted.count} sandbox test records.` });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, message: 'Sandbox cleanup complete.' });
+    }
   });
 
   /**
@@ -1225,11 +1379,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   fastify.get('/api/admin/medical-faq-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const queryStatus = (request.query as any).status || 'PENDING';
       const pendingItems = await prisma.medicalFaqStaging.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
+        where: { tenant_id: DEFAULT_TENANT_ID, status: queryStatus as any },
         orderBy: { created_at: 'desc' },
       });
-      return reply.status(200).send({ success: true, data: pendingItems });
+      const itemsWithChunks = await Promise.all(pendingItems.map(async (item) => {
+        if (item.matched_chunk_id) {
+          const chunk = await prisma.knowledgeChunk.findUnique({ where: { id: item.matched_chunk_id } });
+          return { ...item, matchedChunk: chunk };
+        }
+        return item;
+      }));
+      return reply.status(200).send({ success: true, data: itemsWithChunks });
     } catch (err: any) {
       return reply.status(200).send({ success: true, data: [] });
     }
@@ -1314,11 +1476,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/general-faq-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
+      const queryStatus = (request.query as any).status || 'PENDING';
       const items = await prisma.generalFaqStaging.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
+        where: { tenant_id: DEFAULT_TENANT_ID, status: queryStatus as any },
         orderBy: { created_at: 'desc' },
       });
-      return reply.status(200).send({ success: true, data: items });
+      const itemsWithChunks = await Promise.all(items.map(async (item) => {
+        if (item.matched_chunk_id) {
+          const chunk = await prisma.knowledgeChunk.findUnique({ where: { id: item.matched_chunk_id } });
+          return { ...item, matchedChunk: chunk };
+        }
+        return item;
+      }));
+      return reply.status(200).send({ success: true, data: itemsWithChunks });
     } catch (err) {
       return reply.status(200).send({ success: true, data: [] });
     }
@@ -1367,6 +1537,52 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, message: `Status FAQ umum berhasil diperbarui menjadi ${status}.`, data: updated });
       } catch (err) {
         return reply.status(200).send({ success: true, message: `Review FAQ umum berhasil disimpan (${status}).` });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/persona
+   * Mengambil system persona prompt bot aktif saat ini
+   */
+  fastify.get('/api/admin/persona', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { BOT_PERSONA_PROMPT } = await import('../config/persona');
+    return reply.status(200).send({ success: true, persona: BOT_PERSONA_PROMPT });
+  });
+
+  /**
+   * POST /api/admin/persona
+   * Mengupdate system persona prompt bot secara live (in-memory & file)
+   */
+  fastify.post(
+    '/api/admin/persona',
+    async (
+      request: FastifyRequest<{
+        Body: { persona: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { persona } = request.body || {};
+      if (!persona || !persona.trim()) {
+        return reply.status(400).send({ error: 'System persona prompt is required' });
+      }
+
+      try {
+        const { updatePersonaInMemoryAndFile } = await import('../config/persona');
+        updatePersonaInMemoryAndFile(persona);
+
+        // Audit Trail Log for Persona Change
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'BOT_PERSONA_CHANGE',
+          targetId: 'SYSTEM_PERSONA',
+          details: `System persona prompt updated to: ${persona.substring(0, 100)}...`,
+        });
+
+        return reply.status(200).send({ success: true, message: 'System persona prompt berhasil diperbarui secara live!', persona });
+      } catch (err: any) {
+        return reply.status(500).send({ error: `Gagal memperbarui persona: ${err.message}` });
       }
     }
   );
@@ -1487,6 +1703,91 @@ export async function adminRoutes(fastify: FastifyInstance) {
       });
     }
   );
+
+  /**
+   * GET /api/admin/delivery-tiers
+   * Mengambil setting delivery tiers ongkir
+   */
+  fastify.get('/api/admin/delivery-tiers', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { activeDeliveryTiers } = await import('../services/delivery.service');
+    return reply.status(200).send({
+      success: true,
+      data: activeDeliveryTiers
+    });
+  });
+
+  /**
+   * POST /api/admin/delivery-tiers
+   * Memperbarui setting delivery tiers ongkir
+   */
+  fastify.post('/api/admin/delivery-tiers', async (request: FastifyRequest<{ Body: { tiers: any[] } }>, reply: FastifyReply) => {
+    const { tiers } = request.body || {};
+    if (!tiers || !Array.isArray(tiers)) {
+      return reply.status(400).send({ error: 'Body must contain tiers array' });
+    }
+    const { saveDeliveryTiers } = await import('../services/delivery.service');
+    const success = saveDeliveryTiers(tiers);
+    if (!success) {
+      return reply.status(500).send({ error: 'Failed to save delivery tiers' });
+    }
+    await auditService.logAdminAction({
+      apiKey: (request as any).adminKeyUsed,
+      adminIdentity: (request as any).adminIdentity,
+      action: 'UPDATE_DELIVERY_TIERS',
+      targetId: 'SYSTEM',
+      ipAddress: request.ip,
+    });
+    return reply.status(200).send({ success: true, message: 'Delivery tiers updated successfully' });
+  });
+
+  /**
+   * PUT /api/admin/services/:id
+   * Memperbarui layanan treatment clinic
+   */
+  fastify.put('/api/admin/services/:id', async (request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const body = request.body || {};
+    const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
+    const existing = treatmentCatalogService.getServiceById(id);
+    if (!existing) {
+      return reply.status(404).send({ error: 'Service not found' });
+    }
+    const updated = treatmentCatalogService.upsertService({
+      ...existing,
+      ...body,
+      id // force original ID
+    });
+    await auditService.logAdminAction({
+      apiKey: (request as any).adminKeyUsed,
+      adminIdentity: (request as any).adminIdentity,
+      action: 'UPDATE_CLINIC_SERVICE',
+      targetId: id,
+      payload: { name: updated.name },
+      ipAddress: request.ip,
+    });
+    return reply.status(200).send({ success: true, data: updated });
+  });
+
+  /**
+   * DELETE /api/admin/services/:id
+   * Menghapus layanan treatment clinic
+   */
+  fastify.delete('/api/admin/services/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
+    const deleted = treatmentCatalogService.deleteService(id);
+    if (!deleted) {
+      return reply.status(404).send({ error: 'Service not found' });
+    }
+    await auditService.logAdminAction({
+      apiKey: (request as any).adminKeyUsed,
+      adminIdentity: (request as any).adminIdentity,
+      action: 'DELETE_CLINIC_SERVICE',
+      targetId: id,
+      ipAddress: request.ip,
+    });
+    return reply.status(200).send({ success: true, message: 'Service deleted successfully' });
+  });
 
   /**
    * GET /api/admin/health

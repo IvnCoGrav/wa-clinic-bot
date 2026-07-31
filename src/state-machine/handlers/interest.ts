@@ -1,6 +1,6 @@
 import { ConversationState } from '@prisma/client';
 import { StateHandlerContext, StateHandlerResult } from '../types';
-import { llmIntentService } from '../../integrations/llm/intent';
+import { llmIntentService, IntentType } from '../../integrations/llm/intent';
 import { knowledgeBaseService } from '../../services/knowledge.service';
 import { llmResponseGenerator } from '../../integrations/llm/generator';
 import { conversationService } from '../../services/conversation.service';
@@ -95,9 +95,43 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     }
   }
 
-  // 1. Deteksi Intent (5 Intent Classifier)
-  const intentResult = await llmIntentService.detectIntent(userText);
-  console.log(`[INTENT DETECTED] Customer Message: "${userText}" -> Intent: ${intentResult.intent}`);
+  // 1. Deteksi Intent — NLU Layer-first, dengan fallback ke legacy llmIntentService
+  //
+  // ATURAN PRIORITAS: State machine tetap memegang kendali. NLU hanya mempercepat dan
+  // memperkaya input klasifikasi. Jika NLU confident (>= 0.6, non-fallback), kita mapping
+  // NLU intents ke legacy IntentType taxonomy dan skip extra LLM call.
+  // Jika NLU tidak tersedia atau confidence rendah, jatuh ke llmIntentService seperti semula.
+
+  const nlu = ctx.nluResult;
+  const nluConfident = nlu && !nlu.isFallback && (nlu.confidence || 0) >= 0.6;
+
+  let intentResult: { intent: IntentType; confidence: number };
+
+  if (nluConfident) {
+    // Map NLU taxonomy → legacy IntentType (preserve all existing switch branches)
+    let mappedIntent: IntentType = 'other';
+
+    if (nlu!.intents.includes('complaint')) {
+      mappedIntent = 'complaint';
+    } else if (nlu!.intents.includes('ask_schedule')) {
+      mappedIntent = 'asking_schedule';
+    } else if (nlu!.intents.includes('faq_question') || nlu!.intents.includes('ask_price')) {
+      mappedIntent = 'faq_question';
+    } else if (nlu!.intents.includes('express_interest') || nlu!.intents.includes('affirmation')) {
+      mappedIntent = 'interested';
+    } else if (nlu!.intents.includes('negation')) {
+      mappedIntent = 'not_interested';
+    } else if (nlu!.intents.includes('off_topic') || nlu!.intents.includes('greeting')) {
+      mappedIntent = 'other';
+    }
+
+    intentResult = { intent: mappedIntent, confidence: nlu!.confidence };
+    console.log(`[INTENT DETECTED] (NLU Layer) Customer: "${userText}" → NLU intents: [${nlu!.intents.join(',')}] → Mapped: ${mappedIntent} (conf: ${nlu!.confidence.toFixed(2)})`);
+  } else {
+    // Fallback to legacy LLM intent service (5-intent classifier)
+    intentResult = await llmIntentService.detectIntent(userText);
+    console.log(`[INTENT DETECTED] (Legacy LLM) Customer Message: "${userText}" → Intent: ${intentResult.intent}`);
+  }
 
   switch (intentResult.intent) {
     case 'medical_query':

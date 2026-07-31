@@ -10,7 +10,10 @@ const Overview = lazy(() => import('./pages/tenant/Overview').then(m => ({ defau
 const Reservations = lazy(() => import('./pages/tenant/Reservations').then(m => ({ default: m.Reservations })));
 const KnowledgeBase = lazy(() => import('./pages/tenant/KnowledgeBase').then(m => ({ default: m.KnowledgeBase })));
 const AiSandbox = lazy(() => import('./pages/tenant/AiSandbox').then(m => ({ default: m.AiSandbox })));
+const LiveChatMonitor = lazy(() => import('./pages/tenant/LiveChatMonitor').then(m => ({ default: m.LiveChatMonitor })));
 const Settings = lazy(() => import('./pages/tenant/Settings').then(m => ({ default: m.Settings })));
+const ClinicServices = lazy(() => import('./pages/tenant/ClinicServices').then(m => ({ default: m.ClinicServices })));
+const AiPersona = lazy(() => import('./pages/tenant/AiPersona').then(m => ({ default: m.AiPersona })));
 
 export const App: React.FC = () => {
   return (
@@ -51,6 +54,27 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <AiSandbox />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/live-chat" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <LiveChatMonitor />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/services" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <ClinicServices />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/persona" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <AiPersona />
                 </Layout>
               </ProtectedRoute>
             } />

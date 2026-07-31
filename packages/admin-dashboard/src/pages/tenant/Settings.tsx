@@ -24,10 +24,10 @@ export const Settings: React.FC = () => {
   const [branchName, setBranchName] = useState('Kala Moms & Baby Spa — Mulyosari');
 
   // Tiering Ongkir (persisted locally)
-  const [ongkirTiers, setOngkirTiers] = useState([
-    { id: 1, maxDist: 3, fee: 10000 },
-    { id: 2, maxDist: 7, fee: 20000 },
-    { id: 3, maxDist: 15, fee: 35000 },
+  const [ongkirTiers, setOngkirTiers] = useState<Array<{ id: number; maxDist: number; fee: number; promoDiscount: number }>>([
+    { id: 1, maxDist: 3, fee: 10000, promoDiscount: 0 },
+    { id: 2, maxDist: 7, fee: 20000, promoDiscount: 0 },
+    { id: 3, maxDist: 15, fee: 35000, promoDiscount: 0 },
   ]);
 
   // Broadcast campaign input
@@ -42,7 +42,7 @@ export const Settings: React.FC = () => {
         const data = await apiRequest('/api/admin/settings');
         setGlobalBotActive(data.globalBotActive);
         
-        // Load branch & tiering from localStorage if available
+        // Load branch from localStorage if available
         const localBranch = localStorage.getItem('kala_branch_settings');
         if (localBranch) {
           const parsed = JSON.parse(localBranch);
@@ -51,12 +51,14 @@ export const Settings: React.FC = () => {
           setBranchName(parsed.name);
         }
         
-        const localTiers = localStorage.getItem('kala_ongkir_tiers');
-        if (localTiers) {
-          setOngkirTiers(JSON.parse(localTiers));
+        // Fetch tiers from backend API
+        const tiersRes = await apiRequest('/api/admin/delivery-tiers');
+        const list = Array.isArray(tiersRes) ? tiersRes : (tiersRes?.data || []);
+        if (list.length > 0) {
+          setOngkirTiers(list);
         }
       } catch (err) {
-        console.warn('Failed to load global chatbot active status:', err);
+        console.warn('Failed to load global chatbot settings:', err);
       } finally {
         setLoading(false);
       }
@@ -86,9 +88,16 @@ export const Settings: React.FC = () => {
     alert('Branch coordinates updated successfully!');
   };
 
-  const handleSaveOngkirTiers = () => {
-    localStorage.setItem('kala_ongkir_tiers', JSON.stringify(ongkirTiers));
-    alert('Delivery fee tierings updated successfully!');
+  const handleSaveOngkirTiers = async () => {
+    try {
+      await apiRequest('/api/admin/delivery-tiers', {
+        method: 'POST',
+        body: JSON.stringify({ tiers: ongkirTiers })
+      });
+      alert('Delivery fee tierings updated successfully on server!');
+    } catch (err: any) {
+      alert(`Failed to save delivery fee tierings: ${err.message}`);
+    }
   };
 
   return (
@@ -232,17 +241,15 @@ export const Settings: React.FC = () => {
                   Data tiering ongkir yang diinput di sini hanya tersimpan lokal di browser dan belum terintegrasi dengan backend delivery.service.ts.
                 </p>
               </div>
-            </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Define the price of delivery based on straight-line Haversine distance calculations from coordinates.
+            </div>            <p className="text-xs text-slate-400 leading-relaxed">
+              Tentukan tarif biaya pengiriman (ongkir) normal dan potongan promo berdasarkan jarak haversine rute dari koordinat spa ke lokasi customer.
             </p>
 
             <div className="space-y-3">
               {ongkirTiers.map((tier, idx) => (
-                <div key={tier.id} className="grid grid-cols-3 gap-3 items-center">
+                <div key={tier.id} className="grid grid-cols-4 gap-2 items-end">
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500">Max Distance (km)</label>
+                    <label className="text-[9px] text-slate-500 block uppercase font-bold">Max Dist (km)</label>
                     <input
                       type="number"
                       value={tier.maxDist}
@@ -255,7 +262,7 @@ export const Settings: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500">Fee (IDR)</label>
+                    <label className="text-[9px] text-slate-500 block uppercase font-bold">Normal Fee (Rp)</label>
                     <input
                       type="number"
                       value={tier.fee}
@@ -267,12 +274,26 @@ export const Settings: React.FC = () => {
                       className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
                     />
                   </div>
-                  <div className="pt-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-slate-500 block uppercase font-bold">Promo Disc (Rp)</label>
+                    <input
+                      type="number"
+                      value={tier.promoDiscount !== undefined ? tier.promoDiscount : 0}
+                      onChange={(e) => {
+                        const newTiers = [...ongkirTiers];
+                        newTiers[idx].promoDiscount = parseInt(e.target.value) || 0;
+                        setOngkirTiers(newTiers);
+                      }}
+                      className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                    />
+                  </div>
+                  <div className="flex space-x-2">
                     <button
                       onClick={() => {
                         setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id));
                       }}
-                      className="p-2 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition"
+                      className="p-2 w-full rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition flex justify-center items-center"
+                      title="Hapus Tier"
                     >
                       <Trash size={12} />
                     </button>
@@ -283,7 +304,7 @@ export const Settings: React.FC = () => {
               <div className="pt-2 flex justify-between">
                 <button
                   onClick={() => {
-                    setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 50000 }]);
+                    setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 30000, promoDiscount: 5000 }]);
                   }}
                   className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white flex items-center space-x-1"
                 >

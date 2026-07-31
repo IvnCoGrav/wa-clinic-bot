@@ -76,6 +76,18 @@ export class LegacyHarvestingService {
   }
 
   /**
+   * Filter Penjadwalan & Form Reservasi:
+   * Pertanyaan terkait reschedule, booking slot, jam operasional spesifik, atau pengisian form reservasi
+   * diklasifikasikan sebagai transaksi atau di-exclude total dari kandidat FAQ.
+   */
+  static isTransactionOrScheduleMessage(text: string): boolean {
+    if (!text || typeof text !== 'string') return false;
+    const lower = text.toLowerCase();
+    const pattern = /\b(reschedule|jadwal|jam berapa|isi form|buka jam|slot|booking|reservasi|ganti hari|pindah hari|isi data|kirim form)\b/i;
+    return pattern.test(lower);
+  }
+
+  /**
    * Anti-Duplication Guard: Checks if question already exists in MedicalFaqStaging, GeneralFaqStaging, or FaqItem
    */
   static async isDuplicateFaq(question: string, tenantId: string): Promise<boolean> {
@@ -160,16 +172,48 @@ export class LegacyHarvestingService {
               const rawQ = currentMsg.body;
               const rawA = nextMsg.body;
 
-              // 1. Pre-AI Junk Filter
+              // 1. Pre-AI Junk Filter & Schedule/Form Exclusion
               if (this.isJunkMessage(rawQ)) continue;
+              if (this.isTransactionOrScheduleMessage(rawQ)) {
+                // If it's a schedule/form message, check if it extracts a lead for LegacyStaging, but EXCLUDE from FAQ staging!
+                const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
+                if (reservationDetails.success && reservationDetails.reservation) {
+                  try {
+                    const phoneNum = chat.id.replace(/@.*$/, '');
+                    const existingLead = await prisma.legacyStaging.findUnique({
+                      where: { phoneNumber: phoneNum }
+                    });
+                    if (!existingLead) {
+                      await prisma.legacyStaging.create({
+                        data: {
+                          tenantId: tenantId,
+                          phoneNumber: phoneNum,
+                          name: reservationDetails.reservation.name || 'Customer Lama',
+                          extractedLocation: reservationDetails.reservation.address || null,
+                          leadCreatedAt: new Date(),
+                          extractedReservationJson: JSON.parse(JSON.stringify(reservationDetails.reservation)),
+                          status: 'PENDING',
+                          rawMessagesCount: 2,
+                          rawMessagesJson: JSON.parse(JSON.stringify([currentMsg, nextMsg])),
+                        },
+                      });
+                      activeHarvestingJob.legacyLeadsExtractedCount++;
+                    }
+                  } catch (err: any) {}
+                }
+                continue; // SKIP FAQ STAGING TOTAL
+              }
 
               // 2. PII Scrubbing
               const cleanQ = this.scrubPII(rawQ);
               const cleanA = this.scrubPII(rawA);
 
-              // 3. Anti-Duplication Guard
-              const isDup = await this.isDuplicateFaq(cleanQ, tenantId);
-              if (isDup) continue;
+              // 3. Deduplikasi Otomatis via KnowledgeBaseService.checkDuplicateFaq (Threshold = 0.70)
+              const { knowledgeBaseService } = await import('./knowledge.service');
+              const dupCheck = await knowledgeBaseService.checkDuplicateFaq(cleanQ, tenantId, 0.70);
+              const stagingStatus: any = dupCheck.isDuplicate ? 'EXISTING_MATCH' : 'PENDING';
+              const matchedChunkId = dupCheck.matchedChunk?.id || null;
+              const matchedSimilarity = dupCheck.similarity || null;
 
               // 4. Sub-Part B Lead/Purchase Extraction (using parseReservationText)
               const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
@@ -217,7 +261,9 @@ export class LegacyHarvestingService {
                       general_question: `Bagaimana penanganan ${medicalCheck.detectedSymptoms.join(', ')}?`,
                       general_answer: cleanA,
                       symptoms_tagged: medicalCheck.detectedSymptoms,
-                      status: 'PENDING',
+                      status: stagingStatus,
+                      matched_chunk_id: matchedChunkId,
+                      matched_similarity: matchedSimilarity,
                     },
                   });
                   activeHarvestingJob.medicalStagedCount++;
@@ -236,7 +282,9 @@ export class LegacyHarvestingService {
                       general_question: cleanQ,
                       general_answer: cleanA,
                       category: 'general',
-                      status: 'PENDING',
+                      status: stagingStatus,
+                      matched_chunk_id: matchedChunkId,
+                      matched_similarity: matchedSimilarity,
                     },
                   });
                   activeHarvestingJob.generalStagedCount++;

@@ -117,8 +117,8 @@ describe('Robustness & Hardening Suite', () => {
 
     it('Admin endpoints should limit request flooding (Rate Limit)', async () => {
       const app = buildApp();
-      // Send 35 requests quickly
-      const requests = Array.from({ length: 35 }).map(() =>
+      // Send 305 requests quickly to exceed rate limit (300 req/min)
+      const requests = Array.from({ length: 305 }).map(() =>
         app.inject({
           method: 'GET',
           url: '/api/admin/human-handling-conversations',

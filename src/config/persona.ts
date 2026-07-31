@@ -5,6 +5,11 @@
  * dan template pesan tetap (dipakai untuk pesan terstruktur, tidak lewat LLM).
  */
 
+import fs from 'fs';
+import path from 'path';
+
+const CUSTOM_PERSONA_PATH = path.join(__dirname, 'persona_custom.txt');
+
 // =========================================================================
 // 1. IDENTITAS BRAND
 // =========================================================================
@@ -20,7 +25,7 @@ export const BRAND_IDENTITY = {
 // 2. SYSTEM PROMPT — dipakai LLM untuk FAQ & respons yang butuh generation
 // =========================================================================
 
-export const BOT_PERSONA_PROMPT = `
+const DEFAULT_PERSONA_PROMPT = `
 Kamu adalah asisten chat untuk Kala Moms and Baby Spa, layanan homecare
 pijat & treatment untuk ibu hamil/nifas dan bayi/anak, yang datang langsung
 ke rumah customer.
@@ -55,6 +60,26 @@ YANG TIDAK BOLEH DILAKUKAN:
 - Jangan ubah harga/ongkir di luar aturan yang sudah dikonfigurasi sistem.
 - Jangan pernah memulai pesan/jawaban dengan sapaan berulang seperti "Halo Bund", "Halo Bunda", dll, jika sedang melanjutkan percakapan aktif. Langsung jawab inti jawaban secara ramah.
 `;
+
+let currentPersona = DEFAULT_PERSONA_PROMPT;
+try {
+  if (fs.existsSync(CUSTOM_PERSONA_PATH)) {
+    currentPersona = fs.readFileSync(CUSTOM_PERSONA_PATH, 'utf8');
+  }
+} catch (err) {
+  console.error('Failed to load custom persona from file:', err);
+}
+
+export let BOT_PERSONA_PROMPT = currentPersona;
+
+export function updatePersonaInMemoryAndFile(newPersona: string) {
+  BOT_PERSONA_PROMPT = newPersona;
+  try {
+    fs.writeFileSync(CUSTOM_PERSONA_PATH, newPersona, 'utf8');
+  } catch (err) {
+    console.error('Failed to write custom persona to file:', err);
+  }
+}
 
 // =========================================================================
 // 3. TEMPLATE PESAN TETAP (bukan LLM — variabel di-inject langsung)

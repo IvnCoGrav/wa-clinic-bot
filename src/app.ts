@@ -33,7 +33,7 @@ export function buildApp() {
 
   // Register Rate Limiting (global, admin routes have the tightest budget)
   app.register(rateLimit, {
-    max: 30,
+    max: 300,
     timeWindow: '1 minute',
     keyGenerator: (request) => {
       const apiKey = request.headers['x-api-key'] as string;
