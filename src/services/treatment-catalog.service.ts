@@ -301,12 +301,16 @@ export class TreatmentCatalogService {
 
   /**
    * Format ringkasan katalog harga & promo menjadi teks bersih untuk WhatsApp / LLM
+   * @param includePrice true (default) sertakan harga; false untuk konteks LLM (harga dikelola terpisah)
    */
-  public formatCatalogText(): string {
+  public formatCatalogText(includePrice = true): string {
     const services = this.getAllServices();
     return services
       .map((s) => {
-        return `• *${s.name}*\n  Usia: ${s.ageTier.label}\n  Durasi: ${s.durationMinutes} menit\n  Harga Normal: Rp${s.originalPrice.toLocaleString('id-ID')} | Promo: Rp${s.promoPrice.toLocaleString('id-ID')}\n  Deskripsi: ${s.description}`;
+        const priceLine = includePrice
+          ? `  Harga Normal: Rp${s.originalPrice.toLocaleString('id-ID')} | Promo: Rp${s.promoPrice.toLocaleString('id-ID')}\n`
+          : '';
+        return `• *${s.name}*\n  Usia: ${s.ageTier.label}\n  Durasi: ${s.durationMinutes} menit\n${priceLine}  Deskripsi: ${s.description}`;
       })
       .join('\n\n');
   }

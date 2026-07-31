@@ -128,7 +128,7 @@ export class NluClassifierService {
     const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
     // Offline / Mock check
-    if (!apiKey || apiKey.startsWith('mock')) {
+    if (!apiKey || apiKey.startsWith('mock') || process.env.NODE_ENV === 'test') {
       const fallbackResult = this.fallbackClassify(incomingText);
       console.log(`[NLU CLASSIFICATION] (OFFLINE FALLBACK)`, {
         text: incomingText,

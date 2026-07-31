@@ -92,6 +92,24 @@ describe('Treatment Questions — Treatment Catalog Lookup', () => {
     expect(text).toContain('Promo');
     expect(text).toContain('Durasi');
   });
+
+  it('formatCatalogText(false) — mode konteks LLM TANPA harga', () => {
+    const text = treatmentCatalogService.formatCatalogText(false);
+    expect(text).toContain('Pijat Bayi Ceria');
+    expect(text).toContain('Durasi');
+    expect(text).toContain('Deskripsi');
+    // Harga tidak boleh bocor ke konteks LLM
+    expect(text).not.toContain('Harga Normal');
+    expect(text).not.toContain('Promo');
+    expect(text).not.toMatch(/Rp\s?\d/);
+  });
+
+  it('formatCatalogText(false) tetap memuat deskripsi bapil & moksa untuk konteks LLM', () => {
+    const text = treatmentCatalogService.formatCatalogText(false);
+    expect(text).toContain('Pijat Bayi Pulih Ceria');
+    expect(text).toContain('Sinar Moksa');
+    expect(text).toContain('Nebulizer');
+  });
 });
 
 describe('Treatment Questions — State Machine Response (faq_question)', () => {
@@ -162,8 +180,32 @@ describe('Treatment Questions — State Machine Response (faq_question)', () => 
     expect(result.shouldSendReply).toBe(true);
   });
 
-  it('3. faq_question TANPA KB match → eskalasi senyap ke human', async () => {
+  it('3. faq_question TANPA KB match → inject katalog treatment, jawab dari data treatment', async () => {
     vi.spyOn(knowledgeBaseService, 'searchRelevantChunks').mockResolvedValue([]);
+    mockGenerator();
+    const { phone, customer } = await setupCustomer(ConversationState.AWAITING_INTEREST, '62873');
+
+    const result = await stateMachine.processMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      customer,
+      conversation: await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID),
+      incomingMessage: {
+        id: `msg_catalog_${Date.now()}`,
+        from: phone,
+        timestamp: '1700000000',
+        type: 'text',
+        text: { body: 'moksa itu buat apa ya?' },
+      },
+    });
+
+    // Tidak eskalasi senyap — tetap jawab dari katalog treatment
+    expect(result.nextState).toBe(ConversationState.AWAITING_INTEREST);
+    expect(result.shouldSendReply).toBe(true);
+  });
+
+  it('3b. faq_question TANPA KB match DAN katalog kosong → tetap eskalasi senyap', async () => {
+    vi.spyOn(knowledgeBaseService, 'searchRelevantChunks').mockResolvedValue([]);
+    vi.spyOn(treatmentCatalogService, 'formatCatalogText').mockReturnValue('');
     const { phone, customer } = await setupCustomer(ConversationState.AWAITING_INTEREST, '62873');
 
     const result = await stateMachine.processMessage({
