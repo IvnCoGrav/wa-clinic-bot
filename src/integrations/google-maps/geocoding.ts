@@ -387,10 +387,25 @@ export class GeocodingService {
     // --- HARD GATE: Kecamatan/Kota-only tanpa kelurahan → TOLAK, minta detail ---
     // Pindahkan dari bawah ke sini SEBELUM gazetteer/LLM processing.
     // "waru" = kecamatan → harus ditolak, jangan coba resolve via LLM.
-    // TAPI: kalau user pakai prefix "kelurahan/desa/kel/ds", jangan ditolak.
-    const hasExplicitKelurahanPrefix = /^(kelurahan|desa|kel|ds)\s+/i.test(lower);
-    const impreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
-    if (cleanText.length > 0 && impreciseWords.includes(cleanText) && !hasExplicitKelurahanPrefix) {
+    // TAPI: kalau user sebut "kelurahan/desa/kel/ds" (di mana pun), jangan ditolak.
+    const hasExplicitKelurahanKeyword = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel ') || lower.includes('kelurahan ') || lower.includes('ds ');
+
+    // Kumpulkan daftar nama kecamatan & kota luas langsung dari gazetteer,
+    // bukan hardcoded — supaya semua kecamatan di data ter-cover.
+    let kecamatanSet = new Set<string>();
+    try {
+      const filePathForGate = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
+      if (fs.existsSync(filePathForGate)) {
+        const dataForGate = JSON.parse(fs.readFileSync(filePathForGate, 'utf-8'));
+        kecamatanSet = new Set(dataForGate.map((d: any) => d.Kecamatan.toLowerCase()));
+      }
+    } catch (e) {
+      // ignore — fallback ke list statis
+    }
+    const staticImpreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
+    const isKecamatanOnlyName = cleanText.length > 0 && kecamatanSet.has(cleanText);
+    const isStaticImpreciseWord = cleanText.length > 0 && staticImpreciseWords.includes(cleanText);
+    if ((isKecamatanOnlyName || isStaticImpreciseWord) && !hasExplicitKelurahanKeyword) {
       return {
         isPrecise: false,
         kota: cleanText,
