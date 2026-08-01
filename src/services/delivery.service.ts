@@ -119,11 +119,13 @@ export class DeliveryService {
     } else {
       // 2. FALLBACK: Jika ORS API gagal/timeout/error/unreachable, gunakan formula Haversine + 1.25x Circuity Factor
       console.warn(
-        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with 1.25x circuity multiplier.`
+        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with 1.50x circuity multiplier.`
       );
       const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
-      // Circuity Factor 1.25x memperhitungkan kelengkungan rute jalan darat dibanding garis lurus
-      distanceKm = parseFloat((straightLineKm * 1.25).toFixed(2));
+      // Circuity Factor 1.50x memperhitungkan kelengkungan rute jalan darat dibanding garis lurus.
+      // Berdasarkan analisis 26 lokasi vs ORS: rasio aktual p50=1.52, p80=1.58, p90=1.65.
+      // 1.25x lama meremehkan (50% kasus undercharge); 1.50x mendekati median (81% cocok tier).
+      distanceKm = parseFloat((straightLineKm * 1.50).toFixed(2));
       isEstimated = true;
     }
 
