@@ -18,6 +18,78 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
   const lower = userText.toLowerCase().trim();
 
+  // 0. PENGECEKAN UTAMA: Cek jika customer mengirimkan form reservasi (RESERVATION_SENT atau AWAITING_INTEREST)
+  const isFormSubmission = lower.includes('berikut list untuk reservasi') || 
+                           (lower.includes('pilihan treatment') && (lower.includes('nama bunda') || lower.includes('alamat')));
+                           
+  if (isFormSubmission) {
+    const { parseReservationText } = await import('../../utils/reservation-text-parser');
+    const parseResult = parseReservationText(userText);
+
+    if (parseResult.success && parseResult.reservation) {
+      const parsed = parseResult.reservation;
+      // Simpan reservasi ke database
+      try {
+        const { prisma } = await import('../../db/client');
+        const reservation = await prisma.reservation.create({
+          data: {
+            tenant_id: tenantId,
+            customer_id: customer.id,
+            treatment_category: parsed.treatmentCategory,
+            treatment_detail: parsed.treatmentDetail,
+            booking_date: parsed.bookingDate,
+            raw_text: userText,
+            status: 'pending',
+          },
+        });
+
+        const { followUpService } = await import('../../services/follow-up.service');
+        await followUpService.onReservationCreated(customer.id, reservation.id, tenantId);
+      } catch (dbErr) {
+        // Abaikan error DB untuk in-memory fallback
+      }
+
+      // Simpan nama kontak customer: "Bunda {nama} {kecamatan}"
+      // Hanya update jika customer mengisi nama di form reservasi
+      const customerName = parsed.name?.trim();
+      if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
+        const kecamatan = customer.kecamatan || '';
+        const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+        console.log(`[CONTACT SAVE] Saving customer name as contact: "${contactName}"`);
+        try {
+          const { customerService } = await import('../../services/customer.service');
+          await customerService.updateCustomerName(customer.id, contactName, tenantId);
+        } catch (nameErr: any) {
+          console.warn('[CONTACT SAVE] Failed to update customer name:', nameErr.message);
+        }
+      }
+
+      // Eskalasi ke human handling untuk konfirmasi jadwal manual oleh admin
+      await conversationService.escalateToHumanHandling(
+        conversation,
+        customer.phone,
+        `Formulir reservasi telah diisi oleh customer: "${parsed.treatmentDetail}"`,
+        tenantId
+      );
+
+      return {
+        nextState: ConversationState.HUMAN_HANDLING,
+        replyText: `Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊`,
+        shouldSendReply: true,
+        isHumanHandling: true,
+      };
+    } else {
+      // Jika format kurang lengkap, minta lengkapi field yang kurang
+      const missing = parseResult.missingFields || [];
+      const missingStr = missing.join(', ');
+      return {
+        nextState: ConversationState.RESERVATION_SENT,
+        replyText: `Maaf Bunda, data reservasi yang dikirimkan kurang lengkap. Mohon isi bagian berikut ya bund: ${missingStr}. Terima kasih! 😊`,
+        shouldSendReply: true,
+      };
+    }
+  }
+
   // --- MIXED-SIGNAL DETECTION ---
   // Deteksi pola "afirmasi + tapi/tetapi/tp + negasi" → minta klarifikasi
   const hasAffirmWord = /\b(iya|yup|ok|oke|bener|betul|lanjut|benar|yes|sip|gpp|ho.?oh)\b/i.test(lower);
@@ -48,80 +120,6 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     console.log(`[LOCATION REDIRECT] Redirecting location query/change "${userText}" to handleLocationState.`);
     const { handleLocationState } = await import('./location');
     return handleLocationState(ctx);
-  }
-
-  // 0. Cek jika di state RESERVATION_SENT dan customer mengirimkan form reservasi
-  if (conversation.current_state === ConversationState.RESERVATION_SENT) {
-    const isFormSubmission = lower.includes('berikut list untuk reservasi') || 
-                             lower.includes('pilihan treatment');
-                             
-    if (isFormSubmission) {
-      const { parseReservationText } = await import('../../utils/reservation-text-parser');
-      const parseResult = parseReservationText(userText);
-
-      if (parseResult.success && parseResult.reservation) {
-        const parsed = parseResult.reservation;
-        // Simpan reservasi ke database
-        try {
-          const { prisma } = await import('../../db/client');
-          const reservation = await prisma.reservation.create({
-            data: {
-              tenant_id: tenantId,
-              customer_id: customer.id,
-              treatment_category: parsed.treatmentCategory,
-              treatment_detail: parsed.treatmentDetail,
-              booking_date: parsed.bookingDate,
-              raw_text: userText,
-              status: 'pending',
-            },
-          });
-
-          const { followUpService } = await import('../../services/follow-up.service');
-          await followUpService.onReservationCreated(customer.id, reservation.id, tenantId);
-        } catch (dbErr) {
-          // Abaikan error DB untuk in-memory fallback
-        }
-
-        // Simpan nama kontak customer: "Bunda {nama} {kecamatan}"
-        // Hanya update jika customer mengisi nama di form reservasi
-        const customerName = parsed.name?.trim();
-        if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
-          const kecamatan = customer.kecamatan || '';
-          const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
-          console.log(`[CONTACT SAVE] Saving customer name as contact: "${contactName}"`);
-          try {
-            const { customerService } = await import('../../services/customer.service');
-            await customerService.updateCustomerName(customer.id, contactName, tenantId);
-          } catch (nameErr: any) {
-            console.warn('[CONTACT SAVE] Failed to update customer name:', nameErr.message);
-          }
-        }
-
-        // Eskalasi ke human handling untuk konfirmasi jadwal manual oleh admin
-        await conversationService.escalateToHumanHandling(
-          conversation,
-          customer.phone,
-          `Formulir reservasi telah diisi oleh customer: "${parsed.treatmentDetail}"`,
-          tenantId
-        );
-
-        return {
-          nextState: ConversationState.HUMAN_HANDLING,
-          replyText: `Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊`,
-          shouldSendReply: true,
-          isHumanHandling: true,
-        };
-      } else {
-        // Jika format kurang lengkap, minta lengkapi field yang kurang
-        const missing = parseResult.missingFields || [];
-        const missingStr = missing.join(', ');
-        return {
-          nextState: ConversationState.RESERVATION_SENT,
-          replyText: `Maaf Bunda, data reservasi yang dikirimkan kurang lengkap. Mohon isi bagian berikut ya bund: ${missingStr}. Terima kasih! 😊`,
-          shouldSendReply: true,
-        };
-      }
-    }
   }
 
   // 1. Deteksi Intent — NLU Layer-first, dengan fallback ke legacy llmIntentService

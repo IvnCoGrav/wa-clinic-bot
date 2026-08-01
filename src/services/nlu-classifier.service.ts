@@ -201,7 +201,18 @@ OUTPUT JSON SCHEMA ONLY:
         }
       );
 
-      const rawContent = response.data?.choices?.[0]?.message?.content?.trim();
+      let rawContent = response.data?.choices?.[0]?.message?.content?.trim();
+      
+      // Handle DeepSeek reasoning models where content is empty and JSON is in reasoning_content
+      if (!rawContent) {
+        const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';
+        const jsonMatch = reasoning.match(/\{[\s\S]*?"intents"[\s\S]*?\}/);
+        if (jsonMatch) {
+          rawContent = jsonMatch[0];
+          console.log(`[NLU CLASSIFICATION] Extracted JSON from reasoning_content`);
+        }
+      }
+
       if (!rawContent) {
         throw new Error('Empty response content from LLM');
       }
