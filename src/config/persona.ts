@@ -195,7 +195,17 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
 
   locationEscalation: () => `Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊`,
 
-  faqFollowUp: (faqAnswer: string) => `${faqAnswer}\n\nApakah Bunda tertarik untuk lanjut ke pengisian list reservasi treatment sekarang? 😊`,
+  faqFollowUp: (faqAnswer: string, treatmentName?: string) => {
+    // Follow-up personal dengan rotasi variasi supaya tidak kaku/terlalu mirip tiap kali
+    const personal = treatmentName && treatmentName.trim() ? [
+      `Kalau Bunda berminat, mau langsung pilih treatment *${treatmentName.trim()}* bunda? 😊`,
+      `Bunda tertarik sama *${treatmentName.trim()}*-nya? Boleh langsung booking, nanti kami siapkan jadwalnya ya bund 🤗`,
+      `Mau kami jadwalkan *${treatmentName.trim()}* untuk si kecil/bunda? Kabarin aja, nanti dibantuin 😊`,
+      `Kalau cocok, *${treatmentName.trim()}* bisa langsung di-book bunda. Mau dibantu? 🙏`,
+    ][Math.floor(Math.random() * 4)]
+      : `Apakah Bunda tertarik untuk lanjut ke pengisian list reservasi treatment sekarang? 😊`;
+    return `${faqAnswer}\n\n${personal}`;
+  },
 
   interestUnrelatedFollowUp: () => `Apakah Bunda tertarik untuk lanjut mengisi list reservasi treatment homecare kami? 😊\n\nAtau jika ada hal yang ingin ditanyakan terlebih dahulu, silakan kabari kami ya, Bunda. Saya dengan senang hati siap membantu! 🤗`,
 

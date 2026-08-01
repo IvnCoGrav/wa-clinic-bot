@@ -232,8 +232,32 @@ ${catalogText}`,
       // 3. Generate balasan FAQ natural berbasis RAG + Persona (dengan history & reasoning)
       const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId);
 
+      // 3b. Extract nama treatment spesifik untuk follow-up personal (jika ada)
+      let treatmentNameForFollowUp: string | undefined;
+      // Ambil dari NLU entity jika tersedia
+      const nluTreatment = ctx.nluResult?.entities?.treatment_name;
+      if (nluTreatment && typeof nluTreatment === 'string') {
+        treatmentNameForFollowUp = nluTreatment;
+      }
+      // Coba ambil nama RESMI dari catalog match (lebih akurat daripada entity mentah)
+      try {
+        const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+        const catalogMatch = treatmentCatalogService.searchCatalog(userText, false);
+        const firstLine = catalogMatch.split('\n').find((l) => l.startsWith('• *'));
+        if (firstLine) {
+          const match = firstLine.match(/• \*([^*]+)\*/);
+          if (match && match[1]) {
+            // Bersihkan nama: buang suffix kurung (misal "(Add-on)", "(Rileksasi)")
+            const cleanName = match[1].trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+            if (cleanName) {
+              treatmentNameForFollowUp = cleanName;
+            }
+          }
+        }
+      } catch (_) { /* abaikan, pakai entity NLU */ }
+
       // 4. JANGAN RESET / UBAH STATE: Tambahkan kalimat follow-up sesuai state saat ini!
-      const replyText = TEMPLATES.faqFollowUp(faqAnswer);
+      const replyText = TEMPLATES.faqFollowUp(faqAnswer, treatmentNameForFollowUp);
 
       return {
         nextState: ConversationState.AWAITING_INTEREST,
