@@ -323,7 +323,24 @@ export class TreatmentCatalogService {
    */
   public searchCatalog(userText: string, includePrice = false): string {
     const q = userText.toLowerCase();
-    // Ekstrak kata kunci bermakna (buang kata umum/stopwords)
+    const services = this.getAllServices();
+
+    // 1. PRIORITAS UTAMA: Exact Phrase Match pada Nama Treatment
+    // Jika customer sebut nama treatment spesifik (misal "pijat bayi ceria"), kembalikan HANYA 1 treatment itu.
+    const exactNameMatch = services.find((s) => {
+      // Ambil nama tanpa kurung, misal "Pijat Bayi Ceria (Rileksasi)" -> "pijat bayi ceria"
+      const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+      return q.includes(cleanName) || cleanName.includes(q.replace(/(itu|apa|ya|bund|bunda|berapa|dong|kak|min)\b/gi, '').trim());
+    });
+
+    if (exactNameMatch) {
+      const priceLine = includePrice
+        ? `  Harga Normal: Rp${exactNameMatch.originalPrice.toLocaleString('id-ID')} | Promo: Rp${exactNameMatch.promoPrice.toLocaleString('id-ID')}\n`
+        : '';
+      return `• *${exactNameMatch.name}*\n  Usia: ${exactNameMatch.ageTier.label}\n  Durasi: ${exactNameMatch.durationMinutes} menit\n${priceLine}  Deskripsi: ${exactNameMatch.description}`;
+    }
+
+    // 2. Fallback Keyword Scoring
     const stopwords = new Set([
       'yang', 'itu', 'apa', 'berapa', 'bung', 'bund', 'bunda', 'ya', 'dong', 'kak', 'min', 'mbak', 'mas',
       'saya', 'untuk', 'dengan', 'dan', 'atau', 'dari', 'ke', 'di', 'ada', 'bisa', 'mau', 'ingin', 'bagaimana',
@@ -340,8 +357,7 @@ export class TreatmentCatalogService {
       return '';
     }
 
-    const services = this.getAllServices();
-    // Scoring: nama treatment +2, deskripsi +1, usia +0.5
+    // Scoring: nama treatment +3, deskripsi +1, usia +0.5
     const scored = services
       .map((s) => {
         const nameLower = s.name.toLowerCase();
@@ -349,7 +365,7 @@ export class TreatmentCatalogService {
         const ageLower = s.ageTier.label.toLowerCase();
         let score = 0;
         for (const k of keywords) {
-          if (nameLower.includes(k)) score += 2;
+          if (nameLower.includes(k)) score += 3;
           if (descLower.includes(k)) score += 1;
           if (ageLower.includes(k)) score += 0.5;
         }
@@ -361,12 +377,12 @@ export class TreatmentCatalogService {
       return '';
     }
 
-    // Ambil hanya yang skor tertinggi (minimal 1, maksimal 3) supaya tidak dump semua
+    // Ambil hanya yang skor tertinggi (threshold ketat >= maxScore * 0.85, max 2 items)
     const maxScore = Math.max(...scored.map((c) => c.score));
     const top = scored
-      .filter((c) => c.score >= maxScore * 0.6)
+      .filter((c) => c.score >= maxScore * 0.85)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
+      .slice(0, 2);
 
     return top
       .map(({ s }) => {
