@@ -3,7 +3,7 @@ import { DeliveryService } from '../../src/services/delivery.service';
 import { calculateHaversineDistance } from '../../src/utils/haversine';
 import { clinicConfig } from '../../src/config/clinic';
 
-describe('DeliveryService — Haversine 1.25x Circuity Multiplier & Boundary Tests', () => {
+describe('DeliveryService — Haversine 1.50x Circuity Multiplier & Boundary Tests', () => {
   // Mock ORS client that always fails/returns null to force Haversine fallback
   const mockOrsClientFailed = {
     calculateRoute: vi.fn().mockResolvedValue(null),
@@ -14,7 +14,7 @@ describe('DeliveryService — Haversine 1.25x Circuity Multiplier & Boundary Tes
     calculateRoute: vi.fn().mockResolvedValue({ distanceMeters: 4000, durationSeconds: 300 }),
   };
 
-  it('1. Baseline Test: ORS success vs Haversine 1.25x fallback comparison', async () => {
+  it('1. Baseline Test: ORS success vs Haversine 1.50x fallback comparison', async () => {
     const serviceOrs = new DeliveryService(mockOrsClientSuccess as any);
     const serviceFallback = new DeliveryService(mockOrsClientFailed as any);
 
@@ -27,14 +27,14 @@ describe('DeliveryService — Haversine 1.25x Circuity Multiplier & Boundary Tes
 
     const resFallback = await serviceFallback.calculateDelivery(customerCoords);
     const straightKm = calculateHaversineDistance(clinicConfig, customerCoords);
-    const expectedKm = parseFloat((straightKm * 1.25).toFixed(2));
+    const expectedKm = parseFloat((straightKm * 1.50).toFixed(2));
 
     expect(resFallback.isEstimated).toBe(true);
     expect(resFallback.distanceKm).toBe(expectedKm);
     expect(resFallback.distanceKm).toBeGreaterThan(straightKm);
   });
 
-  it('2. Fallback Timeout Test: ORS API timeout triggers Haversine 1.25x with isEstimated: true', async () => {
+  it('2. Fallback Timeout Test: ORS API timeout triggers Haversine 1.50x with isEstimated: true', async () => {
     const timeoutOrsClient = {
       calculateRoute: vi.fn().mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve(null), 100))),
     };
@@ -48,11 +48,11 @@ describe('DeliveryService — Haversine 1.25x Circuity Multiplier & Boundary Tes
     expect(result.messageTemplate).toBeDefined();
   });
 
-  it('3. Boundary-Sensitive Crossing Test: 4.0 km straight (4.0*1.25 = 5.0 km gratis) vs 4.2 km straight (4.2*1.25 = 5.25 km -> Tier 5-7km Rp5.000)', async () => {
+  it('3. Boundary-Sensitive Crossing Test: 4.0 km straight (4.0*1.50 = 6.0 km > gratis) vs 4.2 km straight (4.2*1.50 = 6.30 km -> Tier 5-7km Rp5.000)', async () => {
     const deliveryService = new DeliveryService(mockOrsClientFailed as any);
 
-    // Coordinate calculated so straight line * 1.25 = ~5.25 km (crosses 5.0 km free tier)
-    // Lat diff ~0.0374 deg approx 4.15 km straight * 1.25 = 5.19 km
+    // Coordinate calculated so straight line * 1.50 = ~6.2 km (crosses 5.0 km free tier)
+    // Lat diff ~0.0374 deg approx 4.15 km straight * 1.50 = 6.23 km
     const customerCoordsAcrossBoundary = {
       lat: clinicConfig.lat + 0.0374,
       lng: clinicConfig.lng,
@@ -67,7 +67,7 @@ describe('DeliveryService — Haversine 1.25x Circuity Multiplier & Boundary Tes
     expect(result.promoPrice).toBe(5000); // Crosses boundary into Rp 5.000 tier!
   });
 
-  it('4. Double-Jump Tier Crossing Test: Straight line 12.1 km (Tier 10-15km) * 1.25x = 15.13 km (Tier 15-20km)', async () => {
+  it('4. Double-Jump Tier Crossing Test: Straight line 12.1 km (Tier 10-15km) * 1.50x = 18.15 km (Tier 15-20km)', async () => {
     const deliveryService = new DeliveryService(mockOrsClientFailed as any);
 
     // Coords chosen so straight line distance is ~12.1 km
