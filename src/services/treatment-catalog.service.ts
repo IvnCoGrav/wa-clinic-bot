@@ -357,19 +357,37 @@ export class TreatmentCatalogService {
       return '';
     }
 
-    // Scoring: nama treatment +3, deskripsi +1, usia +0.5
+    // Hitung document frequency per keyword (berapa service yang mengandung kata itu).
+    // Kata yang muncul di banyak service (misal "pijat") dianggap generik → bobot kecil.
+    // Kata langka (misal "asi", "lancar") lebih spesifik → bobot besar (IDF).
+    const df = new Map<string, number>();
+    for (const k of keywords) {
+      const count = services.filter((s) =>
+        s.name.toLowerCase().includes(k) || s.description.toLowerCase().includes(k)
+      ).length;
+      df.set(k, count > 0 ? count : 1);
+    }
+
+    // Scoring: match nama +3, deskripsi +1, usia +0.5; lalu kalikan dengan 1/df (IDF)
     const scored = services
       .map((s) => {
         const nameLower = s.name.toLowerCase();
         const descLower = s.description.toLowerCase();
         const ageLower = s.ageTier.label.toLowerCase();
-        let score = 0;
+        let rawScore = 0;
         for (const k of keywords) {
-          if (nameLower.includes(k)) score += 3;
-          if (descLower.includes(k)) score += 1;
-          if (ageLower.includes(k)) score += 0.5;
+          if (nameLower.includes(k)) rawScore += 3;
+          if (descLower.includes(k)) rawScore += 1;
+          if (ageLower.includes(k)) rawScore += 0.5;
         }
-        return { s, score };
+        // IDF: kalikan skor per kata dengan 1/df, gabungkan
+        let idfScore = 0;
+        for (const k of keywords) {
+          if (nameLower.includes(k)) idfScore += 3 / (df.get(k) || 1);
+          if (descLower.includes(k)) idfScore += 1 / (df.get(k) || 1);
+          if (ageLower.includes(k)) idfScore += 0.5 / (df.get(k) || 1);
+        }
+        return { s, score: idfScore > 0 ? idfScore : rawScore };
       })
       .filter((c) => c.score > 0);
 
