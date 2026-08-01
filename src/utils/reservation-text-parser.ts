@@ -29,9 +29,16 @@ export function parseReservationText(rawText: string): ParseResult {
   }
 
   // Bersihkan formatting markdown WhatsApp (*, _, ~, `)
-  const cleanedFormattingText = rawText.replace(/[*_~`]/g, '');
-  const normalizedText = cleanedFormattingText.replace(/\r\n/g, '\n');
-  const lines = normalizedText.split('\n');
+  let cleaned = rawText.replace(/[*_~`]/g, '').replace(/\r\n/g, '\n');
+
+  // 1. Gabungkan label yang terpotong ke baris baru (misal Usia Kehamilan (Jika\n hamil): -> Usia Kehamilan (Jika hamil):)
+  cleaned = cleaned.replace(/(usia\s+kehamilan[^\n:]*)\n\s*([^:\n]+:)/gi, '$1 $2');
+
+  // 2. Pisahkan label yang berada di satu baris yang sama setelah nilai field lain
+  const inlineLabelRegex = /(\s+)(Nama Bunda\s*:|Alamat & Shareloc\s*:|Alamat\s*:|Kec\s*&\s*Kota\s*:|\bKec\s*:|\bKota\s*:|No\.?\s*Hp\s*:|Nama Bayi\s*:|Usia Bayi\/Anak\s*:|Usia Bayi\s*:|Usia Kehamilan[^\n:]*:|Treatment\s*:|Pilihan treatment)/gi;
+  cleaned = cleaned.replace(inlineLabelRegex, '\n$2');
+
+  const lines = cleaned.split('\n');
 
   let name = '';
   let phone = '';

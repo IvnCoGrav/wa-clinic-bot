@@ -139,4 +139,26 @@ No. Hp : 08123456789`;
     expect(result.missingFields).toContain('Alamat & Shareloc');
     expect(result.missingFields).toContain('Treatment Detail');
   });
+
+  it('6. should successfully parse multiline form text with wrapped/inline labels', () => {
+    const rawText = `Berikut list untuk reservasi :   Hari dan
+ tanggal :  minggu, 19 juli 2026 Nama Bunda: Bella
+ Alamat & Shareloc : Desa Kedungkendo rt 07 rw 02
+Kec : Candi Kota : Sidoarjo No. Hp : 089670370062
+ Pilihan treatment (Moms) :   Usia Kehamilan (Jika
+ hamil): 37-38weeks Treatment : induksi massage fullbody
+ Mohon bisa diisi Bunda 😊  Cancel / Pembatalan Harap minimal H-3 jam
+ H-1 sebelum treatment akan kami reminder kembali bunda 🥰  Terimakasih. ☺️`;
+
+    const result = parseReservationText(rawText);
+    expect(result.success).toBe(true);
+    const res = result.reservation!;
+    expect(res.name).toBe('Bella');
+    expect(res.phone).toBe('6289670370062');
+    expect(res.address).toBe('Desa Kedungkendo rt 07 rw 02');
+    expect(res.kec).toBe('Candi');
+    expect(res.kota).toBe('Sidoarjo');
+    expect(res.treatmentCategory).toBe('MOMS');
+    expect(res.treatmentDetail).toContain('induksi massage fullbody');
+  });
 });
