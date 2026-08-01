@@ -81,6 +81,55 @@ export function updatePersonaInMemoryAndFile(newPersona: string) {
   }
 }
 
+/**
+ * Load persona dari database per tenant (SaaS-ready).
+ * Sumber kebenaran: tabel tenant_persona. Fallback: persona_custom.txt / default.
+ */
+export async function loadPersonaFromDb(tenantId: string): Promise<string> {
+  try {
+    const { prisma } = await import('../db/client');
+    const record = await prisma.tenantPersona.findUnique({
+      where: { tenant_id: tenantId },
+    });
+    if (record && record.persona && record.persona.trim().length > 0) {
+      BOT_PERSONA_PROMPT = record.persona;
+      return record.persona;
+    }
+    // Tidak ada di DB -> seed dari current (file/default)
+    if (BOT_PERSONA_PROMPT && BOT_PERSONA_PROMPT.trim().length > 0) {
+      await prisma.tenantPersona.upsert({
+        where: { tenant_id: tenantId },
+        update: { persona: BOT_PERSONA_PROMPT },
+        create: { tenant_id: tenantId, persona: BOT_PERSONA_PROMPT },
+      });
+    }
+    return BOT_PERSONA_PROMPT;
+  } catch (err) {
+    console.warn('[PERSONA] DB unavailable, using file/default:', (err as Error).message);
+    return BOT_PERSONA_PROMPT;
+  }
+}
+
+/**
+ * Simpan persona ke database per tenant (SaaS-ready) + update in-memory/file.
+ */
+export async function savePersonaToDb(newPersona: string, tenantId: string): Promise<boolean> {
+  try {
+    const { prisma } = await import('../db/client');
+    await prisma.tenantPersona.upsert({
+      where: { tenant_id: tenantId },
+      update: { persona: newPersona },
+      create: { tenant_id: tenantId, persona: newPersona },
+    });
+    updatePersonaInMemoryAndFile(newPersona);
+    return true;
+  } catch (err) {
+    console.warn('[PERSONA] DB unavailable, using file fallback:', (err as Error).message);
+    updatePersonaInMemoryAndFile(newPersona);
+    return true;
+  }
+}
+
 // =========================================================================
 // 3. TEMPLATE PESAN TETAP (bukan LLM — variabel di-inject langsung)
 // =========================================================================

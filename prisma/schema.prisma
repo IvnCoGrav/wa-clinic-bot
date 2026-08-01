@@ -150,6 +150,69 @@ enum FollowUpStatus {
   FAILED
 }
 
+model DeliveryTier {
+  id             String   @id @default(uuid())
+  tenant_id      String
+  max_dist       Float    // Jarak maksimum dalam km
+  fee            Int      // Ongkir normal (Rp)
+  promo_discount Int      // Potongan diskon promo (Rp)
+  sort_order     Int      // Urutan tier (1 = terdekat)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([tenant_id, sort_order])
+  @@map("delivery_tiers")
+}
+
+model ClinicService {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  service_id      String   // ID layanan (misal "baby-massage-ceria")
+  name            String
+  category        String   // BABY | KIDS | MOMS | BOTH
+  min_age_months  Int
+  max_age_months  Int?     // null = tanpa batas
+  age_label       String
+  duration_minutes Int
+  original_price  Int
+  promo_price     Int
+  description     String
+  is_active       Boolean  @default(true)
+  sort_order      Int      @default(0)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@unique([tenant_id, service_id])
+  @@index([tenant_id])
+  @@map("clinic_services")
+}
+
+model TenantPersona {
+  id         String   @id @default(uuid())
+  tenant_id  String   @unique
+  persona    String   // Teks persona Bidan Yusi (system prompt)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("tenant_persona")
+}
+
+model TenantAiConfig {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  task       String   // HARVESTING | CHAT_REPLY | MEDICAL_CHECK | SUMMARIZATION | PII_SCRUBBING | INTENT_CLASSIFICATION
+  provider   String
+  model_name String
+  max_tokens Int
+  temperature Float
+  confidence_threshold Float?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([tenant_id, task])
+  @@map("tenant_ai_config")
+}
+
 model FollowUpTemplate {
   id          String   @id @default(uuid())
   tenant_id   String   @default("default-tenant")
