@@ -184,22 +184,32 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
       // 2b. Jika FAQ tidak match, FALLBACK ke katalog treatment sebagai konteks LLM.
       // Data treatment (durasi, usia, deskripsi, manfaat) dijadikan knowledge — TANPA harga.
+      // Prioritaskan pencarian treatment spesifik dulu (jangan dump seluruh katalog).
       let chunksToUse = relevantChunks;
       if (chunksToUse.length === 0) {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-        const catalogText = treatmentCatalogService.formatCatalogText(false); // tanpa harga
+        // Coba match treatment spesifik dari pertanyaan
+        const specificCatalogText = treatmentCatalogService.searchCatalog(userText, false);
+        const catalogText = specificCatalogText || treatmentCatalogService.formatCatalogText(false);
         if (catalogText && catalogText.trim().length > 0) {
+          const isSpecific = !!specificCatalogText;
           chunksToUse = [{
-            id: 'treatment-catalog',
+            id: isSpecific ? 'treatment-catalog-specific' : 'treatment-catalog',
             tenantId,
             sourceType: 'catalog' as any,
-            title: 'Katalog Layanan Treatment Kala Moms and Baby Spa',
-            content: `Pertanyaan: Informasi layanan/treatment yang tersedia.
+            title: isSpecific
+              ? 'Layanan Treatment Relevan dengan Pertanyaan'
+              : 'Katalog Layanan Treatment Kala Moms and Baby Spa',
+            content: isSpecific
+              ? `Pertanyaan: ${userText}
+Jawaban: Berikut treatment yang relevan dengan pertanyaan Bunda:
+${catalogText}`
+              : `Pertanyaan: Informasi layanan/treatment yang tersedia.
 Jawaban: Berikut daftar treatment yang kami sediakan:
 ${catalogText}`,
             documentName: 'treatment-catalog',
           }];
-          console.log(`[FAQ CATALOG FALLBACK] No KB match for "${userText}", injecting treatment catalog as context.`);
+          console.log(`[FAQ CATALOG FALLBACK] No KB match for "${userText}", injecting ${isSpecific ? 'specific' : 'full'} treatment catalog as context.`);
         }
       }
 

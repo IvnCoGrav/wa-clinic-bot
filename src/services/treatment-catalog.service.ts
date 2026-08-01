@@ -314,6 +314,69 @@ export class TreatmentCatalogService {
       })
       .join('\n\n');
   }
+
+  /**
+   * Mencari treatment yang relevan dengan pertanyaan customer berdasarkan kata kunci.
+   * Return daftar layanan yang nama/deskripsinya mengandung kata kunci dari pertanyaan.
+   * Scoring: match pada NAMA treatment diberi bobot lebih tinggi daripada match pada deskripsi.
+   * Berguna agar bot TIDAK melempar seluruh katalog saat customer tanya satu treatment spesifik.
+   */
+  public searchCatalog(userText: string, includePrice = false): string {
+    const q = userText.toLowerCase();
+    // Ekstrak kata kunci bermakna (buang kata umum/stopwords)
+    const stopwords = new Set([
+      'yang', 'itu', 'apa', 'berapa', 'bung', 'bund', 'bunda', 'ya', 'dong', 'kak', 'min', 'mbak', 'mas',
+      'saya', 'untuk', 'dengan', 'dan', 'atau', 'dari', 'ke', 'di', 'ada', 'bisa', 'mau', 'ingin', 'bagaimana',
+      'kenapa', 'apakah', 'treatment', 'perawatan', 'tentang', 'info', 'informasi', 'detail', 'tolong',
+      'ciri', 'cirinya', 'khasiat', 'manfaat', 'fungsi', 'fungsinya', 'sih', 'nih', 'lho', 'kan', 'nih',
+      'mau', 'dong', 'ya', 'bund', 'juga', 'saja', 'aja', 'semua', 'daftar', 'list', 'please', 'tolong',
+    ]);
+    const keywords = q
+      .split(/\s+/)
+      .map((w) => w.replace(/[^a-z0-9]/gi, ''))
+      .filter((w) => w.length >= 3 && !stopwords.has(w));
+
+    if (keywords.length === 0) {
+      return '';
+    }
+
+    const services = this.getAllServices();
+    // Scoring: nama treatment +2, deskripsi +1, usia +0.5
+    const scored = services
+      .map((s) => {
+        const nameLower = s.name.toLowerCase();
+        const descLower = s.description.toLowerCase();
+        const ageLower = s.ageTier.label.toLowerCase();
+        let score = 0;
+        for (const k of keywords) {
+          if (nameLower.includes(k)) score += 2;
+          if (descLower.includes(k)) score += 1;
+          if (ageLower.includes(k)) score += 0.5;
+        }
+        return { s, score };
+      })
+      .filter((c) => c.score > 0);
+
+    if (scored.length === 0) {
+      return '';
+    }
+
+    // Ambil hanya yang skor tertinggi (minimal 1, maksimal 3) supaya tidak dump semua
+    const maxScore = Math.max(...scored.map((c) => c.score));
+    const top = scored
+      .filter((c) => c.score >= maxScore * 0.6)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    return top
+      .map(({ s }) => {
+        const priceLine = includePrice
+          ? `  Harga Normal: Rp${s.originalPrice.toLocaleString('id-ID')} | Promo: Rp${s.promoPrice.toLocaleString('id-ID')}\n`
+          : '';
+        return `• *${s.name}*\n  Usia: ${s.ageTier.label}\n  Durasi: ${s.durationMinutes} menit\n${priceLine}  Deskripsi: ${s.description}`;
+      })
+      .join('\n\n');
+  }
 }
 
 export const treatmentCatalogService = new TreatmentCatalogService();

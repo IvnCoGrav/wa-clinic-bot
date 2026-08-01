@@ -20,25 +20,25 @@
   {
     "id": 4,
     "maxDist": 15,
-    "fee": 15000,
-    "promoDiscount": 5000
+    "fee": 25000,
+    "promoDiscount": 10000
   },
   {
     "id": 5,
     "maxDist": 20,
-    "fee": 20000,
+    "fee": 25000,
     "promoDiscount": 5000
   },
   {
     "id": 6,
     "maxDist": 25,
-    "fee": 25000,
-    "promoDiscount": 5000
+    "fee": 35000,
+    "promoDiscount": 10000
   },
   {
     "id": 7,
     "maxDist": 30,
-    "fee": 30000,
+    "fee": 35000,
     "promoDiscount": 5000
   }
 ]

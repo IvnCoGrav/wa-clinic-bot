@@ -174,14 +174,14 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
   | 0 – 5.0 km | Rp 0 | – | Gratis |
   | >5.0 – 7.0 km | Rp 15.000 | Rp 10.000 | Rp 5.000 |
   | >7.0 – 10.0 km | Rp 15.000 | Rp 5.000 | Rp 10.000 |
-  | >10.0 – 15.0 km | Rp 15.000 | Rp 5.000 | Rp 10.000 |
-  | >15.0 – 20.0 km | Rp 20.000 | Rp 5.000 | Rp 15.000 |
-  | >20.0 – 25.0 km | Rp 25.000 | Rp 5.000 | Rp 20.000 |
-  | >25.0 – 30.0 km | Rp 30.000 | Rp 5.000 | Rp 25.000 |
+  | >10.0 – 15.0 km | Rp 25.000 | Rp 10.000 | Rp 15.000 |
+  | >15.0 – 20.0 km | Rp 25.000 | Rp 5.000 | Rp 20.000 |
+  | >20.0 – 25.0 km | Rp 35.000 | Rp 10.000 | Rp 25.000 |
+  | >25.0 – 30.0 km | Rp 35.000 | Rp 5.000 | Rp 30.000 |
   | >30.0 km | Di luar jangkauan | – | – |
 
   *Titik koordinat klinik: Lat -7.34886, Lng 112.751677.*  
-  *Catatan penting: Meski tiering di atas sudah lebih detail, logic ongkir ini tetap berstatus sementara untuk Fase 1. Ke depan akan ada UI/sistem terpisah untuk menghitung ongkir (kemungkinan terintegrasi dengan layanan pengiriman pihak ketiga atau input manual admin), yang akan menggantikan formula ini. Karena itu, delivery.service.ts harus tetap diperlakukan sebagai modul yang mudah diganti (isolated, tidak di-hardcode ke banyak tempat lain di codebase) — supaya saat sistem ongkir baru siap, penggantiannya cukup di satu titik integrasi.*
+  *Catatan: Tiering ini dikelola dinamis dari Admin UI (Delivery Fee → delivery_tiers_custom.json) dan menjadi source of truth runtime. Tabel di atas adalah snapshot terakhir yang diset pemilik bisnis.*
 - **Follow-up belum purchase:** hari ke-3, ke-7, ke-14 sejak kontak terakhir tanpa transaksi.
 - **Follow-up treatment lanjutan:** bulan ke-1, ke-2, ke-3 sejak treatment terakhir; jika tidak ada respon sampai bulan ke-3 → status lost.
 

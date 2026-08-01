@@ -84,7 +84,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.messageTemplate).toContain('Rp10.000');
     });
 
-    it('should calculate ongkir correctly when ORS API returns 12000m (12.0 km -> normal Rp 15.000, promo Rp 10.000)', async () => {
+    it('should calculate ongkir correctly when ORS API returns 12000m (12.0 km -> normal Rp 25.000, promo Rp 15.000)', async () => {
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: 12000,
@@ -96,12 +96,12 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       const res = await service.calculateDelivery({ lat: -7.40, lng: 112.60 });
 
       expect(res.distanceKm).toBe(12.0);
-      expect(res.normalPrice).toBe(15000);
-      expect(res.promoPrice).toBe(10000);
-      expect(res.ongkir).toBe(10000);
+      expect(res.normalPrice).toBe(25000);
+      expect(res.promoPrice).toBe(15000);
+      expect(res.ongkir).toBe(15000);
       expect(res.isOutOfCoverage).toBe(false);
+      expect(res.messageTemplate).toContain('Rp25.000');
       expect(res.messageTemplate).toContain('Rp15.000');
-      expect(res.messageTemplate).toContain('Rp10.000');
     });
 
     it('should mark as Out of Coverage when ORS API returns 32000m (32.0 km -> isOutOfCoverage = true)', async () => {
@@ -196,75 +196,75 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 10.01 km (10010m): should be Rp 10,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 10.01 km (10010m): should be Rp 15,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(10010);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(10.01);
-      expect(res.normalPrice).toBe(15000);
-      expect(res.promoPrice).toBe(10000);
+      expect(res.normalPrice).toBe(25000);
+      expect(res.promoPrice).toBe(15000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 15.0 km (15000m): should be Rp 10,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 15.0 km (15000m): should be Rp 15,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(15000);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(15.0);
-      expect(res.normalPrice).toBe(15000);
-      expect(res.promoPrice).toBe(10000);
+      expect(res.normalPrice).toBe(25000);
+      expect(res.promoPrice).toBe(15000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 15.01 km (15010m): should be Rp 15,000 promo (Rp 20,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 15.01 km (15010m): should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(15010);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(15.01);
-      expect(res.normalPrice).toBe(20000);
-      expect(res.promoPrice).toBe(15000);
+      expect(res.normalPrice).toBe(25000);
+      expect(res.promoPrice).toBe(20000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 20.0 km (20000m): should be Rp 15,000 promo (Rp 20,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 20.0 km (20000m): should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(20000);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(20.0);
-      expect(res.normalPrice).toBe(20000);
-      expect(res.promoPrice).toBe(15000);
+      expect(res.normalPrice).toBe(25000);
+      expect(res.promoPrice).toBe(20000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 20.01 km (20010m): should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 20.01 km (20010m): should be Rp 25,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(20010);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(20.01);
-      expect(res.normalPrice).toBe(25000);
-      expect(res.promoPrice).toBe(20000);
+      expect(res.normalPrice).toBe(35000);
+      expect(res.promoPrice).toBe(25000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 25.0 km (25000m): should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 25.0 km (25000m): should be Rp 25,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(25000);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(25.0);
-      expect(res.normalPrice).toBe(25000);
-      expect(res.promoPrice).toBe(20000);
+      expect(res.normalPrice).toBe(35000);
+      expect(res.promoPrice).toBe(25000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 25.01 km (25010m): should be Rp 25,000 promo (Rp 30,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 25.01 km (25010m): should be Rp 30,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(25010);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(25.01);
-      expect(res.normalPrice).toBe(30000);
-      expect(res.promoPrice).toBe(25000);
+      expect(res.normalPrice).toBe(35000);
+      expect(res.promoPrice).toBe(30000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 30.0 km (30000m): should be Rp 25,000 promo (Rp 30,000 normal) and NOT out of coverage', async () => {
+    it('exact boundary 30.0 km (30000m): should be Rp 30,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
       const service = createMockService(30000);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(30.0);
-      expect(res.normalPrice).toBe(30000);
-      expect(res.promoPrice).toBe(25000);
+      expect(res.normalPrice).toBe(35000);
+      expect(res.promoPrice).toBe(30000);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
