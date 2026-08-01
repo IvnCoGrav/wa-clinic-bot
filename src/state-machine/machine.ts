@@ -82,12 +82,11 @@ export class ConversationStateMachine {
           'medical_concern'
         );
 
-        // Emergency template based on severity (HIGH vs MEDIUM)
-        const replyText = isHigh
-          ? 'Bunda, untuk kondisi darurat seperti ini mohon segera bawa si kecil ke IGD/Rumah Sakit terdekat atau hubungi layanan darurat 119 ya Bunda. Tim Bidan & CS kami juga akan segera menghubungi Bunda secara langsung.'
-          : 'Bunda, untuk pertimbangan kondisi kesehatan si kecil, Bidan & CS kami akan segera membalas pesan Bunda secara langsung. Mohon tunggu sebentar ya Bunda.';
-
-        // Dispatch Real-Time Alert to Telegram / Emergency Log
+        // Dispatch Real-Time Alert HANYA ke Admin (Telegram / Emergency Log).
+        // TIDAK ada template yang dikirim ke chat customer — customer diamkan total,
+        // supaya Bidan/CS yang menggali lebih dalam & menyarankan secara manual.
+        // Catatan: keyword medis bisa false-positive (customer hiperbola), jadi alert
+        // hanya sebagai notifikasi admin, bukan penilaian darurat final.
         try {
           const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
           const alertService = new AlertService();
@@ -104,22 +103,6 @@ export class ConversationStateMachine {
         } catch (alertErr: any) {
           console.error('[EMERGENCY LOG FALLBACK] Failed to trigger alert for medical emergency:', alertErr.message);
         }
-
-        // Send 1x template reply and then remain SILENT
-        const chatId = (incomingMessage as any).chatId || `${customer.phone}@c.us`;
-        await this.typingSvc.simulateHumanReply({
-          chatId,
-          incomingMessageId: incomingMessage.id,
-          incomingText,
-          replyText,
-        });
-
-        await messageService.logMessage({
-          tenantId,
-          conversationId: conversation.id,
-          direction: Direction.OUTBOUND,
-          content: replyText,
-        });
 
         return {
           nextState: ConversationState.HUMAN_HANDLING,
