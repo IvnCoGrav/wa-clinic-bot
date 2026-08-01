@@ -1821,8 +1821,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/follow-ups
    * Mengambil daftar antrian / riwayat follow-up & reminder
    */
-  fastify.get('/api/admin/follow-ups', async (request: FastifyRequest<{ Querystring: { status?: string; type?: string; search?: string } }>, reply: FastifyReply) => {
+  fastify.get('/api/admin/follow-ups', async (request: FastifyRequest<{ Querystring: { status?: string; type?: string; search?: string; page?: string; pageSize?: string } }>, reply: FastifyReply) => {
     const { status, type, search } = request.query || {};
+    const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(request.query?.pageSize || '20', 10) || 20));
     try {
       const where: any = { tenant_id: DEFAULT_TENANT_ID };
       if (status) where.status = status;
@@ -1838,18 +1840,31 @@ export async function adminRoutes(fastify: FastifyInstance) {
         };
       }
 
-      const list = await prisma.followUp.findMany({
-        where,
-        include: {
-          customer: true,
-        },
-        orderBy: { scheduled_at: 'asc' },
-        take: 100,
-      });
+      const [list, total] = await Promise.all([
+        prisma.followUp.findMany({
+          where,
+          include: {
+            customer: true,
+          },
+          orderBy: { scheduled_at: 'asc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        prisma.followUp.count({ where }),
+      ]);
 
-      return reply.status(200).send({ success: true, data: list });
+      return reply.status(200).send({
+        success: true,
+        data: list,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+      });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, data: [], note: 'Fallback in-memory mode' });
+      return reply.status(200).send({ success: true, data: [], pagination: { page: 1, pageSize, total: 0, totalPages: 1 }, note: 'Fallback in-memory mode' });
     }
   });
 
