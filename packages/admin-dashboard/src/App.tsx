@@ -16,6 +16,7 @@ const ClinicServices = lazy(() => import('./pages/tenant/ClinicServices').then(m
 const AiPersona = lazy(() => import('./pages/tenant/AiPersona').then(m => ({ default: m.AiPersona })));
 const DeliveryTiers = lazy(() => import('./pages/tenant/DeliveryTiers').then(m => ({ default: m.DeliveryTiers })));
 const FollowUpQueue = lazy(() => import('./pages/tenant/FollowUpQueue').then(m => ({ default: m.FollowUpQueue })));
+const FollowUpTemplates = lazy(() => import('./pages/tenant/FollowUpTemplates').then(m => ({ default: m.FollowUpTemplates })));
 
 export const App: React.FC = () => {
   return (
@@ -84,6 +85,13 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <FollowUpQueue />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/follow-up-templates" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <FollowUpTemplates />
                 </Layout>
               </ProtectedRoute>
             } />

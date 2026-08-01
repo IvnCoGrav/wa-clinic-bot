@@ -147,6 +147,22 @@ enum FollowUpStatus {
   QUEUED
   SENT
   CANCELLED
+  FAILED
+}
+
+model FollowUpTemplate {
+  id          String   @id @default(uuid())
+  tenant_id   String   @default("default-tenant")
+  type        String   // REMINDER_H0, REVIEW_H1_BABY, NO_PURCHASE_1, dst
+  variant     Int      // 1, 2, 3
+  text        String   // Template teks dengan placeholder {name} {time} {babyName}
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@unique([tenant_id, type, variant])
+  @@index([tenant_id, type])
+  @@map("follow_up_templates")
 }
 
 model FollowUp {
