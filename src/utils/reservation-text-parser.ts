@@ -34,7 +34,7 @@ export function parseReservationText(rawText: string): ParseResult {
   // 1. Sambungkan label yang terpotong di tengah baris (mid-word wrap)
   // Hanya untuk kata-kata label yang DIKETAHUI, supaya tidak salah gabung
   // kata biasa (misal "Hari dan\ntanggal" harus tetap terpisah).
-  const LABEL_WORDS = ['Bunda', 'Kehamilan', 'Shareloc', 'Anak', 'Bayi', 'Alamat', 'Pilihan', 'Treatment', 'Keham', 'Perawatan', 'No.', 'Hp', 'tanggal', 'Booking', 'Reservasi'];
+  const LABEL_WORDS = ['Bunda', 'Kehamilan', 'Shareloc', 'Anak', 'Bayi', 'Alamat', 'Pilihan', 'Treatment', 'Keham', 'No', 'Hp', 'tanggal'];
   for (const word of LABEL_WORDS) {
     for (let i = 1; i < word.length; i++) {
       const part1 = word.slice(0, i);
@@ -76,13 +76,14 @@ export function parseReservationText(rawText: string): ParseResult {
     if (!trimmed) continue;
 
     const lower = trimmed.toLowerCase();
+    const lowerNorm = lower.replace(/\s+/g, ' ');
 
     // Transisi Section berdasarkan header
-    if (lower.includes('pilihan treatment (baby & kids)')) {
+    if (lowerNorm.includes('pilihan treatment (baby & kids)')) {
       currentSection = 'BABY';
       continue;
     }
-    if (lower.includes('pilihan treatment (moms)')) {
+    if (lowerNorm.includes('pilihan treatment (moms)')) {
       currentSection = 'MOMS';
       continue;
     }
@@ -93,7 +94,7 @@ export function parseReservationText(rawText: string): ParseResult {
       continue;
     }
 
-    const label = trimmed.substring(0, colonIdx).trim().toLowerCase();
+    const label = trimmed.substring(0, colonIdx).trim().toLowerCase().replace(/\s+/g, ' ');
     const value = trimmed.substring(colonIdx + 1).trim();
 
     if (currentSection === 'GENERAL') {
