@@ -221,32 +221,7 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
       return `${field} :`;
     };
 
-    return `Berikut list untuk reservasi :
-
-Hari dan tanggal :
-Nama Bunda:${params?.name ? ` ${params.name}` : ''}
-Alamat & Shareloc :
-${prefill('Kec', params?.kecamatan)}
-${prefill('Kota', params?.kota)}
-${prefill('No. Hp', params?.phone)}
-
-Pilihan treatment (Baby & Kids)
-
-Nama Bayi :
-Usia Bayi/Anak :
-Treatment :
-
-Pilihan treatment (Moms) :
-
-Usia Kehamilan (Jika hamil):
-Treatment :
-
-
-Mohon bisa diisi Bunda 😊
-Cancel / Pembatalan Harap minimal H-3 jam
-
-H-1 sebelum treatment akan kami reminder kembali bunda 🥰
-Terimakasih.  ☺️`;
+    return `Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:${params?.name ? ` ${params.name}` : ''}\nAlamat & Shareloc :\n${prefill('Kec', params?.kecamatan)}\n${prefill('Kota', params?.kota)}\n${prefill('No. Hp', params?.phone)}\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️`;
   },
 
   reservationConfirmed: (params: {
