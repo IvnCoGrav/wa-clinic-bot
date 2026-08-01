@@ -59,7 +59,9 @@ async function startSimulator() {
           },
           DEFAULT_TENANT_ID
         );
-        console.log('\x1b[32m[SYSTEM] State percakapan berhasil di-reset ke INITIAL.\x1b[0m\n');
+        // Reset penuh lokasi customer (pending + confirmed) supaya simulasi mulai dari nol
+        await customerService.resetFullLocation(customer.id, DEFAULT_TENANT_ID);
+        console.log('\x1b[32m[SYSTEM] State percakapan berhasil di-reset ke INITIAL (termasuk lokasi customer).\x1b[0m\n');
         promptUser();
         return;
       }

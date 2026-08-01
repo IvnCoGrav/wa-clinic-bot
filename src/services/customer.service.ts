@@ -214,6 +214,61 @@ export class CustomerService {
   }
 
   /**
+   * Reset SELURUH lokasi customer (pending + confirmed) ke kosong.
+   * Dipakai untuk reset penuh di CLI simulator / testing.
+   */
+  public async resetFullLocation(customerId: string, tenantId: string): Promise<any> {
+    try {
+      return await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+          kelurahan: null,
+          kecamatan: null,
+          kota: null,
+          lat: null,
+          lng: null,
+          zipcode: null,
+          distance_km: null,
+          ongkir: null,
+          is_out_of_coverage: false,
+          pending_kelurahan: null,
+          pending_kecamatan: null,
+          pending_kota: null,
+          pending_lat: null,
+          pending_lng: null,
+          pending_zipcode: null,
+        },
+      });
+    } catch (error) {
+      // Memory fallback update
+      for (const [phone, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
+          Object.assign(cust, {
+            kelurahan: null,
+            kecamatan: null,
+            kota: null,
+            lat: null,
+            lng: null,
+            zipcode: null,
+            distance_km: null,
+            ongkir: null,
+            is_out_of_coverage: false,
+            pending_kelurahan: null,
+            pending_kecamatan: null,
+            pending_kota: null,
+            pending_lat: null,
+            pending_lng: null,
+            pending_zipcode: null,
+            updated_at: new Date(),
+          });
+          return cust;
+        }
+      }
+      throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+    }
+  }
+
+  /**
    * Mempromosikan data lokasi pending ke confirmed secara ATOMIC (prisma transaction)
    * serta menghitung ulang tarif ongkos kirim.
    */
