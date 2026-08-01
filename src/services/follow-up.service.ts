@@ -1,9 +1,93 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { getRollingFollowUpMessage, FollowUpTemplateType } from '../config/followup-templates';
+import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES } from '../config/followup-templates';
 import { typingService } from './typing.service';
 
 export class FollowUpService {
+  /**
+   * Mengambil semua template follow-up dari database (dengan fallback ke hardcode default).
+   * Jika DB tidak punya record untuk (type, variant), pakai template default.
+   */
+  public async getAllTemplates(tenantId: string = DEFAULT_TENANT_ID): Promise<Array<{
+    id: string | null;
+    type: string;
+    variant: number;
+    text: string;
+    isDefault: boolean;
+  }>> {
+    try {
+      const dbTemplates = await prisma.followUpTemplate.findMany({
+        where: { tenant_id: tenantId },
+        orderBy: [{ type: 'asc' }, { variant: 'asc' }],
+      });
+
+      // Merge dengan default
+      const result: Array<{ id: string | null; type: string; variant: number; text: string; isDefault: boolean }> = [];
+      for (const [type, variants] of Object.entries(FOLLOWUP_ROLLING_TEMPLATES)) {
+        variants.forEach((fn, idx) => {
+          const db = dbTemplates.find((t) => t.type === type && t.variant === idx + 1);
+          result.push({
+            id: db?.id || null,
+            type,
+            variant: idx + 1,
+            text: db?.text || fn({ name: '{name}', time: '{time}', babyName: '{babyName}' }),
+            isDefault: !db,
+          });
+        });
+      }
+      return result;
+    } catch (err) {
+      console.error('[FollowUp Service] Failed to load templates from DB, using defaults:', err);
+      return Object.entries(FOLLOWUP_ROLLING_TEMPLATES).flatMap(([type, variants]) =>
+        variants.map((fn, idx) => ({
+          id: null,
+          type,
+          variant: idx + 1,
+          text: fn({ name: '{name}', time: '{time}', babyName: '{babyName}' }),
+          isDefault: true,
+        }))
+      );
+    }
+  }
+
+  /**
+   * Menyimpan template custom (upsert) untuk type + variant tertentu.
+   */
+  public async saveTemplate(
+    type: string,
+    variant: number,
+    text: string,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<void> {
+    try {
+      await prisma.followUpTemplate.upsert({
+        where: {
+          tenant_id_type_variant: { tenant_id: tenantId, type, variant },
+        },
+        update: { text, updated_at: new Date() },
+        create: { tenant_id: tenantId, type, variant, text },
+      });
+      console.log(`[FollowUp Service] Saved template ${type} variant ${variant}.`);
+    } catch (err) {
+      console.error('[FollowUp Service] Failed to save template:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Menghapus template custom (kembali ke default hardcode).
+   */
+  public async resetTemplate(type: string, variant: number, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    try {
+      await prisma.followUpTemplate.deleteMany({
+        where: { tenant_id: tenantId, type, variant },
+      });
+      console.log(`[FollowUp Service] Reset template ${type} variant ${variant} to default.`);
+    } catch (err) {
+      console.error('[FollowUp Service] Failed to reset template:', err);
+    }
+  }
+
   /**
    * Dipanggil saat customer baru terdaftar di database.
    * Membuat 3 row follow-up PENDING tipe NO_PURCHASE (+3, +7, +14 hari).
@@ -177,10 +261,34 @@ export class FollowUpService {
       }
 
       const name = fu.customer.name || 'Bunda';
-      const { text: messageText } = getRollingFollowUpMessage(templateType, {
-        name,
-        index: fu.stage - 1,
-      });
+      let messageText: string;
+
+      // Cek apakah ada template custom di DB untuk type+variant ini
+      try {
+        const custom = await prisma.followUpTemplate.findFirst({
+          where: { tenant_id: tenantId, type: templateType, variant: fu.stage, is_active: true },
+        });
+        if (custom) {
+          // Replacing placeholders in custom template
+          messageText = custom.text
+            .replace(/\{name\}/g, name)
+            .replace(/\{time\}/g, '')
+            .replace(/\{babyName\}/g, 'si kecil');
+        } else {
+          const { text } = getRollingFollowUpMessage(templateType, {
+            name,
+            index: fu.stage - 1,
+          });
+          messageText = text;
+        }
+      } catch (err) {
+        // DB fallback -> gunakan default
+        const { text } = getRollingFollowUpMessage(templateType, {
+          name,
+          index: fu.stage - 1,
+        });
+        messageText = text;
+      }
 
       console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${name})`);
       

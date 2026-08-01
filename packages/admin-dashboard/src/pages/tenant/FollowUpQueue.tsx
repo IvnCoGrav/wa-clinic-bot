@@ -43,6 +43,8 @@ export const FollowUpQueue: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send'; id: string } | null>(null);
 
   // Reschedule Modal
   const [rescheduleModal, setRescheduleModal] = useState<{ open: boolean; item?: FollowUpItem; newDate?: string }>({ open: false });
@@ -76,27 +78,26 @@ export const FollowUpQueue: React.FC = () => {
   };
 
   const handleSendNow = async (id: string) => {
-    if (!window.confirm('Yakin ingin langsung mengirim pesan follow-up ini sekarang tanpa menunggu jadwal?')) return;
     setActionLoading(id);
     try {
       await apiRequest(`follow-ups/${id}/send-now`, { method: 'POST' });
-      alert('Follow-up berhasil dikirim!');
+      setToastMsg({ type: 'success', text: 'Follow-up berhasil dikirim!' });
       loadFollowUps();
     } catch (err: any) {
-      alert(`Gagal mengirim: ${err.message}`);
+      setToastMsg({ type: 'error', text: `Gagal mengirim: ${err.message}` });
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleCancel = async (id: string) => {
-    if (!window.confirm('Yakin ingin membatalkan antrian follow-up ini?')) return;
     setActionLoading(id);
     try {
       await apiRequest(`follow-ups/${id}/cancel`, { method: 'PATCH' });
+      setToastMsg({ type: 'success', text: 'Follow-up berhasil dibatalkan.' });
       loadFollowUps();
     } catch (err: any) {
-      alert(`Gagal membatalkan: ${err.message}`);
+      setToastMsg({ type: 'error', text: `Gagal membatalkan: ${err.message}` });
     } finally {
       setActionLoading(null);
     }
@@ -317,7 +318,7 @@ export const FollowUpQueue: React.FC = () => {
                           {fu.status === 'PENDING' && (
                             <>
                               <button
-                                onClick={() => handleSendNow(fu.id)}
+                                onClick={() => setConfirmAction({ type: 'send', id: fu.id })}
                                 disabled={actionLoading === fu.id}
                                 className="p-1.5 rounded bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 text-[10px] font-bold flex items-center space-x-1 transition"
                                 title="Kirim Sekarang"
@@ -331,10 +332,10 @@ export const FollowUpQueue: React.FC = () => {
                                 className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-slate-400 text-[10px] font-bold flex items-center space-x-1 transition"
                                 title="Ubah Jadwal"
                               >
-                                <Edit2 size= {11} />
+                                <Edit2 size={11} />
                               </button>
                               <button
-                                onClick={() => handleCancel(fu.id)}
+                                onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
                                 disabled={actionLoading === fu.id}
                                 className="p-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold flex items-center space-x-1 transition"
                                 title="Batalkan"
@@ -393,6 +394,64 @@ export const FollowUpQueue: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Confirm Modal untuk Send Now / Cancel (tanpa window.confirm) */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="glass-panel border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              {confirmAction.type === 'cancel'
+                ? <><XCircle className="text-rose-400" /><span>Batalkan Follow-Up?</span></>
+                : <><Send className="text-pink-400" /><span>Kirim Sekarang?</span></>
+              }
+            </h3>
+            <p className="text-xs text-slate-400">
+              {confirmAction.type === 'cancel'
+                ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim otomatis.'
+                : 'Pesan akan langsung dikirim sekarang tanpa menunggu jadwal cron.'}
+            </p>
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-bold transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  const { type, id } = confirmAction;
+                  setConfirmAction(null);
+                  if (type === 'cancel') handleCancel(id);
+                  else handleSendNow(id);
+                }}
+                disabled={actionLoading === confirmAction.id}
+                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition ${
+                  confirmAction.type === 'cancel'
+                    ? 'bg-rose-500 hover:bg-rose-600'
+                    : 'bg-pink-500 hover:bg-pink-600'
+                }`}
+              >
+                {actionLoading === confirmAction.id ? 'Memproses...' : (confirmAction.type === 'cancel' ? 'Ya, Batalkan' : 'Ya, Kirim')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className={`fixed bottom-6 right-6 z-[70] px-4 py-3 rounded-xl border text-xs font-bold shadow-xl flex items-center space-x-2 ${
+          toastMsg.type === 'success'
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+        }`}>
+          {toastMsg.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+          <span>{toastMsg.text}</span>
+          <button onClick={() => setToastMsg(null)} className="ml-2 text-slate-500 hover:text-white">
+            <XCircle size={12} />
+          </button>
         </div>
       )}
     </div>

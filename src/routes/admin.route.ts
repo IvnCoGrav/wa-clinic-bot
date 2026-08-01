@@ -1921,6 +1921,64 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  /**
+   * GET /api/admin/follow-up-templates
+   * Mengambil semua template follow-up (custom dari DB + default hardcode)
+   */
+  fastify.get('/api/admin/follow-up-templates', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { followUpService } = await import('../services/follow-up.service');
+      const templates = await followUpService.getAllTemplates(DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, data: templates });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/follow-up-templates
+   * Menyimpan template custom (upsert) untuk type + variant
+   */
+  fastify.put('/api/admin/follow-up-templates', async (request: FastifyRequest<{ Body: { type: string; variant: number; text: string } }>, reply: FastifyReply) => {
+    const { type, variant, text } = request.body || {};
+    if (!type || !variant || !text) {
+      return reply.status(400).send({ error: 'type, variant, dan text wajib diisi' });
+    }
+
+    try {
+      const { followUpService } = await import('../services/follow-up.service');
+      await followUpService.saveTemplate(type, variant, text, DEFAULT_TENANT_ID);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'UPDATE_FOLLOWUP_TEMPLATE',
+        targetId: `${type}#${variant}`,
+        payload: { type, variant },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({ success: true, message: 'Template berhasil disimpan!' });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/follow-up-templates/:type/:variant
+   * Reset template ke default hardcode
+   */
+  fastify.delete('/api/admin/follow-up-templates/:type/:variant', async (request: FastifyRequest<{ Params: { type: string; variant: string } }>, reply: FastifyReply) => {
+    const { type, variant } = request.params;
+    try {
+      const { followUpService } = await import('../services/follow-up.service');
+      await followUpService.resetTemplate(type, parseInt(variant, 10), DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, message: 'Template dikembalikan ke default.' });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
   // Serve admin HTML files manually (no extra packages needed)
   const fs = await import('fs/promises');
   const path = await import('path');

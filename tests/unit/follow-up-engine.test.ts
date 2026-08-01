@@ -65,4 +65,10 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     const count = await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
     expect(count).toBeGreaterThanOrEqual(0);
   });
+
+  it('6. getAllTemplates returns merged list (DB custom + default fallback)', async () => {
+    const templates = await followUpService.getAllTemplates(DEFAULT_TENANT_ID);
+    expect(templates.length).toBeGreaterThanOrEqual(27); // 9 types x 3 variants
+    expect(templates.every((t) => t.text.length > 0)).toBe(true);
+  });
 });
