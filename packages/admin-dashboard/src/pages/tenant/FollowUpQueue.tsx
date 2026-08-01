@@ -39,7 +39,7 @@ interface FollowUpItem {
 export const FollowUpQueue: React.FC = () => {
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('PENDING');
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
