@@ -11,9 +11,10 @@ import {
   AlertCircle,
   CheckCircle,
   User,
-  MapPin,
   Sparkles,
-  Edit2
+  Edit2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface Customer {
@@ -42,12 +43,17 @@ export const FollowUpQueue: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send'; id: string } | null>(null);
 
   // Reschedule Modal
   const [rescheduleModal, setRescheduleModal] = useState<{ open: boolean; item?: FollowUpItem; newDate?: string }>({ open: false });
+
+  const PAGE_SIZE = 20;
 
   const loadFollowUps = async () => {
     setLoading(true);
@@ -56,11 +62,15 @@ export const FollowUpQueue: React.FC = () => {
       if (statusFilter) params.append('status', statusFilter);
       if (typeFilter) params.append('type', typeFilter);
       if (search) params.append('search', search);
+      params.append('page', String(page));
+      params.append('pageSize', String(PAGE_SIZE));
 
       const endpoint = `follow-ups${params.toString() ? `?${params.toString()}` : ''}`;
       const res = await apiRequest(endpoint);
       const list = Array.isArray(res) ? res : (res?.data || []);
       setFollowUps(list);
+      setTotalPages(res?.pagination?.totalPages || 1);
+      setTotalItems(res?.pagination?.total || 0);
     } catch (err: any) {
       console.warn('Gagal load follow-ups:', err);
     } finally {
@@ -70,10 +80,11 @@ export const FollowUpQueue: React.FC = () => {
 
   useEffect(() => {
     loadFollowUps();
-  }, [statusFilter, typeFilter]);
+  }, [statusFilter, typeFilter, page]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     loadFollowUps();
   };
 
@@ -240,7 +251,6 @@ export const FollowUpQueue: React.FC = () => {
                 <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Jam (`time_send`)</th>
                 <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Tipe & Stage</th>
                 <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Customer & No. HP</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Lokasi / Alamat</th>
                 <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Rotasi Template</th>
                 <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Status</th>
                 <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500 text-right">Aksi</th>
@@ -249,14 +259,14 @@ export const FollowUpQueue: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-xs text-slate-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-slate-500">
                     <RefreshCw className="animate-spin mx-auto text-pink-400 mb-2" size={24} />
                     <span>Memuat antrian follow-up...</span>
                   </td>
                 </tr>
               ) : followUps.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-xs text-slate-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-slate-500">
                     Tidak ada antrian follow-up yang sesuai filter.
                   </td>
                 </tr>
@@ -293,14 +303,6 @@ export const FollowUpQueue: React.FC = () => {
                           <span className="text-xs font-bold text-white">{c?.name || 'Bunda'}</span>
                         </div>
                         <div className="text-[10px] text-slate-500 font-mono ml-4">{c?.phone}</div>
-                      </td>
-
-                      {/* Location */}
-                      <td className="px-4 py-3 text-xs text-slate-300">
-                        <div className="flex items-center space-x-1">
-                          <MapPin size={10} className="text-pink-400 flex-shrink-0" />
-                          <span>{c?.kelurahan || '-'}, {c?.kecamatan || '-'}</span>
-                        </div>
                       </td>
 
                       {/* Template Rolling */}
@@ -352,6 +354,34 @@ export const FollowUpQueue: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-slate-500">
+          Menampilkan {totalItems > 0 ? ((page - 1) * 20) + 1 : 0} - {Math.min(page * 20, totalItems)} dari {totalItems} antrian
+        </span>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setPage(page - 1)}
+            disabled={page <= 1 || loading}
+            className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center space-x-1"
+          >
+            <ChevronLeft size={14} />
+            <span>Sebelumnya</span>
+          </button>
+          <span className="text-xs text-slate-400 font-bold px-2">
+            Halaman {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(page + 1)}
+            disabled={page >= totalPages || loading}
+            className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center space-x-1"
+          >
+            <span>Berikutnya</span>
+            <ChevronRight size={14} />
+          </button>
         </div>
       </div>
 
