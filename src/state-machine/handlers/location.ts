@@ -96,6 +96,27 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
+  // --- INTERSEPSI FAQ / PRICE: kalau customer tanya hal lain (bukan lokasi) saat state lokasi,
+  // jawab via interest handler (knowledge base / katalog treatment), TANPA mengganggu state lokasi.
+  // Prinsip: STATE PUNYA PRIORITAS — jawab sela, lalu tetap tanya lokasi.
+  const nlu = ctx.nluResult;
+  const nluConfidentForFaq = nlu && !nlu.isFallback && (nlu.confidence || 0) >= 0.6;
+  const hasFaqIntent = (nluConfidentForFaq && (nlu!.intents.includes('faq_question') || nlu!.intents.includes('ask_price'))) ||
+    (/\b(berapa|harga|tarif|ongkir|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment)\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
+  if (hasFaqIntent) {
+    console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
+    const { handleInterestState } = await import('./interest');
+    const interestResult = await handleInterestState({
+      ...ctx,
+      conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any,
+    });
+    // STATE PUNYA PRIORITAS: setelah jawab FAQ, kembalikan state ke AWAITING_LOCATION.
+    return {
+      ...interestResult,
+      nextState: ConversationState.AWAITING_LOCATION,
+    };
+  }
+
   // Bersihkan teks dari awalan query yang tidak relevan untuk geocoding
   const textLocation = rawTextLocation.toLowerCase()
     .replace(/^(kalau\s+)?(ke|di)\s+/gi, '')

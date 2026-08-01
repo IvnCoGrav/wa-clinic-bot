@@ -229,10 +229,10 @@ Treatment : Pijat Bayi Pulih Ceria`);
     const r1 = await sendText(ctx, 'halo');
     expect(r1.nextState).toBe(ConversationState.AWAITING_LOCATION);
 
-    // Tanya FAQ sebelum kasih lokasi → bukan lokasi, state tetap aman (tidak crash, tidak resolve palsu)
+    // Tanya FAQ sebelum kasih lokasi → harus DIJAWAB (knowledge base), state lokasi tidak hilang
     const r2 = await sendText(ctx, 'jam buka berapa?');
-    expect(r2.nextState).toBe(ConversationState.AWAITING_LOCATION);
-    expect(r2.replyText).toMatch(/kelurahan|desa/i); // minta detail lokasi, bukan asal resolve
+    expect(r2.replyText).toContain('08.00'); // FAQ terjawab dari knowledge base
+    expect(r2.nextState).toBe(ConversationState.AWAITING_LOCATION); // state lokasi tetap
 
     // Lanjut kasih lokasi
     const r3 = await sendText(ctx, 'saya di wedoro waru');
