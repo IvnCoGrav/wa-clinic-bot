@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import { 
   Settings as SettingsIcon, 
   MapPin, 
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
+  const { toast } = useUiFeedback();
   const [globalBotActive, setGlobalBotActive] = useState(true);
   const [loading, setLoading] = useState(true);
   
@@ -73,9 +75,9 @@ export const Settings: React.FC = () => {
         body: JSON.stringify({ globalBotActive: val })
       });
       setGlobalBotActive(val);
-      alert(`Chatbot status changed to: ${val ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}`);
+      toast(`Chatbot status changed to: ${val ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}`, 'success');
     } catch (err: any) {
-      alert(`Failed to change bot status: ${err.message}`);
+      toast(`Failed to change bot status: ${err.message}`, 'error');
     }
   };
 
@@ -85,7 +87,7 @@ export const Settings: React.FC = () => {
       lng,
       name: branchName
     }));
-    alert('Branch coordinates updated successfully!');
+    toast('Branch coordinates updated successfully!', 'success');
   };
 
   const handleSaveOngkirTiers = async () => {
@@ -94,9 +96,9 @@ export const Settings: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({ tiers: ongkirTiers })
       });
-      alert('Delivery fee tierings updated successfully on server!');
+      toast('Delivery fee tierings updated successfully on server!', 'success');
     } catch (err: any) {
-      alert(`Failed to save delivery fee tierings: ${err.message}`);
+      toast(`Failed to save delivery fee tierings: ${err.message}`, 'error');
     }
   };
 

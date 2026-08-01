@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import { 
   MessageSquare, 
   AlertTriangle, 
@@ -39,6 +40,7 @@ interface Conversation {
 }
 
 export const LiveChatMonitor: React.FC = () => {
+  const { toast, confirm } = useUiFeedback();
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<Conversation[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
@@ -72,11 +74,15 @@ export const LiveChatMonitor: React.FC = () => {
   const handleRelease = async (chat: Conversation) => {
     const isMedical = chat.escalation_reason === 'medical_concern';
     
-    const confirmMessage = isMedical
-      ? "🚨 [PERINGATAN DARURAT MEDIS]\n\nPercakapan ini ditandai sebagai eskalasi medis. Bot AI tidak memiliki auto-release waktu untuk kasus medis demi keselamatan.\n\nApakah Anda benar-benar yakin ingin mengembalikan chat ini ke respon otomatis AI Bot?"
-      : "Apakah Anda yakin ingin mengembalikan percakapan ini ke bot otomatis? Bot akan mulai merespon chat berikutnya secara mandiri.";
-
-    if (!window.confirm(confirmMessage)) return;
+    const isConfirmed = await confirm({
+      title: 'Kembalikan ke Bot?',
+      message: isMedical
+        ? 'Percakapan ini ditandai sebagai eskalasi medis. Bot AI tidak memiliki auto-release waktu untuk kasus medis demi keselamatan. Apakah Anda benar-benar yakin ingin mengembalikan chat ini ke respon otomatis AI Bot?'
+        : 'Apakah Anda yakin ingin mengembalikan percakapan ini ke bot otomatis? Bot akan mulai merespon chat berikutnya secara mandiri.',
+      confirmText: 'Ya, Kembalikan',
+      danger: isMedical,
+    });
+    if (!isConfirmed) return;
 
     setReleasingId(chat.id);
     try {
@@ -88,8 +94,9 @@ export const LiveChatMonitor: React.FC = () => {
       if (selectedChatId === chat.id) {
         setSelectedChatId(null);
       }
+      toast('Percakapan berhasil dikembalikan ke bot.', 'success');
     } catch (err: any) {
-      alert(`Gagal merilis percakapan ke bot: ${err.message}`);
+      toast(`Gagal merilis percakapan ke bot: ${err.message}`, 'error');
     } finally {
       setReleasingId(null);
     }

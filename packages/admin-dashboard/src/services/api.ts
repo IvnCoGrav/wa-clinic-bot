@@ -6,14 +6,21 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
   
-  // Make sure we include credentials for cookie session handling
+  // Hanya set Content-Type: application/json jika ada body.
+  // Kalau tidak ada body (misal PATCH cancel/delete), jangan set —
+  // fetch akan reject kalau Content-Type json tapi body kosong.
+  const hasBody = options.body !== undefined && options.body !== null;
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (hasBody && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const mergedOptions: RequestInit = {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   };
 
   const response = await fetch(url, mergedOptions);

@@ -114,7 +114,7 @@ export const FollowUpQueue: React.FC = () => {
       setRescheduleModal({ open: false });
       loadFollowUps();
     } catch (err: any) {
-      alert(`Gagal reschedule: ${err.message}`);
+      setToastMsg({ type: 'error', text: `Gagal reschedule: ${err.message}` });
     } finally {
       setActionLoading(null);
     }

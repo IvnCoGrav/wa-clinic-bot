@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import { 
   Send, 
   Terminal, 
@@ -22,6 +23,7 @@ interface ChatMessage {
 }
 
 export const AiSandbox: React.FC = () => {
+  const { toast, confirm } = useUiFeedback();
   const [sandboxPhone, setSandboxPhone] = useState<string>(() => {
     let stored = sessionStorage.getItem('sandbox_phone');
     if (!stored) {
@@ -101,9 +103,12 @@ export const AiSandbox: React.FC = () => {
   const handleSaveEdit = async (chunkId: string) => {
     if (!editingTitle.trim() || !editingContent.trim() || editLoading) return;
 
-    const isConfirmed = window.confirm(
-      "⚠️ PERINGATAN:\n\nPerubahan ini bersifat PERMANEN dan langsung disimpan ke database utama (tabel KnowledgeChunk).\n\nIni akan memengaruhi jawaban AI Bot untuk seluruh customer asli Anda di WhatsApp produksi.\n\nApakah Anda yakin ingin menyimpan perubahan ini?"
-    );
+    const isConfirmed = await confirm({
+      title: 'Simpan Perubahan Chunk?',
+      message: 'Perubahan ini bersifat PERMANEN dan langsung disimpan ke database utama (tabel KnowledgeChunk). Ini akan memengaruhi jawaban AI Bot untuk seluruh customer asli Anda di WhatsApp produksi.',
+      confirmText: 'Ya, Simpan',
+      danger: true,
+    });
     if (!isConfirmed) return;
 
     setEditLoading(true);
@@ -121,8 +126,9 @@ export const AiSandbox: React.FC = () => {
         )
       }));
       setEditingChunkId(null);
+      toast('Chunk berhasil disimpan.', 'success');
     } catch (err: any) {
-      alert(`Failed to save chunk: ${err.message}`);
+      toast(`Failed to save chunk: ${err.message}`, 'error');
     } finally {
       setEditLoading(false);
     }
@@ -130,9 +136,12 @@ export const AiSandbox: React.FC = () => {
 
   const handleSavePersona = async () => {
     if (!personaText.trim() || personaLoading) return;
-    const isConfirmed = window.confirm(
-      "⚠️ PERINGATAN:\n\nPerubahan ini bersifat PERMANEN dan langsung mengubah SYSTEM PERSONA PROMPT bot AI Anda secara live.\n\nIni akan memengaruhi cara bot merespon seluruh chat customer asli Anda di WhatsApp produksi.\n\nApakah Anda yakin ingin menyimpan perubahan persona ini?"
-    );
+    const isConfirmed = await confirm({
+      title: 'Simpan Perubahan Persona?',
+      message: 'Perubahan ini bersifat PERMANEN dan langsung mengubah SYSTEM PERSONA PROMPT bot AI Anda secara live. Ini akan memengaruhi cara bot merespon seluruh chat customer asli Anda di WhatsApp produksi.',
+      confirmText: 'Ya, Simpan',
+      danger: true,
+    });
     if (!isConfirmed) return;
 
     setPersonaLoading(true);
@@ -143,8 +152,9 @@ export const AiSandbox: React.FC = () => {
       });
       setEditingPersona(false);
       setInspectorData((prev: any) => ({ ...prev, systemPrompt: personaText }));
+      toast('Persona berhasil disimpan.', 'success');
     } catch (err: any) {
-      alert(`Gagal menyimpan perubahan persona: ${err.message}`);
+      toast(`Gagal menyimpan perubahan persona: ${err.message}`, 'error');
     } finally {
       setPersonaLoading(false);
     }

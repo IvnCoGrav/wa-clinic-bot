@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import { 
   Activity, 
   Plus, 
@@ -33,6 +34,7 @@ interface ClinicServiceItem {
 }
 
 export const ClinicServices: React.FC = () => {
+  const { toast, confirm } = useUiFeedback();
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -60,7 +62,7 @@ export const ClinicServices: React.FC = () => {
       const list = Array.isArray(res) ? res : (res?.data || []);
       setServices(list);
     } catch (err: any) {
-      alert(`Gagal memuat katalog layanan: ${err.message}`);
+      toast(`Gagal memuat katalog layanan: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -140,20 +142,28 @@ export const ClinicServices: React.FC = () => {
       }
       setIsModalOpen(false);
       loadServices();
+      toast('Layanan berhasil disimpan!', 'success');
     } catch (err: any) {
-      alert(`Gagal menyimpan layanan: ${err.message}`);
+      toast(`Gagal menyimpan layanan: ${err.message}`, 'error');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Yakin ingin menghapus layanan ini dari katalog?')) return;
+    const isConfirmed = await confirm({
+      title: 'Hapus Layanan?',
+      message: 'Yakin ingin menghapus layanan ini dari katalog?',
+      confirmText: 'Ya, Hapus',
+      danger: true,
+    });
+    if (!isConfirmed) return;
     try {
       await apiRequest(`/api/admin/services/${id}`, {
         method: 'DELETE'
       });
       loadServices();
+      toast('Layanan berhasil dihapus.', 'success');
     } catch (err: any) {
-      alert(`Gagal menghapus layanan: ${err.message}`);
+      toast(`Gagal menghapus layanan: ${err.message}`, 'error');
     }
   };
 
@@ -165,7 +175,7 @@ export const ClinicServices: React.FC = () => {
       });
       loadServices();
     } catch (err: any) {
-      alert(`Gagal mengubah status aktif: ${err.message}`);
+      toast(`Gagal mengubah status aktif: ${err.message}`, 'error');
     }
   };
 
