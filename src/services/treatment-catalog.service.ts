@@ -237,6 +237,88 @@ export function saveServices() {
   }
 }
 
+/**
+ * Load services dari database per tenant (SaaS-ready).
+ * Sumber kebenaran: tabel clinic_services. Fallback: file services_custom.json.
+ */
+export async function loadServicesFromDb(tenantId: string): Promise<void> {
+  try {
+    const { prisma } = await import('../db/client');
+    const dbServices = await prisma.clinicService.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { sort_order: 'asc' },
+    });
+
+    if (dbServices.length > 0) {
+      serviceCatalog.clear();
+      dbServices.forEach((s) => {
+        serviceCatalog.set(s.service_id, {
+          id: s.service_id,
+          name: s.name,
+          category: s.category as TreatmentCategoryType,
+          ageTier: {
+            minAgeMonths: s.min_age_months,
+            maxAgeMonths: s.max_age_months,
+            label: s.age_label,
+          },
+          durationMinutes: s.duration_minutes,
+          originalPrice: s.original_price,
+          promoPrice: s.promo_price,
+          description: s.description,
+          isActive: s.is_active,
+        });
+      });
+      return;
+    }
+
+    // Tidak ada data di DB -> seed dari file/default lalu simpan
+    const source = Array.from(serviceCatalog.values());
+    if (source.length === 0) {
+      DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
+    }
+    await saveServicesToDb(tenantId);
+  } catch (err) {
+    console.warn('[TREATMENT CATALOG] DB unavailable, using file/default:', (err as Error).message);
+  }
+}
+
+/**
+ * Simpan services ke database per tenant (SaaS-ready).
+ * Juga update file services_custom.json (legacy compat).
+ */
+export async function saveServicesToDb(tenantId: string): Promise<boolean> {
+  try {
+    const { prisma } = await import('../db/client');
+    const list = Array.from(serviceCatalog.values());
+
+    await prisma.clinicService.deleteMany({ where: { tenant_id: tenantId } });
+    await prisma.clinicService.createMany({
+      data: list.map((s, idx) => ({
+        tenant_id: tenantId,
+        service_id: s.id,
+        name: s.name,
+        category: s.category,
+        min_age_months: s.ageTier.minAgeMonths,
+        max_age_months: s.ageTier.maxAgeMonths,
+        age_label: s.ageTier.label,
+        duration_minutes: s.durationMinutes,
+        original_price: s.originalPrice,
+        promo_price: s.promoPrice,
+        description: s.description,
+        is_active: s.isActive,
+        sort_order: idx,
+      })),
+    });
+
+    // Legacy compat
+    saveServices();
+    return true;
+  } catch (err) {
+    console.error('[TREATMENT CATALOG] Failed to save to DB:', (err as Error).message);
+    return saveServices();
+  }
+}
+
 // Initial load
 loadServices();
 
@@ -280,21 +362,24 @@ export class TreatmentCatalogService {
   }
 
   /**
-   * Menambahkan atau meng-update data layanan baru
+   * Menambahkan atau meng-update data layanan baru (sync ke DB per tenant)
    */
-  public upsertService(service: ClinicServiceItem): ClinicServiceItem {
+  public upsertService(service: ClinicServiceItem, tenantId: string = 'default-tenant'): ClinicServiceItem {
     serviceCatalog.set(service.id, service);
     saveServices();
+    // Fire-and-forget sinkronisasi ke DB (SaaS-ready)
+    saveServicesToDb(tenantId).catch((e) => console.warn('[TREATMENT CATALOG] upsert DB sync failed:', (e as Error).message));
     return service;
   }
 
   /**
-   * Menghapus layanan
+   * Menghapus layanan (sync ke DB per tenant)
    */
-  public deleteService(id: string): boolean {
+  public deleteService(id: string, tenantId: string = 'default-tenant'): boolean {
     const deleted = serviceCatalog.delete(id);
     if (deleted) {
       saveServices();
+      saveServicesToDb(tenantId).catch((e) => console.warn('[TREATMENT CATALOG] delete DB sync failed:', (e as Error).message));
     }
     return deleted;
   }

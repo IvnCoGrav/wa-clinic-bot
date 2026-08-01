@@ -1,6 +1,8 @@
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
 import { IOrsClient, orsClient as defaultOrsClient } from '../integrations/ors/client';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { prisma } from '../db/client';
 import fs from 'fs';
 import path from 'path';
 
@@ -51,8 +53,76 @@ export function saveDeliveryTiers(tiers: DeliveryTier[]) {
   }
 }
 
-// Initial load
+// Initial load (file fallback)
 loadDeliveryTiers();
+
+/**
+ * Mengambil delivery tiers dari database per tenant.
+ * Sumber kebenaran: tabel `delivery_tiers` (SaaS-ready).
+ * Fallback: file delivery_tiers_custom.json (legacy single-tenant).
+ */
+export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_ID): Promise<DeliveryTier[]> {
+  try {
+    const dbTiers = await prisma.deliveryTier.findMany({
+      where: { tenant_id: tenantId },
+      orderBy: { sort_order: 'asc' },
+    });
+
+    if (dbTiers.length > 0) {
+      return dbTiers.map((t) => ({
+        id: Number(t.sort_order),
+        maxDist: t.max_dist,
+        fee: t.fee,
+        promoDiscount: t.promo_discount,
+      }));
+    }
+
+    // Tidak ada data di DB -> seed dari file/default lalu simpan
+    const source = activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
+    await prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } });
+    await prisma.deliveryTier.createMany({
+      data: source.map((t, idx) => ({
+        tenant_id: tenantId,
+        max_dist: t.maxDist,
+        fee: t.fee,
+        promo_discount: t.promoDiscount,
+        sort_order: idx + 1,
+      })),
+    });
+    return source;
+  } catch (err) {
+    // DB offline -> fallback file
+    console.warn('[DELIVERY TIERS] DB unavailable, using file fallback:', (err as Error).message);
+    return activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
+  }
+}
+
+/**
+ * Menyimpan delivery tiers ke database per tenant.
+ */
+export async function saveDeliveryTiersToDb(tiers: DeliveryTier[], tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+  try {
+    await prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } });
+    await prisma.deliveryTier.createMany({
+      data: tiers
+        .slice()
+        .sort((a, b) => a.maxDist - b.maxDist)
+        .map((t, idx) => ({
+          tenant_id: tenantId,
+          max_dist: t.maxDist,
+          fee: t.fee,
+          promo_discount: t.promoDiscount,
+          sort_order: idx + 1,
+        })),
+    });
+    // Juga update fallback file (legacy compat)
+    saveDeliveryTiers(tiers);
+    return true;
+  } catch (err) {
+    console.error('[DELIVERY TIERS] Failed to save to DB, using file fallback:', (err as Error).message);
+    return saveDeliveryTiers(tiers);
+  }
+}
 
 
 export interface DeliveryCalculationResult {
@@ -70,18 +140,11 @@ export interface DeliveryCalculationResult {
  * 
  * SUMBER DISTANCE:
  * 1. Utama    : OpenRouteService (ORS) Directions API (profile: cycling-electric)
- * 2. Fallback  : Formula Haversine manual dengan Circuity Multiplier (1.25x untuk memperhitungkan kelengkungan jalan)
+ * 2. Fallback  : Formula Haversine manual dengan Circuity Multiplier (1.50x)
  * 
- * ATURAN TARIF ONGKIR & THRESHOLD JARAK BARU (REVISI KEDUA):
- * -----------------------------------------------------------------------
- * 1. Jarak 0.0 km s/d 5.0 km     : FREE / GRATIS (Rp 0)
- * 2. Jarak > 5.0 km s/d 7.0 km    : Rp 15.000 (Promo: Potongan Rp 10.000 -> Net Rp 5.000)
- * 3. Jarak > 7.0 km s/d 10.0 km   : Rp 15.000 (Promo: Potongan Rp 5.000 -> Net Rp 10.000)
- * 4. Jarak > 10.0 km s/d 15.0 km  : Rp 15.000 (Promo: Potongan Rp 5.000 -> Net Rp 10.000)
- * 5. Jarak > 15.0 km s/d 20.0 km  : Rp 20.000 (Promo: Potongan Rp 5.000 -> Net Rp 15.000)
- * 6. Jarak > 20.0 km s/d 25.0 km  : Rp 25.000 (Promo: Potongan Rp 5.000 -> Net Rp 20.000)
- * 7. Jarak > 25.0 km s/d 30.0 km  : Rp 30.000 (Promo: Potongan Rp 5.000 -> Net Rp 25.000)
- * 8. Jarak > 30.0 km              : LUAR JANGKAUAN (isOutOfCoverage = true)
+ * SUMBER TIER (SaaS-ready):
+ * 1. Database `delivery_tiers` per tenant
+ * 2. Fallback file delivery_tiers_custom.json
  */
 export class DeliveryService {
   private orsClient: IOrsClient;
@@ -92,14 +155,11 @@ export class DeliveryService {
 
   /**
    * Menghitung ongkir berdasarkan jarak dari titik lokasi moms & baby spa ke koordinat customer.
-   * Menggunakan ORS Directions API sebagai sumber utama, dengan fallback ke Haversine + 1.25x circuity factor.
-   * 
-   * @param customerCoords Koordinat latitude & longitude customer
-   * @param clinicCoords (Opsional) Koordinat moms & baby spa. Jika tidak diisi, menggunakan default clinicConfig.
    */
   public async calculateDelivery(
     customerCoords: Coordinates,
-    clinicCoords: Coordinates = { lat: clinicConfig.lat, lng: clinicConfig.lng }
+    clinicCoords: Coordinates = { lat: clinicConfig.lat, lng: clinicConfig.lng },
+    tenantId: string = DEFAULT_TENANT_ID
   ): Promise<DeliveryCalculationResult> {
     let distanceKm: number;
     let isEstimated = false;
@@ -117,25 +177,25 @@ export class DeliveryService {
       distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(2));
       isEstimated = false;
     } else {
-      // 2. FALLBACK: Jika ORS API gagal/timeout/error/unreachable, gunakan formula Haversine + 1.25x Circuity Factor
+      // 2. FALLBACK: Haversine + 1.50x Circuity Factor
       console.warn(
         `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with 1.50x circuity multiplier.`
       );
       const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
-      // Circuity Factor 1.50x memperhitungkan kelengkungan rute jalan darat dibanding garis lurus.
-      // Berdasarkan analisis 26 lokasi vs ORS: rasio aktual p50=1.52, p80=1.58, p90=1.65.
-      // 1.25x lama meremehkan (50% kasus undercharge); 1.50x mendekati median (81% cocok tier).
       distanceKm = parseFloat((straightLineKm * 1.50).toFixed(2));
       isEstimated = true;
     }
 
-    // 3. Evaluasi threshold jarak & tentukan tarif ongkir
-    const { normalPrice, promoDiscount, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm);
+    // 3. Ambil tier ongkir per tenant (DB -> fallback file)
+    const tiers = await getDeliveryTiersFromDb(tenantId);
+
+    // 4. Evaluasi threshold jarak & tentukan tarif ongkir
+    const { normalPrice, promoDiscount, isOutOfCoverage } = this.calculateOngkirByDistance(distanceKm, tiers);
 
     // Hitung promoPrice dengan diskon
     const promoPrice = Math.max(0, normalPrice - promoDiscount);
 
-    // 4. Construct message template
+    // 5. Construct message template
     let messageTemplate = '';
     if (distanceKm <= 5.0) {
       messageTemplate = `Wah, Deket Bunda, Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami (masih dalam jangkauan < 5 km), sehingga layanan kami GRATIS ongkir!`;
@@ -157,8 +217,11 @@ export class DeliveryService {
   }
 
 
-  public calculateOngkirByDistance(distanceKm: number): { normalPrice: number; promoDiscount: number; isOutOfCoverage: boolean } {
-    const sortedTiers = [...activeDeliveryTiers].sort((a, b) => a.maxDist - b.maxDist);
+  public calculateOngkirByDistance(
+    distanceKm: number,
+    tiers: DeliveryTier[] = activeDeliveryTiers
+  ): { normalPrice: number; promoDiscount: number; isOutOfCoverage: boolean } {
+    const sortedTiers = [...tiers].sort((a, b) => a.maxDist - b.maxDist);
     const matchingTier = sortedTiers.find(t => distanceKm <= t.maxDist);
     
     if (matchingTier) {

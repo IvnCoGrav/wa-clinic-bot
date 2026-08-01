@@ -93,6 +93,69 @@ export class AiModelConfigService {
   static globalBotActive = true;
 
   /**
+   * Sync seluruh task model config ke database per tenant (SaaS-ready).
+   * Sumber kebenaran: tabel tenant_ai_config. Fallback: registry in-memory.
+   */
+  static async loadConfigsFromDb(tenantId: string): Promise<void> {
+    try {
+      const { prisma } = await import('../db/client');
+      const dbConfigs = await prisma.tenantAiConfig.findMany({
+        where: { tenant_id: tenantId },
+      });
+
+      if (dbConfigs.length > 0) {
+        for (const cfg of dbConfigs) {
+          const task = cfg.task as AiTaskType;
+          if (!defaultTaskModelRegistry.has(task)) continue;
+          defaultTaskModelRegistry.set(task, {
+            task,
+            provider: cfg.provider,
+            modelName: cfg.model_name,
+            description: `DB config for task ${task}`,
+            maxTokens: cfg.max_tokens,
+            temperature: cfg.temperature,
+            confidenceThreshold: cfg.confidence_threshold ?? undefined,
+          });
+        }
+        return;
+      }
+
+      // Tidak ada di DB -> seed dari registry in-memory
+      await this.saveConfigsToDb(tenantId);
+    } catch (err) {
+      console.warn('[AI MODEL CONFIG] DB unavailable, using in-memory:', (err as Error).message);
+    }
+  }
+
+  /**
+   * Simpan seluruh task model config ke database per tenant.
+   */
+  static async saveConfigsToDb(tenantId: string): Promise<boolean> {
+    try {
+      const { prisma } = await import('../db/client');
+      await prisma.tenantAiConfig.deleteMany({ where: { tenant_id: tenantId } });
+      const entries = Array.from(defaultTaskModelRegistry.entries())
+        .filter(([task]) => task !== 'MEDICAL_CHECK') // locked
+        .map(([task, cfg]) => ({
+          tenant_id: tenantId,
+          task,
+          provider: cfg.provider,
+          model_name: cfg.modelName,
+          max_tokens: cfg.maxTokens,
+          temperature: cfg.temperature,
+          confidence_threshold: cfg.confidenceThreshold ?? null,
+        }));
+      if (entries.length > 0) {
+        await prisma.tenantAiConfig.createMany({ data: entries });
+      }
+      return true;
+    } catch (err) {
+      console.error('[AI MODEL CONFIG] Failed to save to DB:', (err as Error).message);
+      return false;
+    }
+  }
+
+  /**
    * Mengambil konfigurasi AI Model untuk task tertentu
    */
   static getModelConfig(task: AiTaskType): AiTaskModelConfig {
@@ -162,6 +225,10 @@ export class AiModelConfigService {
     };
     defaultTaskModelRegistry.set(task, updated);
     console.log(`[AI MODEL CONFIG UPDATED] Task '${task}' is now mapped to provider '${updated.provider}' with model '${updated.modelName}'`);
+    // Fire-and-forget sinkronisasi ke DB (SaaS-ready)
+    this.saveConfigsToDb('default-tenant').catch((e) =>
+      console.warn('[AI MODEL CONFIG] update DB sync failed:', (e as Error).message)
+    );
     return updated;
   }
 }

@@ -1543,16 +1543,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/persona
-   * Mengambil system persona prompt bot aktif saat ini
+   * Mengambil system persona prompt bot aktif saat ini (dari DB per tenant)
    */
   fastify.get('/api/admin/persona', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { BOT_PERSONA_PROMPT } = await import('../config/persona');
-    return reply.status(200).send({ success: true, persona: BOT_PERSONA_PROMPT });
+    const { loadPersonaFromDb } = await import('../config/persona');
+    const persona = await loadPersonaFromDb(DEFAULT_TENANT_ID);
+    return reply.status(200).send({ success: true, persona });
   });
 
   /**
    * POST /api/admin/persona
-   * Mengupdate system persona prompt bot secara live (in-memory & file)
+   * Mengupdate system persona prompt bot secara live (DB per tenant + in-memory & file)
    */
   fastify.post(
     '/api/admin/persona',
@@ -1568,8 +1569,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const { updatePersonaInMemoryAndFile } = await import('../config/persona');
-        updatePersonaInMemoryAndFile(persona);
+        const { savePersonaToDb } = await import('../config/persona');
+        await savePersonaToDb(persona, DEFAULT_TENANT_ID);
 
         // Audit Trail Log for Persona Change
         await auditService.logAdminAction({
@@ -1706,27 +1707,37 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/delivery-tiers
-   * Mengambil setting delivery tiers ongkir
+   * Mengambil setting delivery tiers ongkir (dari DB per tenant, fallback file)
    */
   fastify.get('/api/admin/delivery-tiers', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { activeDeliveryTiers } = await import('../services/delivery.service');
-    return reply.status(200).send({
-      success: true,
-      data: activeDeliveryTiers
-    });
+    try {
+      const { getDeliveryTiersFromDb } = await import('../services/delivery.service');
+      const tiers = await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
+      return reply.status(200).send({
+        success: true,
+        data: tiers,
+      });
+    } catch (err: any) {
+      const { activeDeliveryTiers } = await import('../services/delivery.service');
+      return reply.status(200).send({
+        success: true,
+        data: activeDeliveryTiers,
+        note: 'Fallback file mode',
+      });
+    }
   });
 
   /**
    * POST /api/admin/delivery-tiers
-   * Memperbarui setting delivery tiers ongkir
+   * Memperbarui setting delivery tiers ongkir (simpan ke DB per tenant)
    */
   fastify.post('/api/admin/delivery-tiers', async (request: FastifyRequest<{ Body: { tiers: any[] } }>, reply: FastifyReply) => {
     const { tiers } = request.body || {};
     if (!tiers || !Array.isArray(tiers)) {
       return reply.status(400).send({ error: 'Body must contain tiers array' });
     }
-    const { saveDeliveryTiers } = await import('../services/delivery.service');
-    const success = saveDeliveryTiers(tiers);
+    const { saveDeliveryTiersToDb } = await import('../services/delivery.service');
+    const success = await saveDeliveryTiersToDb(tiers, DEFAULT_TENANT_ID);
     if (!success) {
       return reply.status(500).send({ error: 'Failed to save delivery tiers' });
     }

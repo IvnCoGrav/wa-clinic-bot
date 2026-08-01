@@ -68,7 +68,7 @@ if (require.main === module) {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const HOST = process.env.HOST || '0.0.0.0';
 
-  server.listen({ port: PORT, host: HOST }, (err, address) => {
+  server.listen({ port: PORT, host: HOST }, async (err, address) => {
     if (err) {
       server.log.error(err);
       process.exit(1);
@@ -76,6 +76,22 @@ if (require.main === module) {
     console.log(`\n🚀 WhatsApp Clinic Bot Engine listening on ${address}`);
     console.log(`📌 Webhook URL: ${address}/webhook`);
     console.log(`📌 Admin Endpoint: ${address}/api/admin/human-handling-conversations\n`);
+
+    // Init data tenant (SaaS-ready): seed catalog & delivery tiers dari DB
+    try {
+      const { DEFAULT_TENANT_ID } = await import('./config/tenant');
+      const { loadServicesFromDb } = await import('./services/treatment-catalog.service');
+      const { getDeliveryTiersFromDb } = await import('./services/delivery.service');
+      const { loadPersonaFromDb } = await import('./config/persona');
+      const { AiModelConfigService } = await import('./config/ai-models.config');
+      await loadServicesFromDb(DEFAULT_TENANT_ID);
+      await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
+      await loadPersonaFromDb(DEFAULT_TENANT_ID);
+      await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
+      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config)');
+    } catch (initErr) {
+      console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
+    }
 
     // Start background WAHA status monitor
     import('./services/waha-monitor.service').then(({ WahaMonitorService }) => {
