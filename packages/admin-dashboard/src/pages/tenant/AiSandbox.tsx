@@ -12,7 +12,8 @@ import {
   Sparkles,
   Edit3,
   Save,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -298,22 +299,34 @@ export const AiSandbox: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Form input */}
-          <form onSubmit={handleSend} className="flex space-x-2">
-            <input
-              type="text"
+          {/* Form input — WhatsApp-like style */}
+          <form onSubmit={handleSend} className="bg-slate-900/60 border border-white/5 rounded-2xl p-3 space-y-2">
+            <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Ask about treatments, locations, or scheduling..."
-              className="flex-1 p-3 bg-slate-950 border border-white/5 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  (e.target as HTMLTextAreaElement).form?.requestSubmit();
+                }
+              }}
+              placeholder="Ketik pesan... (Enter untuk kirim)"
+              rows={2}
+              className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none resize-none"
             />
-            <button
-              type="submit"
-              disabled={loading}
-              className="p-3 bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center"
-            >
-              <Send size={14} />
-            </button>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-500">
+                {inputText.length > 0 ? `${inputText.length} karakter` : 'Tekan Enter atau klik Kirim'}
+              </span>
+              <button
+                type="submit"
+                disabled={loading || !inputText.trim()}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20"
+              >
+                {loading ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                <span>Kirim</span>
+              </button>
+            </div>
           </form>
         </div>
 

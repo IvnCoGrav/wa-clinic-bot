@@ -31,10 +31,25 @@ export function parseReservationText(rawText: string): ParseResult {
   // Bersihkan formatting markdown WhatsApp (*, _, ~, `)
   let cleaned = rawText.replace(/[*_~`]/g, '').replace(/\r\n/g, '\n');
 
-  // 1. Gabungkan label yang terpotong ke baris baru (misal Usia Kehamilan (Jika\n hamil): -> Usia Kehamilan (Jika hamil):)
+  // 1. Sambungkan label yang terpotong di tengah baris (mid-word wrap)
+  // Hanya untuk kata-kata label yang DIKETAHUI, supaya tidak salah gabung
+  // kata biasa (misal "Hari dan\ntanggal" harus tetap terpisah).
+  const LABEL_WORDS = ['Bunda', 'Kehamilan', 'Shareloc', 'Anak', 'Bayi', 'Alamat', 'Pilihan', 'Treatment', 'Keham', 'Perawatan', 'No.', 'Hp', 'tanggal', 'Booking', 'Reservasi'];
+  for (const word of LABEL_WORDS) {
+    for (let i = 1; i < word.length; i++) {
+      const part1 = word.slice(0, i);
+      const part2 = word.slice(i);
+      if (part1.length >= 2 && part2.length >= 1) {
+        const re = new RegExp('(' + part1 + ')\\n(' + part2 + ')', 'gi');
+        cleaned = cleaned.replace(re, '$1$2');
+      }
+    }
+  }
+
+  // 2. Gabungkan label yang terpotong ke baris baru (misal Usia Kehamilan (Jika\n hamil): -> Usia Kehamilan (Jika hamil):)
   cleaned = cleaned.replace(/(usia\s+kehamilan[^\n:]*)\n\s*([^:\n]+:)/gi, '$1 $2');
 
-  // 2. Pisahkan label yang berada di satu baris yang sama setelah nilai field lain
+  // 3. Pisahkan label yang berada di satu baris yang sama setelah nilai field lain
   const inlineLabelRegex = /(\s+)(Nama Bunda\s*:|Alamat & Shareloc\s*:|Alamat\s*:|Kec\s*&\s*Kota\s*:|\bKec\s*:|\bKota\s*:|No\.?\s*Hp\s*:|Nama Bayi\s*:|Usia Bayi\/Anak\s*:|Usia Bayi\s*:|Usia Kehamilan[^\n:]*:|Treatment\s*:|Pilihan treatment)/gi;
   cleaned = cleaned.replace(inlineLabelRegex, '\n$2');
 
