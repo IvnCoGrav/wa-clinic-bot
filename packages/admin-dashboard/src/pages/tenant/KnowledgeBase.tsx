@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import { FAQChunk } from '../../types';
 import { 
   BookOpen, 
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 
 export const KnowledgeBase: React.FC = () => {
+  const { confirm } = useUiFeedback();
   const [chunks, setChunks] = useState<FAQChunk[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'chunks' | 'upload' | 'unanswered' | 'harvesting' | 'staging' | 'existing_use_case'>('chunks');
@@ -258,7 +260,13 @@ export const KnowledgeBase: React.FC = () => {
   };
 
   const handleDeleteChunk = async (chunkId: string) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus FAQ Reference Chunk ini? Perubahan ini bersifat permanen.')) return;
+    const isConfirmed = await confirm({
+      title: 'Hapus FAQ Chunk?',
+      message: 'Apakah Anda yakin ingin menghapus FAQ Reference Chunk ini? Perubahan ini bersifat permanen.',
+      confirmText: 'Ya, Hapus',
+      danger: true,
+    });
+    if (!isConfirmed) return;
     try {
       await apiRequest(`/api/admin/knowledge/chunks/${chunkId}`, {
         method: 'DELETE'
@@ -283,12 +291,12 @@ export const KnowledgeBase: React.FC = () => {
           faqs: [{ question, answer }]
         })
       });
-      alert('FAQ added successfully!');
+      showToast('FAQ added successfully!', 'success');
       setQuestion('');
       setAnswer('');
       loadChunks();
     } catch (err: any) {
-      alert(`Failed to add FAQ: ${err.message}`);
+      showToast(`Failed to add FAQ: ${err.message}`, 'error');
     } finally {
       setFormSubmitting(false);
     }
@@ -307,12 +315,12 @@ export const KnowledgeBase: React.FC = () => {
           content: docContent
         })
       });
-      alert('SOP document parsed and saved successfully!');
+      showToast('SOP document parsed and saved successfully!', 'success');
       setDocName('');
       setDocContent('');
       loadChunks();
     } catch (err: any) {
-      alert(`Failed to parse document: ${err.message}`);
+      showToast(`Failed to parse document: ${err.message}`, 'error');
     } finally {
       setUploadSubmitting(false);
     }

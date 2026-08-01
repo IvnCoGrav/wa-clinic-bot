@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { 
   Search, 
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export const Reservations: React.FC = () => {
+  const { toast, confirm } = useUiFeedback();
   const [loading, setLoading] = useState(true);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
@@ -46,11 +48,11 @@ export const Reservations: React.FC = () => {
       await apiRequest(`/api/admin/reservation/${id}/confirm`, {
         method: 'PATCH'
       });
-      alert('Reservation confirmed and event synced to Google Calendar!');
+      toast('Reservation confirmed and event synced to Google Calendar!', 'success');
       setSelectedRes(null);
       loadReservations();
     } catch (err: any) {
-      alert(`Error confirming reservation: ${err.message}`);
+      toast(`Error confirming reservation: ${err.message}`, 'error');
       setLoading(false);
     }
   };
@@ -63,28 +65,34 @@ export const Reservations: React.FC = () => {
         method: 'PATCH',
         body: JSON.stringify({ bookingDate: new Date(editDate).toISOString() })
       });
-      alert('Reservation schedule updated successfully!');
+      toast('Reservation schedule updated successfully!', 'success');
       setSelectedRes(null);
       setEditDate('');
       loadReservations();
     } catch (err: any) {
-      alert(`Error updating date: ${err.message}`);
+      toast(`Error updating date: ${err.message}`, 'error');
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to cancel and delete this reservation?')) return;
+    const isConfirmed = await confirm({
+      title: 'Hapus Reservasi?',
+      message: 'Are you sure you want to cancel and delete this reservation?',
+      confirmText: 'Ya, Hapus',
+      danger: true,
+    });
+    if (!isConfirmed) return;
     try {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${id}`, {
         method: 'DELETE'
       });
-      alert('Reservation deleted/cancelled.');
+      toast('Reservation deleted/cancelled.', 'success');
       setSelectedRes(null);
       loadReservations();
     } catch (err: any) {
-      alert(`Error deleting: ${err.message}`);
+      toast(`Error deleting: ${err.message}`, 'error');
       setLoading(false);
     }
   };

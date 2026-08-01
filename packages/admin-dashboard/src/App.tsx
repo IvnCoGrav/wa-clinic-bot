@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Layout } from './components/common/Layout';
+import { UiFeedbackProvider } from './components/common/UiFeedback';
 import { Login } from './pages/auth/Login';
 
 // Lazy load pages for fast initial bundle sizes (code-splitting rationale)
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <UiFeedbackProvider>
         <Suspense fallback={
           <div className="flex h-screen items-center justify-center bg-slate-950">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-pink-500 border-t-transparent"></div>
@@ -132,6 +134,7 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/admin/overview" replace />} />
           </Routes>
         </Suspense>
+        </UiFeedbackProvider>
       </AuthProvider>
     </BrowserRouter>
   );
