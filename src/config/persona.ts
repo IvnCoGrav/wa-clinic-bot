@@ -212,7 +212,6 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
   notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
   reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string }) => {
-    const hasPrefill = params && (params.kecamatan || params.kota || params.phone);
     const prefill = (field: string, value?: string) => {
       if (value && value.trim().length > 0) {
         return `${field} : ${value.trim()}`;
@@ -241,7 +240,7 @@ Usia Kehamilan (Jika hamil):
 Treatment :
 
 
-${hasPrefill ? 'Beberapa data sudah terisi otomatis, mohon koreksi bila perlu ya Bunda 😊\n\n' : ''}Mohon bisa diisi Bunda 😊
+Mohon bisa diisi Bunda 😊
 Cancel / Pembatalan Harap minimal H-3 jam
 
 H-1 sebelum treatment akan kami reminder kembali bunda 🥰
