@@ -1,8 +1,8 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
-**Versi:** 2.0  
-**Status:** Fase 1 logic-complete (termasuk hardening keamanan & edge case), tervalidasi 100% di WAHA  
-**Terakhir diperbarui:** 24 Juli 2026
+**Versi:** 2.1  
+**Status:** Fase 1 production-ready (tervalidasi di WAHA + 332 unit test PASS)  
+**Terakhir diperbarui:** 1 Agustus 2026
 
 ---
 
@@ -57,23 +57,28 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 20 | Status blocked pada customer: auto-block untuk pola spam/abuse yang jelas (flood, link tak diminta, pesan identik berulang saat human handling), manual block via endpoint admin untuk kasus lain. Bot silent total (tidak membalas apapun) untuk customer blocked. Kata kasar di-flag (review manual) pakai word-boundary match, bukan auto-block | ✅ Selesai (8 test, termasuk verifikasi anti-false-positive) |
 | 21 | Struktur data disiapkan untuk multi-tenant di masa depan (tenant_id di semua tabel, default single-tenant) — bukan fitur SaaS aktif, murni persiapan arsitektur | ✅ Selesai |
 | 22 | LLM Fallback untuk geocoding: resolved lokasi via DeepSeek V4 Flash saat gazetteer gagal (typo, dusun/RT, nama tidak umum), cross-check ke gazetteer untuk koordinat exact | ✅ Selesai |
+| 23 | FAQ dijawab saat customer masih di state AWAITING_LOCATION: pertanyaan non-lokasi (FAQ/harga) dijawab via knowledge base + katalog treatment, state lokasi tidak terganggu | ✅ Selesai |
+| 24 | Form reservasi pre-filled: field kecamatan, kota, dan nomor HP customer terisi otomatis (data sudah diketahui bot) supaya customer tinggal isi sisanya | ✅ Selesai |
+| 25 | Simpan nama kontak customer setelah submit form reservasi sebagai "Bunda {nama} {kecamatan}" (contoh: "Bunda Sari Waru") | ✅ Selesai |
 
 **Belum selesai / pending sebelum Fase 1 dianggap tuntas:**
 - Testing manual end-to-end dengan WAHA aktif (koneksi QR, typing indicator nyata, share location asli, akurasi jawaban FAQ) — saat ini baru divalidasi lewat CLI Chat Simulator
 - Import data FAQ & dokumen asli milik klinik (draft FAQ sudah disiapkan berdasarkan transkrip chat asli, menunggu review & import final)
+- Kelurahan tertentu tidak ada di gazetteer (misal "Mulyosari" di Kec. Sedati) — LLM fallback bisa resolve namanya tapi cross-check koordinat gagal; perlu koordinat dari pemilik bisnis untuk ditambahkan ke `surabaya_sidoarjo_subdistricts.json`
 
 #### 4.1.1 Fitur Tambahan "Fase 3" (dikerjakan di sesi terpisah — status: perlu klarifikasi sebelum dianggap selesai)
 
 | # | Fitur | Status |
 |---|---|---|
 | 22 | Peredaman greeting "Halo Bunda" kalau ada percakapan aktif <48 jam terakhir | ✅ Selesai — dikonfirmasi state machine tetap proses pesan normal, cuma teks pembuka yang di-skip |
-| 23 | Kirim gambar pricelist otomatis (assets/pricelist_spa.jpg) saat lokasi terkonfirmasi | ⚠️ Risiko: pastikan gambar ini sinkron dengan tabel tiering ongkir 7-level terbaru di Section 9 — kalau tidak di-update bareng, bisa muncul info kontradiktif antara teks bot dan gambar |
+| 23 | Kirim gambar pricelist otomatis (assets/pricelist_spa.jpg) saat lokasi terkonfirmasi | ✅ Selesai — sudah diuji manual oleh pemilik bisnis. ⚠️ Risiko: pastikan gambar ini sinkron dengan tabel tiering ongkir 7-level terbaru di Section 9 |
 | 24 | Deteksi lokasi dini: kalau pesan pertama customer sudah mengandung alamat lengkap, langsung proses tanpa nanya lokasi lagi | ✅ Selesai — perkenalan diri tetap disertakan sebelum info ongkir (bug awal sudah diperbaiki) |
 | 25 | Proteksi form reservasi: form tidak dikirim kalau customer.kelurahan masih kosong | ✅ Selesai |
 | 26 | Dukungan alias "bubid" sebagai sapaan ke bot | ✅ Selesai |
 | 27 | Label WAHA "hold" otomatis saat eskalasi ke human + auto-resume kalau label dihapus manual oleh admin | 🚩 Experimental/belum tervalidasi — WAHA belum pernah terhubung ke WhatsApp asli sama sekali, jadi fitur ini murni berdasarkan test yang di-mock. Fitur label WhatsApp biasanya bagian dari WhatsApp Business App resmi, dukungan di WAHA (unofficial) belum tentu stabil. Ini jadi jalur KEDUA untuk auto-release human handling, berdampingan dengan auto-release timeout 6 jam yang sudah ada — perlu dipastikan keduanya tidak saling konflik. Jangan andalkan fitur ini sampai tervalidasi di WhatsApp asli. |
 | 28 | Filter pesan dari grup WhatsApp (@g.us) diabaikan | ✅ Selesai |
 | 29 | Auto-save chat masuk baru ke Google Contacts via Google People API | ⚠️ Dinonaktifkan sementara secara default di .env. Dikonfirmasi ini permintaan eksplisit dari pemilik bisnis. Perlu dipastikan sebelum diaktifkan: OAuth credential Google disimpan aman, dan pemilik bisnis sadar ini menulis data customer (nomor HP, kemungkinan nama) ke akun Google pribadi/bisnis miliknya — lihat catatan privasi di Section 10 |
+| 30 | Medical concern: alert dikirim HANYA ke admin (Telegram/emergency log), chat customer DIAM TOTAL. Bidan/CS yang menggali lebih dalam dan menyarankan secara manual. Approved medical FAQ tetap bisa dijawab bot | ✅ Selesai — alert admin-only, tanpa template darurat yang dikirim ke customer (customer tidak di-shock) |
 
 ---
 
@@ -153,6 +158,9 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - **Reset idle 24 jam:** data lokasi yang statusnya masih pending (belum dikonfirmasi customer) otomatis direset kalau tidak ada aktivitas 24 jam; data yang sudah confirmed tidak terpengaruh.
 - **Keamanan endpoint admin:** proteksi ADMIN_API_KEY dengan perilaku fail-closed (menolak akses kalau key tidak diset, bukan malah default terbuka).
 - **Status blocked:** Keputusan final — auto-block untuk 3 trigger konservatif (flood >10 pesan/60 detik, link tak diminta di luar konteks reservasi, pesan identik berulang saat human handling), manual block via endpoint admin untuk kasus lain. Sinyal ambigu (bahasa kasar, dst) TIDAK auto-block, cukup di-flag untuk review manual admin. Bot silent total untuk customer blocked (lihat Section 4.1 poin 20).
+- **Medical escalation admin-only:** Deteksi keyword medis (HIGH/MEDIUM) hanya mengirim alert ke admin (Telegram/emergency log) dan mengeskalasi ke human handling. Chat customer DIAM TOTAL — tidak ada template "bawa ke IGD" yang dikirim, supaya customer tidak shock dan tidak ada penilaian darurat prematur (keyword bisa false-positive karena customer cenderung hiperbola). Bidan/CS yang menggali lebih dalam dan menyarankan secara manual. Approved medical FAQ tetap dijawab bot.
+- **FAQ saat state lokasi:** pertanyaan non-lokasi (FAQ/harga) yang masuk saat customer masih di alur menentukan lokasi dijawab via knowledge base + katalog treatment, dan state lokasi tidak terganggu (STATE PUNYA PRIORITAS — jawab sela, lalu tetap minta lokasi).
+- **Prefill form reservasi:** saat bot mengirim form reservasi, field kecamatan, kota, dan nomor HP terisi otomatis dari data customer yang sudah diketahui — memudahkan customer mengisi sisa form.
 
 *Fitur-fitur di atas dikerjakan di sesi kerja terpisah dengan Antigravity, bukan hasil perencanaan bersama di percakapan yang menghasilkan dokumen ini. Dicatat di sini supaya PRD tetap jadi satu sumber kebenaran yang mencerminkan kondisi kode yang sebenarnya.*
 
@@ -206,8 +214,15 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - [x] Share location asli (native WA) berhasil ditangkap dan dikonversi ke ongkir
 - [x] Sistem antrian (sharded queue) & idempotensi terbukti mencegah balasan tumpang tindih/retry duplikat
 - [x] FAQ & dokumen asli klinik sudah diimport (30 FAQ ter-seeding)
+- [x] LLM fallback geocoding (DeepSeek V4 Flash) — resolve lokasi typo/dusun saat gazetteer gagal, cross-check koordinat
+- [x] FAQ dijawab di state AWAITING_LOCATION tanpa mengganggu alur lokasi
+- [x] Form reservasi pre-filled (kecamatan, kota, nomor HP) + simpan nama kontak "Bunda {nama} {kecamatan}"
+- [x] Medical escalation admin-only (chat customer diam total, alert ke admin)
+- [x] 332 unit test PASS (37 test files) — termasuk 7 E2E chat-to-reservation scenarios, 28 treatment question tests, 52 kecamatan rejection tests, 3 medical silent escalation tests
 
 **Catatan status yang masih perlu dipantau berkelanjutan (bukan blocker, tapi bukan berarti "selesai selamanya"):**
 - Fitur label WAHA "hold" (poin 27) — tetap experimental sampai ada periode pemakaian nyata yang cukup panjang untuk memastikan tidak konflik dengan auto-release 6 jam
 - Fuzzy matching kelurahan & threshold Sorensen-Dice — pantau di minggu-minggu awal produksi apakah ada false-positive match
 - Auto-save Google Contacts (poin 29) — tetap nonaktif sampai OAuth credential disiapkan dengan aman
+- Kelurahan yang belum ada di gazetteer (misal Mulyosari, Sedati) — LLM resolve nama tapi cross-check koordinat gagal; butuh koordinat dari pemilik bisnis
+- Gambar pricelist (poin 23) — pastikan angka di gambar sinkron dengan tiering ongkir Section 9 saat ada perubahan tarif
