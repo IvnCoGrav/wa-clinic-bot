@@ -280,7 +280,7 @@ export const AiSandbox: React.FC = () => {
                       ? 'bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-tl-none font-medium'
                       : 'bg-slate-800 text-slate-100 rounded-tl-none border border-white/5'
                 }`}>
-                  <p>{msg.content}</p>
+                  <pre className="whitespace-pre-line font-sans">{msg.content}</pre>
                   <span className="block text-[8px] text-slate-500 mt-2 text-right">
                     {msg.timestamp.toLocaleTimeString()}
                   </span>
