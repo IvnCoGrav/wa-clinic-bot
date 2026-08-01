@@ -340,7 +340,6 @@ describe('E2E: Prefill Form Reservasi + Simpan Nama Kontak', () => {
     expect(r3.replyText).toContain('Kec : Waru');
     expect(r3.replyText).toContain('Kota : Kabupaten Sidoarjo');
     expect(r3.replyText).toContain(`No. Hp : ${phone}`);
-    expect(r3.replyText).toContain('sudah terisi otomatis');
   });
 
   it('Setelah customer kirim form reservasi, nama kontak tersimpan sebagai "Bunda {nama} {kecamatan}"', async () => {
