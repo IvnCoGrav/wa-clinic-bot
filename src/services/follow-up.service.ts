@@ -1,5 +1,7 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getRollingFollowUpMessage, FollowUpTemplateType } from '../config/followup-templates';
+import { typingService } from './typing.service';
 
 export class FollowUpService {
   /**
@@ -109,6 +111,110 @@ export class FollowUpService {
       console.log(`[FollowUp Service] Created NEXT_TREATMENT follow-ups for customer: ${customerId}`);
     } catch (err) {
       console.error('[FollowUp Service] Failed to create NEXT_TREATMENT follow-ups:', err);
+    }
+  }
+
+  /**
+   * Dipanggil oleh CronWorker (misal setiap 15 menit) untuk mencari & mengeksekusi
+   * follow-up PENDING yang waktunya sudah tiba (scheduled_at <= NOW()).
+   */
+  public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
+    try {
+      const now = new Date();
+      const dueFollowUps = await prisma.followUp.findMany({
+        where: {
+          tenant_id: tenantId,
+          status: 'PENDING',
+          scheduled_at: { lte: now },
+          customer: {
+            status: { not: 'blocked' },
+          },
+        },
+        include: {
+          customer: true,
+        },
+        take: 20, // Batch limit per execution
+      });
+
+      if (dueFollowUps.length === 0) {
+        return 0;
+      }
+
+      console.log(`[FollowUp Worker] Found ${dueFollowUps.length} due follow-ups to process.`);
+      let processed = 0;
+
+      for (const fu of dueFollowUps) {
+        const success = await this.executeFollowUp(fu, tenantId);
+        if (success) processed++;
+      }
+
+      return processed;
+    } catch (err) {
+      console.error('[FollowUp Worker] Error processing due follow-ups:', err);
+      return 0;
+    }
+  }
+
+  /**
+   * Eksekusi satu unit pengiriman follow-up (dengan rolling template & status update)
+   */
+  public async executeFollowUp(fu: any, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    try {
+      if (!fu.customer || !fu.customer.phone) {
+        await prisma.followUp.update({
+          where: { id: fu.id },
+          data: { status: 'FAILED' },
+        });
+        return false;
+      }
+
+      // Map DB type + stage -> Rolling Template Type
+      let templateType: FollowUpTemplateType = 'NO_PURCHASE_1';
+      if (fu.type === 'NO_PURCHASE') {
+        templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}` as any;
+      } else if (fu.type === 'NEXT_TREATMENT') {
+        templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
+      }
+
+      const name = fu.customer.name || 'Bunda';
+      const { text: messageText } = getRollingFollowUpMessage(templateType, {
+        name,
+        index: fu.stage - 1,
+      });
+
+      console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${name})`);
+      
+      // Throttling acak 5-15 detik antar customer
+      const isTest = process.env.NODE_ENV === 'test';
+      if (!isTest) {
+        const delay = Math.floor(Math.random() * 10000) + 5000;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      await typingService.simulateHumanReply({
+        chatId: fu.customer.phone,
+        replyText: messageText,
+      });
+
+      // Mark as SENT
+      await prisma.followUp.update({
+        where: { id: fu.id },
+        data: {
+          status: 'SENT',
+          sent_at: new Date(),
+        },
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error(`[FollowUp Worker] Failed to send follow-up ${fu.id}:`, err.message);
+      try {
+        await prisma.followUp.update({
+          where: { id: fu.id },
+          data: { status: 'FAILED' },
+        });
+      } catch (_) {}
+      return false;
     }
   }
 

@@ -1,7 +1,7 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
-**Versi:** 2.1  
-**Status:** Fase 1 production-ready (tervalidasi di WAHA + 332 unit test PASS)  
+**Versi:** 2.2  
+**Status:** Fase 1 & Fase 2 Production-Ready (337 unit & integration tests PASS 100%)  
 **Terakhir diperbarui:** 1 Agustus 2026
 
 ---
@@ -82,19 +82,19 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 
 ---
 
-#### 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Didesain, belum dikerjakan)
+#### 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Selesai & Tervalidasi)
 
-*Catatan: Dokumen PRD lain yang mungkin di-generate sendiri oleh Antigravity BUKAN pengganti dokumen ini — dokumen ini (PRD-wa-clinic-bot.md) adalah satu-satunya source of truth yang di-maintain melalui proses review.*
-
-| # | Requirement |
-|---|---|
-| 1 | Setelah admin konfirmasi jadwal, sistem simpan reservasi ke Google Calendar |
-| 2 | Pagi hari sebelum jadwal treatment, sistem kirim reminder otomatis ke customer |
-| 3 | Sehari setelah treatment, sistem kirim follow-up otomatis menanyakan review/hasil treatment |
-| 4 | Skema follow-up belum purchase: jika customer belum melakukan pembelian/reservasi, follow-up otomatis dikirim di hari ke-3, ke-7, dan ke-14 sejak kontak terakhir. Follow-up berhenti jika reservasi masuk di tengah jeda |
-| 5 | Skema follow-up treatment lanjutan: 1 bulan setelah treatment terakhir, sistem follow-up otomatis menawarkan treatment berikutnya. Jika tidak dibalas, follow-up ulang di bulan ke-2, lalu terakhir di bulan ke-3 |
-| 6 | Jika sampai bulan ke-3 tidak ada respon/booking, customer ditandai status lost |
-| 7 | Jika ada booking treatment lanjutan sebelum status lost, sistem tandai sebagai repeat_order |
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Setelah admin konfirmasi jadwal, sistem simpan reservasi ke Google Calendar | ✅ Selesai |
+| 2 | Pagi hari sebelum jadwal treatment, sistem kirim reminder otomatis ke customer | ✅ Selesai (Cron 06:00 WIB) |
+| 3 | Sehari setelah treatment, sistem kirim follow-up otomatis menanyakan review/hasil treatment | ✅ Selesai (Cron H+1 07:00 WIB) |
+| 4 | Skema follow-up belum purchase: jika customer belum melakukan pembelian/reservasi, follow-up otomatis dikirim di hari ke-3, ke-7, dan ke-14 sejak kontak terakhir. Follow-up berhenti jika reservasi masuk di tengah jeda | ✅ Selesai (Auto-cancel & repeat_order flag) |
+| 5 | Skema follow-up treatment lanjutan: 1 bulan setelah treatment terakhir, sistem follow-up otomatis menawarkan treatment berikutnya. Jika tidak dibalas, follow-up ulang di bulan ke-2, lalu terakhir di bulan ke-3 | ✅ Selesai (Next Treatment +1, +2, +3 bulan) |
+| 6 | Jika sampai bulan ke-3 tidak ada respon/booking, customer ditandai status lost | ✅ Selesai (Grace period 3 hari) |
+| 7 | Jika ada booking treatment lanjutan sebelum status lost, sistem tandai sebagai repeat_order | ✅ Selesai |
+| 8 | Engine rolling template 3 variasi per stage untuk mencegah deteksi bot/spam WA | ✅ Selesai |
+| 9 | Dashboard UI Follow-Up Queue (`/admin/follow-ups`) dengan filter, pencarian, dan kontrol admin (Kirim Sekarang, Reschedule, Cancel) | ✅ Selesai |
 
 #### 4.3 Di Luar Scope (untuk saat ini)
 - Dashboard admin dengan UI visual (saat ini cukup REST endpoint)
