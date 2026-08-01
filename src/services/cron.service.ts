@@ -22,6 +22,20 @@ export class CronService {
   }
 
   /**
+   * Worker periodik (misal 15 menit sekali) untuk memproses antrian Follow-Up PENDING
+   */
+  public async runFollowUpWorker(): Promise<void> {
+    try {
+      const processed = await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+      if (processed > 0) {
+        console.log(`[Cron Service] FollowUp Worker processed ${processed} messages.`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running FollowUp worker:', err);
+    }
+  }
+
+  /**
    * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
    */
   private async sendMorningReminders(): Promise<void> {

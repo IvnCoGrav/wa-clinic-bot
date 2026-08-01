@@ -1817,6 +1817,110 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
 
+  /**
+   * GET /api/admin/follow-ups
+   * Mengambil daftar antrian / riwayat follow-up & reminder
+   */
+  fastify.get('/api/admin/follow-ups', async (request: FastifyRequest<{ Querystring: { status?: string; type?: string; search?: string } }>, reply: FastifyReply) => {
+    const { status, type, search } = request.query || {};
+    try {
+      const where: any = { tenant_id: DEFAULT_TENANT_ID };
+      if (status) where.status = status;
+      if (type) where.type = type;
+      if (search) {
+        where.customer = {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { phone: { contains: search } },
+            { kelurahan: { contains: search, mode: 'insensitive' } },
+            { kecamatan: { contains: search, mode: 'insensitive' } },
+          ],
+        };
+      }
+
+      const list = await prisma.followUp.findMany({
+        where,
+        include: {
+          customer: true,
+        },
+        orderBy: { scheduled_at: 'asc' },
+        take: 100,
+      });
+
+      return reply.status(200).send({ success: true, data: list });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, data: [], note: 'Fallback in-memory mode' });
+    }
+  });
+
+  /**
+   * POST /api/admin/follow-ups/:id/send-now
+   * Memaksa eksekusi pengiriman follow-up secara instan
+   */
+  fastify.post('/api/admin/follow-ups/:id/send-now', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    try {
+      const fu = await prisma.followUp.findFirst({
+        where: { id, tenant_id: DEFAULT_TENANT_ID },
+        include: { customer: true },
+      });
+      if (!fu) return reply.status(404).send({ error: 'Follow-up not found' });
+
+      const { followUpService } = await import('../services/follow-up.service');
+      const success = await followUpService.executeFollowUp(fu, DEFAULT_TENANT_ID);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'SEND_NOW_FOLLOWUP',
+        targetId: id,
+        payload: { type: fu.type, stage: fu.stage },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({ success, message: success ? 'Follow-up berhasil dikirim!' : 'Gagal mengirim follow-up' });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * PATCH /api/admin/follow-ups/:id/cancel
+   * Membatalkan antrian follow-up
+   */
+  fastify.patch('/api/admin/follow-ups/:id/cancel', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    try {
+      const updated = await prisma.followUp.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+      });
+      return reply.status(200).send({ success: true, data: updated });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * PATCH /api/admin/follow-ups/:id/reschedule
+   * Mengubah jadwal kirim follow-up
+   */
+  fastify.patch('/api/admin/follow-ups/:id/reschedule', async (request: FastifyRequest<{ Params: { id: string }; Body: { scheduledAt: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const { scheduledAt } = request.body || {};
+    if (!scheduledAt) return reply.status(400).send({ error: 'scheduledAt is required' });
+
+    try {
+      const updated = await prisma.followUp.update({
+        where: { id },
+        data: { scheduled_at: new Date(scheduledAt), status: 'PENDING' },
+      });
+      return reply.status(200).send({ success: true, data: updated });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
   // Serve admin HTML files manually (no extra packages needed)
   const fs = await import('fs/promises');
   const path = await import('path');

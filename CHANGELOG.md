@@ -6,6 +6,26 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [1.8.0] — 2026-08-01
+
+### Added — Fase 2 Scheduling & Follow-Up Engine & UI
+- **`src/config/followup-templates.ts`**: Modul baru *Rolling Templates Engine* dengan 3 variasi pesan natural per stage (anti-bot pattern).
+- **`src/services/follow-up.service.ts`**: `processDueFollowUps()` & `executeFollowUp()` memproses antrian follow-up `NO_PURCHASE` (+3, +7, +14 hari) dan `NEXT_TREATMENT` (+1, +2, +3 bulan) saat `scheduled_at <= NOW()`.
+- **`src/services/cron.service.ts`**: `runFollowUpWorker()` runner periodik (interval 15 menit).
+- **REST Endpoints Admin**:
+  - `GET /api/admin/follow-ups` (Filter status, type, search)
+  - `POST /api/admin/follow-ups/:id/send-now` (Kirim instan)
+  - `PATCH /api/admin/follow-ups/:id/cancel` (Batalkan antrian)
+  - `PATCH /api/admin/follow-ups/:id/reschedule` (Ubah tanggal/jam kirim)
+- **UI React SPA**:
+  - **`FollowUpQueue.tsx`**: Halaman baru `/admin/follow-ups` untuk memantau antrian & riwayat follow-up.
+  - Tabel lengkap: `date_send`, `time_send`, Tipe & Stage, Nama Customer, No. HP, Kecamatan/Kelurahan, Rotasi Template, Status, Tombol Kirim/Reschedule/Cancel.
+- **Unit Tests**:
+  - **`tests/unit/follow-up-engine.test.ts`**: 5 unit test memvalidasi rotasi template, auto-cancel reservasi baru, pembuatan `NEXT_TREATMENT`, dan worker.
+  - **Total test suite: 39 test files \| 337 tests \| 100% PASS** ✅
+
+---
+
 ## [1.7.0] — 2026-07-31
 
 ### Added — UI Delivery Fee Tiering
