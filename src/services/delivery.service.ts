@@ -17,10 +17,10 @@ const DEFAULT_TIERS: DeliveryTier[] = [
   { id: 1, maxDist: 5, fee: 0, promoDiscount: 0 },
   { id: 2, maxDist: 7, fee: 15000, promoDiscount: 10000 },
   { id: 3, maxDist: 10, fee: 15000, promoDiscount: 5000 },
-  { id: 4, maxDist: 15, fee: 15000, promoDiscount: 5000 },
-  { id: 5, maxDist: 20, fee: 20000, promoDiscount: 5000 },
-  { id: 6, maxDist: 25, fee: 25000, promoDiscount: 5000 },
-  { id: 7, maxDist: 30, fee: 30000, promoDiscount: 5000 }
+  { id: 4, maxDist: 15, fee: 25000, promoDiscount: 10000 },
+  { id: 5, maxDist: 20, fee: 25000, promoDiscount: 5000 },
+  { id: 6, maxDist: 25, fee: 35000, promoDiscount: 10000 },
+  { id: 7, maxDist: 30, fee: 35000, promoDiscount: 5000 }
 ];
 
 export let activeDeliveryTiers: DeliveryTier[] = [];

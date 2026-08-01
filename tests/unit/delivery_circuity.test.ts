@@ -78,11 +78,11 @@ describe('DeliveryService — Haversine 1.50x Circuity Multiplier & Boundary Tes
 
     const straightKm = calculateHaversineDistance(clinicConfig, customerCoords);
     expect(straightKm).toBeGreaterThan(10.0);
-    expect(straightKm).toBeLessThan(15.0); // Straight line falls in Tier 10-15km (Rp 10.000)
+    expect(straightKm).toBeLessThan(15.0); // Straight line falls in Tier 10-15km (Rp 25.000)
 
     const result = await deliveryService.calculateDelivery(customerCoords);
     expect(result.isEstimated).toBe(true);
     expect(result.distanceKm).toBeGreaterThan(15.0); // Multiplied > 15.0km
-    expect(result.promoPrice).toBe(15000); // Double-jumps to Tier 15-20km (Rp 15.000)!
+    expect(result.promoPrice).toBe(20000); // Double-jumps to Tier 15-20km (Rp 20.000)!
   });
 });
