@@ -4,8 +4,8 @@ import {
   SendResult,
   TemplateComponent,
 } from './gateway.types';
+import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from './graph.constants';
 
-const GRAPH_API_VERSION = 'v25.0';
 const TYPING_INDICATOR_MAX_MS = 25000;
 
 export interface WabaGatewayDriverConfig {
@@ -25,7 +25,7 @@ export class WabaGatewayDriver implements WhatsAppGateway {
   constructor(config: WabaGatewayDriverConfig) {
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
-    this.baseUrl = config.baseUrl || 'https://graph.facebook.com';
+    this.baseUrl = config.baseUrl || GRAPH_API_BASE_URL;
   }
 
   private get messagesUrl(): string {

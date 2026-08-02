@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { AiModelConfigService } from '../config/ai-models.config';
+import { getBrandIdentity } from '../config/brand';
+import { LLM_HISTORY_LIMIT } from '../config/llm-context';
+import { SERVICE_AREAS_ALTERNATION } from '../config/service-areas';
 
 export interface NluEntities {
   location_text?: string;
@@ -68,7 +71,7 @@ export class NluClassifierService {
     }
 
     // 4. Provide Location
-    if (/(\bdi\b|\bdaerah\b|\bdekat\b|\bkecamatan\b|\bkelurahan\b|\balamat\b|\bjl\b|\bjalan\b|\brungkut\b|\bmulyosari\b|\bsidoklumpuk\b|\bsurabaya\b|\bsidoarjo\b)/i.test(text)) {
+    if (new RegExp(`(\\bdi\\b|\\bdaerah\\b|\\bdekat\\b|\\bkecamatan\\b|\\bkelurahan\\b|\\balamat\\b|\\bjl\\b|\\bjalan\\b|\\b(${SERVICE_AREAS_ALTERNATION})\\b)`, 'i').test(text)) {
       intents.push('provide_location');
       // Extract rough location text entity (clean filler words like "saya di")
       entities.location_text = incomingText.replace(/^(saya\s+)?(di|ke|alamat\s+saya\s+di|rumah\s+saya\s+di)\s+/i, '').trim();
@@ -140,7 +143,7 @@ export class NluClassifierService {
     }
 
     try {
-      const systemPrompt = `You are a Structured NLU (Natural Language Understanding) Classifier for Kala Moms & Baby Spa WhatsApp Chatbot.
+      const systemPrompt = `You are a Structured NLU (Natural Language Understanding) Classifier for ${getBrandIdentity().businessName} WhatsApp Chatbot.
 Your task is to analyze customer messages and return ONLY a JSON object representing the customer's intent(s) and extracted entity data.
 
 ALLOWED INTENTS (A single message MAY contain multiple intents!):
@@ -171,8 +174,8 @@ OUTPUT JSON SCHEMA ONLY:
   "confidence": 0.0 to 1.0
 }`;
 
-      // Build context messages from history (up to last 5 messages)
-      const contextMsgs = historyMessages.slice(-5).map((m) => ({
+      // Build context messages from history (up to LLM_HISTORY_LIMIT messages)
+      const contextMsgs = historyMessages.slice(-LLM_HISTORY_LIMIT).map((m) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content,
       }));

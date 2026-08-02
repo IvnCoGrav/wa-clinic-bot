@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { MedicalDetectionService } from '../../services/medical-detection.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
+import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
+import { SERVICE_AREAS_ALTERNATION } from '../../config/service-areas';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -165,7 +167,7 @@ const SCHEDULE_TIME_RE = /\b(jam\s*\d{1,2}(\s*\.?\s*\d{2})?\s*(pagi|siang|sore|m
 const SCHEDULE_AVAIL_RE = /\b(bisa|mau|ada|slot|kosong|tersedia|masih|ketersediaan)\b/i;
 
 const LOCATION_MARKER_RE =
-  /(?:di\s+|dari\s+)?(?:kelurahan|kecamatan|desa|daerah|dekat|sekitar|wilayah|rumah|alamat)\b|\b(rungkut|mulyosari|sidoklumpuk|surabaya|sidoarjo|waru|candi|kenjeran|kenjern|wonokromo|gubeng|tandes|sukolilo|tenggilis|gayungan|wedi|porong|gedangan|buduran|taman|sedati|krian|balongbendo|tanggungan|bubutan|genteng|mulyorejo|sby)\b/i;
+  new RegExp(`(?:di\\s+|dari\\s+)?(?:kelurahan|kecamatan|desa|daerah|dekat|sekitar|wilayah|rumah|alamat)\\b|\\b(${SERVICE_AREAS_ALTERNATION})\\b`, 'i');
 
 const TREATMENT_KEYWORDS = [
   'pijat bayi', 'baby spa', 'baby spa', 'pijat', 'spa', 'massage', 'laktasi',
@@ -206,7 +208,7 @@ export function extractLocationMention(text: string): string | null {
 
   // Prioritas 0: sebutan lokasi di AWAL kalimat (termasuk alias/typo umum seperti "sby").
   // DICAPTURE mentah, TIDAK di-resolve/dikoreksi di sini — resolusi tetap tugas gazetteer.
-  const leadMatch = lower.match(/^(sby|surabaya|sidoarjo|waru|sedati|candi|kenjeran|kenjern|rungkut|mulyosari|wonokromo|gubeng|tandes|sukolilo|tenggilis|gayungan|wedi|porong|gedangan|buduran|taman|krian|balongbendo|tanggungan|bubutan|genteng|mulyorejo)\b/i);
+  const leadMatch = lower.match(new RegExp(`^(sby|${SERVICE_AREAS_ALTERNATION})\\b`, 'i'));
   if (leadMatch) {
     const span = text
       .split(/\s+/)
@@ -688,7 +690,7 @@ export class AIRouterLLMClient {
   }
 
   private async attempt(input: AIRouterInput, retryUserContent: string | null): Promise<unknown> {
-    const historyMsgs = (input.conversationHistory || []).slice(-5).map((m) => ({
+    const historyMsgs = (input.conversationHistory || []).slice(-LLM_HISTORY_LIMIT).map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
     }));

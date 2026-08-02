@@ -14,6 +14,14 @@ import type { IWahaClient } from '../integrations/waha/client';
 // In-Memory fallback store for reservations during unit testing/offline database modes
 export const memoryReservations = new Map<string, any>();
 
+// Identitas admin dashboard — env-drivable, tanpa nilai produksi di code (Fase 3 docs/HARDCODED_FIX_PLAN.md)
+function getAdminDomain(): string {
+  return process.env.ADMIN_DOMAIN || '';
+}
+function getAdminEmail(): string {
+  return process.env.ADMIN_EMAIL || '';
+}
+
 // Simple In-Memory Login Rate Limiter (5 attempts per minute per IP)
 const loginAttemptsMap = new Map<string, { count: number; resetAt: number }>();
 
@@ -22,11 +30,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // --- REVISI SECURITY: Origin Isolation & Dual Auth Middleware (X-API-KEY or HttpOnly Cookie Session) ---
   fastify.addHook('preHandler', async (request, reply) => {
-    // 1. Layer 1 Origin Isolation Guard: Block /admin/* on pages.kalababyspa.online
+    // 1. Layer 1 Origin Isolation Guard: Block /admin/* pada tenant landing pages domain
     const xForwardedHost = request.headers['x-forwarded-host'];
     const hostVal = Array.isArray(xForwardedHost) ? xForwardedHost[0] : xForwardedHost;
     const hostHeader = (request.headers.host || request.hostname || hostVal || '').toLowerCase();
-    if (hostHeader.includes('pages.kalababyspa.online') && (request.url.includes('/admin') || request.url.includes('/api/admin'))) {
+    // Guard aktif hanya jika ADMIN_DOMAIN dikonfigurasi via env (base domain, mis. example.com).
+    if (getAdminDomain() && hostHeader.includes(`pages.${getAdminDomain()}`) && (request.url.includes('/admin') || request.url.includes('/api/admin'))) {
       console.warn(`[ORIGIN ISOLATION GUARD] Blocked admin access attempt on tenant landing domain (${hostHeader}${request.url})`);
       return reply.status(404).send({ error: 'Not Found' });
     }
@@ -104,7 +113,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     // Create cryptographically secure 24h session
     const session = AdminSessionService.createSession(body.adminIdentity || 'Bidan Admin');
 
-    // Set HttpOnly, Secure, SameSite=Strict cookie scoped to app.kalababyspa.online
+    // Set HttpOnly, Secure, SameSite=Strict cookie scoped to app.{ADMIN_DOMAIN}
     const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
     reply.header('Set-Cookie', cookieValue);
 
@@ -113,7 +122,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       message: 'Login Admin berhasil. Cookie HttpOnly admin_session telah diterbitkan.',
       user: {
         id: session.id,
-        email: 'admin@kalababyspa.online',
+        email: getAdminEmail(),
         role: 'tenant_admin',
         tenantId: 'default-tenant',
       },
@@ -152,7 +161,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       adminIdentity: (request as any).adminIdentity,
       user: {
         id: 'admin-session',
-        email: 'admin@kalababyspa.online',
+        email: getAdminEmail(),
         role: 'tenant_admin',
         tenantId: 'default-tenant',
       },
@@ -2436,6 +2445,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 }
+
+
 
 
 

@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { safeCompare } from '../utils/auth';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getBrandIdentity } from '../config/brand';
 import crypto from 'crypto';
 
 // In-Memory map untuk melacak hasil tracking klik saat database offline (Unit Test / Dev fallback)
@@ -144,7 +145,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
           slug: tenant?.slug || slug || 'default',
           landing_type: tenant?.landing_type || 'STRUCTURED_JSON',
           raw_html_content: tenant?.raw_html_content || null,
-          clinic_name: tenant?.name || landingJson.clinic_name || 'Kala Baby & Moms Spa',
+          clinic_name: tenant?.name || landingJson.clinic_name || getBrandIdentity().businessName,
 
           headline: landingJson.headline || 'Solusi Pijat & Perawatan Bayi Profesional di Rumah Anda',
           subheadline: landingJson.subheadline || 'Bidan bersertifikasi resmi datang langsung ke lokasi Anda. Bebas macet, nyaman, & steril.',
@@ -168,7 +169,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
               answer: 'Ya, seluruh peralatan, minyak pijat alami, dan handuk disterilisasi sebelum dan sesudah setiap sesi perawatan.'
             }
           ],
-          whatsapp_number: tenant?.whatsapp_number || landingJson.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '6287751148065',
+          whatsapp_number: tenant?.whatsapp_number || landingJson.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
           meta_pixel_id: tenant?.meta_pixel_id || landingJson.meta_pixel_id || process.env.FB_PIXEL_ID || '123456789012345',
         };
 
@@ -179,7 +180,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({
           tenant_id: DEFAULT_TENANT_ID,
           slug: slug || 'default',
-          clinic_name: 'Kala Baby & Moms Spa',
+          clinic_name: getBrandIdentity().businessName,
           headline: 'Solusi Pijat & Perawatan Bayi Profesional di Rumah Anda',
           subheadline: 'Bidan bersertifikasi resmi datang langsung ke lokasi Anda.',
           benefits: [
@@ -190,7 +191,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
           faq: [
             { question: 'Bagaimana cara booking?', answer: 'Klik tombol Chat via WhatsApp untuk terhubung dengan CS.' }
           ],
-          whatsapp_number: process.env.DEFAULT_WHATSAPP_PHONE || '6287751148065',
+          whatsapp_number: process.env.DEFAULT_WHATSAPP_PHONE || '',
           meta_pixel_id: process.env.FB_PIXEL_ID || '123456789012345',
         });
       }

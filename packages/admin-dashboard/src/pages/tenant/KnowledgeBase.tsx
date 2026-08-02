@@ -550,7 +550,7 @@ export const KnowledgeBase: React.FC = () => {
                   required
                   value={docName}
                   onChange={(e) => setDocName(e.target.value)}
-                  placeholder="SOP_Pijat_Kala_Spa.txt"
+                  placeholder="SOP_Pijat_Bayi.txt"
                   className="w-full p-3 bg-slate-950 border border-white/5 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none"
                 />
               </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { BRAND } from '../../config/brand';
 import { 
   Volume2, 
   Save, 
@@ -132,7 +133,7 @@ export const AiPersona: React.FC = () => {
                 <div className="space-y-1">
                   <p className="font-bold text-white">1. Nada Bicara (Tone):</p>
                   <p className="text-slate-500">
-                    Bot Kala Spa meniru gaya bicara Bidan Yusi yang ramah, hangat, menggunakan sapaan akrab seperti "Bunda", dan diakhiri dengan emoji yang ramah.
+                    Bot ${BRAND.businessName} meniru gaya bicara Bidan yang ramah, hangat, menggunakan sapaan akrab seperti "Bunda", dan diakhiri dengan emoji yang ramah.
                   </p>
                 </div>
                 

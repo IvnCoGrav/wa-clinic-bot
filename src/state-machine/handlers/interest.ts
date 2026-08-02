@@ -5,6 +5,7 @@ import { knowledgeBaseService } from '../../services/knowledge.service';
 import { llmResponseGenerator } from '../../integrations/llm/generator';
 import { conversationService } from '../../services/conversation.service';
 import { TEMPLATES } from '../../config/persona';
+import { getBrandIdentity } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
 /**
@@ -208,7 +209,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
             sourceType: 'catalog' as any,
             title: isSpecific
               ? 'Layanan Treatment Relevan dengan Pertanyaan'
-              : 'Katalog Layanan Treatment Kala Moms and Baby Spa',
+              : `Katalog Layanan Treatment ${getBrandIdentity().businessName}`,
             content: isSpecific
               ? `Pertanyaan: ${userText}
 Jawaban: Berikut treatment yang relevan dengan pertanyaan Bunda:

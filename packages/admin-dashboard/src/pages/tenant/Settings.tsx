@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { BRAND } from '../../config/brand';
 import { 
   Settings as SettingsIcon, 
   MapPin, 
@@ -30,7 +31,7 @@ export const Settings: React.FC = () => {
   // Coordinates & branch picker (persisted locally)
   const [lat, setLat] = useState(-7.2758);
   const [lng, setLng] = useState(112.7913);
-  const [branchName, setBranchName] = useState('Kala Moms & Baby Spa — Mulyosari');
+  const [branchName, setBranchName] = useState(`${BRAND.businessName} — Mulyosari`);
 
   // Tiering Ongkir (persisted locally)
   const [ongkirTiers, setOngkirTiers] = useState<Array<{ id: number; maxDist: number; fee: number; promoDiscount: number }>>([
@@ -659,7 +660,7 @@ export const Settings: React.FC = () => {
                   rows={3}
                   value={broadcastText}
                   onChange={(e) => setBroadcastText(e.target.value)}
-                  placeholder="Kirim promo bulanan Kala Spa ke pelanggan loyal..."
+                  placeholder="Kirim promo bulanan ke pelanggan loyal..."
                   className="w-full p-3 bg-slate-950 border border-white/5 rounded-xl text-xs text-white resize-none"
                 />
               </div>

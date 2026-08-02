@@ -3,6 +3,7 @@ import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { KnowledgeChunkResult } from '../../services/knowledge.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
+import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -30,7 +31,7 @@ export class LLMResponseGenerator {
         if (conversationId && tenantId) {
           try {
             const { messageService } = await import('../../services/message.service');
-            historyMessages = await messageService.getRecentMessages(conversationId, 6, tenantId);
+            historyMessages = await messageService.getRecentMessages(conversationId, LLM_HISTORY_LIMIT, tenantId);
           } catch (err) {
             console.error('[LLM GENERATOR] Failed to fetch chat history:', err);
           }

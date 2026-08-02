@@ -7,26 +7,16 @@
 
 import fs from 'fs';
 import path from 'path';
+import { getBrandIdentity } from './brand';
 
 const CUSTOM_PERSONA_PATH = path.join(__dirname, 'persona_custom.txt');
-
-// =========================================================================
-// 1. IDENTITAS BRAND
-// =========================================================================
-
-export const BRAND_IDENTITY = {
-  botDisplayName: "Bidan Yusi",
-  businessName: "Kala Moms and Baby Spa",
-  serviceType: "Homecare — treatment dipanggil langsung ke rumah customer",
-  addressTermForCustomer: "Bunda", // panggilan ke customer, singkatan informal: "bund"
-};
 
 // =========================================================================
 // 2. SYSTEM PROMPT — dipakai LLM untuk FAQ & respons yang butuh generation
 // =========================================================================
 
 const DEFAULT_PERSONA_PROMPT = `
-Kamu adalah asisten chat untuk Kala Moms and Baby Spa, layanan homecare
+Kamu adalah asisten chat untuk ${getBrandIdentity().businessName}, layanan homecare
 pijat & treatment untuk ibu hamil/nifas dan bayi/anak, yang datang langsung
 ke rumah customer.
 
@@ -35,13 +25,13 @@ REASONING & INTENT ANALYSIS (TEMAN NGOBROL & EMPATI):
 2. **Sentuhan Teman Ngobrol:** Tanggapi keluh kesah atau pertanyaan mereka dengan tulus dan hangat layaknya sahabat sesama ibu, sebelum langsung menawarkan produk. Tunjukkan empati yang mendalam terlebih dahulu.
    - Contoh curhat: "Bayiku susah tidur nih bidan..."
    - Respon kaku: "Untuk pijat bayi harganya..." (SALAH)
-   - Respon hangat: "Wah kerasa banget ya bund lelahnya kalau si kecil rewel/susah tidur. Bunda yang sabar yaa, wajar sekali kok bund di fase ini. Bidan Yusi siap bantu pijat si kecil biar tidurnya lebih lelap dan rileks ya bund... 🤍" (BENAR)
+   - Respon hangat: "Wah kerasa banget ya bund lelahnya kalau si kecil rewel/susah tidur. Bunda yang sabar yaa, wajar sekali kok bund di fase ini. ${getBrandIdentity().botDisplayName} siap bantu pijat si kecil biar tidurnya lebih lelap dan rileks ya bund... 🤍" (BENAR)
 3. **Jangan Memaksa:** Jangan terburu-buru mendesak customer untuk booking atau membagikan lokasi jika mereka masih bertanya-tanya santai atau berbagi keluh kesah. Jawab pertanyaannya dengan sabar dan beri mereka kenyamanan terlebih dahulu.
 
 GAYA BAHASA:
 - Selalu panggil customer dengan "Bunda" atau singkatan akrabnya "bund" di akhir kalimat.
   Contoh: "Baik bunda, kami keep ya bund 😊"
-- Nama bisnis kami adalah **Kala Moms and Baby Spa** — EJAAN HARUS PERSIS seperti itu. DILARANG menulis "Kala Mom's Baby Spa", "Kala Mom Baby Spa", "Kalaspia", atau variasi ejaan lainnya. Tulis persis: **Kala Moms and Baby Spa**.
+- Nama bisnis kami adalah **${getBrandIdentity().businessName}** — EJAAN HARUS PERSIS seperti itu. DILARANG menulis "Kala Mom's Baby Spa", "Kala Mom Baby Spa", "Kalaspia", atau variasi ejaan lainnya. Tulis persis: **${getBrandIdentity().businessName}**.
 - Nada bicara: hangat, penuh perhatian, sopan, seperti bidan/tenaga kesehatan
   yang genuinely peduli — bukan sekadar admin transaksional.
 - Gunakan bahasa Indonesia santai-sopan (bukan bahasa gaul, bukan terlalu kaku formal).
@@ -50,7 +40,7 @@ GAYA BAHASA:
   Palet emoji yang konsisten dipakai: 😊 🤗 🙏🏻 ☺️ 🥰 ✨ 🤍 🐣
   Jangan pakai emoji yang playful/lucu (😂🤣) atau yang tidak sesuai konteks kesehatan/perawatan.
 - Selalu tunjukkan empati genuine terkait kondisi bayi/anak/ibu hamil, jangan terdengar generic.
-- Customer terkadang memanggilmu dengan sebutan "bubid" (kependekan dari "bu bidan") atau "Bidan Yusi". Kenali panggilan ini sebagai sapaan hangat kepadamu.
+- Customer terkadang memanggilmu dengan sebutan "bubid" (kependekan dari "bu bidan") atau "${getBrandIdentity().botDisplayName}". Kenali panggilan ini sebagai sapaan hangat kepadamu.
 - Kalau tidak yakin jawaban FAQ, jangan mengarang — arahkan untuk konfirmasi manual
   ("boleh saya cek dulu ya bund, nanti saya kabari").
 
@@ -144,7 +134,7 @@ export const TEMPLATES = {
     return `Halo Bunda ! ✨
 Terima kasih sudah menghubungi kami.
 
-Perkenalkan, saya ${BRAND_IDENTITY.botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).
+Perkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).
 
 Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
   },
@@ -157,7 +147,7 @@ Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai �
     if (params.skipGreeting) {
       return `Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**? Atau ada alamat baru? 😊`;
     }
-    return `Halo Bunda! Selamat datang kembali di Kala Moms and Baby Spa. ✨
+    return `Halo Bunda! Selamat datang kembali di ${getBrandIdentity().businessName}. ✨
     
 Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**? Atau ada alamat baru? 😊`;
   },
@@ -181,14 +171,14 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
     return `Kalau boleh tau lebih tepatnya kelurahan/desa ${params.kelurahanName} di kecamatan mana ya bunda? Kami menemukan ada beberapa daerah dengan nama tersebut:\n\n${optionsText}\n\nMohon sebutkan nama kelurahan dan kecamatan Bunda secara lengkap agar kami tidak salah hitung ongkir ya bund! 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`;
   },
 
-  outOfCoverage: (params: { distanceKm: number }) =>
-    `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm.toFixed(1)} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 30 km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
+  outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>
+    `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm.toFixed(1)} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${params.maxCoverageKm ?? 30} km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
 
   // Catatan: pola asli pakai framing "harga normal -> promo", bukan tiering bersih.
   // Sesuaikan dengan aturan ongkir final kamu (ingat: logic ongkir masih sementara).
-  ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number }) => {
+  ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number; freeTierKm?: number }) => {
     if (params.promoPrice === 0) {
-      return `Wah, Deket Bunda, Dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan < 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗`;
+      return `Wah, Deket Bunda, Dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗`;
     }
     return `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗`;
   },
@@ -211,7 +201,7 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
 
   interestUnrelatedFollowUp: () => `Apakah Bunda tertarik untuk lanjut mengisi list reservasi treatment homecare kami? 😊\n\nAtau jika ada hal yang ingin ditanyakan terlebih dahulu, silakan kabari kami ya, Bunda. Saya dengan senang hati siap membantu! 🤗`,
 
-  notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
+  notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
   reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string }) => {
     const prefill = (field: string, value?: string) => {
@@ -285,7 +275,7 @@ Terimakasih.  ☺️`,
   morningReminder: (params: { name: string; time: string }) =>
     `Selamat Pagi bunda ${params.name}! 😊
 
-Kami ingin mengingatkan untuk hari ini ada jadwal treatment dengan Kala 🤗
+Kami ingin mengingatkan untuk hari ini ada jadwal treatment dengan ${getBrandIdentity().businessName} 🤗
 
 Kami akan menuju rumah bunda, kemungkinan akan tiba di jam ${params.time} mohon ditunggu ya bund 🤗`,
 
@@ -377,11 +367,11 @@ Mohon maaf kalau kami kelihatan sering follow up ya bund 🙏🏻 Ini follow up 
 
 Kalau nanti Bunda berkenan atau butuh treatment untuk si Kecil / Bunda sendiri, kami dengan senang hati siap bantu kapan pun — tinggal chat kami lagi aja ya bund 🤗🥰
 
-Terima kasih banyak sudah menghubungi Kala, semoga Bunda dan keluarga selalu sehat ☺️`,
+Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}, semoga Bunda dan keluarga selalu sehat ☺️`,
     (params: { name: string }) => `Halo Bunda ${params.name} 🤍
 
 Ini follow up terakhir kami ya bund, biar Bunda nggak merasa terus-terusan dikejar 🙏🏻 Kapanpun Bunda butuh treatment, pintu kami selalu terbuka.
 
-Terima kasih sudah pernah menghubungi Kala Moms and Baby Spa, semoga Bunda dan si Kecil sehat selalu 🥰`
+Terima kasih sudah pernah menghubungi ${getBrandIdentity().businessName}, semoga Bunda dan si Kecil sehat selalu 🥰`
   ],
 };

@@ -84,7 +84,7 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
         // Ambil data customer terupdate setelah commit transaksi
         const updatedCustomer = await customerService.getOrCreateCustomer(customer.phone, customer.name || undefined, tenantId);
         
-        // JIKA Jarak di luar jangkauan (>30 km)
+        // JIKA Jarak di luar jangkauan
         if (updatedCustomer.is_out_of_coverage) {
           return {
             nextState: ConversationState.COMPLETED,
@@ -102,6 +102,7 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
             distanceKm: delivery.distanceKm,
             normalPrice: delivery.normalPrice,
             promoPrice: delivery.promoPrice,
+            freeTierKm: delivery.freeTierKm,
           }),
           shouldSendReply: true,
           sendPricelistImage: true,

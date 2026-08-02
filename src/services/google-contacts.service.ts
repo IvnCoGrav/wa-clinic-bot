@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getBrandIdentity } from '../config/brand';
 
 class GoogleContactsService {
   private get clientId() {
@@ -59,7 +60,7 @@ class GoogleContactsService {
       const formattedPhone = cleanPhone.startsWith('62') ? `+${cleanPhone}` : cleanPhone;
 
       // Tentukan nama kontak: Gunakan notifyName dari WA jika ada, jika tidak, gunakan default
-      const displayName = notifyName ? `${notifyName} (Kala Spa)` : `Bunda ${cleanPhone} (Kala Spa)`;
+      const displayName = notifyName ? `${notifyName} (${getBrandIdentity().businessName})` : `Bunda ${cleanPhone} (${getBrandIdentity().businessName})`;
 
       console.log(`[GOOGLE CONTACTS] Mendaftarkan kontak ke Google: "${displayName}" (${formattedPhone})...`);
 

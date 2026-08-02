@@ -8,6 +8,55 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-02
 
+### Changed — Pembersihan Hardcoded Business Data (Fase 1, 3, 4.1 dari docs/HARDCODED_FIX_PLAN.md)
+
+**Fase 1 — Satu Sumber Brand**
+- **`src/config/brand.ts`** (baru): `DEFAULT_BRAND_IDENTITY`, `getBrandIdentity(tenant?)`, `setBrandIdentity()`, `resetBrandIdentity()` — satu sumber brand (`Kala Moms and Baby Spa` / `Bidan Yusi`), siap baca `Tenant.name` di masa depan.
+- **`src/config/persona.ts`**: hapus `BRAND_IDENTITY` lokal → import dari `./brand`; `DEFAULT_PERSONA_PROMPT`, greeting, `notInterestedReply`, reminder, followup diparameterisasi brand.
+- **`src/services/followup-templates.service.ts`**: 49 literal "Kala Spa" → `getBrandIdentity().businessName`.
+- **`src/state-machine/handlers/greeting.ts`** (intro + multi-intent), **`interest.ts`** (judul katalog), **`machine.ts`** (caption pricelist): brand dari `getBrandIdentity()`.
+- **`src/routes/webhook.route.ts`**: filter bot auto-reply → `adminReplyText.startsWith('Pricelist ')`.
+- **`src/routes/tracking.route.ts`**: fallback `clinic_name` → brand; hapus nomor produksi `6287751148065` → `process.env.DEFAULT_WHATSAPP_PHONE`.
+- **`packages/click-catcher/src/server.ts`**: fallback brand generik; hapus nomor produksi & FB pixel dummy.
+- **`packages/admin-dashboard/src/config/brand.ts`** (baru) + Layout/Login/AiSandbox/AiPersona/Settings/KnowledgeBase: brand dashboard via `VITE_CLINIC_NAME`.
+
+**Fase 3 — Nilai Bisnis dari Seed**
+- **`src/config/clinic.ts`**: `maxDeliveryDistanceKm` mati (10.0) → env `MAX_DELIVERY_DISTANCE_KM` (default 30), benar-benar dipakai sebagai cap atas fallback.
+- **`src/services/delivery.service.ts`**: Haversine multiplier `1.50` → env `HAVERSINE_CIRCUITY_FACTOR`; teks coverage "gratis <5 km" / "maksimal 30 km" dinamis dari tier; log `[SEED]` saat DB tier kosong; result membawa `freeTierKm`/`maxCoverageKm`.
+- **`src/state-machine/handlers/location.ts`** & **`location-confirmation.ts`**: `TEMPLATES.ongkirInfo`/`outOfCoverage` menerima `freeTierKm`/`maxCoverageKm`.
+- **`src/services/treatment-catalog.service.ts`**: log `[SEED]` saat katalog kosong → `DEFAULT_CLINIC_SERVICES`.
+- **`src/routes/admin.route.ts`**: domain & email produksi (`kalababyspa.online`, `admin@kalababyspa.online`) → env `ADMIN_DOMAIN`/`ADMIN_EMAIL` (lazy read), guard origin isolation aktif hanya bila env terisi.
+- **`tests/integration/control_center_ui.test.ts`**: guard test pakai `ADMIN_DOMAIN=example.com`.
+
+**Fase 4.1 — Graph API Version Tunggal**
+- **`src/integrations/whatsapp/graph.constants.ts`** (baru): `GRAPH_API_VERSION = 'v25.0'` + `GRAPH_API_BASE_URL`.
+- **`waba.driver.ts`**, **`client.ts`** (v20.0 → v25.0), **`capi.service.ts`** (v19.0 → v25.0): semuanya pakai konstanta terpusat.
+
+**Fase 4.2 — History Konteks LLM Konsisten**
+- **`src/config/llm-context.ts`** (baru): `LLM_HISTORY_LIMIT` (env `LLM_HISTORY_LIMIT`, default 6).
+- **`machine.ts`**, **`nlu-classifier.service.ts`**, **`ai-router.ts`**, **`generator.ts`**: jumlah riwayat percakapan ke LLM diseragamkan ke konstanta (sebelumnya 5 vs 6).
+
+**Fase 4.3 — Magic Number jadi Config (env)**
+- **`machine.ts`**: idle reset → `IDLE_TIMEOUT_MS` (default 24 jam), `LOCATION_CONFIRMATION_TIMEOUT_MS` (default 5 menit).
+- **`location.ts`**: `location_attempts >= 3` → `LOCATION_ATTEMPTS_LIMIT`.
+- **`abuse-detection.service.ts`**: flood 10/60s & spam 5 identik → `FLOOD_LIMIT`/`FLOOD_WINDOW_MS`/`SPAM_DUPLICATE_LIMIT`.
+- **`follow-up.service.ts`**: batch `take:20`, throttle 5–15 detik, grace lost-customer 3 hari → `FOLLOWUP_BATCH_LIMIT`/`FOLLOWUP_THROTTLE_BASE_MS`/`LOST_CUSTOMER_GRACE_DAYS`.
+
+**Fase 4.4 — `.env.example` Sinkronisasi**
+- Tambah var hilang: `WAHA_WEBHOOK_SECRET`, `REDIS_HOST/PORT`, `QUEUE_SHARDS`, `AI_MODEL_*`/`AI_PROVIDER_*`, `NLU_CONFIDENCE_THRESHOLD`, `CLINIC_PRICELIST_IMAGE_URL`, `TELEGRAM_BOT_TOKEN/CHAT_ID`, `GOOGLE_CALENDAR_*`, `WABA_APP_SECRET`, `WABA_WEBHOOK_VERIFY_TOKEN`, `ALERT_WEBHOOK_URL`, `ENABLE_WAHA_HOLD_LABEL`, `OPENAI_API_KEY`, `LLM_HISTORY_LIMIT`, dll.
+- Hapus/tandai var mati: `ONGKIR_PROMO_DISCOUNT` (dihapus), `RESERVATION_FORM_URL` (dikomentari, dead).
+- Perbaiki `WAHA_BASE_URL` contoh `:8080` → `:3001`.
+
+**Fase 5 — Wilayah Layanan & Prompt Brand**
+- **`src/config/service-areas.ts`** (baru): `SERVICE_AREAS` (CSV env, fallback daftar historis) + `SERVICE_AREAS_ALTERNATION`.
+- **`ai-router.ts`**: `LOCATION_MARKER_RE` & `leadMatch` memakai `SERVICE_AREAS_ALTERNATION` (daftar nama wilayah tidak lagi literal di regex).
+- **`nlu-classifier.service.ts`**: regex `provide_location` memakai `SERVICE_AREAS_ALTERNATION`.
+- **`self-learning.service.ts`**, **`persona.ts`**: sebutan "Bidan Yusi" di prompt → `getBrandIdentity().botDisplayName`.
+
+**Verifikasi**: TypeScript clean (`npx tsc --noEmit`), 607/607 test pass (54 file).
+
+---
+
 ### Added - WABA Integration Implementation (Fase 1-3)
 
 **Fase 1 — Abstraction Layer**

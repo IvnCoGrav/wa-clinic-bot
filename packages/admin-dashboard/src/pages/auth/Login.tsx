@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Lock, Mail, AlertTriangle } from 'lucide-react';
+import { BRAND } from '../../config/brand';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
@@ -39,10 +40,10 @@ export const Login: React.FC = () => {
         {/* Brand Header */}
         <div className="text-center mb-8">
           <div className="inline-flex h-12 w-12 rounded-xl bg-pink-500 items-center justify-center font-black text-2xl text-white shadow-lg mb-3 shadow-pink-500/20">
-            K
+            {BRAND.initial}
           </div>
           <h2 className="text-2xl font-extrabold tracking-tight text-white mb-1">
-            Kala Moms & Baby Spa
+            {BRAND.businessName}
           </h2>
           <p className="text-sm text-slate-400">
             Sign in to access admin console

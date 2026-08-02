@@ -274,6 +274,7 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
     // Tidak ada data di DB -> seed dari file/default lalu simpan
     const source = Array.from(serviceCatalog.values());
     if (source.length === 0) {
+      console.warn(`[SEED] Catalog treatment kosong untuk tenant ${tenantId}; seeding dari DEFAULT_CLINIC_SERVICES (code default, ${DEFAULT_CLINIC_SERVICES.length} layanan). Set harga/layanan via admin API / DB untuk produksi.`);
       DEFAULT_CLINIC_SERVICES.forEach((item) => serviceCatalog.set(item.id, item));
     }
     await saveServicesToDb(tenantId);

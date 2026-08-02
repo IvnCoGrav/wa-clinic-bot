@@ -32,13 +32,14 @@ async function fetchTenantContent(slug: string): Promise<any> {
   }
 
   const trackingApiBaseUrl = process.env.TRACKING_API_BASE_URL || 'http://localhost:3000';
-  const defaultPhone = process.env.DEFAULT_WHATSAPP_PHONE || '6287751148065';
-  const fbPixelId = process.env.FB_PIXEL_ID || '123456789012345';
+  const defaultPhone = process.env.DEFAULT_WHATSAPP_PHONE || '';
+  const fbPixelId = process.env.FB_PIXEL_ID || '';
+  const defaultClinicName = process.env.CLINIC_NAME || 'Moms & Baby Spa Homecare';
 
   const defaultContent = {
     tenant_id: 'DEFAULT_TENANT_ID',
     slug,
-    clinic_name: 'Kala Baby & Moms Spa',
+    clinic_name: defaultClinicName,
     headline: 'Solusi Pijat & Perawatan Bayi Profesional di Rumah Anda',
     subheadline: 'Bidan bersertifikasi resmi datang langsung ke lokasi Anda. Bebas macet, nyaman, & steril.',
     benefits: [
@@ -139,7 +140,7 @@ const renderLandingHandler = async (request: any, reply: any) => {
     const trackingApiKey = process.env.TRACKING_API_KEY || '';
 
     htmlContent = htmlContent
-      .replace(/__CLINIC_NAME__/g, content.clinic_name || 'Kala Baby & Moms Spa')
+      .replace(/__CLINIC_NAME__/g, content.clinic_name || 'Moms & Baby Spa Homecare')
       .replace(/__HEADLINE__/g, content.headline || 'Solusi Pijat & Perawatan Bayi')
       .replace(/__SUBHEADLINE__/g, content.subheadline || 'Bidan bersertifikasi resmi datang ke lokasi Anda.')
       .replace(/__BENEFITS_HTML__/g, benefitsHtml)

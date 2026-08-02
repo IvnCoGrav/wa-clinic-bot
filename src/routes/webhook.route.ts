@@ -64,7 +64,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               const isBotAutoReply = 
                 adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
                 adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
-                adminReplyText.includes('Pricelist Kala Moms & Baby Spa') ||
+                adminReplyText.startsWith('Pricelist ') ||
                 adminReplyText.startsWith('[AUTOMATED]');
 
               if (adminReplyText.trim() && !isBotAutoReply) {
