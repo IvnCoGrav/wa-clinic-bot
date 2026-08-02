@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 export interface AdminSession {
+  id: string;
   token: string;
   adminIdentity: string;
   createdAt: Date;
@@ -21,6 +22,7 @@ export class AdminSessionService {
     const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
 
     const session: AdminSession = {
+      id: crypto.randomUUID(),
       token,
       adminIdentity,
       createdAt: now,

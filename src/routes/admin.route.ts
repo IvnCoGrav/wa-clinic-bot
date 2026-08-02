@@ -9,6 +9,7 @@ import { auditService } from '../services/audit.service';
 import { safeCompare } from '../utils/auth';
 import { capiService } from '../services/capi.service';
 import crypto from 'crypto';
+import type { IWahaClient } from '../integrations/waha/client';
 
 // In-Memory fallback store for reservations during unit testing/offline database modes
 export const memoryReservations = new Map<string, any>();
@@ -537,7 +538,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
         const { conversationService } = await import('../services/conversation.service');
         const { ConversationStateMachine } = await import('../state-machine/machine');
         const { TypingService } = await import('../services/typing.service');
-        const { IWahaClient } = await import('../integrations/waha/client');
 
         class SandboxWAHAClient implements IWahaClient {
           public sentMessages: Array<{ type: 'text' | 'image'; text: string; fileUrl?: string }> = [];
@@ -1645,7 +1645,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'BOT_PERSONA_CHANGE',
           targetId: 'SYSTEM_PERSONA',
-          details: `System persona prompt updated to: ${persona.substring(0, 100)}...`,
+          payload: { details: `System persona prompt updated to: ${persona.substring(0, 100)}...` },
         });
 
         return reply.status(200).send({ success: true, message: 'System persona prompt berhasil diperbarui secara live!', persona });
