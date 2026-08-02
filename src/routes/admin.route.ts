@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { knowledgeBaseService } from '../services/knowledge.service';
-import { parseReservationText } from '../utils/reservation-text-parser';
+import { parseReservationText, extractBabyDetails } from '../utils/reservation-text-parser';
 import { customerService } from '../services/customer.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { googleCalendarService } from '../services/google-calendar.service';
@@ -201,16 +201,60 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const reservations = await prisma.reservation.findMany({
         where: { tenant_id: DEFAULT_TENANT_ID },
         include: {
-          customer: true
+          customer: {
+            include: { children: true },
+          },
         },
         orderBy: {
           created_at: 'desc'
         }
       });
-      return reservations;
+
+      const { computeCurrentAge } = await import('../utils/age-calculator');
+      return reservations.map((r) => ({
+        ...r,
+        baby_details: extractBabyDetails(r.raw_text),
+        customer: r.customer
+          ? {
+              ...r.customer,
+              children: (r.customer as any).children?.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                birth_date: c.birth_date,
+                raw_age_text: c.raw_age_text,
+                age_months_at_registration: c.age_months_at_registration,
+                current_age: computeCurrentAge({
+                  birthDate: c.birth_date,
+                  ageMonthsAtRegistration: c.age_months_at_registration,
+                  registeredAt: c.created_at,
+                  rawAgeText: c.raw_age_text,
+                }),
+              })) || [],
+            }
+          : undefined,
+      }));
     } catch (err: any) {
-      console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err.message);
-      return Array.from(memoryReservations.values());
+      // Tabel "children" mungkin belum ada (pre-migration) → coba tanpa relasi children,
+      // supaya daftar reservasi TETAP muncul. Jangan langsung jatuh ke memory (kosong).
+      try {
+        console.warn('[Admin API] Reservations query failed, retrying without children relation:', err.message);
+        const reservations = await prisma.reservation.findMany({
+          where: { tenant_id: DEFAULT_TENANT_ID },
+          include: { customer: true },
+          orderBy: { created_at: 'desc' }
+        });
+        return reservations.map((r) => ({
+          ...r,
+          baby_details: extractBabyDetails(r.raw_text),
+          customer: r.customer ? { ...r.customer, children: [] } : undefined,
+        }));
+      } catch (err2: any) {
+        console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err2.message);
+        return Array.from(memoryReservations.values()).map((r) => ({
+          ...r,
+          baby_details: extractBabyDetails(r.raw_text),
+        }));
+      }
     }
   });
 
@@ -506,8 +550,22 @@ export async function adminRoutes(fastify: FastifyInstance) {
             return true;
           }
           public async sendImage(chatId: string, fileUrl: string, caption?: string): Promise<boolean> {
-            this.sentMessages.push({ type: 'image', text: caption || '', fileUrl });
-            return true;
+            try {
+              this.sentMessages.push({
+                type: 'image',
+                text: `${caption ? caption + '\n' : ''}[Gambar tidak dapat ditampilkan di sandbox — kirim gambar (send image) dimatikan di terminal & sandbox]`,
+                fileUrl
+              });
+              return true;
+            } catch (err: any) {
+              console.error('[SANDBOX ERROR] sendImage gagal:', err?.message || err);
+              console.error('[SANDBOX INFO] Kirim gambar (send image) dimatikan di terminal & sandbox — gambar tidak dapat ditampilkan di CLI/sandbox.');
+              this.sentMessages.push({
+                type: 'text',
+                text: '[Gagal kirim gambar di sandbox — kirim gambar (send image) dimatikan di terminal & sandbox]'
+              });
+              return false;
+            }
           }
           public async addLabel(chatId: string, labelId: string): Promise<boolean> { return true; }
           public async removeLabel(chatId: string, labelId: string): Promise<boolean> { return true; }
@@ -670,6 +728,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       const { followUpService } = await import('../services/follow-up.service');
       await followUpService.onReservationCreated(customerId, reservation.id, DEFAULT_TENANT_ID);
+
+      // Persist entitas anak ke tabel children
+      const { childService } = await import('../services/child.service');
+      await childService.upsertChildrenFromBabies({
+        customerId,
+        reservationId: reservation.id,
+        tenantId: DEFAULT_TENANT_ID,
+        babies: parsed.babies || [],
+      });
 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
@@ -1706,6 +1773,197 @@ export async function adminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/whatsapp-provider
+   * Status indicator WhatsApp channel (Fase 5):
+   * - Provider aktif (WAHA/WABA) dari DB tenant
+   * - Status session WAHA (live check)
+   * - Status konfigurasi WABA (token terpasang? number id?)
+   * - Status template HSM (semua mapping per tenant)
+   */
+  fastify.get('/api/admin/whatsapp-provider', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+
+      // Live check status session WAHA (best-effort)
+      let wahaStatus = 'UNKNOWN';
+      try {
+        const { wahaClient } = await import('../integrations/waha/client');
+        wahaStatus = await wahaClient.getSessionStatus();
+      } catch (err: any) {
+        wahaStatus = `FAILED: ${err.message}`;
+      }
+
+      const { wabaTemplateService } = await import('../services/waba-template.service');
+      const templates = await wabaTemplateService.getAllTemplateMappings(DEFAULT_TENANT_ID);
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          provider: tenant?.whatsapp_provider || 'WAHA',
+          wahaSessionId: tenant?.waha_session_id || 'default',
+          wahaStatus,
+          waba: {
+            configured: !!(tenant?.waba_phone_number_id && tenant?.waba_access_token),
+            phoneNumberId: tenant?.waba_phone_number_id || null,
+            businessAccountId: tenant?.waba_business_account_id || null,
+            hasAccessToken: !!tenant?.waba_access_token,
+            hasWebhookVerifyToken: !!tenant?.waba_webhook_verify_token,
+          },
+          templates,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * PATCH /api/admin/whatsapp-provider
+   * Toggle provider WhatsApp per tenant + simpan konfigurasi WABA.
+   * Token WABA disimpan ENCRYPTED (AES-256-GCM) — tidak pernah plaintext di DB.
+   */
+  fastify.patch(
+    '/api/admin/whatsapp-provider',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          provider?: 'WAHA' | 'WABA';
+          waha_session_id?: string;
+          waba_phone_number_id?: string;
+          waba_business_account_id?: string;
+          waba_access_token?: string;
+          waba_webhook_verify_token?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const body = request.body || {};
+      const { provider, waha_session_id, waba_phone_number_id, waba_business_account_id, waba_access_token, waba_webhook_verify_token } = body;
+
+      if (provider && provider !== 'WAHA' && provider !== 'WABA') {
+        return reply.status(400).send({ error: 'provider harus "WAHA" atau "WABA"' });
+      }
+
+      try {
+        const existing = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        const data: any = {};
+
+        if (provider) data.whatsapp_provider = provider;
+        if (waha_session_id) data.waha_session_id = waha_session_id;
+        if (waba_phone_number_id !== undefined) data.waba_phone_number_id = waba_phone_number_id || null;
+        if (waba_business_account_id !== undefined) data.waba_business_account_id = waba_business_account_id || null;
+        if (waba_webhook_verify_token !== undefined) data.waba_webhook_verify_token = waba_webhook_verify_token || null;
+        if (waba_access_token) {
+          const { encryptSecret } = await import('../utils/encryption');
+          data.waba_access_token = encryptSecret(waba_access_token);
+        }
+
+        const tenant = existing
+          ? await prisma.tenant.update({ where: { id: DEFAULT_TENANT_ID }, data })
+          : await prisma.tenant.create({
+              data: {
+                id: DEFAULT_TENANT_ID,
+                slug: DEFAULT_TENANT_ID,
+                name: 'Default Clinic',
+                ...data,
+              },
+            });
+
+        // Reset gateway cache agar resolveGatewayForTenant memakai config terbaru
+        const { resetGateway } = await import('../integrations/whatsapp/factory');
+        resetGateway();
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_WHATSAPP_PROVIDER',
+          targetId: DEFAULT_TENANT_ID,
+          payload: {
+            provider: tenant.whatsapp_provider,
+            waha_session_id: tenant.waha_session_id,
+            waba_phone_number_id: tenant.waba_phone_number_id,
+            waba_configured: !!(tenant.waba_phone_number_id && tenant.waba_access_token),
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `WhatsApp provider diubah ke ${tenant.whatsapp_provider}.`,
+          data: { provider: tenant.whatsapp_provider },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/waba-templates
+   * Mengambil mapping HSM template per tenant (custom dari DB + default).
+   */
+  fastify.get('/api/admin/waba-templates', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { wabaTemplateService } = await import('../services/waba-template.service');
+      const templates = await wabaTemplateService.getAllTemplateMappings(DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, data: templates });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/admin/waba-templates
+   * Menyimpan mapping HSM template (upsert) untuk type + variant.
+   */
+  fastify.post(
+    '/api/admin/waba-templates',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          type: string;
+          variant: number;
+          templateName: string;
+          category?: 'UTILITY' | 'MARKETING';
+          languageCode?: string;
+          status?: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED';
+          isActive?: boolean;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { type, variant, templateName, category, languageCode, status, isActive } = request.body || {};
+      if (!type || !variant || !templateName) {
+        return reply.status(400).send({ error: 'type, variant, dan templateName wajib diisi' });
+      }
+
+      try {
+        const { wabaTemplateService } = await import('../services/waba-template.service');
+        await wabaTemplateService.saveTemplateMapping(DEFAULT_TENANT_ID, type, variant, {
+          templateName,
+          category: category || 'UTILITY',
+          languageCode: languageCode || 'id',
+          status: status || 'APPROVED',
+          isActive,
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_WABA_TEMPLATE',
+          targetId: `${type}#${variant}`,
+          payload: { type, variant, templateName },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, message: 'WABA template mapping berhasil disimpan!' });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/delivery-tiers
    * Mengambil setting delivery tiers ongkir (dari DB per tenant, fallback file)
    */
@@ -2087,6 +2345,94 @@ export async function adminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ error: 'Not Found' });
         }
       }
+    }
+  });
+
+  /**
+   * =====================================================================
+   * SYSTEM DEBUG — Observability & Tracing (read-only)
+   * Halaman Debug dashboard memakai endpoint di bawah ini. Tidak ada mutasi.
+   * =====================================================================
+   */
+
+  /**
+   * GET /api/admin/debug/system
+   * Info sistem: uptime, memori, status DB, feature flags (tanpa secret), counts, state AI Router.
+   */
+  fastify.get('/api/admin/debug/system', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { collectSystemInfo } = await import('../services/system-debug.service');
+      const info = await collectSystemInfo();
+      return reply.status(200).send({ success: true, data: info });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, message: err?.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/debug/ai-router?days=7
+   * Ringkasan akurasi shadow mode + mismatch (terutama MEDICAL_CONCERN) + evaluasi terbaru.
+   */
+  fastify.get('/api/admin/debug/ai-router', async (request: FastifyRequest<{ Querystring: { days?: string } }>, reply: FastifyReply) => {
+    try {
+      const { collectAiRouterSummary } = await import('../services/system-debug.service');
+      const days = Math.max(1, Math.min(90, parseInt(request.query?.days || '7', 10) || 7));
+      const summary = await collectAiRouterSummary(days);
+      return reply.status(200).send({ success: true, data: summary });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, message: err?.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/debug/logs?limit=200&level=all
+   * Log buffer in-memory (console log/warn/error terbaru).
+   */
+  fastify.get('/api/admin/debug/logs', async (request: FastifyRequest<{ Querystring: { limit?: string; level?: string } }>, reply: FastifyReply) => {
+    try {
+      const { getLogBuffer, getLogBufferStats, isLogBufferInstalled } = await import('../services/system-debug.service');
+      const limit = Math.max(1, Math.min(500, parseInt(request.query?.limit || '200', 10) || 200));
+      const level = (request.query?.level || 'all') as any;
+      return reply.status(200).send({
+        success: true,
+        data: {
+          installed: isLogBufferInstalled(),
+          stats: getLogBufferStats(),
+          entries: getLogBuffer(limit, level),
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, message: err?.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/debug/messages?limit=50
+   * Trace pesan terbaru (audit log message) untuk tracing percakapan.
+   */
+  fastify.get('/api/admin/debug/messages', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+    try {
+      const { collectRecentMessages } = await import('../services/system-debug.service');
+      const limit = parseInt(request.query?.limit || '50', 10) || 50;
+      const data = await collectRecentMessages(limit);
+      return reply.status(200).send({ success: true, data });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, message: err?.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/debug/conversations?limit=50
+   * Trace state machine conversation terbaru (state, human handling, UNKNOWN counter, dll).
+   */
+  fastify.get('/api/admin/debug/conversations', async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+    try {
+      const { collectConversationTrace } = await import('../services/system-debug.service');
+      const limit = parseInt(request.query?.limit || '50', 10) || 50;
+      const data = await collectConversationTrace(limit);
+      return reply.status(200).send({ success: true, data });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, message: err?.message });
     }
   });
 }

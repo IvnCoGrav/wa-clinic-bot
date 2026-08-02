@@ -2,6 +2,9 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getRollingFollowUpMessage, FollowUpTemplateType, FOLLOWUP_ROLLING_TEMPLATES } from '../config/followup-templates';
 import { typingService } from './typing.service';
+import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
+import { wabaTemplateService } from './waba-template.service';
+import { wabaConsentService } from './waba-consent.service';
 
 export class FollowUpService {
   /**
@@ -261,6 +264,13 @@ export class FollowUpService {
       }
 
       const name = fu.customer.name || 'Bunda';
+
+      // Provider-aware send: WABA → HSM template + consent gatekeeper; WAHA → rolling text (existing)
+      const gateway = await resolveGatewayForTenant(tenantId);
+      if (gateway.providerType === 'WABA') {
+        return this.executeFollowUpWaba(fu, templateType, name, tenantId);
+      }
+
       let messageText: string;
 
       // Cek apakah ada template custom di DB untuk type+variant ini
@@ -323,6 +333,104 @@ export class FollowUpService {
         });
       } catch (_) {}
       return false;
+    }
+  }
+
+  /**
+   * Cabang WABA: kirim follow-up via HSM template (patuh regulasi Meta).
+   * Gatekeeper consent: MARKETING wajib marketing_opt_in=true, selain itu SKIPPED.
+   * Template yang belum APPROVED di-skip (PENDING/REJECTED/PAUSED) + log + alert admin.
+   */
+  private async executeFollowUpWaba(
+    fu: any,
+    templateType: FollowUpTemplateType,
+    name: string,
+    tenantId: string
+  ): Promise<boolean> {
+    try {
+      const gateway = await resolveGatewayForTenant(tenantId);
+      const variant = Math.min(3, Math.max(1, fu.stage || 1));
+      const mapping = await wabaTemplateService.getTemplateMapping(tenantId, templateType, variant);
+
+      // 1. Template status: hanya APPROVED + is_active yang layak dikirim
+      if (!wabaTemplateService.isUsable(mapping)) {
+        console.warn(`[FollowUp WABA] Template ${templateType} status=${mapping.status} (tenant=${tenantId}). Skipped: NOT_APPROVED.`);
+        await prisma.followUp.update({
+          where: { id: fu.id },
+          data: { status: 'SKIPPED' },
+        });
+        this.notifyTemplateNotApproved(tenantId, templateType, mapping.status);
+        return false;
+      }
+
+      // 2. Consent gatekeeper: MARKETING wajib opt-in.
+      // Kategori diambil dari mapping DB (kategori template yang benar-benar
+      // di-approve Meta), bukan dari tipe follow-up.
+      if (mapping.category === 'MARKETING') {
+        const consent = await wabaConsentService.canSendMarketing(fu.customer);
+        if (!consent.allowed) {
+          console.log(`[FollowUp WABA] Skipped ${templateType} to ${fu.customer.phone}: NO_OPT_IN (tenant=${tenantId}).`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'SKIPPED' },
+          });
+          return false;
+        }
+      }
+
+      // 3. Kirim HSM template
+      console.log(`[FollowUp WABA] Sending ${templateType} (${mapping.templateName}) to ${fu.customer.phone}`);
+      const components = wabaTemplateService.buildBodyComponents({ name });
+      const result = await gateway.sendTemplateMessage(
+        fu.customer.phone,
+        mapping.templateName,
+        mapping.languageCode,
+        components
+      );
+
+      if (result.success) {
+        await prisma.followUp.update({
+          where: { id: fu.id },
+          data: { status: 'SENT', sent_at: new Date() },
+        });
+        return true;
+      }
+
+      // Error 131026: di luar 24h window / teks bebas ditolak → sudah pakai HSM, tetap gagal
+      console.error(`[FollowUp WABA] Send failed ${fu.id}:`, result.error?.message);
+      await prisma.followUp.update({
+        where: { id: fu.id },
+        data: { status: 'FAILED' },
+      });
+      return false;
+    } catch (err: any) {
+      console.error(`[FollowUp WABA] Failed to send follow-up ${fu.id}:`, err.message);
+      try {
+        await prisma.followUp.update({
+          where: { id: fu.id },
+          data: { status: 'FAILED' },
+        });
+      } catch (_) {}
+      return false;
+    }
+  }
+
+  /**
+   * Notifikasi admin saat template HSM belum APPROVED (PENDING/REJECTED/PAUSED),
+   * sehingga admin segera submit/verifikasi template di Meta.
+   */
+  private async notifyTemplateNotApproved(tenantId: string, templateType: string, status: string): Promise<void> {
+    try {
+      const { AlertService, AlertType, AlertSeverity } = await import('./alert.service');
+      const alertService = new AlertService();
+      await alertService.notifyAlert({
+        type: AlertType.FOLLOWUP_FAILED,
+        severity: AlertSeverity.WARNING,
+        message: `[WABA TEMPLATE ${status}] Template ${templateType} belum APPROVED (tenant=${tenantId}). Follow-up WABA di-skip. Segera submit/verify template di Meta.`,
+        metadata: { tenantId, templateType, status },
+      });
+    } catch (err: any) {
+      console.error('[FollowUp WABA] Failed to notify template-not-approved alert:', err.message);
     }
   }
 

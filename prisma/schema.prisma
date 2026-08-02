@@ -27,6 +27,11 @@ enum SourceType {
   DOCUMENT
 }
 
+enum WhatsappProvider {
+  WAHA
+  WABA
+}
+
 enum TreatmentCategory {
   BABY
   MOMS
@@ -61,33 +66,87 @@ model Customer {
   conversations      Conversation[]
   reservations       Reservation[]
   follow_ups         FollowUp[]
+  children           Child[]
   adClick            AdClick?
   pricelist_sent     Boolean        @default(false)
   is_sandbox_test    Boolean        @default(false)
+  marketing_opt_in        Boolean   @default(false)
+  marketing_opt_in_at     DateTime?
+  marketing_opt_in_source String?
 
   @@index([tenant_id])
   @@map("customers")
 }
 
+model Child {
+  id                         String       @id @default(uuid())
+  tenant_id                  String       @default("default-tenant")
+  customer_id                String
+  customer                   Customer     @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  reservation_id             String?
+  reservation                Reservation? @relation(fields: [reservation_id], references: [id], onDelete: SetNull)
+  name                       String
+  birth_date                 DateTime?
+  age_months_at_registration Int?
+  raw_age_text               String?
+  created_at                 DateTime     @default(now())
+  updated_at                 DateTime     @updatedAt
+
+  @@unique([customer_id, name])
+  @@index([tenant_id])
+  @@map("children")
+}
+
 model Conversation {
-  id                   String            @id @default(uuid())
-  tenant_id            String            @default("default-tenant")
-  customer_id          String
-  customer             Customer          @relation(fields: [customer_id], references: [id], onDelete: Cascade)
-  current_state        ConversationState @default(INITIAL)
-  previous_state       ConversationState?
-  location_attempts    Int               @default(0)
-  is_human_handling    Boolean           @default(false)
-  human_handling_since DateTime?
-  escalation_reason    String?
-  review_flagged       Boolean           @default(false)
-  last_message_at      DateTime          @default(now())
-  created_at           DateTime          @default(now())
-  updated_at           DateTime          @updatedAt
-  messages             Message[]
+  id                       String             @id @default(uuid())
+  tenant_id                String             @default("default-tenant")
+  customer_id              String
+  customer                 Customer           @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  current_state            ConversationState  @default(INITIAL)
+  previous_state           ConversationState?
+  location_attempts        Int                @default(0)
+  is_human_handling        Boolean            @default(false)
+  human_handling_since     DateTime?
+  escalation_reason        String?
+  consecutive_unknown_count Int               @default(0)
+  review_flagged           Boolean            @default(false)
+  last_message_at          DateTime           @default(now())
+  created_at               DateTime           @default(now())
+  updated_at               DateTime           @updatedAt
+  messages                 Message[]
 
   @@index([tenant_id])
   @@map("conversations")
+}
+
+model AiRouterEvaluation {
+  id                String   @id @default(cuid())
+  tenant_id         String   @default("default-tenant")
+
+  customer_phone    String
+  message_text      String   @db.Text
+  current_state     String
+
+  llm_raw_output    Json?
+  llm_intent        String?
+  llm_confidence    Float?
+  llm_used_fallback Boolean  @default(false)
+
+  legacy_intent     String
+  legacy_escalated  Boolean
+
+  intent_match      Boolean
+  escalation_match  Boolean
+  mismatch_notes    String?  @db.Text
+
+  response_time_ms  Int?
+
+  created_at        DateTime @default(now())
+
+  @@index([tenant_id, created_at])
+  @@index([intent_match])
+  @@index([escalation_match])
+  @@map("ai_router_evaluations")
 }
 
 model Message {
@@ -119,19 +178,20 @@ model KnowledgeChunk {
 }
 
 model Reservation {
-  id                 String            @id @default(uuid())
-  tenant_id          String            @default("default-tenant")
-  customer_id        String
-  customer           Customer          @relation(fields: [customer_id], references: [id], onDelete: Cascade)
-  treatment_category TreatmentCategory
-  treatment_detail   String?
-  booking_date       DateTime?
+  id                       String            @id @default(uuid())
+  tenant_id                String            @default("default-tenant")
+  customer_id              String
+  customer                 Customer          @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  treatment_category       TreatmentCategory
+  treatment_detail         String?
+  booking_date             DateTime?
   raw_text                 String?
   status                   String            @default("pending")
   google_calendar_event_id String?
   is_repeat_order          Boolean           @default(false)
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
+  children                 Child[]
 
   @@index([tenant_id])
   @@map("reservations")
@@ -148,15 +208,34 @@ enum FollowUpStatus {
   SENT
   CANCELLED
   FAILED
+  SKIPPED
+}
+
+model WabaTemplate {
+  id            String   @id @default(uuid())
+  tenant_id     String   @default("default-tenant")
+  type          String // FollowUpTemplateType: NO_PURCHASE_1, NEXT_TREATMENT_1, dst
+  variant       Int // 1, 2, 3 (mapping ke follow-up stage)
+  template_name String   // Nama HSM template di Meta (ter-approve)
+  category      String   // UTILITY | MARKETING
+  language_code String   @default("id")
+  status        String   @default("APPROVED") // APPROVED | PENDING | REJECTED | PAUSED
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@unique([tenant_id, type, variant])
+  @@index([tenant_id, type])
+  @@map("waba_templates")
 }
 
 model DeliveryTier {
   id             String   @id @default(uuid())
   tenant_id      String
-  max_dist       Float    // Jarak maksimum dalam km
-  fee            Int      // Ongkir normal (Rp)
-  promo_discount Int      // Potongan diskon promo (Rp)
-  sort_order     Int      // Urutan tier (1 = terdekat)
+  max_dist       Float // Jarak maksimum dalam km
+  fee            Int // Ongkir normal (Rp)
+  promo_discount Int // Potongan diskon promo (Rp)
+  sort_order     Int // Urutan tier (1 = terdekat)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
@@ -165,22 +244,22 @@ model DeliveryTier {
 }
 
 model ClinicService {
-  id              String   @id @default(uuid())
-  tenant_id       String
-  service_id      String   // ID layanan (misal "baby-massage-ceria")
-  name            String
-  category        String   // BABY | KIDS | MOMS | BOTH
-  min_age_months  Int
-  max_age_months  Int?     // null = tanpa batas
-  age_label       String
+  id               String   @id @default(uuid())
+  tenant_id        String
+  service_id       String // ID layanan (misal "baby-massage-ceria")
+  name             String
+  category         String // BABY | KIDS | MOMS | BOTH
+  min_age_months   Int
+  max_age_months   Int? // null = tanpa batas
+  age_label        String
   duration_minutes Int
-  original_price  Int
-  promo_price     Int
-  description     String
-  is_active       Boolean  @default(true)
-  sort_order      Int      @default(0)
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  original_price   Int
+  promo_price      Int
+  description      String
+  is_active        Boolean  @default(true)
+  sort_order       Int      @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   @@unique([tenant_id, service_id])
   @@index([tenant_id])
@@ -190,7 +269,7 @@ model ClinicService {
 model TenantPersona {
   id         String   @id @default(uuid())
   tenant_id  String   @unique
-  persona    String   // Teks persona Bidan Yusi (system prompt)
+  persona    String // Teks persona Bidan Yusi (system prompt)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -198,30 +277,30 @@ model TenantPersona {
 }
 
 model TenantAiConfig {
-  id         String   @id @default(uuid())
-  tenant_id  String
-  task       String   // HARVESTING | CHAT_REPLY | MEDICAL_CHECK | SUMMARIZATION | PII_SCRUBBING | INTENT_CLASSIFICATION
-  provider   String
-  model_name String
-  max_tokens Int
-  temperature Float
+  id                   String   @id @default(uuid())
+  tenant_id            String
+  task                 String // HARVESTING | CHAT_REPLY | MEDICAL_CHECK | SUMMARIZATION | PII_SCRUBBING | INTENT_CLASSIFICATION
+  provider             String
+  model_name           String
+  max_tokens           Int
+  temperature          Float
   confidence_threshold Float?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
 
   @@unique([tenant_id, task])
   @@map("tenant_ai_config")
 }
 
 model FollowUpTemplate {
-  id          String   @id @default(uuid())
-  tenant_id   String   @default("default-tenant")
-  type        String   // REMINDER_H0, REVIEW_H1_BABY, NO_PURCHASE_1, dst
-  variant     Int      // 1, 2, 3
-  text        String   // Template teks dengan placeholder {name} {time} {babyName}
-  is_active   Boolean  @default(true)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  id         String   @id @default(uuid())
+  tenant_id  String   @default("default-tenant")
+  type       String // REMINDER_H0, REVIEW_H1_BABY, NO_PURCHASE_1, dst
+  variant    Int // 1, 2, 3
+  text       String // Template teks dengan placeholder {name} {time} {babyName}
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@unique([tenant_id, type, variant])
   @@index([tenant_id, type])
@@ -234,7 +313,7 @@ model FollowUp {
   customer_id  String
   customer     Customer       @relation(fields: [customer_id], references: [id], onDelete: Cascade)
   type         FollowUpType
-  stage        Int            // 1 | 2 | 3
+  stage        Int // 1 | 2 | 3
   scheduled_at DateTime
   sent_at      DateTime?
   status       FollowUpStatus @default(PENDING)
@@ -262,24 +341,24 @@ model AuditLog {
 }
 
 model AdClick {
-  id           String    @id @default(cuid())
-  trackingCode String?   @unique
+  id           String  @id @default(cuid())
+  trackingCode String? @unique
 
-  fbclid       String?
-  fbp          String?
-  fbc          String?
-  ipAddress    String?
-  userAgent    String?
-  landingUrl   String?
-  utmSource    String?
-  utmMedium    String?
-  utmCampaign  String?
-  phone        String?
-  matchedAt    DateTime?
-  customerId   String?   @unique
-  customer     Customer? @relation(fields: [customerId], references: [id])
-  createdAt    DateTime  @default(now())
-  tenant_id    String
+  fbclid      String?
+  fbp         String?
+  fbc         String?
+  ipAddress   String?
+  userAgent   String?
+  landingUrl  String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  phone       String?
+  matchedAt   DateTime?
+  customerId  String?   @unique
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  createdAt   DateTime  @default(now())
+  tenant_id   String
 
   @@index([tenant_id])
   @@index([trackingCode])
@@ -319,17 +398,23 @@ enum LandingType {
 }
 
 model Tenant {
-  id                     String      @id @default(uuid())
-  slug                   String      @unique
+  id                     String            @id @default(uuid())
+  slug                   String            @unique
   name                   String
-  whatsapp_number        String      @default("6287751148065")
+  whatsapp_number        String            @default("6287751148065")
   meta_pixel_id          String?
   meta_capi_access_token String?
-  landing_type           LandingType @default(STRUCTURED_JSON)
+  landing_type           LandingType       @default(STRUCTURED_JSON)
   landing_content        Json?
   raw_html_content       String?
-  created_at             DateTime    @default(now())
-  updated_at             DateTime    @updatedAt
+  whatsapp_provider      WhatsappProvider  @default(WAHA)
+  waha_session_id        String?           @default("default")
+  waba_phone_number_id   String?
+  waba_business_account_id String?
+  waba_access_token      String?
+  waba_webhook_verify_token String?
+  created_at             DateTime          @default(now())
+  updated_at             DateTime          @updatedAt
 
   @@index([slug])
   @@map("tenants")
@@ -344,22 +429,22 @@ enum StagingReviewStatus {
 }
 
 model MedicalFaqStaging {
-  id               String              @id @default(uuid())
-  tenant_id        String              @default("default-tenant")
-  conversation_id  String?
-  customer_phone   String
-  raw_question     String
-  bidan_raw_reply  String?
-  general_question String?
-  general_answer   String?
-  symptoms_tagged  String[]
-  status           StagingReviewStatus @default(PENDING)
-  matched_chunk_id String?
+  id                 String              @id @default(uuid())
+  tenant_id          String              @default("default-tenant")
+  conversation_id    String?
+  customer_phone     String
+  raw_question       String
+  bidan_raw_reply    String?
+  general_question   String?
+  general_answer     String?
+  symptoms_tagged    String[]
+  status             StagingReviewStatus @default(PENDING)
+  matched_chunk_id   String?
   matched_similarity Float?
-  reviewed_by      String?
-  reviewed_at      DateTime?
-  created_at       DateTime            @default(now())
-  updated_at       DateTime            @updatedAt
+  reviewed_by        String?
+  reviewed_at        DateTime?
+  created_at         DateTime            @default(now())
+  updated_at         DateTime            @updatedAt
 
   @@index([tenant_id])
   @@index([status])
@@ -367,27 +452,23 @@ model MedicalFaqStaging {
 }
 
 model GeneralFaqStaging {
-  id               String              @id @default(uuid())
-  tenant_id        String              @default("default-tenant")
-  conversation_id  String?
-  raw_question     String
-  raw_answer       String?
-  general_question String?
-  general_answer   String?
-  category         String              @default("general")
-  status           StagingReviewStatus @default(PENDING)
-  matched_chunk_id String?
+  id                 String              @id @default(uuid())
+  tenant_id          String              @default("default-tenant")
+  conversation_id    String?
+  raw_question       String
+  raw_answer         String?
+  general_question   String?
+  general_answer     String?
+  category           String              @default("general")
+  status             StagingReviewStatus @default(PENDING)
+  matched_chunk_id   String?
   matched_similarity Float?
-  reviewed_by      String?
-  reviewed_at      DateTime?
-  created_at       DateTime            @default(now())
-  updated_at       DateTime            @updatedAt
+  reviewed_by        String?
+  reviewed_at        DateTime?
+  created_at         DateTime            @default(now())
+  updated_at         DateTime            @updatedAt
 
   @@index([tenant_id])
   @@index([status])
   @@map("general_faq_staging")
 }
-
-
-
-
