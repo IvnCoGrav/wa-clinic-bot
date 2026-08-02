@@ -1,6 +1,7 @@
 import { ConversationState, Customer, Conversation } from '@prisma/client';
 import { WhatsAppIncomingMessage } from '../integrations/whatsapp/types';
 import { NluClassificationResult } from '../services/nlu-classifier.service';
+import { AIRouterDecision } from '../integrations/llm/ai-router';
 
 export interface StateHandlerContext {
   tenantId?: string;
@@ -8,6 +9,7 @@ export interface StateHandlerContext {
   conversation: Conversation;
   incomingMessage: WhatsAppIncomingMessage;
   nluResult?: NluClassificationResult;
+  routerDecision?: AIRouterDecision;
 }
 
 export interface StateHandlerResult {
