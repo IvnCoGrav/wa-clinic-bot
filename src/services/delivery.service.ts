@@ -27,6 +27,14 @@ const DEFAULT_TIERS: DeliveryTier[] = [
 
 export let activeDeliveryTiers: DeliveryTier[] = [];
 
+/**
+ * Faktor pembulatan jarak lurus (Haversine) ke estimasi jarak jalan.
+ * Dapat di-override per env HAVERSINE_CIRCUITY_FACTOR; default 1.50x mengikuti
+ * nilai historis agar jarak estimasi konsisten dengan test yang ada.
+ * Lihat Fase 3 docs/HARDCODED_FIX_PLAN.md.
+ */
+const HAVERSINE_CIRCUITY_FACTOR = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.50');
+
 export function loadDeliveryTiers() {
   try {
     if (fs.existsSync(TIERS_FILE)) {
@@ -79,6 +87,7 @@ export async function getDeliveryTiersFromDb(tenantId: string = DEFAULT_TENANT_I
 
     // Tidak ada data di DB -> seed dari file/default lalu simpan
     const source = activeDeliveryTiers.length > 0 ? activeDeliveryTiers : DEFAULT_TIERS;
+    console.warn(`[SEED] Delivery tiers kosong untuk tenant ${tenantId}; seeding dari ${activeDeliveryTiers.length > 0 ? 'file delivery_tiers_custom.json' : 'DEFAULT_TIERS (code default)'} (${source.length} tier). Set nilai via admin API / DB untuk produksi.`);
     await prisma.deliveryTier.deleteMany({ where: { tenant_id: tenantId } });
     await prisma.deliveryTier.createMany({
       data: source.map((t, idx) => ({
@@ -132,6 +141,8 @@ export interface DeliveryCalculationResult {
   promoPrice: number;
   isOutOfCoverage: boolean;
   isEstimated?: boolean;
+  freeTierKm?: number;
+  maxCoverageKm?: number;
   messageTemplate: string;
 }
 
@@ -177,12 +188,12 @@ export class DeliveryService {
       distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(2));
       isEstimated = false;
     } else {
-      // 2. FALLBACK: Haversine + 1.50x Circuity Factor
+      // 2. FALLBACK: Haversine + circuity factor
       console.warn(
-        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with 1.50x circuity multiplier.`
+        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with ${HAVERSINE_CIRCUITY_FACTOR}x circuity multiplier.`
       );
       const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
-      distanceKm = parseFloat((straightLineKm * 1.50).toFixed(2));
+      distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(2));
       isEstimated = true;
     }
 
@@ -195,14 +206,16 @@ export class DeliveryService {
     // Hitung promoPrice dengan diskon
     const promoPrice = Math.max(0, normalPrice - promoDiscount);
 
-    // 5. Construct message template
+    // 5. Construct message template (angka dinamis dari tier, bukan hardcode)
     let messageTemplate = '';
-    if (distanceKm <= 5.0) {
-      messageTemplate = `Wah, Deket Bunda, Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami (masih dalam jangkauan < 5 km), sehingga layanan kami GRATIS ongkir!`;
+    const freeTierKm = tiers.find((t) => t.fee === 0)?.maxDist;
+    const maxCoverageKm = tiers.length > 0 ? Math.max(...tiers.map((t) => t.maxDist)) : clinicConfig.maxDeliveryDistanceKm;
+    if (freeTierKm !== undefined && distanceKm <= freeTierKm) {
+      messageTemplate = `Wah, Deket Bunda, Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami (masih dalam jangkauan gratis ongkir hingga ${freeTierKm} km), sehingga layanan kami GRATIS ongkir!`;
     } else if (!isOutOfCoverage) {
       messageTemplate = `Lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami. Biaya ongkir normal untuk area ini adalah Rp${normalPrice.toLocaleString('id-ID')} (Promo: Rp${promoPrice.toLocaleString('id-ID')}).`;
     } else {
-      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 30 km).`;
+      messageTemplate = `Mohon maaf, lokasi Anda berjarak ${distanceKm.toFixed(1)} km dari moms & baby spa kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${maxCoverageKm} km).`;
     }
 
     return {
@@ -212,6 +225,8 @@ export class DeliveryService {
       promoPrice,
       isOutOfCoverage,
       isEstimated,
+      freeTierKm,
+      maxCoverageKm,
       messageTemplate,
     };
   }

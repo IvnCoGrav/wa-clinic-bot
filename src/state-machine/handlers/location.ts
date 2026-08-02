@@ -50,20 +50,21 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     // Reset attempt counter
     await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 }, tenantId);
 
-    // 4. Jika Luar Jangkauan (>10 km)
+    // 4. Jika Luar Jangkauan
     if (delivery.isOutOfCoverage) {
       return {
         nextState: ConversationState.COMPLETED,
-        replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm }),
+        replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm, maxCoverageKm: delivery.maxCoverageKm }),
         shouldSendReply: true,
       };
     }
 
-    // 5. Jika Dalam Jangkauan (<= 10 km)
+    // 5. Jika Dalam Jangkauan
     const replyText = TEMPLATES.ongkirInfo({
       distanceKm: delivery.distanceKm,
       normalPrice: delivery.normalPrice,
       promoPrice: delivery.promoPrice,
+      freeTierKm: delivery.freeTierKm,
     });
 
     return {
@@ -164,8 +165,9 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   if (!resolved.isPrecise || !resolved.lat || !resolved.lng) {
     const currentAttempts = (conversation.location_attempts || 0) + 1;
 
-    // ESKALASI JIKA 3X GAGAL DETEKSI KELURAHAN
-    if (currentAttempts >= 3) {
+    // ESKALASI JIKA GAGAL DETEKSI KELURAHAN >= LOCATION_ATTEMPTS_LIMIT (default 3x)
+    const LOCATION_ATTEMPTS_LIMIT = parseInt(process.env.LOCATION_ATTEMPTS_LIMIT || '3', 10);
+    if (currentAttempts >= LOCATION_ATTEMPTS_LIMIT) {
       await conversationService.escalateToHumanHandling(
         conversation,
         customer.phone,
@@ -181,7 +183,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       };
     }
 
-    // Jika belum 3x, update counter dan minta nama kelurahan secara spesifik
+    // Jika belum mencapai limit, update counter dan minta nama kelurahan secara spesifik
     await conversationService.updateConversationState(
       conversation.id,
       {
@@ -242,20 +244,21 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   // Reset location attempt counter
   await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 }, tenantId);
 
-  // 4. Jika Luar Jangkauan (>10 km)
+  // 4. Jika Luar Jangkauan
   if (delivery.isOutOfCoverage) {
     return {
       nextState: ConversationState.COMPLETED,
-      replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm }),
+      replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm, maxCoverageKm: delivery.maxCoverageKm }),
       shouldSendReply: true,
     };
   }
 
-  // 5. Dalam Jangkauan (<= 10 km)
+  // 5. Dalam Jangkauan
   const replyText = TEMPLATES.ongkirInfo({
     distanceKm: delivery.distanceKm,
     normalPrice: delivery.normalPrice,
     promoPrice: delivery.promoPrice,
+    freeTierKm: delivery.freeTierKm,
   });
 
   return {

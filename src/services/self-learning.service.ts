@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { knowledgeBaseService } from './knowledge.service';
 import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../config/persona';
+import { getBrandIdentity } from '../config/brand';
 
 interface AdminReplyBuffer {
   text: string;
@@ -105,7 +106,7 @@ Your task is to refine a raw conversation snippet between a Customer and a Bidan
 RULES:
 1. Analyze if the Q&A pair contains general clinical, price, or service information that is useful for other customers (e.g., treatment details, safety guidelines, clinic rules).
 2. If it is a personal or transactional exchange (e.g. address details, shareloc confirmation, greetings like "Halo bunda", specific appointment timings, payment receipts, or personal chatter), reply strictly with the JSON: {"isGeneralFaq": false}.
-3. If it is a general FAQ, rewrite both the question and answer to be clean, professional, general, and matching Bidan Yusi's warm tone (Indonesian). Format the response strictly as a JSON object:
+3. If it is a general FAQ, rewrite both the question and answer to be clean, professional, general, and matching ${getBrandIdentity().botDisplayName}'s warm tone (Indonesian). Format the response strictly as a JSON object:
 {"isGeneralFaq": true, "question": "Clean general question?", "answer": "Clean general answer."}
 
 Input:

@@ -12,6 +12,8 @@ import { TypingService, typingService } from '../services/typing.service';
 import { wahaClient } from '../integrations/waha/client';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getBrandIdentity } from '../config/brand';
+import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -153,9 +155,9 @@ export class ConversationStateMachine {
     const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, tenantId);
     let activeConversation = autoRelease.updatedConversation;
 
-    // --- PENGECEKAN IDLE TIMEOUT > 24 JAM ATAU 5 MENIT UNTUK LOCATION_CONFIRMED ---
-    const IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
-    const CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 menit
+    // --- PENGECEKAN IDLE TIMEOUT (env: IDLE_TIMEOUT_MS default 24 jam) ATAU TIMEOUT KONFIRMASI LOKASI (env: LOCATION_CONFIRMATION_TIMEOUT_MS default 5 menit) ---
+    const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS || '86400000', 10);
+    const CONFIRMATION_TIMEOUT_MS = parseInt(process.env.LOCATION_CONFIRMATION_TIMEOUT_MS || '300000', 10); // 5 menit
 
     const lastMsgTime = activeConversation.last_message_at ? new Date(activeConversation.last_message_at).getTime() : 0;
     const isIdleTooLong = lastMsgTime > 0 && (Date.now() - lastMsgTime > IDLE_TIMEOUT_MS);
@@ -213,7 +215,7 @@ export class ConversationStateMachine {
       try {
         const { NluClassifierService } = await import('../services/nlu-classifier.service');
         const { messageService } = await import('../services/message.service');
-        const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, 5, tenantId);
+        const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
         historyFormatted = recentDbMsgs.map((m) => ({
           role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
           content: m.content || '',
@@ -394,7 +396,7 @@ export class ConversationStateMachine {
 
             if (!alreadySent) {
               const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
-              await wahaClient.sendImage(chatId, pricelistUrl, "Pricelist Kala Moms & Baby Spa 🌸");
+              await wahaClient.sendImage(chatId, pricelistUrl, `Pricelist ${getBrandIdentity().businessName} 🌸`);
 
               if (dbCustomer) {
                 await prisma.customer.update({
@@ -409,7 +411,7 @@ export class ConversationStateMachine {
           } catch (dbErr: any) {
             console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
             const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
-            await wahaClient.sendImage(chatId, pricelistUrl, "Pricelist Kala Moms & Baby Spa 🌸");
+            await wahaClient.sendImage(chatId, pricelistUrl, `Pricelist ${getBrandIdentity().businessName} 🌸`);
           }
         }
       }

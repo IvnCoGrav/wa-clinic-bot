@@ -1,6 +1,7 @@
 import { ConversationState } from '@prisma/client';
 import { StateHandlerContext, StateHandlerResult } from '../types';
 import { TEMPLATES } from '../../config/persona';
+import { getBrandIdentity } from '../../config/brand';
 import { geocodingService } from '../../integrations/google-maps/geocoding';
 
 /**
@@ -63,7 +64,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     // Perbaikan Poin 3b: Jika customer baru (belum punya kelurahan confirmed)
     const hasConfirmedLocation = !!customer.kelurahan;
     if (!hasConfirmedLocation && result.replyText) {
-      const intro = `Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\n`;
+      const intro = `Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya ${getBrandIdentity().botDisplayName} dari ${getBrandIdentity().businessName}. ✨\n\n`;
       result.replyText = intro + result.replyText;
     }
 
@@ -153,7 +154,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     if ((hasAskPrice || hasFaqQuestion) && !hasProvideLocation) {
       return {
         nextState: ConversationState.AWAITING_LOCATION,
-        replyText: `Halo Bunda, selamat datang di Kala Moms and Baby Spa! ✨ Untuk info harga treatment dan ongkir, kami perlu tahu lokasi Bunda terlebih dahulu ya.\n\n${TEMPLATES.greeting({ skipGreeting })}`,
+        replyText: `Halo Bunda, selamat datang di ${getBrandIdentity().businessName}! ✨ Untuk info harga treatment dan ongkir, kami perlu tahu lokasi Bunda terlebih dahulu ya.\n\n${TEMPLATES.greeting({ skipGreeting })}`,
         shouldSendReply: true,
       };
     }

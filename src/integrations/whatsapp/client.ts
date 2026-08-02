@@ -1,5 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from './graph.constants';
 dotenv.config();
 
 /**
@@ -13,7 +14,7 @@ export class WhatsAppClient {
   constructor() {
     this.token = process.env.WHATSAPP_TOKEN || '';
     this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
-    this.baseUrl = `https://graph.facebook.com/v20.0/${this.phoneNumberId}/messages`;
+    this.baseUrl = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${this.phoneNumberId}/messages`;
   }
 
   /**

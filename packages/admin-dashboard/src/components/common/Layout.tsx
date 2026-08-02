@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiRequest } from '../../services/api';
+import { BRAND } from '../../config/brand';
 import { 
   LayoutDashboard, 
   CalendarRange, 
@@ -135,7 +136,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <Menu size={20} />
             </button>
             <h1 className="text-lg font-bold tracking-tight md:text-xl text-slate-100">
-              Kala Moms & Baby Spa Panel
+              {BRAND.panelName}
             </h1>
           </div>
 

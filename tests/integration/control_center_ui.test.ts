@@ -8,16 +8,17 @@ describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', ()
   beforeEach(() => {
     vi.restoreAllMocks();
     process.env.ADMIN_API_KEY = 'test_admin_key_999';
+    process.env.ADMIN_DOMAIN = 'example.com';
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.LLM_API_KEY = 'mock';
   });
 
-  it('1. Origin Isolation Guard: Accessing /admin/* on pages.kalababyspa.online MUST return 404 Not Found', async () => {
+  it('1. Origin Isolation Guard: Accessing /admin/* on tenant landing pages domain MUST return 404 Not Found', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/api/admin/human-handling-conversations',
       headers: {
-        host: 'pages.kalababyspa.online',
+        host: 'pages.example.com',
         'x-api-key': 'test_admin_key_999',
       },
     });

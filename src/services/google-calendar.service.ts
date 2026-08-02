@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getBrandIdentity } from '../config/brand';
 
 dotenv.config();
 
@@ -54,8 +55,8 @@ export class GoogleCalendarService {
     const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
     const event = {
-      summary: `Kala Treatment - ${customerName}`,
-      description: `Treatment: ${reservation.treatment_detail || 'Moms / Baby Spa'}\nCreated automatically by Kala Chatbot.`,
+      summary: `${getBrandIdentity().businessName} Treatment - ${customerName}`,
+      description: `Treatment: ${reservation.treatment_detail || 'Moms / Baby Spa'}\nCreated automatically by ${getBrandIdentity().businessName} Chatbot.`,
       start: {
         dateTime: startDateTime.toISOString(),
         timeZone: 'Asia/Jakarta',
@@ -96,8 +97,8 @@ export class GoogleCalendarService {
     const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
     const event = {
-      summary: `Kala Treatment - ${customerName}`,
-      description: `Treatment: ${reservation.treatment_detail || 'Moms / Baby Spa'}\nUpdated automatically by Kala Chatbot.`,
+      summary: `${getBrandIdentity().businessName} Treatment - ${customerName}`,
+      description: `Treatment: ${reservation.treatment_detail || 'Moms / Baby Spa'}\nUpdated automatically by ${getBrandIdentity().businessName} Chatbot.`,
       start: {
         dateTime: startDateTime.toISOString(),
         timeZone: 'Asia/Jakarta',

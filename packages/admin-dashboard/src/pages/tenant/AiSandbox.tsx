@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { BRAND } from '../../config/brand';
 import { 
   Send, 
   Terminal, 
@@ -35,7 +36,7 @@ export const AiSandbox: React.FC = () => {
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { sender: 'bot', content: `Halo Bunda! Saya asisten AI Kala Moms & Baby Spa (Sesi Baru ${sandboxPhone.substring(7)}). Silakan coba kirim pertanyaan di bawah untuk menguji respon RAG & Persona saya! 🌸`, timestamp: new Date() }
+    { sender: 'bot', content: `Halo Bunda! Saya asisten AI ${BRAND.businessName} (Sesi Baru ${sandboxPhone.substring(7)}). Silakan coba kirim pertanyaan di bawah untuk menguji respon RAG & Persona saya! 🌸`, timestamp: new Date() }
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,7 +48,7 @@ export const AiSandbox: React.FC = () => {
   const [inspectorData, setInspectorData] = useState<any>({
     query: '',
     chunks: [],
-    systemPrompt: `Kamu adalah asisten chat ramah dari Kala Moms & Baby Spa...`,
+    systemPrompt: `Kamu adalah asisten chat ramah dari ${BRAND.businessName}...`,
     latencyMs: 0
   });
 

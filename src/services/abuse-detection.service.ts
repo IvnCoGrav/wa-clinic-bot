@@ -4,6 +4,11 @@ import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 
 export class AbuseDetectionService {
+  // Ambang batas abuse — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
+  private readonly FLOOD_LIMIT = parseInt(process.env.FLOOD_LIMIT || '10', 10);
+  private readonly FLOOD_WINDOW_MS = parseInt(process.env.FLOOD_WINDOW_MS || '60000', 10);
+  private readonly SPAM_DUPLICATE_LIMIT = parseInt(process.env.SPAM_DUPLICATE_LIMIT || '5', 10);
+
   // Melacak timestamp pesan masuk per phone untuk deteksi flood (sliding window)
   private messageTimestamps: Map<string, number[]> = new Map();
 
@@ -30,15 +35,15 @@ export class AbuseDetectionService {
     const now = Date.now();
     const cleanMessage = (messageBody || '').trim();
 
-    // 1. TRIGGER FLOOD: >10 pesan dalam 60 detik dari nomor yang sama
+    // 1. TRIGGER FLOOD: >FLOOD_LIMIT pesan dalam FLOOD_WINDOW_MS dari nomor yang sama
     const timestamps = this.messageTimestamps.get(phone) || [];
     timestamps.push(now);
     
-    // Filter hanya timestamp dalam 60 detik terakhir
-    const activeTimestamps = timestamps.filter(t => now - t <= 60000);
+    // Filter hanya timestamp dalam FLOOD_WINDOW_MS terakhir
+    const activeTimestamps = timestamps.filter(t => now - t <= this.FLOOD_WINDOW_MS);
     this.messageTimestamps.set(phone, activeTimestamps);
 
-    if (activeTimestamps.length > 10) {
+    if (activeTimestamps.length > this.FLOOD_LIMIT) {
       await this.applyAutoBlock(customer.id, phone, 'flood', tenantId);
       return { blocked: true, flagged: false, reason: 'flood' };
     }
@@ -66,18 +71,18 @@ export class AbuseDetectionService {
       }
     }
 
-    // 3. TRIGGER PESAN IDENTIK BERULANG: >=5 pesan dengan konten persis sama berurutan saat human handling
+    // 3. TRIGGER PESAN IDENTIK BERULANG: >=SPAM_DUPLICATE_LIMIT pesan dengan konten persis sama berurutan saat human handling
     if (conversation.is_human_handling) {
       const history = this.lastMessages.get(phone) || [];
       history.push(cleanMessage.toLowerCase());
       
-      // Batasi hanya melacak 5 pesan terakhir
-      if (history.length > 5) {
+      // Batasi hanya melacak SPAM_DUPLICATE_LIMIT pesan terakhir
+      if (history.length > this.SPAM_DUPLICATE_LIMIT) {
         history.shift();
       }
       this.lastMessages.set(phone, history);
 
-      if (history.length === 5 && history.every(msg => msg === history[0] && msg.length > 0)) {
+      if (history.length === this.SPAM_DUPLICATE_LIMIT && history.every(msg => msg === history[0] && msg.length > 0)) {
         await this.applyAutoBlock(customer.id, phone, 'repetitive_spam', tenantId);
         return { blocked: true, flagged: false, reason: 'repetitive_spam' };
       }

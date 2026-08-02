@@ -1,6 +1,7 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import { CircuitBreaker } from '../utils/circuit-breaker';
+import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -117,7 +118,7 @@ export class CapiService {
         data: [eventData],
       };
 
-      const url = `https://graph.facebook.com/v19.0/${pixelId}/events?access_token=${accessToken}`;
+      const url = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
 
       console.log(`[CAPI] Sending event ${eventName} to Meta for customer ${customer.phone}`);
 

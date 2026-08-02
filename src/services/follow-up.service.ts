@@ -6,6 +6,11 @@ import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { wabaTemplateService } from './waba-template.service';
 import { wabaConsentService } from './waba-consent.service';
 
+// Parameter batch/throttle follow-up — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
+const FOLLOWUP_BATCH_LIMIT = parseInt(process.env.FOLLOWUP_BATCH_LIMIT || '20', 10);
+const FOLLOWUP_THROTTLE_BASE_MS = parseInt(process.env.FOLLOWUP_THROTTLE_BASE_MS || '1500', 10);
+const LOST_CUSTOMER_GRACE_DAYS = parseInt(process.env.LOST_CUSTOMER_GRACE_DAYS || '3', 10);
+
 export class FollowUpService {
   /**
    * Mengambil semua template follow-up dari database (dengan fallback ke hardcode default).
@@ -220,7 +225,7 @@ export class FollowUpService {
         include: {
           customer: true,
         },
-        take: 20, // Batch limit per execution
+        take: FOLLOWUP_BATCH_LIMIT, // Batch limit per execution (env FOLLOWUP_BATCH_LIMIT)
       });
 
       if (dueFollowUps.length === 0) {
@@ -302,10 +307,10 @@ export class FollowUpService {
 
       console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${name})`);
       
-      // Throttling acak 5-15 detik antar customer
+      // Throttling acak antar customer (env: FOLLOWUP_THROTTLE_BASE_MS s/d +FOLLOWUP_THROTTLE_BASE_MS*10, default 5-15 detik)
       const isTest = process.env.NODE_ENV === 'test';
       if (!isTest) {
-        const delay = Math.floor(Math.random() * 10000) + 5000;
+        const delay = Math.floor(Math.random() * FOLLOWUP_THROTTLE_BASE_MS * 10) + FOLLOWUP_THROTTLE_BASE_MS;
         await new Promise((r) => setTimeout(r, delay));
       }
 
@@ -436,14 +441,13 @@ export class FollowUpService {
 
   /**
    * Mengecek customer yang statusnya 'active' dan telah dikirimi follow-up NEXT_TREATMENT Stage 3
-   * lebih dari 3 hari yang lalu, serta tidak melakukan booking baru sejak saat itu.
+   * lebih dari LOST_CUSTOMER_GRACE_DAYS hari yang lalu, serta tidak melakukan booking baru sejak saat itu.
    * Mengubah status mereka menjadi 'lost'.
    */
   public async checkAndSetLostCustomers(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-      const gracePeriodDays = 3;
       const thresholdDate = new Date();
-      thresholdDate.setDate(thresholdDate.getDate() - gracePeriodDays);
+      thresholdDate.setDate(thresholdDate.getDate() - LOST_CUSTOMER_GRACE_DAYS);
 
       // Cari follow-up NEXT_TREATMENT stage 3 yang SENT dan sent_at <= thresholdDate
       const sentStage3FollowUps = await prisma.followUp.findMany({
@@ -478,7 +482,7 @@ export class FollowUpService {
             where: { id: f.customer_id },
             data: { status: 'lost' },
           });
-          console.log(`[FollowUp Service] Customer ${f.customer_id} marked as 'lost' (no new reservation 3 days after Stage 3 follow-up).`);
+          console.log(`[FollowUp Service] Customer ${f.customer_id} marked as 'lost' (no new reservation ${LOST_CUSTOMER_GRACE_DAYS} days after Stage 3 follow-up).`);
         }
       }
     } catch (err) {

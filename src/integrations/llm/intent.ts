@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
+import { getBrandIdentity } from '../../config/brand';
 import { llmOutageStorage } from './context';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -57,7 +58,7 @@ export class LLMIntentService {
               role: 'system',
                content: `${BOT_PERSONA_PROMPT}
  
-Anda adalah Intent Classifier untuk percakapan WhatsApp Kala Moms and Baby Spa.
+Anda adalah Intent Classifier untuk percakapan WhatsApp ${getBrandIdentity().businessName}.
 Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format JSON strictly {"intent": "interested" | "not_interested" | "asking_schedule" | "faq_question" | "other"}:
  
 - "faq_question": Jika pengguna menanyakan informasi umum/FAQ moms & baby spa, seperti manfaat treatment, jenis perawatan, harga, durasi, atau pertanyaan seputar pijat dan treatment (contoh: "pijat bayi itu buat apa?", "ada pijat ibu hamil ga?", "berapa harga treatmentnya?", "pijat bayi boleh dari umur berapa?").
