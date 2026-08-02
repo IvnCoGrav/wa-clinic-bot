@@ -20,6 +20,8 @@ Engine percakapan otomatis berbasis **State Machine** untuk bisnis Klinik Treatm
 wa-clinic-bot/
 ├── prisma/
 │   └── schema.prisma              # Skema database (Customers, Conversations, Messages, KnowledgeChunks)
+├── docs/
+│   └── KNOWN_ISSUES.md            # Tech debt & known issues (drift migrasi, enum ordering, dsb)
 ├── src/
 │   ├── config/
 │   │   ├── env.ts                 # Environment variables parser
@@ -34,6 +36,7 @@ wa-clinic-bot/
 │   │   ├── google-maps/
 │   │   │   └── geocoding.ts       # Geocoding & Reverse Geocoding
 │   │   └── llm/
+│   │       ├── ai-router.ts       # AI Router Engine (LLM intent classifier + circuit breaker + shadow mode)
 │   │       ├── intent.ts          # 5-Intent Classifier (termasuk intent 'faq_question')
 │   │       └── generator.ts       # Persona-based RAG FAQ Response Generator
 │   ├── state-machine/
@@ -49,17 +52,21 @@ wa-clinic-bot/
 │   │   ├── delivery.service.ts    # Logic ongkir (Haversine & boundary tiering)
 │   │   ├── customer.service.ts    # Ops database Customer
 │   │   ├── conversation.service.ts# Ops state conversation & timeout auto-release
+│   │   ├── ai-router-evaluation.service.ts # Log evaluasi router + eskalasi UNKNOWN berulang
 │   │   └── message.service.ts     # Audit log & Idempotency Check (wa_message_id)
 │   ├── routes/
 │   │   ├── webhook.route.ts       # POST webhook WAHA (event: "message") + Guard Clause
 │   │   └── admin.route.ts         # REST Endpoints: Human Handling, Import FAQ, Import Document
+│   ├── scripts/
+│   │   └── check-router-accuracy.ts # Cek akurasi shadow mode (gate matikan shadow)
 │   └── app.ts                     # Fastify server entry point
 ├── tests/
 │   ├── unit/
 │   │   ├── delivery.test.ts       # Test ongkir & boundary exact values (5.0, 5.01, 6.0, 6.01, 10.0, 10.01)
 │   │   ├── typing.test.ts         # Test formula delay (800ms base + 40ms/char, cap 4s)
 │   │   ├── knowledge.test.ts      # Test text chunker & FTS search
-│   │   └── state-machine.test.ts  # Test transisi state & auto-release
+│   │   ├── state-machine.test.ts  # Test transisi state & auto-release
+│   │   └── ai-router-engine.test.ts # Test AI Router (50 skenario test plan + observability + UNKNOWN eskalasi)
 │   └── integration/
 │       └── waha-webhook.test.ts   # Test WAHA event, idempotency & guard clause
 ├── Dockerfile
@@ -120,6 +127,64 @@ Untuk menyalakan database PostgreSQL dan server bot:
 docker-compose up -d --build
 docker-compose exec app npx prisma migrate dev --name init
 ```
+
+---
+
+## 🚀 Deployment & Runbook Migration
+
+### Prisma Migrations — Jalankan ke Environment Baru
+
+Pastikan `DATABASE_URL` sudah diisi, lalu:
+
+```bash
+npx prisma generate
+npx prisma migrate deploy
+```
+
+> ⚠️ **Known pitfall: `relation "children" already exists`**
+>
+> Migration `20260802000000_add_children` pernah tercatat **failed** di `_prisma_migrations`
+> (`finished_at = NULL`) meski tabel `children` sudah terlanjur dibuat — ini menyisakan drift
+> antara folder `prisma/migrations` dan tabel `_prisma_migrations`. Di environment yang terdampak,
+> `migrate deploy` gagal di tengah jalan dengan error `relation "children" already exists`.
+>
+> **Fix** (sekali saja, JANGAN drop tabel `children`):
+> ```bash
+> npx prisma migrate resolve --applied 20260802000000_add_children
+> npx prisma migrate deploy
+> ```
+>
+> Verifikasi tidak ada drift antara DB asli dan skema (output harus `-- This is an empty migration.`):
+> ```bash
+> npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
+> ```
+
+> ⚠️ **Known issue: `migrate diff --from-migrations` (shadow replay) rusak**
+>
+> Replay migration dari scratch ke shadow DB gagal di `20260801000000_add_failed_followup_status`
+> (`ERROR: type "FollowUpStatus" does not exist`) — bug urutan enum, **pre-existing** (bukan dari
+> perubahan terbaru). Gunakan `--from-url` (perintah di atas) sebagai pengganti. Detail:
+> `docs/KNOWN_ISSUES.md`.
+
+### Shadow Mode AI Router — Timeline Monitoring
+
+Fitur observasi router (`AI_ROUTER_ENABLED=true` + `AI_ROUTER_SHADOW_MODE=true`) menulis evaluasi
+per pesan ke tabel `ai_router_evaluations`. Cek akurasi dengan:
+
+```bash
+npx tsx src/scripts/check-router-accuracy.ts --days=7
+```
+
+**Jadwal cek yang disarankan:**
+- **Hari ke-1:** langsung jalankan script — kriteria **mismatch `MEDICAL_CONCERN` = 0 (hard-zero)**
+  wajib dipantau dari hari pertama, jangan menunggu 7 hari.
+- **Hari ke-3:** cek tren pertama (escalation match rate, UNMAPPED rate).
+- **Hari ke-7:** jalankan gate lengkap sebelum memutuskan mematikan shadow mode.
+
+**Kriteria aman mematikan `AI_ROUTER_SHADOW_MODE` (semua wajib):**
+1. `escalation match rate >= 98%` selama minimal 7 hari berturut-turut, DAN
+2. mismatch terkait `MEDICAL_CONCERN` = **0** (hard-zero), DAN
+3. `UNMAPPED` rate di `legacy_intent` < 5%.
 
 ### 3. Endpoints Admin Knowledge Base
 

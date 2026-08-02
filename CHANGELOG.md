@@ -6,6 +6,181 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-02
+
+### Added - WABA Integration Implementation (Fase 1-3)
+
+**Fase 1 — Abstraction Layer**
+- **`src/integrations/whatsapp/gateway.types.ts`** (baru): interface `WhatsAppGateway` (`sendTextMessage`, `sendTemplateMessage`, `sendImageMessage`, `sendTypingIndicator`, `markAsRead`) + `SendResult`, `TemplateParam`, `TemplateComponent`, `NormalizedInboundMessage`.
+- **`src/integrations/whatsapp/waha.driver.ts`** (baru): `WahaGatewayDriver` — implementasi gateway untuk WAHA, membungkus `IWahaClient` existing, konversi `to` (E.164) → chatId `@c.us`/`@lid`.
+- **`src/integrations/whatsapp/factory.ts`** (baru): `getGateway()` / `getWabaGateway()` dengan cache per-tenant.
+- **`tests/unit/whatsapp-gateway.test.ts`** (baru): 12 test — sendText, sendImage, sendTemplate interpolation, typing indicator, markAsRead.
+
+**Fase 2 — WABA Core + Webhook Normalizer**
+- **`src/integrations/whatsapp/waba.driver.ts`** (baru): `WabaGatewayDriver` — Meta Cloud API `v25.0`, send text/template/image, typing indicator resmi (mark-as-read + `typing_indicator`, cap 25 detik), dedup mark-as-read, `verifyHubChallenge`.
+- **`src/integrations/whatsapp/normalizer.ts`** (baru): `normalizeWabaPayload()` — payload webhook Meta → `NormalizedInboundMessage[]` (text/location/image).
+- **`src/routes/waba-webhook.route.ts`** (baru): `GET /api/webhook/waba` (hub.challenge) + `POST /api/webhook/waba` (verifikasi HMAC `X-Hub-Signature-256`, normalisasi, idempotency, queue).
+- **`tests/unit/waba-driver-and-webhook.test.ts`** (baru): 16 test — driver WABA + normalizer.
+
+**Fase 3 — Multi-tenant Config + Encryption**
+- **`prisma/schema.prisma`** (update): enum `WhatsappProvider`; `Tenant` + `whatsapp_provider`, `waha_session_id`, `waba_phone_number_id`, `waba_business_account_id`, `waba_access_token`, `waba_webhook_verify_token`; `Customer` + `marketing_opt_in`, `marketing_opt_in_at`, `marketing_opt_in_source`.
+- **`prisma/migrations/20260804000000_add_waba_provider/migration.sql`** (baru): migrasi enum + kolom Tenant/Customer.
+- **`src/utils/encryption.ts`** (baru): `encryptSecret`/`decryptSecret` AES-256-GCM (IV + authTag base64), `generateEncryptionKey`. Token WABA disimpan encrypted.
+- **`src/integrations/whatsapp/factory.ts`** (update): `resolveGatewayForTenant()` — resolve dari DB per `tenant_id`, decrypt token, fallback aman WAHA saat DB down/decrypt gagal.
+- **`tests/unit/encryption.test.ts`** (baru): 7 test roundtrip, unique IV, key validation.
+- **`tests/unit/whatsapp-factory-multitenant.test.ts`** (baru): 8 test — resolve WAHA/WABA per tenant, fallback, cache.
+
+**Verifikasi**: 579/579 test pass (51 file), TypeScript clean.
+
+**Fase 4 — Template Engine + Consent Gatekeeper + Opt-out**
+- **`prisma/schema.prisma`** (update): enum `FollowUpStatus` + `SKIPPED`; model baru `WabaTemplate` (tabel `waba_templates`) — mapping per-tenant stage → HSM template name, kategori (`UTILITY`/`MARKETING`), bahasa, status approval Meta (`APPROVED`/`PENDING`/`REJECTED`/`PAUSED`), `is_active`.
+- **`prisma/migrations/20260805000000_add_waba_templates/migration.sql`** (baru): migrasi enum + tabel `waba_templates`.
+- **`src/services/waba-template.service.ts`** (baru): `getTemplateMapping()` resolve mapping HSM dari DB per tenant (fallback aman ke default konvensi saat DB kosong/down), `saveTemplateMapping()` upsert per tenant, `isUsable()` (hanya `APPROVED` + aktif), `buildBodyComponents()` (param `{{1}}` name, `{{2}}` time, `{{3}}` treatment, `{{4}}` baby — falsy dilewati).
+- **`src/services/waba-consent.service.ts`** (baru): klasifikasi kategori `UTILITY`/`MARKETING` (REMINDER/REVIEW = UTILITY; NO_PURCHASE/NEXT_TREATMENT = MARKETING), `canSendMarketing()` gatekeeper (MARKETING wajib `marketing_opt_in=true`), `recordOptIn()`/`recordOptOut()` audit trail (at + source).
+- **`src/services/waba-optout.service.ts`** (baru): deteksi keyword opt-out `STOP`/`UNSUBSCRIBE`/`BERHENTI`/`BATAL PROMO` (BERHENTI hanya match jika dikombinasi kata marketing PROMO/PENAWARAN/IKLAN/SEMUA — hindari false positive percakapan normal), `handleOptOut()` set opt-in false + batalkan semua follow-up PENDING/QUEUED, ack message.
+- **`src/services/follow-up.service.ts`** (update): `executeFollowUp()` jadi provider-aware — resolve gateway per tenant; cabang WABA via `executeFollowUpWaba()` (HSM template + consent gatekeeper + skip template belum APPROVED dengan alert admin + SKIPPED/FAILED), cabang WAHA tetap rolling template existing (zero regresi).
+- **`src/services/alert.service.ts`** (update): enum `AlertType` + `FOLLOWUP_FAILED`.
+- **`src/state-machine/machine.ts`** (update): global opt-out gate — hanya tenant WABA (`_provider === 'WABA'`), semua state; deteksi keyword → `handleOptOut()` + ack via gateway WABA + log outbound; WAHA tidak terpengaruh.
+- **Tests**: +23 test (`waba-template-consent-optout.test.ts` 14 test + `follow-up-waba-branch.test.ts` 9 test). Total 602 test pass (53 file), TypeScript clean (0 error baru).
+
+**Fase 5 — Admin Dashboard Provider Toggle + Template Status**
+- **`src/routes/admin.route.ts`** (update): `GET /api/admin/whatsapp-provider` — status provider per tenant, live check session WAHA (best-effort), status kredensial WABA (masked, `configured`/`hasAccessToken`), daftar status mapping template HSM per tenant via `getAllTemplateMappings()`. `PATCH /api/admin/whatsapp-provider` — toggle WAHA/WABA + simpan kredensial WABA (token di-encrypt AES-256-GCM, tidak pernah plaintext) + `resetGateway()` agar resolve memakai config terbaru + audit action `UPDATE_WHATSAPP_PROVIDER`. `GET/POST /api/admin/waba-templates` — list & upsert mapping template per tenant.
+- **`src/services/waba-template.service.ts`** (update): `getAllTemplateMappings()` — gabungkan mapping DB per tenant dengan default konvensi (row DB ditandai `isDefault:false`).
+- **`packages/admin-dashboard/src/pages/tenant/Settings.tsx`** (update): panel "WhatsApp Provider" — status indicator, toggle WAHA/WABA, form kredensial WABA (token ditulis ulang tanpa dibaca kembali), grid status template HSM per stage.
+- **`tests/setup.ts`** (update): mock prisma + model `wabaTemplate` (findUnique/findFirst/findMany/create/update/upsert/deleteMany) untuk test baru.
+- **Tests**: +5 test (`waba-admin-endpoints.test.ts` — GET status+templates, masked token, PATCH encrypt & toggle, validasi provider, POST upsert). Total 607 test pass (54 file). Dashboard build clean.
+
+### Added - SaaS Readiness + WABA Integration Planning
+- **`docs/SAAS_READINESS_AUDIT.md`** (baru): audit lengkap kesiapan SaaS multi-tenant — 23 blocker (P0-P3) dengan lokasi file:line + effort estimate + checklist migrasi 5 fase + pola kode benar vs salah. Verdict: DB schema siap (17 model ber-tenant_id), layer atas masih single-tenant.
+- **`docs/WABA_INTEGRATION_PLAN.md`** (baru): rencana arsitektur dual-gateway WhatsApp (WAHA + Meta Cloud API) — coexist per-tenant, interface `WhatsAppGateway` + factory, webhook normalizer, 24h window map per stage follow-up, mekanisme opt-in marketing (kolom `marketing_opt_in` + consent flow + gatekeeper + opt-out scope WABA-only), skema DB, matriks risiko, 5 fase implementasi dengan feature-flag.
+- **`.agents/skills/saas-readiness/SKILL.md`** (update): status table diperbaiki dari "✅ Sudah benar" → ❌/⚠️ sesuai temuan audit; tambah mandat larang hardcode brand; tambah link ke `docs/SAAS_READINESS_AUDIT.md`.
+- **`CLAUDE.md`** (update): tambah note di section RTK — `rtk` adalah fitur built-in 9router (model layer), BUKAN CLI executable. Jangan panggil `rtk` langsung di terminal.
+
+## [1.11.0] - 2026-08-02
+
+### Added - AI Router Observability + UNKNOWN Repeated Escalation
+- **`prisma/schema.prisma`**:
+  - Model baru `AiRouterEvaluation` (tabel `ai_router_evaluations`): snapshot evaluasi router
+    (llm_intent, llm_confidence, llm_used_fallback, legacy_intent, legacy_escalated,
+    intent_match, escalation_match, mismatch_notes, response_time_ms).
+  - Field `conversations.consecutive_unknown_count` (default 0).
+  - Migration: `prisma/migrations/20260803000000_add_ai_router_evaluations/migration.sql`.
+- **`src/services/ai-router-evaluation.service.ts`** (baru):
+  - `logRouterEvaluation()`: tulis evaluasi router ke DB; gagal simpan di-swallow agar tidak mengganggu balasan customer.
+  - `mapLegacyDecisionToIntent()`: translasi tipis keputusan legacy ke label intent; label `UNMAPPED` sengaja beda dari `UNKNOWN`.
+  - `handleRouterResult()`: counter UNKNOWN berulang per conversation; >= 2x -> force eskalasi human (`escalation_reason=UNKNOWN_REPEATED`); reset saat intent lain terdeteksi.
+- **`src/integrations/llm/ai-router.ts`**: enum `ESCALATION_REASONS` + `'UNKNOWN_REPEATED'`.
+- **`src/state-machine/machine.ts`**:
+  - Full-mode (non-shadow): UNKNOWN x2 berturut-turut -> eskalasi otomatis ke HUMAN_HANDLING (silent).
+  - Shadow & full mode: evaluasi router di-log ke `ai_router_evaluations` per pesan.
+- **`src/scripts/check-router-accuracy.ts`** (baru): cek akurasi shadow vs legacy; gate matikan shadow mode
+  (escalation >= 98%, medical mismatch = 0 hard-zero, UNMAPPED < 5%).
+- **Tests**: +17 test (log evaluasi, mapping legacy, counter UNKNOWN, e2e machine 2x UNKNOWN -> HUMAN_HANDLING). Total 525 test pass.
+
+### Notes - Environment / Deploy
+- `prisma generate` penuh kembali normal. Sempat ter-regenerate dengan `--no-engine` yang mengunci client ke
+  URL `prisma://` (P6001, Accelerate-only) saat engine dll terkunci EPERM oleh proses berjalan; sudah digenerate
+  ulang penuh setelah proses yang lock dimatikan. Runtime terverifikasi `P2021` (normal) bukan `P6001`.
+- Migration `20260803000000_add_ai_router_evaluations` sudah di-deploy ke DB docker lokal; zero drift
+  terverifikasi via `migrate diff --from-url`.
+- Runbook deploy & jadwal monitoring shadow mode: `README.md` bagian "Deployment & Runbook Migration".
+- Known issue pre-existing: `migrate diff --from-migrations` rusak oleh urutan enum `FollowUpStatus` di
+  `20260801000000_add_failed_followup_status`. Lihat `docs/KNOWN_ISSUES.md`.
+
+## [1.10.0] — 2026-08-02
+
+### Added — Structured Children + Dynamic Age Engine
+- **`prisma/schema.prisma`**:
+  - Model baru `Child` (tabel `children`): per customer, relasi ke `Reservation`, key unik `(customer_id, name)` anti-duplikasi saat repeat order, multi-tenant (`tenant_id`).
+  - Field: `name`, `birth_date` (estimasi dari teks usia), `age_months_at_registration`, `raw_age_text`.
+  - Relasi `Customer.children[]` & `Reservation.children[]`.
+  - Migration: `prisma/migrations/20260802000000_add_children/migration.sql`.
+- **`src/utils/age-calculator.ts`** (baru):
+  - `parseAgeTextToBirthDate()`: estimasi tanggal lahir dari teks usia Indonesia (`6 bulan`, `1 tahun 2 bulan`, `3 minggu`, `10 hari`, `2th`, `6 bulan 2 hari`).
+  - `computeCurrentAge()`: usia DINAMIS terhadap hari ini (hari ini → `X bulan`, `<24 bulan` → `X tahun Y bulan`, `<1 bulan` → `X hari`), dari `birth_date` ATAU snapshot `age_months_at_registration` + `created_at`.
+- **`src/services/child.service.ts`** (baru):
+  - `upsertChildrenFromBabies()`: persist anak saat reservasi dibuat (DB offline → senyap).
+  - `getChildrenWithCurrentAge()`: daftar anak customer dengan `current_age` realtime.
+- **`src/state-machine/handlers/interest.ts`** & **`src/routes/admin.route.ts`**:
+  - Panggil `childService.upsertChildrenFromBabies()` setelah reservasi dibuat.
+  - `GET /api/admin/reservations` include `customer.children` + hitung `current_age` per anak.
+- **`packages/admin-dashboard/src/pages/tenant/Reservations.tsx`**:
+  - Modal Manage → section "Bayi / Anak (n)" prioritas dari `children` DB (usia realtime), tampil `nama · usia sekarang` + catatan `(saat booking: X)` jika berbeda.
+  - Fallback lama: `baby_details` API → parse `raw_text`/`treatment_detail` client-side.
+- **`packages/admin-dashboard/src/types/index.ts`**: type `ChildInfo` + `customer.children`.
+- **Unit Tests**: `tests/unit/age-calculator.test.ts` (15 test) & `tests/unit/child-service.test.ts` (5 test) 100% PASS.
+
+### Added — Baby Details di Reservation Detail (Manage Modal)
+- **`src/utils/reservation-text-parser.ts`**:
+  - `ParsedReservation.babies: BabyDetail[]` (nama + usia bayi/anak) — terstruktur, bukan string campur di treatmentDetail.
+  - Mendukung **beberapa anak**: satu baris multi-nilai (`Rara, Riri` / `&` / `dan`), blok `Nama Bayi`/`Usia Bayi/Anak` berulang, dan usia dalam kurung (`Rara (6 bulan)`).
+  - Helper baru `extractBabyDetails(rawText)` + `buildBabyDetails()` + `preprocessReservationText()` (refactor preprocessing supaya bisa dipakai mandiri tanpa parse penuh).
+  - `treatmentDetail` kini memuat seluruh bayi (dipisah `|`) untuk multi-anak.
+- **`src/routes/admin.route.ts`**:
+  - `GET /api/admin/reservations` meng-enrich tiap reservasi dengan `baby_details` dari `raw_text` (kompatibel dengan data lama — tidak butuh kolom DB baru).
+- **`packages/admin-dashboard/src/pages/tenant/Reservations.tsx`**:
+  - Modal **Manage** → card "Patient Details" menampilkan daftar **Bayi / Anak (n)**: nama + umur per bayi.
+- **`packages/admin-dashboard/src/types/index.ts`**: type `BabyDetail` + `Reservation.baby_details`.
+- **Unit Tests**: `tests/unit/reservation-text-parser.test.ts` (+7 test: single bayi, 2 bayi satu baris, 2 bayi blok berulang, usia dalam kurung, `extractBabyDetails` inline/null).
+
+### Added — AI Router Engine (Shadow-First, LLM Intent Classification)
+- **`src/integrations/llm/ai-router.ts`** (baru):
+  - Klasifikasi 11 intent (`GREETING`, `PROVIDE_LOCATION`, `ASK_FAQ`, `INTERESTED_IN_BOOKING`, `PROVIDE_RESERVATION_DETAILS`, `ASK_SPECIFIC_SCHEDULE`, `MEDICAL_CONCERN`, `CONFIRMATION`, `NEGATION`, `CHITCHAT`, `UNKNOWN`) + ekstraksi entitas (lokasi, treatment, nama, tanggal, jam).
+  - Validasi output LLM dengan **Zod schema** (`AIRouterResponseSchema`) + **retry-once** dengan `buildRetryPrompt()` (hint field error ringkas, bukan raw stack trace).
+  - **Anti prompt-injection** di system prompt: pesan pelanggan SELALU data, bukan instruksi. Diverifikasi unit test.
+  - **Circuit breaker reuse** (`src/utils/circuit-breaker.ts`): CLOSED → OPEN → HALF_OPEN, cooldown 30s, window 10.
+  - **Rule-based fallback** deterministik yang **re-use `MedicalDetectionService`** (SINGLE SOURCE OF TRUTH — tidak ada keyword list medis duplikat yang bisa divergen).
+  - **CONTRACT ANTI-BYPASS gazetteer**: `location_mention` dari router HANYA kandidat teks, wajib di-resolve ulang via `geocodingService.geocodeText()` (threshold asli kelurahan 0.75 / kecamatan 0.82) — tidak pernah langsung jadi `confirmed_kelurahan`.
+  - Feature flags: `AI_ROUTER_ENABLED` (aktifkan) & `AI_ROUTER_SHADOW_MODE` (log perbandingan LLM vs fallback legacy tanpa mengubah keputusan state).
+- **`src/state-machine/machine.ts`**:
+  - GATE 2.5: jalankan AI Router saat `AI_ROUTER_ENABLED=true`, share riwayat percakapan dengan NLU, expose `routerDecision` ke handler.
+- **`src/state-machine/types.ts`**:
+  - `StateHandlerContext.routerDecision?: AIRouterDecision`.
+- **Unit Tests**:
+  - `tests/unit/ai-router-engine.test.ts` (38 test cases 100% PASS): schema validation, state priority (AWAITING_LOCATION FAQ vs lokasi), affirmation signal (AFFIRM/DENY/MIXED/NONE + interjeksi), schedule escalation, medical fallback parity, reservation extraction, prompt injection (langsung + shadow mode), Zod retry-once, circuit breaker HALF_OPEN recovery, compareRouterDecisions, anti-bypass gazetteer, dan guard kelurahan-kosong menahan form reservasi di level state machine.
+
+---
+
+## [1.9.0] — 2026-08-01
+
+### Fixed — Reservation Text Parser (Wrapped & Double-Spaced Labels)
+- **`src/utils/reservation-text-parser.ts`**:
+  - Preprocessor otomatis memecah label inline dan menyambungkan kata label yang terpotong di tengah baris (misal `Nama Bun\nda:` -> `Nama Bunda:`).
+  - Normalisasi spasi ganda pada label dan section header (misal `Nama  Bunda:` terdeteksi sama dengan `Nama Bunda:`).
+- **Unit Tests**:
+  - `tests/unit/reservation-stress.test.ts` (30 variasi acak form reservasi 100% PASS).
+  - `tests/unit/reservation-text-parser.test.ts` (+1 test case multiline wrapped form).
+
+### Added — Personalized Treatment FAQ Follow-Up
+- **`src/config/persona.ts`**:
+  - `faqFollowUp` sekarang menerima nama treatment spesifik (misal `Sinar Moksa`) dan menghasilkan 4 variasi CTA natural secara acak (rotasi anti-bot).
+- **`src/state-machine/handlers/interest.ts`**:
+  - Ekstrak nama treatment dari NLU entity atau catalog match (dengan pembersihan suffix kurung) untuk di-inject ke `faqFollowUp`.
+- **Unit Tests**:
+  - `tests/unit/treatment-followup-personal.test.ts` (20 test cases 100% PASS).
+  - `tests/unit/treatment-catalog-search.test.ts` (30 test cases dengan IDF scoring 100% PASS).
+
+### Fixed — Persona Language Strictness & Brand Enforcement
+- **`src/config/persona.ts`**:
+  - Tambah aturan ketat: *"HANYA gunakan bahasa Indonesia. DILARANG menggunakan bahasa Inggris, Mandarin, Jepang, Arab..."* (mencegah keluarnya karakter Cina seperti "顺便").
+  - Tambah aturan ejaan merek: *"Kala Moms and Baby Spa — EJAAN HARUS PERSIS."*
+
+### Fixed — Sandbox UI Multiline Formatting & Input UX
+- **`packages/admin-dashboard/src/pages/tenant/AiSandbox.tsx`**:
+  - Render message content dengan `<div className="whitespace-pre-wrap break-words font-sans">` agar karakter `\n` dirender sebagai enter/ganti baris di browser.
+  - Textarea input multi-line dengan dukungan `Enter` untuk kirim dan `Shift+Enter` untuk baris baru.
+  - Tombol **Kirim** hijau lebih menonjol dengan indicator spinner loading.
+
+### Fixed — CLI Simulator
+- **`src/cli/chat-simulator.ts`**:
+  - Mode input multi-line otomatis saat mengetik `Berikut list untuk reservasi` (mengumpulkan baris sampai baris kosong).
+  - `/reset` sekarang menghapus lokasi confirmed dan pending secara total via `customerService.resetFullLocation()`.
+
+### Test Suite Status
+- **42 Test Files \| 391 Tests \| 100% PASS** ✅
+
+---
+
 ## [1.8.0] — 2026-08-01
 
 ### Added — Fase 2 Scheduling & Follow-Up Engine & UI

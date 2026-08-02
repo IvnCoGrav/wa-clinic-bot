@@ -12,21 +12,21 @@
         "kr/claude-sonnet-5": {
           "name": "Claude Sonnet 5 (9router)",
           "limit": {
-            "context": 1000000,
+            "context": 128000,
             "output": 128000
           }
         },
         "kr/claude-opus-5-thinking": {
           "name": "Claude Opus 5 Thinking (9router)",
           "limit": {
-            "context": 1000000,
+            "context": 128000,
             "output": 128000
           }
         },
         "kr/gpt-5.6-sol": {
           "name": "GPT 5.6 Sol (9router)",
           "limit": {
-            "context": 272000,
+            "context": 128000,
             "output": 128000
           }
         },
@@ -40,7 +40,7 @@
         "ag/gemini-3.6-flash-medium": {
           "name": "Gemini 3.6 Flash Medium (9router)",
           "limit": {
-            "context": 1000000,
+            "context": 128000,
             "output": 64000
           }
         }

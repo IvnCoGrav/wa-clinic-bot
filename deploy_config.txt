@@ -15,3 +15,17 @@
 1.  **Changelog Inspection:** Before executing any docker updates or pulling new images, check the official WAHA Changelog at `https://waha.devlike.pro/docs/overview/changelog/` to screen for breaking changes.
 2.  **Staging-First Validation:** Never upgrade the WAHA image in the production environment directly. Verify all session statuses (`WORKING`, `SCAN_QR_CODE`) and message webhook processing in the staging environment first.
 3.  **No Late-Tagging:** Do not use the `:latest` or `:noweb` tags without version numbers in production deployments. Always use the fully qualified version-pinned tags to prevent automatic updates from introducing breaking changes.
+
+## AI Router Shadow Mode - Feature Rollout Protocol (2026-08-02)
+Fitur observasi router (`AI_ROUTER_ENABLED=true` + `AI_ROUTER_SHADOW_MODE=true`) menulis evaluasi ke tabel
+`ai_router_evaluations`. Rollout shadow mode WAJIB mengikuti urutan ini (runbook lengkap: `README.md`):
+1.  **Prisma:** `npx prisma generate` + `npx prisma migrate deploy`. Jika error `relation "children" already exists`,
+    fix sekali: `npx prisma migrate resolve --applied 20260802000000_add_children` lalu deploy ulang.
+2.  **Verifikasi drift:** `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script`
+    harus output `-- This is an empty migration.`.
+3.  **Smoke test:** 1 pesan asli -> cek row muncul di `ai_router_evaluations`; lalu jalankan
+    `npx tsx src/scripts/check-router-accuracy.ts --days=7` sekali.
+4.  **Nyalakan shadow mode di production** HANYA setelah 3 gate lolos (escalation >= 98% 7 hari berturut-turut,
+    mismatch MEDICAL_CONCERN = 0 hard-zero sejak hari ke-1, UNMAPPED < 5%). Jadwal cek: hari ke-1, ke-3, ke-7.
+5.  **Jangan pernah pakai `prisma generate --no-engine`** untuk workaround dll terkunci — hasilnya client
+    Accelerate-only (`P6001`, URL harus `prisma://`). Matikan proses yang lock engine dulu, generate penuh.
