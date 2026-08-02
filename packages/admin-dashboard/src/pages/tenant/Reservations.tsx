@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
+import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { 
   Search, 
   Calendar as CalendarIcon, 
   User, 
+  Baby,
   MapPin, 
   Check, 
   X, 
@@ -95,6 +97,22 @@ export const Reservations: React.FC = () => {
       toast(`Error deleting: ${err.message}`, 'error');
       setLoading(false);
     }
+  };
+
+  // Resolve info bayi/anak: prioritas children DB (usia real-time) → baby_details API → parse raw_text client
+  const getBabyRows = (res: Reservation | null): Array<{ name: string; age: string; regAge?: string }> => {
+    if (!res) return [];
+    const children = res.customer?.children;
+    if (children && children.length > 0) {
+      return children.map((c) => ({
+        name: c.name,
+        age: c.current_age || c.raw_age_text || '',
+        regAge: c.raw_age_text || undefined,
+      }));
+    }
+    const bd = res.baby_details;
+    if (bd && bd.length > 0) return bd.map((b) => ({ name: b.name, age: b.age }));
+    return extractBabiesFromRawText(res.raw_text, res.treatment_detail).map((b) => ({ name: b.name, age: b.age }));
   };
 
   // Filter reservations
@@ -328,6 +346,29 @@ export const Reservations: React.FC = () => {
                     <div className="flex items-center space-x-2 text-slate-400 text-xs">
                       <MapPin size={14} className="text-slate-500" />
                       <span>{selectedRes.customer?.kelurahan}, {selectedRes.customer?.kecamatan}, {selectedRes.customer?.kota}</span>
+                    </div>
+                  )}
+
+                  {/* Baby / Anak info */}
+                  {getBabyRows(selectedRes).length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-white/5 space-y-1.5">
+                      <span className="text-[11px] text-pink-400 font-bold uppercase tracking-wider block">
+                        Bayi / Anak ({getBabyRows(selectedRes).length})
+                      </span>
+                      {getBabyRows(selectedRes).map((baby, i) => (
+                        <div key={i} className="flex items-center space-x-2 text-slate-200">
+                          <Baby size={14} className="text-pink-500/70 flex-shrink-0" />
+                          <span>
+                            <span className="font-semibold">{baby.name || '-'}</span>
+                            <span className="text-slate-300 text-xs"> · {baby.age || '?'}</span>
+                            {baby.regAge && baby.regAge !== baby.age && (
+                              <span className="text-slate-500 text-[11px] ml-1">
+                                (saat booking: {baby.regAge})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

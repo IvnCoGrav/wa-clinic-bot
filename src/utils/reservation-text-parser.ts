@@ -1,5 +1,10 @@
 import { TreatmentCategory } from '@prisma/client';
 
+export interface BabyDetail {
+  name: string;
+  age: string;
+}
+
 export interface ParsedReservation {
   name: string;
   phone: string;
@@ -10,6 +15,7 @@ export interface ParsedReservation {
   treatmentDetail: string;
   bookingDate: Date | null;
   rawText: string;
+  babies: BabyDetail[];
 }
 
 export interface ParseResult {
@@ -23,10 +29,13 @@ export interface ParseResult {
  * Parser toleran untuk meng-parse format teks list reservasi Bidan Yusi (Kala Moms and Baby Spa)
  * Menggunakan pendekatan baris-per-baris untuk keamanan parsing dan keandalan tinggi.
  */
-export function parseReservationText(rawText: string): ParseResult {
-  if (!rawText) {
-    return { success: false, error: 'Teks reservasi kosong.', missingFields: ['rawText'] };
-  }
+
+/**
+ * Preprocessing: bersihkan formatting markdown, sambungkan label terpotong,
+ * dan pecah label inline agar baris-per-baris mudah diproses.
+ */
+export function preprocessReservationText(rawText: string): string {
+  if (!rawText) return '';
 
   // Bersihkan formatting markdown WhatsApp (*, _, ~, `)
   let cleaned = rawText.replace(/[*_~`]/g, '').replace(/\r\n/g, '\n');
@@ -53,6 +62,16 @@ export function parseReservationText(rawText: string): ParseResult {
   const inlineLabelRegex = /(\s+)(Nama Bunda\s*:|Alamat & Shareloc\s*:|Alamat\s*:|Kec\s*&\s*Kota\s*:|\bKec\s*:|\bKota\s*:|No\.?\s*Hp\s*:|Nama Bayi\s*:|Usia Bayi\/Anak\s*:|Usia Bayi\s*:|Usia Kehamilan[^\n:]*:|Treatment\s*:|Pilihan treatment)/gi;
   cleaned = cleaned.replace(inlineLabelRegex, '\n$2');
 
+  return cleaned;
+}
+
+export function parseReservationText(rawText: string): ParseResult {
+  if (!rawText) {
+    return { success: false, error: 'Teks reservasi kosong.', missingFields: ['rawText'] };
+  }
+
+  const cleaned = preprocessReservationText(rawText);
+
   const lines = cleaned.split('\n');
 
   let name = '';
@@ -65,6 +84,8 @@ export function parseReservationText(rawText: string): ParseResult {
   let babyName = '';
   let babyAge = '';
   let babyTreatment = '';
+  const babyNameLines: string[] = [];
+  const babyAgeLines: string[] = [];
 
   let momsPregnancyAge = '';
   let momsTreatment = '';
@@ -119,8 +140,10 @@ export function parseReservationText(rawText: string): ParseResult {
     } else if (currentSection === 'BABY') {
       if (label.includes('nama bayi')) {
         babyName = value;
+        babyNameLines.push(value);
       } else if (label.includes('usia')) {
         babyAge = value;
+        babyAgeLines.push(value);
       } else if (label === 'treatment') {
         babyTreatment = value;
       }
@@ -133,18 +156,23 @@ export function parseReservationText(rawText: string): ParseResult {
     }
   }
 
+  const babies = buildBabyDetails(babyNameLines, babyAgeLines);
+
   // Validasi Field Krusial
   const missingFields: string[] = [];
   if (!name) missingFields.push('Nama Bunda');
   if (!phone) missingFields.push('No. Hp');
   if (!address) missingFields.push('Alamat & Shareloc');
 
-  const hasBabyTreatment = !!babyTreatment || !!babyName;
+  const hasBabyTreatment = !!babyTreatment || !!babyName || babyNameLines.length > 0;
   const hasMomsTreatment = !!momsTreatment || !!momsPregnancyAge;
   const treatmentDetailParts: string[] = [];
 
   if (hasBabyTreatment && babyTreatment) {
-    treatmentDetailParts.push(`Baby: ${babyTreatment} (Bayi: ${babyName || '-'}, Usia: ${babyAge || '-'})`);
+    const babyParts = babies.length > 0
+      ? babies.map((b) => `Bayi: ${b.name || '-'}, Usia: ${b.age || '-'}`).join(' | ')
+      : `Bayi: ${babyName || '-'}, Usia: ${babyAge || '-'}`;
+    treatmentDetailParts.push(`Baby: ${babyTreatment} (${babyParts})`);
   }
   if (hasMomsTreatment && momsTreatment) {
     treatmentDetailParts.push(`Moms: ${momsTreatment} (Kehamilan: ${momsPregnancyAge || '-'})`);
@@ -196,8 +224,111 @@ export function parseReservationText(rawText: string): ParseResult {
       treatmentDetail,
       bookingDate,
       rawText,
+      babies,
     },
   };
+}
+
+/**
+ * Ekstrak daftar bayi/anak (nama + usia) dari teks list reservasi mentah.
+ * Mendukung: satu bayi, beberapa bayi (dipisah koma/&/dan), blok berulang,
+ * dan usia yang ditulis dalam kurung "Nama (usia)".
+ * Dipakai untuk menampilkan info bayi di detail reservasi tanpa bergantung
+ * pada keberhasilan parse penuh.
+ */
+export function extractBabyDetails(rawText: string | null | undefined): BabyDetail[] {
+  if (!rawText) return [];
+  const cleaned = preprocessReservationText(rawText);
+  const lines = cleaned.split('\n');
+
+  const nameLines: string[] = [];
+  const ageLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) continue;
+    const label = trimmed.substring(0, colonIdx).trim().toLowerCase().replace(/\s+/g, ' ');
+    const value = trimmed.substring(colonIdx + 1).trim();
+
+    if (
+      label.includes('nama bayi') ||
+      label.includes('nama anak') ||
+      label.includes('nama baby') ||
+      label.includes('nama pasien') ||
+      label === 'anak' ||
+      label === 'baby'
+    ) {
+      nameLines.push(value);
+    } else if (
+      (label.includes('usia') || label.includes('umur')) &&
+      !label.includes('kehamilan') &&
+      !label.includes('bunda')
+    ) {
+      ageLines.push(value);
+    }
+  }
+
+  return buildBabyDetails(nameLines, ageLines);
+}
+
+/**
+ * Gabungkan baris nama & usia bayi menjadi daftar terstruktur.
+ */
+export function buildBabyDetails(nameLines: string[], ageLines: string[]): BabyDetail[] {
+  const result: BabyDetail[] = [];
+
+  // Ekspansi tiap baris nama → entri (tangani "Rara, Riri" dan "Rara (6 bulan)")
+  const nameEntries: { name: string; age: string | null }[] = [];
+  for (const line of nameLines) {
+    for (const part of splitMultiValue(line)) {
+      const p = part.trim();
+      if (!p) continue;
+      const parenMatch = p.match(/^(.+?)\s*\((?:umur|usia)?\s*([^)]+)\)$/i);
+      if (parenMatch) {
+        nameEntries.push({ name: parenMatch[1].trim(), age: parenMatch[2].trim() });
+      } else {
+        nameEntries.push({ name: p, age: null });
+      }
+    }
+  }
+
+  // Ekspansi tiap baris usia
+  const ages: string[] = [];
+  for (const line of ageLines) {
+    for (const a of splitMultiValue(line)) {
+      const t = a.trim();
+      if (t) ages.push(t);
+    }
+  }
+
+  const count = Math.max(nameEntries.length, ages.length);
+  for (let i = 0; i < count; i++) {
+    const entry = nameEntries[i];
+    result.push({
+      name: entry?.name || `Bayi ${i + 1}`,
+      age: ages[i] ?? entry?.age ?? '',
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Pecah nilai multi-bayi (misal "Rara, Riri" / "Kanaya & Kenshin" / "6 bulan, 2 tahun").
+ * Hanya pecah pada pemisah jelas (koma, &, "dan", ";") — bukan spasi.
+ */
+function splitMultiValue(value: string): string[] {
+  if (!value) return [];
+  return value
+    .replace(/\s+dan\s+/gi, ', ')
+    .replace(/\s*&\s*/gi, ', ')
+    .replace(/\s*;\s*/gi, ', ')
+    .split(/\s*,\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /**

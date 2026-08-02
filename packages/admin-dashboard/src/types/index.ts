@@ -5,6 +5,20 @@ export interface User {
   tenantId: string;
 }
 
+export interface BabyDetail {
+  name: string;
+  age: string;
+}
+
+export interface ChildInfo {
+  id: string;
+  name: string;
+  birth_date: string | null;
+  raw_age_text: string | null;
+  age_months_at_registration: number | null;
+  current_age: string;
+}
+
 export interface Reservation {
   id: string;
   customer_id: string;
@@ -16,12 +30,14 @@ export interface Reservation {
     kota: string | null;
     ongkir: number | null;
     distance_km: number | null;
+    children?: ChildInfo[];
   };
   treatment_category: 'BABY' | 'MOMS' | 'BOTH';
   treatment_detail: string;
   booking_date: string | null;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   raw_text: string;
+  baby_details?: BabyDetail[];
   created_at: string;
 }
 
