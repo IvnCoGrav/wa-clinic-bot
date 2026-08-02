@@ -58,6 +58,7 @@ export const Settings: React.FC = () => {
     type: string; variant: number; templateName: string; category: string; status: string; isActive: boolean; isDefault: boolean;
   }>>([]);
   const [savingProvider, setSavingProvider] = useState(false);
+  const [providerTab, setProviderTab] = useState<'WAHA' | 'WABA'>('WAHA');
 
   useEffect(() => {
     async function loadSettings() {
@@ -216,12 +217,12 @@ export const Settings: React.FC = () => {
         <p className="text-slate-400">Configure coordinates, delivery tiers, active engines, and auto-responders</p>
       </div>
 
-      {/* Channel WhatsApp Utama — toggle provider */}
+      {/* WhatsApp Gateway — channel utama + sub-tab WAHA/WABA */}
       <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-base font-bold text-white flex items-center space-x-2">
             <MessageCircle className="text-pink-400" />
-            <span>Channel WhatsApp Utama</span>
+            <span>WhatsApp Gateway</span>
           </h3>
           <button
             onClick={loadWhatsAppProvider}
@@ -231,15 +232,14 @@ export const Settings: React.FC = () => {
             <span>Refresh</span>
           </button>
         </div>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Pilih channel pengiriman WhatsApp untuk tenant ini. Safety net default tetap <span className="text-emerald-400 font-semibold">WAHA</span> — WABA hanya aktif kalau dipilih eksplisit.
-        </p>
+
+        {/* Channel aktif + toggle */}
         <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
           <div className="flex items-center space-x-3">
             <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${provider === 'WABA' ? 'bg-pink-500/20 text-pink-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
               {provider === 'WABA' ? 'Meta Cloud API v25.0' : 'WAHA Self-Hosted'}
             </span>
-            <p className="text-[10px] text-slate-500">Channel outbound aktif untuk follow-up &amp; reminder engine</p>
+            <p className="text-[10px] text-slate-500">Channel outbound aktif untuk follow-up &amp; reminder engine. Safety net default WAHA.</p>
           </div>
           <div className="flex space-x-2">
             <button
@@ -258,152 +258,176 @@ export const Settings: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Panel WAHA Session */}
-      <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-        <h3 className="text-base font-bold text-white flex items-center space-x-2">
-          <MessageCircle className="text-emerald-400" />
-          <span>WAHA Session (Self-Hosted)</span>
-        </h3>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Gateway WhatsApp self-hosted via WAHA. Kirim teks bebas (tidak terikat HSM template Meta), cocok untuk percakapan dalam 24h window.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-slate-500">Status Session</span>
-              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wahaStatus === 'WORKING' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                {wahaStatus}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">{wahaStatus === 'WORKING' ? 'Session terhubung' : 'Cek dashboard WAHA — mungkin butuh re-scan QR'}</p>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-slate-500">Session ID</span>
-              <span className="text-[11px] font-mono text-slate-300">{wahaSessionId}</span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">WAHA dashboard: <span className="text-slate-300">port 3001</span></p>
-          </div>
-        </div>
-      </div>
-
-      {/* Panel WABA Meta Cloud API */}
-      <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-5">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-white flex items-center space-x-2">
-            <MessageCircle className="text-pink-400" />
-            <span>WABA (Meta Cloud API)</span>
-          </h3>
-          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wabaConfigured ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-            {wabaConfigured ? 'CONFIGURED' : 'NOT CONFIGURED'}
-          </span>
-        </div>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Gateway resmi Meta Cloud API v25.0. Outbound wajib memakai <span className="text-pink-400 font-semibold">HSM template</span> (patuh regulasi, hanya dalam 24h window percakapan). Kredensial disimpan terenkripsi AES-256.
-        </p>
-
-        {/* Kredensial WABA */}
-        <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-          <h4 className="text-xs font-bold text-white flex items-center space-x-2">
-            <KeyRound size={12} className="text-pink-400" />
-            <span>Kredensial WABA</span>
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 uppercase font-bold">Phone Number ID</label>
-              <input
-                type="text"
-                value={wabaPhoneNumberId}
-                onChange={(e) => setWabaPhoneNumberId(e.target.value)}
-                placeholder="123456789"
-                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 uppercase font-bold">Business Account ID</label>
-              <input
-                type="text"
-                value={wabaBusinessAccountId}
-                onChange={(e) => setWabaBusinessAccountId(e.target.value)}
-                placeholder="000000000000000"
-                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 uppercase font-bold">Access Token (isi hanya saat ganti)</label>
-              <input
-                type="password"
-                value={wabaAccessToken}
-                onChange={(e) => setWabaAccessToken(e.target.value)}
-                placeholder="EAA..."
-                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] text-slate-400 uppercase font-bold">Webhook Verify Token</label>
-              <input
-                type="text"
-                value={wabaWebhookVerifyToken}
-                onChange={(e) => setWabaWebhookVerifyToken(e.target.value)}
-                placeholder="verify_token"
-                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-              />
-            </div>
-          </div>
+        {/* Sub-tab WAHA / WABA */}
+        <div className="flex space-x-1 p-1 rounded-xl bg-slate-950 border border-white/5 w-fit">
           <button
-            onClick={handleSaveWabaConfig}
-            disabled={savingProvider}
-            className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+            onClick={() => setProviderTab('WAHA')}
+            className={`px-4 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center space-x-1.5 ${providerTab === 'WAHA' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:bg-white/5'}`}
           >
-            <Save size={12} />
-            <span>{savingProvider ? 'Saving...' : 'Save WABA Config'}</span>
+            <MessageCircle size={12} />
+            <span>WAHA</span>
+          </button>
+          <button
+            onClick={() => setProviderTab('WABA')}
+            className={`px-4 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center space-x-1.5 ${providerTab === 'WABA' ? 'bg-pink-500 text-white' : 'text-slate-400 hover:bg-white/5'}`}
+          >
+            <MessageCircle size={12} />
+            <span>WABA</span>
           </button>
         </div>
 
-        {/* Template status */}
-        <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-          <h4 className="text-xs font-bold text-white flex items-center space-x-2">
-            <FileCheck size={12} className="text-pink-400" />
-            <span>Status Template HSM (9 stage follow-up)</span>
-          </h4>
-          {wabaTemplates.length === 0 ? (
-            <p className="text-[10px] text-slate-500">Belum ada data template. Refresh untuk memuat.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              {wabaTemplates.map((t) => (
-                <div key={t.type} className="p-2.5 rounded-lg bg-slate-950 border border-white/5 flex items-center justify-between space-x-2">
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-slate-300 font-semibold truncate">{t.type}</p>
-                    <p className="text-[9px] text-slate-500 truncate">{t.templateName}</p>
-                    <div className="flex items-center space-x-1 mt-1">
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${t.category === 'MARKETING' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>
-                        {t.category}
-                      </span>
-                      {t.status === 'APPROVED' ? (
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300 flex items-center space-x-0.5">
-                          <FileCheck size={8} /> APPROVED
-                        </span>
-                      ) : t.status === 'PENDING' ? (
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300 flex items-center space-x-0.5">
-                          <FileClock size={8} /> PENDING
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-rose-500/20 text-rose-300 flex items-center space-x-0.5">
-                          <FileX size={8} /> {t.status}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+        {/* Tab WAHA */}
+        {providerTab === 'WAHA' && (
+          <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+            <h4 className="text-xs font-bold text-emerald-300 flex items-center space-x-2">
+              <MessageCircle size={12} />
+              <span>WAHA Session (Self-Hosted)</span>
+            </h4>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              Gateway WhatsApp self-hosted via WAHA. Kirim teks bebas (tidak terikat HSM template Meta), cocok untuk percakapan dalam 24h window.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-500">Status Session</span>
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wahaStatus === 'WORKING' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                    {wahaStatus}
+                  </span>
                 </div>
-              ))}
+                <p className="text-xs text-slate-400 mt-1">{wahaStatus === 'WORKING' ? 'Session terhubung' : 'Cek dashboard WAHA — mungkin butuh re-scan QR'}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-500">Session ID</span>
+                  <span className="text-[11px] font-mono text-slate-300">{wahaSessionId}</span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">WAHA dashboard: <span className="text-slate-300">port 3001</span></p>
+              </div>
             </div>
-          )}
-          <p className="text-[9px] text-slate-500">
-            Edit mapping &amp; status template di menu <span className="text-pink-400">Follow-Up Templates</span>. Template belum APPROVED akan otomatis di-skip follow-up WABA (aman patuh Meta).
-          </p>
-        </div>
+          </div>
+        )}
+
+        {/* Tab WABA */}
+        {providerTab === 'WABA' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/50 border border-white/5">
+              <div>
+                <h4 className="text-xs font-bold text-pink-300 flex items-center space-x-2">
+                  <MessageCircle size={12} />
+                  <span>WABA (Meta Cloud API)</span>
+                </h4>
+                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
+                  Outbound wajib memakai <span className="text-pink-400 font-semibold">HSM template</span> (patuh regulasi, hanya dalam 24h window percakapan). Kredensial disimpan terenkripsi AES-256.
+                </p>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wabaConfigured ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                {wabaConfigured ? 'CONFIGURED' : 'NOT CONFIGURED'}
+              </span>
+            </div>
+
+            {/* Kredensial WABA */}
+            <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+              <h4 className="text-xs font-bold text-white flex items-center space-x-2">
+                <KeyRound size={12} className="text-pink-400" />
+                <span>Kredensial WABA</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold">Phone Number ID</label>
+                  <input
+                    type="text"
+                    value={wabaPhoneNumberId}
+                    onChange={(e) => setWabaPhoneNumberId(e.target.value)}
+                    placeholder="123456789"
+                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold">Business Account ID</label>
+                  <input
+                    type="text"
+                    value={wabaBusinessAccountId}
+                    onChange={(e) => setWabaBusinessAccountId(e.target.value)}
+                    placeholder="000000000000000"
+                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold">Access Token (isi hanya saat ganti)</label>
+                  <input
+                    type="password"
+                    value={wabaAccessToken}
+                    onChange={(e) => setWabaAccessToken(e.target.value)}
+                    placeholder="EAA..."
+                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold">Webhook Verify Token</label>
+                  <input
+                    type="text"
+                    value={wabaWebhookVerifyToken}
+                    onChange={(e) => setWabaWebhookVerifyToken(e.target.value)}
+                    placeholder="verify_token"
+                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleSaveWabaConfig}
+                disabled={savingProvider}
+                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+              >
+                <Save size={12} />
+                <span>{savingProvider ? 'Saving...' : 'Save WABA Config'}</span>
+              </button>
+            </div>
+
+            {/* Template status */}
+            <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+              <h4 className="text-xs font-bold text-white flex items-center space-x-2">
+                <FileCheck size={12} className="text-pink-400" />
+                <span>Status Template HSM (9 stage follow-up)</span>
+              </h4>
+              {wabaTemplates.length === 0 ? (
+                <p className="text-[10px] text-slate-500">Belum ada data template. Refresh untuk memuat.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  {wabaTemplates.map((t) => (
+                    <div key={t.type} className="p-2.5 rounded-lg bg-slate-950 border border-white/5 flex items-center justify-between space-x-2">
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-slate-300 font-semibold truncate">{t.type}</p>
+                        <p className="text-[9px] text-slate-500 truncate">{t.templateName}</p>
+                        <div className="flex items-center space-x-1 mt-1">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${t.category === 'MARKETING' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>
+                            {t.category}
+                          </span>
+                          {t.status === 'APPROVED' ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300 flex items-center space-x-0.5">
+                              <FileCheck size={8} /> APPROVED
+                            </span>
+                          ) : t.status === 'PENDING' ? (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300 flex items-center space-x-0.5">
+                              <FileClock size={8} /> PENDING
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-rose-500/20 text-rose-300 flex items-center space-x-0.5">
+                              <FileX size={8} /> {t.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[9px] text-slate-500">
+                Edit mapping &amp; status template di menu <span className="text-pink-400">Follow-Up Templates</span>. Template belum APPROVED akan otomatis di-skip follow-up WABA (aman patuh Meta).
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
