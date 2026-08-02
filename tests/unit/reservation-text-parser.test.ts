@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationText } from '../../src/utils/reservation-text-parser';
+import { parseReservationText, extractBabyDetails } from '../../src/utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
 
 describe('Reservation Text Parser Unit Tests', () => {
@@ -160,5 +160,103 @@ Kec : Candi Kota : Sidoarjo No. Hp : 089670370062
     expect(res.kota).toBe('Sidoarjo');
     expect(res.treatmentCategory).toBe('MOMS');
     expect(res.treatmentDetail).toContain('induksi massage fullbody');
+  });
+});
+
+describe('Reservation Text Parser — Baby Details (Single & Multi)', () => {
+  it('single bayi terstruktur: name + age', () => {
+    const rawText = `Nama Bunda: Sendy
+Alamat & Shareloc : Jl. Mawar
+No. Hp : 08123456789
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Adek Kenzo
+Usia Bayi/Anak : 6 bulan
+Treatment : Pijat Bayi`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies).toEqual([{ name: 'Adek Kenzo', age: '6 bulan' }]);
+  });
+
+  it('dua bayi dalam satu baris (nama & usia dipisah koma)', () => {
+    const rawText = `Nama Bunda: Sendy
+Alamat & Shareloc : Jl. Mawar
+No. Hp : 08123456789
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Rara, Riri
+Usia Bayi/Anak : 6 bulan, 2 tahun
+Treatment : Pijat Bayi`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies).toEqual([
+      { name: 'Rara', age: '6 bulan' },
+      { name: 'Riri', age: '2 tahun' },
+    ]);
+    // treatmentDetail memuat kedua bayi
+    expect(res.reservation!.treatmentDetail).toContain('Rara');
+    expect(res.reservation!.treatmentDetail).toContain('Riri');
+  });
+
+  it('dua bayi blok berulang (Nama Bayi / Usia diulang)', () => {
+    const rawText = `Nama Bunda: Sendy
+Alamat & Shareloc : Jl. Mawar
+No. Hp : 08123456789
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Kanaya
+Usia Bayi/Anak : 6 bulan
+Nama Bayi : Kenshin
+Usia Bayi/Anak : 3 tahun
+Treatment : Pijat Bayi`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies).toEqual([
+      { name: 'Kanaya', age: '6 bulan' },
+      { name: 'Kenshin', age: '3 tahun' },
+    ]);
+  });
+
+  it('dua bayi dengan usia dalam kurung di kolom nama', () => {
+    const rawText = `Nama Bunda: Sendy
+Alamat & Shareloc : Jl. Mawar
+No. Hp : 08123456789
+Pilihan treatment (Baby & Kids)
+Nama Bayi : Rara (6 bulan) & Riri (2 tahun)
+Usia Bayi/Anak :
+Treatment : Pijat Bayi`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation!.babies).toEqual([
+      { name: 'Rara', age: '6 bulan' },
+      { name: 'Riri', age: '2 tahun' },
+    ]);
+  });
+
+  it('extractBabyDetails berdiri sendiri dari raw_text mentah (inline label)', () => {
+    const rawText = `Pilihan treatment (Baby & Kids)   Nama Bayi : Zayn   Usia Bayi/Anak : 8 bulan
+Treatment : Pijat Bayi`;
+
+    const babies = extractBabyDetails(rawText);
+    expect(babies).toEqual([{ name: 'Zayn', age: '8 bulan' }]);
+  });
+
+  it('extractBabyDetails: dua bayi inline', () => {
+    const rawText = `Pilihan treatment (Baby & Kids)
+Nama Bayi : Zayn, Zara
+Usia Bayi/Anak : 8 bulan, 4 tahun
+Treatment : Pijat Bayi`;
+
+    const babies = extractBabyDetails(rawText);
+    expect(babies).toEqual([
+      { name: 'Zayn', age: '8 bulan' },
+      { name: 'Zara', age: '4 tahun' },
+    ]);
+  });
+
+  it('extractBabyDetails: raw_text kosong/null → []', () => {
+    expect(extractBabyDetails(null)).toEqual([]);
+    expect(extractBabyDetails('')).toEqual([]);
   });
 });

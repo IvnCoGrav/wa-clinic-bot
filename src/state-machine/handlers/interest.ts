@@ -29,6 +29,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     if (parseResult.success && parseResult.reservation) {
       const parsed = parseResult.reservation;
       // Simpan reservasi ke database
+      let createdReservationId: string | null = null;
       try {
         const { prisma } = await import('../../db/client');
         const reservation = await prisma.reservation.create({
@@ -42,9 +43,19 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
             status: 'pending',
           },
         });
+        createdReservationId = reservation.id;
 
         const { followUpService } = await import('../../services/follow-up.service');
         await followUpService.onReservationCreated(customer.id, reservation.id, tenantId);
+
+        // Persist entitas anak ke tabel children (nama + estimasi usia → birth_date)
+        const { childService } = await import('../../services/child.service');
+        await childService.upsertChildrenFromBabies({
+          customerId: customer.id,
+          reservationId: reservation.id,
+          tenantId,
+          babies: parsed.babies || [],
+        });
       } catch (dbErr) {
         // Abaikan error DB untuk in-memory fallback
       }
