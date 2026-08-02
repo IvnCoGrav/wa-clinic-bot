@@ -10,6 +10,7 @@ import { messageService } from '../services/message.service';
 import { customerService } from '../services/customer.service';
 import { TypingService, typingService } from '../services/typing.service';
 import { wahaClient } from '../integrations/waha/client';
+import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 export class ConversationStateMachine {
@@ -35,6 +36,41 @@ export class ConversationStateMachine {
         nextState: conversation.current_state,
         shouldSendReply: false,
       };
+    }
+
+    // --- GATE 🚫: OPT-OUT MARKETING (Scope: WABA only, semua state / global handler) ---
+    // Hanya aktif untuk tenant berprovider WABA (incomingMessage._provider = 'WABA').
+    // Customer WAHA tidak punya marketing_opt_in, tidak terpengaruh.
+    const rawInboundText = incomingMessage.text?.body || '';
+    if ((incomingMessage as any)._provider === 'WABA') {
+      const { wabaOptOutService } = await import('../services/waba-optout.service');
+      const optOutDetect = wabaOptOutService.isOptOutMessage(rawInboundText);
+      if (optOutDetect.matched) {
+        console.log(`[WABA OPT-OUT] Customer ${customer.phone} sent "${optOutDetect.keyword}". Processing global opt-out (tenant=${tenantId}).`);
+        try {
+          const result = await wabaOptOutService.handleOptOut(customer.id, tenantId);
+          console.log(`[WABA OPT-OUT] Customer ${customer.phone} opted out. Cancelled ${result.cancelledFollowUps} scheduled follow-ups.`);
+
+          // Ack reply via gateway WABA (masih dalam 24h window percakapan aktif → teks bebas)
+          const gateway = await resolveGatewayForTenant(tenantId);
+          const ackText = wabaOptOutService.getAckMessage();
+          const sendResult = await gateway.sendTextMessage(customer.phone, ackText);
+
+          await messageService.logMessage({
+            tenantId,
+            conversationId: conversation.id,
+            direction: Direction.OUTBOUND,
+            content: ackText,
+            waMessageId: sendResult.messageId,
+          });
+        } catch (optOutErr: any) {
+          console.error('[WABA OPT-OUT ERROR] Failed to process opt-out:', optOutErr.message);
+        }
+        return {
+          nextState: conversation.current_state,
+          shouldSendReply: false,
+        };
+      }
     }
 
     // 1. Audit Log Pesan Inbound (Masuk)
@@ -172,12 +208,13 @@ export class ConversationStateMachine {
 
     // --- GATE 2 🧠: STRUCTURED NLU INTENT & ENTITY CLASSIFICATION ---
     let nluResult = undefined;
+    let historyFormatted: Array<{ role: 'user' | 'assistant'; content: string }> = [];
     if (!activeConversation.is_human_handling && incomingText) {
       try {
         const { NluClassifierService } = await import('../services/nlu-classifier.service');
         const { messageService } = await import('../services/message.service');
         const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, 5, tenantId);
-        const historyFormatted = recentDbMsgs.map((m) => ({
+        historyFormatted = recentDbMsgs.map((m) => ({
           role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
           content: m.content || '',
         }));
@@ -187,7 +224,47 @@ export class ConversationStateMachine {
       }
     }
 
-    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult };
+    // --- GATE 2.5 🧭: AI ROUTER ENGINE (optional, shadow-first) ---
+    // Feature flag AI_ROUTER_ENABLED. Shadow mode (AI_ROUTER_SHADOW_MODE=true)
+    // hanya LOG perbandingan LLM router vs fallback legacy — TIDAK mengubah
+    // keputusan state. Konsumsi penuh (full mode) menyusul di iterasi berikutnya.
+    let routerDecision = undefined;
+    const routerStateSnapshot = activeConversation.current_state;
+    if (!activeConversation.is_human_handling && incomingText && process.env.AI_ROUTER_ENABLED === 'true') {
+      try {
+        const { aiRouterService } = await import('../integrations/llm/ai-router');
+        routerDecision = await aiRouterService.classify({
+          currentState: activeConversation.current_state,
+          conversationHistory: historyFormatted,
+          lastCustomerMessage: incomingText,
+        });
+      } catch (err: any) {
+        console.error('[AI ROUTER ERROR IN MACHINE]:', err.message);
+      }
+
+      // UNKNOWN berulang → eskalasi human otomatis (HANYA mode konsumsi penuh).
+      // Shadow mode TIDAK boleh mengubah keputusan produksi sama sekali.
+      if (routerDecision?.response && process.env.AI_ROUTER_SHADOW_MODE !== 'true') {
+        try {
+          const { handleRouterResult } = await import('../services/ai-router-evaluation.service');
+          const processed = await handleRouterResult(activeConversation, routerDecision.response, tenantId);
+          if (processed.needs_human_escalation && processed.escalation_reason === 'UNKNOWN_REPEATED') {
+            console.warn(`[UNKNOWN REPEATED ESCALATION] Customer ${customer.phone} auto-escalated. ${processed.reasoning_note}`);
+            await conversationService.escalateToHumanHandling(
+              activeConversation,
+              customer.phone,
+              processed.reasoning_note || 'UNKNOWN berulang dalam thread ini',
+              tenantId,
+              'unknown_repeated'
+            );
+          }
+        } catch (err: any) {
+          console.error('[AI ROUTER UNKNOWN ESCALATION ERROR]:', err.message);
+        }
+      }
+    }
+
+    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision };
     if (activeConversation.is_human_handling) {
       result = await handleHumanHandlingState(handlerCtx);
 
@@ -221,6 +298,44 @@ export class ConversationStateMachine {
         default:
           result = await handleGreetingState(handlerCtx);
           break;
+      }
+    }
+
+    // --- OBSERVABILITY: log evaluasi router (shadow/full) ke ai_router_evaluations ---
+    // "Match" dihitung dari keputusan akhir (intent + escalation), bukan exact-field.
+    if (routerDecision?.response) {
+      try {
+        const { logRouterEvaluation, mapLegacyDecisionToIntent } = await import('../services/ai-router-evaluation.service');
+        const wasMedicalDetected = medicalResult.isMedical;
+        const wasScheduleQuestion =
+          !wasMedicalDetected &&
+          result.nextState === ConversationState.HUMAN_HANDLING &&
+          (nluResult?.intents?.includes('ask_schedule') ||
+            (/\b(jadwal|slot|tanggal|hari|jam)\b/i.test(incomingText) &&
+              /\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu|besok|lusa)\b/i.test(incomingText)));
+        const wasFaqAnswered =
+          !wasMedicalDetected &&
+          !wasScheduleQuestion &&
+          result.shouldSendReply === true &&
+          !!result.replyText &&
+          (result.nextState === routerStateSnapshot || result.nextState === ConversationState.AWAITING_INTEREST);
+
+        await logRouterEvaluation({
+          customerPhone: customer.phone,
+          messageText: incomingText,
+          currentState: routerStateSnapshot,
+          llmResult: routerDecision.response,
+          usedFallback: routerDecision.source === 'fallback',
+          legacy: mapLegacyDecisionToIntent({
+            stateBefore: routerStateSnapshot,
+            stateAfter: result.nextState,
+            wasMedicalDetected,
+            wasScheduleQuestion,
+            wasFaqAnswered,
+          }),
+        });
+      } catch (err: any) {
+        console.error('[AI ROUTER EVALUATION LOG ERROR]:', err.message);
       }
     }
 

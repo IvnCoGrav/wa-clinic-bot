@@ -12,7 +12,14 @@ import {
   AlertTriangle,
   Map,
   Plus,
-  Trash
+  Trash,
+  MessageCircle,
+  RefreshCw,
+  KeyRound,
+  FileCheck,
+  FileClock,
+  FileX,
+  Save
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
@@ -38,6 +45,19 @@ export const Settings: React.FC = () => {
   const [quietHoursStart, setQuietHoursStart] = useState('21:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('08:00');
 
+  // WhatsApp Provider (Fase 5)
+  const [provider, setProvider] = useState<'WAHA' | 'WABA'>('WAHA');
+  const [wahaStatus, setWahaStatus] = useState('UNKNOWN');
+  const [wabaConfigured, setWabaConfigured] = useState(false);
+  const [wabaPhoneNumberId, setWabaPhoneNumberId] = useState('');
+  const [wabaBusinessAccountId, setWabaBusinessAccountId] = useState('');
+  const [wabaAccessToken, setWabaAccessToken] = useState('');
+  const [wabaWebhookVerifyToken, setWabaWebhookVerifyToken] = useState('');
+  const [wabaTemplates, setWabaTemplates] = useState<Array<{
+    type: string; variant: number; templateName: string; category: string; status: string; isActive: boolean; isDefault: boolean;
+  }>>([]);
+  const [savingProvider, setSavingProvider] = useState(false);
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -59,6 +79,9 @@ export const Settings: React.FC = () => {
         if (list.length > 0) {
           setOngkirTiers(list);
         }
+
+        // Fetch WhatsApp provider status (Fase 5)
+        await loadWhatsAppProvider();
       } catch (err) {
         console.warn('Failed to load global chatbot settings:', err);
       } finally {
@@ -67,6 +90,84 @@ export const Settings: React.FC = () => {
     }
     loadSettings();
   }, []);
+
+  const loadWhatsAppProvider = async () => {
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider');
+      const d = res?.data;
+      if (d) {
+        setProvider(d.provider || 'WAHA');
+        setWahaStatus(d.wahaStatus || 'UNKNOWN');
+        setWabaConfigured(!!d.waba?.configured);
+        setWabaPhoneNumberId(d.waba?.phoneNumberId || '');
+        setWabaBusinessAccountId(d.waba?.businessAccountId || '');
+        setWabaWebhookVerifyToken(d.waba?.hasWebhookVerifyToken ? d.waba.webhookVerifyToken : '');
+        if (Array.isArray(d.templates)) setWabaTemplates(d.templates);
+      }
+    } catch (err) {
+      console.warn('Failed to load WhatsApp provider config:', err);
+    }
+  };
+
+  const handleToggleProvider = async (val: 'WAHA' | 'WABA') => {
+    setSavingProvider(true);
+    try {
+      const body: any = { provider: val };
+      if (val === 'WABA' && wabaPhoneNumberId) body.waba_phone_number_id = wabaPhoneNumberId;
+      if (val === 'WABA' && wabaBusinessAccountId) body.waba_business_account_id = wabaBusinessAccountId;
+      if (val === 'WABA' && wabaAccessToken) body.waba_access_token = wabaAccessToken;
+      if (val === 'WABA' && wabaWebhookVerifyToken) body.waba_webhook_verify_token = wabaWebhookVerifyToken;
+
+      await apiRequest('/api/admin/whatsapp-provider', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      setProvider(val);
+      toast(`WhatsApp provider switched to ${val}`, 'success');
+      await loadWhatsAppProvider();
+    } catch (err: any) {
+      toast(`Failed to switch provider: ${err.message}`, 'error');
+    } finally {
+      setSavingProvider(false);
+    }
+  };
+
+  const handleSaveWabaConfig = async () => {
+    setSavingProvider(true);
+    try {
+      const body: any = {
+        waba_phone_number_id: wabaPhoneNumberId,
+        waba_business_account_id: wabaBusinessAccountId,
+        waba_webhook_verify_token: wabaWebhookVerifyToken,
+      };
+      if (wabaAccessToken) body.waba_access_token = wabaAccessToken;
+
+      await apiRequest('/api/admin/whatsapp-provider', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      setWabaAccessToken('');
+      toast('WABA credentials saved securely (AES-256 encrypted)', 'success');
+      await loadWhatsAppProvider();
+    } catch (err: any) {
+      toast(`Failed to save WABA config: ${err.message}`, 'error');
+    } finally {
+      setSavingProvider(false);
+    }
+  };
+
+  const handleSaveWabaTemplate = async (type: string, variant: number, templateName: string) => {
+    try {
+      await apiRequest('/api/admin/waba-templates', {
+        method: 'POST',
+        body: JSON.stringify({ type, variant, templateName }),
+      });
+      toast(`WABA template mapping ${type} saved`, 'success');
+      await loadWhatsAppProvider();
+    } catch (err: any) {
+      toast(`Failed to save template mapping: ${err.message}`, 'error');
+    }
+  };
 
   const handleSaveGlobalToggle = async (val: boolean) => {
     try {
@@ -111,6 +212,182 @@ export const Settings: React.FC = () => {
           <span>Operational Settings</span>
         </h2>
         <p className="text-slate-400">Configure coordinates, delivery tiers, active engines, and auto-responders</p>
+      </div>
+
+      {/* WhatsApp Provider Panel (Fase 5) */}
+      <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-5">
+        <div className="flex justify-between items-center">
+          <h3 className="text-base font-bold text-white flex items-center space-x-2">
+            <MessageCircle className="text-pink-400" />
+            <span>WhatsApp Provider</span>
+          </h3>
+          <button
+            onClick={loadWhatsAppProvider}
+            className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white flex items-center space-x-1"
+          >
+            <RefreshCw size={10} />
+            <span>Refresh</span>
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Pilih channel pengiriman WhatsApp untuk tenant ini. <span className="text-pink-400 font-semibold">WAHA</span> (session self-hosted, teks bebas) atau <span className="text-pink-400 font-semibold">WABA</span> (Meta Cloud API, wajib HSM template patuh regulasi). Safety net default tetap WAHA.
+        </p>
+
+        {/* Status indicator */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-slate-500">Provider Aktif</span>
+              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${provider === 'WABA' ? 'bg-pink-500/20 text-pink-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                {provider}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1 font-semibold">{provider === 'WABA' ? 'Meta Cloud API v25.0' : 'WAHA Self-Hosted'}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-slate-500">WAHA Session</span>
+              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wahaStatus === 'WORKING' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                {wahaStatus}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">{wahaStatus === 'WORKING' ? 'Session terhubung' : 'Cek status WAHA'}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-slate-500">WABA Config</span>
+              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wabaConfigured ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                {wabaConfigured ? 'CONFIGURED' : 'NOT CONFIGURED'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">{wabaConfigured ? 'Token + Phone Number ID siap' : 'Lengkapi kredensial WABA dulu'}</p>
+          </div>
+        </div>
+
+        {/* Provider toggle */}
+        <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
+          <div>
+            <p className="text-sm font-semibold text-slate-300">Channel Outbound Utama</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Toggle ini memengaruhi follow-up &amp; reminder engine (per tenant)</p>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleToggleProvider('WAHA')}
+              disabled={savingProvider || provider === 'WAHA'}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${provider === 'WAHA' ? 'bg-emerald-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+            >
+              WAHA
+            </button>
+            <button
+              onClick={() => handleToggleProvider('WABA')}
+              disabled={savingProvider || provider === 'WABA'}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${provider === 'WABA' ? 'bg-pink-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+            >
+              WABA
+            </button>
+          </div>
+        </div>
+
+        {/* WABA credentials */}
+        <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+          <h4 className="text-xs font-bold text-white flex items-center space-x-2">
+            <KeyRound size={12} className="text-pink-400" />
+            <span>Kredensial WABA (token terenkripsi AES-256)</span>
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 uppercase font-bold">Phone Number ID</label>
+              <input
+                type="text"
+                value={wabaPhoneNumberId}
+                onChange={(e) => setWabaPhoneNumberId(e.target.value)}
+                placeholder="123456789"
+                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 uppercase font-bold">Business Account ID</label>
+              <input
+                type="text"
+                value={wabaBusinessAccountId}
+                onChange={(e) => setWabaBusinessAccountId(e.target.value)}
+                placeholder="000000000000000"
+                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 uppercase font-bold">Access Token (isi hanya saat ganti)</label>
+              <input
+                type="password"
+                value={wabaAccessToken}
+                onChange={(e) => setWabaAccessToken(e.target.value)}
+                placeholder="EAA..."
+                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-400 uppercase font-bold">Webhook Verify Token</label>
+              <input
+                type="text"
+                value={wabaWebhookVerifyToken}
+                onChange={(e) => setWabaWebhookVerifyToken(e.target.value)}
+                placeholder="verify_token"
+                className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleSaveWabaConfig}
+            disabled={savingProvider}
+            className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+          >
+            <Save size={12} />
+            <span>{savingProvider ? 'Saving...' : 'Save WABA Config'}</span>
+          </button>
+        </div>
+
+        {/* Template status */}
+        <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+          <h4 className="text-xs font-bold text-white flex items-center space-x-2">
+            <FileCheck size={12} className="text-pink-400" />
+            <span>Status Template HSM (9 stage follow-up)</span>
+          </h4>
+          {wabaTemplates.length === 0 ? (
+            <p className="text-[10px] text-slate-500">Belum ada data template. Refresh untuk memuat.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {wabaTemplates.map((t) => (
+                <div key={t.type} className="p-2.5 rounded-lg bg-slate-950 border border-white/5 flex items-center justify-between space-x-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-slate-300 font-semibold truncate">{t.type}</p>
+                    <p className="text-[9px] text-slate-500 truncate">{t.templateName}</p>
+                    <div className="flex items-center space-x-1 mt-1">
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${t.category === 'MARKETING' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>
+                        {t.category}
+                      </span>
+                      {t.status === 'APPROVED' ? (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300 flex items-center space-x-0.5">
+                          <FileCheck size={8} /> APPROVED
+                        </span>
+                      ) : t.status === 'PENDING' ? (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300 flex items-center space-x-0.5">
+                          <FileClock size={8} /> PENDING
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-rose-500/20 text-rose-300 flex items-center space-x-0.5">
+                          <FileX size={8} /> {t.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[9px] text-slate-500">
+            Edit mapping &amp; status template di menu <span className="text-pink-400">Follow-Up Templates</span>. Template belum APPROVED akan otomatis di-skip follow-up WABA (aman patuh Meta).
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
