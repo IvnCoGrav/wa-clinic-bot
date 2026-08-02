@@ -41,6 +41,7 @@ export class ConversationService {
           location_attempts: 0,
           is_human_handling: false,
           human_handling_since: null,
+          consecutive_unknown_count: 0,
           last_message_at: new Date(),
           created_at: new Date(),
           updated_at: new Date(),
@@ -132,6 +133,7 @@ export class ConversationService {
       isHumanHandling?: boolean;
       humanHandlingSince?: Date | null;
       escalationReason?: string | null;
+      consecutiveUnknownCount?: number;
     },
     tenantId: string
   ): Promise<any> {
@@ -145,6 +147,7 @@ export class ConversationService {
     if (updates.isHumanHandling !== undefined) dataToUpdate.is_human_handling = updates.isHumanHandling;
     if (updates.humanHandlingSince !== undefined) dataToUpdate.human_handling_since = updates.humanHandlingSince;
     if (updates.escalationReason !== undefined) dataToUpdate.escalation_reason = updates.escalationReason;
+    if (updates.consecutiveUnknownCount !== undefined) dataToUpdate.consecutive_unknown_count = updates.consecutiveUnknownCount;
 
     try {
       const existing = await prisma.conversation.findFirst({
@@ -169,6 +172,8 @@ export class ConversationService {
         if (updates.locationAttempts !== undefined) conv.location_attempts = updates.locationAttempts;
         if (updates.isHumanHandling !== undefined) conv.is_human_handling = updates.isHumanHandling;
         if (updates.humanHandlingSince !== undefined) conv.human_handling_since = updates.humanHandlingSince;
+        if (updates.escalationReason !== undefined) conv.escalation_reason = updates.escalationReason;
+        if (updates.consecutiveUnknownCount !== undefined) conv.consecutive_unknown_count = updates.consecutiveUnknownCount;
         conv.updated_at = new Date();
       }
       return conv;
