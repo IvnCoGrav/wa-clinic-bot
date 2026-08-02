@@ -454,7 +454,7 @@ export class GeocodingService {
             
             if (exactMatches.length > 0) {
               // Check if user input explicitly mentions one of the kecamatans to resolve ambiguity
-              const matchesWithKec = exactMatches.filter(m => lower.includes(m.Kecamatan.toLowerCase()));
+              const matchesWithKec = exactMatches.filter((m: any) => lower.includes(m.Kecamatan.toLowerCase()));
               
               if (matchesWithKec.length === 1) {
                 const match = matchesWithKec[0];
