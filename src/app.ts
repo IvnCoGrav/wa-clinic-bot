@@ -6,8 +6,15 @@ import { healthRoutes } from './routes/health.route';
 import { trackingRoutes } from './routes/tracking.route';
 import rateLimit from '@fastify/rate-limit';
 import { initializeConsoleWrapper } from './utils/context';
+import { installLogBuffer } from './utils/log-buffer';
 
 dotenv.config();
+// URUTAN PENTING: installLogBuffer HARUS sebelum initializeConsoleWrapper.
+// Keduanya menimpa console.log/warn/error; kalau buffer dipasang di atas wrapper
+// konteks (yang punya marker __wrapped/original), pemanggilan ulang
+// initializeConsoleWrapper akan me-re-wrap buffer dan membuat rekursi tak hingga.
+// Urutan benar = buffer paling dalam, context wrapper paling luar.
+installLogBuffer();
 initializeConsoleWrapper();
 
 export function buildApp() {

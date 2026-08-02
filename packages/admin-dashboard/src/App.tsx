@@ -18,6 +18,7 @@ const AiPersona = lazy(() => import('./pages/tenant/AiPersona').then(m => ({ def
 const DeliveryTiers = lazy(() => import('./pages/tenant/DeliveryTiers').then(m => ({ default: m.DeliveryTiers })));
 const FollowUpQueue = lazy(() => import('./pages/tenant/FollowUpQueue').then(m => ({ default: m.FollowUpQueue })));
 const FollowUpTemplates = lazy(() => import('./pages/tenant/FollowUpTemplates').then(m => ({ default: m.FollowUpTemplates })));
+const Debug = lazy(() => import('./pages/tenant/Debug').then(m => ({ default: m.Debug })));
 
 export const App: React.FC = () => {
   return (
@@ -101,6 +102,13 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <AiPersona />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/debug" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <Debug />
                 </Layout>
               </ProtectedRoute>
             } />
