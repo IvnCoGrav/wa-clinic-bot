@@ -1,8 +1,8 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
-**Versi:** 2.2  
-**Status:** Fase 1 & Fase 2 Production-Ready (337 unit & integration tests PASS 100%)  
-**Terakhir diperbarui:** 1 Agustus 2026
+**Versi:** 2.3  
+**Status:** Fase 1, Fase 2 & AI Router Engine Production-Ready (536 unit & integration tests PASS 100%)  
+**Terakhir diperbarui:** 2 Agustus 2026
 
 ---
 
@@ -80,6 +80,17 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 29 | Auto-save chat masuk baru ke Google Contacts via Google People API | ⚠️ Dinonaktifkan sementara secara default di .env. Dikonfirmasi ini permintaan eksplisit dari pemilik bisnis. Perlu dipastikan sebelum diaktifkan: OAuth credential Google disimpan aman, dan pemilik bisnis sadar ini menulis data customer (nomor HP, kemungkinan nama) ke akun Google pribadi/bisnis miliknya — lihat catatan privasi di Section 10 |
 | 30 | Medical concern: alert dikirim HANYA ke admin (Telegram/emergency log), chat customer DIAM TOTAL. Bidan/CS yang menggali lebih dalam dan menyarankan secara manual. Approved medical FAQ tetap bisa dijawab bot | ✅ Selesai — alert admin-only, tanpa template darurat yang dikirim ke customer (customer tidak di-shock) |
 
+#### 4.1.2 Fase 4 — AI Router Engine & System Observability (Status: Selesai & Tervalidasi)
+
+| # | Fitur / Requirement | Status |
+|---|---|---|
+| 31 | AI Router Engine (LLM Intent Classifier): 11 intent taxonomy, Zod schema validation dengan 1x retry hint, circuit breaker (5 failure threshold / 60s cooldown), rule-based fallback deterministik | ✅ Selesai (50 skenario test plan PASS 100%) |
+| 32 | Shadow Mode (`AI_ROUTER_SHADOW_MODE=true`): membaca pesan customer, menebak intent, membandingkan dengan keputusan legacy pipeline, dan mencatat ke tabel `ai_router_evaluations` TANPA mengubah keputusan bot produksi | ✅ Selesai |
+| 33 | Eskalasi UNKNOWN Berulang: jika pesan customer 2x berturut-turut diklasifikasikan `UNKNOWN` dalam 1 thread (saat full-mode `SHADOW_MODE=false`), otomatis eskalasi ke human handling (`escalation_reason=UNKNOWN_REPEATED`), bot silent total | ✅ Selesai |
+| 34 | Script Evaluasi Akurasi Shadow Mode (`src/scripts/check-router-accuracy.ts --days=7`): kalkulasi intent match rate, escalation match rate, UNMAPPED rate, dan list mismatch `MEDICAL_CONCERN`. Mengharuskan 3 gate lolos sebelum mematikan shadow mode | ✅ Selesai |
+| 35 | Dashboard UI System Debug (`/admin/debug` & REST API `/api/admin/debug/*`): 5 tab observability (System Overview, AI Router, Log Buffer in-memory, Message Trace, Conversation Trace) untuk maintenance & tracing read-only | ✅ Selesai |
+| 36 | Penyelarasan Keyword Medis (`ruam`, `eksim`, `alergi susu`): penambahan ke `MEDIUM_SEVERITY_MEDICAL_KEYWORDS` sebagai single source of truth antara detector medis dan router | ✅ Selesai |
+
 ---
 
 #### 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Selesai & Tervalidasi)
@@ -121,10 +132,11 @@ Customer chat pertama kali
 
 ### 6. Data yang Disimpan
 - **Customer:** nomor telepon, nama, lokasi (kelurahan/kecamatan/kota, koordinat), jarak & ongkir terhitung, status keanggotaan (termasuk placeholder status blocked)
-- **Conversation:** status percakapan saat ini, apakah sedang ditangani manusia
+- **Conversation:** status percakapan saat ini, apakah sedang ditangani manusia, counter `consecutive_unknown_count` (untuk eskalasi UNKNOWN berulang)
 - **Message log:** seluruh histori pesan masuk/keluar (untuk audit dan debugging)
 - **Knowledge base:** kumpulan FAQ dan potongan dokumen referensi untuk menjawab pertanyaan customer
 - **Reservasi & treatment (Fase 2):** jadwal, status konfirmasi, riwayat treatment, status repeat order
+- **AiRouterEvaluation (Fase 4):** log evaluasi shadow/full mode per pesan (`customer_phone`, `message_text`, `current_state`, `llm_intent`, `llm_confidence`, `llm_used_fallback`, `legacy_intent`, `legacy_escalated`, `intent_match`, `escalation_match`, `mismatch_notes`, `response_time_ms`)
 
 *Semua tabel di atas memiliki kolom `tenant_id` (default satu nilai tetap) sebagai persiapan arsitektur multi-tenant di masa depan — lihat Section 6.1*
 
@@ -144,7 +156,10 @@ Sistem ini murni single-tenant (satu bisnis, tanpa auth multi-pengguna, tanpa bi
 | Integrasi WhatsApp | WAHA (WhatsApp HTTP API, self-hosted) |
 | Geocoding | Google Maps Geocoding API |
 | Perhitungan Jarak/Rute | OpenRouteService Directions API, fallback formula Haversine |
-| LLM Engine | OpenAI-compatible API via SumoPod (akun milik pemilik bisnis) |
+| LLM Engine | OpenAI-compatible API via SumoPod (MiniMax-M2.7-highspeed / DeepSeek V4 Flash) |
+| AI Router Engine | Klasifikasi 11-intent terstruktur + Circuit Breaker (5 error / 60s cooldown) + Zod retry-once |
+| System Observability | Dashboard UI Debug (`/admin/debug`), Log Buffer in-memory (500 entri), Script akurasi (`check-router-accuracy.ts`) |
+| Admin Dashboard UI | React 18 + Tailwind CSS + Lucide Icons + Vite (Single-Page Application di `/admin/*`) |
 | Testing | Vitest (unit & integration) |
 | Deployment | Docker (Dockerfile + docker-compose) |
 
@@ -218,7 +233,12 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - [x] FAQ dijawab di state AWAITING_LOCATION tanpa mengganggu alur lokasi
 - [x] Form reservasi pre-filled (kecamatan, kota, nomor HP) + simpan nama kontak "Bunda {nama} {kecamatan}"
 - [x] Medical escalation admin-only (chat customer diam total, alert ke admin)
-- [x] 332 unit test PASS (37 test files) — termasuk 7 E2E chat-to-reservation scenarios, 28 treatment question tests, 52 kecamatan rejection tests, 3 medical silent escalation tests
+- [x] AI Router 11-intent classifier & circuit breaker tervalidasi via unit test (50 skenario test plan PASS 100%)
+- [x] Tabel `ai_router_evaluations` & migration `20260803000000_add_ai_router_evaluations` ter-deploy ke DB (zero-drift terverifikasi)
+- [x] Script `check-router-accuracy.ts` tervalidasi lawan Postgres asli
+- [x] UNKNOWN-repeated escalation (2x → HUMAN_HANDLING) terintegrasi di state machine
+- [x] Dashboard UI System Debug (`/admin/debug`) & 5 endpoint read-only `/api/admin/debug/*` aktif & ter-build ke production bundle
+- [x] 536 unit & integration test PASS 100% (47 test files) — termasuk 107 test AI Router Engine, 7 E2E chat-to-reservation scenarios, 28 treatment question tests, 52 kecamatan rejection tests, 3 medical silent escalation tests, 11 system debug tests
 
 **Catatan status yang masih perlu dipantau berkelanjutan (bukan blocker, tapi bukan berarti "selesai selamanya"):**
 - Fitur label WAHA "hold" (poin 27) — tetap experimental sampai ada periode pemakaian nyata yang cukup panjang untuk memastikan tidak konflik dengan auto-release 6 jam

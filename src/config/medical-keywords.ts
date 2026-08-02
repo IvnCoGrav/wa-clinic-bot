@@ -71,8 +71,10 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'ruam tali pusat',
   'bintik-bintik merah',
   'bintik merah',
+  'ruam',
   'ruam parah',
   'kulit mengelupas',
+  'eksim',
   'bisul',
   'bentol-bentol',
 
@@ -99,6 +101,7 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'jamur lidah',
   'ruam popok parah',
   'alergi asi',
+  'alergi susu',
 ];
 
 /**

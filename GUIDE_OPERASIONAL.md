@@ -112,3 +112,11 @@ Sistem tetap melayani rute HTML lama untuk kompatibilitas pengujian:
 ## ⚙️ Variabel Konfigurasi Baru (.env)
 
 - **`ENABLE_WAHA_HOLD_LABEL`** (Boolean, default `false` di production): Set `true` jika ingin mengaktifkan sinkronisasi label "hold" WAHA ke HP admin WhatsApp secara otomatis saat terjadi eskalasi human handling. Secara default dinonaktifkan di production untuk menjaga kestabilan operasional sampai tervalidasi live.
+
+### AI Router Engine (.env)
+
+- **`AI_ROUTER_ENABLED`** (Boolean, default `false`): Mengaktifkan AI Router Engine (LLM intent classifier). Wajib `true` untuk shadow mode maupun full mode.
+- **`AI_ROUTER_SHADOW_MODE`** (Boolean, default `false`): Mode observasi — hasil LLM router hanya dibandingkan dgn keputusan pipeline legacy dan di-log ke tabel `ai_router_evaluations`, TIDAK mengubah keputusan produksi. Eskalasi UNKNOWN-berulang (2x -> HUMAN_HANDLING) HANYA aktif di full mode (`AI_ROUTER_SHADOW_MODE=false`). **Jangan matikan shadow mode sebelum 3 gate di `README.md` lolos** (escalation >= 98%, mismatch MEDICAL = 0, UNMAPPED < 5%).
+- **`AI_MODEL_ROUTER`** (String, opsional): Model LLM khusus untuk router. Kosongkan agar fallback ke `AI_MODEL_NLU` / `OPENAI_MODEL`.
+- **`ESCALATE_SCHEDULE_IN_INITIAL`** (Boolean, default `true`): Eskalasi pertanyaan jadwal spesifik (slot/buka/hari/jam) ke human handling saat conversation masih di state INITIAL.
+- **Cek akurasi:** `npx tsx src/scripts/check-router-accuracy.ts --days=7` — jadwal cek hari ke-1/3/7 ada di README.
