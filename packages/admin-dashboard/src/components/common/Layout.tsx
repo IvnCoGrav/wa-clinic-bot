@@ -18,7 +18,8 @@ import {
   MessageSquareText,
   Volume2,
   Truck,
-  Clock
+  Clock,
+  Bug
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -61,6 +62,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },
     { name: 'AI Persona settings', path: '/admin/persona', icon: Volume2 },
     { name: 'Operational Settings', path: '/admin/settings', icon: SettingsIcon },
+    { name: 'System Debug', path: '/admin/debug', icon: Bug },
   ];
 
   return (
