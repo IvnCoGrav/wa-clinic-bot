@@ -99,6 +99,35 @@ export class MessageService {
       return [];
     }
   }
+
+  /**
+   * Update status delivery pesan dari webhook status Meta (sent/delivered/read/failed).
+   * Idempoten: updateMany by wa_message_id + tenant_id. DB offline → silent.
+   */
+  public async updateDeliveryStatus(
+    waMessageId: string,
+    tenantId: string,
+    status: 'sent' | 'delivered' | 'read' | 'failed',
+    timestamp?: number
+  ): Promise<{ matched: boolean }> {
+    if (!waMessageId) return { matched: false };
+
+    const data: any = { delivery_status: status };
+    const ts = timestamp ? new Date(timestamp * 1000) : new Date();
+    if (status === 'delivered') data.delivered_at = ts;
+    if (status === 'read') data.read_at = ts;
+
+    try {
+      const result = await prisma.message.updateMany({
+        where: { wa_message_id: waMessageId, tenant_id: tenantId },
+        data,
+      });
+      return { matched: result.count > 0 };
+    } catch (error) {
+      console.warn('DB updateDeliveryStatus error (using fallback):', (error as Error).message);
+      return { matched: false };
+    }
+  }
 }
 
 

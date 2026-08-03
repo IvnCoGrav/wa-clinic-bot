@@ -156,8 +156,8 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
     secretKeysPresent: SECRET_ENV_KEYS.filter((k) => process.env[k] !== undefined && process.env[k] !== ''),
     counts: { customers, conversations, messages, reservations, followUps, aiRouterEvaluations },
     aiRouter: {
-      enabled: aiRouterService.isEnabled(),
-      shadowMode: aiRouterService.isShadowMode(),
+      enabled: aiRouterService.isEnabled(DEFAULT_TENANT_ID),
+      shadowMode: aiRouterService.isShadowMode(DEFAULT_TENANT_ID),
       circuitState: aiRouterLLMClient.getCircuitState(),
     },
     logBuffer: { installed: isLogBufferInstalled(), stats: getLogBufferStats() },

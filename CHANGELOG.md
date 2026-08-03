@@ -6,6 +6,97 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-08
+
+### Changed - Landing Page Di-Serve Langsung oleh Bot (Click-Catcher Dipensiunkan)
+
+Sebelumnya landing page (publik) disajikan microservice terpisah `packages/click-catcher` di port 3002, sehingga URL iklan memakai domain berbeda dan butuh proxy/fe. Per keputusan arsitektur (Skema B), landing kini disajikan **langsung oleh bot** di port utama: URL `/{slug}` & `/promo/{slug}`.
+
+- **`src/routes/landing.route.ts`** (baru): `GET /go` (fail-open generik, pintu masuk kampanye), `GET /promo/:slug` (strict 404), `GET /:slug` (guard `RESERVED_SLUGS` - `go|promo|health|api|admin|public|assets|favicon.ico` - + strict 404). Render `RAW_HTML` lewat sanitasi 17-layer + inject tracking; render `STRUCTURED_JSON` lewat template `src/landing/public/go.html` (replace placeholder + nonce CSP). Header keamanan: CSP `script-src 'nonce-...'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
+- **`src/services/landing-content.service.ts`** (baru): resolver konten landing per-slug - 1) `landingPage` aktif (multi-landing, events/override), 2) fallback tenant legacy (`raw_html_content`), 3) `null` bila tak cocok (basis 404 ketat). `defaultLandingContent(slug)` untuk fallback generik. Tanpa cache in-process - baca DB tiap request (konsisten, no stale).
+- **`src/routes/tracking.route.ts`**: `GET /api/tenant/:slug` kini pakai resolver - `null` -> `defaultLandingContent` (fail-open, backward-compat JSON API).
+- **`src/landing/public/go.html`** (baru): template bot (placeholder `__HEADLINE__`, `__EVENTS_ONLOAD__`, `__EVENTS_ONCLICK__`, dll). `scripts/copy-landing-assets.js`: disalin ke `dist/landing/public` saat `npm run build`.
+- **Tracking same-origin**: `src/services/html-sanitizer.ts` - guard klik hanya cek `trackingApiKey`, fetch relatif `'/api/tracking/click'` - tidak butuh CORS/base URL eksternal.
+- **Multi-landing events**: onload `ViewContent`/`Search` setelah `PageView`; click `Lead`/`Purchase`/`InitiateCheckout`/`AddToCart`/`CompleteRegistration`/`Contact`/`StartTrial`/`Subscribe`/`CustomizeProduct` saat klik CTA sebelum redirect.
+- **Pensiun click-catcher**: `docker-compose.yml` hapus service `click-catcher`; `.env.example` seksi Click Catcher diganti "Landing page & tracking atribusi di-serve langsung oleh bot"; `purgeLandingCache()` (HTTP ke click-catcher) diganti purge in-process; sinkronisasi `landing_pages` saat legacy `PUT /api/admin/tenant/:id/html` & reset.
+- **Bersih-bersih**: hapus artefak kompilasi nyasar `src/services/tenant-html.service.js` (menimpa `.ts` di resolusi Vite - `.js` diutamakan sebelum `.ts`), penyebab inject events tidak jalan.
+- **Test**: `tests/integration/landing-serving.test.ts` (baru, 8 test: RAW_HTML vs STRUCTURED_JSON, strict 404, `/go` 200, reserved slug, header keamanan, token CAPI tak bocor, backward-compat JSON). Total **688 tests**, tsc clean, dashboard build sukses.
+
+---
+
+## [Unreleased] - 2026-08-08
+
+### Added — Halaman Landing Page di Dashboard (Upload File HTML, Bukan Builder Visual)
+
+Landing page sebelumnya hanya bisa diubah lewat API mentah (`PUT /api/admin/tenant/:id/html`) tanpa UI. Per permintaan user: **bukan** builder visual ala WordPress/Elementor (hemat RAM, tanpa state builder), cukup **upload file `.html`** untuk dijadikan landing page. Konten disimpan per-tenant di DB (`raw_html_content` + `landing_type`) dan disajikan oleh click-catcher yang sudah ada.
+
+- **`src/routes/admin.route.ts`**:
+  - `GET /api/admin/tenant/:id/landing` (baru) — status & konten landing (`landingType`, `rawHtmlContent`, `sizeBytes`, `metaPixelId`, `whatsappNumber`, `slug`, `previewBaseUrl`). Fail-open saat DB offline / tenant tak ada.
+  - `POST /api/admin/tenant/:id/landing/reset` (baru) — kembalikan ke template default `STRUCTURED_JSON`, kosongkan `raw_html_content`; audit `TENANT_RAW_HTML_RESET`.
+  - `PUT /api/admin/tenant/:id/html` (existing) — setelah simpan/reset, panggil `purgeLandingCache()` (fire-and-forget, `TRACKING_API_KEY`) supaya preview langsung reflect tanpa menunggu TTL 5 menit.
+- **`packages/click-catcher/src/server.ts`**: `POST /api/tracking/cache-purge` (baru) — invalidasi cache tenant (per-slug atau semua), dilindungi `X-Tracking-Api-Key`.
+- **`packages/admin-dashboard/src/pages/tenant/LandingPage.tsx`** (baru, di-register di `App.tsx` + menu `Layout.tsx`): upload file `.html`/`.htm`, editor textarea, badge status `RAW_HTML`/`STRUCTURED_JSON`, tombol preview (buka `{previewBaseUrl}/{slug}`), reset ke template via `useUiFeedback()` (bukan `window.confirm`), info aturan upload (500 KB, wajib `id="wa-cta"`, tag dilarang). Ukuran file dihitung dgn `TextEncoder` (tanpa Node `Buffer` di browser).
+- **`packages/admin-dashboard/src/vite-env.d.ts`**: tambah `VITE_LANDING_BASE_URL?` (fallback preview URL bila server belum set `LANDING_BASE_URL`).
+- **Test**: `tests/integration/landing-admin.test.ts` (baru, 6 test: auth 401, GET fail-open, reset, previewBaseUrl fallback, upload tetap pass) + `tests/setup.ts` tambah mock `tenant.upsert`. Total **665 tests**, tsc clean, dashboard build sukses.
+
+---
+
+## [Unreleased] - 2026-08-08
+
+## [Unreleased] - 2026-08-08
+
+### Added — Panel Meta Pixel & CAPI di Admin Dashboard (UI Input Kredensial)
+
+Sebelumnya input Pixel ID / CAPI token hanya via `.env` atau edit DB manual — tidak ada UI. Panel baru dibuat **terpisah** dari panel WhatsApp Provider karena CAPI berlaku untuk **semua** provider (WAHA & WABA).
+
+- **`src/routes/admin.route.ts`**: `GET/PATCH /api/admin/capi-config` — baca/tulis `meta_pixel_id` + `meta_capi_access_token` per tenant. Token CAPI di-encrypt AES-256-GCM (`encryptSecret`, konsisten dgn `waba_access_token`), tidak pernah plaintext; GET hanya return `hasCapiAccessToken` boolean (token tidak pernah bocor) + sumber (`db`/`env`/`none`); audit `UPDATE_CAPI_CONFIG`; GET graceful saat DB offline.
+- **`src/services/capi.service.ts`**: `decryptCapiToken()` — token DB di-decrypt; backward-compat legacy plaintext `EAA...` tetap dipakai; decrypt gagal → fallback env + warn.
+- **`packages/admin-dashboard/src/pages/tenant/Settings.tsx`**: panel baru "Meta Pixel & CAPI (Konversi Iklan)" — input Pixel ID + CAPI Access Token (password), badge status `CONFIGURED`/`PARTIAL`/`ENV FALLBACK`/`NOT CONFIGURED`, via `useUiFeedback`.
+- **Test**: `tests/integration/capi-config-admin.test.ts` (baru, 6 test: masking token, encrypt saat save, clear token, env fallback, DB offline, audit) + unit `decryptCapiToken` (4 test). Total **659 tests**.
+
+---
+
+## [Unreleased] - 2026-08-07
+
+### Fixed & Added — Lengkapkan Integrasi Meta (WABA Webhook, CAPI, Media, Status)
+
+**Fix kritikal:**
+- **`src/app.ts`**: tambah content-type parser `application/json` yang menyimpan `request.rawBody` (Buffer). Sebelumnya `verifyMetaSignature` dihitung dari `JSON.stringify(request.body)` — urutan kunci/whitespace berubah → HMAC webhook WABA selalu mismatch di production (401). Sekarang verifikasi pakai bytes asli.
+- **`src/routes/waba-webhook.route.ts`**: route `GET|POST /api/webhook/waba` ternyata **belum terdaftar** di `buildApp()` — sekarang di-register (endpoint dulu tidak pernah hidup di produksi).
+
+**Baru:**
+- **Tenant resolution multi-tenant** — **`src/services/waba-tenant.service.ts`** (baru): resolve tenant dari `phone_number_id` di payload Meta (kolom `tenants.waba_phone_number_id`), cache in-memory, fallback `DEFAULT_TENANT_ID`. Webhook kini thread `tenantId` ke customer/conversation/message/queue.
+- **Media inbound** — `normalizer.ts` mengekstrak `mediaId`/`caption`/`mimeType` dari pesan image; **`src/integrations/whatsapp/media.ts`** (baru) resolve URL media via Graph API `GET /{media-id}` (CircuitBreaker, best-effort); webhook menyimpan URL di `_mediaUrl`, log content `[IMAGE: <caption>]`.
+- **CAPI tenant-aware + Purchase** — `capi.service.ts` baca `meta_pixel_id`/`meta_capi_access_token` dari DB tenant (fallback env); helper `resolveTreatmentValue()` ambil harga dari katalog; `admin.route.ts` kirim event `Purchase` (value IDR) saat reservasi dikonfirmasi, `Lead` tetap.
+- **Status webhook** — `schema.prisma` + migration `20260807000000_add_message_delivery_status` (kolom `delivery_status`/`delivered_at`/`read_at`); `normalizeWabaStatuses()`; `message.service.updateDeliveryStatus()`; webhook proses `statuses` (sent/delivered/read/failed) + alert `WABA_MESSAGE_FAILED` saat template gagal.
+- **`src/services/alert.service.ts`**: enum `AlertType.WABA_MESSAGE_FAILED`.
+
+**Test:** `tests/unit/waba-driver-and-webhook.test.ts` (+image/status), `tests/unit/waba-tenant-media-capi.test.ts` (baru: signature raw-body, tenant resolve, media URL, treatment value, CAPI tenant-aware), `tests/integration/waba-webhook-route.test.ts` (baru: hub.challenge, HMAC, status, tenant routing). Total 633 tests.
+
+### Testing lanjutan — Fitur Meta (matriks test lengkap)
+
+- **`tests/integration/waba-webhook-route.test.ts`** (+7): charset `application/json; charset=utf-8`, `object != whatsapp_business_account` → `IGNORED`, dedup idempotensi (duplicate `wa_message_id` skip enqueue), blocked customer (log tanpa enqueue), media image dgn token terenkripsi → `_mediaUrl` resolve, media tanpa token → tidak crash, status `failed` → alert `WABA_MESSAGE_FAILED`.
+- **`tests/unit/message-delivery-status.test.ts`** (baru, 7): `updateDeliveryStatus` utk `delivered`/`read`/`sent`/`failed` (timestamp field benar), empty id → tanpa DB call, DB offline → silent `{matched:false}`, count 0 → `matched:false`.
+- **`tests/integration/ad-click.test.ts`** (+2): event `Purchase` terkirim dgn `value` 60000 (dari katalog `Pijat Bayi Ceria`) + `currency:'IDR'` saat confirm; Purchase tanpa `value` utk treatment tak dikenal. (Gunakan `.some()` bukan `.find()` utk hindari async pollution antar test.)
+- Total suite: **650 tests, 58 files** (sebelumnya 633).
+
+---
+
+## [Unreleased] - 2026-08-06
+
+### Added — AI Router Default-ON per Tenant (Toggle Admin Dashboard)
+
+- **`prisma/schema.prisma`** & **migration `20260806000000_add_ai_router_config`**: kolom `tenants.ai_router_enabled` & `tenants.ai_router_shadow_mode` (default `true`/`true`).
+- **`src/config/ai-router-config.ts`** (baru): `AiRouterConfigService` — konfigurasi router per tenant dari DB (SaaS-ready), cache in-memory, fallback env `AI_ROUTER_ENABLED`/`AI_ROUTER_SHADOW_MODE` saat DB offline.
+- **`ai-router.ts`**: `isEnabled(tenantId?)`/`isShadowMode(tenantId?)`/`classify(input, tenantId?)` baca dari config service (default ON + shadow ON).
+- **`machine.ts`**: gate `AI_ROUTER_ENABLED === 'true'` → `AiRouterConfigService.isEnabled(tenantId)`; gate full-mode → `!isShadowMode(tenantId)`.
+- **`admin.route.ts`**: `GET/PATCH /api/admin/ai-router` (toggle per tenant + audit log).
+- **`packages/admin-dashboard/src/pages/tenant/Settings.tsx`**: panel "AI Router Engine" (toggle enabled + shadow mode) via `useUiFeedback`.
+- **`app.ts`**: boot `AiRouterConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID)`.
+- **`.env.example`**: env `AI_ROUTER_*` didokumentasikan sebagai fallback (DB sumber kebenaran).
+
+---
+
 ## [Unreleased] - 2026-08-02
 
 ### Changed — Pembersihan Hardcoded Business Data (Fase 1, 3, 4.1 dari docs/HARDCODED_FIX_PLAN.md)

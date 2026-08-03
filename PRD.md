@@ -1,8 +1,8 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
-**Versi:** 2.3  
-**Status:** Fase 1, Fase 2 & AI Router Engine Production-Ready (536 unit & integration tests PASS 100%)  
-**Terakhir diperbarui:** 2 Agustus 2026
+**Versi:** 2.4  
+**Status:** Fase 1, Fase 2, Fase 3, Fase 4 & Fase 5 Production-Ready (688 unit & integration tests PASS 100%)  
+**Terakhir diperbarui:** 9 Agustus 2026
 
 ---
 
@@ -91,6 +91,24 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 35 | Dashboard UI System Debug (`/admin/debug` & REST API `/api/admin/debug/*`): 5 tab observability (System Overview, AI Router, Log Buffer in-memory, Message Trace, Conversation Trace) untuk maintenance & tracing read-only | ✅ Selesai |
 | 36 | Penyelarasan Keyword Medis (`ruam`, `eksim`, `alergi susu`): penambahan ke `MEDIUM_SEVERITY_MEDICAL_KEYWORDS` sebagai single source of truth antara detector medis dan router | ✅ Selesai |
 
+#### 4.1.3 Fase 5 — Channel Ops, Landing Page & Dashboard (Status: inti selesai & tervalidasi)
+
+| # | Fitur / Requirement | Status |
+|---|---|---|
+| 37 | WhatsApp Provider per tenant (WAHA/WABA) dikelola dari Admin Dashboard (Settings → WhatsApp Provider): toggle provider, status session WAHA live-check, konfigurasi WABA (Phone Number ID, Business Account ID, Access Token, Webhook Verify Token) | ✅ Selesai — token WABA disimpan AES-256-GCM encrypted (tidak pernah plaintext di DB), gateway cache di-reset saat config berubah |
+| 38 | Dual-gateway WhatsApp (per-tenant factory): `resolveGatewayForTenant()` memilih `WahaGatewayDriver` atau `WabaGatewayDriver` (Meta Cloud API v25) berdasarkan `tenants.whatsapp_provider`, fallback aman ke WAHA saat DB error | ✅ Selesai |
+| 39 | Webhook WABA (Meta Cloud): `GET|POST /api/webhook/waba` — verifikasi token, decode `entry[].changes[]`, normalisasi payload menjadi format internal, integrasi dengan state machine | ✅ Selesai |
+| 40 | Media WABA (download/upload) & sinkronisasi tenant WABA (`src/services/waba-tenant.service.ts`) | ✅ Selesai |
+| 41 | Multi Landing Page per tenant dikelola dari Admin Dashboard (menu Landing Page): CRUD (`/api/admin/landings`), badge Template Sistem vs HTML Kustom, toggle aktif/nonaktif, preview & view (ikon mata), editor dengan limit upload 500 KB & wajib elemen `<a id="wa-cta">` | ✅ Selesai |
+| 42 | Landing page di-serve langsung oleh bot (bukan microservice terpisah): `GET /go` (fail-open generik untuk pintu kampanye), `GET /promo/:slug` & `GET /:slug` (strict 404 bila slug tak dikenal), guard `RESERVED_SLUGS` | ✅ Selesai — click-catcher (`packages/click-catcher`) dipensiunkan dari docker-compose, paket dibiarkan sebagai referensi |
+| 43 | Konten landing dua mode: `RAW_HTML` (sanitasi 17-layer, `TenantHtmlService.validateAndSanitize`) vs `STRUCTURED_JSON` (render template `src/landing/public/go.html`), dengan fallback legacy ke `tenants.raw_html_content` | ✅ Selesai |
+| 44 | Meta Pixel + server-side CAPI per tenant (Settings → Meta Pixel & CAPI): override `meta_pixel_id` per landing, token CAPI encrypted AES-256-GCM, GET hanya kembalikan `hasCapiAccessToken` boolean (token tak pernah bocor) | ✅ Selesai |
+| 45 | Event tracking landing: `PageView` selalu di-fire; onload `ViewContent`/`Search`; saat klik CTA (`id="wa-cta"`) fire `Lead`/`Purchase`/`InitiateCheckout`/`AddToCart`/`CompleteRegistration`/`Contact`/`StartTrial`/`Subscribe`/`CustomizeProduct` sebelum redirect | ✅ Selesai |
+| 46 | Tracking atribusi same-origin: landing memakai API bot sendiri (`/api/tracking/click`, guard `X-Tracking-Api-Key`), menangkap `fbclid`, UTM params, `_fbp`/`_fbc`; tanpa CORS/base URL eksternal | ✅ Selesai |
+| 47 | Keamanan halaman landing: CSP `script-src 'nonce-…' https://connect.facebook.net; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, tag `<script>`/`<iframe>`/dll pada input tenant di-strip | ✅ Selesai |
+| 48 | AI Router Engine config per tenant (Settings → AI Router Engine): `tenants.ai_router_enabled` & `tenants.ai_router_shadow_mode` jadi sumber kebenaran (default ON + shadow ON), env vars hanya fallback offline/test | ✅ Selesai |
+| 49 | **Konek WhatsApp via QR di Admin UI** (fitur terencana — BELUM dibuat): panel Settings → WhatsApp Provider menampilkan QR code untuk konek session WAHA langsung dari dashboard. Dibutuhkan: metode `getAuthQr()`/`getSessionQr()` di `WahaClient` (endpoint WAHA `/api/{session}/auth/qr`), endpoint admin `GET /api/admin/whatsapp-provider/qr`, dan UI render QR + status polling. Status: 🚩 planned | 🚩 Belum dibuat |
+
 ---
 
 #### 4.2 Fase 2 — Scheduling & Follow-up Engine (Status: Selesai & Tervalidasi)
@@ -108,10 +126,10 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 9 | Dashboard UI Follow-Up Queue (`/admin/follow-ups`) dengan filter, pencarian, dan kontrol admin (Kirim Sekarang, Reschedule, Cancel) | ✅ Selesai |
 
 #### 4.3 Di Luar Scope (untuk saat ini)
-- Dashboard admin dengan UI visual (saat ini cukup REST endpoint)
 - Pembayaran online / payment gateway
 - Multi-cabang klinik (asumsi saat ini: satu titik lokasi klinik)
 - Vector/embedding search untuk knowledge base (dimulai dari full-text search sederhana; upgrade jika volume FAQ bertambah signifikan atau akurasi retrieval terbukti kurang)
+- Self-serve SaaS multi-tenant (dashboard saat ini masih internal/single-tenant)
 
 ---
 
@@ -137,6 +155,10 @@ Customer chat pertama kali
 - **Knowledge base:** kumpulan FAQ dan potongan dokumen referensi untuk menjawab pertanyaan customer
 - **Reservasi & treatment (Fase 2):** jadwal, status konfirmasi, riwayat treatment, status repeat order
 - **AiRouterEvaluation (Fase 4):** log evaluasi shadow/full mode per pesan (`customer_phone`, `message_text`, `current_state`, `llm_intent`, `llm_confidence`, `llm_used_fallback`, `legacy_intent`, `legacy_escalated`, `intent_match`, `escalation_match`, `mismatch_notes`, `response_time_ms`)
+- **Tenant (Fase 5):** kolom konfigurasi channel — `whatsapp_provider` (WAHA/WABA), `waha_session_id`, `waba_phone_number_id`, `waba_business_account_id`, `waba_access_token` (encrypted AES-256-GCM), `waba_webhook_verify_token`, `ai_router_enabled`, `ai_router_shadow_mode`
+- **LandingPage (Fase 5):** `slug` unik, `title`, `landing_type` (RAW_HTML/STRUCTURED_JSON), `html_content`, `structured_content`, `events[]`, override `meta_pixel_id` & `whatsapp_number`, `is_active`
+- **AdClick (Fase 5):** log klik atribusi per landing (`tenant_id`, `slug`, `fbclid`, `fbp`, `fbc`, `landing_url`, `utm_source/medium/campaign`, `tracking_code`, `converted`)
+- **AiRouterConfig (Fase 5):** mapping per-tenant untuk model AI router (opsional, fallback env)
 
 *Semua tabel di atas memiliki kolom `tenant_id` (default satu nilai tetap) sebagai persiapan arsitektur multi-tenant di masa depan — lihat Section 6.1*
 
@@ -153,13 +175,14 @@ Sistem ini murni single-tenant (satu bisnis, tanpa auth multi-pengguna, tanpa bi
 | Database & ORM | PostgreSQL + Prisma ORM |
 | Full-Text Search | Postgres native (`to_tsvector('simple', ...)`) untuk knowledge base |
 | Message Queue | BullMQ + Redis (sharded FIFO per nomor customer), fallback in-memory kalau Redis down |
-| Integrasi WhatsApp | WAHA (WhatsApp HTTP API, self-hosted) |
+| Integrasi WhatsApp | WAHA (WhatsApp HTTP API, self-hosted) + WABA (Meta Cloud API v25) — dual-gateway per-tenant, dikelola dari Admin Dashboard |
+| Landing Page & Tracking | Di-serve langsung oleh bot (`/{slug}`, `/promo/:slug`, `/go`) — Meta Pixel (klien) + Conversions API server-side, atribusi same-origin (`fbclid`, UTM, `_fbp`/`_fbc`) |
 | Geocoding | Google Maps Geocoding API |
 | Perhitungan Jarak/Rute | OpenRouteService Directions API, fallback formula Haversine |
 | LLM Engine | OpenAI-compatible API via SumoPod (MiniMax-M2.7-highspeed / DeepSeek V4 Flash) |
-| AI Router Engine | Klasifikasi 11-intent terstruktur + Circuit Breaker (5 error / 60s cooldown) + Zod retry-once |
+| AI Router Engine | Klasifikasi 11-intent terstruktur + Circuit Breaker (5 error / 60s cooldown) + Zod retry-once; config per-tenant dari DB (`ai_router_enabled`/`ai_router_shadow_mode`) |
 | System Observability | Dashboard UI Debug (`/admin/debug`), Log Buffer in-memory (500 entri), Script akurasi (`check-router-accuracy.ts`) |
-| Admin Dashboard UI | React 18 + Tailwind CSS + Lucide Icons + Vite (Single-Page Application di `/admin/*`) |
+| Admin Dashboard UI | React 18 + Tailwind CSS + Lucide Icons + Vite (Single-Page Application di `/admin/*`) — manajemen tenant, landing page, WhatsApp provider, CAPI, follow-up queue, debug |
 | Testing | Vitest (unit & integration) |
 | Deployment | Docker (Dockerfile + docker-compose) |
 
@@ -213,6 +236,9 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - Fuzzy matching lokasi (Candidate Spans & Gazetteer, dual threshold: 0.75 kelurahan, 0.82 kecamatan) berisiko salah cocokkan nama kelurahan yang mirip tapi berbeda (misal dua kelurahan dengan nama hampir sama di kecamatan berbeda) — kalau ini terjadi, ongkir dan penentuan area jadi salah tanpa customer maupun admin sadar. Perlu dipantau di awal produksi apakah threshold ini menghasilkan false-positive match yang mengganggu.
 - Reset idle 24 jam hanya berlaku untuk data lokasi pending (belum dikonfirmasi), bukan data yang sudah confirmed — pastikan pemahaman ini konsisten kalau ada perubahan logic ke depan, supaya tidak keliru menghapus data lokasi yang sudah valid.
 - Auto-save Google Contacts (fitur 29) masih nonaktif secara default — sebelum diaktifkan, pastikan OAuth credential Google disimpan sebagai secret (bukan plaintext di repo), dan pertimbangkan implikasi privasi: data kontak customer (nomor HP, nama) akan tersimpan permanen di akun Google pribadi/bisnis pemilik, di luar kendali sistem database utama. Kalau nanti bisnis ini di-handover atau akun Google berganti, data ini perlu ditangani terpisah dari migrasi database.
+- WABA (Meta Cloud API) tunduk regulasi Meta: outbound di luar 24h window wajib HSM template; typing indicator ada cap durasi; consent/opt-in hanya untuk tenant WABA. Pengujian WABA dilakukan dengan mock/offline — validasi live dengan akun Meta resmi masih tertunda.
+- Landing page strict 404 (`/promo/:slug`, `/:slug`) — pastikan URL iklan selalu memakai slug yang sudah dibuat & aktif di dashboard; slug tak dikenal akan error 404 dan kampanye iklan gagal landing. `/go` tetap fail-open generik.
+- Artefak kompilasi `.js` nyasar di `src/` (contoh `src/services/tenant-html.service.js`) dapat menimpa file `.ts` pada resolusi module Vite (`.js` diprioritaskan sebelum `.ts`) — sudah ditemukan & dihapus; jangan commit hasil kompilasi ke `src/`.
 
 ---
 
@@ -238,7 +264,11 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - [x] Script `check-router-accuracy.ts` tervalidasi lawan Postgres asli
 - [x] UNKNOWN-repeated escalation (2x → HUMAN_HANDLING) terintegrasi di state machine
 - [x] Dashboard UI System Debug (`/admin/debug`) & 5 endpoint read-only `/api/admin/debug/*` aktif & ter-build ke production bundle
-- [x] 536 unit & integration test PASS 100% (47 test files) — termasuk 107 test AI Router Engine, 7 E2E chat-to-reservation scenarios, 28 treatment question tests, 52 kecamatan rejection tests, 3 medical silent escalation tests, 11 system debug tests
+- [x] 688 unit & integration test PASS 100% (61 test files) — termasuk AI Router Engine, E2E chat-to-reservation, treatment questions, kecamatan rejection, medical silent escalation, system debug, WABA driver/webhook/media, landing page CRUD/serving, CAPI config, message delivery status
+- [x] Fase 5 inti: WhatsApp Provider (WAHA/WABA) toggle + status via admin, token WABA encrypted AES-256-GCM; multi landing page CRUD + serve langsung bot (strict 404 / `/go` fail-open / reserved slugs); Meta Pixel + CAPI per tenant; event tracking onload/click; AI Router config per-tenant dari DB
+
+**Belum selesai Fase 5:**
+- [ ] Konek WhatsApp via QR di Admin UI (requirement #49) — panel Settings menampilkan QR untuk konek session WAHA (butuh `getAuthQr()` di `WahaClient` + endpoint admin + UI render QR). Status: planned.
 
 **Catatan status yang masih perlu dipantau berkelanjutan (bukan blocker, tapi bukan berarti "selesai selamanya"):**
 - Fitur label WAHA "hold" (poin 27) — tetap experimental sampai ada periode pemakaian nyata yang cukup panjang untuk memastikan tidak konflik dengan auto-release 6 jam

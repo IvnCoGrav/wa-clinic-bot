@@ -5,6 +5,8 @@ import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { SERVICE_AREAS_ALTERNATION } from '../../config/service-areas';
+import { AiRouterConfigService } from '../../config/ai-router-config';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -760,16 +762,16 @@ export function compareRouterDecisions(a: AIRouterResponse, b: AIRouterResponse)
 export class AIRouterService {
   constructor(private client: AIRouterLLMClient = aiRouterLLMClient) {}
 
-  public isEnabled(): boolean {
-    return process.env.AI_ROUTER_ENABLED === 'true';
+  public isEnabled(tenantId: string = DEFAULT_TENANT_ID): boolean {
+    return AiRouterConfigService.isEnabled(tenantId);
   }
 
-  public isShadowMode(): boolean {
-    return process.env.AI_ROUTER_SHADOW_MODE === 'true';
+  public isShadowMode(tenantId: string = DEFAULT_TENANT_ID): boolean {
+    return AiRouterConfigService.isShadowMode(tenantId);
   }
 
-  public async classify(input: AIRouterInput): Promise<AIRouterDecision> {
-    if (!this.isEnabled()) {
+  public async classify(input: AIRouterInput, tenantId: string = DEFAULT_TENANT_ID): Promise<AIRouterDecision> {
+    if (!this.isEnabled(tenantId)) {
       return { enabled: false, shadowMode: false, source: 'disabled', response: null };
     }
 
@@ -786,7 +788,7 @@ export class AIRouterService {
       source = 'fallback';
     }
 
-    if (this.isShadowMode()) {
+    if (this.isShadowMode(tenantId)) {
       const matches = compareRouterDecisions(response, ruleBased);
       console.log(
         `[AI ROUTER SHADOW] match=${matches} llm_intent=${response.intent} rule_intent=${ruleBased.intent} llm_escalate=${response.needs_human_escalation} rule_escalate=${ruleBased.needs_human_escalation}`

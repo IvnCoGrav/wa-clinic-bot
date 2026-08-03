@@ -56,3 +56,20 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Fix:** matikan proses yang lock `query_engine-windows.dll.node` (dev server, prisma studio),
   lalu jalankan `prisma generate` penuh (tanpa `--no-engine`); verifikasi runtime error berubah dari
   `P6001` menjadi `P2021`/`P1001` (error koneksi normal) sebelum restart app.
+
+## 4. [Build] Artefak kompilasi `.js` nyasar di `src/` menimpa `.ts` pada resolusi module Vite
+
+- **Status:** resolved (2026-08-09).
+- **Gejala:** `injectTracking()` (events onload/click landing) tidak pernah ter-inject walaupun
+  kode `src/services/html-sanitizer.ts` sudah punya param `events`. `TenantHtmlService.injectTracking.toString()`
+  menampilkan signature lama `(htmlString, metaPixelId, nonce, config)` tanpa `events`.
+- **Akar masalah:** file kompilasi nyasar `src/services/tenant-html.service.js` (berisi class lama
+  inline, hasil tsc ke direktori salah) ter-tack. Vite/tsx mengutamakan ekstensi `.js` sebelum `.ts`
+  dalam resolusi, sehingga re-export `tenant-html.service.ts` terselesaikan ke file `.js` stale
+  yang shadowing source aslinya.
+- **Akibat:** test integration landing (events onload/click) merah secara membingungkan; behavior
+  runtime di production ikut salah (event tracking tidak jalan).
+- **Fix:** hapus artefak `.js` dari `src/` (`git rm src/services/tenant-html.service.js`) dan
+  jangan commit hasil kompilasi ke direktori source. Verifikasi: `npx vitest run tests/integration/landing-serving.test.ts`.
+- **Pelajaran:** grep file `*.js` di `src/` sebelum debug perilaku aneh; periksa juga
+  `dist/` untuk sumber kebenaran perilaku yang dipakai di test.

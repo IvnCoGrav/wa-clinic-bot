@@ -1,9 +1,11 @@
 import Fastify from 'fastify';
 import dotenv from 'dotenv';
 import { webhookRoutes } from './routes/webhook.route';
+import { wabaWebhookRoutes } from './routes/waba-webhook.route';
 import { adminRoutes } from './routes/admin.route';
 import { healthRoutes } from './routes/health.route';
 import { trackingRoutes } from './routes/tracking.route';
+import { landingRoutes } from './routes/landing.route';
 import rateLimit from '@fastify/rate-limit';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
@@ -37,6 +39,21 @@ export function buildApp() {
     },
   });
 
+  // Simpan raw body (Buffer) untuk verifikasi X-Hub-Signature-256 Meta.
+  // Meta menandatangani bytes asli request — re-stringify JSON.parse mengubah
+  // urutan kunci/whitespace sehingga HMAC selalu mismatch di production.
+  // Registrasi content-type string (bukan regex) agar menimpa parser default
+  // Fastify utk 'application/json' (matching string menang atas regex).
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    (req as any).rawBody = body;
+    try {
+      done(null, JSON.parse(body.toString('utf8')));
+    } catch (err: any) {
+      err.statusCode = 400;
+      done(err);
+    }
+  });
+
 
   // Register Rate Limiting (global, admin routes have the tightest budget)
   app.register(rateLimit, {
@@ -63,9 +80,11 @@ export function buildApp() {
 
   // Register Webhook, Admin, Health, & Tracking Routes
   app.register(webhookRoutes);
+  app.register(wabaWebhookRoutes);
   app.register(adminRoutes);
   app.register(healthRoutes);
   app.register(trackingRoutes);
+  app.register(landingRoutes);
 
   return app;
 }
@@ -91,11 +110,13 @@ if (require.main === module) {
       const { getDeliveryTiersFromDb } = await import('./services/delivery.service');
       const { loadPersonaFromDb } = await import('./config/persona');
       const { AiModelConfigService } = await import('./config/ai-models.config');
+      const { AiRouterConfigService } = await import('./config/ai-router-config');
       await loadServicesFromDb(DEFAULT_TENANT_ID);
       await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
       await loadPersonaFromDb(DEFAULT_TENANT_ID);
       await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config)');
+      await AiRouterConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
+      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config + AI router)');
     } catch (initErr) {
       console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
     }

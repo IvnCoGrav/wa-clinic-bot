@@ -19,7 +19,7 @@ describe('System Debug Service', () => {
     expect(humanUptime(59)).toBe('0d 0h 0m 59s');
   });
 
-  it('collectSystemInfo: secret TIDAK bocor, flag default unset, tidak throw saat DB offline', async () => {
+  it('collectSystemInfo: secret TIDAK bocor, flag default ON (router aktif shadow), tidak throw saat DB offline', async () => {
     process.env.LLM_API_KEY = 'SUPER_SECRET_XYZ';
     const info = await collectSystemInfo();
     const json = JSON.stringify(info);
@@ -29,8 +29,8 @@ describe('System Debug Service', () => {
 
     const routerFlag = info.featureFlags.find((f) => f.key === 'AI_ROUTER_ENABLED');
     expect(routerFlag?.value).toBe('unset');
-    expect(info.aiRouter.enabled).toBe(false);
-    expect(info.aiRouter.shadowMode).toBe(false);
+    expect(info.aiRouter.enabled).toBe(true); // default ON per tenant
+    expect(info.aiRouter.shadowMode).toBe(true); // default shadow ON (aman)
 
     // DB di-mock offline di test → status bukan CONNECTED, tapi service tetap return (tidak throw)
     expect(['CONNECTED', 'FAILED', 'UNKNOWN']).toContain(info.database.status);

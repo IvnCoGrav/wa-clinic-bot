@@ -168,8 +168,11 @@ npx prisma migrate deploy
 
 ### Shadow Mode AI Router — Timeline Monitoring
 
-Fitur observasi router (`AI_ROUTER_ENABLED=true` + `AI_ROUTER_SHADOW_MODE=true`) menulis evaluasi
-per pesan ke tabel `ai_router_evaluations`. Cek akurasi dengan:
+AI Router **default ON per tenant** (diatur dari Admin Dashboard → Settings → AI Router Engine).
+Sumber kebenaran: kolom `tenants.ai_router_enabled` / `tenants.ai_router_shadow_mode`
+(default ON + shadow ON — aman). Env `AI_ROUTER_ENABLED` / `AI_ROUTER_SHADOW_MODE`
+hanya fallback saat DB tidak tersedia. Router menulis evaluasi per pesan ke tabel
+`ai_router_evaluations`. Cek akurasi dengan:
 
 ```bash
 npx tsx src/scripts/check-router-accuracy.ts --days=7
@@ -185,6 +188,28 @@ npx tsx src/scripts/check-router-accuracy.ts --days=7
 1. `escalation match rate >= 98%` selama minimal 7 hari berturut-turut, DAN
 2. mismatch terkait `MEDICAL_CONCERN` = **0** (hard-zero), DAN
 3. `UNMAPPED` rate di `legacy_intent` < 5%.
+
+### Landing Page — Di-Serve Langsung oleh Bot
+
+Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain yang sama dengan admin dashboard). Microservice `packages/click-catcher` **tidak lagi dipakai** di docker-compose (dibiarkan sebagai referensi).
+
+**URL yang dilayani:**
+- `GET /go` — pintu masuk kampanye (fail-open, selalu 200 generik). Opsional `?slug=` untuk memuat landing spesifik.
+- `GET /promo/:slug` dan `GET /:slug` — landing per-slug. **Strict 404** bila slug tidak ada / nonaktif.
+- `GET /:slug` dilindungi daftar `RESERVED_SLUGS` (`go`, `promo`, `health`, `api`, `admin`, `public`, `assets`, `favicon.ico`) → 404.
+
+**Kelola di admin:** Dashboard → menu **Landing Page** (CRUD, preview/ikon mata, toggle aktif, upload HTML kustom, pilih events, override Pixel & No. WA).
+
+**Mode konten:**
+- `STRUCTURED_JSON` — render template `src/landing/public/go.html` (headline, subheadline, benefits, FAQ).
+- `RAW_HTML` — upload file HTML (maks 500 KB, wajib elemen `<a id="wa-cta">`), disanitasi 17-layer; tag `<script>`/`<iframe>`/dll di-strip.
+
+**Tracking & keamanan:**
+- `PageView` selalu di-fire; events onload (`ViewContent`, `Search`) setelah PageView; events click (`Lead`, `Purchase`, dst) saat CTA diklik sebelum redirect.
+- Tracking atribusi **same-origin**: `POST /api/tracking/click` (guard `X-Tracking-Api-Key`) menangkap `fbclid`, UTM, `_fbp`/`_fbc`.
+- Header keamanan: CSP `script-src 'nonce-…' https://connect.facebook.net; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
+
+**Preview URL di admin:** dikontrol `LANDING_BASE_URL` (fallback `TRACKING_API_BASE_URL`); jika kosong, preview memakai path relatif same-origin (`/{slug}`).
 
 ### 3. Endpoints Admin Knowledge Base
 

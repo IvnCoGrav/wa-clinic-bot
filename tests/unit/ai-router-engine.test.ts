@@ -341,12 +341,14 @@ describe('AI Router Engine — Feature Flags & Shadow Mode', () => {
     vi.restoreAllMocks();
   });
 
-  it('disabled (default) → decision.source=disabled, response null', async () => {
+  it('enabled (default) + shadow (default) → decision dipakai sebagai shadow (tidak override legacy)', async () => {
+    process.env.LLM_API_KEY = 'mock_key'; // paksa fallback offline (tanpa network)
     const svc = new AIRouterService();
     const decision = await svc.classify(input('IDLE', 'halo'));
-    expect(decision.enabled).toBe(false);
-    expect(decision.response).toBeNull();
-    expect(decision.source).toBe('disabled');
+    expect(decision.enabled).toBe(true);
+    expect(decision.shadowMode).toBe(true);
+    expect(decision.response).toBeTruthy();
+    expect(decision.source).not.toBe('disabled');
   });
 
   it('enabled + shadow mode → log comparison, decision tidak override legacy', async () => {
@@ -368,6 +370,7 @@ describe('AI Router Engine — Feature Flags & Shadow Mode', () => {
 
   it('enabled non-shadow → decision dapat dipakai, source llm/fallback', async () => {
     process.env.AI_ROUTER_ENABLED = 'true';
+    process.env.AI_ROUTER_SHADOW_MODE = 'false';
     process.env.LLM_API_KEY = 'mock_key';
     const svc = new AIRouterService();
     const decision = await svc.classify(input('IDLE', 'halo'));
@@ -1152,7 +1155,7 @@ describe('PLAN Kategori I — Shadow Mode & Logging', () => {
 
   it('#50 shadow OFF, LLM invalid total (retry & fallback gagal) → tidak crash, fallback UNKNOWN sbg default aman', async () => {
     process.env.AI_ROUTER_ENABLED = 'true';
-    delete process.env.AI_ROUTER_SHADOW_MODE;
+    process.env.AI_ROUTER_SHADOW_MODE = 'false';
     process.env.LLM_API_KEY = 'mock_key'; // LLM path pasti gagal → breaker fallback rule-based
     const svc = new AIRouterService(new AIRouterLLMClient());
     const decision = await svc.classify(input('IDLE', 'asdlkjfpoqwei'));
@@ -1316,7 +1319,7 @@ describe('PLAN Bagian 2 — UNKNOWN repeated escalation via state machine (full 
     process.env.LLM_API_KEY = 'mock_key';
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.AI_ROUTER_ENABLED = 'true';
-    delete process.env.AI_ROUTER_SHADOW_MODE;
+    process.env.AI_ROUTER_SHADOW_MODE = 'false'; // full mode (default sekarang shadow ON)
   });
   afterEach(() => {
     delete process.env.AI_ROUTER_ENABLED;

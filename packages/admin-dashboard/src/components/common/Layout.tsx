@@ -20,7 +20,8 @@ import {
   Volume2,
   Truck,
   Clock,
-  Bug
+  Bug,
+  Globe
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -62,6 +63,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'AI Sandbox Simulator', path: '/admin/sandbox', icon: Terminal },
     { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },
     { name: 'AI Persona settings', path: '/admin/persona', icon: Volume2 },
+    { name: 'Landing Page', path: '/admin/landing', icon: Globe },
     { name: 'Operational Settings', path: '/admin/settings', icon: SettingsIcon },
     { name: 'System Debug', path: '/admin/debug', icon: Bug },
   ];

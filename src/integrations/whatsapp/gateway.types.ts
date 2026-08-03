@@ -47,6 +47,10 @@ export interface NormalizedInboundMessage {
   text?: string;
   location?: { latitude: number; longitude: number; name?: string; address?: string };
   mediaUrl?: string;
+  mediaId?: string;
+  caption?: string;
+  mimeType?: string;
   contactName?: string;
+  phoneNumberId?: string;
   rawPayload: unknown;
 }

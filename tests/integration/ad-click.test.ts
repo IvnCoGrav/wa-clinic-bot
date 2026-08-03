@@ -219,5 +219,81 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
         })
       );
     });
+
+    it('should also fire Purchase event with value on reservation confirmation', async () => {
+      const capiSpy = vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true });
+
+      const resId = 'res_capi_purchase';
+      const mockCustomer = {
+        id: 'cust_capi_pur',
+        phone: '62812345679',
+        adClick: {
+          id: 'click_capi_pur',
+          fbclid: 'fbc_purchase',
+        },
+      };
+      const mockReservation = {
+        id: resId,
+        tenant_id: DEFAULT_TENANT_ID,
+        customer_id: 'cust_capi_pur',
+        customer: mockCustomer,
+        treatment_category: 'BABY',
+        treatment_detail: 'Pijat Bayi Ceria (Rileksasi)',
+        status: 'pending',
+      };
+      memoryReservations.set(resId, mockReservation);
+
+      const response = await mockApp.inject({
+        method: 'PATCH',
+        url: `/api/admin/reservation/${resId}/confirm`,
+        headers: { 'x-api-key': 'valid_admin_key' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Purchase event terkirim (fire-and-forget, tunggu microtask)
+      await new Promise((r) => setTimeout(r, 50));
+
+      // `.some()` bukan `.find()` — async Purchase dari test Lead sebelumnya bisa
+      // nyangkut di spy; kita cari call yg benar-benar value 60000.
+      const hasPurchaseWithValue = capiSpy.mock.calls.some(
+        (c: any) => c[0]?.eventName === 'Purchase' && c[0]?.value === 60000
+      );
+      expect(hasPurchaseWithValue).toBe(true);
+    });
+
+    it('should send Purchase without value when treatment is unknown', async () => {
+      const capiSpy = vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true });
+
+      const resId = 'res_capi_purchase_novalue';
+      const mockCustomer = {
+        id: 'cust_capi_pur_nv',
+        phone: '62812345670',
+        adClick: { id: 'click_capi_pur_nv', fbclid: 'fbc_novalue' },
+      };
+      const mockReservation = {
+        id: resId,
+        tenant_id: DEFAULT_TENANT_ID,
+        customer_id: 'cust_capi_pur_nv',
+        customer: mockCustomer,
+        treatment_category: 'UNKNOWN_CAT',
+        treatment_detail: 'Treatment misterius tidak dikenal',
+        status: 'pending',
+      };
+      memoryReservations.set(resId, mockReservation);
+
+      const response = await mockApp.inject({
+        method: 'PATCH',
+        url: `/api/admin/reservation/${resId}/confirm`,
+        headers: { 'x-api-key': 'valid_admin_key' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const purchaseCall = capiSpy.mock.calls.find((c: any) => c[0]?.eventName === 'Purchase');
+      expect(purchaseCall).toBeDefined();
+      expect(purchaseCall[0].value).toBeUndefined();
+    });
   });
 });

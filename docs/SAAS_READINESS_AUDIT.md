@@ -3,6 +3,13 @@
 **Audit Date:** 2026-08-02
 **Verdict:** NOT SaaS-ready. DB schema siap multi-tenant, tapi seluruh layer di atas DB masih single-tenant.
 
+> **Status Update 2026-08-09:** Sebagian blocker P0/P1 sudah diringankan sejak audit ini.
+> - **Landing Page tenant-aware** (baru): tabel `landing_pages` punya `tenant_id`, resolver `src/services/landing-content.service.ts` memakai `landingPage.findFirst({ where: { slug, is_active: true } })` + lookup tenant; fallback legacy `tenant.findFirst({ OR: [{slug},{id}] })`. Tidak ada `DEFAULT_TENANT_ID` tersembunyi di resolver.
+> - **AI Router per-tenant**: config `ai_router_enabled`/`ai_router_shadow_mode` di tabel `Tenant` (default ON), bukan env global — dashboard Settings bisa toggle per tenant.
+> - **WhatsApp Provider per-tenant**: `whatsapp_provider` + kredensial WABA di tabel `Tenant`; `resolveGatewayForTenant()` (per-tenant factory) menggantikan singleton WAHA untuk pemilihan driver.
+> - **Fallback nomor WA hardcode** di `tracking.route.ts`/`click-catcher` sudah dihapus — kini env `DEFAULT_WHATSAPP_PHONE` / kolom tenant (`landing_pages.whatsapp_number`, `tenants.whatsapp_number`), tanpa nilai produksi di source.
+> - Status lapisan lain (tenant routing webhook, persona/templates, admin auth) tetap seperti snapshot di bawah.
+
 ---
 
 ## Status per Layer
@@ -87,7 +94,7 @@
 - [ ] Fix `Customer.phone` unique: `@@unique([tenant_id, phone])`
 - [ ] Fix `AdClick.trackingCode` unique: `@@unique([tenant_id, trackingCode])`
 - [ ] Fix `LegacyStaging.tenantId` → `tenant_id` (snake_case)
-- [ ] Remove hardcoded fallback phone numbers di `tracking.route.ts`, `click-catcher`
+- [x] Remove hardcoded fallback phone numbers di `tracking.route.ts`, `click-catcher` — (selesai 2026-08-09: `defaultLandingContent()` env `DEFAULT_WHATSAPP_PHONE`; landing resolver DB-driven)
 
 ### Fase 5 — Backend Services
 - [ ] Google Calendar: label dari DB tenant config, bukan hardcode "Kala Treatment"

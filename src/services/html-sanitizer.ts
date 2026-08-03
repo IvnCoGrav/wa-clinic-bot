@@ -118,9 +118,22 @@ export class TenantHtmlService {
     htmlString: string,
     metaPixelId: string,
     nonce: string,
-    config: ServerTrackingConfig
+    config: ServerTrackingConfig,
+    events: string[] = []
   ): string {
     const $ = cheerio.load(htmlString);
+
+    // Event yang di-fire saat landing load (setelah PageView)
+    const ONLOAD_EVENTS: string[] = ['ViewContent', 'Search'];
+    // Event yang di-fire saat klik CTA (konversi/intent) sebelum redirect
+    const CLICK_EVENTS: string[] = ['Lead', 'Purchase', 'InitiateCheckout', 'AddToCart', 'CompleteRegistration', 'Contact', 'StartTrial', 'Subscribe', 'CustomizeProduct'];
+
+    const pixelOnloadLines = events
+      .filter((e) => ONLOAD_EVENTS.includes(e))
+      .map((e) => `        fbq('track', '${e}');`)
+      .join('\n');
+
+    const clickPixelEvents = JSON.stringify(events.filter((e) => CLICK_EVENTS.includes(e)));
 
     // 1. Inject Meta Pixel into <head> with nonce
     const pixelSnippet = `
@@ -135,6 +148,7 @@ export class TenantHtmlService {
         'https://connect.facebook.net/en_US/fbevents.js');
         fbq('init', '${metaPixelId}');
         fbq('track', 'PageView');
+${pixelOnloadLines}
       </script>
     `;
 
@@ -173,6 +187,8 @@ export class TenantHtmlService {
           const fbp = getCookie('_fbp');
           const fbc = getCookie('_fbc');
 
+          const clickPixelEvents = ${clickPixelEvents};
+
           const ctaBtn = document.getElementById('wa-cta');
           let isRedirecting = false;
 
@@ -189,13 +205,15 @@ export class TenantHtmlService {
               e.preventDefault();
               if (isRedirecting) return;
 
+              clickPixelEvents.forEach(function(ev) { if (window.fbq) fbq('track', ev); });
+
               ctaBtn.style.opacity = '0.7';
 
               const safetyTimeout = setTimeout(function() {
                 executeFallbackRedirect(defaultPhone);
               }, 2000);
 
-              if (!trackingApiBaseUrl || !trackingApiKey) {
+              if (!trackingApiKey) {
                 clearTimeout(safetyTimeout);
                 executeFallbackRedirect(defaultPhone);
                 return;
@@ -213,7 +231,7 @@ export class TenantHtmlService {
                 slug: tenantSlug,
               };
 
-              fetch(trackingApiBaseUrl + '/api/tracking/click', {
+              fetch((trackingApiBaseUrl ? trackingApiBaseUrl.replace(/\/+$/, '') : '') + '/api/tracking/click', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',

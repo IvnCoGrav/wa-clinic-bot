@@ -57,7 +57,7 @@ describe('Fase 1 MVP — Educational Landing Page & Click Catcher Multi-Tenant I
   });
 
   it('3. go.html template should contain mandatory id="wa-cta" CTA button contract & placeholders', () => {
-    const htmlPath = path.join(process.cwd(), 'packages', 'click-catcher', 'public', 'go.html');
+    const htmlPath = path.join(process.cwd(), 'src', 'landing', 'public', 'go.html');
     expect(fs.existsSync(htmlPath)).toBe(true);
 
     const htmlContent = fs.readFileSync(htmlPath, 'utf-8');

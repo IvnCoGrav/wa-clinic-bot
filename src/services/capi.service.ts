@@ -2,6 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
+import { decryptSecret } from '../utils/encryption';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -47,9 +48,52 @@ export function sha256Hash(text: string): string {
   return crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex');
 }
 
+/**
+ * Mencari harga (promoPrice ?? originalPrice) treatment di katalog berdasarkan
+ * treatment_detail / raw text reservasi. Best-effort: tak ditemukan → undefined
+ * (event dikirim tanpa value). Dipakai event Purchase CAPI.
+ */
+export async function resolveTreatmentValue(treatmentDetail: string | null | undefined): Promise<number | undefined> {
+  if (!treatmentDetail || !treatmentDetail.trim()) return undefined;
+  try {
+    const { treatmentCatalogService } = await import('./treatment-catalog.service');
+    const q = treatmentDetail.toLowerCase();
+    const services = treatmentCatalogService.getAllServices();
+    const exact = services.find((s) => {
+      const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+      return cleanName && (q.includes(cleanName) || cleanName.includes(q));
+    });
+    const target = exact || services.find((s) => q.includes(s.name.toLowerCase()));
+    if (target) {
+      return target.promoPrice ?? target.originalPrice;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Decrypt token CAPI yang disimpan encrypted (AES-256-GCM via encryptSecret).
+ * Backward-compat: data lama mungkin plaintext — kalau decrypt gagal & terlihat
+ * seperti token Meta (EAA...), anggap legacy dan pakai apa adanya.
+ */
+export function decryptCapiToken(raw: string): string | null {
+  if (!raw) return null;
+  try {
+    return decryptSecret(raw);
+  } catch {
+    // Legacy plaintext atau format tak dikenal — pakai asli kalau terlihat token.
+    return raw.startsWith('EAA') ? raw : null;
+  }
+}
+
 export class CapiService {
   /**
-   * Mengirimkan server-side event ke Meta Conversions API (CAPI)
+   * Mengirimkan server-side event ke Meta Conversions API (CAPI).
+   * Tenant-aware: pixelId & accessToken diambil dari kolom tenant DB
+   * (meta_pixel_id / meta_capi_access_token), fallback env FB_PIXEL_ID /
+   * FB_CAPI_ACCESS_TOKEN saat tenant tidak punya config.
    */
   public async sendCapiEvent(params: {
     eventName: string;
@@ -57,8 +101,9 @@ export class CapiService {
     adClick?: any;
     value?: number;
     currency?: string;
+    tenantId?: string;
   }): Promise<{ success: boolean; message?: string }> {
-    const { eventName, customer, adClick, value, currency } = params;
+    const { eventName, customer, adClick, value, currency, tenantId } = params;
 
     // 1. GUARD CLAUSE: Jika tidak ada data adClick, lewatkan pemanggilan (CAPI tidak dikirim tanpa data attribution)
     if (!adClick) {
@@ -66,8 +111,23 @@ export class CapiService {
       return { success: false, message: 'Skipped: No attribution data' };
     }
 
-    const pixelId = process.env.FB_PIXEL_ID;
-    const accessToken = process.env.FB_CAPI_ACCESS_TOKEN;
+    // 2. Tenant-aware credentials (DB menang, env fallback)
+    let pixelId = process.env.FB_PIXEL_ID;
+    let accessToken = process.env.FB_CAPI_ACCESS_TOKEN;
+    if (tenantId) {
+      try {
+        const { prisma } = await import('../db/client');
+        const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+        if (tenant?.meta_pixel_id) pixelId = tenant.meta_pixel_id;
+        if (tenant?.meta_capi_access_token) {
+          const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
+          if (decrypted) accessToken = decrypted;
+          else console.warn(`[CAPI WARNING] Token CAPI tenant ${tenantId} gagal didecrypt, pakai env fallback.`);
+        }
+      } catch (err) {
+        console.warn(`[CAPI WARNING] Gagal baca config CAPI tenant ${tenantId}, pakai env fallback:`, (err as Error).message);
+      }
+    }
 
     if (!pixelId || !accessToken) {
       console.warn(`[CAPI WARNING] CAPI credentials missing: FB_PIXEL_ID=${pixelId ? 'configured' : 'missing'}, FB_CAPI_ACCESS_TOKEN=${accessToken ? 'configured' : 'missing'}`);

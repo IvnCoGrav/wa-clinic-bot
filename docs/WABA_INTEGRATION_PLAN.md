@@ -1,7 +1,7 @@
 # WABA Integration Plan — WhatsApp Business API (Meta Cloud API)
 
-**Status:** Rencana arsitektur — siap untuk implementasi fase per fase
-**Tanggal:** 2026-08-02
+**Status:** Implementasi inti SELESAI (Fase 1-3 & 5; Fase 4 sebagian) — masih menunggu validasi live dengan akun Meta resmi & test number.
+**Tanggal:** 2026-08-02 (rencana) / 2026-08-09 (status update implementasi)
 **Gate:** Core state machine, BullMQ queue, AI Router shadow mode, follow-up engine semua jalan production via WAHA
 
 ---
@@ -296,13 +296,13 @@ WABA bisa diuji pakai **Meta Test Number** (sandbox, gratis di Developer Portal)
 
 ## 9. Fase Implementasi
 
-| Fase | Isi | Keluar | Risiko |
-|---|---|---|---|
-| **1. Abstraction** | Interface `WhatsAppGateway`, wrap `waha/client.ts` → `WahaGatewayDriver`, factory default WAHA, `MockGateway` untuk test | 0 perubahan behavior, test tetap pass | Rendah |
-| **2. WABA core** | `WabaGatewayDriver` (Graph API), route `GET/POST /api/webhook/waba` + HMAC, webhook normalizer | Kirim/terima via Test Number | Rendah |
-| **3. Multi-tenant config** | Schema `whatsapp_provider` + kredensial WABA (encrypt), factory resolve per tenant | Tenant bisa switch provider | Rendah |
-| **4. Template engine** | `follow-up.service.ts` cabang per provider, mapping stage → HSM, status template, consent gatekeeper + opt-out handler | Follow-up WABA jalan patuh regulasi | Sedang |
-| **5. Shadow + dashboard** | Toggle provider di Settings, status indicator (WAHA session vs WABA token + template status), uji paralel kedua provider | Production multi-tenant ready | Sedang |
+| Fase | Isi | Keluar | Risiko | Status |
+|---|---|---|---|---|
+| **1. Abstraction** | Interface `WhatsAppGateway`, wrap `waha/client.ts` → `WahaGatewayDriver`, factory default WAHA, `MockGateway` untuk test | 0 perubahan behavior, test tetap pass | Rendah | ✅ Selesai (`src/integrations/whatsapp/gateway.types.ts`, `factory.ts`) |
+| **2. WABA core** | `WabaGatewayDriver` (Graph API v25), route `GET/POST /api/webhook/waba` + verifikasi token, webhook normalizer | Kirim/terima via Test Number | Rendah | ✅ Selesai (driver + webhook + normalizer + media; test `waba-driver-and-webhook.test.ts`) |
+| **3. Multi-tenant config** | Schema `whatsapp_provider` + kredensial WABA (encrypt AES-256-GCM), factory resolve per tenant | Tenant bisa switch provider | Rendah | ✅ Selesai (toggle + status via `GET/PATCH /api/admin/whatsapp-provider`) |
+| **4. Template engine** | `follow-up.service.ts` cabang per provider, mapping stage → HSM, status template (`waba-template.service.ts`), consent gatekeeper (`waba-consent.service.ts`) + opt-out handler | Follow-up WABA jalan patuh regulasi | Sedang | ⚠️ Sebagian — service & consent ada, approval template live belum tervalidasi |
+| **5. Shadow + dashboard** | Toggle provider di Settings, status indicator (WAHA session vs WABA token + template status), uji paralel kedua provider | Production multi-tenant ready | Sedang | ✅ Selesai (panel Settings → WhatsApp Provider; status indicator live) |
 
 **Safety net**: default tetap WAHA. WABA aktif hanya kalau tenant eksplisit pilih. Feature flag per tenant, pola `AI_ROUTER_SHADOW_MODE`.
 

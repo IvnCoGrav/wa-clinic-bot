@@ -1,10 +1,11 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { verifyMetaSignature } from '../integrations/whatsapp/signature';
-import { normalizeWabaPayload } from '../integrations/whatsapp/normalizer';
+import { normalizeWabaPayload, normalizeWabaStatuses } from '../integrations/whatsapp/normalizer';
 import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
+import { wabaTenantService } from '../services/waba-tenant.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -28,7 +29,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     const correlationId = crypto.randomUUID();
 
     const appSecret = process.env.WABA_APP_SECRET || '';
-    const rawBody = JSON.stringify(request.body);
+    const rawBody = (request as any).rawBody ?? Buffer.from(JSON.stringify(request.body));
     const signature = request.headers['x-hub-signature-256'] as string | undefined;
 
     if (!verifyMetaSignature(rawBody, signature, appSecret)) {
@@ -41,6 +42,34 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       return reply.status(200).send({ status: 'IGNORED' });
     }
 
+    // --- STATUS WEBHOOKS (sent/delivered/read/failed) ---
+    // Diproses lebih dulu; update status pesan by wa_message_id.
+    const statuses = normalizeWabaStatuses(body);
+    if (statuses.length > 0) {
+      let processedStatuses = 0;
+      for (const st of statuses) {
+        const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(st.phoneNumberId);
+        await messageService.updateDeliveryStatus(st.messageId, tenantId, st.status, st.timestamp);
+        if (st.status === 'failed') {
+          const detail = st.errors?.map((e) => e?.error_data?.details || e?.title || e?.message).filter(Boolean).join(' | ');
+          console.warn(`[WABA STATUS] Pesan ${st.messageId} gagal dikirim (tenant=${tenantId}): ${detail || 'unknown'}`);
+          try {
+            const { alertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+            await alertService.notifyAlert({
+              type: AlertType.WABA_MESSAGE_FAILED,
+              severity: AlertSeverity.CRITICAL,
+              message: `[WABA TEMPLATE FAILED] Pesan ${st.messageId} gagal dikirim (tenant=${tenantId}).`,
+              metadata: { tenantId, messageId: st.messageId, errors: st.errors },
+            });
+          } catch (alertErr) {
+            console.error('[WABA STATUS] Gagal kirim alert failed:', (alertErr as Error).message);
+          }
+        }
+        processedStatuses++;
+      }
+      return reply.status(200).send({ status: 'STATUS_PROCESSED', count: processedStatuses });
+    }
+
     const normalizedMessages = normalizeWabaPayload(body, DEFAULT_TENANT_ID);
     if (normalizedMessages.length === 0) {
       return reply.status(200).send({ status: 'NO_MESSAGES' });
@@ -48,7 +77,10 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
 
     let processed = 0;
     for (const msg of normalizedMessages) {
-      const isDuplicate = await messageService.isDuplicateMessage(msg.messageId, DEFAULT_TENANT_ID);
+      // Tenant resolution per phone_number_id dari payload (multi-tenant WABA)
+      const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(msg.phoneNumberId);
+
+      const isDuplicate = await messageService.isDuplicateMessage(msg.messageId, tenantId);
       if (isDuplicate) {
         console.log(`[WABA IDEMPOTENCY SKIP] ${msg.messageId} already processed [${correlationId}]`);
         continue;
@@ -57,23 +89,40 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       const customer = await customerService.getOrCreateCustomer(
         msg.fromNumber,
         msg.contactName,
-        DEFAULT_TENANT_ID
+        tenantId
       );
 
       if (customer.status === 'blocked') {
-        const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+        const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
         await messageService.logMessage({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           conversationId: conversation.id,
           direction: 'INBOUND',
-          content: msg.text || '[MEDIA]',
+          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
           waMessageId: msg.messageId,
           payloadRaw: msg.rawPayload,
         });
         continue;
       }
 
-      const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+      const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
+      // Best-effort: resolve URL media WABA (image) — gagal tidak menghalangi alur.
+      let mediaUrl: string | undefined;
+      if (msg.type === 'image' && msg.mediaId) {
+        try {
+          const { prisma } = await import('../db/client');
+          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          if (tenant?.waba_access_token) {
+            const { decryptSecret } = await import('../utils/encryption');
+            const { resolveWabaMediaUrl } = await import('../integrations/whatsapp/media');
+            const resolved = await resolveWabaMediaUrl(msg.mediaId, decryptSecret(tenant.waba_access_token));
+            mediaUrl = resolved?.url;
+          }
+        } catch (mediaErr) {
+          console.warn(`[WABA MEDIA] Gagal resolve URL media ${msg.mediaId}:`, (mediaErr as Error).message);
+        }
+      }
 
       const incomingMessage: any = {
         id: msg.messageId,
@@ -88,10 +137,11 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         _data: { notifyName: msg.contactName },
         _provider: 'WABA',
         _normalized: msg,
+        _mediaUrl: mediaUrl,
       };
 
       await queueService.enqueueMessage({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         customer,
         conversation,
         incomingMessage,
