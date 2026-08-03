@@ -445,6 +445,25 @@ export class CustomerService {
   }
 
   /**
+   * Cari customer berdasarkan id (dengan memory store fallback saat DB offline).
+   */
+  public async getCustomerById(customerId: string, tenantId: string): Promise<any> {
+    try {
+      const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+      if (customer) return customer;
+      for (const [, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) return cust;
+      }
+      return null;
+    } catch (error) {
+      for (const [, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) return cust;
+      }
+      return null;
+    }
+  }
+
+  /**
    * Cari customer berdasarkan nomor telepon
    */
   public async getCustomerByPhone(phone: string, tenantId: string): Promise<any> {

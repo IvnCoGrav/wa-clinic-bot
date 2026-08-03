@@ -189,6 +189,20 @@ npx tsx src/scripts/check-router-accuracy.ts --days=7
 2. mismatch terkait `MEDICAL_CONCERN` = **0** (hard-zero), DAN
 3. `UNMAPPED` rate di `legacy_intent` < 5%.
 
+### Live Chat Panel — Catatan Deployment (SSE)
+
+Endpoint `GET /api/admin/live-chat/events` memakai **Server-Sent Events** (satu kanal per tenant:
+`livechat:{tenantId}`, via Redis pub/sub). Saat bot di belakang reverse proxy:
+
+- **Matikan buffering proxy** untuk endpoint SSE — nginx: `proxy_buffering off;`. Backend sudah mengirim
+  header `X-Accel-Buffering: no` + `Cache-Control: no-cache` + heartbeat `: ping` 15 detik (anti-idle-timeout balancer).
+- **Redis wajib healthy.** Kalau Redis down, hub fallback ke in-memory EventEmitter — event hanya sinkron
+  dalam satu instance (multi-instance tidak sinkron) dan alert CRITICAL `queue.service` terpublish.
+- **Konek WAHA via QR** dari Admin UI (Settings → WAHA → Koneksi WhatsApp): scan QR lewat
+  `GET /api/admin/whatsapp-provider/qr`, start session lewat `POST /api/admin/whatsapp-provider/session/start`.
+  Session id per-tenant (`tenant.waha_session_id`), fallback env `WAHA_SESSION` saat DB down.
+  Detail lengkap: `deploy_config.txt`.
+
 ### Landing Page — Di-Serve Langsung oleh Bot
 
 Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain yang sama dengan admin dashboard). Microservice `packages/click-catcher` **tidak lagi dipakai** di docker-compose (dibiarkan sebagai referensi).

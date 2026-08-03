@@ -29,3 +29,18 @@ Fitur observasi router (`AI_ROUTER_ENABLED=true` + `AI_ROUTER_SHADOW_MODE=true`)
     mismatch MEDICAL_CONCERN = 0 hard-zero sejak hari ke-1, UNMAPPED < 5%). Jadwal cek: hari ke-1, ke-3, ke-7.
 5.  **Jangan pernah pakai `prisma generate --no-engine`** untuk workaround dll terkunci — hasilnya client
     Accelerate-only (`P6001`, URL harus `prisma://`). Matikan proses yang lock engine dulu, generate penuh.
+
+## Live Chat Panel (SSE) — Deployment Notes (2026-08-03)
+Endpoint real-time: `GET /api/admin/live-chat/events` (Server-Sent Events, satu kanal per tenant `livechat:{tenantId}` via Redis pub/sub).
+1.  **Reverse proxy (nginx/Caddy):** WAJIB matikan buffering agar event sampai real-time — nginx:
+    `proxy_buffering off;`. Backend sudah mengirim `X-Accel-Buffering: no` (dihormati nginx) +
+    `Cache-Control: no-cache` + `Connection: keep-alive` + heartbeat `: ping` 15 detik (anti-idle-timeout balancer).
+2.  **Redis WAJIB healthy:** pub/sub hub memakai `REDIS_URL`. Kalau Redis down, fallback in-memory EventEmitter
+    (event hanya sinkron dalam satu instance — multi-instance TIDAK sinkron) + alert CRITICAL `queue.service`.
+3.  **Balancer idle-timeout:** jangan putus koneksi idle — heartbeat 15s sudah mengirim data, tapi sesuaikan
+    idle-timeout balancer bila lebih ketat.
+4.  **Multi-instance:** SSE 1 kanal per tenant; balasan admin dari instance mana pun terpublish via Redis,
+    klien SSE menerima event lintas instance.
+5.  **Konek WAHA via QR (Fitur 1):** `GET /api/admin/whatsapp-provider/qr` + `POST /api/admin/whatsapp-provider/session/start`
+    memakai session id per-tenant (`tenant.waha_session_id`, fallback env `WAHA_SESSION` saat DB down).
+    Asumsi v1: satu instance WAHA (`WAHA_BASE_URL` global).

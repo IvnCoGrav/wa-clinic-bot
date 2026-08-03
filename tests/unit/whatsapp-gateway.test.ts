@@ -14,6 +14,8 @@ function createMockWahaClient(): IWahaClient {
     removeLabel: vi.fn().mockResolvedValue(true),
     getChatLabels: vi.fn().mockResolvedValue([]),
     getSessionStatus: vi.fn().mockResolvedValue('WORKING'),
+    startSession: vi.fn().mockResolvedValue('WORKING'),
+    getAuthQr: vi.fn().mockResolvedValue(null),
     getChats: vi.fn().mockResolvedValue([]),
     getMessages: vi.fn().mockResolvedValue([]),
   };

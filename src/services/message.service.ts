@@ -1,8 +1,18 @@
 import { prisma } from '../db/client';
 import { Direction } from '@prisma/client';
+import { getLiveChatHub } from './live-chat-hub.service';
 
 // In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local
 const memoryWaMessageIds = new Set<string>();
+
+// In-Memory store fallback untuk record pesan (agar Live Chat panel tetap jalan saat DB offline)
+const memoryMessages: any[] = [];
+
+// Sender default untuk payload Live Chat: outbound tanpa penanda = bot, inbound = customer
+function resolveSenderType(data: { direction: Direction; senderType?: string }): string {
+  if (data.senderType) return data.senderType;
+  return data.direction === Direction.OUTBOUND ? 'BOT' : 'CUSTOMER';
+}
 
 export class MessageService {
   /**
@@ -48,13 +58,16 @@ export class MessageService {
     waMessageId?: string;
     payloadRaw?: any;
     tenantId: string;
+    senderType?: string;
+    senderName?: string;
   }) {
     if (data.waMessageId) {
       memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
     }
 
+    let saved: any = null;
     try {
-      return await prisma.message.create({
+      saved = await prisma.message.create({
         data: {
           tenant_id: data.tenantId,
           conversation_id: data.conversationId,
@@ -62,11 +75,43 @@ export class MessageService {
           content: data.content,
           wa_message_id: data.waMessageId || null,
           payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
+          sender_type: data.senderType ?? undefined,
+          sender_name: data.senderName ?? undefined,
         },
       });
+      return saved;
     } catch (error) {
       console.warn('DB logMessage error (using fallback):', (error as Error).message);
-      return null;
+      const fallbackMessage: any = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        tenant_id: data.tenantId,
+        conversation_id: data.conversationId,
+        direction: data.direction,
+        content: data.content,
+        wa_message_id: data.waMessageId || null,
+        sender_type: data.senderType || resolveSenderType(data),
+        sender_name: data.senderName || null,
+        created_at: new Date(),
+      };
+      memoryMessages.push(fallbackMessage);
+      return fallbackMessage;
+    } finally {
+      // Live Chat publish: fire-and-forget, tidak memblokir alur webhook/state-machine.
+      getLiveChatHub()
+        .publish({
+          type: 'message.created',
+          tenantId: data.tenantId,
+          payload: {
+            conversationId: data.conversationId,
+            direction: data.direction,
+            content: data.content,
+            senderType: resolveSenderType(data),
+            senderName: data.senderName || null,
+            messageId: saved?.id || null,
+            createdAt: saved?.created_at || new Date(),
+          },
+        })
+        .catch(() => {});
     }
   }
 
@@ -96,7 +141,11 @@ export class MessageService {
       });
       return messages.reverse(); // Kembalikan ke urutan kronologis (lama -> baru)
     } catch (error) {
-      return [];
+      // Memory fallback: ambil pesan terakhir (kronologis) untuk percakapan tsb
+      return memoryMessages
+        .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .slice(-limit);
     }
   }
 

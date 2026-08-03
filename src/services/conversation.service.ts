@@ -1,8 +1,22 @@
 import { prisma } from '../db/client';
 import { ConversationState } from '@prisma/client';
 import { clinicConfig } from '../config/clinic';
+import { getLiveChatHub } from './live-chat-hub.service';
 
 const memoryConversations = new Map<string, any>();
+
+export function buildConversationUpdatedPayload(conversation: any) {
+  return {
+    conversationId: conversation.id,
+    currentState: conversation.current_state,
+    previousState: conversation.previous_state ?? null,
+    isHumanHandling: !!conversation.is_human_handling,
+    humanHandlingSince: conversation.human_handling_since ?? null,
+    escalationReason: conversation.escalation_reason ?? null,
+    lastMessageAt: conversation.last_message_at ?? null,
+    customerId: conversation.customer_id,
+  };
+}
 
 export class ConversationService {
   /**
@@ -49,6 +63,38 @@ export class ConversationService {
         memoryConversations.set(conv.id, conv);
       }
       return conv;
+    }
+  }
+
+  /**
+   * Cari conversation by id (dengan memory store fallback saat DB offline).
+   */
+  public async getConversationById(id: string, tenantId: string): Promise<any> {
+    try {
+      const conv = await prisma.conversation.findUnique({ where: { id } });
+      return conv || memoryConversations.get(id) || null;
+    } catch (error) {
+      return memoryConversations.get(id) || null;
+    }
+  }
+
+  /**
+   * Daftar percakapan terbaru per tenant (dengan memory store fallback saat DB offline).
+   */
+  public async listConversations(tenantId: string, limit = 50): Promise<any[]> {
+    try {
+      const convs = await prisma.conversation.findMany({
+        where: { tenant_id: tenantId },
+        orderBy: { updated_at: 'desc' },
+        take: limit,
+      });
+      convs.forEach((c) => memoryConversations.set(c.id, c));
+      return convs;
+    } catch (error) {
+      return Array.from(memoryConversations.values())
+        .filter((c) => c.tenant_id === tenantId)
+        .sort((a, b) => new Date(b.updated_at || b.last_message_at).getTime() - new Date(a.updated_at || a.last_message_at).getTime())
+        .slice(0, limit);
     }
   }
 
@@ -162,6 +208,7 @@ export class ConversationService {
         data: dataToUpdate,
       });
       memoryConversations.set(conversationId, updated);
+      this.publishConversationUpdated(updated, tenantId);
       return updated;
     } catch (error) {
       // Memory fallback update
@@ -175,9 +222,32 @@ export class ConversationService {
         if (updates.escalationReason !== undefined) conv.escalation_reason = updates.escalationReason;
         if (updates.consecutiveUnknownCount !== undefined) conv.consecutive_unknown_count = updates.consecutiveUnknownCount;
         conv.updated_at = new Date();
+        this.publishConversationUpdated(conv, tenantId);
       }
       return conv;
     }
+  }
+
+  /**
+   * Reset timer auto-release (human_handling_since) saat admin membalas percakapan
+   * yang sedang dalam HUMAN_HANDLING (dari dashboard atau dari HP asli via WAHA fromMe).
+   * Tidak menonaktifkan human handling — hanya menggeser jendela 6 jam.
+   */
+  public async resetHumanHandlingTimer(conversationId: string, tenantId: string): Promise<any> {
+    return this.updateConversationState(conversationId, { humanHandlingSince: new Date() }, tenantId);
+  }
+
+  /**
+   * Broadcast state percakapan ke Live Chat hub (fire-and-forget).
+   */
+  private publishConversationUpdated(conversation: any, tenantId: string): void {
+    getLiveChatHub()
+      .publish({
+        type: 'conversation.updated',
+        tenantId,
+        payload: buildConversationUpdatedPayload(conversation),
+      })
+      .catch(() => {});
   }
 
   /**
