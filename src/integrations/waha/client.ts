@@ -17,6 +17,18 @@ export interface WahaMessage {
   type: string;
 }
 
+export interface WahaQr {
+  mimetype: string;
+  data: string;
+}
+
+/**
+ * PNG 1x1 transparan (base64) — dipakai sebagai QR deterministik saat WAHA_MOCK aktif,
+ * agar UI/flow koneksi bisa diuji tanpa WAHA asli.
+ */
+export const MOCK_QR_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
 export interface IWahaClient {
   sendSeen(chatId: string, messageId?: string): Promise<boolean>;
   startTyping(chatId: string): Promise<boolean>;
@@ -26,7 +38,9 @@ export interface IWahaClient {
   addLabel(chatId: string, labelName: string): Promise<boolean>;
   removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
-  getSessionStatus(): Promise<string>;
+  getSessionStatus(session?: string): Promise<string>;
+  startSession(session?: string): Promise<string>;
+  getAuthQr(session?: string): Promise<WahaQr | null>;
   getChats(): Promise<WahaChat[]>;
   getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
 }
@@ -483,20 +497,81 @@ export class WahaClient implements IWahaClient {
 
   /**
    * Mengecek status session WAHA saat ini.
-   * Mengembalikan string status session (e.g. "WORKING", "FAILED", "STOPPED", etc.) atau "DISCONNECTED" jika unreachable.
+   * Menerima parameter session opsional untuk mengecek session selain session default (per-tenant).
+   * Mengembalikan string status session (e.g. "WORKING", "SCAN_QR_CODE", "FAILED", "STOPPED", etc.)
+   * atau "DISCONNECTED" jika unreachable.
    */
-  public async getSessionStatus(): Promise<string> {
+  public async getSessionStatus(session?: string): Promise<string> {
+    const sessionName = session || this.session;
+
     if (this.shouldMock) {
       return 'WORKING';
     }
     try {
       const response = await axios.get(
-        `${this.baseUrl}/api/sessions/${this.session}`,
+        `${this.baseUrl}/api/sessions/${sessionName}`,
         { headers: this.headers, timeout: 5000 }
       );
       return response.data?.status || 'UNKNOWN';
     } catch (err) {
       return 'DISCONNECTED';
+    }
+  }
+
+  /**
+   * Memulai session WAHA (POST /api/sessions/{name}/start).
+   * Idempotent — aman dipanggil saat session sudah berjalan.
+   */
+  public async startSession(session?: string): Promise<string> {
+    const sessionName = session || this.session;
+
+    if (this.shouldMock) {
+      return 'WORKING';
+    }
+
+    try {
+      await axios.post(
+        `${this.baseUrl}/api/sessions/${sessionName}/start`,
+        {},
+        { headers: this.headers, timeout: this.timeoutMs }
+      );
+      return 'STARTED';
+    } catch (error: any) {
+      console.warn(`[WAHA API ERROR] startSession failed for session ${sessionName}:`, error?.response?.data || error.message);
+      return 'FAILED';
+    }
+  }
+
+  /**
+   * Mengambil QR code autentikasi session WAHA (GET /api/{session}/auth/qr).
+   * Menerima parameter session opsional (per-tenant); default ke session env.
+   * Mengembalikan base64 QR beserta mimetype, atau null jika QR tidak tersedia/session tidak dalam mode SCAN_QR_CODE.
+   */
+  public async getAuthQr(session?: string): Promise<WahaQr | null> {
+    const sessionName = session || this.session;
+
+    if (this.shouldMock) {
+      return { mimetype: 'image/png', data: MOCK_QR_BASE64 };
+    }
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/${sessionName}/auth/qr`,
+        {
+          headers: { ...this.headers, Accept: 'application/json' },
+          timeout: this.timeoutMs,
+        }
+      );
+      if (response.data && typeof response.data.data === 'string' && response.data.data) {
+        return {
+          mimetype: response.data.mimetype || 'image/png',
+          data: response.data.data,
+        };
+      }
+      return null;
+    } catch (error: any) {
+      console.warn(`[WAHA API ERROR] getAuthQr failed for session ${sessionName}:`, error?.response?.data || error.message);
+      return null;
     }
   }
 }

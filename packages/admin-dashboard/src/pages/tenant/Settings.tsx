@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
@@ -21,7 +21,9 @@ import {
   FileClock,
   FileX,
   Save,
-  BarChart3
+  BarChart3,
+  QrCode,
+  Play
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
@@ -62,6 +64,14 @@ export const Settings: React.FC = () => {
   const [savingProvider, setSavingProvider] = useState(false);
   const [providerTab, setProviderTab] = useState<'WAHA' | 'WABA'>('WAHA');
 
+  // Fitur 1: Konek WhatsApp via QR (Admin UI)
+  const [qrData, setQrData] = useState<{ mimetype: string; data: string } | null>(null);
+  const [qrStatus, setQrStatus] = useState('UNKNOWN');
+  const [qrMessage, setQrMessage] = useState('');
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
+  const qrStatusRef = useRef('UNKNOWN');
+
   // AI Router Engine (default ON + shadow ON)
   const [aiRouterEnabled, setAiRouterEnabled] = useState(true);
   const [aiRouterShadowMode, setAiRouterShadowMode] = useState(true);
@@ -98,6 +108,8 @@ export const Settings: React.FC = () => {
 
         // Fetch WhatsApp provider status (Fase 5)
         await loadWhatsAppProvider();
+        // Fitur 1: muat status QR WAHA sekaligus (agar panel QR terisi tanpa klik manual)
+        await loadQr();
 
         // Fetch AI Router config (default ON + shadow ON)
         await loadAiRouterConfig();
@@ -177,6 +189,72 @@ export const Settings: React.FC = () => {
       console.warn('Failed to load WhatsApp provider config:', err);
     }
   };
+
+  // Fitur 1: muat QR + status session WAHA per-tenant dari GET /api/admin/whatsapp-provider/qr
+  const loadQr = async () => {
+    setLoadingQr(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/qr');
+      const d = res?.data;
+      if (d) {
+        setQrStatus(d.status || 'UNKNOWN');
+        setQrMessage(d.message || '');
+        setQrData(d.qr || null);
+        if (d.sessionId) setWahaSessionId(d.sessionId);
+        if (d.status) setWahaStatus(d.status);
+      } else {
+        setQrData(null);
+        setQrStatus('UNKNOWN');
+      }
+    } catch (err: any) {
+      setQrData(null);
+      setQrStatus('UNKNOWN');
+      setQrMessage(`Gagal mengambil QR: ${err.message}`);
+    } finally {
+      setLoadingQr(false);
+    }
+  };
+
+  // Fitur 1: tombol "Mulai Session" saat status STOPPED/STOPPING/FAILED (POST .../session/start)
+  const handleStartSession = async () => {
+    setStartingSession(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/session/start', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const d = res?.data;
+      if (d) {
+        setQrStatus(d.status || 'UNKNOWN');
+        setQrMessage(d.message || '');
+        setQrData(d.qr || null);
+        if (d.sessionId) setWahaSessionId(d.sessionId);
+        if (d.status) setWahaStatus(d.status);
+      }
+      toast(d?.message || 'Session WAHA dimulai.', 'success');
+    } catch (err: any) {
+      toast(`Gagal memulai session WAHA: ${err.message}`, 'error');
+    } finally {
+      setStartingSession(false);
+    }
+  };
+
+  // Tombol start hanya berguna saat session mati; WORKING/SCAN_QR_CODE tidak perlu.
+  const canStartSession = ['STOPPED', 'STOPPING', 'FAILED'].includes(qrStatus);
+
+  // Auto-refresh QR hanya saat tab WAHA aktif dan status masih SCAN_QR_CODE
+  // (QR ~20 detik kedaluwarsa — polling jangan membebani saat session WORKING).
+  useEffect(() => {
+    qrStatusRef.current = qrStatus;
+  }, [qrStatus]);
+
+  useEffect(() => {
+    if (providerTab !== 'WAHA') return;
+    const interval = setInterval(() => {
+      if (qrStatusRef.current === 'SCAN_QR_CODE') loadQr();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [providerTab]);
 
   const handleToggleProvider = async (val: 'WAHA' | 'WABA') => {
     setSavingProvider(true);
@@ -391,6 +469,73 @@ export const Settings: React.FC = () => {
                 </div>
                 <p className="text-xs text-slate-400 mt-1">WAHA dashboard: <span className="text-slate-300">port 3001</span></p>
               </div>
+            </div>
+
+            {/* Fitur 1: Konek WhatsApp via QR — scan QR dari Admin UI tanpa perlu dashboard WAHA */}
+            <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-emerald-300 flex items-center space-x-2">
+                  <QrCode size={12} />
+                  <span>Koneksi WhatsApp (Scan QR)</span>
+                </h4>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={loadQr}
+                    disabled={loadingQr}
+                    className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/5 text-[9px] font-bold text-slate-300 hover:text-white flex items-center space-x-1 disabled:opacity-50"
+                  >
+                    <RefreshCw size={9} className={loadingQr ? 'animate-spin' : ''} />
+                    <span>Segarkan</span>
+                  </button>
+                  {canStartSession && (
+                    <button
+                      onClick={handleStartSession}
+                      disabled={startingSession}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] font-bold flex items-center space-x-1 disabled:opacity-50"
+                    >
+                      <Play size={9} fill="currentColor" />
+                      <span>{startingSession ? 'Memulai...' : 'Mulai Session'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {loadingQr && !qrData ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw size={20} className="animate-spin text-emerald-400" />
+                </div>
+              ) : qrData && qrStatus === 'SCAN_QR_CODE' ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="p-3 bg-white rounded-xl w-fit">
+                    <img
+                      src={`data:${qrData.mimetype};base64,${qrData.data}`}
+                      alt="QR WhatsApp Session"
+                      className="w-44 h-44"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+                    Pindai dengan <span className="text-emerald-300 font-semibold">WhatsApp &gt; Setelan &gt; Perangkat Tertaut &gt; Tautkan Perangkat</span>.
+                    QR kedaluwarsa otomatis (~20 detik) — klik <span className="text-slate-300">Segarkan</span> untuk QR baru.
+                  </p>
+                </div>
+              ) : qrStatus === 'WORKING' ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px]">
+                  <Check size={14} />
+                  <span>Session terhubung — WhatsApp aktif. QR tidak diperlukan.</span>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] leading-relaxed">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+                    <span>{qrMessage || 'QR tidak tersedia untuk status session saat ini.'}</span>
+                  </div>
+                  {canStartSession && (
+                    <p className="mt-2 text-amber-400/80">
+                      Klik <span className="font-bold">Mulai Session</span> untuk menyalakan session dan memunculkan QR.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

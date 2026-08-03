@@ -10,6 +10,10 @@ import { safeCompare } from '../utils/auth';
 import { capiService, resolveTreatmentValue } from '../services/capi.service';
 import crypto from 'crypto';
 import type { IWahaClient } from '../integrations/waha/client';
+import { liveChatService } from '../services/live-chat.service';
+import { getLiveChatHub } from '../services/live-chat-hub.service';
+import { conversationService, buildConversationUpdatedPayload } from '../services/conversation.service';
+import { ConversationState } from '@prisma/client';
 
 // In-Memory fallback store for reservations during unit testing/offline database modes
 export const memoryReservations = new Map<string, any>();
@@ -238,6 +242,133 @@ export async function adminRoutes(fastify: FastifyInstance) {
         data: [],
         note: 'Fallback in-memory mode',
       });
+    }
+  });
+
+  /**
+   * GET /api/admin/live-chat/conversations
+   * Monitor Live Chat: daftar percakapan terbaru + preview pesan (termasuk sender_type/sender_name).
+   */
+  fastify.get('/api/admin/live-chat/conversations', async (request, reply) => {
+    try {
+      const data = await liveChatService.getConversationList(DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, count: data.length, data });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/live-chat/conversations/:id/messages
+   * Thread pesan sebuah percakapan (kronologis).
+   */
+  fastify.get('/api/admin/live-chat/conversations/:id/messages', async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+    const { id } = request.params;
+    try {
+      const messages = await liveChatService.getConversationMessages(id, DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, count: messages.length, data: messages });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/admin/live-chat/conversations/:id/reply
+   * Admin membalas percakapan dari dashboard (disimpan sebagai sender_type=ADMIN).
+   */
+  fastify.post('/api/admin/live-chat/conversations/:id/reply', async (request: FastifyRequest<{
+    Params: { id: string };
+    Body: { text?: string; adminName?: string; acknowledgeOutsideWindow?: boolean };
+  }>, reply) => {
+    const { id } = request.params;
+    const { text, adminName, acknowledgeOutsideWindow } = request.body || {};
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: id,
+      text: text || '',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName,
+      acknowledgeOutsideWindow,
+    });
+
+    if (!result.success) {
+      const code = result.error?.code || 'REPLY_FAILED';
+      const status =
+        code === 'WABA_OUTSIDE_WINDOW' ? 409 :
+        code === 'CONVERSATION_NOT_FOUND' || code === 'CUSTOMER_NOT_FOUND' ? 404 : 400;
+      return reply.status(status).send({ success: false, error: result.error, data: result });
+    }
+
+    await auditService.logAdminAction({
+      apiKey: (request as any).adminKeyUsed,
+      adminIdentity: (request as any).adminIdentity,
+      action: 'LIVE_CHAT_ADMIN_REPLY',
+      targetId: id,
+      payload: { adminName, messageId: result.messageId, provider: result.provider },
+      ipAddress: request.ip,
+    });
+
+    return reply.status(200).send({ success: true, message: 'Balasan admin berhasil dikirim.', data: result });
+  });
+
+  /**
+   * GET /api/admin/live-chat/events
+   * Server-Sent Events: stream real-time Live Chat (message.created & conversation.updated).
+   * SSE standard + X-Accel-Buffering:no agar tidak di-buffer nginx (deploy config).
+   */
+  fastify.get('/api/admin/live-chat/events', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = DEFAULT_TENANT_ID;
+
+    // Ambil alih kontrol respons — Fastify tidak boleh menulis body lain setelah ini
+    reply.hijack();
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    reply.raw.write('retry: 3000\n\n');
+
+    let closed = false;
+    let unsubscribe: (() => void) | null = null;
+
+    const sendEvent = (event: any) => {
+      if (closed) return;
+      try {
+        const data = JSON.stringify(event.payload || {});
+        reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
+      } catch (err: any) {
+        console.error('[LIVE CHAT SSE] Failed to serialize event:', err.message);
+      }
+    };
+
+    // Heartbeat anti-timeout proxy (unref agar tidak menahan process/event loop test)
+    const heartbeat = setInterval(() => {
+      if (closed) return;
+      try {
+        reply.raw.write(': ping\n\n');
+      } catch (err) {
+        // koneksi sudah putus — dibersihkan via onClose
+      }
+    }, 15000);
+    if ((heartbeat as any).unref) (heartbeat as any).unref();
+
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      if (unsubscribe) unsubscribe();
+    };
+    request.raw.once('close', cleanup);
+    reply.raw.once('close', cleanup);
+
+    try {
+      unsubscribe = await getLiveChatHub().subscribe(tenantId, sendEvent);
+      if (closed) cleanup();
+    } catch (err: any) {
+      console.error('[LIVE CHAT SSE] Subscribe hub gagal:', err.message);
+      cleanup();
     }
   });
 
@@ -618,7 +749,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
           public async addLabel(chatId: string, labelId: string): Promise<boolean> { return true; }
           public async removeLabel(chatId: string, labelId: string): Promise<boolean> { return true; }
           public async getChatLabels(chatId: string): Promise<string[]> { return []; }
-          public async getSessionStatus(): Promise<string> { return 'WORKING'; }
+          public async getSessionStatus(session?: string): Promise<string> { return 'WORKING'; }
+          public async startSession(session?: string): Promise<string> { return 'WORKING'; }
+          public async getAuthQr(session?: string): Promise<import('../integrations/waha/client').WahaQr | null> { return null; }
           public async getChats(): Promise<any[]> { return []; }
           public async getMessages(chatId: string, limit?: number): Promise<any[]> { return []; }
           public async getPhoneNumberFromLid(chatId: string): Promise<string | null> { return targetPhone; }
@@ -1890,8 +2023,32 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Live Chat publish: admin panel mendapat update state percakapan secara real-time
+      getLiveChatHub()
+        .publish({
+          type: 'conversation.updated',
+          tenantId: DEFAULT_TENANT_ID,
+          payload: buildConversationUpdatedPayload(updated),
+        })
+        .catch(() => {});
+
       return reply.status(200).send({ success: true, message: `Percakapan berhasil di-release kembali ke bot (Restored state: ${restoredState}).`, data: updated });
     } catch (err: any) {
+      // Fallback in-memory: tetap release & publish supaya Live Chat panel konsisten saat DB offline
+      try {
+        await conversationService.updateConversationState(
+          id,
+          {
+            currentState: ConversationState.INITIAL,
+            isHumanHandling: false,
+            humanHandlingSince: null,
+            escalationReason: null,
+          },
+          DEFAULT_TENANT_ID
+        );
+      } catch (memErr: any) {
+        console.warn('[ADMIN RELEASE] Failed to update in-memory conversation:', memErr.message);
+      }
       return reply.status(200).send({ success: true, message: 'Percakapan berhasil di-release (Fallback Mode - Restored state: INITIAL).' });
     }
   });
@@ -2324,6 +2481,54 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: err.message });
     }
   });
+
+  /**
+   * GET /api/admin/whatsapp-provider/qr
+   * QR code koneksi session WAHA per-tenant (Fitur 1: konek WhatsApp via Admin UI).
+   * qr hanya diisi saat status === 'SCAN_QR_CODE'; status lain (FAILED/STOPPED/DISCONNECTED/dll)
+   * mengembalikan qr: null + message yang informatif — UI tidak boleh mengasumsikan QR selalu ada.
+   */
+  fastify.get(
+    '/api/admin/whatsapp-provider/qr',
+    async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
+      try {
+        const tenantId = request.query?.tenantId || DEFAULT_TENANT_ID;
+        const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+        const data = await whatsappProviderService.getQrForTenant(tenantId);
+        return reply.status(200).send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/whatsapp-provider/session/start
+   * Memulai session WAHA per-tenant secara eksplisit (tombol "Mulai session" di UI saat STOPPED).
+   */
+  fastify.post(
+    '/api/admin/whatsapp-provider/session/start',
+    async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
+      try {
+        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+        const data = await whatsappProviderService.startSessionForTenant(tenantId);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'WAHA_SESSION_START',
+          targetId: data.sessionId,
+          payload: { status: data.status },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
 
   /**
    * PATCH /api/admin/whatsapp-provider

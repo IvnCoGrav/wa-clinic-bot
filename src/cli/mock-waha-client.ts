@@ -1,4 +1,4 @@
-import { IWahaClient } from '../integrations/waha/client';
+import { IWahaClient, MOCK_QR_BASE64 } from '../integrations/waha/client';
 
 /**
  * Mock WAHA Client untuk CLI Chat Simulator.
@@ -64,8 +64,16 @@ export class MockWAHAClient implements IWahaClient {
     return [];
   }
 
-  public async getSessionStatus(): Promise<string> {
+  public async getSessionStatus(session?: string): Promise<string> {
     return 'WORKING';
+  }
+
+  public async startSession(session?: string): Promise<string> {
+    return 'WORKING';
+  }
+
+  public async getAuthQr(session?: string): Promise<import('../integrations/waha/client').WahaQr | null> {
+    return { mimetype: 'image/png', data: MOCK_QR_BASE64 };
   }
 
   public async getChats(): Promise<import('../integrations/waha/client').WahaChat[]> {

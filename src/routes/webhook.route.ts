@@ -68,6 +68,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 adminReplyText.startsWith('[AUTOMATED]');
 
               if (adminReplyText.trim() && !isBotAutoReply) {
+                // 0. Konsistensi auto-release: balasan admin dari HP asli me-reset timer 6 jam
+                conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
+                  .catch(err => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
+
                 // 1. Self Learning Capture
                 console.log(`[SELF-LEARNING] Captured admin manual outbound reply to customer ${phone}: "${adminReplyText}"`);
                 const { selfLearningService } = await import('../services/self-learning.service');

@@ -180,4 +180,51 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     // Hapus label Admin setelah pengujian
     await wahaClient.removeLabel(chatId, 'Admin');
   });
+
+  it('POST /webhook: fromMe admin reply resets human handling auto-release timer', async () => {
+    const phone = `628999${Date.now()}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Human Test Customer', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    // Aktifkan human handling dengan timer 5 jam yang lalu (mendekati batas auto-release 6 jam)
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        isHumanHandling: true,
+        humanHandlingSince: new Date(Date.now() - 1000 * 60 * 60 * 5),
+        escalationReason: 'complex_query',
+      },
+      DEFAULT_TENANT_ID
+    );
+
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: `waha_fromme_msg_${Date.now()}`,
+        chatId: `${phone}@c.us`,
+        fromMe: true,
+        timestamp: 1700000000,
+        body: 'Baik Bunda, nanti kami konfirmasi ya',
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_OUTBOUND' });
+
+    // Beri kesempatan fire-and-forget reset (DB offline -> memory store) selesai
+    await new Promise((r) => setTimeout(r, 0));
+
+    const refreshed = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+    expect(refreshed.is_human_handling).toBe(true);
+    expect(refreshed.human_handling_since).toBeTruthy();
+    const since = new Date(refreshed.human_handling_since).getTime();
+    expect(since).toBeGreaterThan(Date.now() - 5000);
+  });
 });

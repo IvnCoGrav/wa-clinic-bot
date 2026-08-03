@@ -157,6 +157,8 @@ model Message {
   wa_message_id   String?      @unique
   direction       Direction
   content         String
+  sender_type     String?      @default("BOT")
+  sender_name     String?
   payload_raw     Json?
   delivery_status String?
   delivered_at    DateTime?
@@ -437,6 +439,7 @@ model Tenant {
   waba_webhook_verify_token String?
   ai_router_enabled      Boolean           @default(true)
   ai_router_shadow_mode  Boolean           @default(true)
+  manual_reply_escalates Boolean           @default(true)
   created_at             DateTime          @default(now())
   updated_at             DateTime          @updatedAt
 
