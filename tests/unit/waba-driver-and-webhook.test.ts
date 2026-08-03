@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WabaGatewayDriver } from '../../src/integrations/whatsapp/waba.driver';
-import { normalizeWabaPayload } from '../../src/integrations/whatsapp/normalizer';
+import { normalizeWabaPayload, normalizeWabaStatuses } from '../../src/integrations/whatsapp/normalizer';
 import type { WhatsAppGateway } from '../../src/integrations/whatsapp/gateway.types';
 import type { WhatsAppWebhookPayload } from '../../src/integrations/whatsapp/types';
 import axios from 'axios';
@@ -237,6 +237,100 @@ describe('normalizeWabaPayload', () => {
 
   it('should handle empty payload', () => {
     const result = normalizeWabaPayload({ object: 'whatsapp_business_account', entry: [] }, 't1');
+    expect(result).toHaveLength(0);
+  });
+
+  it('should normalize image message with media metadata', () => {
+    const payload = {
+      ...basePayload,
+      entry: [{
+        ...basePayload.entry[0],
+        changes: [{
+          field: 'messages',
+          value: {
+            ...basePayload.entry[0].changes[0].value,
+            messages: [{
+              id: 'waba_img',
+              from: '628123',
+              timestamp: '1691000002',
+              type: 'image',
+              image: {
+                id: 'media_id_987',
+                mime_type: 'image/jpeg',
+                sha256: 'abc',
+                caption: 'Foto hasil terapi',
+              },
+            }],
+          },
+        }],
+      }],
+    };
+
+    const result = normalizeWabaPayload(payload, 't1');
+    expect(result[0].type).toBe('image');
+    expect(result[0].mediaId).toBe('media_id_987');
+    expect(result[0].caption).toBe('Foto hasil terapi');
+    expect(result[0].mimeType).toBe('image/jpeg');
+    expect(result[0].phoneNumberId).toBe('123');
+  });
+});
+
+describe('normalizeWabaStatuses', () => {
+  it('should extract statuses from payload', () => {
+    const payload: WhatsAppWebhookPayload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: 'e1',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '6281234', phone_number_id: 'PNID_1' },
+            statuses: [
+              { id: 'wamid.delivered_1', status: 'delivered', timestamp: '1691000100' },
+              { id: 'wamid.read_1', status: 'read', timestamp: '1691000200' },
+            ],
+          },
+        }],
+      }],
+    };
+
+    const result = normalizeWabaStatuses(payload);
+    expect(result).toHaveLength(2);
+    expect(result[0].messageId).toBe('wamid.delivered_1');
+    expect(result[0].status).toBe('delivered');
+    expect(result[1].status).toBe('read');
+    expect(result[0].phoneNumberId).toBe('PNID_1');
+  });
+
+  it('should extract failed status with errors', () => {
+    const payload: WhatsAppWebhookPayload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        id: 'e1',
+        changes: [{
+          field: 'messages',
+          value: {
+            messaging_product: 'whatsapp',
+            metadata: { display_phone_number: '6281234', phone_number_id: 'PNID_1' },
+            statuses: [{
+              id: 'wamid.failed_1',
+              status: 'failed',
+              timestamp: '1691000300',
+              errors: [{ code: 131026, title: 'Message Undeliverable', error_data: { details: '24h window closed' } }],
+            }],
+          },
+        }],
+      }],
+    };
+
+    const result = normalizeWabaStatuses(payload);
+    expect(result[0].status).toBe('failed');
+    expect(result[0].errors?.[0]?.error_data?.details).toBe('24h window closed');
+  });
+
+  it('should return empty when no statuses', () => {
+    const result = normalizeWabaStatuses({ object: 'whatsapp_business_account', entry: [] });
     expect(result).toHaveLength(0);
   });
 });

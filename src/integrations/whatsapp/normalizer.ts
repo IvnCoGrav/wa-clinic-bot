@@ -1,5 +1,5 @@
 import { NormalizedInboundMessage } from './gateway.types';
-import type { WhatsAppWebhookPayload } from './types';
+import type { WhatsAppStatus, WhatsAppWebhookPayload } from './types';
 
 export function normalizeWabaPayload(
   payload: WhatsAppWebhookPayload,
@@ -13,6 +13,7 @@ export function normalizeWabaPayload(
       if (!value?.messages) continue;
 
       const contactName = value.contacts?.[0]?.profile?.name;
+      const phoneNumberId = value.metadata?.phone_number_id;
 
       for (const msg of value.messages) {
         const fromNumber = msg.from;
@@ -21,7 +22,9 @@ export function normalizeWabaPayload(
         let type: NormalizedInboundMessage['type'] = 'unknown';
         let text: string | undefined;
         let location: NormalizedInboundMessage['location'] | undefined;
-        let mediaUrl: string | undefined;
+        let mediaId: string | undefined;
+        let caption: string | undefined;
+        let mimeType: string | undefined;
 
         if (msg.type === 'text' && msg.text) {
           type = 'text';
@@ -34,8 +37,11 @@ export function normalizeWabaPayload(
             name: msg.location.name,
             address: msg.location.address,
           };
-        } else if ((msg as any).type === 'image') {
+        } else if (msg.type === 'image' && msg.image) {
           type = 'image';
+          mediaId = msg.image.id;
+          caption = msg.image.caption;
+          mimeType = msg.image.mime_type;
         }
 
         results.push({
@@ -47,9 +53,45 @@ export function normalizeWabaPayload(
           type,
           text,
           location,
-          mediaUrl,
+          mediaId,
+          caption,
+          mimeType,
           contactName,
+          phoneNumberId,
           rawPayload: msg,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+export interface NormalizedWabaStatus {
+  messageId: string;
+  status: WhatsAppStatus['status'];
+  timestamp: number;
+  errors?: WhatsAppStatus['errors'];
+  phoneNumberId?: string;
+}
+
+export function normalizeWabaStatuses(payload: WhatsAppWebhookPayload): NormalizedWabaStatus[] {
+  const results: NormalizedWabaStatus[] = [];
+
+  for (const entry of payload.entry || []) {
+    for (const change of entry.changes || []) {
+      const value = change.value;
+      if (!value?.statuses) continue;
+
+      const phoneNumberId = value.metadata?.phone_number_id;
+
+      for (const status of value.statuses) {
+        results.push({
+          messageId: status.id,
+          status: status.status,
+          timestamp: parseInt(status.timestamp, 10) || Math.floor(Date.now() / 1000),
+          errors: status.errors,
+          phoneNumberId,
         });
       }
     }

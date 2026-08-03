@@ -14,6 +14,7 @@ import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
+import { AiRouterConfigService } from '../config/ai-router-config';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -226,27 +227,28 @@ export class ConversationStateMachine {
       }
     }
 
-    // --- GATE 2.5 🧭: AI ROUTER ENGINE (optional, shadow-first) ---
-    // Feature flag AI_ROUTER_ENABLED. Shadow mode (AI_ROUTER_SHADOW_MODE=true)
-    // hanya LOG perbandingan LLM router vs fallback legacy — TIDAK mengubah
-    // keputusan state. Konsumsi penuh (full mode) menyusul di iterasi berikutnya.
+    // --- GATE 2.5 🧭: AI ROUTER ENGINE (default ON per tenant, shadow-first) ---
+    // Konfigurasi per tenant (tenants.ai_router_enabled / ai_router_shadow_mode)
+    // dimuat dari DB saat boot. Shadow mode hanya LOG perbandingan LLM router vs
+    // fallback legacy — TIDAK mengubah keputusan state. Konsumsi penuh (full mode)
+    // hanya saat shadow mode dimatikan lewat dashboard (setelah gate akurasi lolos).
     let routerDecision = undefined;
     const routerStateSnapshot = activeConversation.current_state;
-    if (!activeConversation.is_human_handling && incomingText && process.env.AI_ROUTER_ENABLED === 'true') {
+    if (!activeConversation.is_human_handling && incomingText && AiRouterConfigService.isEnabled(tenantId)) {
       try {
         const { aiRouterService } = await import('../integrations/llm/ai-router');
         routerDecision = await aiRouterService.classify({
           currentState: activeConversation.current_state,
           conversationHistory: historyFormatted,
           lastCustomerMessage: incomingText,
-        });
+        }, tenantId);
       } catch (err: any) {
         console.error('[AI ROUTER ERROR IN MACHINE]:', err.message);
       }
 
       // UNKNOWN berulang → eskalasi human otomatis (HANYA mode konsumsi penuh).
       // Shadow mode TIDAK boleh mengubah keputusan produksi sama sekali.
-      if (routerDecision?.response && process.env.AI_ROUTER_SHADOW_MODE !== 'true') {
+      if (routerDecision?.response && !AiRouterConfigService.isShadowMode(tenantId)) {
         try {
           const { handleRouterResult } = await import('../services/ai-router-evaluation.service');
           const processed = await handleRouterResult(activeConversation, routerDecision.response, tenantId);

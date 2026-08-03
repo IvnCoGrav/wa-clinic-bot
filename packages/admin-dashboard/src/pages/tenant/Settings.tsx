@@ -20,7 +20,8 @@ import {
   FileCheck,
   FileClock,
   FileX,
-  Save
+  Save,
+  BarChart3
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
@@ -61,6 +62,18 @@ export const Settings: React.FC = () => {
   const [savingProvider, setSavingProvider] = useState(false);
   const [providerTab, setProviderTab] = useState<'WAHA' | 'WABA'>('WAHA');
 
+  // AI Router Engine (default ON + shadow ON)
+  const [aiRouterEnabled, setAiRouterEnabled] = useState(true);
+  const [aiRouterShadowMode, setAiRouterShadowMode] = useState(true);
+  const [savingAiRouter, setSavingAiRouter] = useState(false);
+
+  // Meta Pixel & CAPI (konversi iklan — berlaku semua provider WAHA/WABA)
+  const [metaPixelId, setMetaPixelId] = useState('');
+  const [capiAccessToken, setCapiAccessToken] = useState('');
+  const [capiConfigured, setCapiConfigured] = useState(false);
+  const [capiSource, setCapiSource] = useState('none');
+  const [savingCapi, setSavingCapi] = useState(false);
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -85,6 +98,12 @@ export const Settings: React.FC = () => {
 
         // Fetch WhatsApp provider status (Fase 5)
         await loadWhatsAppProvider();
+
+        // Fetch AI Router config (default ON + shadow ON)
+        await loadAiRouterConfig();
+
+        // Fetch Meta Pixel & CAPI config
+        await loadCapiConfig();
       } catch (err) {
         console.warn('Failed to load global chatbot settings:', err);
       } finally {
@@ -93,6 +112,52 @@ export const Settings: React.FC = () => {
     }
     loadSettings();
   }, []);
+
+  const loadAiRouterConfig = async () => {
+    try {
+      const res = await apiRequest('/api/admin/ai-router');
+      const d = res?.data;
+      if (d) {
+        setAiRouterEnabled(d.enabled ?? true);
+        setAiRouterShadowMode(d.shadowMode ?? true);
+      }
+    } catch (err) {
+      console.warn('Failed to load AI Router config:', err);
+    }
+  };
+
+  const loadCapiConfig = async () => {
+    try {
+      const res = await apiRequest('/api/admin/capi-config');
+      const d = res?.data;
+      if (d) {
+        setMetaPixelId(d.metaPixelId || '');
+        setCapiConfigured(!!d.hasCapiAccessToken);
+        setCapiSource(d.capiTokenSource || 'none');
+      }
+    } catch (err) {
+      console.warn('Failed to load Meta Pixel & CAPI config:', err);
+    }
+  };
+
+  const handleSaveCapiConfig = async () => {
+    setSavingCapi(true);
+    try {
+      const body: any = {};
+      if (metaPixelId !== '') body.metaPixelId = metaPixelId;
+      if (capiAccessToken !== '') body.capiAccessToken = capiAccessToken;
+      const res = await apiRequest('/api/admin/capi-config', { method: 'PATCH', body });
+      setCapiConfigured(!!res?.data?.hasCapiAccessToken);
+      setMetaPixelId(res?.data?.metaPixelId || metaPixelId);
+      setCapiAccessToken('');
+      setCapiSource('db');
+      toast(res?.message || 'Konfigurasi Meta Pixel & CAPI tersimpan.', 'success');
+    } catch (err: any) {
+      toast(`Gagal menyimpan config Meta Pixel & CAPI: ${err.message}`, 'error');
+    } finally {
+      setSavingCapi(false);
+    }
+  };
 
   const loadWhatsAppProvider = async () => {
     try {
@@ -133,6 +198,27 @@ export const Settings: React.FC = () => {
       toast(`Failed to switch provider: ${err.message}`, 'error');
     } finally {
       setSavingProvider(false);
+    }
+  };
+
+  const handleToggleAiRouter = async (val: 'enabled' | 'shadowMode', next: boolean) => {
+    setSavingAiRouter(true);
+    try {
+      await apiRequest('/api/admin/ai-router', {
+        method: 'PATCH',
+        body: JSON.stringify(val === 'enabled' ? { enabled: next } : { shadowMode: next }),
+      });
+      if (val === 'enabled') {
+        setAiRouterEnabled(next);
+        toast(`AI Router Engine ${next ? 'diaktifkan' : 'dinonaktifkan'}`, 'success');
+      } else {
+        setAiRouterShadowMode(next);
+        toast(`AI Router Shadow Mode ${next ? 'diaktifkan' : 'dinonaktifkan (full mode)'}`, 'success');
+      }
+    } catch (err: any) {
+      toast(`Failed to update AI Router config: ${err.message}`, 'error');
+    } finally {
+      setSavingAiRouter(false);
     }
   };
 
@@ -431,6 +517,61 @@ export const Settings: React.FC = () => {
         )}
       </div>
 
+      {/* Meta Pixel & CAPI — konversi iklan, berlaku utk semua provider (WAHA & WABA) */}
+      <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <BarChart3 className="text-pink-400" />
+              <span>Meta Pixel &amp; CAPI (Konversi Iklan)</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed mt-1">
+              Berlaku untuk semua provider WhatsApp (<span className="text-emerald-400 font-semibold">WAHA</span> &amp; <span className="text-pink-400 font-semibold">WABA</span>). Digunakan landing page (Pixel) &amp; server-side event Lead/Purchase ke Meta (CAPI).
+            </p>
+          </div>
+          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${capiSource === 'db' && capiConfigured ? 'bg-emerald-500/20 text-emerald-300' : capiSource === 'db' ? 'bg-amber-500/20 text-amber-300' : capiSource === 'env' ? 'bg-sky-500/20 text-sky-300' : 'bg-rose-500/20 text-rose-300'}`}>
+            {capiSource === 'db' && capiConfigured ? 'CONFIGURED'
+              : capiSource === 'db' ? 'PARTIAL'
+              : capiSource === 'env' ? 'ENV FALLBACK'
+              : 'NOT CONFIGURED'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-400 uppercase font-bold">Meta Pixel ID</label>
+            <input
+              type="text"
+              value={metaPixelId}
+              onChange={(e) => setMetaPixelId(e.target.value)}
+              placeholder="123456789012345"
+              className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+            />
+            <p className="text-[9px] text-slate-500">ID Pixel Facebook (dipakai tracking landing &amp; ad clicks).</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-400 uppercase font-bold">CAPI Access Token (isi hanya saat ganti)</label>
+            <input
+              type="password"
+              value={capiAccessToken}
+              onChange={(e) => setCapiAccessToken(e.target.value)}
+              placeholder="EAA..."
+              className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+            />
+            <p className="text-[9px] text-slate-500">{capiConfigured ? 'Token tersimpan (terenkripsi). Kosongkan utk tidak mengubah.' : 'Belum ada token. Disimpan terenkripsi AES-256.'}</p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleSaveCapiConfig}
+          disabled={savingCapi}
+          className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+        >
+          <Save size={12} />
+          <span>{savingCapi ? 'Saving...' : 'Save Meta Pixel & CAPI'}</span>
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Left column: Bot Toggle & Branch picker */}
@@ -456,6 +597,48 @@ export const Settings: React.FC = () => {
               >
                 <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${globalBotActive ? 'translate-x-7' : ''}`}></div>
               </button>
+            </div>
+          </div>
+
+          {/* AI Router Engine Toggle */}
+          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <ShieldCheck className="text-pink-400" />
+              <span>AI Router Engine</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Default <span className="text-emerald-400 font-semibold">ON</span> (shadow mode aman). Aktifkan untuk mengevaluasi intent via LLM router.
+              Matikan shadow mode (<span className="text-amber-400 font-semibold">full mode</span>) hanya setelah 3 gate akurasi di README lolos.
+            </p>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
+                <div>
+                  <span className="text-sm font-semibold text-slate-300">AI Router Engine</span>
+                  <p className="text-[10px] text-slate-500">Klasifikasi intent via LLM router per pesan</p>
+                </div>
+                <button
+                  onClick={() => handleToggleAiRouter('enabled', !aiRouterEnabled)}
+                  disabled={savingAiRouter}
+                  className={`w-14 h-7 rounded-full transition-all relative disabled:opacity-50 ${aiRouterEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                >
+                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiRouterEnabled ? 'translate-x-7' : ''}`}></div>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
+                <div>
+                  <span className="text-sm font-semibold text-slate-300">Shadow Mode</span>
+                  <p className="text-[10px] text-slate-500">{aiRouterShadowMode ? 'Hanya LOG perbandingan, tidak ubah keputusan produksi' : 'Full mode: keputusan router dapat mengubah alur produksi'}</p>
+                </div>
+                <button
+                  onClick={() => handleToggleAiRouter('shadowMode', !aiRouterShadowMode)}
+                  disabled={savingAiRouter || !aiRouterEnabled}
+                  className={`w-14 h-7 rounded-full transition-all relative disabled:opacity-50 ${aiRouterShadowMode ? 'bg-amber-500' : 'bg-slate-600'}`}
+                >
+                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiRouterShadowMode ? 'translate-x-7' : ''}`}></div>
+                </button>
+              </div>
             </div>
           </div>
 

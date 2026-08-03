@@ -19,9 +19,22 @@ export interface WhatsAppIncomingMessage {
   id: string;
   from: string; // Nomor HP pengirim (format internasional tanpa +, misal: 628123456789)
   timestamp: string;
-  type: 'text' | 'location' | 'interactive' | 'unknown';
+  type: 'text' | 'location' | 'image' | 'interactive' | 'unknown';
   text?: WhatsAppTextPayload;
   location?: WhatsAppLocationPayload;
+  image?: {
+    id: string;
+    mime_type?: string;
+    sha256?: string;
+    caption?: string;
+  };
+}
+
+export interface WhatsAppStatus {
+  id: string; // wamid pesan
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  timestamp: string;
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>;
 }
 
 export interface WhatsAppWebhookValue {
@@ -35,6 +48,7 @@ export interface WhatsAppWebhookValue {
     wa_id: string;
   }>;
   messages?: WhatsAppIncomingMessage[];
+  statuses?: WhatsAppStatus[];
 }
 
 export interface WhatsAppWebhookChange {

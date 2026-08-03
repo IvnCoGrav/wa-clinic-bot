@@ -2,7 +2,6 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { safeCompare } from '../utils/auth';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { getBrandIdentity } from '../config/brand';
 import crypto from 'crypto';
 
 // In-Memory map untuk melacak hasil tracking klik saat database offline (Unit Test / Dev fallback)
@@ -104,7 +103,6 @@ export async function generateTrackingCode(
   }
   throw new Error(`[Tracking] Keyspace exhausted: semua ${RETRY_LENGTHS.join('/')} karakter collision setelah ${MAX_ATTEMPTS_PER_LENGTH} percobaan masing-masing.`);
 }
-
 export async function trackingRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/tenant/:slug
@@ -115,85 +113,19 @@ export async function trackingRoutes(fastify: FastifyInstance) {
 
     async (request: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
       const { slug } = request.params;
-      
+
       try {
-        const tenant = await prisma.tenant.findFirst({
-          where: {
-            OR: [
-              { slug: slug },
-              { id: slug },
-            ],
-          },
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            whatsapp_number: true,
-            meta_pixel_id: true,
-            landing_type: true,
-            landing_content: true,
-            raw_html_content: true,
-            // CRITICAL SECURITY PROOF: meta_capi_access_token is EXPLICITLY OMITTED from SELECT projection!
-          },
-        });
-
-        const landingJson = (tenant?.landing_content as any) || {};
-
-        // Dynamic multi-tenant content model
-        const content = {
-          tenant_id: tenant?.id || DEFAULT_TENANT_ID,
-          slug: tenant?.slug || slug || 'default',
-          landing_type: tenant?.landing_type || 'STRUCTURED_JSON',
-          raw_html_content: tenant?.raw_html_content || null,
-          clinic_name: tenant?.name || landingJson.clinic_name || getBrandIdentity().businessName,
-
-          headline: landingJson.headline || 'Solusi Pijat & Perawatan Bayi Profesional di Rumah Anda',
-          subheadline: landingJson.subheadline || 'Bidan bersertifikasi resmi datang langsung ke lokasi Anda. Bebas macet, nyaman, & steril.',
-          benefits: landingJson.benefits || [
-            'Terapis Bidan Terlatih & Certified Spa Specialist',
-            'Peralatan Steril & Hygienic Standard Rumah Sakit',
-            'Gratis Ongkir Layanan Home-Treatment hingga 5 km',
-            'Bebas Pilih Jadwal Fleksibel Sesuai Kenyamanan Bunda',
-          ],
-          faq: landingJson.faq || [
-            {
-              question: 'Bagaimana cara memesan layanan home-treatment?',
-              answer: 'Cukup klik tombol "Chat via WhatsApp" di bawah ini. Customer Service kami akan langsung membantu menentukan lokasi & jadwal kunjungan.'
-            },
-            {
-              question: 'Berapa jarak jangkauan layanan klinik?',
-              answer: 'Kami melayani area home-treatment hingga jarak 30 km dari lokasi spa kami dengan ongkir terjangkau.'
-            },
-            {
-              question: 'Apakah peralatan pijat bayi higienis?',
-              answer: 'Ya, seluruh peralatan, minyak pijat alami, dan handuk disterilisasi sebelum dan sesudah setiap sesi perawatan.'
-            }
-          ],
-          whatsapp_number: tenant?.whatsapp_number || landingJson.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
-          meta_pixel_id: tenant?.meta_pixel_id || landingJson.meta_pixel_id || process.env.FB_PIXEL_ID || '123456789012345',
-        };
-
-        return reply.status(200).send(content);
+        const { resolveLandingContent, defaultLandingContent } = await import('../services/landing-content.service');
+        const content = await resolveLandingContent(slug);
+        if (content) {
+          return reply.status(200).send(content);
+        }
+        // Fail-open: slug tak dikenal / DB offline → konten generik (perilaku legacy)
+        return reply.status(200).send(defaultLandingContent(slug));
       } catch (err: any) {
-        console.error(`[TENANT SLUG RESOLVE ERROR] Failed to fetch tenant for slug ${slug}:`, err.message);
-        // Fail-open default content
-        return reply.status(200).send({
-          tenant_id: DEFAULT_TENANT_ID,
-          slug: slug || 'default',
-          clinic_name: getBrandIdentity().businessName,
-          headline: 'Solusi Pijat & Perawatan Bayi Profesional di Rumah Anda',
-          subheadline: 'Bidan bersertifikasi resmi datang langsung ke lokasi Anda.',
-          benefits: [
-            'Terapis Bidan Terlatih & Certified',
-            'Peralatan Steril Standard Hospital',
-            'Gratis Ongkir hingga 5 km',
-          ],
-          faq: [
-            { question: 'Bagaimana cara booking?', answer: 'Klik tombol Chat via WhatsApp untuk terhubung dengan CS.' }
-          ],
-          whatsapp_number: process.env.DEFAULT_WHATSAPP_PHONE || '',
-          meta_pixel_id: process.env.FB_PIXEL_ID || '123456789012345',
-        });
+        console.error(`[TENANT SLUG RESOLVE ERROR] Failed to resolve content for slug ${slug}:`, err.message);
+        const { defaultLandingContent } = await import('../services/landing-content.service');
+        return reply.status(200).send(defaultLandingContent(slug));
       }
     }
   );

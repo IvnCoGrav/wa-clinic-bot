@@ -158,6 +158,9 @@ model Message {
   direction       Direction
   content         String
   payload_raw     Json?
+  delivery_status String?
+  delivered_at    DateTime?
+  read_at         DateTime?
   created_at      DateTime     @default(now())
 
   @@index([tenant_id])
@@ -397,6 +400,25 @@ enum LandingType {
   RAW_HTML
 }
 
+model LandingPage {
+  id                 String      @id @default(uuid())
+  tenant_id          String      @default("default-tenant")
+  slug               String      @unique
+  title              String
+  landing_type       LandingType @default(RAW_HTML)
+  html_content       String?     @db.Text
+  structured_content Json?
+  meta_pixel_id      String?
+  whatsapp_number    String?
+  events             String[]    @default([])
+  is_active          Boolean     @default(true)
+  created_at         DateTime    @default(now())
+  updated_at         DateTime    @updatedAt
+
+  @@index([tenant_id])
+  @@map("landing_pages")
+}
+
 model Tenant {
   id                     String            @id @default(uuid())
   slug                   String            @unique
@@ -413,6 +435,8 @@ model Tenant {
   waba_business_account_id String?
   waba_access_token      String?
   waba_webhook_verify_token String?
+  ai_router_enabled      Boolean           @default(true)
+  ai_router_shadow_mode  Boolean           @default(true)
   created_at             DateTime          @default(now())
   updated_at             DateTime          @updatedAt
 

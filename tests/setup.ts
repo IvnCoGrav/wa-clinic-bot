@@ -5,6 +5,14 @@ import { vi } from 'vitest';
 // which triggers the Haversine fallback in DeliveryService (deterministic, no network).
 process.env.ORS_API_KEY = '';
 
+// Blank LLM keys so the AI Router (default ON) never hits the network during tests.
+// rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
+// rule-based classification (deterministic, offline). Tests that exercise the LLM path
+// set a mock key explicitly.
+process.env.LLM_API_KEY = '';
+process.env.OPENAI_API_KEY = '';
+process.env.AI_MODEL_ROUTER = '';
+
 // Mock Prisma client globally for all unit and integration tests to fail fast
 // and trigger the in-memory fallback stores instantly when Postgres is offline.
 vi.mock('../src/db/client', () => {
@@ -27,6 +35,7 @@ vi.mock('../src/db/client', () => {
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       knowledgeChunk: {
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
@@ -79,6 +88,15 @@ vi.mock('../src/db/client', () => {
         findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      landingPage: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        delete: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       wabaTemplate: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),

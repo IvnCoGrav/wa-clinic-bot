@@ -85,6 +85,25 @@ fastify.get('/health', async (request, reply) => {
   return reply.status(200).send({ status: 'OK' });
 });
 
+// Purge cache tenant landing content (dipanggil backend setelah upload/reset raw HTML)
+fastify.post('/api/tracking/cache-purge', async (request: any, reply: any) => {
+  const trackingApiKey = process.env.TRACKING_API_KEY || '';
+  const clientKey = (request.headers['x-tracking-api-key'] as string) || '';
+  if (!trackingApiKey || clientKey !== trackingApiKey) {
+    return reply.status(401).send({ error: 'Unauthorized: Invalid or missing X-Tracking-Api-Key header.' });
+  }
+
+  const body = (request.body || {}) as { slug?: string };
+  const slug = (body.slug || '').toString().toLowerCase();
+  if (slug) {
+    tenantCache.delete(slug);
+  } else {
+    tenantCache.clear();
+  }
+
+  return reply.status(200).send({ success: true, purged: slug || '*' });
+});
+
 // Render Landing Page for /go, /:slug, or /promo/:slug
 const renderLandingHandler = async (request: any, reply: any) => {
   try {
@@ -116,7 +135,8 @@ const renderLandingHandler = async (request: any, reply: any) => {
           whatsappNumber: content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
           tenantId: content.tenant_id || 'DEFAULT_TENANT_ID',
           tenantSlug: slug,
-        }
+        },
+        content.events || []
       );
 
       return reply.type('text/html').status(200).send(injectedHtml);
@@ -139,6 +159,19 @@ const renderLandingHandler = async (request: any, reply: any) => {
     const trackingApiBaseUrl = process.env.TRACKING_API_BASE_URL || '';
     const trackingApiKey = process.env.TRACKING_API_KEY || '';
 
+    // Per-landing pixel events (placeholder __EVENTS_ONLOAD__ / __EVENTS_ONCLICK__ di go.html)
+    const ONLOAD_EVENTS = ['ViewContent', 'Search'];
+    const CLICK_EVENTS = ['Lead', 'Purchase', 'InitiateCheckout', 'AddToCart', 'CompleteRegistration', 'Contact', 'StartTrial', 'Subscribe', 'CustomizeProduct'];
+    const events: string[] = content.events || [];
+    const eventsOnload = events
+      .filter((e) => ONLOAD_EVENTS.includes(e))
+      .map((e) => `      fbq('track', '${e}');`)
+      .join('\n');
+    const eventsOnclick = events
+      .filter((e) => CLICK_EVENTS.includes(e))
+      .map((e) => `      fbq('track', '${e}');`)
+      .join('\n');
+
     htmlContent = htmlContent
       .replace(/__CLINIC_NAME__/g, content.clinic_name || 'Moms & Baby Spa Homecare')
       .replace(/__HEADLINE__/g, content.headline || 'Solusi Pijat & Perawatan Bayi')
@@ -149,7 +182,11 @@ const renderLandingHandler = async (request: any, reply: any) => {
       .replace(/__FB_PIXEL_ID__/g, content.meta_pixel_id || process.env.FB_PIXEL_ID || '')
       .replace(/__DEFAULT_WHATSAPP_PHONE__/g, content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '')
       .replace(/__TENANT_ID__/g, content.tenant_id || 'DEFAULT_TENANT_ID')
-      .replace(/__TENANT_SLUG__/g, slug);
+      .replace(/__TENANT_SLUG__/g, slug)
+      .replace(/__EVENTS_ONLOAD__/g, eventsOnload)
+      .replace(/__EVENTS_ONCLICK__/g, eventsOnclick)
+      // Strict CSP: beri nonce pada script inline go.html supaya Pixel & tracking tidak diblokir
+      .replace(/<script>/g, `<script nonce="${nonce}">`);
 
     return reply
       .type('text/html')

@@ -26,25 +26,6 @@ services:
       postgres:
         condition: service_healthy
 
-  # Click Catcher — microservice perantara untuk menangkap atribusi klik iklan Meta
-  # dan meredirect customer ke WhatsApp dengan tracking code.
-  # Dokumentasi: packages/click-catcher/README.md
-  click-catcher:
-    build:
-      context: ./packages/click-catcher
-      dockerfile: Dockerfile
-    ports:
-      - "3002:3002"
-    environment:
-      - PORT=3002
-      # Gunakan nama service Docker 'app' agar bisa berkomunikasi via internal network
-      - TRACKING_API_BASE_URL=http://app:3000
-      - TRACKING_API_KEY=${TRACKING_API_KEY}
-      - FB_PIXEL_ID=${FB_PIXEL_ID}
-      - DEFAULT_WHATSAPP_PHONE=${DEFAULT_WHATSAPP_PHONE}
-    depends_on:
-      - app
-
   postgres:
     image: postgres:16-alpine
     restart: always

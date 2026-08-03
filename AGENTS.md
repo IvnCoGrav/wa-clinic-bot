@@ -40,7 +40,7 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 
 - Root `package.json` = bot engine. Each `packages/*` has its own install/lockfile — run `npm install` inside them.
 - `packages/admin-dashboard`: React + Vite + Tailwind. The bot serves its built `dist/` at `/admin/*` — **rebuild it** (`npm run build` in that dir) and restart the bot to see UI changes; or `npm run dev` (Vite) for standalone UI dev.
-- `packages/click-catcher`: separate Fastify microservice (port 3002).
+- `packages/click-catcher`: **RETIRED** — landing page kini di-serve langsung oleh bot (`src/routes/landing.route.ts` + `src/landing/public/go.html`). Paket ini dibiarkan di repo untuk referensi, tidak lagi dipakai di docker-compose.
 
 ## Tooling
 
