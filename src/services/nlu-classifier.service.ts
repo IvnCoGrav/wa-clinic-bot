@@ -78,7 +78,7 @@ export class NluClassifierService {
     }
 
     // 5. Ask Price
-    if (/(\bberapa\b|\bharga\b|\btarif\b|\bongkir\b|\bbiaya\b|\bpricelists?\b|\bpromos?\b)/i.test(text)) {
+    if (/(\bberapa\b|\bharga(nya)?\b|\btarif(nya)?\b|\bongkir(nya)?\b|\bbiaya(nya)?\b|\bongkos(nya)?\b|\bpricelists?\b|\bpromos?\b|\b\d+\s*(rb|k|ribu)\b)/i.test(text)) {
       intents.push('ask_price');
     }
 

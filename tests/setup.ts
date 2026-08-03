@@ -21,6 +21,8 @@ vi.mock('../src/db/client', () => {
       customer: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
@@ -104,8 +106,23 @@ vi.mock('../src/db/client', () => {
         findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
-        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
         deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      generalFaqStaging: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
+      medicalFaqStaging: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       $queryRaw: vi.fn().mockRejectedValue(new Error('Database offline')),
 

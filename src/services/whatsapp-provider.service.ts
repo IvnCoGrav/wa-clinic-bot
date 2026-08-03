@@ -111,6 +111,17 @@ export class WhatsappProviderService {
   public async startSessionForTenant(tenantId: string = DEFAULT_TENANT_ID): Promise<ProviderQrData> {
     const sessionId = await this.resolveSessionId(tenantId);
 
+    // Buat session baru di WAHA jika session belum pernah dibuat / baru saja di-disconnect
+    try {
+      const existing = await wahaClient.getSession(sessionId);
+      if (!existing) {
+        const config = this.buildDefaultSessionConfig();
+        await wahaClient.createSession(sessionId, config);
+      }
+    } catch (err) {
+      // ignore
+    }
+
     const startResult = await wahaClient.startSession(sessionId);
     let status: string;
     try {
@@ -119,14 +130,14 @@ export class WhatsappProviderService {
       status = 'DISCONNECTED';
     }
 
-    if (startResult === 'FAILED') {
+    if (startResult === 'FAILED' && status !== 'SCAN_QR_CODE' && status !== 'WORKING') {
       return {
         provider: 'WAHA',
         sessionId,
         status,
         qr: null,
         qrExpiresInMs: null,
-        message: 'Gagal memulai session WAHA. Periksa log WAHA dan coba lagi.',
+        message: 'Gagal memulai session WAHA. Periksa log WAHA atau klik Reset & Scan Ulang.',
       };
     }
 
@@ -198,6 +209,31 @@ export class WhatsappProviderService {
 
     // 3. Mulai session → memunculkan QR baru untuk scan ulang.
     return this.startSessionForTenant(tenantId);
+  }
+
+  /**
+   * Menghentikan/Disconnect session WAHA per-tenant (POST .../session/disconnect).
+   */
+  public async disconnectSessionForTenant(tenantId: string = DEFAULT_TENANT_ID): Promise<ProviderQrData> {
+    const sessionId = await this.resolveSessionId(tenantId);
+    await wahaClient.stopSession(sessionId);
+    await wahaClient.deleteSession(sessionId);
+
+    let status: string;
+    try {
+      status = await wahaClient.getSessionStatus(sessionId);
+    } catch (err: any) {
+      status = 'STOPPED';
+    }
+
+    return {
+      provider: 'WAHA',
+      sessionId,
+      status,
+      qr: null,
+      qrExpiresInMs: null,
+      message: 'Session WAHA telah terputus (Disconnected). Klik Mulai Session / Scan QR untuk menghubungkan kembali.',
+    };
   }
 }
 

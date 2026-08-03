@@ -20,6 +20,9 @@ export interface LiveChatConversationItem {
   lastMessageAt: Date;
   createdAt: Date;
   lastMessages: any[];
+  isMql?: boolean;
+  mqlBubbleCount?: number;
+  mqlTriggeredAt?: Date | null;
 }
 
 export interface AdminReplyResult {
@@ -155,6 +158,9 @@ export class LiveChatService {
       lastMessageAt: c.last_message_at,
       createdAt: c.created_at,
       lastMessages: c.messages || [],
+      isMql: !!c.customer?.is_mql,
+      mqlBubbleCount: c.customer?.mql_bubble_count || 0,
+      mqlTriggeredAt: c.customer?.mql_triggered_at || null,
     };
   }
 

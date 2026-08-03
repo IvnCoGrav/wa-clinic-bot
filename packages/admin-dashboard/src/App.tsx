@@ -20,6 +20,7 @@ const FollowUpQueue = lazy(() => import('./pages/tenant/FollowUpQueue').then(m =
 const FollowUpTemplates = lazy(() => import('./pages/tenant/FollowUpTemplates').then(m => ({ default: m.FollowUpTemplates })));
 const Debug = lazy(() => import('./pages/tenant/Debug').then(m => ({ default: m.Debug })));
 const LandingPage = lazy(() => import('./pages/tenant/LandingPage').then(m => ({ default: m.LandingPage })));
+const CustomerDatabase = lazy(() => import('./pages/tenant/CustomerDatabase').then(m => ({ default: m.CustomerDatabase })));
 
 export const App: React.FC = () => {
   return (
@@ -40,6 +41,13 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <Overview />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/customers" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <CustomerDatabase />
                 </Layout>
               </ProtectedRoute>
             } />

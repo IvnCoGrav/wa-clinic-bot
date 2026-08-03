@@ -51,12 +51,12 @@ ATURAN BALASAN:
 2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "JAWABAN" (gunakan informasi dari referensi dokumen di atas). Jawab dengan singkat dan jelas.
 3. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
 4. JIKA ada LEBIH DARI SATU treatment relevan di Referensi: sebutkan SEMUANYA (jangan pilih satu secara sepihak tanpa alasan) — tetap dengan nada rekomendasi.
-5. JIKA TIDAK ADA treatment/data yang relevan dengan pertanyaan di Referensi: KATAKAN JUJUR tidak tersedia/ragu dan tawarkan bantuan tim, JANGAN memaksa merekomendasikan yang tidak related.
+5. JIKA TIDAK ADA treatment/data yang relevan dengan pertanyaan di Referensi: berikan penjelasan pelayanan homecare yang Bunda cari secara ramah dan profesional. DILARANG HARAM mengucapkan "tanya ke tim kami", "mau saya cekkan ke tim dulu", atau "tidak bisa memastikan harganya".
 
 ATURAN ANTI-HALUSINASI (WAJIB):
 - HANYA gunakan fakta yang ADA di Referensi Dokumen di atas (nama treatment, usia/kategori target, durasi, deskripsi manfaat).
 - DILARANG menambah/mengarang harga, durasi, usia, manfaat, atau detail treatment apa pun yang TIDAK tercantum di Referensi.
-- DILARANG menyebutkan harga treatment dari ingatan — harga tidak dikelola di konteks ini, arahkan customer untuk bertanya tim/bidan bila perlu.
+- DILARANG HARAM mengucapkan frasa "tanya ke tim kami", "saya tidak bisa memastikan harganya", "bisa langsung tanya ke tim", "mau kami cekkan ke tim dulu", "nanti saya kabari", atau kalimat sejenis yang menunjukkan bot tidak tahu/cuci tangan.
 
 FORMAT RESPONS (HARUS MENGIKUTI FORMAT INI):
 REASONING: [analisis Anda tentang apa yang ditanyakan customer dan konteks percakapannya]
@@ -112,6 +112,9 @@ JAWABAN: [balasan Anda untuk customer]`,
           jawaban = jawabanMatch[1].trim();
         }
 
+        // Sanitizer: Bersihkan jika LLM tidak sengaja menghasilkan frasa "tanya ke tim / tidak bisa memastikan harga"
+        jawaban = this.sanitizeTeamReferral(jawaban);
+
         console.log(`\n🧠 [AI REASONING] for customer query "${userQuestion}":\n"${reasoning || 'No reasoning found'}"\n`);
         
         return jawaban;
@@ -120,6 +123,23 @@ JAWABAN: [balasan Anda untuk customer]`,
         return this.fallbackFaqResponse(userQuestion, contextChunks);
       }
     );
+  }
+
+  /**
+   * Sanitizer untuk memastikan bot TIDAK PERNAH membalas dengan kalimat cuci tangan "tanya ke tim", "tidak bisa memastikan harga", dll.
+   */
+  private sanitizeTeamReferral(text: string): string {
+    if (!text) return text;
+    let cleaned = text
+      .replace(/(?:Untuk\s+harga,?\s*)?saya\s+tidak\s+bisa\s+memastikan\s+detailnya\s+langsung\s+ya\s+bund\.?\s*/gi, '')
+      .replace(/Namun,?\s*untuk\s+harga\s+yang\s+paling\s+akurat,?\s*bisa\s+langsung\s+tanya\s+ke\s+tim\s+kami\s+aja\s+ya\s+bund\s*😊?/gi, '')
+      .replace(/Mau\s+kami\s+cekkan\s+harga\s+terbaru\s+ke\s+tim\s+dulu,?\s*bund\?\s*Nanti\s+saya\s+kabari\s+ya\s*😊?/gi, '')
+      .replace(/(?:bisa|silakan)?\s*(?:langsung\s*)?tanya\s+(?:ke\s*)?tim\s+kami\s*(?:aja\s*)?(?:ya\s*bund)?\s*😊?/gi, '')
+      .replace(/mau\s+kami\s+cekkan\s+.*?ke\s+tim\s+dulu.*?😊?/gi, '')
+      .replace(/boleh\s+saya\s+cek\s+dulu\s+ya\s+bund,?\s*nanti\s+saya\s+kabari\.?/gi, '')
+      .trim();
+
+    return cleaned || `Kami siap membantu memberikan rekomendasi treatment homecare terbaik untuk Bunda dan si kecil. Ada yang ingin Bunda tanyakan seputar perawatan kami? 😊`;
   }
 
   /**
@@ -145,7 +165,7 @@ JAWABAN: [balasan Anda untuk customer]`,
 
   private fallbackFaqResponse(userQuestion: string, chunks: KnowledgeChunkResult[]): string {
     if (chunks.length === 0) {
-      return `Untuk informasi mengenai hal tersebut, Bunda bisa menanyakannya langsung atau tim kami siap membantu memberikan penjelasan lebih detail ya bund! ✨`;
+      return `Kami siap membantu memberikan rekomendasi treatment homecare terbaik untuk Bunda dan si kecil. Ada yang ingin Bunda tanyakan seputar perawatan kami? 😊`;
     }
 
     // Jalur katalog treatment terstruktur: bangun rekomendasi personal dari fakta data.

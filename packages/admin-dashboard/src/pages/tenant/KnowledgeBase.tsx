@@ -19,7 +19,8 @@ import {
   Edit3,
   Save,
   X,
-  Trash2
+  Trash2,
+  Sparkles
 } from 'lucide-react';
 
 export const KnowledgeBase: React.FC = () => {
@@ -187,7 +188,7 @@ export const KnowledgeBase: React.FC = () => {
     try {
       const res = await apiRequest('/api/admin/harvest/legacy-chat', {
         method: 'POST',
-        body: JSON.stringify({})
+        body: JSON.stringify({ clearPreviousPending: true })
       });
       showToast(res.message || 'Scraping job started successfully!', 'info');
       const stats = await apiRequest('/api/admin/harvest/status');
@@ -196,6 +197,121 @@ export const KnowledgeBase: React.FC = () => {
       showToast(`Failed to start scraping: ${err.message}`, 'error');
     } finally {
       setHarvestLoading(false);
+    }
+  };
+
+  const handleResetStaging = async () => {
+    const ok = await confirm({
+      title: 'Bersihkan Staging Lama yang Terbalik?',
+      message: 'Ini akan menghapus kandidat FAQ PENDING lama yang terbalik dari pengikisan sebelumnya. Anda dapat menjalankan scraping baru yang sudah terurut dengan benar.',
+      confirmText: 'Bersihkan Data Lama',
+      cancelText: 'Batal',
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      const res = await apiRequest('/api/admin/harvest/reset-staging', { method: 'POST' });
+      showToast(res.message || 'Data staging terbalik berhasil dibersihkan.', 'success');
+      loadStagingData();
+    } catch (err: any) {
+      showToast(`Gagal membersihkan staging: ${err.message}`, 'error');
+    }
+  };
+
+  const handleDeleteAllStaging = async () => {
+    const ok = await confirm({
+      title: 'Hapus SELURUH Data Staging FAQ?',
+      message: 'Seluruh kandidat FAQ medis dan umum di antrian Staging Reviewer akan dihapus secara PERMANEN. Lanjutkan?',
+      confirmText: 'Hapus Semua Staging',
+      cancelText: 'Batal',
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      const res = await apiRequest('/api/admin/harvest/staging/all', { method: 'DELETE' });
+      showToast(res.message || 'Seluruh data staging berhasil dihapus.', 'success');
+      loadStagingData();
+      loadExistingMatches();
+    } catch (err: any) {
+      showToast(`Gagal menghapus seluruh staging: ${err.message}`, 'error');
+    }
+  };
+
+  const handleExportMarkdown = async () => {
+    try {
+      showToast('Menyiapkan berkas Markdown staging...', 'info');
+      const response = await fetch('/api/admin/harvest/staging/export-md', {
+        headers: {
+          'x-admin-key': localStorage.getItem('admin_key') || '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Gagal mengunduh berkas Markdown');
+      }
+
+      const text = await response.text();
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `staging-faq-export-${new Date().toISOString().split('T')[0]}.md`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showToast('Berkas staging-faq-export.md berhasil diunduh!', 'success');
+    } catch (err: any) {
+      showToast(`Gagal export Markdown: ${err.message}`, 'error');
+    }
+  };
+
+  const handleDownloadRawChatDump = async () => {
+    try {
+      showToast('Mengunduh berkas transkrip percakapan...', 'info');
+      const response = await fetch('/api/admin/harvest/raw-file', {
+        headers: {
+          'x-admin-key': localStorage.getItem('admin_key') || '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Berkas transkrip belum tersedia. Jalankan AI Chat Scraper terlebih dahulu.');
+      }
+
+      const text = await response.text();
+      const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `raw_scraped_chats_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showToast('Berkas raw_scraped_chats.json berhasil diunduh!', 'success');
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const [analyzingStaging, setAnalyzingStaging] = useState(false);
+
+  const handleAnalyzeStagingAI = async () => {
+    try {
+      setAnalyzingStaging(true);
+      showToast('Memulai analisis DeepSeek AI untuk kandidat staging...', 'info');
+      const res = await apiRequest('/api/admin/harvest/staging/analyze-ai', { method: 'POST' });
+      showToast(res.message || 'Berhasil mengolah data staging dengan DeepSeek AI!', 'success');
+      loadStagingData();
+    } catch (err: any) {
+      showToast(`Gagal analisa AI: ${err.message}`, 'error');
+    } finally {
+      setAnalyzingStaging(false);
     }
   };
 
@@ -593,23 +709,41 @@ export const KnowledgeBase: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                onClick={handleStartHarvest}
-                disabled={harvestJob?.status === 'PROCESSING' || harvestLoading}
-                className="px-4 py-2.5 bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
-              >
-                {harvestJob?.status === 'PROCESSING' ? (
-                  <>
-                    <RefreshCw className="animate-spin" size={14} />
-                    <span>Harvesting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={14} />
-                    <span>Start Scraping Chats</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleDownloadRawChatDump}
+                  className="px-3 py-2.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
+                  title="Unduh berkas JSON transkrip percakapan mentah (raw dump)"
+                >
+                  <FileText size={14} />
+                  <span>Download Raw Dump (.json)</span>
+                </button>
+                <button
+                  onClick={handleResetStaging}
+                  className="px-3 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
+                  title="Hapus data PENDING staging lama yang terbalik"
+                >
+                  <Trash2 size={14} />
+                  <span>Reset Staging Terbalik</span>
+                </button>
+                <button
+                  onClick={handleStartHarvest}
+                  disabled={harvestJob?.status === 'PROCESSING' || harvestLoading}
+                  className="px-4 py-2.5 bg-pink-500 hover:bg-pink-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
+                >
+                  {harvestJob?.status === 'PROCESSING' ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={14} />
+                      <span>Harvesting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={14} />
+                      <span>Start Scraping Chats</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* If there's an active or finished job, show progress & stats */}
@@ -680,21 +814,53 @@ export const KnowledgeBase: React.FC = () => {
       ) : activeTab === 'staging' ? (
         <div className="space-y-6">
           {/* Sub tabs for Staging Reviewer */}
-          <div className="flex border-b border-white/5 space-x-6">
-            <button
-              onClick={() => setStagingTab('medical')}
-              className={`pb-3 text-xs font-bold transition-all relative ${stagingTab === 'medical' ? 'text-pink-400 font-extrabold' : 'text-slate-400 hover:text-white'}`}
-            >
-              Medical Staging ({medicalStaging.length})
-              {stagingTab === 'medical' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pink-500 rounded-full"></div>}
-            </button>
-            <button
-              onClick={() => setStagingTab('general')}
-              className={`pb-3 text-xs font-bold transition-all relative ${stagingTab === 'general' ? 'text-pink-400 font-extrabold' : 'text-slate-400 hover:text-white'}`}
-            >
-              General Staging ({generalStaging.length})
-              {stagingTab === 'general' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pink-500 rounded-full"></div>}
-            </button>
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <div className="flex space-x-6">
+              <button
+                onClick={() => setStagingTab('medical')}
+                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'medical' ? 'text-pink-400 font-extrabold' : 'text-slate-400 hover:text-white'}`}
+              >
+                Medical Staging ({medicalStaging.length})
+                {stagingTab === 'medical' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pink-500 rounded-full"></div>}
+              </button>
+              <button
+                onClick={() => setStagingTab('general')}
+                className={`pb-2 text-xs font-bold transition-all relative ${stagingTab === 'general' ? 'text-pink-400 font-extrabold' : 'text-slate-400 hover:text-white'}`}
+              >
+                General Staging ({generalStaging.length})
+                {stagingTab === 'general' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-pink-500 rounded-full"></div>}
+              </button>
+            </div>
+
+            {(medicalStaging.length > 0 || generalStaging.length > 0) && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleAnalyzeStagingAI}
+                  disabled={analyzingStaging}
+                  className="px-3 py-1 bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 border border-pink-500/40 text-pink-300 rounded-lg text-[10px] font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+                  title="Olah dan rapikan seluruh draf staging dengan DeepSeek AI"
+                >
+                  <Sparkles size={11} className={analyzingStaging ? 'animate-spin' : ''} />
+                  <span>{analyzingStaging ? 'Analyzing with AI...' : 'Analyse Staging'}</span>
+                </button>
+                <button
+                  onClick={handleExportMarkdown}
+                  className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 rounded-lg text-[10px] font-bold transition flex items-center space-x-1.5"
+                  title="Unduh seluruh kandidat staging dalam format Markdown (.md)"
+                >
+                  <Download size={11} />
+                  <span>Export to .md</span>
+                </button>
+                <button
+                  onClick={handleDeleteAllStaging}
+                  className="px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-lg text-[10px] font-bold transition flex items-center space-x-1.5"
+                  title="Hapus seluruh kandidat staging secara permanen"
+                >
+                  <Trash2 size={11} />
+                  <span>Hapus Semua Staging</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {stagingLoading ? (

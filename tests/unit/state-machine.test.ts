@@ -180,4 +180,36 @@ describe('State Machine & Conversation Orchestrator Unit Tests', () => {
     expect(autoReleaseResult.updatedConversation.is_human_handling).toBe(false);
     expect(autoReleaseResult.updatedConversation.current_state).toBe(ConversationState.AWAITING_LOCATION);
   });
+
+  it('6. Price Question Interception in AWAITING_LOCATION: Must NOT trigger geocoding failure retry with "Hallo"', async () => {
+    const phone = `62866${Date.now()}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Rina', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    await conversationService.updateConversationState(
+      conversation.id,
+      {
+        currentState: ConversationState.AWAITING_LOCATION,
+        locationAttempts: 0,
+      },
+      DEFAULT_TENANT_ID
+    );
+
+    const result = await stateMachine.processMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      customer,
+      conversation: await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID),
+      incomingMessage: {
+        id: `msg_price_${Date.now()}`,
+        from: phone,
+        timestamp: '1700000000',
+        type: 'text',
+        text: { body: 'hallo kak ini benar harganya 60rb saja' },
+      },
+    });
+
+    expect(result.nextState).toBe(ConversationState.AWAITING_LOCATION);
+    expect(result.replyText).not.toContain('lebih tepatnya Hallo ini benar');
+    expect(result.shouldSendReply).toBe(true);
+  });
 });

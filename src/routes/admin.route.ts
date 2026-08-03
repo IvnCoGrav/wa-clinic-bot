@@ -246,6 +246,164 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/admin/settings/mql
+   * Mengambil setting MQL threshold & toggle auto lead
+   */
+  fastify.get('/api/admin/settings/mql', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { customerService } = await import('../services/customer.service');
+      const settings = await customerService.getMqlSettings(DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, data: settings });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/mql
+   * Memperbarui setting MQL threshold & toggle auto lead
+   */
+  fastify.put('/api/admin/settings/mql', async (request: FastifyRequest<{
+    Body: { mqlThresholdBubbles?: number; mqlAutoLeadEnabled?: boolean };
+  }>, reply: FastifyReply) => {
+    const { mqlThresholdBubbles, mqlAutoLeadEnabled } = request.body || {};
+    if (mqlThresholdBubbles !== undefined && (typeof mqlThresholdBubbles !== 'number' || mqlThresholdBubbles < 1)) {
+      return reply.status(400).send({ success: false, error: 'mqlThresholdBubbles harus berupa angka > 0' });
+    }
+
+    try {
+      const { customerService } = await import('../services/customer.service');
+      const updated = await customerService.updateMqlSettings(DEFAULT_TENANT_ID, {
+        mqlThresholdBubbles,
+        mqlAutoLeadEnabled,
+      });
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'UPDATE_MQL_SETTINGS',
+        payload: updated,
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({ success: true, data: updated, message: 'Setting MQL berhasil diperbarui.' });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/customers
+   * Mengambil daftar customer database lengkap dengan Tracking Code, LTV, MQL Status, dan pagination
+   */
+  fastify.get('/api/admin/customers', async (request: FastifyRequest<{
+    Querystring: { search?: string; page?: string; pageSize?: string; mqlOnly?: string };
+  }>, reply: FastifyReply) => {
+    try {
+      const { search, page, pageSize, mqlOnly } = request.query || {};
+      const { customerService } = await import('../services/customer.service');
+      const result = await customerService.listCustomersWithLtvAndAdClick(DEFAULT_TENANT_ID, {
+        search,
+        page: parseInt(page || '1', 10) || 1,
+        pageSize: parseInt(pageSize || '20', 10) || 20,
+        mqlOnly: mqlOnly === 'true',
+      });
+      return reply.status(200).send({ success: true, ...result });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/customers/:id/messages
+   * Riwayat percakapan kronologis (Chat History) untuk modal pada customer tertentu
+   */
+  fastify.get('/api/admin/customers/:id/messages', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    try {
+      const conversations = await prisma.conversation.findMany({
+        where: { customer_id: id, tenant_id: DEFAULT_TENANT_ID },
+        orderBy: { updated_at: 'desc' },
+      });
+
+      if (conversations.length === 0) {
+        return reply.status(200).send({ success: true, count: 0, data: [] });
+      }
+
+      const conversationIds = conversations.map((c) => c.id);
+      const messages = await prisma.message.findMany({
+        where: { conversation_id: { in: conversationIds }, tenant_id: DEFAULT_TENANT_ID },
+        orderBy: { created_at: 'asc' },
+      });
+
+      return reply.status(200).send({ success: true, count: messages.length, data: messages });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/admin/customers/:id/send-event
+   * Manual trigger event Meta Pixel / CAPI untuk customer tertentu
+   */
+  fastify.post('/api/admin/customers/:id/send-event', async (request: FastifyRequest<{
+    Params: { id: string };
+    Body: { eventName: string; value?: number; currency?: string };
+  }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const { eventName, value, currency = 'IDR' } = request.body || {};
+
+    if (!eventName) {
+      return reply.status(400).send({ success: false, error: 'eventName wajib diisi (mis. Lead, Purchase, ViewContent)' });
+    }
+
+    try {
+      const customer = await prisma.customer.findFirst({
+        where: { id, tenant_id: DEFAULT_TENANT_ID },
+        include: { adClick: true },
+      });
+
+      if (!customer) {
+        return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+      }
+
+      const { capiService } = await import('../services/capi.service');
+      const capiResult = await capiService.sendCapiEvent({
+        eventName,
+        customer,
+        adClick: customer.adClick || {
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'] || 'Admin Manual Event Trigger',
+        },
+        value,
+        currency,
+        tenantId: DEFAULT_TENANT_ID,
+        customData: {
+          manual_trigger: true,
+          triggered_by_admin: (request as any).adminIdentity || 'Admin',
+        },
+      });
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'MANUAL_SEND_META_EVENT',
+        targetId: id,
+        payload: { eventName, value, currency, success: capiResult.success },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: `Event '${eventName}' berhasil dikirim ke Meta CAPI untuk customer ${customer.phone}.`,
+        data: capiResult,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
    * GET /api/admin/live-chat/conversations
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (termasuk sender_type/sender_name).
    */
@@ -2183,16 +2341,155 @@ export async function adminRoutes(fastify: FastifyInstance) {
    * POST /api/admin/harvest/legacy-chat
    * Memicu job background harvesting histori chat WAHA
    */
-  fastify.post('/api/admin/harvest/legacy-chat', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { LegacyHarvestingService } = await import('../services/legacy-harvesting.service');
-    LegacyHarvestingService.runHarvestingJob(DEFAULT_TENANT_ID).catch((err) => console.error('[HARVEST JOB ERROR]', err));
+  fastify.post(
+    '/api/admin/harvest/legacy-chat',
+    async (request: FastifyRequest<{ Body: { maxChats?: number; maxMessagesPerChat?: number; clearPreviousPending?: boolean } }>, reply: FastifyReply) => {
+      const body = request.body || {};
+      const { maxChats, maxMessagesPerChat, clearPreviousPending } = body;
+      const { LegacyHarvestingService } = await import('../services/legacy-harvesting.service');
 
-    return reply.status(200).send({
-      success: true,
-      message: 'Proses AI Harvesting histori chat berhasil dimulai di background.',
-      jobId: `job_${Date.now()}`,
-      status: 'STARTED',
-    });
+      if (clearPreviousPending) {
+        try {
+          await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' } });
+          await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' } });
+          console.log('[HARVESTING] Previous PENDING staging records cleared before new harvesting run.');
+        } catch (e: any) {
+          console.warn('[HARVESTING] Could not clear previous pending staging records:', e.message);
+        }
+      }
+
+      LegacyHarvestingService.runHarvestingJob(DEFAULT_TENANT_ID, { maxChats, maxMessagesPerChat }).catch((err) =>
+        console.error('[HARVEST JOB ERROR]', err)
+      );
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Proses AI Harvesting histori chat berhasil dimulai di background dengan perbaikan pengurutan kronologis.',
+        jobId: `job_${Date.now()}`,
+        status: 'STARTED',
+      });
+    }
+  );
+
+  /**
+   * POST /api/admin/harvest/reset-staging
+   * Membersihkan data staging PENDING yang terbolak-balik dari pengikisan lama
+   */
+  fastify.post('/api/admin/harvest/reset-staging', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const medRes = await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' } });
+      const genRes = await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' } });
+
+      return reply.status(200).send({
+        success: true,
+        message: `Berhasil membersihkan ${medRes.count} kandidat medis dan ${genRes.count} kandidat umum staging PENDING yang lama.`,
+        data: { medicalCleared: medRes.count, generalCleared: genRes.count },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/harvest/staging/all
+   * Menghapus SELURUH data staging FAQ (Medical & General Staging) secara permanen
+   */
+  fastify.delete('/api/admin/harvest/staging/all', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const medRes = await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID } });
+      const genRes = await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: DEFAULT_TENANT_ID } });
+
+      return reply.status(200).send({
+        success: true,
+        message: `Berhasil menghapus seluruh data staging: ${medRes.count} kandidat medis dan ${genRes.count} kandidat umum.`,
+        data: { medicalDeleted: medRes.count, generalDeleted: genRes.count },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * GET /api/admin/harvest/staging/export-md
+   * Meng-export seluruh kandidat Staging FAQ (Medical & General) dalam format Markdown (.md)
+   */
+  fastify.get('/api/admin/harvest/staging/export-md', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = DEFAULT_TENANT_ID;
+      const statusFilter = (request.query as any)?.status || 'ALL';
+
+      const medQuery: any = { tenant_id: tenantId };
+      const genQuery: any = { tenant_id: tenantId };
+
+      if (statusFilter !== 'ALL') {
+        medQuery.status = statusFilter;
+        genQuery.status = statusFilter;
+      }
+
+      const medicalItems = await prisma.medicalFaqStaging.findMany({
+        where: medQuery,
+        orderBy: { created_at: 'desc' },
+      });
+
+      const generalItems = await prisma.generalFaqStaging.findMany({
+        where: genQuery,
+        orderBy: { created_at: 'desc' },
+      });
+
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      let md = `# Export Staging Reviewer FAQ - ${dateStr}\n\n`;
+      md += `> Tanggal Export: ${new Date().toLocaleString()}\n`;
+      md += `> Total Medical Staging: ${medicalItems.length} kandidat\n`;
+      md += `> Total General Staging: ${generalItems.length} kandidat\n\n`;
+      md += `---\n\n`;
+
+      md += `## 🏥 Medical FAQ Staging (Kandidat Bidan)\n\n`;
+      if (medicalItems.length === 0) {
+        md += `*Tidak ada data kandidat medis.*\n\n`;
+      } else {
+        medicalItems.forEach((item, index) => {
+          md += `### ${index + 1}. ${item.general_question || item.raw_question}\n`;
+          md += `- **Status**: \`${item.status}\`\n`;
+          md += `- **No. Customer**: ${item.customer_phone || 'N/A'}\n`;
+          md += `- **Waktu Staged**: ${new Date(item.created_at).toLocaleString()}\n`;
+          if (item.symptoms_tagged && item.symptoms_tagged.length > 0) {
+            md += `- **Gejala Terdeteksi**: ${item.symptoms_tagged.join(', ')}\n`;
+          }
+          md += `\n**Pesan Mentah Customer (Question)**:\n> ${item.raw_question}\n\n`;
+          md += `**Pesan Mentah Bidan (Reply)**:\n> ${item.bidan_raw_reply || 'N/A'}\n\n`;
+          md += `**Usulan FAQ Publik (Question)**:\n${item.general_question || item.raw_question}\n\n`;
+          md += `**Usulan FAQ Publik (Answer)**:\n${item.general_answer || item.bidan_raw_reply || 'N/A'}\n\n`;
+          md += `---\n\n`;
+        });
+      }
+
+      md += `## 💬 General FAQ Staging (Kandidat Admin)\n\n`;
+      if (generalItems.length === 0) {
+        md += `*Tidak ada data kandidat umum.*\n\n`;
+      } else {
+        generalItems.forEach((item, index) => {
+          md += `### ${index + 1}. ${item.general_question || item.raw_question}\n`;
+          md += `- **Status**: \`${item.status}\`\n`;
+          md += `- **Kategori**: \`${item.category || 'general'}\`\n`;
+          md += `- **Waktu Staged**: ${new Date(item.created_at).toLocaleString()}\n`;
+          md += `\n**Pesan Mentah Customer (Question)**:\n> ${item.raw_question}\n\n`;
+          md += `**Pesan Mentah Admin (Reply)**:\n> ${item.raw_answer || 'N/A'}\n\n`;
+          md += `**Usulan FAQ Publik (Question)**:\n${item.general_question || item.raw_question}\n\n`;
+          md += `**Usulan FAQ Publik (Answer)**:\n${item.general_answer || item.raw_answer || 'N/A'}\n\n`;
+          md += `---\n\n`;
+        });
+      }
+
+      const filename = `staging-faq-export-${dateStr}.md`;
+
+      return reply
+        .header('Content-Type', 'text/markdown; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(md);
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
   });
 
   /**
@@ -2203,6 +2500,179 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const { LegacyHarvestingService } = await import('../services/legacy-harvesting.service');
     const stats = LegacyHarvestingService.getJobStatus();
     return reply.status(200).send({ success: true, data: stats });
+  });
+
+  /**
+   * GET /api/admin/harvest/raw-file
+   * Mengunduh berkas dump transkrip percakapan konsolidasi (storage/harvesting/latest_raw_scraped_chats.json)
+   */
+  fastify.get('/api/admin/harvest/raw-file', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { default: fs } = await import('fs');
+      const { default: path } = await import('path');
+      const filePath = path.join(process.cwd(), 'storage', 'harvesting', 'latest_raw_scraped_chats.json');
+
+      if (!fs.existsSync(filePath)) {
+        return reply.status(404).send({ error: 'Berkas dump percakapan belum tersedia. Jalankan AI Chat Scraper terlebih dahulu.' });
+      }
+
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const filename = `raw_scraped_chats_${new Date().toISOString().split('T')[0]}.json`;
+
+      return reply
+        .header('Content-Type', 'application/json; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(content);
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/admin/harvest/staging/analyze-ai
+   * Menganalisis & memoles seluruh draf kandidat staging FAQ PENDING menggunakan DeepSeek AI
+   */
+  fastify.post('/api/admin/harvest/staging/analyze-ai', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenantId = DEFAULT_TENANT_ID;
+
+      const medicalPending = await prisma.medicalFaqStaging.findMany({
+        where: { tenant_id: tenantId, status: 'PENDING' },
+      });
+
+      const generalPending = await prisma.generalFaqStaging.findMany({
+        where: { tenant_id: tenantId, status: 'PENDING' },
+      });
+
+      if (medicalPending.length === 0 && generalPending.length === 0) {
+        return reply.status(200).send({
+          success: true,
+          message: 'Tidak ada kandidat staging bertipe PENDING yang perlu dianalisis.',
+          data: { medicalAnalyzed: 0, generalAnalyzed: 0 },
+        });
+      }
+
+      const apiKey = process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+      const baseUrl = (process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+      const model = process.env.AI_MODEL_HARVESTING || 'deepseek-chat';
+
+      let medicalAnalyzedCount = 0;
+      let generalAnalyzedCount = 0;
+
+      // Process Medical Staging items
+      for (const item of medicalPending) {
+        const prompt = `Rapikan pertanyaan dan jawaban medis klinik spa berikut menjadi bahasa Indonesia formal, ramah, dan profesional yang siap dipublikasikan ke FAQ.
+Pertanyaan mentah: "${item.raw_question}"
+Jawaban mentah: "${item.bidan_raw_reply}"
+
+Format JSON:
+{
+  "general_question": "Pertanyaan yang bersih dan umum?",
+  "general_answer": "Jawaban medis yang lengkap, ramah, dan profesional."
+}`;
+
+        if (apiKey && !apiKey.startsWith('mock')) {
+          try {
+            const { default: axios } = await import('axios');
+            const res = await axios.post(
+              `${baseUrl}/chat/completions`,
+              {
+                model,
+                response_format: { type: 'json_object' },
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.2,
+                max_tokens: 500,
+              },
+              { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000 }
+            );
+
+            const parsed = JSON.parse(res.data?.choices?.[0]?.message?.content || '{}');
+            if (parsed.general_question && parsed.general_answer) {
+              await prisma.medicalFaqStaging.update({
+                where: { id: item.id },
+                data: {
+                  general_question: parsed.general_question,
+                  general_answer: parsed.general_answer,
+                },
+              });
+              medicalAnalyzedCount++;
+              continue;
+            }
+          } catch (e: any) {}
+        }
+
+        // Fallback polishing
+        await prisma.medicalFaqStaging.update({
+          where: { id: item.id },
+          data: {
+            general_question: item.general_question || item.raw_question,
+            general_answer: item.general_answer || item.bidan_raw_reply,
+          },
+        });
+        medicalAnalyzedCount++;
+      }
+
+      // Process General Staging items
+      for (const item of generalPending) {
+        const prompt = `Rapikan pertanyaan dan jawaban umum klinik spa berikut menjadi bahasa Indonesia formal, ramah, dan profesional yang siap dipublikasikan ke FAQ.
+Pertanyaan mentah: "${item.raw_question}"
+Jawaban mentah: "${item.raw_answer}"
+
+Format JSON:
+{
+  "general_question": "Pertanyaan yang bersih dan umum?",
+  "general_answer": "Jawaban yang lengkap, ramah, dan profesional."
+}`;
+
+        if (apiKey && !apiKey.startsWith('mock')) {
+          try {
+            const { default: axios } = await import('axios');
+            const res = await axios.post(
+              `${baseUrl}/chat/completions`,
+              {
+                model,
+                response_format: { type: 'json_object' },
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.2,
+                max_tokens: 500,
+              },
+              { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 15000 }
+            );
+
+            const parsed = JSON.parse(res.data?.choices?.[0]?.message?.content || '{}');
+            if (parsed.general_question && parsed.general_answer) {
+              await prisma.generalFaqStaging.update({
+                where: { id: item.id },
+                data: {
+                  general_question: parsed.general_question,
+                  general_answer: parsed.general_answer,
+                },
+              });
+              generalAnalyzedCount++;
+              continue;
+            }
+          } catch (e: any) {}
+        }
+
+        // Fallback polishing
+        await prisma.generalFaqStaging.update({
+          where: { id: item.id },
+          data: {
+            general_question: item.general_question || item.raw_question,
+            general_answer: item.general_answer || item.raw_answer,
+          },
+        });
+        generalAnalyzedCount++;
+      }
+
+      return reply.status(200).send({
+        success: true,
+        message: `Berhasil menganalisis & memoles ${medicalAnalyzedCount} kandidat medis dan ${generalAnalyzedCount} kandidat umum dengan DeepSeek AI.`,
+        data: { medicalAnalyzed: medicalAnalyzedCount, generalAnalyzed: generalAnalyzedCount },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
   });
 
   /**
@@ -2558,6 +3028,34 @@ export async function adminRoutes(fastify: FastifyInstance) {
         });
 
         return reply.status(200).send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/whatsapp-provider/session/disconnect
+   * Memutuskan/Logout session WAHA per tenant
+   */
+  fastify.post(
+    '/api/admin/whatsapp-provider/session/disconnect',
+    async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
+      try {
+        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+        const data = await whatsappProviderService.disconnectSessionForTenant(tenantId);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'WAHA_SESSION_DISCONNECT',
+          targetId: data.sessionId,
+          payload: { status: data.status },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data, message: 'Session WAHA berhasil terputus (Disconnected).' });
       } catch (err: any) {
         return reply.status(500).send({ error: err.message });
       }
