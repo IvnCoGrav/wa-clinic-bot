@@ -5,6 +5,7 @@ import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
+import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { wabaTenantService } from '../services/waba-tenant.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import crypto from 'crypto';
@@ -140,12 +141,24 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         _mediaUrl: mediaUrl,
       };
 
-      await queueService.enqueueMessage({
+      // BURST COALESCING: jika aktif (BURST_COALESCE_MS>0) dan pesan text di state
+      // open-ended, pesan di-buffer lalu di-merge jadi 1 balasan (handled=true).
+      const coalesceResult = await burstCoalesceService.maybeCoalesce({
         tenantId,
         customerId: customer.id,
         phone: customer.phone,
+        conversation,
         incomingMessage,
       });
+
+      if (!coalesceResult.handled) {
+        await queueService.enqueueMessage({
+          tenantId,
+          customerId: customer.id,
+          phone: customer.phone,
+          incomingMessage,
+        });
+      }
       processed++;
     }
 
