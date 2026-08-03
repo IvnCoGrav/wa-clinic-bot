@@ -23,7 +23,8 @@ import {
   Save,
   BarChart3,
   QrCode,
-  Play
+  Play,
+  Power
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
@@ -85,6 +86,43 @@ export const Settings: React.FC = () => {
   const [capiSource, setCapiSource] = useState('none');
   const [savingCapi, setSavingCapi] = useState(false);
 
+  // MQL Automation Settings
+  const [mqlThresholdBubbles, setMqlThresholdBubbles] = useState<number>(5);
+  const [mqlAutoLeadEnabled, setMqlAutoLeadEnabled] = useState<boolean>(true);
+  const [savingMql, setSavingMql] = useState(false);
+
+  const loadMqlSettings = async () => {
+    try {
+      const res = await apiRequest('/api/admin/settings/mql');
+      if (res && res.data) {
+        setMqlThresholdBubbles(res.data.mqlThresholdBubbles ?? 5);
+        setMqlAutoLeadEnabled(res.data.mqlAutoLeadEnabled ?? true);
+      }
+    } catch (e) {
+      console.warn('Failed to load MQL settings:', e);
+    }
+  };
+
+  const handleSaveMqlSettings = async () => {
+    setSavingMql(true);
+    try {
+      const res = await apiRequest('/api/admin/settings/mql', {
+        method: 'PUT',
+        body: JSON.stringify({
+          mqlThresholdBubbles: Number(mqlThresholdBubbles),
+          mqlAutoLeadEnabled,
+        }),
+      });
+      if (res && res.success) {
+        toast('Pengaturan MQL & Trigger Event Lead berhasil disimpan.', 'success');
+      }
+    } catch (err: any) {
+      toast(`Gagal menyimpan MQL settings: ${err.message}`, 'error');
+    } finally {
+      setSavingMql(false);
+    }
+  };
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -117,6 +155,9 @@ export const Settings: React.FC = () => {
 
         // Fetch Meta Pixel & CAPI config
         await loadCapiConfig();
+
+        // Fetch MQL settings
+        await loadMqlSettings();
       } catch (err) {
         console.warn('Failed to load global chatbot settings:', err);
       } finally {
@@ -240,8 +281,8 @@ export const Settings: React.FC = () => {
     }
   };
 
-  // Tombol start hanya berguna saat session mati; WORKING/SCAN_QR_CODE tidak perlu.
-  const canStartSession = ['STOPPED', 'STOPPING', 'FAILED'].includes(qrStatus);
+  // Tombol start berguna saat session mati/terputus; WORKING/SCAN_QR_CODE tidak perlu.
+  const canStartSession = ['STOPPED', 'STOPPING', 'FAILED', 'DISCONNECTED', 'UNKNOWN'].includes(qrStatus);
   // Session FAILED yang sudah-paired tidak bisa di-recover hanya dengan start
   // (Noise Handshake failure baileys) — butuh reset penuh (delete → create → start).
   const canResetSession = qrStatus === 'FAILED';
@@ -278,6 +319,42 @@ export const Settings: React.FC = () => {
       toast(`Gagal mereset session WAHA: ${err.message}`, 'error');
     } finally {
       setResettingSession(false);
+    }
+  };
+
+  const [disconnectingSession, setDisconnectingSession] = useState(false);
+
+  const handleDisconnectSession = async () => {
+    const ok = await confirm({
+      title: 'Putuskan Koneksi WAHA?',
+      message:
+        'Koneksi WhatsApp WAHA akan terputus (logout/stop session). ' +
+        'Bot tidak akan bisa menerima/mengirim pesan WAHA sampai session dihubungkan kembali via Scan QR.',
+      confirmText: 'Putuskan Koneksi',
+      cancelText: 'Batal',
+      danger: true,
+    });
+    if (!ok) return;
+
+    setDisconnectingSession(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/session/disconnect', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const d = res?.data;
+      if (d) {
+        setQrStatus(d.status || 'STOPPED');
+        setQrMessage(d.message || 'Session terputus.');
+        setQrData(null);
+        if (d.status) setWahaStatus(d.status);
+      }
+      toast('Koneksi WAHA berhasil diputuskan (Disconnected).', 'success');
+      await loadQr();
+    } catch (err: any) {
+      toast(`Gagal memutuskan koneksi WAHA: ${err.message}`, 'error');
+    } finally {
+      setDisconnectingSession(false);
     }
   };
 
@@ -526,6 +603,16 @@ export const Settings: React.FC = () => {
                     <RefreshCw size={9} className={loadingQr ? 'animate-spin' : ''} />
                     <span>Segarkan</span>
                   </button>
+
+                  <button
+                    onClick={handleDisconnectSession}
+                    disabled={disconnectingSession || resettingSession || startingSession}
+                    className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 text-[9px] font-bold flex items-center space-x-1 disabled:opacity-50"
+                    title="Putuskan koneksi WAHA (Logout / Stop Session)"
+                  >
+                    <Power size={9} />
+                    <span>{disconnectingSession ? 'Memutuskan...' : 'Putuskan Koneksi'}</span>
+                  </button>
                   {canStartSession && (
                     <button
                       onClick={canResetSession ? handleResetSession : handleStartSession}
@@ -542,7 +629,7 @@ export const Settings: React.FC = () => {
                             : 'Reset & Scan Ulang'
                           : startingSession
                             ? 'Memulai...'
-                            : 'Mulai Session'}
+                            : 'Mulai Session / Scan QR Baru'}
                       </span>
                     </button>
                   )}
@@ -576,13 +663,13 @@ export const Settings: React.FC = () => {
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] leading-relaxed">
                   <div className="flex items-start space-x-2">
                     <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
-                    <span>{qrMessage || 'QR tidak tersedia untuk status session saat ini.'}</span>
+                    <span>{qrMessage || 'Session WAHA terputus / belum terhubung.'}</span>
                   </div>
                   {canStartSession && (
                     <p className="mt-2 text-amber-400/80">
                       {canResetSession
                         ? 'Session FAILED sudah-paired tidak bisa dipulihkan dengan start biasa. Klik <span className="font-bold">Reset &amp; Scan Ulang</span> untuk membuat session baru dan memunculkan QR.'
-                        : 'Klik <span className="font-bold">Mulai Session</span> untuk menyalakan session dan memunculkan QR.'}
+                        : 'Klik tombol <span className="font-bold font-mono text-emerald-300">Mulai Session / Scan QR Baru</span> di atas untuk menghubungkan nomor WhatsApp baru.'}
                     </p>
                   )}
                 </div>
@@ -835,6 +922,55 @@ export const Settings: React.FC = () => {
                   <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiRouterShadowMode ? 'translate-x-7' : ''}`}></div>
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* MQL Automation & Lead Event Configuration */}
+          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <BarChart3 className="text-pink-400" />
+              <span>MQL Automation & Trigger Event Lead</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Kualifikasi customer otomatis menjadi <span className="text-emerald-400 font-semibold">Minimum Qualified Lead (MQL)</span> ketika jumlah pesan/bubble chat dari customer mencapai ambang batas yang ditentukan.
+            </p>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Target Bubble Chat ke- (Threshold MQL)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={mqlThresholdBubbles}
+                  onChange={(e) => setMqlThresholdBubbles(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                  placeholder="Contoh: 5"
+                />
+                <p className="text-[10px] text-slate-500">Saat customer mengirim bubble ke-{mqlThresholdBubbles}, status customer otomatis berubah menjadi MQL.</p>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
+                <div>
+                  <span className="text-sm font-semibold text-slate-300">Auto-Trigger Event 'Lead' (Meta CAPI)</span>
+                  <p className="text-[10px] text-slate-500">Kirim event Lead otomatis ke Meta CAPI 1x saat customer mencapai status MQL</p>
+                </div>
+                <button
+                  onClick={() => setMqlAutoLeadEnabled(!mqlAutoLeadEnabled)}
+                  className={`w-14 h-7 rounded-full transition-all relative ${mqlAutoLeadEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                >
+                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${mqlAutoLeadEnabled ? 'translate-x-7' : ''}`}></div>
+                </button>
+              </div>
+
+              <button
+                onClick={handleSaveMqlSettings}
+                disabled={savingMql}
+                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+              >
+                <Save size={14} />
+                <span>{savingMql ? 'Memproses...' : 'Simpan Pengaturan MQL'}</span>
+              </button>
             </div>
           </div>
 

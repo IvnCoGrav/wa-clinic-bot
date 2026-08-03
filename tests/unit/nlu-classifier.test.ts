@@ -25,6 +25,11 @@ describe('NLU Classifier Service Unit Tests', () => {
       expect(result.confidence).toBeGreaterThanOrEqual(0.6);
     });
 
+    it('should classify price questions with suffix -nya and numbers like "hallo kak ini benar harganya 60rb saja" as ask_price', async () => {
+      const result = await NluClassifierService.classifyMessage('hallo kak ini benar harganya 60rb saja', []);
+      expect(result.intents).toContain('ask_price');
+    });
+
     it('should classify treatment questions like "apakah yang treatment nanti bidan ya ?" as faq_question', async () => {
       const result = await NluClassifierService.classifyMessage('apakah yang treatment nanti bidan ya ?', []);
       expect(result.intents).toContain('faq_question');

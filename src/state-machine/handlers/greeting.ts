@@ -162,19 +162,17 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
-  if (nlu && !nlu.isFallback && nlu.confidence >= 0.6) {
-    const hasAskPrice = nlu.intents.includes('ask_price');
-    const hasFaqQuestion = nlu.intents.includes('faq_question');
-    const hasProvideLocation = nlu.intents.includes('provide_location');
+  const hasAskPrice = nlu?.intents.includes('ask_price') || /\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|\d+\s*(rb|k|ribu))\b/i.test(lower);
+  const hasFaqQuestion = nlu?.intents.includes('faq_question') || /\b(manfaat|aman|usia|boleh|bayar|bidan)\b/i.test(lower);
+  const hasProvideLocation = nlu?.intents.includes('provide_location') || hasLocationKeyword || hasValidGeocode;
 
-    // Multi-intent: greeting + ask_price/faq + no location → brief acknowledgement + ask location
-    if ((hasAskPrice || hasFaqQuestion) && !hasProvideLocation) {
-      return {
-        nextState: ConversationState.AWAITING_LOCATION,
-        replyText: `Halo Bunda, selamat datang di ${getBrandIdentity().businessName}! ✨ Untuk info harga treatment dan ongkir, kami perlu tahu lokasi Bunda terlebih dahulu ya.\n\n${TEMPLATES.greeting({ skipGreeting })}`,
-        shouldSendReply: true,
-      };
-    }
+  // Multi-intent: greeting + ask_price/faq + no location → brief acknowledgement + ask location
+  if ((hasAskPrice || hasFaqQuestion) && !hasProvideLocation) {
+    return {
+      nextState: ConversationState.AWAITING_LOCATION,
+      replyText: `Halo Bunda, selamat datang di ${getBrandIdentity().businessName}! ✨ Untuk info harga treatment dan ongkir, kami perlu tahu lokasi Bunda terlebih dahulu ya.\n\n${TEMPLATES.greeting({ skipGreeting })}`,
+      shouldSendReply: true,
+    };
   }
 
   // 4. Default Greeting Baru (Belum punya lokasi)

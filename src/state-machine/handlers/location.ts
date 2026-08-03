@@ -101,9 +101,9 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   // jawab via interest handler (knowledge base / katalog treatment), TANPA mengganggu state lokasi.
   // Prinsip: STATE PUNYA PRIORITAS — jawab sela, lalu tetap tanya lokasi.
   const nlu = ctx.nluResult;
-  const nluConfidentForFaq = nlu && !nlu.isFallback && (nlu.confidence || 0) >= 0.6;
-  const hasFaqIntent = (nluConfidentForFaq && (nlu!.intents.includes('faq_question') || nlu!.intents.includes('ask_price'))) ||
-    (/\b(berapa|harga|tarif|ongkir|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment)\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
+  const hasNluPriceOrFaq = nlu && (nlu.intents.includes('faq_question') || nlu.intents.includes('ask_price'));
+  const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
+  const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex;
   if (hasFaqIntent) {
     console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
     const { handleInterestState } = await import('./interest');

@@ -40,6 +40,7 @@ export interface IWahaClient {
   getChatLabels(chatId: string): Promise<string[]>;
   getSessionStatus(session?: string): Promise<string>;
   startSession(session?: string): Promise<string>;
+  stopSession(session?: string): Promise<boolean>;
   getAuthQr(session?: string): Promise<WahaQr | null>;
   getSession(session?: string): Promise<any | null>;
   deleteSession(session?: string): Promise<boolean>;
@@ -542,6 +543,37 @@ export class WahaClient implements IWahaClient {
     } catch (error: any) {
       console.warn(`[WAHA API ERROR] startSession failed for session ${sessionName}:`, error?.response?.data || error.message);
       return 'FAILED';
+    }
+  }
+
+  /**
+   * Menghentikan session WAHA (POST /api/sessions/{name}/stop atau logout).
+   */
+  public async stopSession(session?: string): Promise<boolean> {
+    const sessionName = session || this.session;
+
+    if (this.shouldMock) {
+      return true;
+    }
+
+    try {
+      await axios.post(
+        `${this.baseUrl}/api/sessions/${sessionName}/stop`,
+        {},
+        { headers: this.headers, timeout: this.timeoutMs }
+      );
+      return true;
+    } catch (error: any) {
+      try {
+        await axios.post(
+          `${this.baseUrl}/api/sessions/${sessionName}/logout`,
+          {},
+          { headers: this.headers, timeout: this.timeoutMs }
+        );
+        return true;
+      } catch (err) {
+        return false;
+      }
     }
   }
 

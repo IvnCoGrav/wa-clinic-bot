@@ -39,6 +39,8 @@ interface LiveChatItem {
   lastMessageAt: string;
   createdAt: string;
   lastMessages?: ChatMessage[];
+  isMql?: boolean;
+  mqlBubbleCount?: number;
 }
 
 export const LiveChatMonitor: React.FC = () => {
@@ -319,15 +321,22 @@ export const LiveChatMonitor: React.FC = () => {
                             <span>{chatName}</span>
                             <span className="text-[10px] text-slate-500 font-normal">({chat.customerPhone || 'Unknown'})</span>
                           </h4>
-                          <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                            isMedical
-                              ? 'bg-rose-500/25 text-rose-300 border border-rose-500/30'
-                              : chat.escalationReason === 'unresolved_faq'
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                          }`}>
-                            {isMedical ? '🚨 MEDICAL EMERGENCY' : chat.escalationReason || 'Human Request'}
-                          </span>
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                              isMedical
+                                ? 'bg-rose-500/25 text-rose-300 border border-rose-500/30'
+                                : chat.escalationReason === 'unresolved_faq'
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            }`}>
+                              {isMedical ? '🚨 MEDICAL EMERGENCY' : chat.escalationReason || 'Human Request'}
+                            </span>
+                            {chat.isMql && (
+                              <span className="inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                ⚡ MQL ({chat.mqlBubbleCount ?? 0} Bubble)
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <button
                           onClick={(e) => {

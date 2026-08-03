@@ -96,6 +96,20 @@ export class MessageService {
       memoryMessages.push(fallbackMessage);
       return fallbackMessage;
     } finally {
+      // Jika pesan INBOUND (dari customer), increment bubble count & evaluasi status MQL
+      if (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND') {
+        try {
+          const { conversationService } = await import('./conversation.service');
+          const { customerService } = await import('./customer.service');
+          const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
+          if (conv?.customer_id) {
+            customerService.incrementCustomerMessageCount(conv.customer_id, data.tenantId).catch(() => {});
+          }
+        } catch (mqlErr: any) {
+          console.warn('[MQL] Failed to increment bubble count:', mqlErr.message);
+        }
+      }
+
       // Live Chat publish: fire-and-forget, tidak memblokir alur webhook/state-machine.
       getLiveChatHub()
         .publish({

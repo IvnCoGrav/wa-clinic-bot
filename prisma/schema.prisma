@@ -73,6 +73,9 @@ model Customer {
   marketing_opt_in        Boolean   @default(false)
   marketing_opt_in_at     DateTime?
   marketing_opt_in_source String?
+  is_mql                  Boolean   @default(false)
+  mql_triggered_at        DateTime?
+  mql_bubble_count        Int       @default(0)
 
   @@index([tenant_id])
   @@map("customers")
@@ -442,6 +445,8 @@ model Tenant {
   manual_reply_escalates Boolean           @default(true)
   idle_greeting_enabled  Boolean           @default(true)
   idle_greeting_min_hours Int             @default(36)
+  mql_threshold_bubbles  Int               @default(5)
+  mql_auto_lead_enabled  Boolean           @default(true)
   created_at             DateTime          @default(now())
   updated_at             DateTime          @updatedAt
 

@@ -45,8 +45,8 @@ export class LegacyHarvestingService {
     // 3. Scrub Email Addresses
     cleaned = cleaned.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[REDACTED_EMAIL]');
 
-    // 4. Best-Effort Name Scrubbing (Phrases starting with Bunda/Ibu/Kak followed by capitalized names)
-    cleaned = cleaned.replace(/\b(?:Bunda|Ibu|Kak|Bu)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/g, 'Bunda [REDACTED_NAME]');
+    // 4. Best-Effort Name Scrubbing (Phrases starting with Bunda/Ibu/Kak/Bu followed by capitalized names, ignoring common terms like Hamil/Menyusui/Bidan/Dokter/Anak)
+    cleaned = cleaned.replace(/\b(?:Bunda|Ibu|Kak|Bu)\s+(?!(?:Hamil|Menyusui|Melahirkan|Bidan|Dokter|Anak|Bayi|Balita)\b)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/g, 'Bunda [REDACTED_NAME]');
 
     return cleaned;
   }
@@ -82,9 +82,43 @@ export class LegacyHarvestingService {
    */
   static isTransactionOrScheduleMessage(text: string): boolean {
     if (!text || typeof text !== 'string') return false;
-    const lower = text.toLowerCase();
-    const pattern = /\b(reschedule|jadwal|jam berapa|isi form|buka jam|slot|booking|reservasi|ganti hari|pindah hari|isi data|kirim form)\b/i;
-    return pattern.test(lower);
+    const lower = text.toLowerCase().trim();
+
+    // 1. Kata kunci & frasa transaksi, booking, jadwal, jam, hari, lokasi, & form
+    const scheduleKeywords = [
+      'jadwal', 'dijadwalkan', 'penjadwalan', 'slot', 'booking', 'reservasi',
+      'reschedule', 'ganti hari', 'pindah hari', 'ganti jam', 'pindah jam',
+      'buka jam', 'tutup jam', 'jam berapa', 'jam berapa saja', 'jam berapa aja',
+      'jam 0', 'jam 1', 'jam 2', 'jam 3', 'jam 4', 'jam 5', 'jam 6', 'jam 7', 'jam 8', 'jam 9', 'jam 10', 'jam 11', 'jam 12',
+      'jam 13', 'jam 14', 'jam 15', 'jam 16', 'jam 17', 'jam 18', 'jam 19', 'jam 20', 'jam 21', 'jam 22', 'jam 23',
+      'hari ini', 'besok', 'lusa', 'minggu ini', 'bulan ini',
+      'hari senin', 'hari selasa', 'hari rabu', 'hari kamis', 'hari jumat', 'hari sabtu', 'hari minggu',
+      'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu',
+      'pagi', 'siang', 'sore', 'malam', 'wib',
+      'isi form', 'kirim form', 'isi data', 'kirim data', 'form reservasi', 'form booking',
+      'lokasi', 'alamat', 'shareloc', 'share location', 'titik', 'posisi', 'otw', 'perjalanan',
+      'bisa booking', 'mau booking', 'mau reservasi', 'mau daftar', 'daftar sekarang',
+      'tersedia', 'ready', 'kosong', 'slot kosong', 'jadwal kosong', 'slot ready',
+      'ambil slot', 'pilih slot', 'booking slot', 'dapat slot',
+    ];
+
+    if (scheduleKeywords.some((kw) => lower.includes(kw))) {
+      return true;
+    }
+
+    // 2. Pola Tanggal spesifik (mis. 10 agustus, tgl 5, tanggal 12, 12/08, 12-08-2026)
+    const datePattern = /(?:tgl|tanggal|\b\d{1,2}[\/\.-]\d{1,2}(?:[\/\.-]\d{2,4})?|\b\d{1,2}\s+(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des|januari|februari|maret|april|juni|juli|agustus|september|oktober|november|desember))/i;
+    if (datePattern.test(lower)) {
+      return true;
+    }
+
+    // 3. Pola Jam spesifik (mis. 09.00, 10:00, 14.30)
+    const timePattern = /\b\d{1,2}[.:]\d{2}\b/;
+    if (timePattern.test(lower)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -127,19 +161,25 @@ export class LegacyHarvestingService {
 
   /**
    * Main Async Harvesting Worker Engine:
-   * 1. Fetches historical chats from WAHA API
-   * 2. Extracts Q&A pairs & Lead/Purchase data
-   * 3. Performs PII Scrubbing & Pre-AI Filtering
-   * 4. Routes Medical ➔ MedicalFaqStaging, Non-Medical ➔ GeneralFaqStaging, Leads ➔ LegacyStaging
+   * 1. Fetches historical chats from WAHA API and dumps into a consolidated JSON file (storage/harvesting/raw_scraped_chats_<timestamp>.json)
+   * 2. Fetches existing Knowledge Base FAQs from DB for LLM context
+   * 3. Analyzes transcript with DeepSeek LLM to extract ONLY NEW medical and general Q&As not present in existing FAQs
+   * 4. Ingests new candidates into MedicalFaqStaging & GeneralFaqStaging for manual review
    */
-  static async runHarvestingJob(tenantId: string = DEFAULT_TENANT_ID): Promise<HarvestingProgressStats> {
+  static async runHarvestingJob(
+    tenantId: string = DEFAULT_TENANT_ID,
+    options?: { maxChats?: number; maxMessagesPerChat?: number }
+  ): Promise<HarvestingProgressStats> {
     if (activeHarvestingJob.status === 'PROCESSING') {
       return activeHarvestingJob;
     }
 
-    // Resolve AI model dynamically from AI Model Config Registry
+    const maxChats = options?.maxChats || 50;
+    const maxMessagesPerChat = options?.maxMessagesPerChat || 50;
+
+    // Resolve AI model dynamically from AI Model Config Registry (Defaults to DeepSeek / deepseek-chat)
     const aiConfig = AiModelConfigService.getModelConfig('HARVESTING');
-    console.log(`[HARVESTING ENGINE] Starting harvesting job using model '${aiConfig.modelName}' (${aiConfig.provider})...`);
+    console.log(`[HARVESTING ENGINE] Starting file-based harvesting job (maxChats: ${maxChats}) using model '${aiConfig.modelName}' (${aiConfig.provider})...`);
 
     activeHarvestingJob = {
       status: 'PROCESSING',
@@ -154,14 +194,34 @@ export class LegacyHarvestingService {
     // Execute in background
     setTimeout(async () => {
       try {
-        const chats = await wahaClient.getChats();
-        activeHarvestingJob.totalChatsScanned = chats.length || 1;
-        activeHarvestingJob.progressPercent = 25;
+        const { default: fs } = await import('fs');
+        const { default: path } = await import('path');
+        const storageDir = path.join(process.cwd(), 'storage', 'harvesting');
+        if (!fs.existsSync(storageDir)) {
+          fs.mkdirSync(storageDir, { recursive: true });
+        }
 
-        for (let i = 0; i < Math.min(chats.length, 10); i++) {
+        // STEP 1: Scrape chats & dump into 1 consolidated JSON file
+        const chats = await wahaClient.getChats();
+        const chatLimit = Math.min(chats.length, maxChats);
+        activeHarvestingJob.totalChatsScanned = chatLimit || 1;
+        activeHarvestingJob.progressPercent = 20;
+
+        const consolidatedTranscripts: Array<{
+          chatId: string;
+          customerPhone: string;
+          dialogue: Array<{ sender: 'CUSTOMER' | 'BIDAN_ADMIN'; message: string }>;
+        }> = [];
+
+        for (let i = 0; i < chatLimit; i++) {
           const chat = chats[i];
-          const messages = await wahaClient.getMessages(chat.id, 20);
-          activeHarvestingJob.totalMessagesScanned += messages.length;
+          const rawMessages = await wahaClient.getMessages(chat.id, maxMessagesPerChat);
+          activeHarvestingJob.totalMessagesScanned += rawMessages.length;
+
+          // Sort messages chronologically (ASCENDING: oldest message first, newest message last)
+          const messages = [...rawMessages].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+          const chatDialogue: Array<{ sender: 'CUSTOMER' | 'BIDAN_ADMIN'; message: string }> = [];
 
           for (let j = 0; j < messages.length - 1; j++) {
             const currentMsg = messages[j];
@@ -172,10 +232,10 @@ export class LegacyHarvestingService {
               const rawQ = currentMsg.body;
               const rawA = nextMsg.body;
 
-              // 1. Pre-AI Junk Filter & Schedule/Form Exclusion
+              // Pre-AI Junk Filter & Schedule/Form Exclusion
               if (this.isJunkMessage(rawQ)) continue;
               if (this.isTransactionOrScheduleMessage(rawQ)) {
-                // If it's a schedule/form message, check if it extracts a lead for LegacyStaging, but EXCLUDE from FAQ staging!
+                // Check if it extracts a lead for LegacyStaging
                 const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
                 if (reservationDetails.success && reservationDetails.reservation) {
                   try {
@@ -201,106 +261,232 @@ export class LegacyHarvestingService {
                     }
                   } catch (err: any) {}
                 }
-                continue; // SKIP FAQ STAGING TOTAL
+                continue; // EXCLUDE scheduling/booking from FAQ dump
               }
 
-              // 2. PII Scrubbing
+              // PII Scrubbing
               const cleanQ = this.scrubPII(rawQ);
               const cleanA = this.scrubPII(rawA);
 
-              // 3. Deduplikasi Otomatis via KnowledgeBaseService.checkDuplicateFaq (Threshold = 0.70)
-              const { knowledgeBaseService } = await import('./knowledge.service');
-              const dupCheck = await knowledgeBaseService.checkDuplicateFaq(cleanQ, tenantId, 0.70);
-              const stagingStatus: any = dupCheck.isDuplicate ? 'EXISTING_MATCH' : 'PENDING';
-              const matchedChunkId = dupCheck.matchedChunk?.id || null;
-              const matchedSimilarity = dupCheck.similarity || null;
+              chatDialogue.push({ sender: 'CUSTOMER', message: cleanQ });
+              chatDialogue.push({ sender: 'BIDAN_ADMIN', message: cleanA });
+            }
+          }
 
-              // 4. Sub-Part B Lead/Purchase Extraction (using parseReservationText)
-              const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
-              if (reservationDetails.success && reservationDetails.reservation) {
-                try {
-                  const phoneNum = chat.id.replace(/@.*$/, '');
-                  const existingLead = await prisma.legacyStaging.findUnique({
-                    where: { phoneNumber: phoneNum }
-                  });
+          if (chatDialogue.length > 0) {
+            consolidatedTranscripts.push({
+              chatId: chat.id,
+              customerPhone: chat.id.replace(/@.*$/, ''),
+              dialogue: chatDialogue,
+            });
+          }
 
-                  if (!existingLead) {
-                    await prisma.legacyStaging.create({
-                      data: {
-                        tenantId: tenantId,
-                        phoneNumber: phoneNum,
-                        name: reservationDetails.reservation.name || 'Customer Lama',
-                        extractedLocation: reservationDetails.reservation.address || null,
-                        leadCreatedAt: new Date(),
-                        extractedReservationJson: JSON.parse(JSON.stringify(reservationDetails.reservation)),
-                        status: 'PENDING',
-                        rawMessagesCount: 2,
-                        rawMessagesJson: JSON.parse(JSON.stringify([currentMsg, nextMsg])),
-                      },
-                    });
-                    activeHarvestingJob.legacyLeadsExtractedCount++;
-                  }
-                } catch (err: any) {
-                  // Fallback for mock mode
-                }
+          activeHarvestingJob.progressPercent = Math.min(45, 20 + Math.round(((i + 1) / chatLimit) * 25));
+        }
+
+        // Save consolidated file to storage/harvesting/raw_scraped_chats_<timestamp>.json & latest_raw_scraped_chats.json
+        const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
+        const dumpFilePath = path.join(storageDir, `raw_scraped_chats_${timestampStr}.json`);
+        const latestFilePath = path.join(storageDir, `latest_raw_scraped_chats.json`);
+
+        const dumpData = {
+          scrapedAt: new Date().toISOString(),
+          tenantId,
+          totalChats: consolidatedTranscripts.length,
+          totalMessagesScanned: activeHarvestingJob.totalMessagesScanned,
+          conversations: consolidatedTranscripts,
+        };
+
+        fs.writeFileSync(dumpFilePath, JSON.stringify(dumpData, null, 2), 'utf-8');
+        fs.writeFileSync(latestFilePath, JSON.stringify(dumpData, null, 2), 'utf-8');
+        console.log(`[HARVESTING ENGINE] Consolidated raw chats dumped to file: ${dumpFilePath}`);
+
+        activeHarvestingJob.progressPercent = 50;
+
+        // STEP 2: Fetch existing Knowledge Base FAQs from DB for LLM Context
+        let existingFaqsContext: Array<{ id: string; title: string; content: string }> = [];
+        try {
+          const chunks = await prisma.knowledgeChunk.findMany({
+            where: { tenant_id: tenantId },
+            select: { id: true, title: true, content: true },
+          });
+          existingFaqsContext = chunks.map((c) => ({ id: c.id, title: c.title, content: c.content }));
+        } catch (err: any) {
+          console.warn('[HARVESTING ENGINE] Could not fetch existing knowledge chunks:', err.message);
+        }
+
+        // STEP 3: Deep LLM Context Analysis with DeepSeek (or configured model)
+        const { knowledgeBaseService } = await import('./knowledge.service');
+        activeHarvestingJob.progressPercent = 60;
+
+        // Format prompt for DeepSeek LLM with full consolidated file dump
+        const existingFaqTitles = existingFaqsContext.map((f) => `- ${f.title}`).join('\n') || '(Belum ada FAQ)';
+        const transcriptText = consolidatedTranscripts
+          .map((c) => `=== CHAT (${c.customerPhone}) ===\n` + c.dialogue.map((d) => `[${d.sender}]: ${d.message}`).join('\n'))
+          .join('\n\n');
+
+        const systemPrompt = `You are an expert Medical & Knowledge Base Curator for Kala Spa (Moms & Baby Spa).
+Your task is to analyze historical chat transcripts and extract NEW, high-value FAQ entries.
+
+CRITICAL INSTRUCTIONS:
+1. EXISTING APPROVED FAQs IN OUR SYSTEM:
+${existingFaqTitles}
+
+2. Compare the chat transcript against the existing FAQs above. DO NOT extract questions that are already answered or covered by existing FAQs.
+3. Filter out personal greetings, appointment scheduling, specific slot availability, location sharelocs, or price negotiations.
+4. Separate findings into two arrays:
+   - "medicalFaqs": Clinical/health questions about babies, moms, pregnancy, postpartum care, infant massage safety (for Bidan review).
+   - "generalFaqs": General clinic policy, service descriptions, general price guidelines, homecare rules (for Admin review).
+5. Format the output strictly as JSON object with structure:
+{
+  "medicalFaqs": [ { "question": "Clean Question?", "answer": "Clean Answer.", "symptoms": ["Demam", "Batuk"] } ],
+  "generalFaqs": [ { "question": "Clean Question?", "answer": "Clean Answer.", "category": "general" } ]
+}`;
+
+        const apiKey = process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+        const baseUrl = (process.env.DEEPSEEK_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
+        const model = process.env.AI_MODEL_HARVESTING || 'deepseek-chat';
+
+        let extractedResult: { medicalFaqs: any[]; generalFaqs: any[] } = { medicalFaqs: [], generalFaqs: [] };
+
+        if (apiKey && !apiKey.startsWith('mock')) {
+          console.log(`[HARVESTING ENGINE] Sending transcript file to DeepSeek LLM (${model}) for context analysis...`);
+          try {
+            const { default: axios } = await import('axios');
+            const llmRes = await axios.post(
+              `${baseUrl}/chat/completions`,
+              {
+                model,
+                response_format: { type: 'json_object' },
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: `Chat Transcripts File Dump:\n${transcriptText}` },
+                ],
+                temperature: 0.2,
+                max_tokens: 3000,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: 30000,
               }
+            );
 
-              // 5. Sub-Part A Medical Detection & Dual Routing
-              const medicalCheck = MedicalDetectionService.detectMedicalConcern(cleanQ);
+            const content = llmRes.data?.choices?.[0]?.message?.content || '{}';
+            const parsed = JSON.parse(content);
+            if (parsed && typeof parsed === 'object') {
+              extractedResult = {
+                medicalFaqs: Array.isArray(parsed.medicalFaqs) ? parsed.medicalFaqs : [],
+                generalFaqs: Array.isArray(parsed.generalFaqs) ? parsed.generalFaqs : [],
+              };
+            }
+          } catch (llmErr: any) {
+            console.warn('[HARVESTING ENGINE] LLM analysis API call failed, falling back to rule-based extractor:', llmErr.message);
+          }
+        }
 
-              if (medicalCheck.isMedical) {
-                // Route to MedicalFaqStaging (Bidan Queue)
-                try {
-                  await prisma.medicalFaqStaging.create({
-                    data: {
-                      tenant_id: tenantId,
-                      conversation_id: chat.id,
-                      customer_phone: chat.id.replace(/@.*$/, ''),
-                      raw_question: cleanQ,
-                      bidan_raw_reply: cleanA,
-                      general_question: `Bagaimana penanganan ${medicalCheck.detectedSymptoms.join(', ')}?`,
-                      general_answer: cleanA,
-                      symptoms_tagged: medicalCheck.detectedSymptoms,
-                      status: stagingStatus,
-                      matched_chunk_id: matchedChunkId,
-                      matched_similarity: matchedSimilarity,
-                    },
-                  });
-                  activeHarvestingJob.medicalStagedCount++;
-                } catch (err: any) {
-                  // Fallback
-                }
-              } else {
-                // Route to GeneralFaqStaging (Admin Queue)
-                try {
-                  await prisma.generalFaqStaging.create({
-                    data: {
-                      tenant_id: tenantId,
-                      conversation_id: chat.id,
-                      raw_question: cleanQ,
-                      raw_answer: cleanA,
-                      general_question: cleanQ,
-                      general_answer: cleanA,
+        // STEP 4: Rule-based fallback if LLM returned empty or offline mode
+        if (extractedResult.medicalFaqs.length === 0 && extractedResult.generalFaqs.length === 0) {
+          console.log('[HARVESTING ENGINE] Processing Q&A pairs via fallback extraction & similarity check...');
+          for (const conv of consolidatedTranscripts) {
+            for (let k = 0; k < conv.dialogue.length - 1; k += 2) {
+              const qMsg = conv.dialogue[k];
+              const aMsg = conv.dialogue[k + 1];
+              if (qMsg && aMsg && qMsg.sender === 'CUSTOMER' && aMsg.sender === 'BIDAN_ADMIN') {
+                const cleanQ = qMsg.message;
+                const cleanA = aMsg.message;
+
+                const dupCheck = await knowledgeBaseService.checkDuplicateFaq(cleanQ, tenantId, 0.70);
+                if (!dupCheck.isDuplicate) {
+                  const medicalCheck = MedicalDetectionService.detectMedicalConcern(cleanQ);
+                  if (medicalCheck.isMedical) {
+                    extractedResult.medicalFaqs.push({
+                      question: `Bagaimana penanganan ${medicalCheck.detectedSymptoms.join(', ')}?`,
+                      answer: cleanA,
+                      rawQuestion: cleanQ,
+                      rawReply: cleanA,
+                      symptoms: medicalCheck.detectedSymptoms,
+                      customerPhone: conv.customerPhone,
+                    });
+                  } else {
+                    extractedResult.generalFaqs.push({
+                      question: cleanQ,
+                      answer: cleanA,
+                      rawQuestion: cleanQ,
+                      rawReply: cleanA,
                       category: 'general',
-                      status: stagingStatus,
-                      matched_chunk_id: matchedChunkId,
-                      matched_similarity: matchedSimilarity,
-                    },
-                  });
-                  activeHarvestingJob.generalStagedCount++;
-                } catch (err: any) {
-                  // Fallback
+                      customerPhone: conv.customerPhone,
+                    });
+                  }
                 }
               }
             }
           }
+        }
 
-          activeHarvestingJob.progressPercent = Math.min(95, 25 + Math.round(((i + 1) / 10) * 70));
+        activeHarvestingJob.progressPercent = 85;
+
+        // STEP 5: Ingest LLM candidates into MedicalFaqStaging & GeneralFaqStaging
+        for (const medItem of extractedResult.medicalFaqs) {
+          const qText = medItem.question || medItem.rawQuestion || '';
+          const aText = medItem.answer || medItem.rawReply || '';
+          if (!qText || !aText) continue;
+
+          const dupCheck = await knowledgeBaseService.checkDuplicateFaq(qText, tenantId, 0.70);
+          const status: any = dupCheck.isDuplicate ? 'EXISTING_MATCH' : 'PENDING';
+
+          try {
+            await prisma.medicalFaqStaging.create({
+              data: {
+                tenant_id: tenantId,
+                conversation_id: `harvest_${Date.now()}`,
+                customer_phone: medItem.customerPhone || 'WAHA_SCRAPED',
+                raw_question: medItem.rawQuestion || qText,
+                bidan_raw_reply: medItem.rawReply || aText,
+                general_question: qText,
+                general_answer: aText,
+                symptoms_tagged: medItem.symptoms || [],
+                status,
+                matched_chunk_id: dupCheck.matchedChunk?.id || null,
+                matched_similarity: dupCheck.similarity || null,
+              },
+            });
+            activeHarvestingJob.medicalStagedCount++;
+          } catch (e: any) {}
+        }
+
+        for (const genItem of extractedResult.generalFaqs) {
+          const qText = genItem.question || genItem.rawQuestion || '';
+          const aText = genItem.answer || genItem.rawReply || '';
+          if (!qText || !aText) continue;
+
+          const dupCheck = await knowledgeBaseService.checkDuplicateFaq(qText, tenantId, 0.70);
+          const status: any = dupCheck.isDuplicate ? 'EXISTING_MATCH' : 'PENDING';
+
+          try {
+            await prisma.generalFaqStaging.create({
+              data: {
+                tenant_id: tenantId,
+                conversation_id: `harvest_${Date.now()}`,
+                raw_question: genItem.rawQuestion || qText,
+                raw_answer: genItem.rawReply || aText,
+                general_question: qText,
+                general_answer: aText,
+                category: genItem.category || 'general',
+                status,
+                matched_chunk_id: dupCheck.matchedChunk?.id || null,
+                matched_similarity: dupCheck.similarity || null,
+              },
+            });
+            activeHarvestingJob.generalStagedCount++;
+          } catch (e: any) {}
         }
 
         activeHarvestingJob.status = 'COMPLETED';
         activeHarvestingJob.progressPercent = 100;
-        console.log(`[HARVESTING ENGINE COMPLETED] Medical Staged: ${activeHarvestingJob.medicalStagedCount}, General Staged: ${activeHarvestingJob.generalStagedCount}, Leads Extracted: ${activeHarvestingJob.legacyLeadsExtractedCount}`);
+        console.log(`[HARVESTING ENGINE COMPLETED] File Dumped to ${dumpFilePath}. Medical Staged: ${activeHarvestingJob.medicalStagedCount}, General Staged: ${activeHarvestingJob.generalStagedCount}, Leads Extracted: ${activeHarvestingJob.legacyLeadsExtractedCount}`);
       } catch (err: any) {
         activeHarvestingJob.status = 'FAILED';
         activeHarvestingJob.errorMessage = err.message;

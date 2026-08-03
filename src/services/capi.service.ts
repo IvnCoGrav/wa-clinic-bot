@@ -102,8 +102,9 @@ export class CapiService {
     value?: number;
     currency?: string;
     tenantId?: string;
+    customData?: Record<string, any>;
   }): Promise<{ success: boolean; message?: string }> {
-    const { eventName, customer, adClick, value, currency, tenantId } = params;
+    const { eventName, customer, adClick, value, currency, tenantId, customData } = params;
 
     // 1. GUARD CLAUSE: Jika tidak ada data adClick, lewatkan pemanggilan (CAPI tidak dikirim tanpa data attribution)
     if (!adClick) {

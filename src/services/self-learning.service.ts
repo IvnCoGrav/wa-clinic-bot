@@ -65,13 +65,63 @@ export class SelfLearningService {
       }
 
       const customerQuestion = lastInbound.content;
+      const { LegacyHarvestingService } = await import('./legacy-harvesting.service');
+      if (
+        LegacyHarvestingService.isTransactionOrScheduleMessage(customerQuestion) ||
+        LegacyHarvestingService.isTransactionOrScheduleMessage(adminAnswer)
+      ) {
+        console.log('[SELF-LEARNING IGNORED] Q&A pair is transactional/scheduling. Skipping FAQ staging.');
+        return;
+      }
+
       console.log(`[SELF-LEARNING] Debounce finished. Processing Q&A pair:\nQ: "${customerQuestion}"\nA: "${adminAnswer}"`);
 
       // Ask LLM to refine the raw Q&A into a generalized FAQ entry
       const refinedFaq = await this.refineFaqWithLLM(customerQuestion, adminAnswer);
       if (refinedFaq) {
-        console.log(`[SELF-LEARNING SUCCESS] Generalized FAQ learned:\nQ: "${refinedFaq.question}"\nA: "${refinedFaq.answer}"`);
-        await knowledgeBaseService.importFaqs([refinedFaq], tenantId);
+        console.log(`[SELF-LEARNING SUCCESS] Generalized FAQ extracted:\nQ: "${refinedFaq.question}"\nA: "${refinedFaq.answer}"`);
+
+        // Check medical concern
+        const { MedicalDetectionService } = await import('./medical-detection.service');
+        const medicalCheck = MedicalDetectionService.detectMedicalConcern(refinedFaq.question);
+
+        // Anti-duplication check
+        const dupCheck = await knowledgeBaseService.checkDuplicateFaq(refinedFaq.question, tenantId, 0.70);
+        const stagingStatus: any = dupCheck.isDuplicate ? 'EXISTING_MATCH' : 'PENDING';
+
+        if (medicalCheck.isMedical) {
+          await prisma.medicalFaqStaging.create({
+            data: {
+              tenant_id: tenantId,
+              conversation_id: conversationId,
+              customer_phone: customerId,
+              raw_question: customerQuestion,
+              bidan_raw_reply: adminAnswer,
+              general_question: refinedFaq.question,
+              general_answer: refinedFaq.answer,
+              symptoms_tagged: medicalCheck.detectedSymptoms,
+              status: stagingStatus,
+              matched_chunk_id: dupCheck.matchedChunk?.id || null,
+              matched_similarity: dupCheck.similarity || null,
+            },
+          });
+        } else {
+          await prisma.generalFaqStaging.create({
+            data: {
+              tenant_id: tenantId,
+              conversation_id: conversationId,
+              raw_question: customerQuestion,
+              raw_answer: adminAnswer,
+              general_question: refinedFaq.question,
+              general_answer: refinedFaq.answer,
+              category: 'livechat_harvest',
+              status: stagingStatus,
+              matched_chunk_id: dupCheck.matchedChunk?.id || null,
+              matched_similarity: dupCheck.similarity || null,
+            },
+          });
+        }
+        console.log(`[SELF-LEARNING STAGED] Q&A pair routed to ${medicalCheck.isMedical ? 'MedicalFaqStaging' : 'GeneralFaqStaging'} for review.`);
       } else {
         console.log('[SELF-LEARNING IGNORED] Message exchange is transactional or personal. Skipping database ingestion.');
       }
