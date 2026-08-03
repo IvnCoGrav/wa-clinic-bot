@@ -77,15 +77,19 @@ export class ConversationStateMachine {
     }
 
     // 1. Audit Log Pesan Inbound (Masuk)
+    // Skip jika pesan sudah di-log oleh BurstCoalesceService (_preLogged) — pesan asli
+    // tercatat realtime saat diterima, job hasil merge tidak perlu mencatat ulang.
     const inboundContent = incomingMessage.text?.body || (incomingMessage.location ? `[LOCATION SHARE: Lat ${incomingMessage.location.latitude}, Lng ${incomingMessage.location.longitude}]` : '[MEDIA/UNKNOWN]');
-    await messageService.logMessage({
-      tenantId,
-      conversationId: conversation.id,
-      direction: Direction.INBOUND,
-      content: inboundContent,
-      waMessageId: incomingMessage.id,
-      payloadRaw: incomingMessage,
-    });
+    if (!(incomingMessage as any)._preLogged) {
+      await messageService.logMessage({
+        tenantId,
+        conversationId: conversation.id,
+        direction: Direction.INBOUND,
+        content: inboundContent,
+        waMessageId: incomingMessage.id,
+        payloadRaw: incomingMessage,
+      });
+    }
 
     // In-memory rewriting for Promo[CODE] greeting trigger
     if (incomingMessage.text?.body && /Promo\[(\w+)\]/i.test(incomingMessage.text.body)) {

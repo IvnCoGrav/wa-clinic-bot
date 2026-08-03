@@ -6,6 +6,39 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-11
+
+### Added — Burst Coalescing: Gabungkan Pesan Text Beruntun Menjadi Satu Balasan
+
+Saat customer mengirim banyak pesan text dalam waktu singkat (burst chat), bot sebelumnya
+memproses & membalas **per-pesan** (1 LLM call + 1 balasan per pesan). Kini pesan text beruntun
+di state open-ended di-debounce dalam window kecil, digabung jadi **satu job → satu balasan**
+yang membaca seluruh konteks.
+
+- **`src/services/burst-coalesce.service.ts`** (baru) — `BurstCoalesceService`:
+  - `maybeCoalesce(...)` → `{ handled }`: text pertama memulai buffer + timer; text berikutnya
+    di-append & timer di-reset; saat timer habis seluruh buffer di-merge jadi 1 `incomingMessage`
+    (`text.body` digabung `\n`, `id`/`timestamp` = pesan terakhir, flag `_preLogged` + `_mergedCount`)
+    lalu di-enqueue. `handled=true` = pesan sudah di-buffer; `handled=false` = proses normal.
+  - Batasan: hanya pesan **text** dan hanya saat state **open-ended** (`INITIAL`, `AWAITING_INTEREST`,
+    `COMPLETED`). Pesan lokasi/media & state menunggu input spesifik (`AWAITING_LOCATION`,
+    `LOCATION_CONFIRMED`, `RESERVATION_SENT`, `HUMAN_HANDLING`) tidak pernah di-merge.
+  - Tiap pesan asli langsung di-`logMessage` saat diterima → audit trail & Live Chat tetap realtime,
+    idempotency lock (`wa_message_id`) aktif sejak awal. Buffer penuh (`BURST_COALESCE_MAX_MESSAGES`)
+    → flush batch lama, mulai batch baru.
+- **`src/routes/webhook.route.ts`** & **`src/routes/waba-webhook.route.ts`**: sebelum `enqueueMessage`,
+  panggil `burstCoalesceService.maybeCoalesce(...)`; enqueue normal hanya jika `handled=false`.
+- **`src/state-machine/machine.ts`**: skip audit-log inbound jika `incomingMessage._preLogged` (pesan
+  sudah dicatat coalesce service — cegah duplikat).
+- **Config (env, default OFF — tidak mengubah behavior existing)**:
+  - `BURST_COALESCE_MS` — window debounce dalam milidetik (mis. `5000` = 5 detik). `0`/kosong = nonaktif.
+  - `BURST_COALESCE_MAX_MESSAGES` — batas pesan per batch (default `10`).
+- **Test**: `tests/unit/burst-coalesce.test.ts` (baru, 6 test: off→passthrough, 3 pesan→1 job gabungan,
+  text→location flush, state non-open-ended tidak merge, batch terpisah lintas window, max-messages).
+  Total **796 tests** (75 files), tsc clean.
+
+---
+
 ## [Unreleased] - 2026-08-08
 
 ### Changed - Landing Page Di-Serve Langsung oleh Bot (Click-Catcher Dipensiunkan)

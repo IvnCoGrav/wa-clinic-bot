@@ -125,3 +125,25 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   intent `ask_price` (mapping ke faq_question) dijawab tanpa menyebut nominal jika harga tidak ada
   di Referensi — arahkan ke tim bila perlu.
 
+---
+
+## 7. [Queue] Burst coalescing: balasan ditunda window debounce saat aktif
+
+- **Status:** by-design (2026-08-11), fitur off secara default (`BURST_COALESCE_MS=0`).
+- **Gejala (saat diaktifkan, mis. `BURST_COALESCE_MS=5000`):** pesan text tunggal dari customer
+  mendapat balasan **tertunda hingga window habis** (≤5 detik), karena semua pesan text di-buffer
+  dulu untuk digabung jadi 1 balasan. Ini bisa terasa lambat untuk sapaan/pertanyaan cepat.
+- **Alasan:** trade-off yang dipilih user — menggabung burst chat (1 LLM call + 1 balasan untuk
+  banyak pesan) lebih penting daripada respons secepat kilat per pesan tunggal.
+- **Batasan yang sengaja:** hanya pesan **text** dan hanya state open-ended (`INITIAL`,
+  `AWAITING_INTEREST`, `COMPLETED`). Lokasi/media & state menunggu input spesifik (`AWAITING_LOCATION`,
+  `LOCATION_CONFIRMED`, `RESERVATION_SENT`, `HUMAN_HANDLING`) TIDAK di-merge → tidak ada delay.
+- **Catatan penting:** pesan asli tetap di-log realtime saat diterima (Live Chat panel tidak tertunda),
+  hanya **balasan bot** yang ditunda window. Idempotency per `wa_message_id` tetap aktif sejak pesan
+  diterima (bukan saat flush).
+- **Tuning:** sesuaikan `BURST_COALESCE_MS` (lebih kecil = lebih responsif, lebih besar = penggabungan
+  lebih agresif) dan `BURST_COALESCE_MAX_MESSAGES` (batas pesan per batch, default 10).
+- **Verifikasi:** `tests/unit/burst-coalesce.test.ts` (6 test: off→passthrough, 3 pesan→1 job,
+  text→location flush, state non-open-ended tidak merge, batch lintas window, max-messages).
+  Full suite 796 test hijau.
+
