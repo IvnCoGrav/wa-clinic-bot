@@ -751,6 +751,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
           public async getChatLabels(chatId: string): Promise<string[]> { return []; }
           public async getSessionStatus(session?: string): Promise<string> { return 'WORKING'; }
           public async startSession(session?: string): Promise<string> { return 'WORKING'; }
+          public async getSession(session?: string): Promise<any | null> { return null; }
+          public async deleteSession(session?: string): Promise<boolean> { return true; }
+          public async createSession(session?: string, config?: any): Promise<string> { return 'CREATED'; }
           public async getAuthQr(session?: string): Promise<import('../integrations/waha/client').WahaQr | null> { return null; }
           public async getChats(): Promise<any[]> { return []; }
           public async getMessages(chatId: string, limit?: number): Promise<any[]> { return []; }
@@ -2531,6 +2534,37 @@ export async function adminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/whatsapp-provider/session/reset
+   * Reset / re-pair session WAHA per-tenant (delete → create ulang → start).
+   * Dipakai tombol "Reset Session" di UI saat status FAILED yang sudah-paired
+   * tidak bisa di-recover hanya dengan start (Noise Handshake failure baileys).
+   * Config webhook session lama dipertahankan agar bot tidak kehilangan webhook.
+   */
+  fastify.post(
+    '/api/admin/whatsapp-provider/session/reset',
+    async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
+      try {
+        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+        const data = await whatsappProviderService.resetSessionForTenant(tenantId);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'WAHA_SESSION_RESET',
+          targetId: data.sessionId,
+          payload: { status: data.status },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
    * PATCH /api/admin/whatsapp-provider
    * Toggle provider WhatsApp per tenant + simpan konfigurasi WABA.
    * Token WABA disimpan ENCRYPTED (AES-256-GCM) — tidak pernah plaintext di DB.
@@ -2766,6 +2800,72 @@ export async function adminRoutes(fastify: FastifyInstance) {
           success: true,
           message: `Konfigurasi AI Router diperbarui: enabled=${cfg.enabled}, shadowMode=${cfg.shadowMode}.`,
           data: cfg,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/conversation-behavior
+   * Mengambil konfigurasi perilaku percakapan per tenant (idle greeting, dll).
+   */
+  fastify.get('/api/admin/conversation-behavior', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { IdleGreetingConfigService } = await import('../config/idle-greeting.config');
+      const idleGreeting = IdleGreetingConfigService.getConfig(DEFAULT_TENANT_ID);
+      return reply.status(200).send({ success: true, data: { idleGreeting } });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * PATCH /api/admin/conversation-behavior
+   * Update konfigurasi perilaku percakapan per tenant (idle greeting enabled/minHours).
+   */
+  fastify.patch(
+    '/api/admin/conversation-behavior',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          idleGreeting?: { enabled?: boolean; minHours?: number };
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const body = request.body || {};
+      const idlePatch: { enabled?: boolean; minHours?: number } = {};
+
+      if (body.idleGreeting && typeof body.idleGreeting === 'object') {
+        if (typeof body.idleGreeting.enabled === 'boolean') idlePatch.enabled = body.idleGreeting.enabled;
+        if (typeof body.idleGreeting.minHours === 'number') idlePatch.minHours = body.idleGreeting.minHours;
+      }
+
+      if (Object.keys(idlePatch).length === 0) {
+        return reply.status(400).send({
+          error: 'Body harus berisi idleGreeting.enabled (boolean) dan/atau idleGreeting.minHours (number).',
+        });
+      }
+
+      try {
+        const { IdleGreetingConfigService } = await import('../config/idle-greeting.config');
+        const cfg = await IdleGreetingConfigService.saveConfig(DEFAULT_TENANT_ID, idlePatch);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_CONVERSATION_BEHAVIOR',
+          targetId: DEFAULT_TENANT_ID,
+          payload: { idleGreeting: cfg },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Konfigurasi perilaku percakapan diperbarui: idleGreeting.enabled=${cfg.enabled}, idleGreeting.minHours=${cfg.minHours}.`,
+          data: { idleGreeting: cfg },
         });
       } catch (err: any) {
         return reply.status(500).send({ error: err.message });

@@ -205,7 +205,8 @@ describe('Treatment Questions — State Machine Response (faq_question)', () => 
 
   it('3b. faq_question TANPA KB match DAN katalog kosong → tetap eskalasi senyap', async () => {
     vi.spyOn(knowledgeBaseService, 'searchRelevantChunks').mockResolvedValue([]);
-    vi.spyOn(treatmentCatalogService, 'formatCatalogText').mockReturnValue('');
+    vi.spyOn(treatmentCatalogService, 'searchCatalogItems').mockReturnValue([]);
+    vi.spyOn(treatmentCatalogService, 'getAllServices').mockReturnValue([]);
     const { phone, customer } = await setupCustomer(ConversationState.AWAITING_INTEREST, '62873');
 
     const result = await stateMachine.processMessage({

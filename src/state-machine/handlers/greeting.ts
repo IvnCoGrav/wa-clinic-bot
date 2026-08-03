@@ -3,6 +3,7 @@ import { StateHandlerContext, StateHandlerResult } from '../types';
 import { TEMPLATES } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { geocodingService } from '../../integrations/google-maps/geocoding';
+import { isPureIdleGreeting } from '../utils/idle-greeting';
 
 /**
  * Handler untuk state INITIAL:
@@ -75,6 +76,22 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   const lastInteraction = conversation.last_message_at;
   const isNew = !lastInteraction || (lastInteraction.getTime() === conversation.created_at.getTime());
   const skipGreeting = !isNew && (Date.now() - new Date(lastInteraction).getTime() < 48 * 60 * 60 * 1000);
+
+  // GATE WARM REOPENING GREETING: sapaan basa-basi di sesi idle panjang (>= min_hours,
+  // default 36 jam) → balas sapaan hangat open-ended (bukan pitch reservasi).
+  // Berjalan SEBELUM logika lokasi/FAQ/skipGreeting — prioritas tertinggi untuk pure greeting.
+  if (isPureIdleGreeting({
+    messageText: userText,
+    lastMessageAt: conversation.last_message_at,
+    nluIntents: ctx.nluResult?.intents,
+    tenantId,
+  })) {
+    return {
+      nextState: ConversationState.AWAITING_INTEREST,
+      replyText: TEMPLATES.warmReopenGreeting(),
+      shouldSendReply: true,
+    };
+  }
 
   // 3. RETENSI LOKASI: Jika customer sudah memiliki lokasi confirmed sebelumnya
   if (customer.kelurahan && customer.lat && customer.lng) {

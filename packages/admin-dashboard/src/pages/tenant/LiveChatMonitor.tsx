@@ -55,6 +55,12 @@ export const LiveChatMonitor: React.FC = () => {
   const [sseConnected, setSseConnected] = useState(false);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll ke pesan terbaru saat thread berubah / pesan baru masuk.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, selectedId]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -420,6 +426,7 @@ export const LiveChatMonitor: React.FC = () => {
                       );
                     })
                   )}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 {/* Reply Composer */}

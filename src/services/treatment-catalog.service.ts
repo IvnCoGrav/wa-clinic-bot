@@ -402,11 +402,103 @@ export class TreatmentCatalogService {
   }
 
   /**
-   * Mencari treatment yang relevan dengan pertanyaan customer berdasarkan kata kunci.
-   * Return daftar layanan yang nama/deskripsinya mengandung kata kunci dari pertanyaan.
-   * Scoring: match pada NAMA treatment diberi bobot lebih tinggi daripada match pada deskripsi.
-   * Berguna agar bot TIDAK melempar seluruh katalog saat customer tanya satu treatment spesifik.
+   * Format data treatment TERSTRUKTUR untuk injeksi sebagai konteks LLM (bukan jawaban jadi).
+   * Berbeda dari formatCatalogText (yang berformat bullet "• *Nama*") — blok ini memaksa LLM
+   * menyusun kalimat rekomendasi sendiri dari fakta, menghindari LLM meniru format katalog kaku.
+   * TANPA harga (harga dikelola terpisah — cegah halusinasi harga).
    */
+  public formatCatalogData(services: ClinicServiceItem[]): string {
+    return services
+      .filter((s) => s.isActive)
+      .map((s) =>
+        `[DATA TREATMENT]\n` +
+        `Nama: ${s.name}\n` +
+        `Kategori: ${s.category}\n` +
+        `Usia/Target: ${s.ageTier.label}\n` +
+        `Durasi: ${s.durationMinutes} menit\n` +
+        `Deskripsi: ${s.description}`
+      )
+      .join('\n\n');
+  }
+
+  /**
+   * Cari treatment yang relevan dengan pertanyaan customer dan kembalikan array item terstruktur.
+   * Logika scoring sama persis dengan searchCatalog (exact-name priority, lalu IDF keyword top-2),
+   * TAPI mengembalikan data mentah — biarkan pembentuk jawaban (LLM/fallback) yang menyusun kalimat.
+   */
+  public searchCatalogItems(userText: string): ClinicServiceItem[] {
+    const q = userText.toLowerCase();
+    const services = this.getAllServices();
+
+    // 1. Exact Phrase Match pada Nama Treatment
+    const exactNameMatch = services.find((s) => {
+      const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+      return q.includes(cleanName) || cleanName.includes(q.replace(/(itu|apa|ya|bund|bunda|berapa|dong|kak|min)\b/gi, '').trim());
+    });
+
+    if (exactNameMatch) {
+      return [exactNameMatch];
+    }
+
+    // 2. Fallback Keyword Scoring (sama dengan searchCatalog)
+    const stopwords = new Set([
+      'yang', 'itu', 'apa', 'berapa', 'bung', 'bund', 'bunda', 'ya', 'dong', 'kak', 'min', 'mbak', 'mas',
+      'saya', 'untuk', 'dengan', 'dan', 'atau', 'dari', 'ke', 'di', 'ada', 'bisa', 'mau', 'ingin', 'bagaimana',
+      'kenapa', 'apakah', 'treatment', 'perawatan', 'tentang', 'info', 'informasi', 'detail', 'tolong',
+      'ciri', 'cirinya', 'khasiat', 'manfaat', 'fungsi', 'fungsinya', 'sih', 'nih', 'lho', 'kan', 'nih',
+      'mau', 'dong', 'ya', 'bund', 'juga', 'saja', 'aja', 'semua', 'daftar', 'list', 'please', 'tolong',
+    ]);
+    const keywords = q
+      .split(/\s+/)
+      .map((w) => w.replace(/[^a-z0-9]/gi, ''))
+      .filter((w) => w.length >= 3 && !stopwords.has(w));
+
+    if (keywords.length === 0) {
+      return [];
+    }
+
+    const df = new Map<string, number>();
+    for (const k of keywords) {
+      const count = services.filter((s) =>
+        s.name.toLowerCase().includes(k) || s.description.toLowerCase().includes(k)
+      ).length;
+      df.set(k, count > 0 ? count : 1);
+    }
+
+    const scored = services
+      .map((s) => {
+        const nameLower = s.name.toLowerCase();
+        const descLower = s.description.toLowerCase();
+        const ageLower = s.ageTier.label.toLowerCase();
+        let rawScore = 0;
+        for (const k of keywords) {
+          if (nameLower.includes(k)) rawScore += 3;
+          if (descLower.includes(k)) rawScore += 1;
+          if (ageLower.includes(k)) rawScore += 0.5;
+        }
+        let idfScore = 0;
+        for (const k of keywords) {
+          if (nameLower.includes(k)) idfScore += 3 / (df.get(k) || 1);
+          if (descLower.includes(k)) idfScore += 1 / (df.get(k) || 1);
+          if (ageLower.includes(k)) idfScore += 0.5 / (df.get(k) || 1);
+        }
+        return { s, score: idfScore > 0 ? idfScore : rawScore };
+      })
+      .filter((c) => c.score > 0);
+
+    if (scored.length === 0) {
+      return [];
+    }
+
+    const maxScore = Math.max(...scored.map((c) => c.score));
+    return scored
+      .filter((c) => c.score >= maxScore * 0.85)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map((c) => c.s);
+  }
+
+
   public searchCatalog(userText: string, includePrice = false): string {
     const q = userText.toLowerCase();
     const services = this.getAllServices();

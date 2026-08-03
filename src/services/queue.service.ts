@@ -2,13 +2,15 @@ import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { stateMachine } from '../state-machine/machine';
 import { StateHandlerContext } from '../state-machine/types';
+import { customerService } from './customer.service';
+import { conversationService } from './conversation.service';
 import dotenv from 'dotenv';
 dotenv.config();
 
 export interface QueuePayload {
   tenantId: string;
-  customer: any;
-  conversation: any;
+  customerId: string;
+  phone?: string;
   incomingMessage: any;
 }
 
@@ -100,14 +102,10 @@ export class QueueService {
       const worker = new Worker(
         queueName,
         async (job: Job<QueuePayload>) => {
-          const { tenantId, customer, conversation, incomingMessage } = job.data;
-          console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${customer.phone} (Tenant: ${tenantId})`);
-          await stateMachine.processMessage({
-            tenantId,
-            customer,
-            conversation,
-            incomingMessage,
-          });
+          const ctx = await this.resolveFreshContext(job.data);
+          if (!ctx) return;
+          console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${ctx.customer.phone} (Tenant: ${ctx.tenantId})`);
+          await stateMachine.processMessage(ctx);
         },
         {
           connection,
@@ -141,7 +139,7 @@ export class QueueService {
    * Menambahkan pesan masuk ke dalam antrian pemrosesan
    */
   public async enqueueMessage(payload: QueuePayload): Promise<void> {
-    const phone = payload.customer.phone;
+    const phone = payload.phone || payload.customerId;
 
     if (this.redisEnabled) {
       try {
@@ -195,13 +193,14 @@ export class QueueService {
     const payload = queue.shift()!;
 
     try {
-      console.log(`[QUEUE Memory-Fallback] Processing message for customer: ${phone} (Tenant: ${payload.tenantId}, Queue depth: ${queue.length})`);
-      await stateMachine.processMessage({
-        tenantId: payload.tenantId,
-        customer: payload.customer,
-        conversation: payload.conversation,
-        incomingMessage: payload.incomingMessage,
-      });
+      const ctx = await this.resolveFreshContext(payload);
+      if (!ctx) {
+        this.memoryProcessing.delete(phone);
+        this.processNextInMemory(phone);
+        return;
+      }
+      console.log(`[QUEUE Memory-Fallback] Processing message for customer: ${ctx.customer.phone} (Tenant: ${ctx.tenantId}, Queue depth: ${queue.length})`);
+      await stateMachine.processMessage(ctx);
     } catch (e: any) {
       console.error(`[QUEUE Memory-Fallback ERROR] Failed processing message for ${phone}:`, e.message);
     } finally {
@@ -209,6 +208,30 @@ export class QueueService {
       // Pemicu otomatis untuk pesan berikutnya di antrian customer tersebut
       this.processNextInMemory(phone);
     }
+  }
+
+  /**
+   * Re-fetch fresh customer & conversation dari DB (dengan fallback memory store) tepat
+   * sebelum memproses job — mencegah race condition / stale state saat pesan beruntun
+   * masuk dalam waktu singkat. Payload queue hanya membawa identifier; snapshot lama
+   * TIDAK dipakai sebagai last resort karena justru melanggengkan bug.
+   * Mengembalikan null jika customer tidak bisa di-resolve → job di-skip + di-log.
+   */
+  private async resolveFreshContext(payload: QueuePayload): Promise<StateHandlerContext | null> {
+    const { tenantId, customerId, phone, incomingMessage } = payload;
+
+    let customer = await customerService.getCustomerById(customerId, tenantId);
+    if (!customer && phone) {
+      customer = await customerService.getOrCreateCustomer(phone, undefined, tenantId);
+    }
+    if (!customer) {
+      console.error(`[QUEUE SKIP] Customer ${customerId} tidak ditemukan untuk tenant ${tenantId}. Job dibuang.`);
+      return null;
+    }
+
+    const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
+    return { tenantId, customer, conversation, incomingMessage };
   }
 
   /**

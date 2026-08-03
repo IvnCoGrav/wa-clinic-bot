@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
-  const { toast } = useUiFeedback();
+  const { toast, confirm } = useUiFeedback();
   const [globalBotActive, setGlobalBotActive] = useState(true);
   const [loading, setLoading] = useState(true);
   
@@ -70,6 +70,7 @@ export const Settings: React.FC = () => {
   const [qrMessage, setQrMessage] = useState('');
   const [loadingQr, setLoadingQr] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
+  const [resettingSession, setResettingSession] = useState(false);
   const qrStatusRef = useRef('UNKNOWN');
 
   // AI Router Engine (default ON + shadow ON)
@@ -241,6 +242,44 @@ export const Settings: React.FC = () => {
 
   // Tombol start hanya berguna saat session mati; WORKING/SCAN_QR_CODE tidak perlu.
   const canStartSession = ['STOPPED', 'STOPPING', 'FAILED'].includes(qrStatus);
+  // Session FAILED yang sudah-paired tidak bisa di-recover hanya dengan start
+  // (Noise Handshake failure baileys) — butuh reset penuh (delete → create → start).
+  const canResetSession = qrStatus === 'FAILED';
+
+  // Fitur 1: tombol "Reset Session" saat status FAILED — delete → create ulang (webhook dipertahankan) → start → QR baru.
+  const handleResetSession = async () => {
+    const ok = await confirm({
+      title: 'Reset Session WhatsApp?',
+      message:
+        'Session FAILED akan dihapus dan dibuat ulang, lalu muncul QR baru untuk dipindai ulang. ' +
+        'Perangkat WhatsApp lama akan terlepas dari session ini. Lanjutkan?',
+      confirmText: 'Reset & Scan Ulang',
+      cancelText: 'Batal',
+      danger: true,
+    });
+    if (!ok) return;
+
+    setResettingSession(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/session/reset', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const d = res?.data;
+      if (d) {
+        setQrStatus(d.status || 'UNKNOWN');
+        setQrMessage(d.message || '');
+        setQrData(d.qr || null);
+        if (d.sessionId) setWahaSessionId(d.sessionId);
+        if (d.status) setWahaStatus(d.status);
+      }
+      toast(d?.message || 'Session WAHA berhasil di-reset. Pindai QR baru untuk menghubungkan ulang.', 'success');
+    } catch (err: any) {
+      toast(`Gagal mereset session WAHA: ${err.message}`, 'error');
+    } finally {
+      setResettingSession(false);
+    }
+  };
 
   // Auto-refresh QR hanya saat tab WAHA aktif dan status masih SCAN_QR_CODE
   // (QR ~20 detik kedaluwarsa — polling jangan membebani saat session WORKING).
@@ -489,12 +528,22 @@ export const Settings: React.FC = () => {
                   </button>
                   {canStartSession && (
                     <button
-                      onClick={handleStartSession}
-                      disabled={startingSession}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] font-bold flex items-center space-x-1 disabled:opacity-50"
+                      onClick={canResetSession ? handleResetSession : handleStartSession}
+                      disabled={resettingSession || startingSession}
+                      className={`px-2.5 py-1 rounded-lg text-white text-[9px] font-bold flex items-center space-x-1 disabled:opacity-50 ${
+                        canResetSession ? 'bg-rose-500 hover:bg-rose-600' : 'bg-emerald-500 hover:bg-emerald-600'
+                      }`}
                     >
                       <Play size={9} fill="currentColor" />
-                      <span>{startingSession ? 'Memulai...' : 'Mulai Session'}</span>
+                      <span>
+                        {canResetSession
+                          ? resettingSession
+                            ? 'Mereset...'
+                            : 'Reset & Scan Ulang'
+                          : startingSession
+                            ? 'Memulai...'
+                            : 'Mulai Session'}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -510,7 +559,7 @@ export const Settings: React.FC = () => {
                     <img
                       src={`data:${qrData.mimetype};base64,${qrData.data}`}
                       alt="QR WhatsApp Session"
-                      className="w-44 h-44"
+                      className="w-72 h-72"
                     />
                   </div>
                   <p className="text-[10px] text-slate-400 text-center leading-relaxed">
@@ -531,7 +580,9 @@ export const Settings: React.FC = () => {
                   </div>
                   {canStartSession && (
                     <p className="mt-2 text-amber-400/80">
-                      Klik <span className="font-bold">Mulai Session</span> untuk menyalakan session dan memunculkan QR.
+                      {canResetSession
+                        ? 'Session FAILED sudah-paired tidak bisa dipulihkan dengan start biasa. Klik <span className="font-bold">Reset &amp; Scan Ulang</span> untuk membuat session baru dan memunculkan QR.'
+                        : 'Klik <span className="font-bold">Mulai Session</span> untuk menyalakan session dan memunculkan QR.'}
                     </p>
                   )}
                 </div>

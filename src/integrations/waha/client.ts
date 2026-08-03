@@ -41,6 +41,9 @@ export interface IWahaClient {
   getSessionStatus(session?: string): Promise<string>;
   startSession(session?: string): Promise<string>;
   getAuthQr(session?: string): Promise<WahaQr | null>;
+  getSession(session?: string): Promise<any | null>;
+  deleteSession(session?: string): Promise<boolean>;
+  createSession(session?: string, config?: any): Promise<string>;
   getChats(): Promise<WahaChat[]>;
   getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
 }
@@ -538,6 +541,86 @@ export class WahaClient implements IWahaClient {
       return 'STARTED';
     } catch (error: any) {
       console.warn(`[WAHA API ERROR] startSession failed for session ${sessionName}:`, error?.response?.data || error.message);
+      return 'FAILED';
+    }
+  }
+
+  /**
+   * Mengambil objek session lengkap (termasuk config webhooks) dari WAHA.
+   * Mengembalikan null jika session belum ada / tidak dapat dijangkau.
+   */
+  public async getSession(session?: string): Promise<any | null> {
+    const sessionName = session || this.session;
+
+    if (this.shouldMock) {
+      return { name: sessionName, status: 'WORKING', config: {} };
+    }
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/sessions/${sessionName}`,
+        { headers: this.headers, timeout: 5000 }
+      );
+      return response.data || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
+   * Menghapus session WAHA beserta kredensialnya (DELETE /api/sessions/{name}).
+   * Dipakai untuk re-pair (logout total) saat session FAILED / korup.
+   * Mengembalikan true jika session berhasil dihapus (atau sudah tidak ada).
+   */
+  public async deleteSession(session?: string): Promise<boolean> {
+    const sessionName = session || this.session;
+
+    if (this.shouldMock) {
+      return true;
+    }
+
+    try {
+      await axios.delete(
+        `${this.baseUrl}/api/sessions/${sessionName}`,
+        { headers: this.headers, timeout: this.timeoutMs }
+      );
+      return true;
+    } catch (error: any) {
+      // 404 = session tidak ada → dianggap sukses (tujuan akhir: bersih)
+      const status = error?.response?.status || error?.response?.data?.status;
+      if (status === 404) {
+        return true;
+      }
+      console.warn(`[WAHA API ERROR] deleteSession failed for session ${sessionName}:`, error?.response?.data || error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Membuat session WAHA baru (POST /api/sessions) dengan config opsional
+   * (mis. webhooks). Mempertahankan config lama penting saat re-pair agar
+   * webhook bot tidak hilang. Mengembalikan 'CREATED'/'EXISTS'/'FAILED'.
+   */
+  public async createSession(session?: string, config?: any): Promise<string> {
+    const sessionName = session || this.session;
+
+    if (this.shouldMock) {
+      return 'CREATED';
+    }
+
+    try {
+      await axios.post(
+        `${this.baseUrl}/api/sessions`,
+        { name: sessionName, config: config || {} },
+        { headers: this.headers, timeout: this.timeoutMs }
+      );
+      return 'CREATED';
+    } catch (error: any) {
+      const status = error?.response?.status || error?.response?.data?.status;
+      if (status === 409) {
+        return 'EXISTS';
+      }
+      console.warn(`[WAHA API ERROR] createSession failed for session ${sessionName}:`, error?.response?.data || error.message);
       return 'FAILED';
     }
   }

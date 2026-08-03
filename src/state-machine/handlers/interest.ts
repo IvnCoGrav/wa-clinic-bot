@@ -7,6 +7,7 @@ import { conversationService } from '../../services/conversation.service';
 import { TEMPLATES } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { isPureIdleGreeting } from '../utils/idle-greeting';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
@@ -194,15 +195,19 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
       // 2b. Jika FAQ tidak match, FALLBACK ke katalog treatment sebagai konteks LLM.
       // Data treatment (durasi, usia, deskripsi, manfaat) dijadikan knowledge — TANPA harga.
-      // Prioritaskan pencarian treatment spesifik dulu (jangan dump seluruh katalog).
+      // Context di-inject sebagai blok DATA TERSTRUKTUR (bukan jawaban jadi) agar LLM menyusun
+      // kalimat rekomendasi sendiri dari fakta, tidak meniru format katalog yang kaku.
       let chunksToUse = relevantChunks;
       if (chunksToUse.length === 0) {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
         // Coba match treatment spesifik dari pertanyaan
-        const specificCatalogText = treatmentCatalogService.searchCatalog(userText, false);
-        const catalogText = specificCatalogText || treatmentCatalogService.formatCatalogText(false);
-        if (catalogText && catalogText.trim().length > 0) {
-          const isSpecific = !!specificCatalogText;
+        const matchedItems = treatmentCatalogService.searchCatalogItems(userText);
+        const catalogItems = matchedItems.length > 0
+          ? matchedItems
+          : treatmentCatalogService.getAllServices();
+        if (catalogItems.length > 0) {
+          const isSpecific = matchedItems.length > 0;
+          const catalogData = treatmentCatalogService.formatCatalogData(catalogItems);
           chunksToUse = [{
             id: isSpecific ? 'treatment-catalog-specific' : 'treatment-catalog',
             tenantId,
@@ -210,13 +215,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
             title: isSpecific
               ? 'Layanan Treatment Relevan dengan Pertanyaan'
               : `Katalog Layanan Treatment ${getBrandIdentity().businessName}`,
-            content: isSpecific
-              ? `Pertanyaan: ${userText}
-Jawaban: Berikut treatment yang relevan dengan pertanyaan Bunda:
-${catalogText}`
-              : `Pertanyaan: Informasi layanan/treatment yang tersedia.
-Jawaban: Berikut daftar treatment yang kami sediakan:
-${catalogText}`,
+            content: catalogData,
             documentName: 'treatment-catalog',
           }];
           console.log(`[FAQ CATALOG FALLBACK] No KB match for "${userText}", injecting ${isSpecific ? 'specific' : 'full'} treatment catalog as context.`);
@@ -252,16 +251,13 @@ ${catalogText}`,
       // Coba ambil nama RESMI dari catalog match (lebih akurat daripada entity mentah)
       try {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-        const catalogMatch = treatmentCatalogService.searchCatalog(userText, false);
-        const firstLine = catalogMatch.split('\n').find((l) => l.startsWith('• *'));
-        if (firstLine) {
-          const match = firstLine.match(/• \*([^*]+)\*/);
-          if (match && match[1]) {
-            // Bersihkan nama: buang suffix kurung (misal "(Add-on)", "(Rileksasi)")
-            const cleanName = match[1].trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
-            if (cleanName) {
-              treatmentNameForFollowUp = cleanName;
-            }
+        const catalogMatch = treatmentCatalogService.searchCatalogItems(userText);
+        if (catalogMatch.length > 0) {
+          const first = catalogMatch[0];
+          // Bersihkan nama: buang suffix kurung (misal "(Add-on)", "(Rileksasi)")
+          const cleanName = first.name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+          if (cleanName) {
+            treatmentNameForFollowUp = cleanName;
           }
         }
       } catch (_) { /* abaikan, pakai entity NLU */ }
@@ -318,11 +314,29 @@ ${catalogText}`,
       };
 
     case 'other':
-    default:
+    default: {
+      // GATE WARM REOPENING GREETING: sapaan basa-basi di sesi idle panjang → warm greeting.
+      // Intent `greeting` di-map ke 'other' di atas (interest.ts mapping), TAPI intents ORIGINAL
+      // tetap tersedia via ctx.nluResult?.intents — helper memakai itu untuk memastikan pesan
+      // benar-benar sapaan murni (tanpa intent spesifik yang tersembunyi di balik mapping).
+      const idleGreeting = isPureIdleGreeting({
+        messageText: userText,
+        lastMessageAt: conversation.last_message_at,
+        nluIntents: ctx.nluResult?.intents,
+        tenantId,
+      });
+      if (idleGreeting) {
+        return {
+          nextState: ConversationState.AWAITING_INTEREST,
+          replyText: TEMPLATES.warmReopenGreeting(),
+          shouldSendReply: true,
+        };
+      }
       return {
         nextState: ConversationState.AWAITING_INTEREST,
         replyText: TEMPLATES.interestUnrelatedFollowUp(),
         shouldSendReply: true,
       };
+    }
   }
 }

@@ -139,6 +139,18 @@ Perkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment 
 Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
   },
 
+  // Sapaan hangat untuk sesi idle panjang (1-2 hari): customer kembali chat dengan
+  // sapaan basa-basi tanpa kebutuhan spesifik. Buka pertanyaan terbuka — jangan dorong
+  // pitch reservasi/form. Rotasi variasi agar tidak kaku dipakai berulang (pola rolling template).
+  warmReopenGreeting: () => {
+    const variations: Array<() => string> = [
+      () => `Halo Bunda! 😊 Ada yang bisa saya bantu hari ini?`,
+      () => `Halo Bunda, senang bertemu lagi! 🌸 Ada yang bisa kami bantu untuk Bunda hari ini?`,
+      () => `Halo Bunda! 👋 Gimana kabarnya? Kalau ada yang mau ditanyakan soal treatment homecare kami, silakan ya bund 😊`,
+    ];
+    return variations[Math.floor(Math.random() * variations.length)]();
+  },
+
   askKelurahanDetail: () => `Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻
 
 Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻`,

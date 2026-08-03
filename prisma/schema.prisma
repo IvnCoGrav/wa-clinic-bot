@@ -440,6 +440,8 @@ model Tenant {
   ai_router_enabled      Boolean           @default(true)
   ai_router_shadow_mode  Boolean           @default(true)
   manual_reply_escalates Boolean           @default(true)
+  idle_greeting_enabled  Boolean           @default(true)
+  idle_greeting_min_hours Int             @default(36)
   created_at             DateTime          @default(now())
   updated_at             DateTime          @updatedAt
 

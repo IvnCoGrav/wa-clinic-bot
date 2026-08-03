@@ -134,5 +134,86 @@ describe('WahaClient — getAuthQr / getSessionStatus / startSession', () => {
       const client = newClient();
       expect(await client.startSession()).toBe('FAILED');
     });
+
+    it('getSession GET ke /api/sessions/{name} dan mengembalikan objek session', async () => {
+      forceRealHttp();
+      const sessionData = { name: 'default', status: 'FAILED', config: { webhooks: [{ url: 'http://x/webhook' }] } };
+      mockedAxios.get.mockResolvedValueOnce({ data: sessionData });
+
+      const client = newClient();
+      const session = await client.getSession('default');
+
+      expect(session).toEqual(sessionData);
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/sessions/default'),
+        expect.anything()
+      );
+    });
+
+    it('getSession mengembalikan null saat session tidak ada', async () => {
+      forceRealHttp();
+      mockedAxios.get.mockRejectedValueOnce({ response: { data: { status: 404 } } });
+
+      const client = newClient();
+      expect(await client.getSession('default')).toBeNull();
+    });
+
+    it('deleteSession DELETE ke /api/sessions/{name} dan mengembalikan true', async () => {
+      forceRealHttp();
+      mockedAxios.delete.mockResolvedValueOnce({ status: 200, data: {} });
+
+      const client = newClient();
+      expect(await client.deleteSession('default')).toBe(true);
+      expect(mockedAxios.delete).toHaveBeenCalledWith(
+        expect.stringContaining('/api/sessions/default'),
+        expect.anything()
+      );
+    });
+
+    it('deleteSession menganggap 404 sukses (session sudah tidak ada)', async () => {
+      forceRealHttp();
+      mockedAxios.delete.mockRejectedValueOnce({ response: { data: { status: 404 } } });
+
+      const client = newClient();
+      expect(await client.deleteSession('default')).toBe(true);
+    });
+
+    it('deleteSession mengembalikan false saat request gagal', async () => {
+      forceRealHttp();
+      mockedAxios.delete.mockRejectedValueOnce({ response: { data: { status: 500 } } });
+
+      const client = newClient();
+      expect(await client.deleteSession('default')).toBe(false);
+    });
+
+    it('createSession POST ke /api/sessions dengan config dan mengembalikan CREATED', async () => {
+      forceRealHttp();
+      mockedAxios.post.mockResolvedValueOnce({ status: 201, data: {} });
+
+      const client = newClient();
+      const config = { webhooks: [{ url: 'http://x/webhook' }] };
+      expect(await client.createSession('default', config)).toBe('CREATED');
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/api/sessions'),
+        expect.objectContaining({ name: 'default', config }),
+        expect.anything()
+      );
+    });
+
+    it('createSession mengembalikan EXISTS saat session sudah ada (409)', async () => {
+      forceRealHttp();
+      mockedAxios.post.mockRejectedValueOnce({ response: { data: { status: 409 } } });
+
+      const client = newClient();
+      expect(await client.createSession('default')).toBe('EXISTS');
+    });
+
+    it('createSession mengembalikan FAILED saat request gagal', async () => {
+      forceRealHttp();
+      mockedAxios.post.mockRejectedValueOnce({ response: { data: { status: 500 } } });
+
+      const client = newClient();
+      expect(await client.createSession('default')).toBe('FAILED');
+    });
   });
 });

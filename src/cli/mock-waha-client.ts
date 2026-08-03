@@ -72,6 +72,18 @@ export class MockWAHAClient implements IWahaClient {
     return 'WORKING';
   }
 
+  public async getSession(session?: string): Promise<any | null> {
+    return { name: session, status: 'WORKING', config: {} };
+  }
+
+  public async deleteSession(session?: string): Promise<boolean> {
+    return true;
+  }
+
+  public async createSession(session?: string, config?: any): Promise<string> {
+    return 'CREATED';
+  }
+
   public async getAuthQr(session?: string): Promise<import('../integrations/waha/client').WahaQr | null> {
     return { mimetype: 'image/png', data: MOCK_QR_BASE64 };
   }
