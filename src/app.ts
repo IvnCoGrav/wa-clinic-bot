@@ -111,12 +111,14 @@ if (require.main === module) {
       const { loadPersonaFromDb } = await import('./config/persona');
       const { AiModelConfigService } = await import('./config/ai-models.config');
       const { AiRouterConfigService } = await import('./config/ai-router-config');
+      const { IdleGreetingConfigService } = await import('./config/idle-greeting.config');
       await loadServicesFromDb(DEFAULT_TENANT_ID);
       await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
       await loadPersonaFromDb(DEFAULT_TENANT_ID);
       await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
       await AiRouterConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config + AI router)');
+      await IdleGreetingConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
+      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config + AI router + idle greeting)');
     } catch (initErr) {
       console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
     }

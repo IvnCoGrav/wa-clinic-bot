@@ -132,4 +132,49 @@ describe('WhatsappProviderService — getQrForTenant / startSessionForTenant', (
 
     expect(result.message).toContain('Gagal memulai');
   });
+
+  it('resetSessionForTenant → delete + create (webhook dipertahankan) + start → QR baru', async () => {
+    const existingConfig = { webhooks: [{ url: 'http://x/webhook', events: ['message'] }] };
+    vi.spyOn(wahaClient, 'getSession').mockResolvedValue({ name: 'default', status: 'FAILED', config: existingConfig });
+    const deleteSpy = vi.spyOn(wahaClient, 'deleteSession').mockResolvedValue(true);
+    const createSpy = vi.spyOn(wahaClient, 'createSession').mockResolvedValue('CREATED');
+    vi.spyOn(wahaClient, 'startSession').mockResolvedValue('STARTED');
+    vi.spyOn(wahaClient, 'getSessionStatus').mockResolvedValue('SCAN_QR_CODE');
+    vi.spyOn(wahaClient, 'getAuthQr').mockResolvedValue({ mimetype: 'image/png', data: 'QUJD' });
+
+    const result = await whatsappProviderService.resetSessionForTenant();
+
+    expect(result.status).toBe('SCAN_QR_CODE');
+    expect(result.qr).toEqual({ mimetype: 'image/png', data: 'QUJD' });
+    expect(deleteSpy).toHaveBeenCalledWith('default');
+    expect(createSpy).toHaveBeenCalledWith('default', existingConfig);
+    expect(wahaClient.startSession).toHaveBeenCalledWith('default');
+  });
+
+  it('resetSessionForTenant tanpa config lama → create dengan default config (env webhook URL)', async () => {
+    vi.spyOn(wahaClient, 'getSession').mockResolvedValue({ name: 'default', status: 'FAILED' });
+    vi.spyOn(wahaClient, 'deleteSession').mockResolvedValue(true);
+    process.env.WAHA_WEBHOOK_URL = 'http://webhook.example.test';
+    const createSpy = vi.spyOn(wahaClient, 'createSession').mockResolvedValue('CREATED');
+    vi.spyOn(wahaClient, 'startSession').mockResolvedValue('STARTED');
+    vi.spyOn(wahaClient, 'getSessionStatus').mockResolvedValue('WORKING');
+
+    const result = await whatsappProviderService.resetSessionForTenant();
+
+    expect(result.status).toBe('WORKING');
+    const config = createSpy.mock.calls[0][1];
+    expect(config.webhooks[0].url).toBe('http://webhook.example.test');
+    delete process.env.WAHA_WEBHOOK_URL;
+  });
+
+  it('resetSessionForTenant gagal create → message Gagal membuat ulang', async () => {
+    vi.spyOn(wahaClient, 'getSession').mockResolvedValue(null);
+    vi.spyOn(wahaClient, 'deleteSession').mockResolvedValue(true);
+    vi.spyOn(wahaClient, 'createSession').mockResolvedValue('FAILED');
+
+    const result = await whatsappProviderService.resetSessionForTenant();
+
+    expect(result.status).toBe('FAILED');
+    expect(result.message).toContain('Gagal membuat ulang');
+  });
 });

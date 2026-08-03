@@ -331,11 +331,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'BLOCKED' });
       }
 
-      // Masukkan pesan ke antrian pemrosesan sekuensial per customer
+      // Masukkan pesan ke antrian pemrosesan sekuensial per customer.
+      // Payload hanya membawa identifier; worker re-fetch fresh customer/conversation
+      // dari DB saat job diproses (cegah stale state / race condition pesan beruntun).
       await queueService.enqueueMessage({
         tenantId: DEFAULT_TENANT_ID,
-        customer,
-        conversation,
+        customerId: customer.id,
+        phone: customer.phone,
         incomingMessage,
       });
 

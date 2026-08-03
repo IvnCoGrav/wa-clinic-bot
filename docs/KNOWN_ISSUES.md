@@ -73,3 +73,55 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   jangan commit hasil kompilasi ke direktori source. Verifikasi: `npx vitest run tests/integration/landing-serving.test.ts`.
 - **Pelajaran:** grep file `*.js` di `src/` sebelum debug perilaku aneh; periksa juga
   `dist/` untuk sumber kebenaran perilaku yang dipakai di test.
+
+---
+
+## 5. [Queue] Stale state / race condition pesan beruntun — FIXED via fresh-fetch di worker
+
+- **Status:** resolved (2026-08-10), tercatat sebagai risiko "Konkurensi & Pengolahan Paralel" PRD yang kini tervalidasi.
+- **Gejala:** saat customer mengirim 2 pesan afirmasi beruntun dalam waktu singkat (~19 detik),
+  pesan kedua diproses seolah-olah state percakapan belum berubah dari pesan pertama — bot
+  mengulang balasan identik, alih-alih lanjut ke langkah berikutnya.
+- **Akar masalah:** `webhook.route.ts` & `waba-webhook.route.ts` memasukkan **snapshot**
+  `customer`/`conversation` (di-fetch di awal webhook) ke dalam payload queue. Worker BullMQ
+  maupun in-memory fallback memproses `job.data` apa adanya tanpa query ulang, sehingga job kedua
+  yang di-enqueue sebelum job pertama selesai menulis state baru memakai `current_state` basi.
+- **Fix:** payload queue kini hanya membawa identifier (`customerId` + fallback `phone` +
+  `incomingMessage`). Worker me-refresh `customer` (via `getCustomerById`, fallback
+  `getOrCreateCustomer`) dan `conversation` (via `getOrCreateConversation`) dari DB tepat
+  sebelum `stateMachine.processMessage()`. Fresh-fetch gagal total → skip + log `[QUEUE SKIP]`
+  (bukan fallback snapshot basi). FIFO per-customer (concurrency 1 per shard, memory queue per
+  `phone`) tidak berubah — re-fetch terjadi di awal tiap job, tetap urut sesuai antrian.
+- **Verifikasi:** `tests/unit/queue.test.ts` (test #4: 2 afirmasi beruntun → `['INITIAL',
+  'AWAITING_INTEREST']`), `tests/integration/queue-stale-state.test.ts` (2 webhook beruntun,
+  state akhir tersimpan `AWAITING_INTEREST`). Full suite 752 test hijau.
+
+---
+
+## 6. [Behavior] Jawaban FAQ treatment dulunya berbunyi seperti "membaca katalog", bukan rekomendasi personal
+
+- **Status:** resolved (2026-08-11) — lihat juga commit "FAQ answer rekomendasi personal + idle greeting".
+- **Gejala:** saat customer bertanya treatment (misal "pijat ibu hamil apa ya"), bot membalas
+  dengan daftar bullet "Berikut treatment yang relevan... • *Nama*" — terdengar kaku seperti
+  membacakan katalog, dan rawan memuat detail (harga, durasi) yang tidak ada di data.
+- **Akar masalah:** jalur FAQ treatment meng-inject konten katalog yang sudah diformat jadi
+  "Pertanyaan:/Jawaban:" dan menyuruh LLM membacakannya verbatim; `fallbackFaqResponse` juga
+  mengembalikan chunk apa adanya. Konten chunk menentukan gaya jawaban.
+- **Fix:**
+  1. `treatment-catalog.service.ts`: tambah `formatCatalogData()` (blok `[DATA TREATMENT]`
+     Nama/Kategori/Usia/Durasi/Deskripsi — **tanpa harga**) dan `searchCatalogItems()` yang
+     mengembalikan data mentah `ClinicServiceItem[]`.
+  2. `interest.ts`: fallback katalog kini meng-inject `formatCatalogData` sebagai **konteks
+     terstruktur**, bukan jawaban jadi.
+  3. `generator.ts`: system prompt `generateFaqResponse` ditambah instruksi **nada rekomendasi
+     personal** + aturan **anti-halusinasi** (hanya fakta dari Referensi, sebut semua opsi relevan,
+     jujur saat tidak tersedia, dilarang mengarang harga/durasi/usia).
+  4. `generator.ts` `fallbackFaqResponse`: dibangun ulang jadi rekomendasi deterministik dari data
+     `[DATA TREATMENT]` (satu opsi → rekomendasi + tawaran bantu pilih; multi opsi → sebut semuanya;
+     no-match → jujur tidak tersedia).
+- **Verifikasi:** `tests/unit/faq-grounding.test.ts` (6 test: single/multi treatment grounded,
+  context tanpa harga, no-data jujur, format blok tanpa bullet). Full unit suite 665 test hijau.
+- **Catatan harga:** harga TETAP tidak dikelola di context FAQ treatment; pertanyaan harga lewat
+  intent `ask_price` (mapping ke faq_question) dijawab tanpa menyebut nominal jika harga tidak ada
+  di Referensi — arahkan ke tim bila perlu.
+

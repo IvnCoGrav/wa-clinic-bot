@@ -142,8 +142,8 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
 
       await queueService.enqueueMessage({
         tenantId,
-        customer,
-        conversation,
+        customerId: customer.id,
+        phone: customer.phone,
         incomingMessage,
       });
       processed++;

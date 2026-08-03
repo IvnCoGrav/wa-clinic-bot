@@ -49,6 +49,14 @@ ${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemu
 ATURAN BALASAN:
 1. Lakukan analisis terlebih dahulu terhadap apa yang sedang ditanyakan/dibahas oleh customer berdasarkan pesan terakhir dan riwayat percakapan. Tuliskan analisis ini di bagian "REASONING".
 2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "JAWABAN" (gunakan informasi dari referensi dokumen di atas). Jawab dengan singkat dan jelas.
+3. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
+4. JIKA ada LEBIH DARI SATU treatment relevan di Referensi: sebutkan SEMUANYA (jangan pilih satu secara sepihak tanpa alasan) — tetap dengan nada rekomendasi.
+5. JIKA TIDAK ADA treatment/data yang relevan dengan pertanyaan di Referensi: KATAKAN JUJUR tidak tersedia/ragu dan tawarkan bantuan tim, JANGAN memaksa merekomendasikan yang tidak related.
+
+ATURAN ANTI-HALUSINASI (WAJIB):
+- HANYA gunakan fakta yang ADA di Referensi Dokumen di atas (nama treatment, usia/kategori target, durasi, deskripsi manfaat).
+- DILARANG menambah/mengarang harga, durasi, usia, manfaat, atau detail treatment apa pun yang TIDAK tercantum di Referensi.
+- DILARANG menyebutkan harga treatment dari ingatan — harga tidak dikelola di konteks ini, arahkan customer untuk bertanya tim/bidan bila perlu.
 
 FORMAT RESPONS (HARUS MENGIKUTI FORMAT INI):
 REASONING: [analisis Anda tentang apa yang ditanyakan customer dan konteks percakapannya]
@@ -136,14 +144,47 @@ JAWABAN: [balasan Anda untuk customer]`,
   }
 
   private fallbackFaqResponse(userQuestion: string, chunks: KnowledgeChunkResult[]): string {
-    if (chunks.length > 0) {
-      let text = chunks[0].content;
-      if (text.includes('Jawaban:')) {
-        text = text.split('Jawaban:')[1].trim();
-      }
-      return `${text} 😊`;
+    if (chunks.length === 0) {
+      return `Untuk informasi mengenai hal tersebut, Bunda bisa menanyakannya langsung atau tim kami siap membantu memberikan penjelasan lebih detail ya bund! ✨`;
     }
-    return `Untuk informasi mengenai hal tersebut, Bunda bisa menanyakannya langsung atau tim kami siap membantu memberikan penjelasan lebih detail ya bund! ✨`;
+
+    // Jalur katalog treatment terstruktur: bangun rekomendasi personal dari fakta data.
+    // Format chunk dari interest.ts adalah blok "[DATA TREATMENT] Nama:... Usia:... Durasi:... Deskripsi:..."
+    // — parse fakta lalu susun kalimat rekomendasi (tetap grounded, tanpa mengarang).
+    const firstChunk = chunks[0];
+    if (firstChunk.content.includes('[DATA TREATMENT]')) {
+      const items = firstChunk.content.split(/\[DATA TREATMENT\]/).filter((s) => s.trim().length > 0);
+      if (items.length > 0) {
+        const recommendations = items.map((raw) => {
+          const field = (key: string) => {
+            const m = raw.match(new RegExp(`${key}:\\s*(.+)`));
+            return m ? m[1].trim() : '';
+          };
+          return {
+            name: field('Nama'),
+            age: field('Usia/Target'),
+            duration: field('Durasi'),
+            description: field('Deskripsi'),
+          };
+        });
+
+        if (recommendations.length === 1) {
+          const r = recommendations[0];
+          return `Bunda, untuk itu kami punya *${r.name}* — treatment ini khusus untuk ${r.age.toLowerCase()}${r.duration ? ` dengan durasi ${r.duration}` : ''}. ${r.description} 😊\n\nMau saya bantu pilih treatment ini, Bunda?`;
+        }
+
+        const list = recommendations.map((r) => `*${r.name}* (${r.age.toLowerCase()}, ${r.duration})`).join(' dan ');
+        const names = recommendations.map((r) => r.name).join(' atau ');
+        return `Bunda, kami punya beberapa opsi yang cocok: ${list}. ${recommendations[0].description} 😊\n\nMau saya bantu pilih di antara ${names} untuk Bunda?`;
+      }
+    }
+
+    // Jalur knowledge base FAQ biasa (non-catalog): ambil Jawaban yang tersimpan verbatim.
+    let text = firstChunk.content;
+    if (text.includes('Jawaban:')) {
+      text = text.split('Jawaban:')[1].trim();
+    }
+    return `${text} 😊`;
   }
 }
 

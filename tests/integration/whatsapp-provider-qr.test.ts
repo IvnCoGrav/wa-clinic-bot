@@ -85,4 +85,26 @@ describe('Fitur 1 — WhatsApp Provider QR API', () => {
     expect(body.data.status).toBe('WORKING');
     expect(wahaClient.startSession).toHaveBeenCalled();
   });
+
+  it('6. POST /api/admin/whatsapp-provider/session/reset memanggil delete+create+start + audit', async () => {
+    vi.spyOn(wahaClient, 'getSession').mockResolvedValue({ name: 'default', status: 'FAILED', config: { webhooks: [] } });
+    vi.spyOn(wahaClient, 'deleteSession').mockResolvedValue(true);
+    vi.spyOn(wahaClient, 'createSession').mockResolvedValue('CREATED');
+    vi.spyOn(wahaClient, 'startSession').mockResolvedValue('STARTED');
+    vi.spyOn(wahaClient, 'getSessionStatus').mockResolvedValue('WORKING');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/whatsapp-provider/session/reset',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.status).toBe('WORKING');
+    expect(wahaClient.deleteSession).toHaveBeenCalledWith('default');
+    expect(wahaClient.createSession).toHaveBeenCalled();
+    expect(wahaClient.startSession).toHaveBeenCalled();
+  });
 });

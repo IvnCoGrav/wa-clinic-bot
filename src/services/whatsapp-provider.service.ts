@@ -132,6 +132,73 @@ export class WhatsappProviderService {
 
     return this.getQrForTenant(tenantId);
   }
+
+  /**
+   * Membangun config default untuk session WAHA yang baru dibuat.
+   * Webhook URL diambil dari env (per-tenant via env injection / infra), bukan di-hardcode.
+   * Tidak dipakai bila session lama masih punya config (webhook dipertahankan).
+   */
+  private buildDefaultSessionConfig(): any {
+    const webhookUrl = process.env.WAHA_WEBHOOK_URL || 'http://host.docker.internal:3000/webhook';
+    return {
+      noweb: {
+        store: {
+          enabled: true,
+          fullSync: true,
+        },
+      },
+      webhooks: [
+        {
+          url: webhookUrl,
+          events: ['session.status', 'message'],
+          retries: {
+            delaySeconds: 2,
+            attempts: 15,
+            exponential: true,
+          },
+        },
+      ],
+    };
+  }
+
+  /**
+   * Reset / re-pair session WAHA per-tenant (delete → create ulang → start).
+   * Dipakai tombol "Reset Session" di UI saat status FAILED yang sudah-paired
+   * tidak bisa di-recover hanya dengan start (Noise Handshake failure baileys).
+   * Config webhook session lama dipertahankan agar bot tidak kehilangan webhook.
+   */
+  public async resetSessionForTenant(tenantId: string = DEFAULT_TENANT_ID): Promise<ProviderQrData> {
+    const sessionId = await this.resolveSessionId(tenantId);
+
+    // Pertahankan config session lama (termasuk webhooks) sebelum dihapus.
+    let existingConfig: any;
+    try {
+      const current = await wahaClient.getSession(sessionId);
+      existingConfig = current?.config;
+    } catch (err: any) {
+      existingConfig = undefined;
+    }
+    const newConfig = existingConfig && typeof existingConfig === 'object' ? existingConfig : this.buildDefaultSessionConfig();
+
+    // 1. Hapus session lama (bersihkan kredensial yang korup).
+    const deleted = await wahaClient.deleteSession(sessionId);
+
+    // 2. Buat ulang session dengan config webhook yang dipertahankan.
+    const created = await wahaClient.createSession(sessionId, newConfig);
+    if (created === 'FAILED') {
+      return {
+        provider: 'WAHA',
+        sessionId,
+        status: 'FAILED',
+        qr: null,
+        qrExpiresInMs: null,
+        message: 'Gagal membuat ulang session WAHA. Periksa log WAHA dan coba lagi.',
+      };
+    }
+
+    // 3. Mulai session → memunculkan QR baru untuk scan ulang.
+    return this.startSessionForTenant(tenantId);
+  }
 }
 
 export const whatsappProviderService = new WhatsappProviderService();
