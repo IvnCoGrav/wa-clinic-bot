@@ -156,15 +156,16 @@ export class WhatsappProviderService {
       url: webhookUrl,
       events: ['session.status', 'message'],
       retries: {
+        policy: 'constant',
         delaySeconds: 2,
         attempts: 15,
-        exponential: true,
       },
     };
     // WAHA_WEBHOOK_SECRET (NODE_ENV=production wajib) → WAHA kirim header ini supaya
-    // webhook.route.ts tidak menolak (401) request inbound. Dikosongkan bila secret kosong.
+    // webhook.route.ts tidak menolak (401) request inbound. WAHA pakai schema
+    // `customHeaders: [{ name, value }]` — field `headers` (object) tidak didukung.
     if (secret) {
-      webhook.headers = { 'X-Webhook-Secret': secret };
+      webhook.customHeaders = [{ name: 'X-Webhook-Secret', value: secret }];
     }
     return {
       noweb: {
