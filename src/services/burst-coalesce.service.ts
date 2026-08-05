@@ -74,6 +74,10 @@ export class BurstCoalesceService {
     return msg?.type === 'text' || (!!msg?.text?.body && typeof msg.text.body === 'string');
   }
 
+  private isCommandText(text: string): boolean {
+    return /^\/[a-z]/.test(text.trim().toLowerCase());
+  }
+
   /**
    * Titik masuk dari webhook layer. Return handled=true jika pesan di-buffer (belum di-enqueue),
    * handled=false jika harus diproses normal oleh caller.
@@ -91,6 +95,16 @@ export class BurstCoalesceService {
 
     // 2. Pesan non-text (location/media) → flush buffer tertunda (jika ada) lalu passthrough.
     if (!this.isTextMessage(incomingMessage)) {
+      if (existing) {
+        this.flush(key);
+      }
+      return { handled: false };
+    }
+
+    // 2b. Pesan perintah slash (contoh /reset, /state, /mulai) → jangan di-merge supaya
+    // exact-match perintah tidak hilang saat digabung dengan pesan lain. Flush lalu
+    // passthrough ke machine command gate.
+    if (this.isCommandText(incomingMessage.text?.body || '')) {
       if (existing) {
         this.flush(key);
       }

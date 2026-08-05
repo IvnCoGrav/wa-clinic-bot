@@ -6,17 +6,19 @@ import { messageService } from '../../src/services/message.service';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { prisma } from '../../src/db/client';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 
 describe('WABA Webhook Route (raw-body signature + tenant + status + media)', () => {
   const app = buildApp();
   const appSecret = 'meta_app_secret_integration';
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
     wabaTenantService.resetCache();
     process.env.ADMIN_API_KEY = 'test_admin_key_888';
     process.env.WABA_APP_SECRET = appSecret;
     process.env.WABA_WEBHOOK_VERIFY_TOKEN = 'verify_tok';
+    await seedAiScopeAll();
   });
 
   function sign(body: string): string {
@@ -158,7 +160,7 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
             metadata: { display_phone_number: '6281234', phone_number_id: 'PNID_TENANT_A' },
             contacts: [{ profile: { name: 'Bunda Test' }, wa_id: '628999123456' }],
             messages: [{
-              id: 'wamid.inbound_1',
+              id: `wamid.inbound_${Date.now()}_${Math.random()}`,
               from: '628999123456',
               timestamp: '1691000500',
               type: 'text',

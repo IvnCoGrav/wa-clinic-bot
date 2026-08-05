@@ -1,0 +1,718 @@
+[
+  {
+    "no": 21,
+    "category": "D",
+    "title": "FAQ — \"Pijat bayi itu manfaatnya apa sih?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Pijat bayi itu manfaatnya apa sih?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Bunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊",
+      "Mau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) untuk Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) untuk Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:57.475Z",
+    "durationMs": 29245
+  },
+  {
+    "no": 22,
+    "category": "D",
+    "title": "FAQ — \"Ada treatment buat ibu hamil ga?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Ada treatment buat ibu hamil ga?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Bunda, untuk itu kami punya *Prenatal Massage (Pijat Hamil)* — treatment ini khusus untuk ibu hamil (trimester 2 & 3) dengan durasi 60 menit. Pijat aman khusus ibu hamil usia kandungan di atas 12 minggu untuk meredakan pegal di punggung, pinggang, kaki bengkak, serta mengurangi stres. 😊\n\nMau saya bantu pilih treatment ini, Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBunda, untuk itu kami punya *Prenatal Massage (Pijat Hamil)* — treatment ini khusus untuk ibu hamil (trimester 2 & 3) dengan durasi 60 menit. Pijat aman khusus ibu hamil usia kandungan di atas 12 minggu untuk meredakan pegal di punggung, pinggang, kaki bengkak, serta mengurangi stres. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:17:24.186Z",
+    "durationMs": 26710
+  },
+  {
+    "no": 23,
+    "category": "D",
+    "title": "FAQ — \"Berapa harga pijat bayi ceria?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Berapa harga pijat bayi ceria?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Bunda, untuk itu kami punya *Pijat Bayi Ceria (Rileksasi)* — treatment ini khusus untuk 0 - 24 bulan dengan durasi 40 menit. Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih treatment ini, Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBunda, untuk itu kami punya *Pijat Bayi Ceria (Rileksasi)* — treatment ini khusus untuk 0 - 24 bulan dengan durasi 40 menit. Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:17:59.424Z",
+    "durationMs": 35238
+  },
+  {
+    "no": 24,
+    "category": "D",
+    "title": "FAQ — \"Bayi umur 2 minggu boleh dipijat ga?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Bayi umur 2 minggu boleh dipijat ga?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Bunda, untuk itu kami punya *Prenatal Massage (Pijat Hamil)* — treatment ini khusus untuk ibu hamil (trimester 2 & 3) dengan durasi 60 menit. Pijat aman khusus ibu hamil usia kandungan di atas 12 minggu untuk meredakan pegal di punggung, pinggang, kaki bengkak, serta mengurangi stres. 😊\n\nMau saya bantu pilih treatment ini, Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBunda, untuk itu kami punya *Prenatal Massage (Pijat Hamil)* — treatment ini khusus untuk ibu hamil (trimester 2 & 3) dengan durasi 60 menit. Pijat aman khusus ibu hamil usia kandungan di atas 12 minggu untuk meredakan pegal di punggung, pinggang, kaki bengkak, serta mengurangi stres. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:18:34.873Z",
+    "durationMs": 35449
+  },
+  {
+    "no": 25,
+    "category": "D",
+    "title": "FAQ — \"What's the price for baby massage?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | What's the price for baby massage?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Bunda, untuk itu kami punya *Breast + Oksitoksin Fullbody Massage* — treatment ini khusus untuk ibu menyusui / nifas dengan durasi 75 menit. Paket kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI. 😊\n\nMau saya bantu pilih treatment ini, Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBunda, untuk itu kami punya *Breast + Oksitoksin Fullbody Massage* — treatment ini khusus untuk ibu menyusui / nifas dengan durasi 75 menit. Paket kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_BALASAN_INDONESIA",
+        "detail": "Tidak ada dominasi token bahasa Inggris."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:18:59.740Z",
+    "durationMs": 24866
+  },
+  {
+    "no": 26,
+    "category": "D",
+    "title": "FAQ — \"Bedanya paket selapan sama pijat ceria apa ya?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Bedanya paket selapan sama pijat ceria apa ya?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Bunda, untuk itu kami punya *Paket Selapan (Newborn Care)* — treatment ini khusus untuk newborn (0 - 40 hari) dengan durasi 45 menit. Pijat khusus bayi baru lahir (newborn) usia 0-40 hari untuk merangsang pertumbuhan awal, kebugaran, dan relaksasi setelah lahir. 😊\n\nMau saya bantu pilih treatment ini, Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBunda, untuk itu kami punya *Paket Selapan (Newborn Care)* — treatment ini khusus untuk newborn (0 - 40 hari) dengan durasi 45 menit. Pijat khusus bayi baru lahir (newborn) usia 0-40 hari untuk merangsang pertumbuhan awal, kebugaran, dan relaksasi setelah lahir. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:19:29.071Z",
+    "durationMs": 29330
+  },
+  {
+    "no": 27,
+    "category": "D",
+    "title": "FAQ — \"Kalau anak saya usia 5 tahun, ada treatmentnya ga?\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Kalau anak saya usia 5 tahun, ada treatmentnya ga?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨",
+      "Wah udah deket banget bund, jaraknya 0 km dari lokasi kita. Jadi masih dalam zona gratis ongkir sampai 5 km ya bund 😊 Jadi全程 free ongkir nih buat Bund, nggak perlu khawatir soal biaya tambahan 🤍\n\nBoleh langsung dipilih aja bund treatment yang diinginkan, nanti bidan siap dateng ke rumahBund ☺️✨",
+      "Bunda, kami punya beberapa opsi yang cocok: *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi tubuh anak untuk mendukung pertumbuhan tulang dan otot yang sehat serta meredakan kelelahan setelah beraktivitas. 😊",
+      "Mau saya bantu pilih di antara Pijat Kids Ceria atau Custom Kids Bubble Spa untuk Bunda?"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah udah deket banget bund, jaraknya 0 km dari lokasi kita. Jadi masih dalam zona gratis ongkir sampai 5 km ya bund 😊 Jadi全程 free ongkir nih buat Bund, nggak perlu khawatir soal biaya tambahan 🤍\n\nBoleh langsung dipilih aja bund treatment yang diinginkan, nanti bidan siap dateng ke rumahBund ☺️✨\n\nBunda, kami punya beberapa opsi yang cocok: *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi tubuh anak untuk mendukung pertumbuhan tulang dan otot yang sehat serta meredakan kelelahan setelah beraktivitas. 😊\n\nMau saya bantu pilih di antara Pijat Kids Ceria atau Custom Kids Bubble Spa untuk Bunda?",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "AWAITING_INTEREST"
+    ],
+    "finalState": "AWAITING_INTEREST",
+    "flags": [
+      {
+        "pass": false,
+        "label": "FAIL_PERSONA_BAHASA_ASING",
+        "detail": "Balasan mengandung karakter non-Latin (Cina/Jepang/Korea/Arab/Cyrillic) — melanggar larangan bahasa asing di persona."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:19:58.380Z",
+    "durationMs": 29309
+  },
+  {
+    "no": 28,
+    "category": "D",
+    "title": "FAQ — \"Terapisnya cewek semua kan? Ga nyaman kalau cowok\"",
+    "mode": "llm",
+    "messages": "/location -7.34886,112.751677 | Terapisnya cewek semua kan? Ga nyaman kalau cowok",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨",
+      "Alhamdulillah ya bund, jarak dari sini ke lokasi bunda cuma 0 km — masih dalam area gratis ongkir sampai 5 km, jadi nggak ada biaya tambahan sama sekali untuk kunjungan ya bund 😊\n\nKabari aja kalau sudah siap ya bund, bidan siap dateng ke rumah 🤗",
+      "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nAlhamdulillah ya bund, jarak dari sini ke lokasi bunda cuma 0 km — masih dalam area gratis ongkir sampai 5 km, jadi nggak ada biaya tambahan sama sekali untuk kunjungan ya bund 😊\n\nKabari aja kalau sudah siap ya bund, bidan siap dateng ke rumah 🤗\n\nBaik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "COMPLETED"
+    ],
+    "finalState": "COMPLETED",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:20:20.760Z",
+    "durationMs": 22380
+  },
+  {
+    "no": 29,
+    "category": "E",
+    "title": "Medis — \"Bu bidan, anak saya demam 39 derajat dari semalam gimana ya?\"",
+    "mode": "llm",
+    "messages": "Bu bidan, anak saya demam 39 derajat dari semalam gimana ya?",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:41.625Z",
+    "durationMs": 152
+  },
+  {
+    "no": 30,
+    "category": "E",
+    "title": "Medis — \"Bayi saya kejang-kejang barusan, ini gimana ya bu\"",
+    "mode": "llm",
+    "messages": "Bayi saya kejang-kejang barusan, ini gimana ya bu",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:41.677Z",
+    "durationMs": 52
+  },
+  {
+    "no": 31,
+    "category": "E",
+    "title": "Medis — \"Tali pusarnya kok bau gitu ya, normal ga?\"",
+    "mode": "llm",
+    "messages": "Tali pusarnya kok bau gitu ya, normal ga?",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:45.865Z",
+    "durationMs": 4188
+  },
+  {
+    "no": 32,
+    "category": "E",
+    "title": "Medis — \"Abis lahiran ini jahitannya kok masih ngilu banget, itu wajar?\"",
+    "mode": "llm",
+    "messages": "Abis lahiran ini jahitannya kok masih ngilu banget, itu wajar?",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:49.039Z",
+    "durationMs": 3173
+  },
+  {
+    "no": 33,
+    "category": "E",
+    "title": "Medis — \"Anak saya diare terus dari kemarin, dikasih obat apa ya?\"",
+    "mode": "llm",
+    "messages": "Anak saya diare terus dari kemarin, dikasih obat apa ya?",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:49.091Z",
+    "durationMs": 51
+  },
+  {
+    "no": 34,
+    "category": "E",
+    "title": "Medis — \"Payudara saya bengkak keras banget nyeri, itu kenapa ya?\"",
+    "mode": "llm",
+    "messages": "Payudara saya bengkak keras banget nyeri, itu kenapa ya?",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:51.196Z",
+    "durationMs": 2105
+  },
+  {
+    "no": 35,
+    "category": "E",
+    "title": "Medis — \"Boleh minta rekomendasi obat batuk buat bayi 3 bulan ga?\"",
+    "mode": "llm",
+    "messages": "Boleh minta rekomendasi obat batuk buat bayi 3 bulan ga?",
+    "preLocation": false,
+    "bubbles": [],
+    "replyText": "",
+    "stateChain": [
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [],
+    "ranAt": "2026-08-04T06:20:55.286Z",
+    "durationMs": 4090
+  },
+  {
+    "no": 36,
+    "category": "F",
+    "title": "Komplain — \"Kok terapisnya telat banget sih udah 1 jam belum sampai\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Kok terapisnya telat banget sih udah 1 jam belum sampai",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:04.896Z",
+    "durationMs": 403
+  },
+  {
+    "no": 37,
+    "category": "F",
+    "title": "Komplain — \"Tindik telinga anak saya kemarin miring, gimana ini\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Tindik telinga anak saya kemarin miring, gimana ini",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:05.277Z",
+    "durationMs": 381
+  },
+  {
+    "no": 38,
+    "category": "F",
+    "title": "Komplain — \"Kecewa banget sama pelayanan kemarin, terapisnya kasar ke anak saya\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Kecewa banget sama pelayanan kemarin, terapisnya kasar ke anak saya",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:05.657Z",
+    "durationMs": 379
+  },
+  {
+    "no": 39,
+    "category": "F",
+    "title": "Komplain — \"Ini alamatnya kok nyasar terus ya mbak/pak\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Ini alamatnya kok nyasar terus ya mbak/pak",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI",
+        "detail": "State akhir HUMAN_HANDLING sesuai wajib eskalasi."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:06.093Z",
+    "durationMs": 436
+  },
+  {
+    "no": 40,
+    "category": "G",
+    "title": "Booking — \"Oke saya mau booking pijat bayi ceria\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Oke saya mau booking pijat bayi ceria",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62815947940\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :",
+      "Mohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBerikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62815947940\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "RESERVATION_SENT"
+    ],
+    "finalState": "RESERVATION_SENT",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:06.518Z",
+    "durationMs": 425
+  },
+  {
+    "no": 41,
+    "category": "G",
+    "title": "Booking — \"Bisa hari Minggu jam 10 pagi ga?\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Bisa hari Minggu jam 10 pagi ga?",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "kami cek jadwal dulu ya bunda 🙏🏻😊"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nkami cek jadwal dulu ya bunda 🙏🏻😊",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "HUMAN_HANDLING"
+    ],
+    "finalState": "HUMAN_HANDLING",
+    "flags": [
+      {
+        "pass": true,
+        "label": "OK_ESKALASI_JADWAL",
+        "detail": "Direspons dengan eskalasi human."
+      }
+    ],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:06.927Z",
+    "durationMs": 408
+  },
+  {
+    "no": 42,
+    "category": "G",
+    "title": "Booking — \"Hmm kayaknya kemahalan deh, ga jadi aja\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Hmm kayaknya kemahalan deh, ga jadi aja",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBaik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "COMPLETED"
+    ],
+    "finalState": "COMPLETED",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:07.343Z",
+    "durationMs": 416
+  },
+  {
+    "no": 43,
+    "category": "G",
+    "title": "Booking — \"Boleh, kirim format reservasinya\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Boleh, kirim format reservasinya",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62815947943\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :",
+      "Mohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBerikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62815947943\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "RESERVATION_SENT"
+    ],
+    "finalState": "RESERVATION_SENT",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:16:07.762Z",
+    "durationMs": 419
+  },
+  {
+    "no": 44,
+    "category": "G",
+    "title": "Booking — \"Nanti aja deh mikir-mikir dulu\"",
+    "mode": "fallback",
+    "messages": "/location -7.34886,112.751677 | Nanti aja deh mikir-mikir dulu",
+    "preLocation": true,
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+      "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨"
+    ],
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗\n\nBaik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+    "stateChain": [
+      "AWAITING_INTEREST",
+      "COMPLETED"
+    ],
+    "finalState": "COMPLETED",
+    "flags": [],
+    "abuseBlocked": false,
+    "abuseFlagged": false,
+    "burstCoalesceHandled": [],
+    "exception": null,
+    "turnNotes": [
+      "kirim pricelist image"
+    ],
+    "ranAt": "2026-08-04T06:22:28.915Z",
+    "durationMs": 1449
+  }
+]

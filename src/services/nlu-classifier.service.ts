@@ -30,6 +30,7 @@ export const VALID_INTENTS = [
   'affirmation',
   'negation',
   'complaint',
+  'medical_query',
   'off_topic',
 ] as const;
 
@@ -68,6 +69,20 @@ export class NluClassifierService {
     // 3. Negation
     if (/^(tidak|enggak|nggak|bukan|batal|ga|gak|ndak)/i.test(text)) {
       intents.push('negation');
+    }
+
+    // 3b. Medical Query — keluhan medis / gejala / minta obat (fallback deterministik).
+    // Gate konservatif (mirip intent.ts): keyword gejala ADA && ada sinyal pertanyaan/tindakan.
+    const medicalKeywords = [
+      'demam', 'panas', 'kejang', 'paracetamol', 'obat', 'sakit', 'nyeri', 'perih',
+      'sesak', 'grok', 'lendir', 'dahak', 'bengkak', 'batuk', 'diare', 'mencret',
+      'muntah', 'ruam', 'tali pusat', 'tali pusar', 'pusar', 'jahitan', 'ngilu',
+      'payudara', 'mastitis',
+    ];
+    const hasMedicalKeyword = medicalKeywords.some((kw) => text.includes(kw));
+    const hasMedicalSignal = text.includes('obat') || text.includes('sakit') || text.includes('kasih') || text.includes('bisa') || text.includes('?') || text.includes('normal') || text.includes('wajar') || text.includes('bahaya');
+    if (hasMedicalKeyword && hasMedicalSignal) {
+      intents.push('medical_query');
     }
 
     // 4. Provide Location
@@ -156,6 +171,7 @@ ALLOWED INTENTS (A single message MAY contain multiple intents!):
 - "affirmation": Affirmation or agreement ("Iya", "Betul", "Bisa", "Oke", "Boleh").
 - "negation": Refusal or cancellation ("Tidak", "Bukan itu", "Batal").
 - "complaint": Customer expressing frustration, slow response, or service complaint.
+- "medical_query": Customer reporting a health/medical concern, describing a symptom, or asking for medicine/dosage/medical advice (e.g., "anak saya demam dikasih apa ya", "tali pusar kok bau", "jahitan melahirkan perih", "minta rekomendasi obat batuk"). Escalate, do NOT answer with medical advice.
 - "off_topic": Unrelated or gibberish chatter.
 
 EXTRACTED ENTITIES (If mentioned):

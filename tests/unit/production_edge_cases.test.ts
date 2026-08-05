@@ -10,6 +10,7 @@ import { ConversationState } from '@prisma/client';
 import { deliveryService } from '../../src/services/delivery.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { wahaClient } from '../../src/integrations/waha/client';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 import { llmIntentService } from '../../src/integrations/llm/intent';
 
 // Mock LLM services secara global untuk mencegah panggilan API nyata / timeout
@@ -38,7 +39,7 @@ const testStateMachine = new ConversationStateMachine(mockTypingService);
 describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => {
   let originalApiKey: string | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     originalApiKey = process.env.ADMIN_API_KEY;
     process.env.ADMIN_API_KEY = 'test_admin_key_123';
 
@@ -46,6 +47,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     (prisma as any).$transaction = async (fn: any) => {
       return fn(prisma);
     };
+    await seedAiScopeAll();
   });
 
   afterEach(() => {

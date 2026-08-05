@@ -68,3 +68,6 @@ storage/
 scratch/
 
 
+
+# local desktop tool state
+.freebuff/

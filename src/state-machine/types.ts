@@ -10,6 +10,8 @@ export interface StateHandlerContext {
   incomingMessage: WhatsAppIncomingMessage;
   nluResult?: NluClassificationResult;
   routerDecision?: AIRouterDecision;
+  /** Riwayat percakapan terbaru (role user/assistant) — dipakai handler untuk resolusi anaphora (mis. "berapa itu?"). */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 export interface StateHandlerResult {
@@ -18,4 +20,8 @@ export interface StateHandlerResult {
   shouldSendReply: boolean;
   isHumanHandling?: boolean;
   sendPricelistImage?: boolean;
+  /** Caption custom utk gambar pricelist (default: "Pricelist {brand} 🌸"). */
+  pricelistCaption?: string;
+  /** Kirim ulang pricelist walau sudah pernah terkirim (dipakai saat customer minta ulang). */
+  forcePricelistResend?: boolean;
 }

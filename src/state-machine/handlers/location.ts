@@ -4,6 +4,7 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { deliveryService } from '../../services/delivery.service';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
+import { phrasingService } from '../../integrations/llm/phrasing.service';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -47,6 +48,10 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       tenantId
     );
 
+    // Tandai customer sudah pernah kirim share-location native (pin GPS).
+    customer.share_location_sent = true;
+    await customerService.markShareLocationSent(customer.id, tenantId);
+
     // Reset attempt counter
     await conversationService.updateConversationState(conversation.id, { locationAttempts: 0 }, tenantId);
 
@@ -60,11 +65,24 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     }
 
     // 5. Jika Dalam Jangkauan
-    const replyText = TEMPLATES.ongkirInfo({
+    const fallbackOngkirText = TEMPLATES.ongkirInfo({
       distanceKm: delivery.distanceKm,
       normalPrice: delivery.normalPrice,
       promoPrice: delivery.promoPrice,
       freeTierKm: delivery.freeTierKm,
+    });
+
+    const replyText = await phrasingService.generate({
+      intent: 'ongkir_info',
+      facts: {
+        distanceKm: delivery.distanceKm,
+        normalPrice: delivery.normalPrice,
+        promoPrice: delivery.promoPrice,
+        freeTierKm: delivery.freeTierKm ?? 5,
+      },
+      conversationId: conversation.id,
+      tenantId,
+      fallbackTemplate: fallbackOngkirText,
     });
 
     return {
@@ -80,9 +98,15 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   const rawTextLocation = (nluConfident && nluLocationText) ? nluLocationText : (incomingMessage.text?.body?.trim() || '');
 
   if (!rawTextLocation) {
+    const askDetailReply = await phrasingService.generate({
+      intent: 'ask_kelurahan_detail',
+      conversationId: conversation.id,
+      tenantId,
+      fallbackTemplate: TEMPLATES.askKelurahanDetail(),
+    });
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: TEMPLATES.askKelurahanDetail(),
+      replyText: askDetailReply,
       shouldSendReply: true,
     };
   }
@@ -101,8 +125,8 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   // jawab via interest handler (knowledge base / katalog treatment), TANPA mengganggu state lokasi.
   // Prinsip: STATE PUNYA PRIORITAS — jawab sela, lalu tetap tanya lokasi.
   const nlu = ctx.nluResult;
-  const hasNluPriceOrFaq = nlu && (nlu.intents.includes('faq_question') || nlu.intents.includes('ask_price'));
-  const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
+  const hasNluPriceOrFaq = nlu && (nlu.intents.includes('faq_question') || nlu.intents.includes('ask_price') || nlu.intents.includes('chitchat') || nlu.intents.includes('ask_schedule'));
+  const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|cukur|gundul|potong|pijat|massage|spa|nanya|tanya|bisa|apakah|gimana|bagaimana|apa|persyaratan|syarat|paket|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
   const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex;
   if (hasFaqIntent) {
     console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
@@ -111,10 +135,14 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       ...ctx,
       conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any,
     });
-    // STATE PUNYA PRIORITAS: setelah jawab FAQ, kembalikan state ke AWAITING_LOCATION.
+    // STATE PUNYA PRIORITAS: setelah jawab FAQ, kembalikan state ke AWAITING_LOCATION,
+    // KECUALI jika customer melakukan form submission atau eskalasi ke human handling.
+    const isFormOrEscalation = interestResult.isHumanHandling ||
+                               interestResult.nextState === ConversationState.HUMAN_HANDLING ||
+                               interestResult.nextState === ConversationState.RESERVATION_SENT;
     return {
       ...interestResult,
-      nextState: ConversationState.AWAITING_LOCATION,
+      nextState: isFormOrEscalation ? interestResult.nextState : ConversationState.AWAITING_LOCATION,
     };
   }
 
@@ -175,9 +203,16 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
         tenantId
       );
 
+      const escalationReply = await phrasingService.generate({
+        intent: 'location_escalation',
+        conversationId: conversation.id,
+        tenantId,
+        fallbackTemplate: TEMPLATES.locationEscalation(),
+      });
+
       return {
         nextState: ConversationState.HUMAN_HANDLING,
-        replyText: TEMPLATES.locationEscalation(),
+        replyText: escalationReply,
         shouldSendReply: true,
         isHumanHandling: true,
       };
@@ -209,6 +244,22 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       .replace(/^desa\s+/, '')
       .replace(/\s+(bund|bunda|ya|kak|min|mbak|mas|gan|sis)\b/g, '')
       .trim();
+
+    // Jika teks lokasi lebih dari 15 karakter / merupakan kalimat bukan nama tempat, jangan echo kalimatnya
+    const isTooLongSentence = !resolved.matchedSpan && (cleanLocationName.length > 15 || cleanLocationName.split(/\s+/).length > 2);
+    if (isTooLongSentence) {
+      const askDetailReply = await phrasingService.generate({
+        intent: 'ask_kelurahan_detail',
+        conversationId: conversation.id,
+        tenantId,
+        fallbackTemplate: TEMPLATES.askKelurahanDetail(),
+      });
+      return {
+        nextState: ConversationState.AWAITING_LOCATION,
+        replyText: askDetailReply,
+        shouldSendReply: true,
+      };
+    }
 
     const capitalizedLocationName = resolved.matchedSpan
       ? resolved.matchedSpan.charAt(0).toUpperCase() + resolved.matchedSpan.slice(1)
@@ -254,11 +305,24 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // 5. Dalam Jangkauan
-  const replyText = TEMPLATES.ongkirInfo({
+  const fallbackOngkirText = TEMPLATES.ongkirInfo({
     distanceKm: delivery.distanceKm,
     normalPrice: delivery.normalPrice,
     promoPrice: delivery.promoPrice,
     freeTierKm: delivery.freeTierKm,
+  });
+
+  const replyText = await phrasingService.generate({
+    intent: 'ongkir_info',
+    facts: {
+      distanceKm: delivery.distanceKm,
+      normalPrice: delivery.normalPrice,
+      promoPrice: delivery.promoPrice,
+      freeTierKm: delivery.freeTierKm ?? 5,
+    },
+    conversationId: conversation.id,
+    tenantId,
+    fallbackTemplate: fallbackOngkirText,
   });
 
   return {

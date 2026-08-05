@@ -6,12 +6,14 @@ import { abuseDetectionService } from '../../src/services/abuse-detection.servic
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { ConversationState } from '@prisma/client';
 import { WahaClient, wahaClient } from '../../src/integrations/waha/client';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 
 describe('Abuse Detection & Customer Blocking Suite', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset state map in abuse detection service untuk membersihkan data sisa test sebelumnya
     (abuseDetectionService as any).messageTimestamps.clear();
     (abuseDetectionService as any).lastMessages.clear();
+    await seedAiScopeAll();
   });
 
   it('1. should trigger FLOOD auto-block when customer sends > 10 messages in 60 seconds', async () => {

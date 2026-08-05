@@ -7,6 +7,7 @@ import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { wabaTenantService } from '../services/waba-tenant.service';
+import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -94,7 +95,22 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       );
 
       if (customer.status === 'blocked') {
-        const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
+      // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
+      // Konsisten dgn webhook WAHA. Legacy customer non-AI di-senyapkan (human
+      // handling + escalation khusus) sebelum masuk queue / state machine.
+      const scopeGate = await enforceAiScopeGate({
+        customer,
+        conversation,
+        tenantId,
+        content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+        waMessageId: msg.messageId,
+        payloadRaw: msg.rawPayload,
+      });
+      if (scopeGate.action === 'silence') {
+        continue;
+      }
         await messageService.logMessage({
           tenantId,
           conversationId: conversation.id,

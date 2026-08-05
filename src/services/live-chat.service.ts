@@ -23,6 +23,7 @@ export interface LiveChatConversationItem {
   isMql?: boolean;
   mqlBubbleCount?: number;
   mqlTriggeredAt?: Date | null;
+  isSandboxTest?: boolean;
 }
 
 export interface AdminReplyResult {
@@ -37,16 +38,18 @@ export interface AdminReplyResult {
 export class LiveChatService {
   /**
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (dengan sender_type/sender_name).
+   * Paging offset-based untuk infinite scroll; hasMore=true bila masih ada halaman berikutnya.
    */
-  public async getConversationList(tenantId: string, limit = 50): Promise<LiveChatConversationItem[]> {
-    const conversations = await conversationService.listConversations(tenantId, limit);
+  public async getConversationList(tenantId: string, take = 50, offset = 0): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
+    const conversations = await conversationService.listConversations(tenantId, take, offset);
     const items: LiveChatConversationItem[] = [];
     for (const c of conversations) {
       const customer = await customerService.getCustomerById(c.customer_id, tenantId);
       const lastMessages = await messageService.getRecentMessages(c.id, 3, tenantId);
       items.push(this.serialize({ ...c, customer, messages: lastMessages }));
     }
-    return items;
+    // Urutan sudah dijamin DB (human handling di atas, lalu last_message_at desc) — stabil antar halaman.
+    return { items, hasMore: conversations.length === take };
   }
 
   /**
@@ -161,6 +164,7 @@ export class LiveChatService {
       isMql: !!c.customer?.is_mql,
       mqlBubbleCount: c.customer?.mql_bubble_count || 0,
       mqlTriggeredAt: c.customer?.mql_triggered_at || null,
+      isSandboxTest: !!c.customer?.is_sandbox_test,
     };
   }
 

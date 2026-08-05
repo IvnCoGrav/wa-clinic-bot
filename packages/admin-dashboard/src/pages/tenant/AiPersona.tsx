@@ -14,6 +14,7 @@ import {
 
 export const AiPersona: React.FC = () => {
   const [persona, setPersona] = useState('');
+  const [maxCharsPerReply, setMaxCharsPerReply] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export const AiPersona: React.FC = () => {
     try {
       const res = await apiRequest('/api/admin/persona');
       setPersona(res.persona || '');
+      setMaxCharsPerReply(res.maxCharsPerReply != null ? String(res.maxCharsPerReply) : '');
       setErrorMessage(null);
     } catch (err: any) {
       console.error('Failed to load persona:', err);
@@ -45,7 +47,10 @@ export const AiPersona: React.FC = () => {
     try {
       await apiRequest('/api/admin/persona', {
         method: 'POST',
-        body: JSON.stringify({ persona })
+        body: JSON.stringify({
+          persona,
+          maxCharsPerReply: maxCharsPerReply.trim() === '' ? null : Number(maxCharsPerReply),
+        }),
       });
       setSuccessMessage('Prompt AI Persona berhasil diperbarui secara live dan persisten!');
       // Hide message after 5 seconds
@@ -123,6 +128,29 @@ export const AiPersona: React.FC = () => {
 
           {/* Guidelines & Advice panel */}
           <div className="lg:col-span-4 space-y-6">
+            <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                <FileText className="text-pink-400" />
+                <span>Batas Balasan AI</span>
+              </h3>
+              <div className="space-y-2">
+                <label className="block text-[11px] text-slate-400 font-medium">
+                  Maksimal karakter per balasan AI (0 / kosong = tanpa limit)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={maxCharsPerReply}
+                  onChange={(e) => setMaxCharsPerReply(e.target.value)}
+                  placeholder="mis. 500"
+                  className="w-full p-3 bg-slate-950/70 border border-white/5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-pink-500"
+                />
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Berlaku untuk balasan yang di-generate AI (bukan template pesan terstruktur). Balasan yang melebihi batas akan dipotong aman di akhir kalimat.
+                </p>
+              </div>
+            </div>
+
             <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-6">
               <h3 className="text-sm font-bold text-white flex items-center space-x-2">
                 <Info className="text-pink-400" />

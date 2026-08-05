@@ -36,6 +36,21 @@ export class CronService {
   }
 
   /**
+   * Label reconciliation (Task 7) — re-sync label WA vs status DB.
+   * Best-effort; dipanggil dari boot app.ts via setInterval (gated oleh
+   * ENABLE_LABEL_RECONCILIATION_CRON).
+   */
+  public async runLabelReconciliation(): Promise<void> {
+    try {
+      const { labelReconciliationService } = await import('./label-reconciliation.service');
+      const result = await labelReconciliationService.reconcileLabels(DEFAULT_TENANT_ID);
+      console.log(`[Cron Service] Label reconciliation complete (drifts found: ${result.driftsFound}, fixed: ${result.driftsFixed}).`);
+    } catch (err) {
+      console.error('[Cron Service] Error running label reconciliation:', err);
+    }
+  }
+
+  /**
    * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
    */
   private async sendMorningReminders(): Promise<void> {

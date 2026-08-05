@@ -41,6 +41,34 @@ export class ConversationStateMachine {
       };
     }
 
+    // --- GATE ✨: CUSTOMER SLASH COMMANDS (/reset, /state, /mulai) ---
+    // Dieksekusi SEBELUM inbound logging, medical detection, NLU & AI router supaya pesan
+    // perintah tidak salah-rute ke state handler / eskalasi medis. Command selalu
+    // per-customer (hanya data nomor yang sedang berbicara ini yang direset/ditampilkan).
+    const { commandService } = await import('../services/command.service');
+    const cmdResult = await commandService.tryHandle(ctx, tenantId);
+    if (cmdResult) {
+      const cmdChatId = (incomingMessage as any).chatId || `${customer.phone}@c.us`;
+      const cmdSent = await this.typingSvc.simulateHumanReply({
+        chatId: cmdChatId,
+        incomingMessageId: incomingMessage.id,
+        incomingText: incomingMessage.text?.body || '',
+        replyText: cmdResult.replyText,
+      });
+      if (cmdSent.success) {
+        await messageService.logMessage({
+          tenantId,
+          conversationId: cmdResult.conversationId,
+          direction: Direction.OUTBOUND,
+          content: cmdResult.replyText,
+        });
+      }
+      return {
+        nextState: cmdResult.nextState ?? ConversationState.INITIAL,
+        shouldSendReply: false,
+      };
+    }
+
     // --- GATE 🚫: OPT-OUT MARKETING (Scope: WABA only, semua state / global handler) ---
     // Hanya aktif untuk tenant berprovider WABA (incomingMessage._provider = 'WABA').
     // Customer WAHA tidak punya marketing_opt_in, tidak terpengaruh.
@@ -231,6 +259,41 @@ export class ConversationStateMachine {
       }
     }
 
+    // --- GATE 2.1 🩺: MEDICAL DETECTION VIA NLU (SEMUA state, tanpa extra LLM call) ---
+    // Gate keyword (di atas) hanya mencakup frasa statis. NLU sudah dipanggil di GATE 2 untuk
+    // setiap pesan text non-human-handling, di state manapun (INITIAL / AWAITING_LOCATION / dst).
+    // Jika NLU menyimpulkan intent medical_query, eskalasi senyap — konsisten dgn gate medis.
+    if (!activeConversation.is_human_handling && nluResult && (nluResult.intents || []).includes('medical_query')) {
+      console.log(`[MEDICAL NLU ESCALATION] NLU intent medical_query detected for customer ${customer.phone}. Escalating silently.`);
+      conversation.is_human_handling = true;
+      conversation.human_handling_since = new Date();
+      conversation.escalation_reason = 'medical_concern';
+      await conversationService.escalateToHumanHandling(
+        activeConversation,
+        customer.phone,
+        `Keluhan medis terdeteksi via NLU classifier (intent medical_query): "${incomingText}"`,
+        tenantId,
+        'medical_concern'
+      );
+      try {
+        const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+        const alertService = new AlertService();
+        await alertService.notifyAlert({
+          type: AlertType.MEDICAL_CONCERN_MEDIUM,
+          severity: AlertSeverity.WARNING,
+          message: `[MEDICAL ALERT via NLU] Customer: ${customer.phone}. Text: "${incomingText}"`,
+          metadata: { customerPhone: customer.phone, incomingText },
+        });
+      } catch (alertErr: any) {
+        console.error('[MEDICAL NLU ALERT ERROR] Failed to trigger alert:', alertErr.message);
+      }
+      return {
+        nextState: ConversationState.HUMAN_HANDLING,
+        shouldSendReply: false,
+        isHumanHandling: true,
+      };
+    }
+
     // --- GATE 2.5 🧭: AI ROUTER ENGINE (default ON per tenant, shadow-first) ---
     // Konfigurasi per tenant (tenants.ai_router_enabled / ai_router_shadow_mode)
     // dimuat dari DB saat boot. Shadow mode hanya LOG perbandingan LLM router vs
@@ -272,7 +335,7 @@ export class ConversationStateMachine {
       }
     }
 
-    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision };
+    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision, history: historyFormatted };
     if (activeConversation.is_human_handling) {
       result = await handleHumanHandlingState(handlerCtx);
 
@@ -391,7 +454,9 @@ export class ConversationStateMachine {
           content: result.replyText,
         });
 
-        // Kirim Pricelist Image jika diinstruksikan oleh state handler (hanya 1x per customer)
+        // Kirim Pricelist Image jika diinstruksikan oleh state handler.
+        // Default hanya 1x per customer; boleh dikirim ulang jika handler set forcePricelistResend
+        // (mis. saat customer minta pricelist lagi karena hilang / tidak terkirim).
         if (result.sendPricelistImage) {
           try {
             const { prisma } = await import('../db/client');
@@ -400,11 +465,13 @@ export class ConversationStateMachine {
             });
             const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
 
-            if (!alreadySent) {
+            if (!alreadySent || result.forcePricelistResend) {
               const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
-              await wahaClient.sendImage(chatId, pricelistUrl, `Pricelist ${getBrandIdentity().businessName} 🌸`);
+              const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
+              await wahaClient.sendImage(chatId, pricelistUrl, caption);
 
-              if (dbCustomer) {
+              // Tandai terkirim HANYA jika sebelumnya belum pernah (jangan reset ulang).
+              if (dbCustomer && !dbCustomer.pricelist_sent) {
                 await prisma.customer.update({
                   where: { id: customer.id },
                   data: { pricelist_sent: true }
@@ -417,7 +484,8 @@ export class ConversationStateMachine {
           } catch (dbErr: any) {
             console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
             const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
-            await wahaClient.sendImage(chatId, pricelistUrl, `Pricelist ${getBrandIdentity().businessName} 🌸`);
+            const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
+            await wahaClient.sendImage(chatId, pricelistUrl, caption);
           }
         }
       }

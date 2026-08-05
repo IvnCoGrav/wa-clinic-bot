@@ -133,16 +133,28 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
       return { intent: 'faq_question', confidence: 0.9 };
     }
 
-    // 5. Deteksi Tertarik
-    const interestedKeywords = ['mau', 'tertarik', 'boleh', 'oke', 'ok', 'ya', 'yes', 'booking', 'daftar', 'setuju', 'kirim link'];
-    if (interestedKeywords.some((kw) => lower.includes(kw))) {
-      return { intent: 'interested', confidence: 0.95 };
+    // 5. Deteksi TIDAK TERTARIK — prioritas TERTINGGI (dicek sebelum 'interested') karena
+    //    kata ambigu ('ya','ok','mau') sering jadi substring kata lain ("kayaknya", "saya").
+    //    Pola negasi eksplisit diprioritaskan agar "ga jadi aja", "kemahalan", "batal" tidak
+    //    salah masuk ke interested.
+    if (
+      /(^|\s)(ga|gak|nggak|tidak|enggak|ndak)\s+(jadi|mau|usah|perlu)\b/i.test(lower) ||
+      /\b(kemahalan|mahal|batal|gausah|ga usah|gak usah|skip|enggak jadi|tidak jadi)\b/i.test(lower) ||
+      /\bnanti\s+(aja|dulu)\b/i.test(lower)
+    ) {
+      return { intent: 'not_interested', confidence: 0.95 };
     }
 
-    // 6. Deteksi Tidak Tertarik
-    const notInterestedKeywords = ['ga', 'gak', 'tidak', 'mahal', 'batal', 'nanti', 'kemahalan', 'enggak'];
-    if (notInterestedKeywords.some((kw) => lower.includes(kw))) {
+    // 6. Deteksi Tidak Tertarik — sinyal negasi umum (word-boundary, hindari substring).
+    const notInterestedWord = /\b(ga|gak|nggak|tidak|enggak|batal|mahal|kemahalan|nanti|ndak|ngg)\b/i;
+    if (notInterestedWord.test(lower)) {
       return { intent: 'not_interested', confidence: 0.9 };
+    }
+
+    // 7. Deteksi Tertarik — word-boundary (hindari "ya" dalam "kayaknya/saya").
+    const interestedWord = /\b(iya+|iyaa+|ya|bener|betul|setuju|sip|gpp|oke|ok|mau|tertarik|boleh|yes|booking|daftar|kirim\s+list)\b/i;
+    if (interestedWord.test(lower)) {
+      return { intent: 'interested', confidence: 0.95 };
     }
 
     return { intent: 'other', confidence: 0.5 };

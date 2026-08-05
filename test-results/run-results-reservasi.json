@@ -1,0 +1,2138 @@
+[
+  {
+    "no": 1,
+    "category": "A",
+    "title": "Kooperatif — greeting -> alamat kel/kec -> tertarik -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Rumah saya di kelurahan Wonokromo kec Wonokromo Surabaya",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 9.1 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Oke tertarik, gimana caranya",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wonokromo\nKota : Kota Surabaya\nNo. Hp : 62870900801\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Ani\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonokromo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 2,
+    "category": "A",
+    "title": "Kooperatif — spa bayi -> sharelock -> booking -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Selamat pagi, mau tanya soal spa bayi",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "[Share Location: -7.3, 112.75]",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 10.3 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Wah lumayan deket ya, oke saya mau booking",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62870900802\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Dewi\nAlamat & Shareloc : Jl. Perumahan Indah No. 45\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi : Adek Kenzo\nUsia Bayi/Anak : 6 bulan\nTreatment : Pijat Spa Bayi",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 3,
+    "category": "A",
+    "title": "Kooperatif — salam -> Sidoarjo Waru -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Assalamualaikum bu bidan",
+        "botReply": "Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Sidoarjo, Waru, deket perumahan Graha Indah",
+        "botReply": "Wah, Deket Bunda, Dilihat dari jaraknya kurang lebih 4.8 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Boleh langsung reservasi ga?",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Fitri\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Waru\nKota : Sidoarjo\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 4,
+    "category": "A",
+    "title": "Kooperatif — Hai -> Ngagel Jaya Selatan -> form data usia campur",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Ngagel Jaya Selatan",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 11.6 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Iya deh, kirim form reservasinya",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wonokromo\nKota : Kota Surabaya\nNo. Hp : 62870900804\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Maya\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonokromo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi 3 bln",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 5,
+    "category": "A",
+    "title": "Kooperatif — sharelock -> minat -> form 2 anak",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 2,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "[Share Location: -7.335, 112.73]",
+        "botReply": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nJika kami cek bunda, dilihat dari jaraknya kurang lebih 5.1 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp5.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 2,
+        "userMessage": "oke saya minat",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62870900805\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Rahma\nAlamat & Shareloc : Jl. Rungkut Asri No. 5\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids) : Pijat Bayi (3 bln) & Pijat Anak (3 thn)",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 6,
+    "category": "A",
+    "title": "Kooperatif — tanya dulu -> Rungkut -> booking -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Bunda mau tanya-tanya dulu boleh?",
+        "botReply": "Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Boleh",
+        "botReply": "Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Rungkut Surabaya",
+        "botReply": "Kalau boleh tau lebih tepatnya Rungkut di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "ok mau booking",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Sarah\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 7,
+    "category": "A",
+    "title": "Asking schedule di awal -> Pakuwon City -> reservasi -> form",
+    "expectedGoal": "HUMAN_HANDLING",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 5,
+    "notes": "Eskalasi ke Human Handling sesuai PRD",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Pagi, ada slot buat besok ga?",
+        "botReply": "kami cek jadwal dulu ya bunda 🙏🏻😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Pakuwon City",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke reservasi aja",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Linda\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Mulyosari\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 8,
+    "category": "A",
+    "title": "FAQ newborn di awal -> Gunung Anyar -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo, ada paket buat bayi baru lahir?",
+        "botReply": "Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Rumah di Gunung Anyar",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 7.9 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "iya mau, kirim formnya",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gunung Anyar\nKota : Kota Surabaya\nNo. Hp : 62870900808\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Nina\nAlamat & Shareloc : Jl. Perumahan Indah No. 45\nKec : Gunung Anyar\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi : Adek Kenzo\nUsia Bayi/Anak : 6 bulan\nTreatment : Pijat Bayi Newborn",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 9,
+    "category": "B",
+    "title": "Disela \"beneran bidan atau bot\" saat lokasi -> tertarik -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Rungkut",
+        "botReply": "Kalau boleh tau lebih tepatnya Rungkut di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "eh btw ini beneran bidan asli atau bot ya",
+        "botReply": "Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke saya tertarik",
+        "botReply": "Mohon maaf bunda, lokasi Bunda berjarak 35.8 km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal 30 km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Rini\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 10,
+    "category": "B",
+    "title": "Sukolilo ambigu -> deket ITS -> FAQ harga -> booking -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 6,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hi bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Sukolilo Surabaya",
+        "botReply": "Kalau boleh tau lebih tepatnya kelurahan/desa Suko di kecamatan mana ya bunda? Kami menemukan ada beberapa daerah dengan nama tersebut:\n\n- Suko, Kec. Sukodono (Kabupaten Sidoarjo)\n- Suko, Kec. Sidoarjo (Kabupaten Sidoarjo)\n\nMohon sebutkan nama kelurahan dan kecamatan Bunda secara lengkap agar kami tidak salah hitung ongkir ya bund! 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "yang deket ITS",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "pijat bayi ceria harganya berapa ya",
+        "botReply": "Untuk *Pijat Bayi Ceria (Rileksasi)*-nya, promo sekarang Rp60.000 aja Bunda (normalnya Rp80.000), durasinya 40 menit. Sesuai untuk 0 - 24 bulan. 😊\n\nBunda sekarang di area mana ya? Biar sekalian kami cek ongkirnya ke tempat Bunda 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "oke oke, saya mau booking itu",
+        "botReply": "Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 6,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Intan\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Sukolilo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 11,
+    "category": "B",
+    "title": "Wiyung -> FAQ terapis cewek -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Wiyung",
+        "botReply": "Kalau boleh tau lebih tepatnya Wiyung di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "terapisnya cewek semua kan",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oh oke aman berarti, lanjut reservasi",
+        "botReply": "Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Dina\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wiyung\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 12,
+    "category": "B",
+    "title": "Jl Ahmad Yani -> FAQ medis ringan 2 minggu -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Selamat siang",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Jl Ahmad Yani deket royal plaza",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "bayi umur 2 minggu boleh dipijat ga",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke kalau gitu saya reservasi ya",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Tari\nAlamat & Shareloc : Jl. Perumahan Indah No. 45\nKec : Wonocolo\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi : Adek Kenzo\nUsia Bayi/Anak : 6 bulan\nTreatment : Pijat Bayi Newborn",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 13,
+    "category": "B",
+    "title": "Wonorejo -> FAQ paket selapan -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo bunda",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Wonorejo",
+        "botReply": "Kalau boleh tau lebih tepatnya kelurahan/desa Wonorejo di kecamatan mana ya bunda? Kami menemukan ada beberapa daerah dengan nama tersebut:\n\n- Wonorejo, Kec. Rungkut (Kota Surabaya)\n- Wonorejo, Kec. Tegalsari (Kota Surabaya)\n\nMohon sebutkan nama kelurahan dan kecamatan Bunda secara lengkap agar kami tidak salah hitung ongkir ya bund! 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "paket selapan itu apa bedanya sama yang lain",
+        "botReply": "Bunda, untuk itu kami punya *Paket Selapan (Newborn Care)* — treatment ini khusus untuk newborn (0 - 40 hari) dengan durasi 45 menit. Pijat khusus bayi baru lahir (newborn) usia 0-40 hari untuk merangsang pertumbuhan awal, kebugaran, dan relaksasi setelah lahir. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke ambil paket selapan aja, gimana caranya",
+        "botReply": "Bunda, untuk itu kami punya *Paket Selapan (Newborn Care)* — treatment ini khusus untuk newborn (0 - 40 hari) dengan durasi 45 menit. Pijat khusus bayi baru lahir (newborn) usia 0-40 hari untuk merangsang pertumbuhan awal, kebugaran, dan relaksasi setelah lahir. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Lia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Paket Selapan Bayi",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 14,
+    "category": "B",
+    "title": "Gayungan -> FAQ reschedule -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Pagi",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Gayungan",
+        "botReply": "Kalau boleh tau lebih tepatnya Gayungan di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oh iya sekalian, kalau reschedule gimana ya nanti kalau mendadak ada acara",
+        "botReply": "Bunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit) dan *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Pijat Lahap Juara (Nafsu Makan)* (0 - 24 bulan, 40 menit) dan *Paket Selapan (Newborn Care)* (newborn (0 - 40 hari), 45 menit) dan *Prenatal Massage (Pijat Hamil)* (ibu hamil (trimester 2 & 3), 60 menit) dan *Oksitosin Massage Fullbody* (ibu pasca melahirkan / nifas, 60 menit) dan *Oksitosin Massage Non-Fullbody* (ibu menyusui, 40 menit) dan *Paket Laktasi (Breast Massage)* (ibu menyusui, 45 menit) dan *Breast + Oksitoksin Fullbody Massage* (ibu menyusui / nifas, 75 menit) dan *Tindik Telinga Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur Rambut Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur + Pijat Terapi* (bayi 0 - 12 bulan, 55 menit) dan *Sinar Moksa (Add-on)* (semua usia, 15 menit) dan *Nebulizer (Terapi Uap Add-on)* (semua usia, 20 menit) dan *Nebulizer + Obat (Terapi Uap Lengkap)* (semua usia, 20 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) atau Pijat Kids Ceria atau Pijat Lahap Juara (Nafsu Makan) atau Paket Selapan (Newborn Care) atau Prenatal Massage (Pijat Hamil) atau Oksitosin Massage Fullbody atau Oksitosin Massage Non-Fullbody atau Paket Laktasi (Breast Massage) atau Breast + Oksitoksin Fullbody Massage atau Tindik Telinga Bayi atau Cukur Rambut Bayi atau Cukur + Pijat Terapi atau Sinar Moksa (Add-on) atau Nebulizer (Terapi Uap Add-on) atau Nebulizer + Obat (Terapi Uap Lengkap) atau Custom Kids Bubble Spa untuk Bunda?",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke ga masalah, lanjut aja reservasi",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Vera\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Gayungan\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 15,
+    "category": "B",
+    "title": "FAQ manfaat duluan -> Jambangan -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "pijat bayi itu manfaatnya apa aja sih",
+        "botReply": "Bunda, kami punya beberapa opsi yang cocok: *Tindik Telinga Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur Rambut Bayi* (bayi 0 - 12 bulan, 15 menit). Layanan tindik telinga bayi secara manual menggunakan anting steril langsung secara aman. 😊\n\nMau saya bantu pilih di antara Tindik Telinga Bayi atau Cukur Rambut Bayi untuk Bunda?",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oh oke, saya di Jambangan",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 8.2 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "mau, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Jambangan\nKota : Kota Surabaya\nNo. Hp : 62870900815\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Wulan\nAlamat & Shareloc : Jl. Perumahan Indah No. 45\nKec : Jambangan\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi : Adek Kenzo\nUsia Bayi/Anak : 6 bulan\nTreatment : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 16,
+    "category": "B",
+    "title": "Ketintang -> FAQ owner -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai bu bidan",
+        "botReply": "Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Ketintang",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 7.0 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "ownernya siapa ya kok baru denger",
+        "botReply": "Bunda, untuk itu kami punya *Paket Selapan (Newborn Care)* — treatment ini khusus untuk newborn (0 - 40 hari) dengan durasi 45 menit. Pijat khusus bayi baru lahir (newborn) usia 0-40 hari untuk merangsang pertumbuhan awal, kebugaran, dan relaksasi setelah lahir. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke lanjut aja saya reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gayungan\nKota : Kota Surabaya\nNo. Hp : 62870900816\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Nisa\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Gayungan\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 17,
+    "category": "C",
+    "title": "Wonokromo -> \"mahal juga ya\" -> worth it -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Wonokromo",
+        "botReply": "Kalau boleh tau lebih tepatnya Wonokromo di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "mahal juga ya",
+        "botReply": "Kalau boleh tau lebih tepatnya Mahal juga di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "ah oke deh worth it kayaknya, reservasi",
+        "botReply": "Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Kiki\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonokromo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 18,
+    "category": "C",
+    "title": "Karah -> \"pikir-pikir dulu\" -> delay -> jadi reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Karah",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 8.4 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "saya pikir-pikir dulu ya",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Jambangan\nKota : Kota Surabaya\nNo. Hp : 62870900818\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke jadi deh, gimana caranya reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Jambangan\nKota : Kota Surabaya\nNo. Hp : 62870900818\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Siska\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Jambangan\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 19,
+    "category": "C",
+    "title": "Jemursari -> \"aman ga buat newborn\" -> percaya -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Jemursari",
+        "botReply": "Kalau boleh tau lebih tepatnya Jemursari di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "ini aman ga sih buat bayi baru lahir",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "ok percaya deh, lanjut reservasi",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Mega\nAlamat & Shareloc : Jl. Perumahan Indah No. 45\nKec : Wonocolo\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi : Adek Kenzo\nUsia Bayi/Anak : 6 bulan\nTreatment : Pijat Bayi Newborn",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 20,
+    "category": "C",
+    "title": "Menur Pumpungan -> FAQ refund -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Selamat malam",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Menur Pumpungan",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 9.8 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "kalau ga cocok bisa refund ga",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke saya coba dulu deh, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Sukolilo\nKota : Kota Surabaya\nNo. Hp : 62870900820\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Yulia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Sukolilo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 21,
+    "category": "C",
+    "title": "Tenggilis -> FAQ anak nangis -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Tenggilis",
+        "botReply": "Kalau boleh tau lebih tepatnya Tenggilis di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "nanti kalau anak nangis terus gimana, dihentikan ga",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke masuk akal, saya reservasi",
+        "botReply": "Apakah yang Bunda maksud kelurahan **Pakal**, Kec. **Pakal**? 😊",
+        "nextState": "LOCATION_CONFIRMED"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Tari\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Tenggilis Mejoyo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 22,
+    "category": "C",
+    "title": "Sidosermo -> FAQ kompetitor -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Sidosermo",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 8.4 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "bandingin sama spa X (kompetitor) apa bedanya",
+        "botReply": "Bunda, untuk itu kami punya *Custom Kids Bubble Spa* — treatment ini khusus untuk 1 - 4 tahun dengan durasi 60 menit. Layanan mandi berbusa dan pijat relaksasi anak. 😊\n\nMau saya bantu pilih treatment ini, Bunda?",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke saya coba punya bunda dulu, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wonocolo\nKota : Kota Surabaya\nNo. Hp : 62870900822\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Melly\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonocolo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 23,
+    "category": "C",
+    "title": "Panjang Jiwo -> FAQ testimoni -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Panjang Jiwo",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 8.0 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "boleh liat testimoni dulu ga",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke yakin sekarang, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Tenggilis Mejoyo\nKota : Kota Surabaya\nNo. Hp : 62870900823\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Poppy\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Tenggilis Mejoyo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 24,
+    "category": "C",
+    "title": "Dukuh Kupang -> suami belum setuju -> setuju -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Dukuh Kupang",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 13.2 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "suami saya belum setuju nih, tapi kayaknya bakal iya",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Dukuh Pakis\nKota : Kota Surabaya\nNo. Hp : 62870900824\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke udah setuju, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Dukuh Pakis\nKota : Kota Surabaya\nNo. Hp : 62870900824\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Astrid\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Dukuh Pakis\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 25,
+    "category": "D",
+    "title": "Typo \"wonorejo rungkuttt\" -> \"sikattt\" -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hallo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "wonorejo rungkuttt",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 12.2 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke sikattt, reservasi dong",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Rungkut\nKota : Kota Surabaya\nNo. Hp : 62870900825\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Poppy\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 26,
+    "category": "D",
+    "title": "Single char \"p\" -> sby, gununganyar -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "p",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "oh sori kepencet, halo bu mau tanya spa bayi",
+        "botReply": "Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "sby, gununganyar",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 7.9 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke gas reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gunung Anyar\nKota : Kota Surabaya\nNo. Hp : 62870900826\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Tika\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Gunung Anyar\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 27,
+    "category": "D",
+    "title": "Slang \"wtb spa\" -> tandes surabaya -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "wtb spa bayi wkwk",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "jaksel eh maksudnya surabaya, tandes",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 17.9 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp20.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "mantul, reservasi yaa",
+        "botReply": "Apakah Bunda tertarik untuk lanjut mengisi list reservasi treatment homecare kami? 😊\n\nAtau jika ada hal yang ingin ditanyakan terlebih dahulu, silakan kabari kami ya, Bunda. Saya dengan senang hati siap membantu! 🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Karin\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Tandes\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 28,
+    "category": "D",
+    "title": "Singkatan -> jl raya darmo deket kebun binatang -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo bu, mau nanya2 dlu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "sy tinggal di jl raya darmo, deket kebun binatang",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 12.1 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke mnt reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wonokromo\nKota : Kota Surabaya\nNo. Hp : 62870900828\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Bella\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonokromo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 29,
+    "category": "D",
+    "title": "Singkatan berat \"Krmbngn\" -> Krembangan -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "hi",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Krmbngn",
+        "botReply": "Kalau boleh tau lebih tepatnya Krmbngn di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "maksudnya Krembangan Surabaya",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 11.7 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Taman\nKota : Kabupaten Sidoarjo\nNo. Hp : 62870900829\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Clara\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Krembangan\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 30,
+    "category": "D",
+    "title": "Available skrg -> gubeng deket rmh sakit -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "bu bidan available ga skrg",
+        "botReply": "Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "oh iya location dulu ya, sy di gubeng deket rmh sakit",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 3,
+        "userMessage": "sip reservasi aja",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Nadia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 31,
+    "category": "E",
+    "title": "Babatan -> pilek ringan -> conditional (FAQ or escalation)",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Babatan",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 13.4 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "bayi saya agak pilek dikit nih, boleh dipijat ga",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oh oke, reservasi aja kalau gitu",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wiyung\nKota : Kota Surabaya\nNo. Hp : 62870900831\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Sani\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wiyung\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Pilek Ringan",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 32,
+    "category": "E",
+    "title": "Pagesangan -> susah BAB -> FAQ -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Pagesangan",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 6.5 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp5.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "anak saya agak susah BAB akhir-akhir ini, ada pijat khusus itu ga",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oh ada ya, oke reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Jambangan\nKota : Kota Surabaya\nNo. Hp : 62870900832\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Irma\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Jambangan\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Pediatrik BAB",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 33,
+    "category": "E",
+    "title": "Wonocolo -> newborn 5 hari -> FAQ -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Wonocolo",
+        "botReply": "Kalau boleh tau lebih tepatnya Wonocolo di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "newborn umur 5 hari udah boleh dipijat belum",
+        "botReply": "Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke pas timing-nya, reservasi",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Henny\nAlamat & Shareloc : Jl. Perumahan Indah No. 45\nKec : Wonocolo\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi : Adek Kenzo\nUsia Bayi/Anak : 6 bulan\nTreatment : Pijat Bayi Newborn",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 34,
+    "category": "F",
+    "title": "Kutisari -> 2 anak beda usia di form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Kutisari",
+        "botReply": "Wah, Deket Bunda, Dilihat dari jaraknya kurang lebih 4.8 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "mau",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Tenggilis Mejoyo\nKota : Kota Surabaya\nNo. Hp : 62870900834\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Selasa, 11 Agustus 2026 jam 14.00\nNama Bunda: Bunda Rahma\nAlamat & Shareloc : Jl. Rungkut Asri No. 5\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08198765432\n\nPilihan treatment (Baby & Kids) : Pijat Bayi (3 bln) & Pijat Anak (3 thn)",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 35,
+    "category": "F",
+    "title": "Siwalankerto -> form treatment nifas/moms",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Siwalankerto",
+        "botReply": "Wah, Deket Bunda, Dilihat dari jaraknya kurang lebih 3.4 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wonocolo\nKota : Kota Surabaya\nNo. Hp : 62870900835\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Rabu, 12 Agustus 2026 jam 09.00\nNama Bunda: Bunda Siti\nAlamat & Shareloc : Jl. Siwalankerto No. 88\nKec : Wonocolo\nKota : Surabaya\nNo. Hp : 08111222333\n\nPilihan treatment (Moms & Nifas) : Pijat Postpartum Nifas",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 36,
+    "category": "F",
+    "title": "Bendul Merisi -> nama anak panjang di form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Bendul Merisi",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 8.1 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "mau reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wonocolo\nKota : Kota Surabaya\nNo. Hp : 62870900836\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Anastasia Aurelia Permata Putri\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonocolo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Spa Anak",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 37,
+    "category": "F",
+    "title": "Jajar Tunggal -> ganti tanggal di form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 3,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Jajar Tunggal",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 10.2 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp15.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke lanjut",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Wiyung\nKota : Kota Surabaya\nNo. Hp : 62870900837\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin depan, 17 Agustus 2026 jam 10.00\nNama Bunda: Bunda Amalia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wiyung\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 38,
+    "category": "G",
+    "title": "Simomulyo -> mahal ga jadi -> balik lagi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Simomulyo",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 16.3 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp20.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "ga jadi deh mahal",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "COMPLETED"
+      },
+      {
+        "turn": 4,
+        "userMessage": "eh jadi deh, gimana reservasi",
+        "botReply": "Apakah Bunda tertarik untuk lanjut mengisi list reservasi treatment homecare kami? 😊\n\nAtau jika ada hal yang ingin ditanyakan terlebih dahulu, silakan kabari kami ya, Bunda. Saya dengan senang hati siap membantu! 🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Erna\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Sukomanunggal\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 39,
+    "category": "G",
+    "title": "Tandes -> mikir dulu -> balik lagi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Tandes",
+        "botReply": "Kalau boleh tau lebih tepatnya Tandes di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "nanti aja deh mikir dulu",
+        "botReply": "Kalau boleh tau lebih tepatnya kelurahan/desa Janti di kecamatan mana ya bunda? Kami menemukan ada beberapa daerah dengan nama tersebut:\n\n- Janti, Kec. Tarik (Kabupaten Sidoarjo)\n- Janti, Kec. Tulangan (Kabupaten Sidoarjo)\n- Janti, Kec. Waru (Kabupaten Sidoarjo)\n\nMohon sebutkan nama kelurahan dan kecamatan Bunda secara lengkap agar kami tidak salah hitung ongkir ya bund! 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke jadi, reservasi",
+        "botReply": "Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Ghea\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Tandes\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 40,
+    "category": "G",
+    "title": "Manukan -> diskusi suami -> balik -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Manukan",
+        "botReply": "Kalau boleh tau lebih tepatnya Manukan di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke tunggu bentar ya lagi diskusi sama suami",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke acc, lanjut reservasi",
+        "botReply": "Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Hannah\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Tandes\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 41,
+    "category": "G",
+    "title": "Sawahan -> tanya promo -> full price -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 6,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Sawahan",
+        "botReply": "Kalau boleh tau lebih tepatnya Sawahan di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "mau tapi budget masih mikir",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "bu, ada promo ga biar jadi murah dikit",
+        "botReply": "Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi Kala Moms and Baby Spa! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "oke ga papa full price aja, reservasi",
+        "botReply": "Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 6,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Ines\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Sawahan\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 42,
+    "category": "H",
+    "title": "Kedurus -> terapis jam berapa -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Kedurus",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 8.6 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp15.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp10.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "terapisnya kesini jam berapa biasanya",
+        "botReply": "Bunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit) dan *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Pijat Lahap Juara (Nafsu Makan)* (0 - 24 bulan, 40 menit) dan *Paket Selapan (Newborn Care)* (newborn (0 - 40 hari), 45 menit) dan *Prenatal Massage (Pijat Hamil)* (ibu hamil (trimester 2 & 3), 60 menit) dan *Oksitosin Massage Fullbody* (ibu pasca melahirkan / nifas, 60 menit) dan *Oksitosin Massage Non-Fullbody* (ibu menyusui, 40 menit) dan *Paket Laktasi (Breast Massage)* (ibu menyusui, 45 menit) dan *Breast + Oksitoksin Fullbody Massage* (ibu menyusui / nifas, 75 menit) dan *Tindik Telinga Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur Rambut Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur + Pijat Terapi* (bayi 0 - 12 bulan, 55 menit) dan *Sinar Moksa (Add-on)* (semua usia, 15 menit) dan *Nebulizer (Terapi Uap Add-on)* (semua usia, 20 menit) dan *Nebulizer + Obat (Terapi Uap Lengkap)* (semua usia, 20 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) atau Pijat Kids Ceria atau Pijat Lahap Juara (Nafsu Makan) atau Paket Selapan (Newborn Care) atau Prenatal Massage (Pijat Hamil) atau Oksitosin Massage Fullbody atau Oksitosin Massage Non-Fullbody atau Paket Laktasi (Breast Massage) atau Breast + Oksitoksin Fullbody Massage atau Tindik Telinga Bayi atau Cukur Rambut Bayi atau Cukur + Pijat Terapi atau Sinar Moksa (Add-on) atau Nebulizer (Terapi Uap Add-on) atau Nebulizer + Obat (Terapi Uap Lengkap) atau Custom Kids Bubble Spa untuk Bunda?",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke ngerti, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Karang Pilang\nKota : Kota Surabaya\nNo. Hp : 62870900842\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Julia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Karang Pilang\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 43,
+    "category": "H",
+    "title": "Made Sambikerep -> alat yang dibawa -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Made",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 21.2 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp35.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp25.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke, alat2 yang dibawa apa aja",
+        "botReply": "Bunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit) dan *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Pijat Lahap Juara (Nafsu Makan)* (0 - 24 bulan, 40 menit) dan *Paket Selapan (Newborn Care)* (newborn (0 - 40 hari), 45 menit) dan *Prenatal Massage (Pijat Hamil)* (ibu hamil (trimester 2 & 3), 60 menit) dan *Oksitosin Massage Fullbody* (ibu pasca melahirkan / nifas, 60 menit) dan *Oksitosin Massage Non-Fullbody* (ibu menyusui, 40 menit) dan *Paket Laktasi (Breast Massage)* (ibu menyusui, 45 menit) dan *Breast + Oksitoksin Fullbody Massage* (ibu menyusui / nifas, 75 menit) dan *Tindik Telinga Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur Rambut Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur + Pijat Terapi* (bayi 0 - 12 bulan, 55 menit) dan *Sinar Moksa (Add-on)* (semua usia, 15 menit) dan *Nebulizer (Terapi Uap Add-on)* (semua usia, 20 menit) dan *Nebulizer + Obat (Terapi Uap Lengkap)* (semua usia, 20 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) atau Pijat Kids Ceria atau Pijat Lahap Juara (Nafsu Makan) atau Paket Selapan (Newborn Care) atau Prenatal Massage (Pijat Hamil) atau Oksitosin Massage Fullbody atau Oksitosin Massage Non-Fullbody atau Paket Laktasi (Breast Massage) atau Breast + Oksitoksin Fullbody Massage atau Tindik Telinga Bayi atau Cukur Rambut Bayi atau Cukur + Pijat Terapi atau Sinar Moksa (Add-on) atau Nebulizer (Terapi Uap Add-on) atau Nebulizer + Obat (Terapi Uap Lengkap) atau Custom Kids Bubble Spa untuk Bunda?",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "sip, reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Sambikerep\nKota : Kota Surabaya\nNo. Hp : 62870900843\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Kartika\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Sambikerep\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 44,
+    "category": "H",
+    "title": "Lidah Kulon -> preparasi sebelum terapis datang -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Lidah Kulon",
+        "botReply": "Jika kami cek bunda, dilihat dari jaraknya kurang lebih 16.9 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp25.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp20.000 saja bunda. Jadi bisa ya bunda ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 3,
+        "userMessage": "perlu siapin apa aja sebelum terapis dateng",
+        "botReply": "Bunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit) dan *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Pijat Lahap Juara (Nafsu Makan)* (0 - 24 bulan, 40 menit) dan *Paket Selapan (Newborn Care)* (newborn (0 - 40 hari), 45 menit) dan *Prenatal Massage (Pijat Hamil)* (ibu hamil (trimester 2 & 3), 60 menit) dan *Oksitosin Massage Fullbody* (ibu pasca melahirkan / nifas, 60 menit) dan *Oksitosin Massage Non-Fullbody* (ibu menyusui, 40 menit) dan *Paket Laktasi (Breast Massage)* (ibu menyusui, 45 menit) dan *Breast + Oksitoksin Fullbody Massage* (ibu menyusui / nifas, 75 menit) dan *Tindik Telinga Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur Rambut Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur + Pijat Terapi* (bayi 0 - 12 bulan, 55 menit) dan *Sinar Moksa (Add-on)* (semua usia, 15 menit) dan *Nebulizer (Terapi Uap Add-on)* (semua usia, 20 menit) dan *Nebulizer + Obat (Terapi Uap Lengkap)* (semua usia, 20 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) atau Pijat Kids Ceria atau Pijat Lahap Juara (Nafsu Makan) atau Paket Selapan (Newborn Care) atau Prenatal Massage (Pijat Hamil) atau Oksitosin Massage Fullbody atau Oksitosin Massage Non-Fullbody atau Paket Laktasi (Breast Massage) atau Breast + Oksitoksin Fullbody Massage atau Tindik Telinga Bayi atau Cukur Rambut Bayi atau Cukur + Pijat Terapi atau Sinar Moksa (Add-on) atau Nebulizer (Terapi Uap Add-on) atau Nebulizer + Obat (Terapi Uap Lengkap) atau Custom Kids Bubble Spa untuk Bunda?",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 4,
+        "userMessage": "noted, reservasi ya",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Lakarsantri\nKota : Kota Surabaya\nNo. Hp : 62870900844\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Laras\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Lakarsantri\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 45,
+    "category": "H",
+    "title": "Lakarsantri -> cash or transfer -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Lakarsantri",
+        "botReply": "Kalau boleh tau lebih tepatnya Lakarsantri di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "bayarnya cash apa transfer",
+        "botReply": "Bunda, kami punya beberapa opsi yang cocok: *Pijat Bayi Ceria (Rileksasi)* (0 - 24 bulan, 40 menit) dan *Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)* (0 - 24 bulan, 40 menit) dan *Pijat Kids Ceria* (2 - 7 tahun, 45 menit) dan *Pijat Lahap Juara (Nafsu Makan)* (0 - 24 bulan, 40 menit) dan *Paket Selapan (Newborn Care)* (newborn (0 - 40 hari), 45 menit) dan *Prenatal Massage (Pijat Hamil)* (ibu hamil (trimester 2 & 3), 60 menit) dan *Oksitosin Massage Fullbody* (ibu pasca melahirkan / nifas, 60 menit) dan *Oksitosin Massage Non-Fullbody* (ibu menyusui, 40 menit) dan *Paket Laktasi (Breast Massage)* (ibu menyusui, 45 menit) dan *Breast + Oksitoksin Fullbody Massage* (ibu menyusui / nifas, 75 menit) dan *Tindik Telinga Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur Rambut Bayi* (bayi 0 - 12 bulan, 15 menit) dan *Cukur + Pijat Terapi* (bayi 0 - 12 bulan, 55 menit) dan *Sinar Moksa (Add-on)* (semua usia, 15 menit) dan *Nebulizer (Terapi Uap Add-on)* (semua usia, 20 menit) dan *Nebulizer + Obat (Terapi Uap Lengkap)* (semua usia, 20 menit) dan *Custom Kids Bubble Spa* (1 - 4 tahun, 60 menit). Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks. 😊\n\nMau saya bantu pilih di antara Pijat Bayi Ceria (Rileksasi) atau Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung) atau Pijat Kids Ceria atau Pijat Lahap Juara (Nafsu Makan) atau Paket Selapan (Newborn Care) atau Prenatal Massage (Pijat Hamil) atau Oksitosin Massage Fullbody atau Oksitosin Massage Non-Fullbody atau Paket Laktasi (Breast Massage) atau Breast + Oksitoksin Fullbody Massage atau Tindik Telinga Bayi atau Cukur Rambut Bayi atau Cukur + Pijat Terapi atau Sinar Moksa (Add-on) atau Nebulizer (Terapi Uap Add-on) atau Nebulizer + Obat (Terapi Uap Lengkap) atau Custom Kids Bubble Spa untuk Bunda?",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke paham, reservasi",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Mona\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Lakarsantri\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 46,
+    "category": "I",
+    "title": "Sharelock exact klinik (0 km) -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 2,
+    "prefillCorrect": "Ya",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "[Share Location: -7.34886, 112.751677]",
+        "botReply": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nWah, Deket Bunda, Dilihat dari jaraknya kurang lebih 0.0 km (masih dalam jangkauan gratis ongkir hingga 5 km), jadi layanan kami GRATIS ongkir ya bund ☺️ Jadi mau pilih treatment apa bunda ?🤗",
+        "nextState": "AWAITING_INTEREST"
+      },
+      {
+        "turn": 2,
+        "userMessage": "deket banget ya berarti, oke reservasi",
+        "botReply": "Berikut list untuk reservasi :\n\nHari dan tanggal :\nNama Bunda:\nAlamat & Shareloc :\nKec : Gubeng\nKota : Surabaya\nNo. Hp : 62870900846\n\nPilihan treatment (Baby & Kids)\n\nNama Bayi :\nUsia Bayi/Anak :\nTreatment :\n\nPilihan treatment (Moms) :\n\nUsia Kehamilan (Jika hamil):\nTreatment :\n\n\nMohon bisa diisi Bunda 😊\nCancel / Pembatalan Harap minimal H-3 jam\n\nH-1 sebelum treatment akan kami reminder kembali bunda 🥰\nTerimakasih.  ☺️",
+        "nextState": "RESERVATION_SENT"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Nia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonokromo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 47,
+    "category": "I",
+    "title": "Mulyosari deket ITS -> LLM fallback -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Hai",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Mulyosari deket ITS",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "oke reservasi aja",
+        "botReply": "Kalau boleh tau detail kelurahan/desanya ya bunda? Soalnya beda km beda harga bunda 🙏🏻\n\nAtau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai 😊🙏🏻",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Olivia\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Mulyorejo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 48,
+    "category": "I",
+    "title": "Koreksi lokasi (Malang -> Rungkut) -> reservasi -> form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": false,
+    "turnsToReservation": 5,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "N/A",
+    "naturalness": 2,
+    "notes": "Macet di state HUMAN_HANDLING",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Malang",
+        "botReply": "Kalau boleh tau lebih tepatnya Malang di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "eh sori salah ketik maksudnya Malang Jaya deket sini, Rungkut",
+        "botReply": "Kalau boleh tau lebih tepatnya Rungkut di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "oke reservasi",
+        "botReply": "Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊",
+        "nextState": "HUMAN_HANDLING"
+      },
+      {
+        "turn": 5,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Putri\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "(No reply text / silent escalation)",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 49,
+    "category": "J",
+    "title": "Scope NEW_ONLY — Customer Baru -> Full Journey -> Form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo bu",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Wonokromo",
+        "botReply": "Kalau boleh tau lebih tepatnya Wonokromo di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "Oke tertarik, gimana caranya",
+        "botReply": "Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Qori\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Wonokromo\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  },
+  {
+    "no": 50,
+    "category": "J",
+    "title": "Scope legacy + FORCE_ON override -> Full Journey -> Form",
+    "expectedGoal": "RESERVATION_SENT",
+    "finalState": "HUMAN_HANDLING",
+    "reachedGoal": true,
+    "turnsToReservation": 4,
+    "prefillCorrect": "N/A",
+    "contactNameSaved": "Ya",
+    "naturalness": 5,
+    "notes": "Form reservasi berhasil diterima & diproses",
+    "turnsLog": [
+      {
+        "turn": 1,
+        "userMessage": "Halo, jadi bisa reservasi ga",
+        "botReply": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nKalau boleh tau rumahnya dimana ya bunda?. 😊",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 2,
+        "userMessage": "Rungkut",
+        "botReply": "Kalau boleh tau lebih tepatnya Rungkut di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 3,
+        "userMessage": "mau reservasi",
+        "botReply": "Kalau boleh tau lebih tepatnya Mau reservasi di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏",
+        "nextState": "AWAITING_LOCATION"
+      },
+      {
+        "turn": 4,
+        "userMessage": "Berikut list untuk reservasi :\n\nHari dan tanggal : Senin, 10 Agustus 2026 jam 10.00\nNama Bunda: Bunda Resti\nAlamat & Shareloc : Jl. Utama No. 12\nKec : Rungkut\nKota : Surabaya\nNo. Hp : 08123456789\n\nPilihan treatment (Baby & Kids) : Pijat Bayi Ceria",
+        "botReply": "Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊\n\nKalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊",
+        "nextState": "HUMAN_HANDLING"
+      }
+    ]
+  }
+]

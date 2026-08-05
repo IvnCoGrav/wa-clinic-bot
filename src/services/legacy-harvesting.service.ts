@@ -258,6 +258,16 @@ export class LegacyHarvestingService {
                         },
                       });
                       activeHarvestingJob.legacyLeadsExtractedCount++;
+                      // Best-effort: addLabel 'legacy' + set Customer.is_legacy_source = true
+                      wahaClient.addLabel(chat.id, 'legacy').catch((err: any) =>
+                        console.warn('[LEGACY LABEL] addLabel "legacy" failed:', err.message)
+                      );
+                      try {
+                        await prisma.customer.updateMany({
+                          where: { phone: phoneNum, tenant_id: tenantId },
+                          data: { is_legacy_source: true },
+                        });
+                      } catch (e: any) {}
                     }
                   } catch (err: any) {}
                 }

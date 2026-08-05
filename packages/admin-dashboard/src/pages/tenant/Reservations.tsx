@@ -28,6 +28,17 @@ export const Reservations: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [googleCalendarMockActive, setGoogleCalendarMockActive] = useState(true);
   const [editDate, setEditDate] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    customerId: '',
+    customerSearch: '',
+    treatmentCategory: 'BABY' as 'BABY' | 'MOMS' | 'BOTH',
+    treatmentDetail: '',
+    bookingDate: '',
+    babies: [] as Array<{ name: string; ageText: string }>,
+  });
+  const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
 
   const loadReservations = async () => {
     try {
@@ -50,7 +61,7 @@ export const Reservations: React.FC = () => {
       await apiRequest(`/api/admin/reservation/${id}/confirm`, {
         method: 'PATCH'
       });
-      toast('Reservation confirmed and event synced to Google Calendar!', 'success');
+      toast('Reservasi ditandai lunas & disinkronkan ke Google Calendar', 'success');
       setSelectedRes(null);
       loadReservations();
     } catch (err: any) {
@@ -97,6 +108,52 @@ export const Reservations: React.FC = () => {
       toast(`Error deleting: ${err.message}`, 'error');
       setLoading(false);
     }
+  };
+
+  // --- Task 9: Buat Jadwal Baru (customer search + structured form) ---
+  const searchCustomers = async (query: string) => {
+    if (!query || query.length < 2) { setCustomerSearchResults([]); return; }
+    setSearchingCustomers(true);
+    try {
+      const params = new URLSearchParams({ search: query, pageSize: '10' });
+      const res = await apiRequest(`/api/admin/customers?${params.toString()}`);
+      setCustomerSearchResults(res.customers || []);
+    } catch {
+      setCustomerSearchResults([]);
+    } finally {
+      setSearchingCustomers(false);
+    }
+  };
+
+  const handleCreateReservation = async () => {
+    if (!createForm.customerId || !createForm.treatmentDetail) {
+      toast('Pilih customer dan isi detail treatment', 'error'); return;
+    }
+    try {
+      await apiRequest('/api/admin/reservation', {
+        method: 'POST',
+        body: JSON.stringify({
+          customerId: createForm.customerId,
+          treatmentCategory: createForm.treatmentCategory,
+          treatmentDetail: createForm.treatmentDetail,
+          bookingDate: createForm.bookingDate || undefined,
+          babies: createForm.babies.length > 0 ? createForm.babies : undefined,
+        }),
+      });
+      toast('Reservasi baru berhasil dibuat!', 'success');
+      setShowCreateModal(false);
+      setCreateForm({ customerId: '', customerSearch: '', treatmentCategory: 'BABY', treatmentDetail: '', bookingDate: '', babies: [] });
+      setCustomerSearchResults([]);
+      loadReservations();
+    } catch (err: any) {
+      toast(`Gagal membuat reservasi: ${err.message}`, 'error');
+    }
+  };
+
+  const updateBaby = (index: number, field: 'name' | 'ageText', value: string) => {
+    const next = [...createForm.babies];
+    next[index] = { ...next[index], [field]: value };
+    setCreateForm((prev) => ({ ...prev, babies: next }));
   };
 
   // Resolve info bayi/anak: prioritas children DB (usia real-time) → baby_details API → parse raw_text client
@@ -152,13 +209,22 @@ export const Reservations: React.FC = () => {
           <h2 className="text-3xl font-extrabold tracking-tight text-white">Reservations</h2>
           <p className="text-slate-400">View schedule, confirm bookings, and manage clinic calendars</p>
         </div>
-        <button 
-          onClick={() => { setLoading(true); loadReservations(); }}
-          className="flex items-center space-x-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          <span>Reload</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-pink-500 hover:bg-pink-600 rounded-xl text-xs font-semibold text-white transition-colors shadow shadow-pink-500/20"
+          >
+            <CalendarIcon size={14} />
+            <span>+ Buat Jadwal Baru</span>
+          </button>
+          <button 
+            onClick={() => { setLoading(true); loadReservations(); }}
+            className="flex items-center space-x-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <span>Reload</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs Menu */}
@@ -250,7 +316,17 @@ export const Reservations: React.FC = () => {
                           {res.treatment_detail}
                         </td>
                         <td className="py-4 px-6 font-semibold">
-                          {res.booking_date ? new Date(res.booking_date).toLocaleString('id-ID') : 'Not Set (Admin decision)'}
+                          {res.booking_date
+                            ? new Date(res.booking_date).toLocaleString('id-ID')
+                            : (
+                              <button
+                                onClick={() => { setSelectedRes(res); setEditDate(''); }}
+                                className="px-2 py-1 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/20 text-xs font-semibold transition-all"
+                              >
+                                + Tambahkan Jadwal Kunjungan
+                              </button>
+                            )
+                          }
                         </td>
                         <td className="py-4 px-6">
                           {getStatusBadge(res.status)}
@@ -406,7 +482,7 @@ export const Reservations: React.FC = () => {
                     onClick={() => handleSetDate(selectedRes.id)}
                     className="w-full py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-xs font-semibold transition"
                   >
-                    Update Booking Schedule
+                    Tambahkan Jadwal Kunjungan
                   </button>
                 </div>
 
@@ -452,9 +528,173 @@ export const Reservations: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition text-xs font-semibold flex items-center space-x-1.5 shadow shadow-emerald-500/20"
                 >
                   <Check size={14} />
-                  <span>Confirm Reservation</span>
+                  <span>Tandai Lunas</span>
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Buat Jadwal Baru Modal (Task 9) */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+
+            <div>
+              <h3 className="text-xl font-bold text-white flex items-center space-x-2">
+                <CalendarIcon size={20} className="text-pink-400" />
+                <span>Buat Jadwal Baru</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">Buat reservasi manual tanpa raw text — input terstruktur</p>
+            </div>
+
+            {/* Customer Search Picker */}
+            <div className="space-y-2">
+              <span className="text-xs text-slate-500 font-semibold block uppercase">Customer</span>
+              <input
+                type="text"
+                value={createForm.customerSearch}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCreateForm((prev) => ({ ...prev, customerSearch: v, customerId: '' }));
+                  searchCustomers(v);
+                }}
+                placeholder="Cari nama / nomor HP customer..."
+                className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
+              />
+              {searchingCustomers && <p className="text-[11px] text-slate-500">Mencari...</p>}
+              {customerSearchResults.length > 0 && !createForm.customerId && (
+                <div className="border border-white/10 rounded-lg bg-slate-950 max-h-48 overflow-y-auto divide-y divide-white/5">
+                  {customerSearchResults.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setCreateForm((prev) => ({
+                        ...prev,
+                        customerId: c.id,
+                        customerSearch: `${c.name || 'Bunda'} (${c.phone})`,
+                      }))}
+                      className="w-full text-left px-3 py-2 hover:bg-white/5 text-xs text-slate-200"
+                    >
+                      <span className="font-semibold">{c.name || 'Bunda'}</span>
+                      <span className="text-slate-500 ml-2">{c.phone}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {createForm.customerId && (
+                <div className="flex items-center justify-between px-3 py-2 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs text-pink-300">
+                  <span>{createForm.customerSearch}</span>
+                  <button
+                    onClick={() => setCreateForm((prev) => ({ ...prev, customerId: '', customerSearch: '' }))}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Treatment Category */}
+            <div className="space-y-2">
+              <span className="text-xs text-slate-500 font-semibold block uppercase">Kategori Treatment</span>
+              <div className="flex space-x-2">
+                {(['BABY', 'MOMS', 'BOTH'] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCreateForm((prev) => ({ ...prev, treatmentCategory: cat }))}
+                    className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                      createForm.treatmentCategory === cat
+                        ? 'bg-pink-500/10 border-pink-500 text-pink-400'
+                        : 'border-white/5 text-slate-400 hover:text-white bg-slate-900/35'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Treatment Detail */}
+            <div className="space-y-2">
+              <span className="text-xs text-slate-500 font-semibold block uppercase">Detail Treatment</span>
+              <textarea
+                value={createForm.treatmentDetail}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, treatmentDetail: e.target.value }))}
+                placeholder="Contoh: Pijat Bayi Ceria (Bayi: Zayn, Usia: 6 bulan)"
+                rows={3}
+                className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white resize-none"
+              />
+            </div>
+
+            {/* Booking Date (optional) */}
+            <div className="space-y-2">
+              <span className="text-xs text-slate-500 font-semibold block uppercase">Tanggal Booking (opsional)</span>
+              <input
+                type="datetime-local"
+                value={createForm.bookingDate}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, bookingDate: e.target.value }))}
+                className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
+              />
+            </div>
+
+            {/* Dynamic Baby Inputs (BABY / BOTH) */}
+            {createForm.treatmentCategory !== 'MOMS' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-semibold block uppercase">Bayi / Anak</span>
+                  <button
+                    onClick={() => setCreateForm((prev) => ({ ...prev, babies: [...prev.babies, { name: '', ageText: '' }] }))}
+                    className="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 hover:bg-pink-500/10 hover:text-pink-400 transition-all"
+                  >
+                    + Tambah Bayi
+                  </button>
+                </div>
+                {createForm.babies.length === 0 && (
+                  <p className="text-[11px] text-slate-600">Belum ada bayi ditambahkan.</p>
+                )}
+                {createForm.babies.map((baby, i) => (
+                  <div key={i} className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={baby.name}
+                      onChange={(e) => updateBaby(i, 'name', e.target.value)}
+                      placeholder="Nama bayi"
+                      className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
+                    />
+                    <input
+                      type="text"
+                      value={baby.ageText}
+                      onChange={(e) => updateBaby(i, 'ageText', e.target.value)}
+                      placeholder="Usia (mis. 6 bulan)"
+                      className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
+                    />
+                    <button
+                      onClick={() => setCreateForm((prev) => ({ ...prev, babies: prev.babies.filter((_, idx) => idx !== i) }))}
+                      className="p-2 text-slate-500 hover:text-rose-400"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="pt-4 border-t border-white/5 flex justify-end">
+              <button
+                onClick={handleCreateReservation}
+                className="px-5 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white transition text-xs font-semibold flex items-center space-x-1.5 shadow shadow-pink-500/20"
+              >
+                <CalendarIcon size={14} />
+                <span>Simpan Reservasi</span>
+              </button>
             </div>
           </div>
         </div>

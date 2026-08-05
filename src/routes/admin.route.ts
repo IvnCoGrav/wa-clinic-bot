@@ -14,6 +14,7 @@ import { liveChatService } from '../services/live-chat.service';
 import { getLiveChatHub } from '../services/live-chat-hub.service';
 import { conversationService, buildConversationUpdatedPayload } from '../services/conversation.service';
 import { ConversationState } from '@prisma/client';
+import { AI_ELIGIBILITY_ESCALATION_REASON } from '../services/ai-eligibility.service';
 
 // In-Memory fallback store for reservations during unit testing/offline database modes
 export const memoryReservations = new Map<string, any>();
@@ -406,11 +407,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/live-chat/conversations
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (termasuk sender_type/sender_name).
+   * Dukung paging offset-based (limit & offset) untuk infinite scroll.
    */
-  fastify.get('/api/admin/live-chat/conversations', async (request, reply) => {
+  fastify.get('/api/admin/live-chat/conversations', async (request: FastifyRequest<{
+    Querystring: { limit?: string; offset?: string };
+  }>, reply) => {
     try {
-      const data = await liveChatService.getConversationList(DEFAULT_TENANT_ID);
-      return reply.status(200).send({ success: true, count: data.length, data });
+      const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
+      const offset = Math.max(parseInt(request.query.offset || '0', 10) || 0, 0);
+      const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset);
+      return reply.status(200).send({ success: true, count: items.length, hasMore, data: items });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message });
     }
@@ -909,6 +915,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
           public async getChatLabels(chatId: string): Promise<string[]> { return []; }
           public async getSessionStatus(session?: string): Promise<string> { return 'WORKING'; }
           public async startSession(session?: string): Promise<string> { return 'WORKING'; }
+          public async stopSession(session?: string): Promise<boolean> { return true; }
           public async getSession(session?: string): Promise<any | null> { return null; }
           public async deleteSession(session?: string): Promise<boolean> { return true; }
           public async createSession(session?: string, config?: any): Promise<string> { return 'CREATED'; }
@@ -1068,15 +1075,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
         },
       });
 
-      const { followUpService } = await import('../services/follow-up.service');
-      await followUpService.onReservationCreated(customerId, reservation.id, DEFAULT_TENANT_ID);
-
-      // Persist entitas anak ke tabel children
-      const { childService } = await import('../services/child.service');
-      await childService.upsertChildrenFromBabies({
+      // Shared post-create side effects (follow-ups, children, lifecycle labels)
+      const parsedCustomer = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
+      const { reservationLifecycleService } = await import('../services/reservation-lifecycle.service');
+      await reservationLifecycleService.onReservationCreated({
         customerId,
         reservationId: reservation.id,
         tenantId: DEFAULT_TENANT_ID,
+        chatId: parsedCustomer?.phone ? `${parsedCustomer.phone}@c.us` : '',
         babies: parsed.babies || [],
       });
 
@@ -1110,6 +1116,93 @@ export async function adminRoutes(fastify: FastifyInstance) {
         data: mockReservation,
         note: 'Fallback in-memory mode (DB offline)',
       });
+    }
+  });
+
+  /**
+   * POST /api/admin/reservation
+   * Admin membuat reservasi manual — tanpa perlu raw text, input terstruktur langsung.
+   * Menjalankan shared post-create side effects via reservationLifecycleService.
+   */
+  fastify.post('/api/admin/reservation', async (request: FastifyRequest<{
+    Body: {
+      customerId: string;
+      treatmentCategory: 'BABY' | 'MOMS' | 'BOTH';
+      treatmentDetail: string;
+      bookingDate?: string;
+      babies?: Array<{ name: string; ageText?: string }>;
+    }
+  }>, reply: FastifyReply) => {
+    const { customerId, treatmentCategory, treatmentDetail, bookingDate, babies } = request.body || {};
+
+    // Validasi input
+    if (!customerId || !treatmentCategory || !treatmentDetail) {
+      return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
+    }
+    if (!['BABY', 'MOMS', 'BOTH'].includes(treatmentCategory)) {
+      return reply.status(400).send({ error: 'treatmentCategory harus BABY, MOMS, atau BOTH.' });
+    }
+
+    // Cek customer exists (pakai customerService.getCustomerById supaya tetap jalan saat DB offline — memory fallback)
+    const customer = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
+    if (!customer) {
+      return reply.status(404).send({ error: 'Customer tidak ditemukan.' });
+    }
+
+    const parsedDate = bookingDate ? new Date(bookingDate) : null;
+    if (bookingDate && parsedDate && isNaN(parsedDate.getTime())) {
+      return reply.status(400).send({ error: 'Format bookingDate tidak valid.' });
+    }
+
+    try {
+      const reservation = await prisma.reservation.create({
+        data: {
+          tenant_id: DEFAULT_TENANT_ID,
+          customer_id: customerId,
+          treatment_category: treatmentCategory,
+          treatment_detail: treatmentDetail,
+          booking_date: parsedDate,
+          raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}`,
+          status: 'pending',
+        },
+      });
+
+      // Shared post-create side effects (follow-ups, children, lifecycle labels)
+      const { reservationLifecycleService } = await import('../services/reservation-lifecycle.service');
+      await reservationLifecycleService.onReservationCreated({
+        customerId,
+        reservationId: reservation.id,
+        tenantId: DEFAULT_TENANT_ID,
+        chatId: `${customer.phone}@c.us`,
+        babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
+      });
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'CREATE_RESERVATION_MANUAL',
+        targetId: reservation.id,
+        payload: { customerId, treatmentCategory, source: 'admin_panel' },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(201).send({ success: true, data: reservation });
+    } catch (error: any) {
+      // Memory Fallback jika database offline
+      const mockReservation = {
+        id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        tenant_id: DEFAULT_TENANT_ID,
+        customer_id: customerId,
+        treatment_category: treatmentCategory,
+        treatment_detail: treatmentDetail,
+        booking_date: parsedDate,
+        raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}`,
+        status: 'pending',
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+      memoryReservations.set(mockReservation.id, mockReservation);
+      return reply.status(201).send({ success: true, data: mockReservation, note: 'Fallback in-memory mode' });
     }
   });
 
@@ -1186,6 +1279,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }).catch(() => {});
       }
 
+      // Best-effort: remove 'pending payment' label setelah confirm (Task 5)
+      if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && existing.customer?.phone) {
+        const { wahaClient } = await import('../integrations/waha/client');
+        wahaClient.removeLabel(`${existing.customer.phone}@c.us`, 'pending payment')
+          .catch((err: any) => console.warn('[LIFECYCLE LABEL] removeLabel "pending payment" on confirm failed:', err.message));
+      }
+
       return reply.status(200).send({ success: true, data: reservation });
     } catch (error) {
       const mock = memoryReservations.get(id);
@@ -1218,6 +1318,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
               console.error('[CAPI MOCK ERROR] Failed to send Purchase event:', err.message);
             });
           }).catch(() => {});
+        }
+
+        // Best-effort: remove 'pending payment' label setelah confirm (Task 5)
+        if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && mock.customer?.phone) {
+          const { wahaClient } = await import('../integrations/waha/client');
+          wahaClient.removeLabel(`${mock.customer.phone}@c.us`, 'pending payment')
+            .catch((err: any) => console.warn('[LIFECYCLE LABEL] removeLabel "pending payment" on confirm (memory) failed:', err.message));
         }
 
         return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
@@ -2143,13 +2250,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   /**
    * PATCH /api/admin/conversation/:id/release
-   * Endpoint manual release untuk mengembalikan thread dari HUMAN_HANDLING ke state aktif bot
+   * Endpoint manual release untuk mengembalikan thread dari HUMAN_HANDLING ke state aktif bot.
+   * Guard: tolak 409 bila conversation sedang tidak dalam human handling (ditangani bot)
+   * — mencegah reset state / hapus escalation yang tidak disengaja dari UI.
    */
   fastify.patch('/api/admin/conversation/:id/release', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = request.params;
+    let restoredState = 'INITIAL';
     try {
-      const existing = await prisma.conversation.findUnique({ where: { id } });
-      const restoredState = existing?.previous_state || 'INITIAL';
+      let existing: any = null;
+      try {
+        existing = await prisma.conversation.findUnique({ where: { id } });
+      } catch {
+        existing = null;
+      }
+      if (!existing) {
+        existing = await conversationService.getConversationById(id, DEFAULT_TENANT_ID);
+      }
+      if (!existing) {
+        return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan.' });
+      }
+      if (!existing.is_human_handling) {
+        return reply.status(409).send({ success: false, error: 'Conversation sedang ditangani bot — tidak perlu di-release.' });
+      }
+      restoredState = existing.previous_state || 'INITIAL';
 
       const updated = await prisma.conversation.update({
         where: { id },
@@ -2200,7 +2324,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         await conversationService.updateConversationState(
           id,
           {
-            currentState: ConversationState.INITIAL,
+            currentState: restoredState as ConversationState,
             isHumanHandling: false,
             humanHandlingSince: null,
             escalationReason: null,
@@ -2210,7 +2334,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       } catch (memErr: any) {
         console.warn('[ADMIN RELEASE] Failed to update in-memory conversation:', memErr.message);
       }
-      return reply.status(200).send({ success: true, message: 'Percakapan berhasil di-release (Fallback Mode - Restored state: INITIAL).' });
+      return reply.status(200).send({ success: true, message: `Percakapan berhasil di-release (Fallback Mode - Restored state: ${restoredState}).` });
     }
   });
 
@@ -2749,33 +2873,43 @@ Format JSON:
   /**
    * GET /api/admin/persona
    * Mengambil system persona prompt bot aktif saat ini (dari DB per tenant)
+   * beserta batas maksimal karakter per balasan AI (null = tanpa limit).
    */
   fastify.get('/api/admin/persona', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { loadPersonaFromDb } = await import('../config/persona');
+    const { loadPersonaFromDb, getMaxCharsPerReply } = await import('../config/persona');
     const persona = await loadPersonaFromDb(DEFAULT_TENANT_ID);
-    return reply.status(200).send({ success: true, persona });
+    return reply.status(200).send({ success: true, persona, maxCharsPerReply: getMaxCharsPerReply(DEFAULT_TENANT_ID) });
   });
 
   /**
    * POST /api/admin/persona
-   * Mengupdate system persona prompt bot secara live (DB per tenant + in-memory & file)
+   * Mengupdate system persona prompt bot secara live (DB per tenant + in-memory & file).
+   * Body opsional: maxCharsPerReply (number | null) = batas karakter per balasan AI.
    */
   fastify.post(
     '/api/admin/persona',
     async (
       request: FastifyRequest<{
-        Body: { persona: string };
+        Body: { persona: string; maxCharsPerReply?: number | null | '' };
       }>,
       reply: FastifyReply
     ) => {
-      const { persona } = request.body || {};
+      const { persona, maxCharsPerReply } = request.body || {};
       if (!persona || !persona.trim()) {
         return reply.status(400).send({ error: 'System persona prompt is required' });
       }
 
       try {
-        const { savePersonaToDb } = await import('../config/persona');
-        await savePersonaToDb(persona, DEFAULT_TENANT_ID);
+        const { savePersonaToDb, getMaxCharsPerReply } = await import('../config/persona');
+        let maxChars: number | null | undefined;
+        if (maxCharsPerReply === undefined) {
+          maxChars = undefined;
+        } else if (maxCharsPerReply === '' || maxCharsPerReply === null) {
+          maxChars = null;
+        } else {
+          maxChars = Math.max(0, Number(maxCharsPerReply));
+        }
+        await savePersonaToDb(persona, DEFAULT_TENANT_ID, maxChars);
 
         // Audit Trail Log for Persona Change
         await auditService.logAdminAction({
@@ -2783,10 +2917,16 @@ Format JSON:
           adminIdentity: (request as any).adminIdentity,
           action: 'BOT_PERSONA_CHANGE',
           targetId: 'SYSTEM_PERSONA',
-          payload: { details: `System persona prompt updated to: ${persona.substring(0, 100)}...` },
+          payload: { details: `System persona prompt updated to: ${persona.substring(0, 100)}...${maxChars === undefined ? '' : ` | max_chars_per_reply=${maxChars}`}` },
         });
 
-        return reply.status(200).send({ success: true, message: 'System persona prompt berhasil diperbarui secara live!', persona });
+        const savedMaxChars = maxChars === undefined ? getMaxCharsPerReply(DEFAULT_TENANT_ID) : maxChars;
+        return reply.status(200).send({
+          success: true,
+          message: 'System persona prompt berhasil diperbarui secara live!',
+          persona,
+          maxCharsPerReply: savedMaxChars,
+        });
       } catch (err: any) {
         return reply.status(500).send({ error: `Gagal memperbarui persona: ${err.message}` });
       }
@@ -3298,6 +3438,175 @@ Format JSON:
           success: true,
           message: `Konfigurasi AI Router diperbarui: enabled=${cfg.enabled}, shadowMode=${cfg.shadowMode}.`,
           data: cfg,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/ai-rollout-scope
+   * Konfigurasi AI Rollout Scope per tenant (scope + cutoff) beserta ringkasan
+   * dampak: total customer, customer baru, legacy, dan yang ter-senyapkan.
+   * Ringkasan best-effort (DB offline → 0 tanpa error).
+   */
+  fastify.get('/api/admin/ai-rollout-scope', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { AiEligibilityConfigService } = await import('../config/ai-eligibility-config');
+      const cfg = AiEligibilityConfigService.getConfig(DEFAULT_TENANT_ID);
+
+      let summary = { totalCustomers: 0, newCustomers: 0, legacyCustomers: 0, silencedByScope: 0 };
+      try {
+        const [totalCustomers, newCustomers, silencedByScope] = await Promise.all([
+          prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID } }),
+          prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID, created_at: { gte: cfg.ai_scope_cutoff_at } } }),
+          prisma.conversation.count({
+            where: {
+              tenant_id: DEFAULT_TENANT_ID,
+              is_human_handling: true,
+              escalation_reason: AI_ELIGIBILITY_ESCALATION_REASON,
+            },
+          }),
+        ]);
+        summary = {
+          totalCustomers,
+          newCustomers,
+          legacyCustomers: Math.max(0, totalCustomers - newCustomers),
+          silencedByScope,
+        };
+      } catch (dbErr: any) {
+        console.warn('[AI ROLLOUT SCOPE] DB offline, summary di-skip:', dbErr.message);
+      }
+
+      return reply.status(200).send({ success: true, data: cfg, summary });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  /**
+   * PATCH /api/admin/ai-rollout-scope
+   * Ubah scope rollout AI per tenant (NEW_ONLY / ALL) dan/atau cutoff.
+   * Audit log ADMIN_WRITE via auditService.
+   */
+  fastify.patch(
+    '/api/admin/ai-rollout-scope',
+    async (
+      request: FastifyRequest<{
+        Body: { aiCustomerScope?: 'NEW_ONLY' | 'ALL'; aiScopeCutoffAt?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const body = request.body || {};
+      const patch: { ai_customer_scope?: 'NEW_ONLY' | 'ALL'; ai_scope_cutoff_at?: Date } = {};
+      if (body.aiCustomerScope === 'NEW_ONLY' || body.aiCustomerScope === 'ALL') {
+        patch.ai_customer_scope = body.aiCustomerScope;
+      }
+      if (body.aiScopeCutoffAt && !isNaN(Date.parse(body.aiScopeCutoffAt))) {
+        patch.ai_scope_cutoff_at = new Date(body.aiScopeCutoffAt);
+      }
+
+      if (Object.keys(patch).length === 0) {
+        return reply.status(400).send({ error: 'Body harus berisi aiCustomerScope (NEW_ONLY|ALL) dan/atau aiScopeCutoffAt (ISO date).' });
+      }
+
+      try {
+        const { AiEligibilityConfigService } = await import('../config/ai-eligibility-config');
+        const cfg = await AiEligibilityConfigService.saveConfig(DEFAULT_TENANT_ID, patch);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_AI_ROLLOUT_SCOPE',
+          targetId: DEFAULT_TENANT_ID,
+          payload: cfg,
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `AI Rollout Scope diperbarui: scope=${cfg.ai_customer_scope}, cutoff=${cfg.ai_scope_cutoff_at.toISOString()}.`,
+          data: cfg,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/customers/:id/ai-override
+   * Set override AI per customer (FORCE_ON / FORCE_OFF / null).
+   * FORCE_ON otomatis melepas conversation yang ter-senyap karena
+   * LEGACY_AI_SCOPE_DISABLED (kembalikan ke previous_state) + hapus label hold.
+   */
+  fastify.patch(
+    '/api/admin/customers/:id/ai-override',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { aiOverride?: 'FORCE_ON' | 'FORCE_OFF' | null };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { aiOverride } = request.body || {};
+      if (aiOverride !== 'FORCE_ON' && aiOverride !== 'FORCE_OFF' && aiOverride !== null) {
+        return reply.status(400).send({ error: 'aiOverride harus FORCE_ON, FORCE_OFF, atau null.' });
+      }
+
+      try {
+        const { customerService } = await import('../services/customer.service');
+        const updated = await customerService.setAiOverride(id, DEFAULT_TENANT_ID, aiOverride);
+
+        if (aiOverride === 'FORCE_ON') {
+          const silenced = await prisma.conversation.findFirst({
+            where: {
+              customer_id: id,
+              tenant_id: DEFAULT_TENANT_ID,
+              is_human_handling: true,
+              escalation_reason: AI_ELIGIBILITY_ESCALATION_REASON,
+            },
+          });
+          if (silenced) {
+            const restoredState = silenced.previous_state || ConversationState.INITIAL;
+            await conversationService.updateConversationState(
+              silenced.id,
+              {
+                currentState: restoredState as any,
+                isHumanHandling: false,
+                humanHandlingSince: null,
+                escalationReason: null,
+              },
+              DEFAULT_TENANT_ID
+            );
+            const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+            if (enableHoldLabel) {
+              try {
+                const { wahaClient } = await import('../integrations/waha/client');
+                await wahaClient.removeLabel(`${updated.phone}@c.us`, 'hold');
+              } catch (labelErr: any) {
+                console.warn('[AI OVERRIDE] Gagal hapus hold label:', labelErr.message);
+              }
+            }
+            console.log(`[AI OVERRIDE] FORCE_ON utk customer ${updated.phone} — conversation ${silenced.id} di-release dari LEGACY_AI_SCOPE_DISABLED.`);
+          }
+        }
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_AI_OVERRIDE',
+          targetId: id,
+          payload: { aiOverride },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Override AI customer diperbarui: ${aiOverride || 'ikut aturan tenant'}.`,
+          data: { id, aiOverride: updated.ai_override ?? null },
         });
       } catch (err: any) {
         return reply.status(500).send({ error: err.message });

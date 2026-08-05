@@ -1,8 +1,8 @@
 # Product Requirements Document
 ## WhatsApp Clinic Automation Chatbot
-**Versi:** 2.4  
-**Status:** Fase 1, Fase 2, Fase 3, Fase 4 & Fase 5 Production-Ready (688 unit & integration tests PASS 100%)  
-**Terakhir diperbarui:** 9 Agustus 2026
+**Versi:** 2.5  
+**Status:** Fase 1, Fase 2, Fase 3, Fase 4 & Fase 5 Production-Ready (~800 unit & integration tests PASS 100%)  
+**Terakhir diperbarui:** 12 Agustus 2026
 
 ---
 
@@ -80,7 +80,7 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 29 | Auto-save chat masuk baru ke Google Contacts via Google People API | ⚠️ Dinonaktifkan sementara secara default di .env. Dikonfirmasi ini permintaan eksplisit dari pemilik bisnis. Perlu dipastikan sebelum diaktifkan: OAuth credential Google disimpan aman, dan pemilik bisnis sadar ini menulis data customer (nomor HP, kemungkinan nama) ke akun Google pribadi/bisnis miliknya — lihat catatan privasi di Section 10 |
 | 30 | Medical concern: alert dikirim HANYA ke admin (Telegram/emergency log), chat customer DIAM TOTAL. Bidan/CS yang menggali lebih dalam dan menyarankan secara manual. Approved medical FAQ tetap bisa dijawab bot | ✅ Selesai — alert admin-only, tanpa template darurat yang dikirim ke customer (customer tidak di-shock) |
 
-#### 4.1.2 Fase 4 — AI Router Engine & System Observability (Status: Selesai & Tervalidasi)
+#### 4.1.2 Fase 4 — AI Router Engine, NLU Layer & System Observability (Status: Selesai & Tervalidasi)
 
 | # | Fitur / Requirement | Status |
 |---|---|---|
@@ -90,8 +90,9 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 34 | Script Evaluasi Akurasi Shadow Mode (`src/scripts/check-router-accuracy.ts --days=7`): kalkulasi intent match rate, escalation match rate, UNMAPPED rate, dan list mismatch `MEDICAL_CONCERN`. Mengharuskan 3 gate lolos sebelum mematikan shadow mode | ✅ Selesai |
 | 35 | Dashboard UI System Debug (`/admin/debug` & REST API `/api/admin/debug/*`): 5 tab observability (System Overview, AI Router, Log Buffer in-memory, Message Trace, Conversation Trace) untuk maintenance & tracing read-only | ✅ Selesai |
 | 36 | Penyelarasan Keyword Medis (`ruam`, `eksim`, `alergi susu`): penambahan ke `MEDIUM_SEVERITY_MEDICAL_KEYWORDS` sebagai single source of truth antara detector medis dan router | ✅ Selesai |
+| 37 | NLU Medical Escalation (GATE 2.1): eskalasi medis via NLU intent `medical_query` di semua state (tanpa extra LLM call, pakai hasil NLU yang sudah ada). Alert `MEDICAL_CONCERN_MEDIUM` otomatis. Konsisten dgn gate keyword medis existing | ✅ Selesai |
 
-#### 4.1.3 Fase 5 — Channel Ops, Landing Page & Dashboard (Status: inti selesai & tervalidasi)
+#### 4.1.3 Fase 5 — Channel Ops, Landing Page, Dashboard & Reservation Lifecycle (Status: selesai & tervalidasi)
 
 | # | Fitur / Requirement | Status |
 |---|---|---|
@@ -108,6 +109,13 @@ Bisnis klinik treatment saat ini menangani percakapan calon customer secara manu
 | 47 | Keamanan halaman landing: CSP `script-src 'nonce-…' https://connect.facebook.net; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, tag `<script>`/`<iframe>`/dll pada input tenant di-strip | ✅ Selesai |
 | 48 | AI Router Engine config per tenant (Settings → AI Router Engine): `tenants.ai_router_enabled` & `tenants.ai_router_shadow_mode` jadi sumber kebenaran (default ON + shadow ON), env vars hanya fallback offline/test | ✅ Selesai |
 | 49 | **Konek WhatsApp via QR di Admin UI** (fitur terencana — BELUM dibuat): panel Settings → WhatsApp Provider menampilkan QR code untuk konek session WAHA langsung dari dashboard. Dibutuhkan: metode `getAuthQr()`/`getSessionQr()` di `WahaClient` (endpoint WAHA `/api/{session}/auth/qr`), endpoint admin `GET /api/admin/whatsapp-provider/qr`, dan UI render QR + status polling. Status: 🚩 planned | 🚩 Belum dibuat |
+| 50 | Reservation Lifecycle Service: side-effect sentral pasca-create reservasi — follow-up scheduling, upsert children, label lifecycle (pending payment / repeat / hapus new customer). Best-effort, tiap efek independent. Terintegrasi di webhook chat + admin create/edit | ✅ Selesai |
+| 51 | Admin Create Reservation (`POST /api/admin/reservation`): input terstruktur (customerId, treatmentCategory, treatmentDetail, bookingDate, babies), validasi input, auto-resolve treatment category, jalankan reservationLifecycleService. Audit `CREATE_RESERVATION`. UI dashboard "Buat Reservasi Manual" | ✅ Selesai |
+| 52 | Label Reconciliation Service: cron re-sync label WA vs status DB. Fix drift — customer dgn reservasi pending + riwayat confirmed → label `repeat`; customer baru tanpa confirmed → `pending payment`; hapus `new customer` saat reservasi pertama. Runner periodik 60 menit | ✅ Selesai |
+| 53 | Per-Contact Legacy Scrape: scraping per-contact saat chat di-label `legacy` (gated `ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER`). Baca histori pesan sampai form reservasi pertama → simpan ke LegacyStaging. Race condition guard, dry-run mode | ✅ Selesai |
+| 54 | Share Location Tracking: field `share_location_sent` di Customer. Minta share-location (pin GPS) 1x setelah reservasi diterima (gate `share_location_sent`). Template `askShareLocation()` | ✅ Selesai |
+| 55 | Price Answer Service: jawaban harga deterministik dari treatment catalog (tanpa LLM, anti-halusinasi). Harga spesifik → tampilkan harga + CTA; harga generik → kirim pricelist image. Gate pricelist hilang + gate afirmasi setelah CTA harga | ✅ Selesai |
+| 56 | Phrasing Service: generate balasan natural via LLM berdasarkan intent + facts. Fallback ke template statis saat LLM down. Opener tracker anti-repetisi (TTL 2 jam). Integrasi di semua handler (greeting, location, location-confirmation, interest) | ✅ Selesai |
 
 ---
 
@@ -149,7 +157,7 @@ Customer chat pertama kali
 ---
 
 ### 6. Data yang Disimpan
-- **Customer:** nomor telepon, nama, lokasi (kelurahan/kecamatan/kota, koordinat), jarak & ongkir terhitung, status keanggotaan (termasuk placeholder status blocked)
+- **Customer:** nomor telepon, nama, lokasi (kelurahan/kecamatan/kota, koordinat), jarak & ongkir terhitung, status keanggotaan (termasuk placeholder status blocked), `share_location_sent` (boolean — sudah pernah kirim share-location native), `is_legacy_source` (boolean — data dari legacy scrape), `legacy_scraped_at` (timestamp — kapan di-scrape)
 - **Conversation:** status percakapan saat ini, apakah sedang ditangani manusia, counter `consecutive_unknown_count` (untuk eskalasi UNKNOWN berulang)
 - **Message log:** seluruh histori pesan masuk/keluar (untuk audit dan debugging)
 - **Knowledge base:** kumpulan FAQ dan potongan dokumen referensi untuk menjawab pertanyaan customer
@@ -239,6 +247,7 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - WABA (Meta Cloud API) tunduk regulasi Meta: outbound di luar 24h window wajib HSM template; typing indicator ada cap durasi; consent/opt-in hanya untuk tenant WABA. Pengujian WABA dilakukan dengan mock/offline — validasi live dengan akun Meta resmi masih tertunda.
 - Landing page strict 404 (`/promo/:slug`, `/:slug`) — pastikan URL iklan selalu memakai slug yang sudah dibuat & aktif di dashboard; slug tak dikenal akan error 404 dan kampanye iklan gagal landing. `/go` tetap fail-open generik.
 - Artefak kompilasi `.js` nyasar di `src/` (contoh `src/services/tenant-html.service.js`) dapat menimpa file `.ts` pada resolusi module Vite (`.js` diprioritaskan sebelum `.ts`) — sudah ditemukan & dihapus; jangan commit hasil kompilasi ke `src/`.
+- AI Rollout Scope config layer bersifat fail-closed: kalau DB/cache config tenant tidak terbaca (gangguan koneksi, race condition saat boot), sistem default ke `NEW_ONLY` (AI hanya jalan untuk customer yang benar-benar baru setelah momen fallback), bukan `ALL`. Ini trade-off disengaja — availability AI untuk customer baru dikorbankan sementara demi mencegah AI diam-diam aktif ke customer lama yang belum di-approve. Dampak: saat config-service gangguan, sebagian customer baru bisa ikut silence sementara sampai config berhasil di-load ulang. Dipantau lewat log warning `[AI_ROLLOUT_SCOPE] DB unreachable at boot`.
 
 ---
 
@@ -264,8 +273,8 @@ Selain alur inti di Section 4-5, sistem juga dilengkapi lapisan hardening beriku
 - [x] Script `check-router-accuracy.ts` tervalidasi lawan Postgres asli
 - [x] UNKNOWN-repeated escalation (2x → HUMAN_HANDLING) terintegrasi di state machine
 - [x] Dashboard UI System Debug (`/admin/debug`) & 5 endpoint read-only `/api/admin/debug/*` aktif & ter-build ke production bundle
-- [x] 688 unit & integration test PASS 100% (61 test files) — termasuk AI Router Engine, E2E chat-to-reservation, treatment questions, kecamatan rejection, medical silent escalation, system debug, WABA driver/webhook/media, landing page CRUD/serving, CAPI config, message delivery status
-- [x] Fase 5 inti: WhatsApp Provider (WAHA/WABA) toggle + status via admin, token WABA encrypted AES-256-GCM; multi landing page CRUD + serve langsung bot (strict 404 / `/go` fail-open / reserved slugs); Meta Pixel + CAPI per tenant; event tracking onload/click; AI Router config per-tenant dari DB
+- [x] ~800 unit & integration test PASS 100% (~90 test files) — termasuk AI Router Engine, E2E chat-to-reservation, treatment questions, kecamatan rejection, medical silent escalation, system debug, WABA driver/webhook/media, landing page CRUD/serving, CAPI config, message delivery status, NLU medical escalation, price answer, phrasing service, reservation lifecycle, admin create reservation, label lifecycle, per-contact legacy scrape, tier1 guards, live chat hooks, idle greeting, FAQ grounding, delivery circuity
+- [x] Fase 5 inti: WhatsApp Provider (WAHA/WABA) toggle + status via admin, token WABA encrypted AES-256-GCM; multi landing page CRUD + serve langsung bot (strict 404 / `/go` fail-open / reserved slugs); Meta Pixel + CAPI per tenant; event tracking onload/click; AI Router config per-tenant dari DB; Reservation Lifecycle Service (follow-up + children + labels); Admin Create Reservation (POST + UI); Label Reconciliation Service (cron 60 menit); Per-Contact Legacy Scrape; Share Location Tracking; Price Answer Service; Phrasing Service + Opener Tracker
 
 **Belum selesai Fase 5:**
 - [ ] Konek WhatsApp via QR di Admin UI (requirement #49) — panel Settings menampilkan QR untuk konek session WAHA (butuh `getAuthQr()` di `WahaClient` + endpoint admin + UI render QR). Status: planned.

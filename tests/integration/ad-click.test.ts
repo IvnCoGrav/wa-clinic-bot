@@ -10,6 +10,7 @@ import { customerService } from '../../src/services/customer.service';
 import { messageService } from '../../src/services/message.service';
 import { wahaClient } from '../../src/integrations/waha/client';
 import { ConversationState } from '@prisma/client';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 
 // Mock DB client
 vi.mock('../../src/db/client', () => ({
@@ -46,12 +47,13 @@ vi.mock('../../src/db/client', () => ({
 describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
   const mockApp = buildApp();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     memoryAdClicks.clear();
     memoryReservations.clear();
     vi.stubEnv('TRACKING_API_KEY', 'valid_track_key');
     vi.stubEnv('ADMIN_API_KEY', 'valid_admin_key');
+    await seedAiScopeAll();
   });
 
   afterEach(() => {

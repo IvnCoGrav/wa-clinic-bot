@@ -37,8 +37,10 @@ wa-clinic-bot/
 │   │   │   └── geocoding.ts       # Geocoding & Reverse Geocoding
 │   │   └── llm/
 │   │       ├── ai-router.ts       # AI Router Engine (LLM intent classifier + circuit breaker + shadow mode)
-│   │       ├── intent.ts          # 5-Intent Classifier (termasuk intent 'faq_question')
-│   │       └── generator.ts       # Persona-based RAG FAQ Response Generator
+│   │       ├── intent.ts          # NLU Intent Classifier (11 intent + medical_query)
+│   │       ├── generator.ts       # Persona-based RAG FAQ Response Generator
+│   │       ├── phrasing.service.ts # Natural language response generation via LLM (intent + facts)
+│   │       └── opener-tracker.ts  # Anti-repetition opener tracking (TTL 2 jam)
 │   ├── state-machine/
 │   │   ├── machine.ts             # Core State Machine Orchestrator (Wrapper typingService)
 │   │   └── handlers/
@@ -53,10 +55,15 @@ wa-clinic-bot/
 │   │   ├── customer.service.ts    # Ops database Customer
 │   │   ├── conversation.service.ts# Ops state conversation & timeout auto-release
 │   │   ├── ai-router-evaluation.service.ts # Log evaluasi router + eskalasi UNKNOWN berulang
-│   │   └── message.service.ts     # Audit log & Idempotency Check (wa_message_id)
+│   │   ├── message.service.ts     # Audit log & Idempotency Check (wa_message_id)
+│   │   ├── price-answer.service.ts # Jawaban harga deterministik dari catalog (anti-halusinasi)
+│   │   ├── reservation-lifecycle.service.ts # Side-effect pasca-create reservasi (follow-up, children, labels)
+│   │   ├── label-reconciliation.service.ts # Cron re-sync label WA vs status DB
+│   │   └── per-contact-legacy-scrape.service.ts # Scraping legacy per-contact saat label 'legacy'
 │   ├── routes/
 │   │   ├── webhook.route.ts       # POST webhook WAHA (event: "message") + Guard Clause
-│   │   └── admin.route.ts         # REST Endpoints: Human Handling, Import FAQ, Import Document
+│   │   ├── waba-webhook.route.ts  # Webhook WABA Meta Cloud (HMAC verify, normalizer, idempotency)
+│   │   └── admin.route.ts         # REST Endpoints: Human Handling, Import FAQ, Create Reservation, Provider Toggle
 │   ├── scripts/
 │   │   └── check-router-accuracy.ts # Cek akurasi shadow mode (gate matikan shadow)
 │   └── app.ts                     # Fastify server entry point
@@ -249,3 +256,18 @@ Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain ya
   ```
 - **Daftar Human Handling Active**:
   `GET /api/admin/human-handling-conversations`
+
+### Customer Chat Commands (Perintah Slash di WhatsApp)
+
+Customer bisa mengetik perintah slash langsung di chat bot. Semua perintah **per-customer** — hanya data nomor yang sedang chat ini yang terpengaruh, tidak pernah customer lain.
+
+| Command | Fungsi |
+|---|---|
+| `/reset` | **Hard wipe** seluruh data chat & reservasi nomor ini (percakapan, pesan, reservasi, data anak, follow-up, staging terkait, event Google Calendar). Konfirmasi 1 langkah: ketik `/reset`, lalu balas **YA** dalam 5 menit untuk eksekusi (pesan lain = batal). Setelah reset, nomor dianggap customer baru. |
+| `/state` | Debug: tampilkan state internal percakapan (current/previous state, attempts, human handling, coverage). |
+| `/mulai` atau `/start` | Restart percakapan ke awal (state INITIAL + kosongkan lokasi) tanpa menghapus data; bot menampilkan greeting persona. |
+
+Detail implementasi: `src/services/command.service.ts` (interceptor tunggal di `machine.processMessage()`), berlaku untuk webhook WAHA, WABA, maupun CLI simulator (`npm run chat`).
+
+> **Catatan tenant-aware**: copy balasan command saat ini hardcoded Indonesia. Untuk multi-brand, copy ini dapat dipindahkan ke tabel per-tenant tanpa mengubah logika command.
+

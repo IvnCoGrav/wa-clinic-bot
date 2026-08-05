@@ -4,6 +4,7 @@ import { TEMPLATES } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
+import { phrasingService } from '../../integrations/llm/phrasing.service';
 
 /**
  * Handler untuk state INITIAL:
@@ -154,9 +155,15 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
       `Customer bertanya jadwal spesifik: "${userText}" (state: INITIAL)`,
       tenantId
     );
+    const scheduleReply = await phrasingService.generate({
+      intent: 'schedule_check_handoff',
+      conversationId: conversation.id,
+      tenantId,
+      fallbackTemplate: TEMPLATES.scheduleCheckHandoff(),
+    });
     return {
       nextState: ConversationState.HUMAN_HANDLING,
-      replyText: TEMPLATES.scheduleCheckHandoff(),
+      replyText: scheduleReply,
       shouldSendReply: true,
       isHumanHandling: true,
     };
@@ -166,18 +173,26 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   const hasFaqQuestion = nlu?.intents.includes('faq_question') || /\b(manfaat|aman|usia|boleh|bayar|bidan)\b/i.test(lower);
   const hasProvideLocation = nlu?.intents.includes('provide_location') || hasLocationKeyword || hasValidGeocode;
 
-  // Multi-intent: greeting + ask_price/faq + no location → brief acknowledgement + ask location
+  const fallbackGreeting = TEMPLATES.greeting({ skipGreeting });
+  const greetingText = await phrasingService.generate({
+    intent: 'greeting',
+    facts: { skipGreeting: skipGreeting ? '1' : '0' },
+    conversationId: conversation.id,
+    tenantId,
+    fallbackTemplate: fallbackGreeting,
+  });
+
+  // Multi-intent: greeting + ask_price/faq + belum ada lokasi → JANGAN menolak, langsung
+  // alihkan ke menanyakan lokasi dulu (harga dibahas setelah lokasi diketahui).
   if ((hasAskPrice || hasFaqQuestion) && !hasProvideLocation) {
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: `Halo Bunda, selamat datang di ${getBrandIdentity().businessName}! ✨ Untuk info harga treatment dan ongkir, kami perlu tahu lokasi Bunda terlebih dahulu ya.\n\n${TEMPLATES.greeting({ skipGreeting })}`,
+      replyText: TEMPLATES.askLocationFirstPrice(),
       shouldSendReply: true,
     };
   }
 
   // 4. Default Greeting Baru (Belum punya lokasi)
-  const greetingText = TEMPLATES.greeting({ skipGreeting });
-
   return {
     nextState: ConversationState.AWAITING_LOCATION,
     replyText: greetingText,

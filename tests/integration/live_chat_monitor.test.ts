@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildApp } from '../../src/app';
+import { conversationService } from '../../src/services/conversation.service';
+import { customerService } from '../../src/services/customer.service';
+import { ConversationState } from '@prisma/client';
+import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 describe('Modul 5.5 — Live Chat Monitor & Human Override Control Unit & Integration Tests', () => {
   const app = buildApp();
@@ -23,9 +27,23 @@ describe('Modul 5.5 — Live Chat Monitor & Human Override Control Unit & Integr
   });
 
   it('2. Option A Manual Release State Restoration: Release MUST restore previous_state instead of resetting blindly to INITIAL', async () => {
+    const cust = await customerService.getOrCreateCustomer('62899loc123', 'Bunda Lokasi', DEFAULT_TENANT_ID);
+    const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    await conversationService.updateConversationState(
+      conv.id,
+      {
+        currentState: ConversationState.AWAITING_LOCATION,
+        previousState: ConversationState.INITIAL,
+        isHumanHandling: true,
+        humanHandlingSince: new Date(),
+        escalationReason: 'manual',
+      },
+      DEFAULT_TENANT_ID
+    );
+
     const resRelease = await app.inject({
       method: 'PATCH',
-      url: '/api/admin/conversation/conv_test_location/release',
+      url: `/api/admin/conversation/${conv.id}/release`,
       headers: { 'x-api-key': 'test_admin_key_999' },
     });
 

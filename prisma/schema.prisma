@@ -38,6 +38,16 @@ enum TreatmentCategory {
   BOTH
 }
 
+enum AiCustomerScope {
+  NEW_ONLY
+  ALL
+}
+
+enum AiOverride {
+  FORCE_ON
+  FORCE_OFF
+}
+
 model Customer {
   id                 String         @id @default(uuid())
   tenant_id          String         @default("default-tenant")
@@ -69,6 +79,7 @@ model Customer {
   children           Child[]
   adClick            AdClick?
   pricelist_sent     Boolean        @default(false)
+  share_location_sent Boolean       @default(false)
   is_sandbox_test    Boolean        @default(false)
   marketing_opt_in        Boolean   @default(false)
   marketing_opt_in_at     DateTime?
@@ -76,6 +87,9 @@ model Customer {
   is_mql                  Boolean   @default(false)
   mql_triggered_at        DateTime?
   mql_bubble_count        Int       @default(0)
+  is_legacy_source        Boolean   @default(false)
+  legacy_scraped_at       DateTime?
+  ai_override             AiOverride?
 
   @@index([tenant_id])
   @@map("customers")
@@ -275,11 +289,12 @@ model ClinicService {
 }
 
 model TenantPersona {
-  id         String   @id @default(uuid())
-  tenant_id  String   @unique
-  persona    String // Teks persona Bidan Yusi (system prompt)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  tenant_id          String   @unique
+  persona            String // Teks persona Bidan Yusi (system prompt)
+  max_chars_per_reply Int?   // Batas maksimal karakter untuk 1 balasan AI (null = tanpa limit)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   @@map("tenant_persona")
 }
@@ -442,6 +457,8 @@ model Tenant {
   waba_webhook_verify_token String?
   ai_router_enabled      Boolean           @default(true)
   ai_router_shadow_mode  Boolean           @default(true)
+  ai_customer_scope      AiCustomerScope   @default(NEW_ONLY)
+  ai_scope_cutoff_at     DateTime          @default(now())
   manual_reply_escalates Boolean           @default(true)
   idle_greeting_enabled  Boolean           @default(true)
   idle_greeting_min_hours Int             @default(36)

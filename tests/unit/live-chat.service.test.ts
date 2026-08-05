@@ -44,13 +44,43 @@ describe('LiveChatService — monitor & balas admin', () => {
       senderName: 'Admin Klinik',
     });
 
-    const list = await liveChatService.getConversationList(DEFAULT_TENANT_ID);
+    const { items: list, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID);
     const item = list.find((c) => c.conversationId === conversation.id);
     expect(item).toBeTruthy();
     expect(item!.customerPhone).toBe(phone);
     expect(item!.lastMessages.length).toBe(2);
     expect(item!.lastMessages[1].sender_type).toBe('ADMIN');
     expect(item!.lastMessages[1].sender_name).toBe('Admin Klinik');
+  });
+
+  it('getConversationList: paging offset tidak mengembalikan item halaman sebelumnya', async () => {
+    // Buat 2 percakapan dengan timestamp berbeda untuk memastikan urutan stable
+    const phoneA = `628700${Date.now()}`;
+    const phoneB = `628710${Date.now()}`;
+    const customerA = await customerService.getOrCreateCustomer(phoneA, 'Bunda A', DEFAULT_TENANT_ID);
+    const convA = await conversationService.getOrCreateConversation(customerA.id, DEFAULT_TENANT_ID);
+    const customerB = await customerService.getOrCreateCustomer(phoneB, 'Bunda B', DEFAULT_TENANT_ID);
+    const convB = await conversationService.getOrCreateConversation(customerB.id, DEFAULT_TENANT_ID);
+
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: convA.id,
+      direction: Direction.INBOUND,
+      content: 'Halo A',
+    });
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: convB.id,
+      direction: Direction.INBOUND,
+      content: 'Halo B',
+    });
+
+    const page1 = await liveChatService.getConversationList(DEFAULT_TENANT_ID, 1, 0);
+    expect(page1.items.length).toBe(1);
+    const page2 = await liveChatService.getConversationList(DEFAULT_TENANT_ID, 1, 1);
+    expect(page2.items.length).toBe(1);
+    // Halaman 1 dan 2 tidak boleh tumpang tindih
+    expect(page1.items[0].conversationId).not.toBe(page2.items[0].conversationId);
   });
 
   it('sendAdminReply: kirim via gateway + auto-escalation ke HUMAN_HANDLING + log sender ADMIN', async () => {
