@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -18,11 +18,16 @@ RUN npx prisma generate
 RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
 # --- STAGE 2: PRODUCTION RUNNER ---
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
+
+# Prisma query engine butuh OpenSSL (node:20-slim tidak menyertakannya)
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 COPY prisma ./prisma/
