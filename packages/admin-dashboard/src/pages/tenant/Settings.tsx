@@ -255,7 +255,7 @@ export const Settings: React.FC = () => {
       const body: any = {};
       if (metaPixelId !== '') body.metaPixelId = metaPixelId;
       if (capiAccessToken !== '') body.capiAccessToken = capiAccessToken;
-      const res = await apiRequest('/api/admin/capi-config', { method: 'PATCH', body });
+      const res = await apiRequest('/api/admin/capi-config', { method: 'PATCH', body: JSON.stringify(body) });
       setCapiConfigured(!!res?.data?.hasCapiAccessToken);
       setMetaPixelId(res?.data?.metaPixelId || metaPixelId);
       setCapiAccessToken('');
