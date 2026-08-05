@@ -69,6 +69,8 @@ export class CustomerService {
           status: 'active',
           block_reason: null,
           blocked_at: null,
+          is_legacy_source: false,
+          legacy_scraped_at: null,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -142,6 +144,30 @@ export class CustomerService {
   }
 
   /**
+   * Menandai bahwa customer pernah mengirimkan share-location native (pin GPS) di WhatsApp.
+   * Dipakai untuk memutuskan apakah bot perlu meminta shareloc saat form reservasi dikirim.
+   */
+  public async markShareLocationSent(customerId: string, tenantId: string): Promise<any> {
+    try {
+      const updated = await prisma.customer.update({
+        where: { id: customerId },
+        data: { share_location_sent: true },
+      });
+      memoryCustomers.set(updated.phone, updated);
+      return updated;
+    } catch (error) {
+      const cust = Array.from(memoryCustomers.values()).find(
+        (c) => c.id === customerId && c.tenant_id === tenantId
+      );
+      if (cust) {
+        cust.share_location_sent = true;
+        cust.updated_at = new Date();
+      }
+      return cust;
+    }
+  }
+
+  /**
    * Meng-update alamat pending/sementara milik customer
    */
   public async updateCustomerPendingLocation(
@@ -193,6 +219,14 @@ export class CustomerService {
       }
       return null;
     }
+  }
+
+  /**
+   * Hapus snapshot customer dari memory fallback store (dipakai saat hard wipe /reset
+   * supaya snapshot lama tidak memunculkan customer yang sudah dihapus dari DB).
+   */
+  public clearCustomerMemory(phone: string): void {
+    memoryCustomers.delete(phone);
   }
 
   /**
@@ -437,6 +471,28 @@ export class CustomerService {
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
           cust.name = name;
+          return cust;
+        }
+      }
+      throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+    }
+  }
+
+  /**
+   * Set override AI Rollout Scope per customer (FORCE_ON / FORCE_OFF / null).
+   * null = ikuti aturan tenant (scope + cutoff). Fail-over ke memory store saat DB offline.
+   */
+  public async setAiOverride(customerId: string, tenantId: string, aiOverride: 'FORCE_ON' | 'FORCE_OFF' | null): Promise<any> {
+    try {
+      return await prisma.customer.update({
+        where: { id: customerId },
+        data: { ai_override: aiOverride },
+      });
+    } catch (error) {
+      // Memory fallback update
+      for (const [phone, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
+          cust.ai_override = aiOverride;
           return cust;
         }
       }
@@ -697,6 +753,7 @@ export class CustomerService {
             reservationCount: c.reservations.length,
             createdAt: c.created_at,
             updatedAt: c.updated_at,
+            aiOverride: c.ai_override || null,
           };
         })
       );
@@ -725,6 +782,7 @@ export class CustomerService {
           reservationCount: 0,
           createdAt: c.created_at || new Date(),
           updatedAt: c.updated_at || new Date(),
+          aiOverride: c.ai_override || null,
         })),
         total: list.length,
         page: 1,

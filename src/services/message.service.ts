@@ -130,6 +130,18 @@ export class MessageService {
   }
 
   /**
+   * Hapus pesan milik percakapan tertentu dari memory fallback store (dipakai saat
+   * hard wipe /reset supaya tidak menyisakan pesan stale di memori / live chat).
+   */
+  public clearMessageMemory(conversationId: string): void {
+    for (let i = memoryMessages.length - 1; i >= 0; i--) {
+      if (memoryMessages[i].conversation_id === conversationId) {
+        memoryMessages.splice(i, 1);
+      }
+    }
+  }
+
+  /**
    * Mengambil pesan inbound (masuk) terakhir dari customer untuk thread percakapan tertentu.
    */
   public async getLastInboundMessage(conversationId: string, tenantId: string): Promise<any> {

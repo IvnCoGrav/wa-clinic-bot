@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import {
   Bug,
@@ -528,6 +528,7 @@ interface ConversationTraceEntry {
 function ConversationsSection() {
   const [data, setData] = useState<{ entries: ConversationTraceEntry[]; dbNote?: string }>({ entries: [] });
   const [loading, setLoading] = useState(true);
+  const [escFilter, setEscFilter] = useState<string>('all');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -545,10 +546,38 @@ function ConversationsSection() {
     load();
   }, [load]);
 
+  const reasonOptions = useMemo(
+    () => Array.from(new Set(data.entries.map((e) => e.escalation_reason).filter((r): r is string => Boolean(r)))).sort(),
+    [data.entries]
+  );
+
+  const filteredEntries = useMemo(() => {
+    if (escFilter === 'all') return data.entries;
+    if (escFilter === 'none') return data.entries.filter((e) => !e.escalation_reason);
+    return data.entries.filter((e) => e.escalation_reason === escFilter);
+  }, [data.entries, escFilter]);
+
   return (
     <div className="space-y-4">
       <SectionHeader title="Conversation State Trace (terbaru)" onRefresh={load} loading={loading} />
       {data.dbNote && <ErrNote note={data.dbNote} />}
+      <div className="flex items-center gap-2">
+        <label className="text-[10px] uppercase tracking-wider text-slate-500">Filter Eskalasi</label>
+        <select
+          value={escFilter}
+          onChange={(e) => setEscFilter(e.target.value)}
+          className="px-2 py-1 bg-slate-950 border border-white/10 rounded-lg text-xs text-white"
+        >
+          <option value="all">Semua</option>
+          <option value="none">Tanpa eskalasi</option>
+          {reasonOptions.map((r) => (
+            <option key={r} value={r}>
+              {r === 'LEGACY_AI_SCOPE_DISABLED' ? 'LEGACY_AI_SCOPE_DISABLED (AI scope)' : r}
+            </option>
+          ))}
+        </select>
+        <span className="text-[10px] text-slate-600">{filteredEntries.length} / {data.entries.length} baris</span>
+      </div>
       <div className="glass-panel rounded-2xl p-4 overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -563,12 +592,12 @@ function ConversationsSection() {
             </tr>
           </thead>
           <tbody>
-            {data.entries.length === 0 && (
+            {filteredEntries.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-4 text-center text-slate-500">Belum ada conversation.</td>
               </tr>
             )}
-            {data.entries.map((c) => (
+            {filteredEntries.map((c) => (
               <tr key={c.id} className="border-b border-white/5 last:border-0">
                 <td className="py-2 pr-3 text-slate-300">
                   {c.customerName || '?'}

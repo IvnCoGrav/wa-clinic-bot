@@ -23,8 +23,10 @@ export interface Reservation {
   id: string;
   customer_id: string;
   customer?: {
+    id?: string;
     phone: string;
     name: string | null;
+    is_legacy_source?: boolean;
     kelurahan: string | null;
     kecamatan: string | null;
     kota: string | null;

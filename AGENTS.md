@@ -33,7 +33,7 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 
 ## Repo conventions (mandatory)
 
-- **SaaS-readiness**: any new feature/config/tuning must be tenant-aware — business data (brand names, message templates, system prompts) MUST come from DB, never hardcoded. See `.agents/skills/saas-readiness/SKILL.md` and `docs/SAAS_READINESS_AUDIT.md`.
+- **SaaS-readiness**: any new feature/config/tuning must be tenant-aware — business data (brand names, message templates, system prompts) MUST come from DB, never hardcoded. Pengecualian (hardcode sementara / tunda tenant-aware) WAJIB lewat **Confirmation Gate** — stop & konfirmasi ke user dengan pros/cons — bila solusi tenant-aware butuh infrastruktur baru / LOC sangat besar / migrasi berisiko. See `.agents/skills/saas-readiness/SKILL.md` and `docs/SAAS_READINESS_AUDIT.md`.
 - **Admin dashboard** (`packages/admin-dashboard`, React): never `window.confirm`/`alert` — use `useUiFeedback`. See `.agents/skills/no-native-confirm-alert/SKILL.md`.
 
 ## Monorepo (no npm workspaces)

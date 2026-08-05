@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { buildApp } from '../../src/app';
-import { AdminSessionService } from '../../src/services/admin-session.service';
-
-describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', () => {
-  const app = buildApp();
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    process.env.ADMIN_API_KEY = 'test_admin_key_999';
-    process.env.ADMIN_DOMAIN = 'example.com';
-    process.env.HUMANIZER_ENABLED = 'false';
-    process.env.LLM_API_KEY = 'mock';
-  });
+  import { buildApp } from '../../src/app';
+  import { AdminSessionService } from '../../src/services/admin-session.service';
+  import { seedAiScopeAll } from '../helpers/seed-ai-scope';
+  
+  describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', () => {
+    const app = buildApp();
+  
+  beforeEach(async () => {
+      vi.restoreAllMocks();
+      process.env.ADMIN_API_KEY = 'test_admin_key_999';
+      process.env.ADMIN_DOMAIN = 'example.com';
+      process.env.HUMANIZER_ENABLED = 'false';
+      process.env.LLM_API_KEY = 'mock';
+      await seedAiScopeAll();
+    });
 
   it('1. Origin Isolation Guard: Accessing /admin/* on tenant landing pages domain MUST return 404 Not Found', async () => {
     const response = await app.inject({
@@ -175,7 +177,7 @@ describe('Modul 5.4 — Control Center UI & Origin Isolation Security Tests', ()
     expect(resWebhook.statusCode).toBe(200);
     
     // Wait for background worker processing
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 400));
     
     const convAfterWebhook = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     expect(convAfterWebhook.current_state).toBe(ConversationState.AWAITING_LOCATION);

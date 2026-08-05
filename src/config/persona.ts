@@ -63,6 +63,48 @@ try {
 
 export let BOT_PERSONA_PROMPT = currentPersona;
 
+// Cache maksimal karakter per balasan AI, keyed per tenant (SaaS-ready).
+// null = tanpa limit. Terisi saat loadPersonaFromDb / savePersonaToDb.
+const maxCharsByTenant = new Map<string, number | null>();
+
+export function getMaxCharsPerReply(tenantId: string): number | null {
+  const val = maxCharsByTenant.get(tenantId);
+  return val === undefined ? null : val;
+}
+
+/**
+ * Potong teks aman ke maksimal karakter, tanpa memotong di tengah kata.
+ * Cari akhir kalimat (. ! ? \n) atau spasi terakhir sebelum batas.
+ * max <= 0 / null => kembalikan teks apa adanya.
+ */
+export function truncateToMaxChars(text: string, max: number | null | undefined): string {
+  if (!text) return text;
+  const limit = Number(max);
+  if (!limit || limit <= 0) return text;
+  if (text.length <= limit) return text;
+
+  const rawSlice = text.slice(0, limit);
+
+  // 1. Cari akhir kalimat terakhir sebelum batas (agar tidak putus di tengah kalimat).
+  //    Hanya . ! ? — jangan \n (baris baru bisa muncul di tengah format daftar, bukan akhir kalimat).
+  const lastSentenceEnd = Math.max(
+    rawSlice.lastIndexOf('.'),
+    rawSlice.lastIndexOf('!'),
+    rawSlice.lastIndexOf('?')
+  );
+  if (lastSentenceEnd > 0) {
+    return rawSlice.slice(0, lastSentenceEnd + 1).trimEnd();
+  }
+
+  // 2. Fallback: potong di spasi terakhir (tidak memotong kata).
+  const lastSpace = rawSlice.lastIndexOf(' ');
+  if (lastSpace > 0) {
+    return rawSlice.slice(0, lastSpace).trimEnd();
+  }
+
+  return rawSlice.trimEnd();
+}
+
 export function updatePersonaInMemoryAndFile(newPersona: string) {
   BOT_PERSONA_PROMPT = newPersona;
   try {
@@ -84,6 +126,7 @@ export async function loadPersonaFromDb(tenantId: string): Promise<string> {
     });
     if (record && record.persona && record.persona.trim().length > 0) {
       BOT_PERSONA_PROMPT = record.persona;
+      maxCharsByTenant.set(tenantId, record.max_chars_per_reply ?? null);
       return record.persona;
     }
     // Tidak ada di DB -> seed dari current (file/default)
@@ -103,20 +146,38 @@ export async function loadPersonaFromDb(tenantId: string): Promise<string> {
 
 /**
  * Simpan persona ke database per tenant (SaaS-ready) + update in-memory/file.
+ * maxCharsPerReply (opsional): null/undefined = tanpa limit balasan AI.
  */
-export async function savePersonaToDb(newPersona: string, tenantId: string): Promise<boolean> {
+export async function savePersonaToDb(
+  newPersona: string,
+  tenantId: string,
+  maxCharsPerReply?: number | null
+): Promise<boolean> {
   try {
     const { prisma } = await import('../db/client');
     await prisma.tenantPersona.upsert({
       where: { tenant_id: tenantId },
-      update: { persona: newPersona },
-      create: { tenant_id: tenantId, persona: newPersona },
+      update: {
+        persona: newPersona,
+        ...(maxCharsPerReply === undefined ? {} : { max_chars_per_reply: maxCharsPerReply }),
+      },
+      create: {
+        tenant_id: tenantId,
+        persona: newPersona,
+        max_chars_per_reply: maxCharsPerReply ?? null,
+      },
     });
     updatePersonaInMemoryAndFile(newPersona);
+    if (maxCharsPerReply !== undefined) {
+      maxCharsByTenant.set(tenantId, maxCharsPerReply ?? null);
+    }
     return true;
   } catch (err) {
     console.warn('[PERSONA] DB unavailable, using file fallback:', (err as Error).message);
     updatePersonaInMemoryAndFile(newPersona);
+    if (maxCharsPerReply !== undefined) {
+      maxCharsByTenant.set(tenantId, maxCharsPerReply ?? null);
+    }
     return true;
   }
 }
@@ -197,6 +258,31 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
   scheduleCheckHandoff: () => `kami cek jadwal dulu ya bunda 🙏🏻😊`,
 
   locationEscalation: () => `Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊`,
+
+  // =======================================================================
+  // JAWABAN HARGA & PRICELIST (fitur "tanya harga -> beri tahu")
+  // =======================================================================
+  // CTA assumptive-close (yes-yes, bukan yes-no): arahkan ke konversi.
+  priceCta: (name: string) => `Mau coba ${name} bunda ?`,
+  // Format harga yang NATURAL/ngobrol (bukan brosur): deterministik, tanpa LLM,
+  // tapi dibungkus kalimat percakapan supaya tidak terkesan "menempel brosur".
+  priceInfo: (params: { name: string; ageTierLabel?: string; durationMinutes?: number; normalPrice: number; promoPrice: number }) => {
+    const fmt = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
+    const dur = params.durationMinutes ? `, durasinya ${params.durationMinutes} menit` : '';
+    const tier = params.ageTierLabel && params.ageTierLabel.trim()
+      ? ` Sesuai untuk ${params.ageTierLabel.toLowerCase()}.`
+      : '';
+    return `Untuk *${params.name}*-nya, promo sekarang ${fmt(params.promoPrice)} aja Bunda (normalnya ${fmt(params.normalPrice)})${dur}.${tier} 😊`;
+  },
+  pricelistPrompt: () => `pricelist dari kami bunda, mau pilih yang mana bund ?`,
+  pricelistIntro: () => `Berikut pricelist dari kami ya Bunda 😊`,
+  // Minta share location setelah customer submit form reservasi (jika pin belum pernah dikirim).
+  askShareLocation: () => `Kalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊`,
+  // INITIAL (belum ada lokasi): jangan menolak, langsung alihkan ke tanya lokasi.
+  askLocationFirstPrice: () => `Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊`,
+  // AWAITING_LOCATION (belum ada lokasi, tapi harga sudah ditampilkan): tetap minta lokasi,
+  // pakai nada ngobrol yang hangat, bukan formal.
+  askLocationShort: () => `Bunda sekarang di area mana ya? Biar sekalian kami cek ongkirnya ke tempat Bunda 😊`,
 
   faqFollowUp: (faqAnswer: string, treatmentName?: string) => {
     // Follow-up personal dengan rotasi variasi supaya tidak kaku/terlalu mirip tiap kali

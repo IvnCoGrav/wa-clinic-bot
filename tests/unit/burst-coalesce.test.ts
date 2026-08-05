@@ -200,4 +200,30 @@ describe('BurstCoalesceService', () => {
     expect(enqueueSpy).toHaveBeenCalledTimes(2); // batch m3
     expect(enqueueSpy.mock.calls[1][0].incomingMessage.text.body).toBe('c');
   });
+
+  it('7. command slash (/reset) → flush buffer lalu passthrough (handled=false)', async () => {
+    const enqueueSpy = vi.spyOn(queueService, 'enqueueMessage').mockResolvedValue(undefined as any);
+    vi.spyOn(messageService, 'logMessage').mockResolvedValue(undefined as any);
+
+    const opts = {
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: 'cust-1',
+      phone: '628123456789',
+      conversation: makeConv(ConversationState.INITIAL),
+    };
+
+    // 1 text biasa → masuk buffer
+    const r1 = await burstCoalesceService.maybeCoalesce({ ...opts, incomingMessage: makeMsg('m1', 'halo bunda') });
+    expect(r1.handled).toBe(true);
+    expect(burstCoalesceService.pendingCount()).toBe(1);
+
+    // Command slash berikutnya → flush buffer (batch pertama ter-enqueue), passthrough.
+    const r2 = await burstCoalesceService.maybeCoalesce({ ...opts, incomingMessage: makeMsg('m2', '/reset') });
+    expect(r2.handled).toBe(false); // tidak di-merge, langsung ke machine command gate
+    expect(burstCoalesceService.pendingCount()).toBe(0);
+
+    await settle(20);
+    expect(enqueueSpy).toHaveBeenCalledTimes(1); // batch "halo bunda" ter-flush
+    expect(enqueueSpy.mock.calls[0][0].incomingMessage.text.body).toBe('halo bunda');
+  });
 });

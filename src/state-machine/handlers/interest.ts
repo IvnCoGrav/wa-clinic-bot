@@ -3,11 +3,13 @@ import { StateHandlerContext, StateHandlerResult } from '../types';
 import { llmIntentService, IntentType } from '../../integrations/llm/intent';
 import { knowledgeBaseService } from '../../services/knowledge.service';
 import { llmResponseGenerator } from '../../integrations/llm/generator';
+import { phrasingService } from '../../integrations/llm/phrasing.service';
 import { conversationService } from '../../services/conversation.service';
 import { TEMPLATES } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
+import { buildPriceAnswer, isAskPrice, isPricelistLostRequest } from '../../services/price-answer.service';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
@@ -47,15 +49,12 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         });
         createdReservationId = reservation.id;
 
-        const { followUpService } = await import('../../services/follow-up.service');
-        await followUpService.onReservationCreated(customer.id, reservation.id, tenantId);
-
-        // Persist entitas anak ke tabel children (nama + estimasi usia → birth_date)
-        const { childService } = await import('../../services/child.service');
-        await childService.upsertChildrenFromBabies({
+        const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
+        await reservationLifecycleService.onReservationCreated({
           customerId: customer.id,
           reservationId: reservation.id,
           tenantId,
+          chatId: ctx.incomingMessage.chatId || `${customer.phone}@c.us`,
           babies: parsed.babies || [],
         });
       } catch (dbErr) {
@@ -85,9 +84,13 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         tenantId
       );
 
+      // Minta share-location (pin) jika customer belum pernah mengirimkannya — biar admin
+      // punya titik presisi. Hanya dijalankan SETELAH customer mengirim form yang sudah diisi.
+      const shareNote = customer.share_location_sent ? '' : `\n\n${TEMPLATES.askShareLocation()}`;
+
       return {
         nextState: ConversationState.HUMAN_HANDLING,
-        replyText: `Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊`,
+        replyText: `Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊${shareNote}`,
         shouldSendReply: true,
         isHumanHandling: true,
       };
@@ -101,6 +104,25 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         shouldSendReply: true,
       };
     }
+  }
+
+  // 0b. GATE PRICELIST HILANG / TIDAK TERKIRIM: deterministik (regex keyword), TANPA
+  // bergantung pada klasifikasi intent (NLU/LLM bisa salah-misrout "pricelist tidak terkirim"
+  // ke not_interested karena kata "tidak"). Dicek SEBELUM intent detection supaya selalu
+  // force kirim ulang pricelist image.
+  if (isPricelistLostRequest(userText)) {
+    const ans = buildPriceAnswer(userText, {
+      hasLocation: true,
+      pricelistAlreadySent: false,
+    });
+    return {
+      nextState: ConversationState.AWAITING_INTEREST,
+      replyText: ans.replyText,
+      shouldSendReply: true,
+      sendPricelistImage: !!ans.pricelist,
+      pricelistCaption: ans.pricelist?.caption,
+      forcePricelistResend: ans.pricelist?.force,
+    };
   }
 
   // --- MIXED-SIGNAL DETECTION ---
@@ -135,6 +157,45 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     return handleLocationState(ctx);
   }
 
+  // 1b. GATE AFIRMASI SETELAH CTA HARGA: deterministik, TANPA bergantung klasifikasi
+  // intent (NLU/LLM produksi sering salah-misrout "boleh bund" → off_topic → balasan
+  // generik interestUnrelatedFollowUp, padahal itu persetujuan booking).
+  // CTA "Mau coba {nama} bunda ?" (TEMPLATES.priceCta) HANYA muncul setelah lokasi
+  // customer terkunci (buildPriceAnswer: hasLocation → priceCta). Jadi afirmasi singkat
+  // setelah CTA = lanjut form reservasi, tanpa tanya lokasi ulang.
+  const lastAssistantMsg = ctx.history && ctx.history.length > 0
+    ? [...ctx.history].reverse().find((m) => m.role === 'assistant' && !!m.content)
+    : undefined;
+  const isPriceCtaMessage = (content: string) => /^Mau coba .+\?$/mi.test(content.trim());
+  const isShortAffirmAfterCta =
+    lastAssistantMsg !== undefined &&
+    isPriceCtaMessage(lastAssistantMsg.content) &&
+    userText.trim().split(/\s+/).filter(Boolean).length <= 4 &&
+    /\b(boleh|boleh\s+banget|iya|iyaa+|iyas|mau|mau\s+dong|siap|oke|ok|okey|sip|gas|lanjut|bisa|bisa\s+bunda|insya\s+allah)\b/i.test(userText) &&
+    !/\b(jam|tanggal|hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|jadwal|slot)\b/i.test(userText) &&
+    !/\b(ga|gak|nggak|tidak|enggak|batal|ndak|ngg|jangan|ngga)\b/i.test(userText) &&
+    !/\?/.test(userText.trim());
+
+  if (isShortAffirmAfterCta) {
+    console.log(`[CTA CONSENT] "Mau coba..." CTA + afirmasi "${userText}" → lanjut ke form reservasi.`);
+    if (!customer.kelurahan || !customer.lat || !customer.lng) {
+      return {
+        nextState: ConversationState.AWAITING_LOCATION,
+        replyText: `Baik Bunda, sebelum melakukan reservasi, mohon informasikan detail kelurahan/desa atau kirimkan share location Bunda terlebih dahulu ya bund, agar kami bisa cek jarak dan ongkirnya terlebih dahulu. 😊`,
+        shouldSendReply: true,
+      };
+    }
+    return {
+      nextState: ConversationState.RESERVATION_SENT,
+      replyText: TEMPLATES.reservationFormRequest({
+        kecamatan: customer.kecamatan || undefined,
+        kota: customer.kota || undefined,
+        phone: customer.phone || undefined,
+      }),
+      shouldSendReply: true,
+    };
+  }
+
   // 1. Deteksi Intent — NLU Layer-first, dengan fallback ke legacy llmIntentService
   //
   // ATURAN PRIORITAS: State machine tetap memegang kendali. NLU hanya mempercepat dan
@@ -151,7 +212,9 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     // Map NLU taxonomy → legacy IntentType (preserve all existing switch branches)
     let mappedIntent: IntentType = 'other';
 
-    if (nlu!.intents.includes('complaint')) {
+    if (nlu!.intents.includes('medical_query')) {
+      mappedIntent = 'medical_query';
+    } else if (nlu!.intents.includes('complaint')) {
       mappedIntent = 'complaint';
     } else if (nlu!.intents.includes('ask_schedule')) {
       mappedIntent = 'asking_schedule';
@@ -190,6 +253,43 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       };
 
     case 'faq_question': {
+      // --- JAWABAN HARGA: jika customer bertanya harga → beri tahu harga (deterministik,
+      //     anti-halusinasi harga). CTA yes-yes jika lokasi sudah ada; minta lokasi jika belum.
+      if (isAskPrice(userText, nlu?.intents)) {
+        const hasLocation = !!(customer.kelurahan && customer.lat && customer.lng);
+
+        // Resolusi anaphora: pesan generik ("berapa itu bund?") tanpa nama treatment → cari
+        // treatment yang baru saja direkomendasikan bot di riwayat percakapan (pesan assistant terakhir).
+        let candidateTreatmentName: string | undefined;
+        const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+        if (treatmentCatalogService.searchCatalogItems(userText).length === 0 && ctx.history && ctx.history.length > 0) {
+          for (let i = ctx.history.length - 1; i >= 0; i--) {
+            const msg = ctx.history[i];
+            if (msg.role !== 'assistant' || !msg.content) continue;
+            const botMatch = treatmentCatalogService.searchCatalogItems(msg.content);
+            if (botMatch.length > 0) {
+              candidateTreatmentName = botMatch[0].name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+              console.log(`[PRICE ANAPHORA] No treatment in "${userText}", resolved from bot history → "${candidateTreatmentName}".`);
+              break;
+            }
+          }
+        }
+
+        const ans = buildPriceAnswer(userText, {
+          hasLocation,
+          pricelistAlreadySent: !!customer.pricelist_sent,
+          candidateTreatmentName,
+        });
+        return {
+          nextState: ConversationState.AWAITING_INTEREST,
+          replyText: ans.replyText,
+          shouldSendReply: true,
+          sendPricelistImage: !!ans.pricelist,
+          pricelistCaption: ans.pricelist?.caption,
+          forcePricelistResend: ans.pricelist?.force,
+        };
+      }
+
       // 2. Query Knowledge Base menggunakan Postgres Full-Text Search ('simple')
       const relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3, tenantId);
 
@@ -238,10 +338,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         };
       }
 
-      // 3. Generate balasan FAQ natural berbasis RAG + Persona (dengan history & reasoning)
-      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId);
-
-      // 3b. Extract nama treatment spesifik untuk follow-up personal (jika ada)
+      // 3. Extract nama treatment spesifik untuk follow-up personal (jika ada)
       let treatmentNameForFollowUp: string | undefined;
       // Ambil dari NLU entity jika tersedia
       const nluTreatment = ctx.nluResult?.entities?.treatment_name;
@@ -262,12 +359,12 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         }
       } catch (_) { /* abaikan, pakai entity NLU */ }
 
-      // 4. JANGAN RESET / UBAH STATE: Tambahkan kalimat follow-up sesuai state saat ini!
-      const replyText = TEMPLATES.faqFollowUp(faqAnswer, treatmentNameForFollowUp);
+      // 4. Generate balasan FAQ natural berbasis RAG + Persona (CTA menyatu dalam 1 generation call)
+      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp);
 
       return {
         nextState: ConversationState.AWAITING_INTEREST,
-        replyText,
+        replyText: faqAnswer,
         shouldSendReply: true,
       };
     }
@@ -299,9 +396,16 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         tenantId
       );
 
+      const scheduleHandoffReply = await phrasingService.generate({
+        intent: 'schedule_check_handoff',
+        conversationId: conversation.id,
+        tenantId,
+        fallbackTemplate: TEMPLATES.scheduleCheckHandoff(),
+      });
+
       return {
         nextState: ConversationState.HUMAN_HANDLING,
-        replyText: TEMPLATES.scheduleCheckHandoff(),
+        replyText: scheduleHandoffReply,
         shouldSendReply: true,
         isHumanHandling: true,
       };

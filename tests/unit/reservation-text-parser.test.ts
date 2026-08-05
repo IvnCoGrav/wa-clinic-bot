@@ -259,4 +259,43 @@ Treatment : Pijat Bayi`;
     expect(extractBabyDetails(null)).toEqual([]);
     expect(extractBabyDetails('')).toEqual([]);
   });
+
+  it('inline treatment parsing: Pilihan treatment (Baby & Kids) : Pijat Bayi Ceria', () => {
+    const rawText = `Berikut list untuk reservasi :
+
+Hari dan tanggal : Senin, 10 Agustus 2026 jam 10.00
+Nama Bunda: Bunda Ani
+Alamat & Shareloc : Jl. Wonokromo No. 12
+Kec : Wonokromo
+Kota : Surabaya
+No. Hp : 08123456789
+
+Pilihan treatment (Baby & Kids) : Pijat Bayi Ceria`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation).toBeDefined();
+    expect(res.reservation!.treatmentCategory).toBe(TreatmentCategory.BABY);
+    expect(res.reservation!.treatmentDetail).toContain('Pijat Bayi Ceria');
+  });
+
+  it('inline treatment parsing for Moms: Pilihan treatment (Moms & Nifas) : Pijat Postpartum Nifas', () => {
+    const rawText = `Berikut list untuk reservasi :
+
+Hari dan tanggal : Rabu, 12 Agustus 2026 jam 09.00
+Nama Bunda: Bunda Siti
+Alamat & Shareloc : Jl. Siwalankerto No. 88
+Kec : Wonocolo
+Kota : Surabaya
+No. Hp : 08111222333
+
+Pilihan treatment (Moms & Nifas) : Pijat Postpartum Nifas`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation).toBeDefined();
+    expect(res.reservation!.treatmentCategory).toBe(TreatmentCategory.MOMS);
+    expect(res.reservation!.treatmentDetail).toContain('Pijat Postpartum Nifas');
+  });
 });
+

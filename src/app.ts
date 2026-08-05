@@ -112,13 +112,21 @@ if (require.main === module) {
       const { AiModelConfigService } = await import('./config/ai-models.config');
       const { AiRouterConfigService } = await import('./config/ai-router-config');
       const { IdleGreetingConfigService } = await import('./config/idle-greeting.config');
+      const { AiEligibilityConfigService } = await import('./config/ai-eligibility-config');
       await loadServicesFromDb(DEFAULT_TENANT_ID);
       await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
       await loadPersonaFromDb(DEFAULT_TENANT_ID);
       await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
       await AiRouterConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
       await IdleGreetingConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config + AI router + idle greeting)');
+      const aiScopeLoaded = await AiEligibilityConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
+      if (!aiScopeLoaded) {
+        console.warn(
+          '[AI_ROLLOUT_SCOPE] DB unreachable at boot, defaulting to fail-closed (NEW_ONLY, cutoff=now). ' +
+          'AI akan silence untuk customer yang belum eligible sampai config berhasil di-load ulang.'
+        );
+      }
+      console.log('📦 Tenant data initialized (catalog + delivery tiers + persona + AI config + AI router + idle greeting + AI scope)');
     } catch (initErr) {
       console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
     }
@@ -127,6 +135,16 @@ if (require.main === module) {
     import('./services/waha-monitor.service').then(({ WahaMonitorService }) => {
       WahaMonitorService.getInstance().start();
     }).catch(e => console.error('[MONITOR START ERROR]', e));
+
+    // Start label reconciliation cron (Task 7 / flag: ENABLE_LABEL_RECONCILIATION_CRON)
+    if (process.env.ENABLE_LABEL_RECONCILIATION_CRON === 'true') {
+      const intervalHours = parseInt(process.env.LABEL_RECONCILIATION_INTERVAL_HOURS || '4', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        setInterval(() => cron.runLabelReconciliation(), intervalHours * 60 * 60 * 1000);
+        console.log(`🏷️ Label reconciliation cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[LABEL RECONCILIATION START ERROR]', e));
+    }
   });
 }
 

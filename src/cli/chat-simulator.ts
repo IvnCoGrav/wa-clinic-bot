@@ -1,10 +1,10 @@
 import readline from 'readline';
+import { prisma } from '../db/client';
 import { MockWAHAClient } from './mock-waha-client';
 import { TypingService } from '../services/typing.service';
 import { ConversationStateMachine } from '../state-machine/machine';
 import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
-import { ConversationState } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 async function startSimulator() {
@@ -16,16 +16,32 @@ async function startSimulator() {
   const dummyChatId = '6281234567890@c.us';
   let msgCounter = 1;
 
+  // Tandai customer test sebagai QA TEST (is_sandbox_test=true) — wajib agar data
+  // simulasi tidak mencemari pelanggan asli (lihat .agents/skills/qa-test-labeling/SKILL.md).
+  const markSandboxTest = async (customer: any): Promise<any> => {
+    try {
+      if (!customer.is_sandbox_test) {
+        await prisma.customer.update({
+          where: { id: customer.id },
+          data: { is_sandbox_test: true },
+        });
+      }
+    } catch (e) {
+      // best-effort — jangan menggagalkan simulasi bila DB offline
+    }
+    return customer;
+  };
+
   console.clear();
   console.log('\x1b[36m\x1b[1m===============================================================');
   console.log('   🏥 WAHA CLINIC BOT - CLI CHAT SIMULATOR (INTERACTIVE)');
   console.log('===============================================================\x1b[0m');
   console.log('\x1b[90mCommand interaktif:');
   console.log('  /location <lat>,<lng>  : Simulasikan share lokasi WhatsApp (contoh: /location -7.2574,112.7520)');
-  console.log('  /reset                 : Reset percakapan ke state awal (INITIAL) + hapus lokasi customer');
-  console.log('  /state                 : Lihat state internal percakapan (current_state, attempts, dll)');
   console.log('  /speed <faktor>        : Atur kecepatan simulasi delay (contoh: /speed 2 untuk 2x lebih cepat)');
   console.log('  exit / quit            : Keluar dari simulator CLI\x1b[0m\n');
+  console.log('\x1b[90mPerintah yang diketik juga mengalir lewat state machine, jadi command customer asli');
+  console.log('  (/reset, /state, /mulai) ikut diuji di sini sama seperti di WhatsApp.\x1b[0m\n');
   console.log('\x1b[90mUntuk form reservasi multi-line: mulai ketik "Berikut list untuk reservasi",\n  lalu paste baris-baris form, akhiri dengan BARIS KOSONG.\x1b[0m\n');
 
   const rl = readline.createInterface({
@@ -76,40 +92,13 @@ async function startSimulator() {
       return;
     }
 
-    if (input === '/reset') {
-      const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID);
-      const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-      await conversationService.updateConversationState(
-        conversation.id,
-        {
-          currentState: ConversationState.INITIAL,
-          previousState: null,
-          locationAttempts: 0,
-          isHumanHandling: false,
-          humanHandlingSince: null,
-        },
-        DEFAULT_TENANT_ID
+    if (input === '/reset' || input === '/state' || input === '/mulai' || input === '/start') {
+      // Command customer asli (/reset, /state, /mulai) dibiarkan mengalir lewat state machine
+      // supaya parity dgn WhatsApp. markSandboxTest memastikan customer simulasi diberi tag
+      // QA TEST (is_sandbox_test=true) supaya tidak mencemari data pelanggan asli.
+      await markSandboxTest(
+        await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID)
       );
-      // Reset penuh lokasi customer (pending + confirmed) supaya simulasi mulai dari nol
-      await customerService.resetFullLocation(customer.id, DEFAULT_TENANT_ID);
-      console.log('\x1b[32m[SYSTEM] State percakapan berhasil di-reset ke INITIAL (termasuk lokasi customer).\x1b[0m\n');
-      promptUser();
-      return;
-    }
-
-    if (input === '/state') {
-      const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID);
-      const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-      console.log('\x1b[35m\n--- [INTERNAL STATE DEBUG] ---');
-      console.log(`Customer Phone    : ${customer.phone}`);
-      console.log(`Current State     : ${conversation.current_state}`);
-      console.log(`Previous State    : ${conversation.previous_state || 'null'}`);
-      console.log(`Location Attempts : ${conversation.location_attempts}`);
-      console.log(`Is Human Handling : ${conversation.is_human_handling}`);
-      console.log(`Coverage Status   : ${customer.is_out_of_coverage ? 'OUT OF COVERAGE' : 'IN COVERAGE'}`);
-      console.log(`Speed Factor      : ${cliTypingService.getSpeedFactor()}x\x1b[0m\n`);
-      promptUser();
-      return;
     }
 
     if (input.startsWith('/speed')) {
@@ -165,7 +154,9 @@ async function startSimulator() {
     }
 
     try {
-      const customer = await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID);
+      const customer = await markSandboxTest(
+        await customerService.getOrCreateCustomer(dummyPhone, 'CLI Tester', DEFAULT_TENANT_ID)
+      );
       const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
       // Process state machine message

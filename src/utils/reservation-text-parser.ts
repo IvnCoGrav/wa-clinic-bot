@@ -100,12 +100,22 @@ export function parseReservationText(rawText: string): ParseResult {
     const lowerNorm = lower.replace(/\s+/g, ' ');
 
     // Transisi Section berdasarkan header
-    if (lowerNorm.includes('pilihan treatment (baby & kids)')) {
+    if (lowerNorm.includes('pilihan treatment (baby & kids)') || lowerNorm.includes('pilihan treatment (baby')) {
       currentSection = 'BABY';
+      const colonIdx = trimmed.indexOf(':');
+      if (colonIdx !== -1) {
+        const val = trimmed.substring(colonIdx + 1).trim();
+        if (val) babyTreatment = val;
+      }
       continue;
     }
-    if (lowerNorm.includes('pilihan treatment (moms)')) {
+    if (lowerNorm.includes('pilihan treatment (moms')) {
       currentSection = 'MOMS';
+      const colonIdx = trimmed.indexOf(':');
+      if (colonIdx !== -1) {
+        const val = trimmed.substring(colonIdx + 1).trim();
+        if (val) momsTreatment = val;
+      }
       continue;
     }
 

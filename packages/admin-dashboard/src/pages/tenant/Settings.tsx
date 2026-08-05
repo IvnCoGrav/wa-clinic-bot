@@ -77,6 +77,17 @@ export const Settings: React.FC = () => {
   // AI Router Engine (default ON + shadow ON)
   const [aiRouterEnabled, setAiRouterEnabled] = useState(true);
   const [aiRouterShadowMode, setAiRouterShadowMode] = useState(true);
+
+  // AI Rollout Scope (AI hanya untuk customer baru)
+  const [aiScope, setAiScope] = useState<'NEW_ONLY' | 'ALL'>('NEW_ONLY');
+  const [aiScopeCutoffAt, setAiScopeCutoffAt] = useState('');
+  const [aiScopeSummary, setAiScopeSummary] = useState<{
+    totalCustomers: number;
+    newCustomers: number;
+    legacyCustomers: number;
+    silencedByScope: number;
+  }>({ totalCustomers: 0, newCustomers: 0, legacyCustomers: 0, silencedByScope: 0 });
+  const [savingAiScope, setSavingAiScope] = useState(false);
   const [savingAiRouter, setSavingAiRouter] = useState(false);
 
   // Meta Pixel & CAPI (konversi iklan — berlaku semua provider WAHA/WABA)
@@ -153,6 +164,9 @@ export const Settings: React.FC = () => {
         // Fetch AI Router config (default ON + shadow ON)
         await loadAiRouterConfig();
 
+        // Fetch AI Rollout Scope config
+        await loadAiScopeConfig();
+
         // Fetch Meta Pixel & CAPI config
         await loadCapiConfig();
 
@@ -177,6 +191,47 @@ export const Settings: React.FC = () => {
       }
     } catch (err) {
       console.warn('Failed to load AI Router config:', err);
+    }
+  };
+
+  const loadAiScopeConfig = async () => {
+    try {
+      const res = await apiRequest('/api/admin/ai-rollout-scope');
+      const d = res?.data;
+      if (d) {
+        setAiScope(d.ai_customer_scope === 'ALL' ? 'ALL' : 'NEW_ONLY');
+        if (d.ai_scope_cutoff_at) {
+          setAiScopeCutoffAt(new Date(d.ai_scope_cutoff_at).toISOString().slice(0, 16));
+        }
+      }
+      if (res?.summary) setAiScopeSummary(res.summary);
+    } catch (err) {
+      console.warn('Failed to load AI Rollout Scope config:', err);
+    }
+  };
+
+  const handleSaveAiScope = async () => {
+    setSavingAiScope(true);
+    try {
+      const body: any = { aiCustomerScope: aiScope };
+      if (aiScopeCutoffAt) {
+        const dt = new Date(aiScopeCutoffAt);
+        if (!isNaN(dt.getTime())) body.aiScopeCutoffAt = dt.toISOString();
+      }
+      const res = await apiRequest('/api/admin/ai-rollout-scope', { method: 'PATCH', body });
+      const d = res?.data;
+      if (d?.ai_scope_cutoff_at) {
+        setAiScopeCutoffAt(new Date(d.ai_scope_cutoff_at).toISOString().slice(0, 16));
+      }
+      if (res?.summary) setAiScopeSummary(res.summary);
+      toast(res?.message || 'AI Rollout Scope tersimpan.', 'success');
+      if (aiScope === 'ALL') {
+        toast('Semua customer kini eligible AI. Conversation legacy yang tersenyap tetap di HUMAN_HANDLING — release manual via panel per-customer.', 'info');
+      }
+    } catch (err: any) {
+      toast(`Gagal menyimpan AI Rollout Scope: ${err.message}`, 'error');
+    } finally {
+      setSavingAiScope(false);
     }
   };
 
@@ -923,6 +978,75 @@ export const Settings: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* AI Rollout Scope — AI hanya untuk customer baru */}
+          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <ShieldCheck className="text-pink-400" />
+              <span>AI Rollout Scope</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Batasi AI hanya untuk customer <span className="text-emerald-400 font-semibold">baru</span> (created_at &gt;= cutoff).
+              Customer <span className="text-amber-400 font-semibold">legacy</span> otomatis di-senyapkan &amp; dirutekan ke human handling
+              pada state idle/reset (sesi percakapan berjalan tidak dipotong). Berlaku utk pesan setelah simpan.
+            </p>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
+                <div>
+                  <span className="text-sm font-semibold text-slate-300">Cakupan AI</span>
+                  <p className="text-[10px] text-slate-500">
+                    {aiScope === 'NEW_ONLY' ? 'Hanya customer baru dapat AI (rollout bertahap)' : 'Semua customer dapat AI (rollout penuh)'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAiScope(aiScope === 'NEW_ONLY' ? 'ALL' : 'NEW_ONLY')}
+                  disabled={savingAiScope}
+                  className={`w-14 h-7 rounded-full transition-all relative disabled:opacity-50 ${aiScope === 'ALL' ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                >
+                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiScope === 'ALL' ? 'translate-x-7' : ''}`}></div>
+                </button>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Cutoff Rollout (created_at &lt; cutoff = legacy)</label>
+                <input
+                  type="datetime-local"
+                  value={aiScopeCutoffAt}
+                  onChange={(e) => setAiScopeCutoffAt(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Total</div>
+                  <div className="text-lg font-bold text-white">{aiScopeSummary.totalCustomers}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Baru (AI)</div>
+                  <div className="text-lg font-bold text-emerald-400">{aiScopeSummary.newCustomers}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Legacy</div>
+                  <div className="text-lg font-bold text-amber-400">{aiScopeSummary.legacyCustomers}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
+                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Tersenyapkan</div>
+                  <div className="text-lg font-bold text-pink-400">{aiScopeSummary.silencedByScope}</div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveAiScope}
+              disabled={savingAiScope}
+              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              <Save size={12} />
+              <span>{savingAiScope ? 'Saving...' : 'Simpan AI Rollout Scope'}</span>
+            </button>
           </div>
 
           {/* MQL Automation & Lead Event Configuration */}

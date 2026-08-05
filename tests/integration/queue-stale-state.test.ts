@@ -5,6 +5,7 @@ import { customerService } from '../../src/services/customer.service';
 import { queueService } from '../../src/services/queue.service';
 import { stateMachine } from '../../src/state-machine/machine';
 import { FastifyInstance } from 'fastify';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 /**
@@ -20,6 +21,7 @@ describe('Queue Stale-State Fix: 2 Rapid Affirmations', () => {
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.LLM_API_KEY = 'mock_llm_key';
     process.env.WAHA_API_KEY = 'my_waha_api_key_secret';
+    await seedAiScopeAll();
     app = buildApp();
     await app.ready();
   });
@@ -86,7 +88,7 @@ describe('Queue Stale-State Fix: 2 Rapid Affirmations', () => {
     expect(JSON.parse(res2.body)).toEqual({ status: 'EVENT_PROCESSED' });
 
     // Beri waktu worker in-memory menyelesaikan kedua job.
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
     expect(processSpy).toHaveBeenCalledTimes(2);
     // Pesan pertama diproses di INITIAL, pesan kedua di AWAITING_INTEREST

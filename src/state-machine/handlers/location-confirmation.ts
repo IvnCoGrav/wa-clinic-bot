@@ -3,6 +3,7 @@ import { StateHandlerContext, StateHandlerResult } from '../types';
 import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { deliveryService } from '../../services/delivery.service';
 import { customerService } from '../../services/customer.service';
+import { phrasingService } from '../../integrations/llm/phrasing.service';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
@@ -96,14 +97,29 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
         // Hitung detail ongkir normal & promo
         const delivery = await deliveryService.calculateDelivery({ lat: updatedCustomer.lat!, lng: updatedCustomer.lng! });
 
-        return {
-          nextState: ConversationState.AWAITING_INTEREST,
-          replyText: TEMPLATES.ongkirInfo({
+        const fallbackOngkirText = TEMPLATES.ongkirInfo({
+          distanceKm: delivery.distanceKm,
+          normalPrice: delivery.normalPrice,
+          promoPrice: delivery.promoPrice,
+          freeTierKm: delivery.freeTierKm,
+        });
+
+        const replyText = await phrasingService.generate({
+          intent: 'ongkir_info',
+          facts: {
             distanceKm: delivery.distanceKm,
             normalPrice: delivery.normalPrice,
             promoPrice: delivery.promoPrice,
-            freeTierKm: delivery.freeTierKm,
-          }),
+            freeTierKm: delivery.freeTierKm ?? 5,
+          },
+          conversationId: conversation.id,
+          tenantId,
+          fallbackTemplate: fallbackOngkirText,
+        });
+
+        return {
+          nextState: ConversationState.AWAITING_INTEREST,
+          replyText,
           shouldSendReply: true,
           sendPricelistImage: true,
         };
@@ -116,9 +132,15 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
         };
       }
     } else {
+      const askDetailReply = await phrasingService.generate({
+        intent: 'ask_kelurahan_detail',
+        conversationId: conversation.id,
+        tenantId,
+        fallbackTemplate: TEMPLATES.askKelurahanDetail(),
+      });
       return {
         nextState: ConversationState.AWAITING_LOCATION,
-        replyText: TEMPLATES.askKelurahanDetail(),
+        replyText: askDetailReply,
         shouldSendReply: true,
       };
     }
@@ -127,9 +149,15 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
   // 4. NEGATIVE CHECK -> Bersihkan data pending dan minta input ulang kelurahan
   if (isNegative) {
     await customerService.clearPendingLocation(customer.id, tenantId);
+    const askDetailReply = await phrasingService.generate({
+      intent: 'ask_kelurahan_detail',
+      conversationId: conversation.id,
+      tenantId,
+      fallbackTemplate: TEMPLATES.askKelurahanDetail(),
+    });
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: TEMPLATES.askKelurahanDetail(),
+      replyText: askDetailReply,
       shouldSendReply: true,
     };
   }
@@ -146,9 +174,16 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
     };
   }
 
+  const askDetailReply = await phrasingService.generate({
+    intent: 'ask_kelurahan_detail',
+    conversationId: conversation.id,
+    tenantId,
+    fallbackTemplate: TEMPLATES.askKelurahanDetail(),
+  });
+
   return {
     nextState: ConversationState.AWAITING_LOCATION,
-    replyText: TEMPLATES.askKelurahanDetail(),
+    replyText: askDetailReply,
     shouldSendReply: true,
   };
 }

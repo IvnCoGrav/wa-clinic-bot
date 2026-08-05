@@ -6,6 +6,108 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-12
+
+### Added — Slash Commands Customer (/reset, /state, /mulai)
+
+**Command Service (per-customer, satu choke point):**
+- **`src/services/command.service.ts`** (baru): `CommandService` — intercept perintah slash di `machine.processMessage()` (berlaku untuk semua jalur pesan masuk: webhook WAHA, WABA, CLI simulator). Command hanya menyentuh data customer yang sedang chat ini, tidak pernah customer lain.
+  - `/reset` — **hard wipe** data chat & reservasi nomor tersebut: hapus record Customer (cascade otomatis Conversation/Message/Reservation/Child/FollowUp), staging terkait (`medical_faq_staging`, `general_faq_staging`), cancel event Google Calendar, lepas label lifecycle WAHA, bersihkan memory fallback store, lalu re-create customer+conversation untuk balasan konfirmasi. **Konfirmasi 1 langkah** (TTL 5 menit): `/reset` → bot minta balas *YA* → baru dieksekusi; pesan lain membatalkan.
+  - `/state` — tampilkan info internal percakapan (current/previous state, attempts, human handling, coverage).
+  - `/mulai` (alias `/start`) — restart percakapan ke INITIAL + kosongkan lokasi, tanpa menghapus data; balasan greeting di-generate lewat handler greeting (persona tenant-aware).
+- **`src/state-machine/machine.ts`**: GATE ✨ command dijalankan SETELAH gate blocked-customer dan SEBELUM inbound logging / medical detection / NLU / AI router, supaya perintah tidak salah-rute ke eskalasi medis atau state handler.
+- **`src/services/burst-coalesce.service.ts`**: pesan teks diawali `/` di-flush buffer lalu passthrough (tidak di-merge) supaya exact-match perintah tidak hilang.
+- **Memory cleanup**: `clearCustomerMemory()` (customer.service), `clearConversationMemory()` (conversation.service), `clearMessageMemory()` (message.service) — mencegah snapshot stale pasca hard wipe.
+- **`src/cli/chat-simulator.ts`**: `/reset` & `/state` kini mengalir lewat state machine (parity dengan WhatsApp); `/location` & `/speed` tetap khusus simulator.
+
+**Copy balasan command** hardcoded Indonesia (konsisten dgn CLI command lain). Bila nanti multi-brand: pindahkan ke tabel per-tenant (catatan di README).
+
+### Added — Maksimal Karakter per Balasan AI + Highlight Chat Aktif (Live Chat)
+
+**Maksimal karakter per balasan AI (persona config, tenant-aware):**
+- **`prisma/schema.prisma`** + migration `20260814000000_add_max_chars_per_reply`: kolom `max_chars_per_reply Int?` di tabel `tenant_persona` (null = tanpa limit, default aman utk tenant lama).
+- **`src/config/persona.ts`**: cache `maxCharsByTenant` + getter `getMaxCharsPerReply(tenantId)`; `loadPersonaFromDb`/`savePersonaToDb` ikut baca/simpan limit; helper `truncateToMaxChars()` — potong aman di akhir kalimat (`.`, `!`, `?`) atau batas kata, tanpa memotong di tengah kata.
+- **`src/integrations/llm/generator.ts`**: sisipkan instruksi `BATAS KARAKTER` ke system prompt saat limit dikonfigurasi + hard-truncate aman pada jawaban final (jalur sukses & fallback). Berlaku untuk balasan AI saja, template terstruktur tetap utuh.
+- **`src/routes/admin.route.ts`**: `GET/POST /api/admin/persona` kini menyertakan/menerima `maxCharsPerReply`.
+- **Dashboard `AiPersona.tsx`**: input "Maksimal karakter per balasan AI (0/kosong = tanpa limit)".
+
+**Highlight chat aktif (Live Chat Monitor):**
+- **Dashboard `LiveChatMonitor.tsx`**: kartu percakapan yang dipilih kini tampil tegas — `border-pink-500` solid + `bg-pink-500/10` + ring + subtle shadow.
+
+### Added — NLU Layer, Price Answer, Phrasing Service, Reservation Lifecycle, Admin Create Reservation
+
+**NLU Layer (GATE 2.1 Medical):**
+- **`src/state-machine/machine.ts`**: GATE 2.1 — eskalasi medis via NLU intent `medical_query` (tanpa extra LLM call, pakai hasil NLU yang sudah ada). Konsisten dgn gate keyword medis existing. Alert `MEDICAL_CONCERN_MEDIUM` otomatis.
+- **`src/services/nlu-classifier.service.ts`**: tambah intent `medical_query` ke rule-based fallback (regex `medicalDetectionService`). Hanya NLU yang classify, gate keyword medis existing tidak dihapus.
+
+**Price Answer Service (anti-halusinasi harga):**
+- **`src/services/price-answer.service.ts`** (baru): `buildPriceAnswer()` — jawaban harga deterministik dari treatment catalog (tanpa LLM). Harga SPESIFIK (nama treatment disebut) → tampilkan harga + CTA assumptive-close jika ada lokasi; harga GENERIK → kirim pricelist image. `isAskPrice()` deteksi intent tanya harga; `isPricelistLostRequest()` deteksi permintaan kirim ulang pricelist.
+- **`src/state-machine/handlers/interest.ts`**: GATE PRICELIST HILANG (deterministik, sebelum intent detection) + GATE AFIRMASI SETELAH CTA HARGA (affirmasi singkat setelah "Mau coba {name}?" → lanjut form reservasi, tanpa tanya lokasi ulang).
+
+**Phrasing Service (natural language generation):**
+- **`src/integrations/llm/phrasing.service.ts`** (baru): `PhrasingService` — generate balasan natural via LLM berdasarkan intent + facts. Fallback ke template statis saat LLM down/API key kosong. Model: `MiniMax-M2.7-highspeed` via `OPENAI_BASE_URL` + `OPENAI_MODEL`.
+- **`src/integrations/llm/opener-tracker.ts`** (baru): tracking ringan in-memory per conversationId — simpan 3 kata pertama dari balasan bot terakhir (TTL 2 jam) supaya Phrasing Service bisa hindari repetisi pembuka.
+- **Handler updates**: `greeting.ts`, `location.ts`, `location-confirmation.ts` — semua balasan natural via `phrasingService.generate()` dgn fallback template statis. Multi-intent greeting + price/faq sebelum lokasi → alihkan tanya lokasi dulu.
+
+**Reservation Lifecycle Service:**
+- **`src/services/reservation-lifecycle.service.ts`** (baru): `onReservationCreated()` — side-effect sentral pasca-create reservasi: follow-up scheduling, upsert children, label lifecycle (pending payment / repeat / hapus new customer). Best-effort, tiap efek independent.
+- **`src/routes/webhook.route.ts`**: panggil `reservationLifecycleService.onReservationCreated()` setelah reservasi dibuat dari chat customer.
+- **`src/routes/admin.route.ts`**: panggil `reservationLifecycleService.onReservationCreated()` setelah reservasi dibuat dari admin + edit.
+
+**Admin Create Reservation (POST /api/admin/reservation):**
+- **`src/routes/admin.route.ts`**: endpoint baru `POST /api/admin/reservation` — input terstruktur (`customerId`, `treatmentCategory`, `treatmentDetail`, `bookingDate?`, `babies?`), validasi input, auto-resolve `treatmentCategory` dari treatment detail. Jalankan `reservationLifecycleService.onReservationCreated()` (follow-up + children + labels). Audit `CREATE_RESERVATION`.
+- **`packages/admin-dashboard/src/pages/tenant/Reservations.tsx`**: UI baru "Buat Reservasi Manual" — form dropdown customer, radio treatment category, textarea detail, date picker, dynamic baby name + age input, submit dgn `useUiFeedback`.
+
+**Label Lifecycle & Reconciliation:**
+- **`src/services/label-reconciliation.service.ts`** (baru): `LabelReconciliationService` — cron re-sync label WA vs status DB. Fix drift: customer dgn reservasi pending + riwayat confirmed → label `repeat` (bukan `pending payment`); customer baru tanpa confirmed → `pending payment`; hapus `new customer` saat reservasi pertama; `legacy` tidak disentuh.
+- **`src/services/cron.service.ts`**: `runLabelReconciliationWorker()` — runner periodik (interval 60 menit).
+- **`src/services/customer.service.ts`**: `markShareLocationSent()` — update `share_location_sent=true` saat customer mengirim share-location native.
+
+**Per-Contact Legacy Scrape:**
+- **`src/services/per-contact-legacy-scrape.service.ts`** (baru): `PerContactLegacyScrapeService` — scraping per-contact saat chat di-label `legacy` (gated `ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER`). Baca histori pesan sampai form reservasi pertama → simpan ke LegacyStaging (skip jika sudah ada). Race condition guard: in-memory Set. Dry-run mode support.
+- **`src/routes/webhook.route.ts`**: deteksi label change `legacy` → trigger `scrapeContactUntilFirstLead()`.
+- **`prisma/schema.prisma`**: `Customer` + `is_legacy_source` (boolean, default false) + `legacy_scraped_at` (timestamp nullable).
+- **`prisma/migrations/20260812000000_add_customer_legacy_fields/migration.sql`** (baru).
+
+**Share Location Tracking:**
+- **`prisma/schema.prisma`**: `Customer` + `share_location_sent` (boolean, default false).
+- **`prisma/migrations/20260807000000_add_customer_share_location_sent/migration.sql`** (baru).
+- **`src/state-machine/handlers/interest.ts`**: setelah reservasi diterima, minta share-location (pin GPS) — hanya 1x (gate `share_location_sent`). `TEMPLATES.askShareLocation()`.
+
+**State Machine Enhancements:**
+- **`src/state-machine/machine.ts`**: deteksi FAQ/price/chitchat via NLU + regex di state non-AWAITING_INTEREST → redirect ke FAQ handler tanpa reset state.
+- **`src/state-machine/types.ts`**: tambah `shareLocationRequestSent?: boolean` ke `StateHandlerContext`.
+- **`src/state-machine/handlers/location.ts`**: gate FAQ/price/chitchat via NLU + regex — redirect ke `handleInterestState()` tanpa reset state (customer bertanya harga sambil menunggu lokasi, tidak boleh ditolak).
+- **`src/state-machine/handlers/location-confirmation.ts`**: gate FAQ/price/chitchat saat menunggu konfirmasi lokasi — redirect ke handler interest.
+
+**Other Updates:**
+- **`src/config/persona.ts`**: tambah `askShareLocation()`, `priceCta()` template.
+- **`src/config/clinic.ts`**: `HAVERSINE_CIRCUITY_FACTOR` env fallback.
+- **`src/integrations/llm/intent.ts`**: tambah `medical_query` ke intent enum.
+- **`src/integrations/llm/generator.ts`**: integrasi phrasing service + opener tracker.
+- **`src/integrations/whatsapp/types.ts`**: tambah `labelChange?: { name: string; type: string }` ke webhook payload.
+- **`src/services/treatment-catalog.service.ts`**: `resolveTreatmentCategory()` — auto-detect kategori treatment dari detail teks.
+- **`src/services/legacy-harvesting.service.ts`**: tambah logging untuk harvesting engine.
+- **`src/app.ts`**: boot `PhrasingService`, `OpenerTracker`, `LabelReconciliationService`.
+- **`.env.example`**: tambah `ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER`, `PHRASING_MODEL`, `PHRASING_BASE_URL`.
+
+**Tests (baru):**
+- `tests/unit/price-answer.test.ts` (10 test: isAskPrice, buildPriceAnswer, pricelist lost)
+- `tests/unit/admin-create-reservation.test.ts` (POST admin reservation, validasi, lifecycle effects)
+- `tests/unit/label-lifecycle.test.ts` (label reconciliation drift fix scenarios)
+- `tests/unit/phrasing-service.test.ts` (phrasing fallback, LLM down, opener tracking)
+- `tests/unit/per-contact-legacy-scrape.test.ts` (4 test: scrape trigger, already scraped, race condition, dry-run)
+- `tests/unit/tier1_extra_guards.test.ts` (7 test: JID normalization, memory pruning, HUMAN_HANDLING guard)
+- `tests/unit/live-chat-hooks.test.ts` (5 test: message.created, conversation.updated events)
+- `tests/unit/idle-greeting-handler.test.ts` (5 test: warm reopening greeting, gate handler)
+- `tests/unit/faq-grounding.test.ts` (6 test: FAQ search grounding)
+- `tests/unit/delivery_circuity.test.ts` (4 test: Haversine 1.50x circuity, boundary, double-jump tier)
+- `tests/unit/kecamatan_city_rejection.test.ts` (52 test: 20 kecamatan rejection + city/regency rejection)
+- `tests/unit/idle-greeting-config.test.ts` (4 test: idle greeting config)
+- **Total: ~90 test files, 800+ tests, tsc clean.** 2 test failure pre-existing (queue-stale-state, self-learning debounce).
+
+---
+
 ## [Unreleased] - 2026-08-11
 
 ### Added — Burst Coalescing: Gabungkan Pesan Text Beruntun Menjadi Satu Balasan

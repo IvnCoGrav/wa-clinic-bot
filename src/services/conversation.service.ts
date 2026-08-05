@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { ConversationState } from '@prisma/client';
 import { clinicConfig } from '../config/clinic';
 import { getLiveChatHub } from './live-chat-hub.service';
+import { AI_ELIGIBILITY_ESCALATION_REASON } from './ai-eligibility.service';
 
 const memoryConversations = new Map<string, any>();
 
@@ -67,6 +68,18 @@ export class ConversationService {
   }
 
   /**
+   * Hapus snapshot conversation milik customer dari memory fallback store (dipakai saat
+   * hard wipe /reset supaya tidak menyisakan snapshot stale di memori).
+   */
+  public clearConversationMemory(customerId: string): void {
+    for (const [id, conv] of Array.from(memoryConversations.entries())) {
+      if (conv.customer_id === customerId) {
+        memoryConversations.delete(id);
+      }
+    }
+  }
+
+  /**
    * Cari conversation by id (dengan memory store fallback saat DB offline).
    */
   public async getConversationById(id: string, tenantId: string): Promise<any> {
@@ -79,22 +92,31 @@ export class ConversationService {
   }
 
   /**
-   * Daftar percakapan terbaru per tenant (dengan memory store fallback saat DB offline).
+   * Daftar percakapan per tenant dengan paging offset (dengan memory store fallback saat DB offline).
+   * Urutan: human-handling di atas (yang butuh aksi admin), lalu sisanya by last_message_at desc —
+   * dipindah ke DB supaya stabil antar halaman (infinite scroll).
    */
-  public async listConversations(tenantId: string, limit = 50): Promise<any[]> {
+  public async listConversations(tenantId: string, take = 50, offset = 0): Promise<any[]> {
     try {
       const convs = await prisma.conversation.findMany({
         where: { tenant_id: tenantId },
-        orderBy: { updated_at: 'desc' },
-        take: limit,
+        orderBy: [
+          { is_human_handling: 'desc' },
+          { last_message_at: 'desc' },
+        ],
+        skip: offset,
+        take,
       });
       convs.forEach((c) => memoryConversations.set(c.id, c));
       return convs;
     } catch (error) {
       return Array.from(memoryConversations.values())
         .filter((c) => c.tenant_id === tenantId)
-        .sort((a, b) => new Date(b.updated_at || b.last_message_at).getTime() - new Date(a.updated_at || a.last_message_at).getTime())
-        .slice(0, limit);
+        .sort((a, b) => {
+          if (!!a.is_human_handling !== !!b.is_human_handling) return a.is_human_handling ? -1 : 1;
+          return new Date(b.updated_at || b.last_message_at).getTime() - new Date(a.updated_at || a.last_message_at).getTime();
+        })
+        .slice(offset, offset + take);
     }
   }
 
@@ -111,6 +133,13 @@ export class ConversationService {
     // EXPLICIT GUARD: 6-hour auto-release is DISABLED for medical_concern escalation to protect customer safety
     if (conversation.escalation_reason === 'medical_concern') {
       console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to medical_concern. 6-hour auto-release is DISABLED.`);
+      return { released: false, updatedConversation: conversation };
+    }
+
+    // EXPLICIT GUARD: Legacy customer non-AI (AI Rollout Scope) TIDAK boleh auto-release
+    // kembali ke bot — customer ini memang diarahkan ke human handling permanen.
+    if (conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON) {
+      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${AI_ELIGIBILITY_ESCALATION_REASON}. 6-hour auto-release is DISABLED.`);
       return { released: false, updatedConversation: conversation };
     }
 

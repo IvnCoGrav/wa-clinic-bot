@@ -8,10 +8,12 @@ import { wahaClient } from '../../src/integrations/waha/client';
 import { customerService } from '../../src/services/customer.service';
 import { conversationService } from '../../src/services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 
 describe('Tier 1 Extra Items — E1 (JID Normalization), E2 (Memory Pruning), E3 (HUMAN_HANDLING Guard)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await seedAiScopeAll();
   });
 
   // --- E1: JID Normalization Tests ---

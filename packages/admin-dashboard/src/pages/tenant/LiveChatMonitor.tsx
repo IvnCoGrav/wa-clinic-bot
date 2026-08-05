@@ -41,6 +41,7 @@ interface LiveChatItem {
   lastMessages?: ChatMessage[];
   isMql?: boolean;
   mqlBubbleCount?: number;
+  isSandboxTest?: boolean;
 }
 
 export const LiveChatMonitor: React.FC = () => {
@@ -55,9 +56,15 @@ export const LiveChatMonitor: React.FC = () => {
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
+  const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('human_request');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const listSentinelRef = useRef<HTMLDivElement>(null);
+  const loadingMoreRef = useRef(false);
+  const firstRenderRef = useRef(true);
 
   // Auto-scroll ke pesan terbaru saat thread berubah / pesan baru masuk.
   useEffect(() => {
@@ -68,19 +75,71 @@ export const LiveChatMonitor: React.FC = () => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
 
-  const loadChats = async (isInitial = false) => {
-    if (isInitial) setLoading(true);
+  // Infinite scroll: muat halaman berikutnya saat sentinel terlihat di ujung daftar.
+  useEffect(() => {
+    const sentinel = listSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMoreRef.current) {
+          loadChats(false);
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, labelFilter]);
+
+  // Ganti filter label → reset daftar ke halaman pertama.
+  useEffect(() => {
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      return;
+    }
+    loadChats(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labelFilter]);
+
+  const loadChats = async (reset = false) => {
+    if (reset) setLoading(true);
+    if (loadingMoreRef.current && !reset) return;
+    if (reset) {
+      loadingMoreRef.current = true;
+    } else {
+      loadingMoreRef.current = true;
+      setLoadingMore(true);
+    }
     try {
-      const res = await apiRequest('/api/admin/live-chat/conversations');
+      const offset = reset ? 0 : chatsRef.current.length;
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}`);
       const data = Array.isArray(res) ? res : (res?.data || []);
-      setChats(data);
-      chatsRef.current = data;
+      const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
+      if (reset) {
+        setChats(data);
+        chatsRef.current = data;
+      } else {
+        const merged = [...chatsRef.current];
+        const seen = new Set(merged.map((c) => c.conversationId));
+        for (const item of data) {
+          if (!seen.has(item.conversationId)) {
+            merged.push(item);
+            seen.add(item.conversationId);
+          }
+        }
+        setChats(merged);
+        chatsRef.current = merged;
+      }
+      setHasMore(nextHasMore);
       setErrorMessage(null);
     } catch (err: any) {
       console.error('Failed to load live chat conversations:', err);
       setErrorMessage(err.message || 'Gagal memuat percakapan.');
     } finally {
-      if (isInitial) setLoading(false);
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+      if (reset) setLoading(false);
     }
   };
 
@@ -103,8 +162,7 @@ export const LiveChatMonitor: React.FC = () => {
   useEffect(() => {
     loadChats(true);
 
-    const unsubscribe = connectLiveChatSse({
-      onStatusChange: (connected) => setSseConnected(connected),
+    const unsubscribe = connectLiveChatSse({      onStatusChange: (connected) => setSseConnected(connected),
       onEvent: (type, payload) => {
         if (type === 'message.created') {
           const conversationId = payload.conversationId;
@@ -138,13 +196,13 @@ export const LiveChatMonitor: React.FC = () => {
             setChats(updated);
             chatsRef.current = updated;
           } else {
-            // Percakapan baru muncul → reload daftar
-            loadChats(false);
+            // Percakapan baru muncul → reload daftar dari awal
+            loadChats(true);
           }
         } else if (type === 'conversation.updated') {
           const current = chatsRef.current;
           if (!current.some((c) => c.conversationId === payload.conversationId)) {
-            loadChats(false);
+            loadChats(true);
             return;
           }
           const updated = current.map((c) =>
@@ -186,7 +244,7 @@ export const LiveChatMonitor: React.FC = () => {
       await apiRequest(`/api/admin/conversation/${chat.conversationId}/release`, {
         method: 'PATCH',
       });
-      loadChats(false);
+      loadChats(true);
       if (selectedId === chat.conversationId) {
         setSelectedId(null);
         setMessages([]);
@@ -217,6 +275,16 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
+
+  const getChatLabel = (chat: LiveChatItem): 'medical_concern' | 'unresolved_faq' | 'human_request' => {
+    if (chat.escalationReason === 'medical_concern') return 'medical_concern';
+    if (chat.escalationReason === 'unresolved_faq') return 'unresolved_faq';
+    return 'human_request';
+  };
+
+  const filteredChats = chats.filter(
+    (chat) => labelFilter === 'all' || getChatLabel(chat) === labelFilter
+  );
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
@@ -282,19 +350,37 @@ export const LiveChatMonitor: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Conversations List */}
           <div className="lg:col-span-5 space-y-4">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-              Daftar Percakapan ({chats.length})
-            </h3>
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                Daftar Percakapan
+              </h3>
+              <select
+                value={labelFilter}
+                onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
+                className="px-2.5 py-1.5 bg-slate-900 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 focus:outline-none focus:border-pink-500 cursor-pointer"
+              >
+                <option value="human_request">Human Request</option>
+                <option value="medical_concern">Medical Emergency</option>
+                <option value="unresolved_faq">Unresolved FAQ</option>
+                <option value="all">Semua Label</option>
+              </select>
+            </div>
 
-            {chats.length === 0 ? (
+            {filteredChats.length === 0 ? (
               <div className="glass-panel border border-white/5 rounded-2xl p-12 text-center text-slate-500 text-xs">
                 <CheckCircle className="mx-auto text-emerald-500/80 mb-3" size={36} />
-                <p className="font-bold text-slate-400">Belum ada percakapan</p>
-                <p className="text-slate-600 mt-1">Percakapan baru akan muncul di sini secara real-time.</p>
+                <p className="font-bold text-slate-400">
+                  {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan sesuai filter'}
+                </p>
+                <p className="text-slate-600 mt-1">
+                  {chats.length === 0
+                    ? 'Percakapan baru akan muncul di sini secara real-time.'
+                    : 'Coba ganti filter label atau pilih "Semua Label".'}
+                </p>
               </div>
             ) : (
               <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {chats.map((chat) => {
+                {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
                   const chatName = chat.customerName || 'Customer';
@@ -308,10 +394,10 @@ export const LiveChatMonitor: React.FC = () => {
                       onClick={() => handleSelect(chat.conversationId)}
                       className={`glass-card rounded-2xl p-4 border transition cursor-pointer text-left flex flex-col justify-between space-y-3 ${
                         isSelected
-                          ? 'border-pink-500/50 bg-pink-500/5'
+                          ? 'border-pink-500 bg-pink-500/10 ring-2 ring-pink-500/40 shadow-lg shadow-pink-500/10 hover:!border-pink-400 hover:bg-pink-500/20'
                           : isMedical
-                            ? 'border-rose-500/20 bg-rose-500/5 hover:border-rose-500/40'
-                            : 'border-white/5 hover:border-white/10'
+                            ? 'border-rose-500/20 bg-rose-500/5 hover:!border-rose-500/50 hover:bg-rose-500/15'
+                            : 'border-white/5 hover:!border-white/25 hover:bg-slate-800/60 hover:!shadow-none'
                       }`}
                     >
                       <div className="flex justify-between items-start">
@@ -336,23 +422,34 @@ export const LiveChatMonitor: React.FC = () => {
                                 ⚡ MQL ({chat.mqlBubbleCount ?? 0} Bubble)
                               </span>
                             )}
+                            {chat.isSandboxTest && (
+                              <span className="inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30" title="Chat test/simulasi (bukan WhatsApp asli)">
+                                🧪 QA TEST
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRelease(chat);
-                          }}
-                          disabled={releasingId === chat.conversationId}
-                          className={`px-2 py-1 rounded-lg text-[9px] font-black transition flex items-center space-x-1 uppercase disabled:opacity-50 ${
-                            isMedical
-                              ? 'bg-rose-500 hover:bg-rose-600 text-white'
-                              : 'bg-pink-500 hover:bg-pink-600 text-white'
-                          }`}
-                        >
-                          <Play size={10} fill="currentColor" />
-                          <span>{releasingId === chat.conversationId ? 'Releasing...' : 'Release'}</span>
-                        </button>
+                        {chat.isHumanHandling ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRelease(chat);
+                            }}
+                            disabled={releasingId === chat.conversationId}
+                            className={`px-2 py-1 rounded-lg text-[9px] font-black transition flex items-center space-x-1 uppercase disabled:opacity-50 ${
+                              isMedical
+                                ? 'bg-rose-500 hover:bg-rose-600 text-white'
+                                : 'bg-pink-500 hover:bg-pink-600 text-white'
+                            }`}
+                          >
+                            <Play size={10} fill="currentColor" />
+                            <span>{releasingId === chat.conversationId ? 'Releasing...' : 'Release'}</span>
+                          </button>
+                        ) : (
+                          <span className="px-2 py-1 rounded-lg text-[9px] font-black uppercase bg-white/5 text-slate-500 border border-white/10">
+                            Ditangani bot
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-[11px] text-slate-400 line-clamp-1 italic font-sans leading-relaxed">
@@ -369,6 +466,11 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   );
                 })}
+                {hasMore && (
+                  <div ref={listSentinelRef} className="flex justify-center py-3">
+                    <Loader size={16} className={`animate-spin text-pink-500 ${loadingMore ? '' : 'opacity-0'}`} />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -389,14 +491,20 @@ export const LiveChatMonitor: React.FC = () => {
                         {selectedChat.customerPhone || 'Unknown'}@c.us
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleRelease(selectedChat)}
-                      disabled={releasingId === selectedChat.conversationId}
-                      className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-lg shadow-pink-500/10 disabled:opacity-50"
-                    >
-                      <Play size={12} fill="currentColor" />
-                      <span>Kembalikan ke Bot</span>
-                    </button>
+                    {selectedChat.isHumanHandling ? (
+                      <button
+                        onClick={() => handleRelease(selectedChat)}
+                        disabled={releasingId === selectedChat.conversationId}
+                        className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-lg shadow-pink-500/10 disabled:opacity-50"
+                      >
+                        <Play size={12} fill="currentColor" />
+                        <span>Kembalikan ke Bot</span>
+                      </button>
+                    ) : (
+                      <span className="px-3 py-1.5 bg-white/5 text-slate-500 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-wider">
+                        Ditangani Bot
+                      </span>
+                    )}
                   </div>
                 </div>
 

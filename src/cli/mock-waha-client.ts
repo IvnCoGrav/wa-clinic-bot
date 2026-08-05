@@ -72,6 +72,10 @@ export class MockWAHAClient implements IWahaClient {
     return 'WORKING';
   }
 
+  public async stopSession(session?: string): Promise<boolean> {
+    return true;
+  }
+
   public async getSession(session?: string): Promise<any | null> {
     return { name: session, status: 'WORKING', config: {} };
   }

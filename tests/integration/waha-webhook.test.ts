@@ -5,6 +5,7 @@ import { customerService } from '../../src/services/customer.service';
 import { queueService } from '../../src/services/queue.service';
 import { wahaClient } from '../../src/integrations/waha/client';
 import { FastifyInstance } from 'fastify';
+import { seedAiScopeAll } from '../helpers/seed-ai-scope';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 describe('WAHA Webhook & Guard Clause Integration Tests', () => {
@@ -14,6 +15,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.LLM_API_KEY = 'mock_llm_key';
     process.env.WAHA_API_KEY = 'my_waha_api_key_secret';
+    await seedAiScopeAll();
     app = buildApp();
     await app.ready();
   });

@@ -18,6 +18,7 @@ export interface WhatsAppTextPayload {
 export interface WhatsAppIncomingMessage {
   id: string;
   from: string; // Nomor HP pengirim (format internasional tanpa +, misal: 628123456789)
+  chatId?: string; // JID chat WAHA asli (misal phone@c.us / phone@lid) — dipakai utk label lifecycle
   timestamp: string;
   type: 'text' | 'location' | 'image' | 'interactive' | 'unknown';
   text?: WhatsAppTextPayload;

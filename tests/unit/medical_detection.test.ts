@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MedicalDetectionService } from '../../src/services/medical-detection.service';
 import { ConversationService } from '../../src/services/conversation.service';
+import { conversationService } from '../../src/services/conversation.service';
+import { customerService } from '../../src/services/customer.service';
+import { ConversationState } from '@prisma/client';
 import { buildApp } from '../../src/app';
+import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 describe('Modul 5.2 — Medical Concern Detection & Escalation Unit Tests', () => {
   const app = buildApp();
@@ -58,9 +62,23 @@ describe('Modul 5.2 — Medical Concern Detection & Escalation Unit Tests', () =
   });
 
   it('4. Manual Release API: PATCH /api/admin/conversation/:id/release MUST reset human handling state', async () => {
+    const cust = await customerService.getOrCreateCustomer('62899med123', 'Bunda Med', DEFAULT_TENANT_ID);
+    const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    await conversationService.updateConversationState(
+      conv.id,
+      {
+        currentState: ConversationState.HUMAN_HANDLING,
+        previousState: ConversationState.INITIAL,
+        isHumanHandling: true,
+        humanHandlingSince: new Date(),
+        escalationReason: 'medical_concern',
+      },
+      DEFAULT_TENANT_ID
+    );
+
     const response = await app.inject({
       method: 'PATCH',
-      url: '/api/admin/conversation/conv_med_123/release',
+      url: `/api/admin/conversation/${conv.id}/release`,
       headers: { 'x-api-key': 'test_admin_key_999' },
     });
 

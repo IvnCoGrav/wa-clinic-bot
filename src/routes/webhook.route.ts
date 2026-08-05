@@ -10,6 +10,7 @@ import { googleContactsService } from '../services/google-contacts.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { ConversationState } from '@prisma/client';
 import { abuseDetectionService } from '../services/abuse-detection.service';
+import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { contextStorage } from '../utils/context';
 import { memoryAdClicks } from './tracking.route';
 import { prisma } from '../db/client';
@@ -136,6 +137,40 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const phone = (await wahaClient.getPhoneNumberFromLid(chatId)) || normalizeWahaJid(chatId);
       const contactName = payload._data?.notifyName;
 
+      // --- LEGACY PER-CONTACT SCRAPE TRIGGER (Task 2 / flag: ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER) ---
+      // Posisi: SETELAH admin bypass, SEBELUM getOrCreateCustomer utama. Jika chat
+      // berlabel 'legacy' dan customer belum pernah di-scrape, kita picu scraping
+      // historis per-kontak dan return 200 TANPA masuk ke state machine.
+      if (process.env.ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER === 'true') {
+        if (labels.some(l => l.toLowerCase() === 'legacy')) {
+          const existingCust = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+          if (existingCust && !existingCust.legacy_scraped_at) {
+            console.log(`[LEGACY SCRAPE TRIGGER] Chat ${chatId} labeled 'legacy', customer not yet scraped. Triggering.`);
+            // Log inbound message ke audit trail
+            const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+            const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+            await messageService.logMessage({
+              tenantId: DEFAULT_TENANT_ID,
+              conversationId: conversation.id,
+              direction: 'INBOUND',
+              content: payload.body || '[LOCATION/MEDIA]',
+              waMessageId,
+              payloadRaw: payload,
+            });
+            // Best-effort: addLabel 'hold' (skip pada dry-run)
+            if (process.env.LEGACY_SCRAPE_DRY_RUN !== 'true') {
+              wahaClient.addLabel(chatId, 'hold').catch((err: any) => console.warn('[LEGACY SCRAPE] addLabel hold failed:', err.message));
+            }
+            // Fire-and-forget scrape
+            import('../services/per-contact-legacy-scrape.service').then(({ perContactLegacyScrapeService }) => {
+              perContactLegacyScrapeService.scrapeContactUntilFirstLead(chatId, DEFAULT_TENANT_ID)
+                .catch((err: any) => console.error('[LEGACY SCRAPE ERROR]', err));
+            });
+            return reply.status(200).send({ status: 'LEGACY_SCRAPE_TRIGGERED' });
+          }
+        }
+      }
+
 
       // Periksa apakah customer baru (belum ada record di database)
       const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
@@ -152,6 +187,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // --- LABEL "new customer" (Task 3 / flag: ENABLE_LIFECYCLE_LABELS) ---
+      // Hanya untuk customer baru (record baru dibuat) yang BUKAN legacy source —
+      // legacy customer yang melakukan scrape ulang tidak perlu label ini.
+      if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && isNewCustomer && !customer.is_legacy_source) {
+        wahaClient.addLabel(chatId, 'new customer').catch((err: any) =>
+          console.warn('[LIFECYCLE LABEL] addLabel "new customer" failed:', err.message)
+        );
+      }
+
       let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
       // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
@@ -166,6 +210,22 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           payloadRaw: payload,
         });
         return reply.status(200).send({ status: 'BLOCKED' });
+      }
+
+      // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
+      // Evaluasi sebelum state machine / AI Router / LLM. Legacy customer yang
+      // tidak eligible di-senyapkan (human handling + escalation khusus) — lihat
+      // ai-scope-gate.service.ts utk detail definisi "reset boundary" & mid-flow defer.
+      const scopeGate = await enforceAiScopeGate({
+        customer,
+        conversation,
+        tenantId: DEFAULT_TENANT_ID,
+        content: payload.body || '[LOCATION/MEDIA]',
+        waMessageId,
+        payloadRaw: payload,
+      });
+      if (scopeGate.action === 'silence') {
+        return reply.status(200).send({ status: scopeGate.status });
       }
 
       // Converted standardized incoming message format

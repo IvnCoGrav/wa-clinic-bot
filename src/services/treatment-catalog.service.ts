@@ -441,17 +441,53 @@ export class TreatmentCatalogService {
     }
 
     // 2. Fallback Keyword Scoring (sama dengan searchCatalog)
+    // Synonym expansion: istilah colloquial → keyword yang ada di catalog
+    const SYNONYMS: Record<string, string> = {
+      'bumil': 'hamil',           // ibu hamil
+      'bapil': 'batuk pilek',     // batuk pilek
+      'asi': 'laktasi',           // produksi ASI
+      'menyusui': 'laktasi',      // ibu menyusui
+      'hamil': 'hamil',           // canonical
+      'prenatal': 'hamil',        // prenatal massage
+      'oksitosin': 'oksitosin',   // sudah ada di nama
+      'nifas': 'pasca melahirkan', // masa nifas
+      'bayi': 'bayi',             // baby
+      'kids': 'anak',             // kids
+      'balita': 'anak',           // balita = anak
+      'kembung': 'kembung',       // sudah ada di nama
+      'kolik': 'kembung',         // bayi kolik
+    };
+
     const stopwords = new Set([
-      'yang', 'itu', 'apa', 'berapa', 'bung', 'bund', 'bunda', 'ya', 'dong', 'kak', 'min', 'mbak', 'mas',
+      'yang', 'itu', 'apa', 'berapa', 'bung', 'bund', 'bunda', 'bun', 'ya', 'dong', 'kak', 'min', 'mbak', 'mas',
       'saya', 'untuk', 'dengan', 'dan', 'atau', 'dari', 'ke', 'di', 'ada', 'bisa', 'mau', 'ingin', 'bagaimana',
       'kenapa', 'apakah', 'treatment', 'perawatan', 'tentang', 'info', 'informasi', 'detail', 'tolong',
       'ciri', 'cirinya', 'khasiat', 'manfaat', 'fungsi', 'fungsinya', 'sih', 'nih', 'lho', 'kan', 'nih',
       'mau', 'dong', 'ya', 'bund', 'juga', 'saja', 'aja', 'semua', 'daftar', 'list', 'please', 'tolong',
+      'pijat', // generic, semua treatment ada kata "pijat" → skip dari scoring
     ]);
-    const keywords = q
+    
+    const rawKeywords = q
       .split(/\s+/)
       .map((w) => w.replace(/[^a-z0-9]/gi, ''))
       .filter((w) => w.length >= 3 && !stopwords.has(w));
+
+    // Expand synonyms: setiap keyword yang ada di SYNONYMS → tambahkan expanded keyword
+    const expandedKeywords = new Set<string>();
+    for (const kw of rawKeywords) {
+      expandedKeywords.add(kw);
+      const synonym = SYNONYMS[kw];
+      if (synonym) {
+        // Split multi-word synonyms (e.g. "batuk pilek" → ["batuk", "pilek"])
+        for (const part of synonym.split(/\s+/)) {
+          if (part.length >= 3) {
+            expandedKeywords.add(part);
+          }
+        }
+      }
+    }
+
+    const keywords = Array.from(expandedKeywords);
 
     if (keywords.length === 0) {
       return [];
