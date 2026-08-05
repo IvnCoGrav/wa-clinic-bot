@@ -78,6 +78,10 @@ export function buildApp() {
   });
 
 
+  // Alias: /admin (tanpa trailing slash) → SPA admin dashboard di /admin/*.
+  // SPA + assets + tambahan login.html diserve handler internal di admin.route.ts.
+  app.get('/admin', async (_req, reply) => reply.redirect('/admin/'));
+
   // Register Webhook, Admin, Health, & Tracking Routes
   app.register(webhookRoutes);
   app.register(wabaWebhookRoutes);

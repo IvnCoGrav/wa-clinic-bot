@@ -17,6 +17,11 @@ RUN npx prisma generate
 # --max-old-space-size: mencegah OOM saat tsc build di server/VPS dengan RAM terbatas
 RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
+# Build Admin Dashboard SPA (base '/admin/', diserve bot di /admin/*)
+WORKDIR /app/packages/admin-dashboard
+RUN npm ci --prefer-offline && npm run build
+WORKDIR /app
+
 # --- STAGE 2: PRODUCTION RUNNER ---
 FROM node:20-slim AS runner
 
@@ -38,6 +43,8 @@ RUN npx prisma generate
 
 # Copy built code from builder stage
 COPY --from=builder /app/dist ./dist
+# Admin dashboard SPA (diserve bot di /admin/*)
+COPY --from=builder /app/packages/admin-dashboard/dist ./packages/admin-dashboard/dist
 
 EXPOSE 3000
 
