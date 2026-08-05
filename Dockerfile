@@ -14,7 +14,8 @@ COPY . .
 
 # Generate Prisma Client & Build TypeScript
 RUN npx prisma generate
-RUN npm run build
+# --max-old-space-size: mencegah OOM saat tsc build di server/VPS dengan RAM terbatas
+RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
 # --- STAGE 2: PRODUCTION RUNNER ---
 FROM node:20-alpine AS runner
