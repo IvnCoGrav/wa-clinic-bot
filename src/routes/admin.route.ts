@@ -157,8 +157,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
     // Create cryptographically secure 24h session
     const session = AdminSessionService.createSession(body.adminIdentity || 'Bidan Admin');
 
-    // Set HttpOnly, Secure, SameSite=Strict cookie scoped to app.{ADMIN_DOMAIN}
-    const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+    // Set HttpOnly, SameSite=Strict cookie scoped to app.{ADMIN_DOMAIN}
+    // Flag `Secure` HANYA saat koneksi benar-benar HTTPS (langsung atau via reverse
+    // proxy x-forwarded-proto). Kalau dipaksa Secure saat NODE_ENV=production di atas
+    // HTTP, browser menyimpan cookie tapi TIDAK mengirimkannya kembali → semua panggilan
+    // /api/admin/* kena 401 ("Invalid or missing authentication credentials").
+    const isSecureRequest =
+      request.protocol === 'https' ||
+      String(request.headers['x-forwarded-proto'] || '')
+        .split(',')[0]
+        .trim() === 'https';
+    const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${isSecureRequest ? '; Secure' : ''}`;
     reply.header('Set-Cookie', cookieValue);
 
     return reply.status(200).send({
