@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     # Forward SEMUA var dari .env server ke container app (LLM/ORS/Redis/admin keys dll).
     # Nilai di blok `environment` di bawah tetap MENIMPA env_file — jadi var jaringan
     # (DATABASE_URL, WAHA_BASE_URL, PORT, HOST) aman memakai nilai container.
@@ -51,6 +51,20 @@ services:
       timeout: 5s
       retries: 5
 
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
   waha:
     image: devlikeapro/waha:noweb-2026.7.2
     restart: always
@@ -73,3 +87,5 @@ services:
 volumes:
   postgres_data:
   waha_sessions:
+  caddy_data:
+  caddy_config:
