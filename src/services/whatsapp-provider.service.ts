@@ -150,7 +150,22 @@ export class WhatsappProviderService {
    * Tidak dipakai bila session lama masih punya config (webhook dipertahankan).
    */
   private buildDefaultSessionConfig(): any {
-    const webhookUrl = process.env.WAHA_WEBHOOK_URL || 'http://host.docker.internal:3000/webhook';
+    const webhookUrl = process.env.WAHA_WEBHOOK_URL || 'http://app:3000/webhook';
+    const secret = process.env.WAHA_WEBHOOK_SECRET || '';
+    const webhook: any = {
+      url: webhookUrl,
+      events: ['session.status', 'message'],
+      retries: {
+        delaySeconds: 2,
+        attempts: 15,
+        exponential: true,
+      },
+    };
+    // WAHA_WEBHOOK_SECRET (NODE_ENV=production wajib) → WAHA kirim header ini supaya
+    // webhook.route.ts tidak menolak (401) request inbound. Dikosongkan bila secret kosong.
+    if (secret) {
+      webhook.headers = { 'X-Webhook-Secret': secret };
+    }
     return {
       noweb: {
         store: {
@@ -158,17 +173,7 @@ export class WhatsappProviderService {
           fullSync: true,
         },
       },
-      webhooks: [
-        {
-          url: webhookUrl,
-          events: ['session.status', 'message'],
-          retries: {
-            delaySeconds: 2,
-            attempts: 15,
-            exponential: true,
-          },
-        },
-      ],
+      webhooks: [webhook],
     };
   }
 
