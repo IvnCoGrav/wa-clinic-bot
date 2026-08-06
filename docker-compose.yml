@@ -74,10 +74,9 @@ services:
       - WAHA_DASHBOARD_USERNAME=admin
       - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-admin12345}
       - WAHA_API_KEY=${WAHA_API_KEY:-my_waha_api_key_secret}
-      # Override WhatsApp Web version untuk mencegah regresi Noise Handshake (WA blocked stale version).
-      # WAHA memakai versi ini hanya jika lebih tinggi dari bawaan (cek log "resolved version" saat start).
-      # Ambil revision terbaru dari https://web.whatsapp.com/sw.js (cari "client_revision").
-      - WAHA_NOWEB_WA_VERSION=2.3000.1044332936
+      # Secara default, override WA_VERSION dimatikan agar engine (Baileys) dapat melakukan auto-fetch
+      # versi terbaru dari WhatsApp Web saat sesi dimulai. Aktifkan kembali HANYA jika auto-fetch rusak.
+      # - WAHA_NOWEB_WA_VERSION=2.3000.1044619432
 
 
 volumes:
