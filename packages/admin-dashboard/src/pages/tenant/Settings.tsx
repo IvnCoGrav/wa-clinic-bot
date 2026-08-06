@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
+
+// Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
+const CAPI_TOKEN_MASK = '••••••••••••••••••••••••••••••••';
+
 import { 
   Settings as SettingsIcon, 
   MapPin, 
@@ -243,6 +247,7 @@ export const Settings: React.FC = () => {
         setMetaPixelId(d.metaPixelId || '');
         setCapiConfigured(!!d.hasCapiAccessToken);
         setCapiSource(d.capiTokenSource || 'none');
+        setCapiAccessToken(d.hasCapiAccessToken ? CAPI_TOKEN_MASK : '');
       }
     } catch (err) {
       console.warn('Failed to load Meta Pixel & CAPI config:', err);
@@ -254,11 +259,11 @@ export const Settings: React.FC = () => {
     try {
       const body: any = {};
       if (metaPixelId !== '') body.metaPixelId = metaPixelId;
-      if (capiAccessToken !== '') body.capiAccessToken = capiAccessToken;
+      if (capiAccessToken !== '' && capiAccessToken !== CAPI_TOKEN_MASK) body.capiAccessToken = capiAccessToken;
       const res = await apiRequest('/api/admin/capi-config', { method: 'PATCH', body: JSON.stringify(body) });
       setCapiConfigured(!!res?.data?.hasCapiAccessToken);
       setMetaPixelId(res?.data?.metaPixelId || metaPixelId);
-      setCapiAccessToken('');
+      setCapiAccessToken(CAPI_TOKEN_MASK);
       setCapiSource('db');
       toast(res?.message || 'Konfigurasi Meta Pixel & CAPI tersimpan.', 'success');
     } catch (err: any) {

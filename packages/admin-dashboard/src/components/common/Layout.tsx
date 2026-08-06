@@ -44,7 +44,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       }
     }
     fetchSystemHealth();
-    const interval = setInterval(fetchSystemHealth, 30000);
+    const interval = setInterval(fetchSystemHealth, 120000);
     return () => clearInterval(interval);
   }, []);
 

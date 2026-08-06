@@ -48,8 +48,8 @@ export const Overview: React.FC = () => {
       setHealthData(data);
       
       // Load recent reservations to update stats count dynamically
-      const reservations = await apiRequest('/api/admin/reservations');
-      const count = reservations?.length || 0;
+      const reservations = await apiRequest('/api/admin/reservations/count');
+      const count = reservations?.count ?? 0;
       setStats(prev => ({
         ...prev,
         reservations: count,
@@ -64,7 +64,7 @@ export const Overview: React.FC = () => {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000);
+    const interval = setInterval(fetchStatus, 60000);
     return () => clearInterval(interval);
   }, []);
 

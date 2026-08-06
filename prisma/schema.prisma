@@ -92,6 +92,7 @@ model Customer {
   ai_override             AiOverride?
 
   @@index([tenant_id])
+  @@index([tenant_id, created_at])
   @@map("customers")
 }
 
@@ -133,6 +134,7 @@ model Conversation {
   messages                 Message[]
 
   @@index([tenant_id])
+  @@index([tenant_id, is_human_handling, last_message_at])
   @@map("conversations")
 }
 
@@ -183,6 +185,7 @@ model Message {
   created_at      DateTime     @default(now())
 
   @@index([tenant_id])
+  @@index([conversation_id, tenant_id, created_at])
   @@map("messages")
 }
 
@@ -216,6 +219,7 @@ model Reservation {
   children                 Child[]
 
   @@index([tenant_id])
+  @@index([tenant_id, created_at])
   @@map("reservations")
 }
 

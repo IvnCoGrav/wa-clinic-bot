@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { Pagination } from '../../components/common/Pagination';
 import {
   Users,
   Search,
@@ -9,8 +10,6 @@ import {
   Loader,
   RefreshCw,
   X,
-  ChevronLeft,
-  ChevronRight,
   Zap,
   Phone,
   Copy,
@@ -327,31 +326,12 @@ export const CustomerDatabase: React.FC = () => {
 
         {/* Pagination Footer */}
         {!loading && customers.length > 0 && (
-          <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
-            <span>
-              Menampilkan {customers.length} dari total <span className="text-white font-bold">{totalCount}</span> customer
-            </span>
-
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1.5 rounded-lg bg-white/5 border border-white/10 disabled:opacity-30 hover:text-white"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="font-bold text-white">
-                {page} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-1.5 rounded-lg bg-white/5 border border-white/10 disabled:opacity-30 hover:text-white"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            label={`Menampilkan ${customers.length} dari total ${totalCount} customer`}
+          />
         )}
       </div>
 

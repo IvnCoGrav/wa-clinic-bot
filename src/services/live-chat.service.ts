@@ -42,12 +42,58 @@ export class LiveChatService {
    */
   public async getConversationList(tenantId: string, take = 50, offset = 0): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
     const conversations = await conversationService.listConversations(tenantId, take, offset);
-    const items: LiveChatConversationItem[] = [];
-    for (const c of conversations) {
-      const customer = await customerService.getCustomerById(c.customer_id, tenantId);
-      const lastMessages = await messageService.getRecentMessages(c.id, 3, tenantId);
-      items.push(this.serialize({ ...c, customer, messages: lastMessages }));
+    if (conversations.length === 0) {
+      return { items: [], hasMore: false };
     }
+
+    const conversationIds = conversations.map((c) => c.id);
+    const customerIds = [...new Set(conversations.map((c) => c.customer_id))];
+
+    // Batch fetch semua customer (1 query, bukan N query).
+    let customers = new Map<string, any>();
+    try {
+      const rows = await prisma.customer.findMany({
+        where: { id: { in: customerIds }, tenant_id: tenantId },
+      });
+      customers = new Map(rows.map((c) => [c.id, c]));
+    } catch (error) {
+      // DB offline → fallback per-customer (memory store)
+      for (const id of customerIds) {
+        const c = await customerService.getCustomerById(id, tenantId);
+        if (c) customers.set(id, c);
+      }
+    }
+
+    // Batch fetch pesan terakhir per conversation (1 query, bukan N query).
+    let lastMessagesByConv = new Map<string, any[]>();
+    try {
+      const rows = await prisma.message.findMany({
+        where: { conversation_id: { in: conversationIds }, tenant_id: tenantId },
+        orderBy: { created_at: 'desc' },
+      });
+      const grouped = new Map<string, any[]>();
+      for (const m of rows) {
+        const arr = grouped.get(m.conversation_id) || [];
+        if (arr.length < 3) arr.push(m);
+        grouped.set(m.conversation_id, arr);
+      }
+      for (const [cid, arr] of grouped.entries()) {
+        lastMessagesByConv.set(cid, arr.reverse()); // kembalikan ke kronologis (lama -> baru)
+      }
+    } catch (error) {
+      // DB offline → fallback per-conversation (memory store)
+      for (const cid of conversationIds) {
+        lastMessagesByConv.set(cid, await messageService.getRecentMessages(cid, 3, tenantId));
+      }
+    }
+
+    const items = conversations.map((c) =>
+      this.serialize({
+        ...c,
+        customer: customers.get(c.customer_id),
+        messages: lastMessagesByConv.get(c.id) || [],
+      })
+    );
     // Urutan sudah dijamin DB (human handling di atas, lalu last_message_at desc) — stabil antar halaman.
     return { items, hasMore: conversations.length === take };
   }

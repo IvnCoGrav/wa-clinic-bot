@@ -39,11 +39,26 @@ export const Reservations: React.FC = () => {
   });
   const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalReservations, setTotalReservations] = useState(0);
 
-  const loadReservations = async () => {
+  const PAGE_SIZE = 100;
+
+  const loadReservations = async (targetPage = 1, append = false) => {
     try {
-      const data = await apiRequest('/api/admin/reservations');
-      setReservations(data || []);
+      setLoading(true);
+      const res = await apiRequest(`/api/admin/reservations?page=${targetPage}&pageSize=${PAGE_SIZE}`);
+      const data = Array.isArray(res) ? res : (res?.data || []);
+      setReservations(prev => append ? [...prev, ...data] : data);
+      if (!Array.isArray(res)) {
+        setTotalPages(res?.totalPages || 1);
+        setTotalReservations(res?.total ?? data.length);
+      } else {
+        setTotalPages(1);
+        setTotalReservations(data.length);
+      }
+      setPage(targetPage);
     } catch (err) {
       console.error('Failed to load reservations:', err);
     } finally {
@@ -52,8 +67,12 @@ export const Reservations: React.FC = () => {
   };
 
   useEffect(() => {
-    loadReservations();
+    loadReservations(1);
   }, []);
+
+  const loadMore = () => {
+    if (page < totalPages) loadReservations(page + 1, true);
+  };
 
   const handleConfirm = async (id: string) => {
     try {
@@ -346,6 +365,31 @@ export const Reservations: React.FC = () => {
               </table>
             </div>
           </div>
+
+          {/* Pagination Footer */}
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
+              <span>
+                Menampilkan {reservations.length} dari total <span className="text-white font-bold">{totalReservations}</span> reservasi
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => { setReservations([]); loadReservations(1); }}
+                  disabled={page === 1 || loading}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition font-semibold"
+                >
+                  Awal
+                </button>
+                <button
+                  onClick={loadMore}
+                  disabled={page >= totalPages || loading}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition font-semibold"
+                >
+                  {loading ? 'Memuat...' : `Muat Halaman ${page + 1} / ${totalPages}`}
+                </button>
+              </div>
+            </div>
+          )}
 
         </div>
       ) : (

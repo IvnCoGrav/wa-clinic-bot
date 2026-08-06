@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
+import { Pagination } from '../../components/common/Pagination';
 import {
   Clock,
   Send,
@@ -13,8 +14,6 @@ import {
   User,
   Sparkles,
   Edit2,
-  ChevronLeft,
-  ChevronRight
 } from 'lucide-react';
 
 interface Customer {
@@ -358,32 +357,13 @@ export const FollowUpQueue: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-slate-500">
-          Menampilkan {totalItems > 0 ? ((page - 1) * 20) + 1 : 0} - {Math.min(page * 20, totalItems)} dari {totalItems} antrian
-        </span>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setPage(page - 1)}
-            disabled={page <= 1 || loading}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center space-x-1"
-          >
-            <ChevronLeft size={14} />
-            <span>Sebelumnya</span>
-          </button>
-          <span className="text-xs text-slate-400 font-bold px-2">
-            Halaman {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => setPage(page + 1)}
-            disabled={page >= totalPages || loading}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-slate-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center space-x-1"
-          >
-            <span>Berikutnya</span>
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        loading={loading}
+        label={`Menampilkan ${totalItems > 0 ? ((page - 1) * 20) + 1 : 0} - ${Math.min(page * 20, totalItems)} dari ${totalItems} antrian`}
+      />
 
       {/* Reschedule Modal */}
       {rescheduleModal.open && rescheduleModal.item && (
