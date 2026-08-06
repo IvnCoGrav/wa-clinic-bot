@@ -328,8 +328,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/customers/:id/messages
    * Riwayat percakapan kronologis (Chat History) untuk modal pada customer tertentu
    */
-  fastify.get('/api/admin/customers/:id/messages', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  fastify.get('/api/admin/customers/:id/messages', async (request: FastifyRequest<{ Params: { id: string }; Querystring: { limit?: string } }>, reply: FastifyReply) => {
     const { id } = request.params;
+    const limit = Math.min(1000, Math.max(1, parseInt(request.query?.limit || '200', 10) || 200));
     try {
       const conversations = await prisma.conversation.findMany({
         where: { customer_id: id, tenant_id: DEFAULT_TENANT_ID },
@@ -344,6 +345,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const messages = await prisma.message.findMany({
         where: { conversation_id: { in: conversationIds }, tenant_id: DEFAULT_TENANT_ID },
         orderBy: { created_at: 'asc' },
+        take: limit,
       });
 
       return reply.status(200).send({ success: true, count: messages.length, data: messages });
@@ -546,25 +548,51 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * GET /api/admin/reservations
-   * Get all reservations for the tenant
+   * GET /api/admin/reservations/count
+   * Hitung jumlah reservasi tenant (ringan, dipakai Overview dashboard yang polling berkala).
+   * Catatan: route ini HARUS didaftarkan sebelum GET /api/admin/reservations.
    */
-  fastify.get('/api/admin/reservations', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/admin/reservations/count', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const reservations = await prisma.reservation.findMany({
+      const count = await prisma.reservation.count({
         where: { tenant_id: DEFAULT_TENANT_ID },
-        include: {
-          customer: {
-            include: { children: true },
-          },
-        },
-        orderBy: {
-          created_at: 'desc'
-        }
       });
+      return reply.status(200).send({ success: true, count });
+    } catch (err: any) {
+      // Fallback memory bila DB offline
+      return reply.status(200).send({ success: true, count: memoryReservations.size });
+    }
+  });
+
+  /**
+   * GET /api/admin/reservations
+   * Get all reservations for the tenant (paginated).
+   * Query opsional: page (default 1), pageSize (default 100, max 500).
+   */
+  fastify.get('/api/admin/reservations', async (request: FastifyRequest<{ Querystring: { page?: string; pageSize?: string } }>, reply: FastifyReply) => {
+    const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
+    const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '100', 10) || 100));
+    try {
+      const where = { tenant_id: DEFAULT_TENANT_ID };
+      const [rows, total] = await Promise.all([
+        prisma.reservation.findMany({
+          where,
+          include: {
+            customer: {
+              include: { children: true },
+            },
+          },
+          orderBy: {
+            created_at: 'desc'
+          },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        prisma.reservation.count({ where }),
+      ]);
 
       const { computeCurrentAge } = await import('../utils/age-calculator');
-      return reservations.map((r) => ({
+      const data = rows.map((r) => ({
         ...r,
         baby_details: extractBabyDetails(r.raw_text),
         customer: r.customer
@@ -586,27 +614,37 @@ export async function adminRoutes(fastify: FastifyInstance) {
             }
           : undefined,
       }));
+      return reply.status(200).send({
+        success: true,
+        data,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      });
     } catch (err: any) {
       // Tabel "children" mungkin belum ada (pre-migration) → coba tanpa relasi children,
       // supaya daftar reservasi TETAP muncul. Jangan langsung jatuh ke memory (kosong).
       try {
         console.warn('[Admin API] Reservations query failed, retrying without children relation:', err.message);
-        const reservations = await prisma.reservation.findMany({
+        const rows = await prisma.reservation.findMany({
           where: { tenant_id: DEFAULT_TENANT_ID },
           include: { customer: true },
           orderBy: { created_at: 'desc' }
         });
-        return reservations.map((r) => ({
+        const data = rows.map((r) => ({
           ...r,
           baby_details: extractBabyDetails(r.raw_text),
           customer: r.customer ? { ...r.customer, children: [] } : undefined,
         }));
+        return reply.status(200).send({ success: true, data, total: data.length, page: 1, pageSize: data.length, totalPages: 1 });
       } catch (err2: any) {
         console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err2.message);
-        return Array.from(memoryReservations.values()).map((r) => ({
+        const data = Array.from(memoryReservations.values()).map((r) => ({
           ...r,
           baby_details: extractBabyDetails(r.raw_text),
         }));
+        return reply.status(200).send({ success: true, data, total: data.length, page: 1, pageSize: data.length, totalPages: 1 });
       }
     }
   });
@@ -615,15 +653,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/knowledge/chunks
    * Get all knowledge base chunks for the tenant
    */
-  fastify.get('/api/admin/knowledge/chunks', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/api/admin/knowledge/chunks', async (request: FastifyRequest<{ Querystring: { page?: string; pageSize?: string } }>, reply: FastifyReply) => {
     try {
-      const chunks = await prisma.knowledgeChunk.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID },
-        orderBy: { created_at: 'desc' }
+      const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
+      const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '200', 10) || 200));
+      const where = { tenant_id: DEFAULT_TENANT_ID };
+      const [rows, total] = await Promise.all([
+        prisma.knowledgeChunk.findMany({
+          where,
+          orderBy: { created_at: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        prisma.knowledgeChunk.count({ where }),
+      ]);
+      return reply.status(200).send({
+        success: true,
+        data: rows,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
       });
-      return reply.status(200).send({ success: true, data: chunks });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, data: [] });
+      return reply.status(200).send({ success: true, data: [], total: 0, page: 1, pageSize: 200, totalPages: 1 });
     }
   });
 
@@ -2410,13 +2463,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
         where: { tenant_id: DEFAULT_TENANT_ID, status: queryStatus as any },
         orderBy: { created_at: 'desc' },
       });
-      const itemsWithChunks = await Promise.all(pendingItems.map(async (item) => {
-        if (item.matched_chunk_id) {
-          const chunk = await prisma.knowledgeChunk.findUnique({ where: { id: item.matched_chunk_id } });
-          return { ...item, matchedChunk: chunk };
-        }
-        return item;
-      }));
+      const chunkIds = [...new Set(pendingItems.map((item) => item.matched_chunk_id).filter(Boolean))];
+      const chunks = chunkIds.length > 0
+        ? await prisma.knowledgeChunk.findMany({ where: { id: { in: chunkIds as string[] } } })
+        : [];
+      const chunksById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
+      const itemsWithChunks = pendingItems.map((item) =>
+        item.matched_chunk_id ? { ...item, matchedChunk: chunksById.get(item.matched_chunk_id) } : item
+      );
       return reply.status(200).send({ success: true, data: itemsWithChunks });
     } catch (err: any) {
       return reply.status(200).send({ success: true, data: [] });
@@ -4079,6 +4133,8 @@ Format JSON:
         } else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
           reply.type('image/jpeg');
         }
+        // Vite membangun asset dengan content-hash pada nama file → aman di-cache immutable.
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
         return reply.send(content);
       } catch (err) {
         return reply.status(404).send({ error: 'Not Found' });
@@ -4104,6 +4160,8 @@ Format JSON:
       const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/index.html');
       const content = await fs.readFile(filePath, 'utf-8');
       reply.type('text/html');
+      // index.html tidak boleh di-cache supaya versi terbaru JS/CSS selalu diambil.
+      reply.header('Cache-Control', 'no-cache');
       return reply.send(content);
     } catch (err) {
       // Fallback: serve legacy HTML pages directly if dist/index.html does not exist yet (e.g. before initial build)
