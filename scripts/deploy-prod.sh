@@ -107,9 +107,8 @@ echo "  Migrate deploy: OK"
 # -----------------------------------------------------------------------------
 # 4. Verifikasi no drift
 # -----------------------------------------------------------------------------
-echo
-DATABASE_URL_VAL="${DATABASE_URL:-$(grep -E "^DATABASE_URL=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"')}"
-DRIFT=$(docker compose exec -T app npx prisma migrate diff --from-url "$DATABASE_URL_VAL" --to-schema-datamodel prisma/schema.prisma --script 2>&1 || true)
+echo "==> [4/5] Cek drift skema (harus '-- This is an empty migration.') ..."
+DRIFT=$(docker compose exec -T app sh -c 'npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script' 2>&1 || true)
 if ! echo "$DRIFT" | grep -q "This is an empty migration"; then
   echo "WARNING: ada drift antara DB dan schema. Periksa manual:" >&2
   echo "$DRIFT" | head -40 >&2
@@ -123,10 +122,10 @@ fi
 echo
 echo "==> [5/5] Health check ..."
 echo "  GET /health:"
-curl -sS http://localhost:3000/health || { echo "  GAGAL hubungi /health"; exit 1; }
+docker compose exec -T app node -e "fetch('http://localhost:3000/health').then(r=>r.text()).then(console.log)" || { echo "  GAGAL hubungi /health"; exit 1; }
 echo
 echo "  GET /ready:"
-curl -sS http://localhost:3000/ready || { echo "  GAGAL hubungi /ready"; exit 1; }
+docker compose exec -T app node -e "fetch('http://localhost:3000/ready').then(r=>r.text()).then(console.log)" || { echo "  GAGAL hubungi /ready"; exit 1; }
 echo
 echo
 echo "Selesai. Kalau /ready menunjukkan waha bukan WORKING, scan QR via admin dashboard."
