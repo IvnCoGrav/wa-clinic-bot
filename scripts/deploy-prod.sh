@@ -42,8 +42,8 @@ require_env "ADMIN_API_KEY"
 require_env "WAHA_WEBHOOK_SECRET"
 
 WAHA_API_KEY_VAL=$(grep -E "^WAHA_API_KEY=" .env | head -1 | cut -d'=' -f2- | tr -d '"')
-if [[ "${WAHA_API_KEY_VAL}" != "my_waha_api_key_secret" ]]; then
-  echo "ERROR: WAHA_API_KEY di .env ('${WAHA_API_KEY_VAL}') harus 'my_waha_api_key_secret' (cocok dgn service waha di docker-compose.yml)." >&2
+if [[ -z "${WAHA_API_KEY_VAL}" ]]; then
+  echo "ERROR: WAHA_API_KEY di .env kosong. Isi dgn API key WAHA (harus sama dgn yang dipakai service waha di docker-compose.yml, dari var .env yang sama)." >&2
   exit 1
 fi
 
