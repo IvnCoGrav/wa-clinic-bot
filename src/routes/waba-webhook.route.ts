@@ -94,37 +94,8 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         tenantId
       );
 
-      if (customer.status === 'blocked') {
-const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
-
-      // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
-      // Konsisten dgn webhook WAHA. Legacy customer non-AI di-senyapkan (human
-      // handling + escalation khusus) sebelum masuk queue / state machine.
-      const scopeGate = await enforceAiScopeGate({
-        customer,
-        conversation,
-        tenantId,
-        content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
-        waMessageId: msg.messageId,
-        payloadRaw: msg.rawPayload,
-      });
-      if (scopeGate.action === 'silence') {
-        continue;
-      }
-        await messageService.logMessage({
-          tenantId,
-          conversationId: conversation.id,
-          direction: 'INBOUND',
-          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
-          waMessageId: msg.messageId,
-          payloadRaw: msg.rawPayload,
-        });
-        continue;
-      }
-
-      const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
-
-      // Best-effort: resolve URL media WABA (image) — gagal tidak menghalangi alur.
+      // Best-effort: resolve URL media WABA (image) & simpan ke storage/media/inbound
+      // agar bisa dirender di Live Chat (blur + download). Gagal tidak menghalangi alur.
       let mediaUrl: string | undefined;
       if (msg.type === 'image' && msg.mediaId) {
         try {
@@ -141,6 +112,59 @@ const conversation = await conversationService.getOrCreateConversation(customer.
         }
       }
 
+      let msgMedia: any = undefined;
+      if (msg.type === 'image' && mediaUrl) {
+        try {
+          const axios = (await import('axios')).default;
+          const response = await axios.get(mediaUrl, { responseType: 'arraybuffer', timeout: 15000 });
+          const { mediaService } = await import('../services/media.service');
+          const saved = await mediaService.saveInboundMedia({
+            tenantId,
+            buffer: Buffer.from(response.data),
+            mimeType: msg.mimeType || 'image/jpeg',
+          });
+          msgMedia = {
+            url: saved.hdUrl,
+            hdUrl: saved.hdUrl,
+            mimeType: msg.mimeType || 'image/jpeg',
+            caption: msg.caption || null,
+          };
+        } catch (mediaErr: any) {
+          console.warn(`[WABA MEDIA] Gagal menyimpan media ${msg.mediaId}:`, mediaErr.message);
+        }
+      }
+      const mergeMediaIntoRaw = (raw: any) => (msgMedia ? { ...raw, media: msgMedia } : raw);
+
+      if (customer.status === 'blocked') {
+const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
+      // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
+      // Konsisten dgn webhook WAHA. Legacy customer non-AI di-senyapkan (human
+      // handling + escalation khusus) sebelum masuk queue / state machine.
+      const scopeGate = await enforceAiScopeGate({
+        customer,
+        conversation,
+        tenantId,
+        content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+        waMessageId: msg.messageId,
+        payloadRaw: mergeMediaIntoRaw(msg.rawPayload),
+      });
+      if (scopeGate.action === 'silence') {
+        continue;
+      }
+        await messageService.logMessage({
+          tenantId,
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+          waMessageId: msg.messageId,
+          payloadRaw: mergeMediaIntoRaw(msg.rawPayload),
+        });
+        continue;
+      }
+
+      const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
       const incomingMessage: any = {
         id: msg.messageId,
         from: msg.fromNumber,
@@ -155,6 +179,7 @@ const conversation = await conversationService.getOrCreateConversation(customer.
         _provider: 'WABA',
         _normalized: msg,
         _mediaUrl: mediaUrl,
+        media: msgMedia,
       };
 
       // BURST COALESCING: jika aktif (BURST_COALESCE_MS>0) dan pesan text di state

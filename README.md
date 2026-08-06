@@ -226,8 +226,10 @@ Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain ya
 - `RAW_HTML` — upload file HTML (maks 500 KB, wajib elemen `<a id="wa-cta">`), disanitasi 17-layer; tag `<script>`/`<iframe>`/dll di-strip.
 
 **Tracking & keamanan:**
-- `PageView` selalu di-fire; events onload (`ViewContent`, `Search`) setelah PageView; events click (`Lead`, `Purchase`, dst) saat CTA diklik sebelum redirect.
+- **Event klien (pixel):** `PageView` selalu di-fire; events onload (`ViewContent`, `Search`) setelah PageView; events click (`Lead`, `Purchase`, dst) saat CTA diklik sebelum redirect.
+- **Event server (CAPI):** funnel konversi end-to-end — `Contact` (first contact), `Lead` (MQL), `InitiateCheckout` (form reservasi dikirim), `Purchase` (deteksi pesan "Payment <nominal>" ATAU admin tandai lunas, dedup 7 hari via `purchase_event_sent_at`). Semua event memakai `event_id = adClick.trackingCode` supaya Meta men-dedup. Konfigurasi kata kunci per tenant (`format_checkout`, `format_purchase`, `format_value`).
 - Tracking atribusi **same-origin**: `POST /api/tracking/click` (guard `X-Tracking-Api-Key`) menangkap `fbclid`, UTM, `_fbp`/`_fbc`.
+- 📖 Referensi arsitektur lengkap: **[`docs/META_FUNNEL.md`](docs/META_FUNNEL.md)**.
 - Header keamanan: CSP `script-src 'nonce-…' https://connect.facebook.net; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
 
 **Preview URL di admin:** dikontrol `LANDING_BASE_URL` (fallback `TRACKING_API_BASE_URL`); jika kosong, preview memakai path relatif same-origin (`/{slug}`).

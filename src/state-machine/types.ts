@@ -12,6 +12,11 @@ export interface StateHandlerContext {
   routerDecision?: AIRouterDecision;
   /** Riwayat percakapan terbaru (role user/assistant) — dipakai handler untuk resolusi anaphora (mis. "berapa itu?"). */
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /**
+   * INTERNAL guard: kedalaman hop antar-handler (intercept FAQ ↔ redirect lokasi).
+   * Dipakai mencegah mutual recursion tak terbatas — caller eksternal JANGAN mengisi.
+   */
+  _interceptDepth?: number;
 }
 
 export interface StateHandlerResult {

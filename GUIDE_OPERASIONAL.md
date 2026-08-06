@@ -118,7 +118,7 @@ Semua rute di bawah `/admin/*`; `/admin` & `/admin/*` yang tak dikenal redirect 
 13. **Operational Settings (`/admin/settings`):**
     - Global chatbot active toggle (ON/OFF).
     - **WhatsApp Provider** — pilih provider WAHA/WABA, status session WAHA live-check, ambil QR (`GET /api/admin/whatsapp-provider/qr` saat status `SCAN_QR_CODE`), aksi session (start/reset/disconnect), dan simpan kredensial WABA (Phone Number ID, Business Account ID, Access Token, Webhook Verify Token — token di-enkripsi AES-256-GCM di DB).
-    - **Meta Pixel & CAPI** — atur Pixel ID + CAPI Access Token per tenant (berlaku untuk semua provider).
+    - **Meta Pixel & CAPI** — atur Pixel ID + CAPI Access Token per tenant (berlaku untuk semua provider). Funnel konversi otomatis: `Contact` (kontak pertama), `Lead` (MQL), `InitiateCheckout` (form reservasi dikirim), `Purchase` (customer kirim pesan "Payment <nominal>" ATAU admin klik "Tandai Lunas" — dibatasi 7 hari). Lihat **`docs/META_FUNNEL.md`** untuk alur lengkap & dedup.
     - **AI Router Engine** — toggle aktif/shadow mode per tenant (default ON + shadow ON).
     - Peta & Branch Coordinate Picker, editor broadcast (UI Demo Only).
 14. **System Debug (`/admin/debug`):**
@@ -155,6 +155,15 @@ NLU berjalan di GATE 2 state machine pada setiap pesan inbound non-human-handlin
 
 - **`BURST_COALESCE_MS`** (default `0` = nonaktif; contoh `5000` = gabung pesan text dalam window 5 detik): bot di-debounce, gabung pesan text beruntun di state open-ended jadi **satu job satu balasan** yang membaca seluruh konteks. Pesan lokasi/media & state menunggu input spesifik (`AWAITING_LOCATION`, `LOCATION_CONFIRMED`, `RESERVATION_SENT`, `HUMAN_HANDLING`) TIDAK pernah di-merge.
 - **`BURST_COALESCE_MAX_MESSAGES`** (default `10`): batas pesan per batch; saat penuh, batch lama di-flush & batch baru dimulai.
+
+### Live Chat Media (Gambar Outbound & Inbound)
+
+Admin bisa **kirim gambar** dari Live Chat Monitor dan melihat **gambar yang dikirim customer** (thumbnail, blur + tombol download). File disimpan di `storage/media/{outbound,inbound}/<tenantId>/` (gitignored). Outbound dipakai langsung oleh WAHA (path lokal) atau Meta/WABA (URL publik), inbound hanya bisa diakses dashboard (cookie `admin_session`).
+
+- **`PUBLIC_BASE_URL`** (String, WAJIB untuk tenant WABA): Base URL publik bot. Tanpa ini, kirim gambar via provider Meta/WABA gagal dengan error `MEDIA_PUBLIC_URL_REQUIRED` (WAHA tidak butuh).
+- **`MEDIA_RETENTION_DAYS`** (Number, default `30`): fallback global lama penyimpanan media. Nilai per-tenant diambil dari kolom `tenants.media_retention_days`.
+- **`ENABLE_MEDIA_CLEANUP_CRON`** (Boolean, default `false`): aktifkan cron periodik yang menghapus file media kadaluarsa.
+- **`MEDIA_CLEANUP_INTERVAL_HOURS`** (Number, default `24`): interval cron cleanup media (jam).
 
 ### Humanizer / Human Typing Simulation
 

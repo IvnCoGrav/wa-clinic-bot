@@ -166,6 +166,8 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
       // 2. Verify that the message logged is the STRIPPED body (not raw Promo[CODE]).
       // The message-rewrite strips Promo[XX] before state machine and logging.
       // "Promo[promo22]" (standalone) → stripped body = "" → fallback → "Halo"
+      // Pesan diproses oleh queue worker secara async — tunggu sejenak sebelum assert.
+      await new Promise((r) => setTimeout(r, 400));
       expect(dbLogMsgSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           content: 'Halo',
@@ -176,8 +178,8 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
     });
   });
 
-  describe('3. Meta CAPI Lead Event Integration', () => {
-    it('should fire Lead event to CAPI Service on reservation confirmation', async () => {
+  describe('3. Meta CAPI Event Integration', () => {
+    it('should fire Purchase (not Lead) event to CAPI Service on reservation confirmation', async () => {
       const capiSpy = vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true });
 
       // Setup a mock reservation in memory fallback
@@ -211,15 +213,20 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
       });
 
       expect(response.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
 
-      // Verify that sendCapiEvent was called asynchronously with the 'Lead' event
-      expect(capiSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventName: 'Lead',
-          customer: mockCustomer,
-          adClick: mockCustomer.adClick,
-        })
-      );
+      // Confirm HANYA memicu Purchase (Lead dihapus dari sini — Lead hanya di MQL,
+      // InitiateCheckout di momen form reservasi dikirim).
+      const purchaseCall = capiSpy.mock.calls.find((c: any) => c[0]?.eventName === 'Purchase');
+      expect(purchaseCall).toBeDefined();
+      expect(purchaseCall[0]).toEqual(expect.objectContaining({
+        customer: mockCustomer,
+        adClick: mockCustomer.adClick,
+        customData: { source: 'ADMIN_CONFIRM' },
+      }));
+
+      const leadCall = capiSpy.mock.calls.find((c: any) => c[0]?.eventName === 'Lead');
+      expect(leadCall).toBeUndefined();
     });
 
     it('should also fire Purchase event with value on reservation confirmation', async () => {

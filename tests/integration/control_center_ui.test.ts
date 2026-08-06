@@ -12,6 +12,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
       process.env.ADMIN_DOMAIN = 'example.com';
       process.env.HUMANIZER_ENABLED = 'false';
       process.env.LLM_API_KEY = 'mock';
+      // Tes sandbox/webhook mengharap state maju dalam <400ms — matikan burst
+      // coalescing supaya pesan text langsung diproses (deterministik), tidak
+      // tergantung nilai .env lokal (mis. BURST_COALESCE_MS=5000).
+      process.env.BURST_COALESCE_MS = '0';
       await seedAiScopeAll();
     });
 

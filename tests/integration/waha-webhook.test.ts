@@ -1,8 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { buildApp } from '../../src/app';
 import { conversationService } from '../../src/services/conversation.service';
 import { customerService } from '../../src/services/customer.service';
 import { queueService } from '../../src/services/queue.service';
+import { messageService } from '../../src/services/message.service';
 import { wahaClient } from '../../src/integrations/waha/client';
 import { FastifyInstance } from 'fastify';
 import { seedAiScopeAll } from '../helpers/seed-ai-scope';
@@ -181,6 +184,80 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
 
     // Hapus label Admin setelah pengujian
     await wahaClient.removeLabel(chatId, 'Admin');
+  });
+
+  it('POST /webhook: menyimpan gambar inbound (WAHA) ke storage/media/inbound dan melampirkan metadata media', async () => {
+    const { mediaService } = await import('../../src/services/media.service');
+    const saveSpy = vi.spyOn(mediaService, 'saveInboundMedia');
+    const enqueueSpy = vi.spyOn(queueService, 'enqueueMessage');
+
+    const phone = `628777${Date.now()}`;
+    const waMessageId = `waha_img_msg_${Date.now()}`;
+    const payload = {
+      event: 'message',
+      session: 'default',
+      payload: {
+        id: waMessageId,
+        from: `${phone}@c.us`,
+        fromMe: false,
+        timestamp: 1700000000,
+        type: 'image',
+        caption: 'Foto hasil USG',
+        message: {
+          imageMessage: {
+            mimetype: 'image/jpeg',
+            caption: 'Foto hasil USG',
+          },
+        },
+        _data: { notifyName: 'Customer Image' },
+      },
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ status: 'EVENT_PROCESSED' });
+
+    // 1. Media diunduh & disimpan via mediaService dengan buffer + mimeType.
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    const saveArg = saveSpy.mock.calls[0][0];
+    expect(saveArg.tenantId).toBe(DEFAULT_TENANT_ID);
+    expect(saveArg.mimeType).toBe('image/jpeg');
+    expect(Buffer.isBuffer(saveArg.buffer)).toBe(true);
+
+    // 2. Pesan di-enqueue membawa metadata media (hdUrl path inbound privat).
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    const queuedMedia = enqueueSpy.mock.calls[0][0].incomingMessage.media;
+    expect(queuedMedia).toBeTruthy();
+    expect(queuedMedia.hdUrl).toMatch(/^\/media\/inbound\/default-tenant\//);
+    expect(queuedMedia.mimeType).toBe('image/jpeg');
+    expect(queuedMedia.caption).toBe('Foto hasil USG');
+
+    // 3. File benar-benar tersimpan di storage/media/inbound/<tenantId>.
+    const relPath = queuedMedia.hdUrl.replace('/media/inbound/', '');
+    const filePath = path.join(process.cwd(), 'storage', 'media', 'inbound', relPath);
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    // 4. Tunggu worker memproses → pesan INBOUND tercatat dengan payload_raw.media.
+    const customer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer!.id, DEFAULT_TENANT_ID);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const messages = await messageService.getRecentMessages(conversation.id, 5, DEFAULT_TENANT_ID);
+    const inbound = messages.find((m) => m.direction === 'INBOUND');
+    expect(inbound).toBeTruthy();
+    expect(inbound.payload_raw?.media?.hdUrl).toMatch(/^\/media\/inbound\//);
+
+    // Cleanup file media hasil test agar tidak mencemari storage.
+    try {
+      fs.unlinkSync(filePath);
+    } catch { /* ignore */ }
+
+    saveSpy.mockRestore();
+    enqueueSpy.mockRestore();
   });
 
   it('POST /webhook: fromMe admin reply resets human handling auto-release timer', async () => {

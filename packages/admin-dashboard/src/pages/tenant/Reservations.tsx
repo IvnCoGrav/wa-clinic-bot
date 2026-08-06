@@ -566,15 +566,27 @@ export const Reservations: React.FC = () => {
                 <span>Delete & Cancel</span>
               </button>
 
-              {selectedRes.status === 'pending' && (
-                <button
-                  onClick={() => handleConfirm(selectedRes.id)}
-                  className="px-5 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition text-xs font-semibold flex items-center space-x-1.5 shadow shadow-emerald-500/20"
-                >
-                  <Check size={14} />
-                  <span>Tandai Lunas</span>
-                </button>
-              )}
+              {selectedRes.status === 'pending' && (() => {
+                const purchaseSentAt = selectedRes.purchase_event_sent_at ? new Date(selectedRes.purchase_event_sent_at) : null;
+                const purchaseWindowOpen = purchaseSentAt && (Date.now() - purchaseSentAt.getTime()) < 7 * 24 * 60 * 60 * 1000;
+                return (
+                  <button
+                    onClick={() => handleConfirm(selectedRes.id)}
+                    disabled={!!purchaseWindowOpen}
+                    title={purchaseWindowOpen
+                      ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count / potensi repeat order.`
+                      : undefined}
+                    className={`px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
+                      purchaseWindowOpen
+                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                        : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow shadow-emerald-500/20'
+                    }`}
+                  >
+                    <Check size={14} />
+                    <span>{purchaseWindowOpen ? 'Purchase Sudah Dikirim' : 'Tandai Lunas'}</span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>

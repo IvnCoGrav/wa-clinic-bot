@@ -14,6 +14,13 @@ function resolveSenderType(data: { direction: Direction; senderType?: string }):
   return data.direction === Direction.OUTBOUND ? 'BOT' : 'CUSTOMER';
 }
 
+// Ambil metadata media (gambar Live Chat) dari payload_raw untuk di-render dashboard.
+function extractMediaFromPayload(payloadRaw: any): any {
+  const media = payloadRaw?.media;
+  if (media && (media.url || media.hdUrl)) return media;
+  return undefined;
+}
+
 export class MessageService {
   /**
    * Pengecekan Idempotensi: Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
@@ -89,6 +96,7 @@ export class MessageService {
         direction: data.direction,
         content: data.content,
         wa_message_id: data.waMessageId || null,
+        payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
         sender_type: data.senderType || resolveSenderType(data),
         sender_name: data.senderName || null,
         created_at: new Date(),
@@ -123,6 +131,7 @@ export class MessageService {
             senderName: data.senderName || null,
             messageId: saved?.id || null,
             createdAt: saved?.created_at || new Date(),
+            media: extractMediaFromPayload(data.payloadRaw),
           },
         })
         .catch(() => {});

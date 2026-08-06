@@ -300,7 +300,11 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
 
   notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
-  reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string }) => {
+  reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string; formatCheckout?: string }) => {
+    const headerText = params?.formatCheckout && params.formatCheckout.trim().length > 0
+      ? params.formatCheckout.trim()
+      : 'Berikut list untuk reservasi :';
+
     const prefill = (field: string, value?: string) => {
       if (value && value.trim().length > 0) {
         return `${field} : ${value.trim()}`;
@@ -308,7 +312,7 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.k
       return `${field} :`;
     };
 
-    return `Berikut list untuk reservasi :
+    return `${headerText}
 
 Hari dan tanggal :
 Nama Bunda:${params?.name ? ` ${params.name}` : ''}
@@ -349,7 +353,21 @@ Terimakasih.  ☺️`;
     ongkir: number;
     promoDiscount: number;
     total: number;
-  }) => `Berikut reservasi 🐣
+    formatPurchase?: string;
+    formatValue?: string;
+  }) => {
+    const purchaseLabel = params.formatPurchase && params.formatPurchase.trim().length > 0
+      ? params.formatPurchase.trim()
+      : 'Payment';
+
+    const formatValueStr = (label: string, price: number) => {
+      if (params.formatValue && params.formatValue.includes('%VALUE%')) {
+        return params.formatValue.replace('%VALUE%', price.toLocaleString("id-ID"));
+      }
+      return `${label} = ${price.toLocaleString("id-ID")}`;
+    };
+
+    return `Berikut reservasi 🐣
 
 Hari dan tanggal : ${params.date} jam ${params.time}
 Nama Bunda: ${params.name}
@@ -360,14 +378,15 @@ No. Hp : ${params.phone}
 
 ${params.treatmentDetail}
 
-Payment :
-Treatment = ${params.treatmentPrice.toLocaleString("id-ID")}
+${purchaseLabel} :
+${formatValueStr('Treatment', params.treatmentPrice)}
 Ongkir = ${params.ongkir.toLocaleString("id-ID")}
 Promo ongkir = -${params.promoDiscount.toLocaleString("id-ID")}
 Total = ${params.total.toLocaleString("id-ID")}
 
 Hari H Pagi sebelum treatment akan kami reminder kembali bunda 🥰
-Terimakasih.  ☺️`,
+Terimakasih.  ☺️`;
+  },
 
   morningReminder: (params: { name: string; time: string }) =>
     `Selamat Pagi bunda ${params.name}! 😊

@@ -88,6 +88,51 @@ export function decryptCapiToken(raw: string): string | null {
   }
 }
 
+/**
+ * Format kata kunci funnel CAPI per tenant (format_checkout / format_purchase).
+ * Tenant-aware: dibaca dari kolom tenant DB, fallback ke nilai default bila
+ * tenant tidak punya config / DB offline (konsisten dengan pola credentials CAPI).
+ */
+export async function getTenantCapiFormats(tenantId?: string): Promise<{
+  formatCheckout: string;
+  formatPurchase: string;
+}> {
+  const defaults = {
+    formatCheckout: 'list untuk reservasi :',
+    formatPurchase: 'Payment',
+  };
+  if (!tenantId) return defaults;
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    return {
+      formatCheckout: tenant?.format_checkout?.trim() || defaults.formatCheckout,
+      formatPurchase: tenant?.format_purchase?.trim() || defaults.formatPurchase,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+/**
+ * Fire-and-forget helper: kirim event CAPI jika customer punya atribusi adClick,
+ * log error via console tanpa melempar exception (tidak merusak critical path).
+ */
+export function fireCapiEvent(params: {
+  eventName: string;
+  customer: any;
+  adClick?: any;
+  value?: number;
+  currency?: string;
+  tenantId?: string;
+  customData?: Record<string, any>;
+}): void {
+  capiService.sendCapiEvent(params).catch((err) => {
+    console.error(`[CAPI ERROR] Failed to send ${params.eventName} event:`, err.message);
+  });
+}
+
+
 export class CapiService {
   /**
    * Mengirimkan server-side event ke Meta Conversions API (CAPI).
@@ -160,6 +205,10 @@ export class CapiService {
       }
 
       // 4. CONSTRUCT EVENT DATA payload
+      //    event_id = trackingCode ad click (auto-derive). Meta menduplikasi event yang
+      //    memiliki event_id sama, jadi event yang sama dikirim 2x (mis. Purchase dari
+      //    keyword "Payment" + dari admin confirm) tidak akan double-count, dan Pixel
+      //    server-side (eventID) ter-dedup dengan CAPI.
       const eventData: any = {
         event_name: eventName,
         event_time: Math.floor(Date.now() / 1000),
@@ -167,6 +216,9 @@ export class CapiService {
         action_source: 'chat',
         user_data: userData,
       };
+      if (adClick.trackingCode) {
+        eventData.event_id = adClick.trackingCode;
+      }
 
       if (value !== undefined) {
         eventData.custom_data = {

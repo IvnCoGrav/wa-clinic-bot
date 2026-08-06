@@ -21,6 +21,10 @@ describe('Queue Stale-State Fix: 2 Rapid Affirmations', () => {
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.LLM_API_KEY = 'mock_llm_key';
     process.env.WAHA_API_KEY = 'my_waha_api_key_secret';
+    // Tes ini memverifikasi fresh-fetch state per pesan di worker queue — matikan
+    // burst coalescing supaya 2 pesan text langsung di-enqueue (bukan di-buffer),
+    // sehingga deterministik dan tidak tergantung nilai .env lokal.
+    process.env.BURST_COALESCE_MS = '0';
     await seedAiScopeAll();
     app = buildApp();
     await app.ready();

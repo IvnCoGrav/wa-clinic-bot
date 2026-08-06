@@ -7,6 +7,7 @@ import { conversationService } from '../../services/conversation.service';
 import { phrasingService } from '../../integrations/llm/phrasing.service';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { isLocationQueryMessage } from '../utils/location-query';
 
 /**
  * Handler untuk state AWAITING_LOCATION:
@@ -128,11 +129,16 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   const hasNluPriceOrFaq = nlu && (nlu.intents.includes('faq_question') || nlu.intents.includes('ask_price') || nlu.intents.includes('chitchat') || nlu.intents.includes('ask_schedule'));
   const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|cukur|gundul|potong|pijat|massage|spa|nanya|tanya|bisa|apakah|gimana|bagaimana|apa|persyaratan|syarat|paket|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
   const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex;
-  if (hasFaqIntent) {
+  const interceptDepth = ctx._interceptDepth || 0;
+  // Guard mutual recursion: pesan lokasi tetap diproses sebagai lokasi (jangan di-intercept FAQ),
+  // dan jangan intercept ulang bila sudah di-arahkan kembali dari interest handler (hop > 0).
+  const skipFaqIntercept = isLocationQueryMessage(incomingMessage, rawTextLocation) || interceptDepth > 0;
+  if (hasFaqIntent && !skipFaqIntercept) {
     console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
     const { handleInterestState } = await import('./interest');
     const interestResult = await handleInterestState({
       ...ctx,
+      _interceptDepth: interceptDepth + 1,
       conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any,
     });
     // STATE PUNYA PRIORITAS: setelah jawab FAQ, kembalikan state ke AWAITING_LOCATION,
@@ -245,9 +251,12 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       .replace(/\s+(bund|bunda|ya|kak|min|mbak|mas|gan|sis)\b/g, '')
       .trim();
 
-    // Jika teks lokasi lebih dari 15 karakter / merupakan kalimat bukan nama tempat, jangan echo kalimatnya
+    // Jika teks lokasi tidak mengandung keyword lokasi (kecamatan/kota/kelurahan/desa/di/ke/dll) dan tidak matchedSpan, atau terlalu panjang/bukan nama tempat, jangan echo kata tersebut
+    const LOCATION_KEYWORD_RE = /\b(kelurahan|desa|kecamatan|kec|kota|kabupaten|kab|jalan|jl|di|ke|dari|daerah|sekitar|wilayah|rumah|alamat)\b/i;
+    const hasLocationKeyword = LOCATION_KEYWORD_RE.test(rawTextLocation);
     const isTooLongSentence = !resolved.matchedSpan && (cleanLocationName.length > 15 || cleanLocationName.split(/\s+/).length > 2);
-    if (isTooLongSentence) {
+
+    if (!resolved.matchedSpan && (!hasLocationKeyword || isTooLongSentence)) {
       const askDetailReply = await phrasingService.generate({
         intent: 'ask_kelurahan_detail',
         conversationId: conversation.id,

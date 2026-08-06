@@ -6,6 +6,7 @@ import { adminRoutes } from './routes/admin.route';
 import { healthRoutes } from './routes/health.route';
 import { trackingRoutes } from './routes/tracking.route';
 import { landingRoutes } from './routes/landing.route';
+import { mediaRoutes } from './routes/media.route';
 import rateLimit from '@fastify/rate-limit';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
@@ -89,6 +90,7 @@ export function buildApp() {
   app.register(healthRoutes);
   app.register(trackingRoutes);
   app.register(landingRoutes);
+  app.register(mediaRoutes);
 
   return app;
 }
@@ -148,6 +150,16 @@ if (require.main === module) {
         setInterval(() => cron.runLabelReconciliation(), intervalHours * 60 * 60 * 1000);
         console.log(`🏷️ Label reconciliation cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[LABEL RECONCILIATION START ERROR]', e));
+    }
+
+    // Start media cleanup cron (hapus file media Live Chat yang melebihi retensi)
+    if (process.env.ENABLE_MEDIA_CLEANUP_CRON === 'true') {
+      const intervalHours = parseInt(process.env.MEDIA_CLEANUP_INTERVAL_HOURS || '24', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        setInterval(() => cron.runMediaCleanup(), intervalHours * 60 * 60 * 1000);
+        console.log(`🖼️ Media cleanup cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));
     }
   });
 }

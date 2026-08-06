@@ -29,6 +29,13 @@ export interface WhatsAppIncomingMessage {
     sha256?: string;
     caption?: string;
   };
+  /** Metadata media (gambar Live Chat): url/hdUrl relatif ke /media + mimeType + caption. */
+  media?: {
+    url?: string;
+    hdUrl?: string;
+    mimeType?: string;
+    caption?: string | null;
+  };
 }
 
 export interface WhatsAppStatus {

@@ -8,12 +8,30 @@ vi.mock('../../src/db/client', () => ({
     message: {
       findFirst: vi.fn(),
     },
+    generalFaqStaging: {
+      create: vi.fn(),
+    },
+    medicalFaqStaging: {
+      create: vi.fn(),
+    },
   },
 }));
 
 vi.mock('../../src/services/knowledge.service', () => ({
   knowledgeBaseService: {
-    importFaqs: vi.fn(),
+    checkDuplicateFaq: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/services/legacy-harvesting.service', () => ({
+  LegacyHarvestingService: {
+    isTransactionOrScheduleMessage: vi.fn(() => false),
+  },
+}));
+
+vi.mock('../../src/services/medical-detection.service', () => ({
+  MedicalDetectionService: {
+    detectMedicalConcern: vi.fn(() => ({ isMedical: false, detectedSymptoms: [] })),
   },
 }));
 
@@ -21,13 +39,18 @@ describe('Self-Learning Service Unit Tests', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
+    process.env.LLM_API_KEY = 'mock'; // paksa offline fallback (tanpa LLM)
+    vi.mocked(knowledgeBaseService.checkDuplicateFaq).mockResolvedValue({
+      isDuplicate: false,
+      similarity: 0,
+    } as any);
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('should debounce multiple admin replies and aggregate them into a single string', async () => {
+  it('should debounce multiple admin replies and aggregate them into a single staging entry', async () => {
     const customerId = 'cust_123';
     const conversationId = 'conv_123';
     const tenantId = 'default-tenant';
@@ -43,7 +66,7 @@ describe('Self-Learning Service Unit Tests', () => {
       created_at: new Date(),
     } as any);
 
-    const importFaqsSpy = vi.spyOn(knowledgeBaseService, 'importFaqs').mockResolvedValue(1);
+    const stagingCreateSpy = vi.spyOn(prisma.generalFaqStaging, 'create').mockResolvedValue({} as any);
 
     // Send first part of admin reply
     await selfLearningService.processAdminReply(customerId, conversationId, 'Pijat bayi harganya 60rb bund.', tenantId);
@@ -72,16 +95,19 @@ describe('Self-Learning Service Unit Tests', () => {
       orderBy: { created_at: 'desc' },
     });
 
-    // Check that it learns and aggregates with newline
-    expect(importFaqsSpy).toHaveBeenCalledWith(
-      [
-        {
-          question: 'Berapa harga pijat bayi?',
-          answer: 'Pijat bayi harganya 60rb bund.\nSudah free ongkir di bawah 5 km ya.',
-        },
-      ],
-      tenantId
-    );
+    // Check that it stages the aggregated Q&A pair (general FAQ, non-medical)
+    expect(stagingCreateSpy).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenant_id: tenantId,
+        conversation_id: conversationId,
+        raw_question: 'Berapa harga pijat bayi?',
+        raw_answer: 'Pijat bayi harganya 60rb bund.\nSudah free ongkir di bawah 5 km ya.',
+        general_question: 'Berapa harga pijat bayi?',
+        general_answer: 'Pijat bayi harganya 60rb bund.\nSudah free ongkir di bawah 5 km ya.',
+        category: 'livechat_harvest',
+        status: 'PENDING',
+      }),
+    });
   });
 
   it('should ignore learning if the admin reply contains transactional or greeting noise', async () => {
@@ -100,7 +126,8 @@ describe('Self-Learning Service Unit Tests', () => {
       created_at: new Date(),
     } as any);
 
-    const importFaqsSpy = vi.spyOn(knowledgeBaseService, 'importFaqs');
+    const stagingCreateSpy = vi.spyOn(prisma.generalFaqStaging, 'create').mockResolvedValue({} as any);
+    const medicalStagingSpy = vi.spyOn(prisma.medicalFaqStaging, 'create').mockResolvedValue({} as any);
 
     // Admin sends greeting/transactional reply
     await selfLearningService.processAdminReply(customerId, conversationId, 'Halo bunda, iya sebentar saya otw ya.', tenantId);
@@ -108,7 +135,8 @@ describe('Self-Learning Service Unit Tests', () => {
     await vi.advanceTimersByTimeAsync(11000);
 
     expect(findFirstSpy).toHaveBeenCalled();
-    // Should NOT save the FAQ because it contains noise keywords like "halo", "otw"
-    expect(importFaqsSpy).not.toHaveBeenCalled();
+    // Should NOT stage anything because the offline noise filter rejects "halo"/"otw"
+    expect(stagingCreateSpy).not.toHaveBeenCalled();
+    expect(medicalStagingSpy).not.toHaveBeenCalled();
   });
 });

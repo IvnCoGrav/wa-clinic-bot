@@ -18,6 +18,10 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
     process.env.ADMIN_API_KEY = 'test_admin_key_888';
     process.env.WABA_APP_SECRET = appSecret;
     process.env.WABA_WEBHOOK_VERIFY_TOKEN = 'verify_tok';
+    // Tes ini memverifikasi perilaku per-pesan (enqueue/idempotency) — matikan
+    // burst coalescing supaya pesan text langsung di-enqueue (deterministik),
+    // tidak tergantung nilai .env lokal (mis. BURST_COALESCE_MS=5000).
+    process.env.BURST_COALESCE_MS = '0';
     await seedAiScopeAll();
   });
 

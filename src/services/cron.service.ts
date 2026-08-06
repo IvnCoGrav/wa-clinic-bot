@@ -51,6 +51,28 @@ export class CronService {
   }
 
   /**
+   * Media Cleanup — hapus file media Live Chat (outbound & inbound) yang umurnya
+   * melebihi media_retention_days per tenant (fallback env MEDIA_RETENTION_DAYS).
+   * Dipanggil dari boot app.ts via setInterval (gated ENABLE_MEDIA_CLEANUP_CRON).
+   */
+  public async runMediaCleanup(): Promise<void> {
+    try {
+      const { mediaService, getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let removed = 0;
+      for (const tenantId of tenants) {
+        const retention = await mediaService.getRetentionDays(tenantId);
+        removed += await mediaService.deleteExpiredMedia(tenantId, retention);
+      }
+      if (removed > 0) {
+        console.log(`[Cron Service] Media cleanup selesai (${removed} file kadaluarsa dihapus).`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running media cleanup:', (err as Error).message);
+    }
+  }
+
+  /**
    * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
    */
   private async sendMorningReminders(): Promise<void> {

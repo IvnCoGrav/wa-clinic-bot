@@ -137,6 +137,37 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const phone = (await wahaClient.getPhoneNumberFromLid(chatId)) || normalizeWahaJid(chatId);
       const contactName = payload._data?.notifyName;
 
+      // --- MEDIA INBOUND (gambar customer) ---
+      // Deteksi image, unduh file dari WAHA, simpan ke storage/media/inbound/<tenantId>,
+      // dan lampirkan metadata media ke payload_raw agar bisa dirender di Live Chat
+      // (blur + download). Konten teks bot tetap seperti sebelumnya agar state machine
+      // & classifier TIDAK berubah. Best-effort: gagal unduh tidak menghentikan alur.
+      const isInboundImage = payload.type === 'image' || !!(payload.message && payload.message.imageMessage);
+      const imageCaption = (payload.message?.imageMessage?.caption) || payload.caption || '';
+      let inboundMedia: any = null;
+      if (isInboundImage) {
+        try {
+          const { mediaService } = await import('../services/media.service');
+          const buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+          if (buffer && buffer.length > 0) {
+            const mimeType = payload.message?.imageMessage?.mimetype || 'image/jpeg';
+            const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
+            inboundMedia = {
+              url: saved.hdUrl,
+              hdUrl: saved.hdUrl,
+              mimeType,
+              caption: imageCaption || null,
+            };
+          }
+        } catch (mediaErr: any) {
+          console.warn('[WAHA MEDIA] Gagal menyimpan media inbound:', mediaErr.message);
+        }
+      }
+      const inboundContent = isInboundImage
+        ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
+        : (payload.body || '[LOCATION/MEDIA]');
+      const mergeMediaIntoPayload = (p: any) => (inboundMedia ? { ...p, media: inboundMedia } : p);
+
       // --- LEGACY PER-CONTACT SCRAPE TRIGGER (Task 2 / flag: ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER) ---
       // Posisi: SETELAH admin bypass, SEBELUM getOrCreateCustomer utama. Jika chat
       // berlabel 'legacy' dan customer belum pernah di-scrape, kita picu scraping
@@ -153,9 +184,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               tenantId: DEFAULT_TENANT_ID,
               conversationId: conversation.id,
               direction: 'INBOUND',
-              content: payload.body || '[LOCATION/MEDIA]',
+              content: inboundContent,
               waMessageId,
-              payloadRaw: payload,
+              payloadRaw: mergeMediaIntoPayload(payload),
             });
             // Best-effort: addLabel 'hold' (skip pada dry-run)
             if (process.env.LEGACY_SCRAPE_DRY_RUN !== 'true') {
@@ -205,9 +236,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           tenantId: DEFAULT_TENANT_ID,
           conversationId: conversation.id,
           direction: 'INBOUND',
-          content: payload.body || '[LOCATION/MEDIA]',
+          content: inboundContent,
           waMessageId,
-          payloadRaw: payload,
+          payloadRaw: mergeMediaIntoPayload(payload),
         });
         return reply.status(200).send({ status: 'BLOCKED' });
       }
@@ -220,9 +251,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         customer,
         conversation,
         tenantId: DEFAULT_TENANT_ID,
-        content: payload.body || '[LOCATION/MEDIA]',
+        content: inboundContent,
         waMessageId,
-        payloadRaw: payload,
+        payloadRaw: mergeMediaIntoPayload(payload),
       });
       if (scopeGate.action === 'silence') {
         return reply.status(200).send({ status: scopeGate.status });
@@ -234,7 +265,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         from: phone,
         chatId,
         timestamp: String(payload.timestamp || Math.floor(Date.now() / 1000)),
-        type: payload.location ? 'location' : 'text',
+        type: payload.location ? 'location' : isInboundImage ? 'image' : 'text',
         text: payload.body ? { body: payload.body } : undefined,
         location: payload.location
           ? {
@@ -242,14 +273,32 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               longitude: payload.location.longitude,
             }
           : undefined,
+        media: inboundMedia,
       };
+
+      // --- PURCHASE EVENT DETECTION (sebelum state machine / HUMAN HANDLING guard,
+      //     agar tetap berjalan walau bot silent). Pesan berisi keyword format_purchase
+      //     + nominal rupiah → fire event CAPI 'Purchase' & tandai reservasi. ---
+      if (incomingMessage.type === 'text' && incomingMessage.text?.body) {
+        try {
+          const { maybeFirePurchaseEvent } = await import('../services/purchase-detection.service');
+          await maybeFirePurchaseEvent({
+            customer,
+            conversation,
+            text: incomingMessage.text.body,
+            tenantId: DEFAULT_TENANT_ID,
+          });
+        } catch (purchaseErr) {
+          console.warn('[CAPI] Purchase detection error:', (purchaseErr as Error).message);
+        }
+      }
 
       // --- ATTRIBUTION CHECK ---
       const bodyText = incomingMessage.text?.body || '';
-      const promoMatch = bodyText.match(/Promo\[(\w+)\]/i);
+      const promoMatch = bodyText.match(/Promo\s*\[(\w+)\]/i);
       if (isNewCustomerRecord && promoMatch) {
         const trackingCode = promoMatch[1];
-        // 1. Cek memory fallback first (untuk unit testing/database offline)
+        // 1. Memory fallback update (untuk unit testing/in-memory cache)
         const memClick = memoryAdClicks.get(trackingCode);
         if (memClick) {
           if (!memClick.matchedAt) {
@@ -259,27 +308,43 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           } else {
             console.log(`[ATTRIBUTION SKIP - MEMORY] TrackingCode ${trackingCode} has already been matched.`);
           }
-        } else {
-          // 2. Prisma DB Atomic updateMany (menghindari race condition)
-          try {
-            const updateResult = await prisma.adClick.updateMany({
-              where: {
-                trackingCode,
-                matchedAt: null,
-              },
-              data: {
-                matchedAt: new Date(),
-                customerId: customer.id,
-              },
-            });
-            if (updateResult.count === 1) {
-              console.log(`[ATTRIBUTION SUCCESS] Linked trackingCode ${trackingCode} to new customer ${phone} (ID: ${customer.id})`);
-            } else {
-              console.log(`[ATTRIBUTION SKIP] TrackingCode ${trackingCode} is invalid or already matched.`);
-            }
-          } catch (err: any) {
-            console.error('[ATTRIBUTION ERROR] Failed to update AdClick attribution:', err.message);
+        }
+
+        // 2. Prisma DB Atomic updateMany (menghindari race condition)
+        try {
+          const updateResult = await prisma.adClick.updateMany({
+            where: {
+              trackingCode,
+              matchedAt: null,
+            },
+            data: {
+              matchedAt: new Date(),
+              customerId: customer.id,
+            },
+          });
+          if (updateResult.count === 1) {
+            console.log(`[ATTRIBUTION SUCCESS] Linked trackingCode ${trackingCode} to new customer ${phone} (ID: ${customer.id})`);
+          } else if (!memClick) {
+            console.log(`[ATTRIBUTION SKIP] TrackingCode ${trackingCode} is invalid or already matched.`);
           }
+        } catch (err: any) {
+          console.error('[ATTRIBUTION ERROR] Failed to update AdClick attribution:', err.message);
+        }
+
+        // 3. Trigger Meta CAPI 'Lead' event (karena chat WA dari CTA berhasil masuk ke server)
+        try {
+          const { capiService } = await import('../services/capi.service');
+          capiService.sendCapiEvent({
+            eventName: 'Lead',
+            customer,
+            tenantId: DEFAULT_TENANT_ID,
+            customData: {
+              trackingCode,
+              source: 'WHATSAPP_INBOUND_CTA',
+            },
+          }).catch((err) => console.error('[CAPI LEAD ERROR]', err.message));
+        } catch (capiErr: any) {
+          console.error('[CAPI LEAD ERROR]', capiErr.message);
         }
       }
 
@@ -288,7 +353,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // tapi sebelum state machine membaca incomingMessage.text.body.
       // "Promo[a7] halo bunda" → "halo bunda"  |  "Promo[a7]" (saja) → "Halo"
       if (promoMatch && incomingMessage.text) {
-        const stripped = bodyText.replace(/Promo\[\w+\]/gi, '').trim();
+        const stripped = bodyText.replace(/Promo\s*\[\w+\]\s*/gi, '').trim();
         incomingMessage.text.body = stripped || 'Halo';
       }
 
@@ -317,7 +382,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             direction: 'INBOUND',
             content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
             waMessageId: waMessageId,
-            payloadRaw: payload,
+            payloadRaw: mergeMediaIntoPayload(payload),
           });
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
@@ -332,7 +397,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             direction: 'INBOUND',
             content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
             waMessageId: waMessageId,
-            payloadRaw: payload,
+            payloadRaw: mergeMediaIntoPayload(payload),
           });
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
@@ -363,7 +428,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             direction: 'INBOUND',
             content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
             waMessageId: waMessageId,
-            payloadRaw: payload,
+            payloadRaw: mergeMediaIntoPayload(payload),
           });
 
           // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
@@ -387,7 +452,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           direction: 'INBOUND',
           content: incomingMessage.text?.body || '[LOCATION/MEDIA]',
           waMessageId,
-          payloadRaw: payload,
+          payloadRaw: mergeMediaIntoPayload(payload),
         });
         return reply.status(200).send({ status: 'BLOCKED' });
       }

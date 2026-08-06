@@ -8,6 +8,55 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-12
 
+### Added — Live Chat: Kirim & Tampilkan Gambar (outbound + inbound)
+
+**Penyimpanan media lokal & retensi:**
+- **`src/services/media.service.ts`** (baru): simpan gambar outbound (HD + thumbnail) & inbound ke `storage/media/{outbound,inbound}/<tenantId>/` (folder sudah gitignored). Validasi mime `jpg/png/webp/gif`, batas ukuran 8 MB. Helper `deleteExpiredMedia`, `getRetentionDays` (per-tenant → fallback env `MEDIA_RETENTION_DAYS` → 30 hari), `getPublicMediaUrl`.
+- **`prisma/schema.prisma`** + migration `20260817000000_add_media_retention_days`: kolom `media_retention_days Int @default(30)` di `tenants`.
+- **`src/services/cron.service.ts`**: `runMediaCleanup()` — hapus file kadaluarsa semua tenant. Dijadwalkan di `src/app.ts` (gated `ENABLE_MEDIA_CLEANUP_CRON`, interval `MEDIA_CLEANUP_INTERVAL_HOURS` default 24 jam).
+- **`src/routes/media.route.ts`** (baru): `GET /media/:scope/:tenant/:file` — folder `outbound` publik (dibutuhkan WAHA/WABA ambil file), folder `inbound` privat (wajib cookie `admin_session`).
+
+**Kirim gambar (admin → customer):**
+- **`src/services/live-chat.service.ts`**: `sendAdminReply` kini menerima `{ imageB64, thumbB64, mimeType, fileName }`. Provider WAHA → kirim via `sendImageMessage` (path file lokal); provider WABA → butuh `PUBLIC_BASE_URL` (Meta fetch link publik), error `MEDIA_PUBLIC_URL_REQUIRED` bila tidak ter-set, plus cek 24 jam window.
+- **`src/routes/admin.route.ts`**: DTO reply diperluas + `bodyLimit` 12 MB; `SandboxWAHAClient.downloadMedia`.
+- **`src/integrations/waha/client.ts` + `types.ts`**: `downloadMedia` + tipe `imageMessage`/`caption`.
+
+**Gambar inbound (customer → Live Chat):**
+- **`src/routes/webhook.route.ts`** (WAHA): deteksi image → `downloadMedia` → simpan inbound → metadata dilampirkan ke `payload_raw.media`; konten bot `[IMAGE: caption]`/`[MEDIA]`; `incomingMessage.type='image'` (tidak ikut di-burst-coalesce).
+- **`src/routes/waba-webhook.route.ts`** (Meta): resolve media URL → download → simpan inbound → merge metadata.
+- **`src/services/message.service.ts`**: publish SSE `message.created` kini menyertakan `media` (`extractMediaFromPayload`).
+- **`src/state-machine/machine.ts`**: konten audit untuk pesan media `[IMAGE: caption]`/`[MEDIA]`.
+
+**Dashboard (`packages/admin-dashboard`):**
+- **`MediaImage.tsx`** (baru): thumbnail low-res client-side (canvas), gambar inbound tampil blur + tombol download, placeholder "Gambar tidak tersedia" saat file sudah dihapus (masa retensi).
+- **`LiveChatMonitor.tsx`**: tombol lampirkan gambar + preview + hapus lampiran; kirim via composer (Enter/kirim); bubble pesan merender media.
+
+**Config env (`.env.example`):** `PUBLIC_BASE_URL`, `MEDIA_RETENTION_DAYS=30`, `ENABLE_MEDIA_CLEANUP_CRON=false`, `MEDIA_CLEANUP_INTERVAL_HOURS=24`.
+
+**Test:** `tests/unit/media.service.test.ts` (7) + `tests/integration/waha-webhook.test.ts` (inbound image) + `tests/unit/live-chat.service.test.ts` (3 kasus gambar: WAHA path lokal, WABA tanpa/ dengan `PUBLIC_BASE_URL`).
+
+
+### Added — Funnel Meta Conversions API: InitiateCheckout + Purchase (deteksi Payment)
+
+**CAPI infra (`src/services/capi.service.ts`):**
+- `sendCapiEvent` kini auto-derive `event_id = adClick.trackingCode` pada semua event. Meta men-dedup event ber-`event_id` sama, jadi Purchase yang dikirim 2x (keyword Payment + admin confirm) serta Pixel vs CAPI tidak double-count.
+- `getTenantCapiFormats(tenantId)` — baca `format_checkout` / `format_purchase` dari kolom tenant DB (fallback env/default), tenant-aware.
+- `fireCapiEvent` — fire-and-forget helper (log error tanpa throw, aman di critical path).
+
+**InitiateCheckout (form reservasi dikirim):**
+- Bot kirim form → fire `InitiateCheckout` di `src/state-machine/handlers/interest.ts` (2 titik: CTA consent & intent `interested`).
+- Admin kirim form via Live Chat (`sendAdminReply`) yang teksnya mengandung `format_checkout` tenant → fire `InitiateCheckout`.
+- `isFormSubmission` di `interest.ts` sekarang membaca kata kunci `format_checkout` tenant (bukan hanya hardcoded "berikut list untuk reservasi").
+
+**Purchase (deteksi keyword Payment):**
+- **`src/services/purchase-detection.service.ts`** (baru): `maybeFirePurchaseEvent` — deteksi pesan customer berisi keyword `format_purchase` (default "Payment") **+** nominal rupiah (regex, anti false-positive: pesan tanpa nominal dilewati). Fire `Purchase` (value = nominal dari pesan, fallback katalog treatment) lalu set `purchase_event_sent_at`.
+- Dipanggil di `webhook.route.ts` sebelum HUMAN HANDLING guard → tetap jalan walau bot silent.
+
+**Field DB & dashboard (`prisma/schema.prisma` + migration `20260816000000_add_purchase_event_sent_at`):**
+- Kolom `purchase_event_sent_at DateTime?` di `reservations` — dasar disable tombol di dashboard 7 hari (cegah double-count & potensi repeat order).
+- `admin.route.ts` confirm: **hapus event `Lead`** (Lead hanya di momen MQL), **tetap** `Purchase`, set `purchase_event_sent_at`.
+- Dashboard `Reservations.tsx`: tombol "Tandai Lunas" `disabled` bila `purchase_event_sent_at` < 7 hari (tooltip), pakai `useUiFeedback`.
+
 ### Added — Slash Commands Customer (/reset, /state, /mulai)
 
 **Command Service (per-customer, satu choke point):**

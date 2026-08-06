@@ -16,7 +16,10 @@ import {
   Wifi,
   WifiOff,
   Bot,
+  ImagePlus,
+  X,
 } from 'lucide-react';
+import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 
 interface ChatMessage {
   id: string;
@@ -25,6 +28,13 @@ interface ChatMessage {
   sender_type?: string | null;
   sender_name?: string | null;
   created_at: string;
+  media?: ChatMediaData;
+}
+
+function extractMedia(msg: any): ChatMediaData | undefined {
+  const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
+  if (m && (m.url || m.hdUrl)) return m;
+  return undefined;
 }
 
 interface LiveChatItem {
@@ -53,6 +63,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
@@ -146,7 +158,8 @@ export const LiveChatMonitor: React.FC = () => {
   const loadThread = async (conversationId: string) => {
     try {
       const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages`);
-      setMessages(Array.isArray(res) ? res : (res?.data || []));
+      const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
+      setMessages(list.map((m) => ({ ...m, media: extractMedia(m) })));
     } catch (err: any) {
       console.error('Failed to load conversation thread:', err);
       setMessages([]);
@@ -173,6 +186,7 @@ export const LiveChatMonitor: React.FC = () => {
             sender_type: payload.senderType || null,
             sender_name: payload.senderName || null,
             created_at: payload.createdAt || new Date().toISOString(),
+            media: extractMedia(payload),
           };
 
           // Append ke thread yang sedang dibuka (hindari duplikat by id)
@@ -258,14 +272,28 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const handleSendReply = async () => {
-    if (!selectedId || !replyText.trim()) return;
+    const image = selectedImage;
+    if (!selectedId || (!replyText.trim() && !image)) return;
     setSending(true);
     try {
+      const body: Record<string, any> = {
+        adminName: user?.email || 'Admin',
+      };
+      if (replyText.trim()) body.text = replyText.trim();
+      if (image) {
+        const imageB64 = await fileToDataUrl(image.file);
+        const thumbB64 = await makeThumbnail(imageB64);
+        body.imageB64 = imageB64;
+        body.thumbB64 = thumbB64;
+        body.mimeType = image.file.type || 'image/jpeg';
+        body.fileName = image.file.name;
+      }
       await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/reply`, {
         method: 'POST',
-        body: JSON.stringify({ text: replyText.trim(), adminName: user?.email || 'Admin' }),
+        body: JSON.stringify(body),
       });
       setReplyText('');
+      setSelectedImage(null);
       toast('Balasan admin terkirim.', 'success');
     } catch (err: any) {
       toast(`Gagal mengirim balasan: ${err.message}`, 'error');
@@ -273,6 +301,54 @@ export const LiveChatMonitor: React.FC = () => {
       setSending(false);
     }
   };
+
+  const handlePickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Hanya file gambar yang didukung.', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast('Gambar maksimal 8 MB.', 'error');
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setSelectedImage({ file, preview });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const fileToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+      reader.readAsDataURL(file);
+    });
+
+  const makeThumbnail = (dataUrl: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 480;
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('no ctx');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Gagal membuat thumbnail.'));
+      img.src = dataUrl;
+    });
 
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
 
@@ -534,7 +610,19 @@ export const LiveChatMonitor: React.FC = () => {
                               {!isCustomer && !isAdmin && <Bot size={9} />}
                               <span>{senderLabel(msg)}</span>
                             </span>
-                            <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
+                            {msg.media && (
+                              <div className="mb-2">
+                                <MediaImage
+                                  src={msg.media.url || msg.media.hdUrl}
+                                  downloadSrc={msg.media.hdUrl}
+                                  caption={msg.media.caption || undefined}
+                                  blur={isCustomer}
+                                />
+                              </div>
+                            )}
+                            {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && (
+                              <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
+                            )}
                             <span className="block text-[8px] text-slate-400/80 mt-1.5 text-right font-mono">
                               {msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : ''}
                             </span>
@@ -548,7 +636,40 @@ export const LiveChatMonitor: React.FC = () => {
 
                 {/* Reply Composer */}
                 <div className="border-t border-white/5 pt-4">
+                  {selectedImage && (
+                    <div className="relative inline-block mb-2">
+                      <img
+                        src={selectedImage.preview}
+                        alt="Preview"
+                        className="w-24 h-20 object-cover rounded-xl border border-white/10"
+                      />
+                      <button
+                        onClick={() => {
+                          setSelectedImage(null);
+                        }}
+                        className="absolute -top-2 -right-2 p-1 rounded-full bg-rose-500 text-white shadow hover:bg-rose-600 transition"
+                        title="Hapus lampiran"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-end space-x-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePickImage}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sending}
+                      className="px-3 py-3 bg-slate-900 border border-white/10 hover:border-pink-500/50 disabled:opacity-40 text-slate-400 hover:text-pink-400 rounded-xl text-xs font-bold transition flex items-center"
+                      title="Lampirkan gambar"
+                    >
+                      <ImagePlus size={14} />
+                    </button>
                     <textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
@@ -564,7 +685,7 @@ export const LiveChatMonitor: React.FC = () => {
                     />
                     <button
                       onClick={handleSendReply}
-                      disabled={sending || !replyText.trim()}
+                      disabled={sending || (!replyText.trim() && !selectedImage)}
                       className="px-4 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/10"
                     >
                       <Send size={13} />

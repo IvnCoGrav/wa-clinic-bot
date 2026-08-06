@@ -114,14 +114,20 @@ export class LiveChatService {
    */
   public async sendAdminReply(params: {
     conversationId: string;
-    text: string;
+    text?: string;
+    imageB64?: string;
+    thumbB64?: string;
+    mimeType?: string;
+    fileName?: string;
     tenantId: string;
     adminName?: string;
     acknowledgeOutsideWindow?: boolean;
   }): Promise<AdminReplyResult> {
-    const { conversationId, text, tenantId, adminName, acknowledgeOutsideWindow } = params;
+    const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow } = params;
 
-    if (!text || !text.trim()) {
+    const hasText = !!text && !!text.trim();
+    const hasImage = !!imageB64;
+    if (!hasText && !hasImage) {
       return { success: false, error: { code: 'EMPTY_REPLY', message: 'Isi balasan tidak boleh kosong.' } };
     }
 
@@ -137,8 +143,21 @@ export class LiveChatService {
 
     const gateway = await resolveGatewayForTenant(tenantId);
 
-    // WABA 24h window: hanya tenant ber-provider WABA yang membatasi teks bebas
-    if (gateway.providerType === 'WABA') {
+// WABA 24h window: hanya tenant ber-provider WABA yang membatasi teks bebas
+    // (berlaku juga untuk gambar + caption, karena termasuk free-form content)
+    if (gateway.providerType === 'WABA' && hasImage && !process.env.PUBLIC_BASE_URL) {
+      // Gambar WABA butuh URL publik; tanpanya Meta tak bisa mengambil media.
+      return {
+        success: false,
+        error: {
+          code: 'MEDIA_PUBLIC_URL_REQUIRED',
+          message: 'Konfigurasi PUBLIC_BASE_URL diperlukan untuk mengirim gambar via WABA. Set variabel lingkungan PUBLIC_BASE_URL ke domain publik bot.',
+        },
+        provider: gateway.providerType,
+      };
+    }
+
+    if (!hasImage && gateway.providerType === 'WABA') {
       const lastInboundAt = await this.getLastInboundAt(conversationId, tenantId);
       if (lastInboundAt && Date.now() - new Date(lastInboundAt).getTime() > WABA_WINDOW_MS && !acknowledgeOutsideWindow) {
         return {
@@ -151,8 +170,45 @@ export class LiveChatService {
       }
     }
 
-    const sendResult = await gateway.sendTextMessage(customer.phone, text);
+    let sendResult;
+    let content = (hasText ? text!.trim() : '') || '';
+    let mediaMeta: any;
+
+    if (hasImage) {
+      const { mediaService } = await import('./media.service');
+      const saved = await mediaService.saveOutboundMedia({
+        tenantId,
+        imageB64: imageB64!,
+        thumbB64,
+        mimeType,
+        fileName,
+      });
+
+      const sendTarget = mediaService.resolveOutboundForProvider(saved.hdUrl, gateway.providerType);
+      if (!sendTarget) {
+        return { success: false, error: { code: 'MEDIA_PUBLIC_URL_REQUIRED', message: 'Gagal me-resolve URL media untuk pengiriman.' }, provider: gateway.providerType };
+      }
+
+      // Jika image + text, text dipakai sebagai caption gambar.
+      sendResult = await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined);
+      if (!hasText) content = '[IMAGE]';
+      mediaMeta = {
+        url: saved.thumbUrl || saved.hdUrl,
+        hdUrl: saved.hdUrl,
+        mimeType,
+        caption: hasText ? text!.trim() : null,
+        fileName,
+      };
+    } else {
+      sendResult = await gateway.sendTextMessage(customer.phone, content);
+    }
+
     if (!sendResult.success) {
+      if (hasImage) {
+        // best-effort hapus file yang baru disimpan bila pengiriman gagal
+        const { mediaService } = await import('./media.service');
+        if (mediaMeta?.hdUrl) mediaService.deleteFile(mediaMeta.hdUrl);
+      }
       return {
         success: false,
         error: sendResult.error || { code: 'SEND_FAILED', message: 'Gagal mengirim pesan ke WhatsApp.' },
@@ -165,10 +221,11 @@ export class LiveChatService {
       tenantId,
       conversationId,
       direction: Direction.OUTBOUND,
-      content: text,
+      content,
       waMessageId: sendResult.messageId,
       senderType: 'ADMIN',
       senderName: adminName || 'Admin',
+      payloadRaw: mediaMeta ? { media: mediaMeta } : undefined,
     });
 
     // Auto-escalation: balasan admin menandakan percakapan ditangani manusia
@@ -183,6 +240,32 @@ export class LiveChatService {
         tenantId,
         'manual_reply'
       );
+    }
+
+    // CAPI InitiateCheckout: jika pesan admin adalah form reservasi (teks mengandung
+    // format_checkout tenant), anggap user memulai checkout → fire event (fire-and-forget).
+    try {
+      const { getTenantCapiFormats, fireCapiEvent } = await import('./capi.service');
+      const formats = await getTenantCapiFormats(tenantId);
+      const checkoutKeyword = formats.formatCheckout.toLowerCase().replace(/\s+/g, ' ').trim();
+      const replyLower = (text || '').toLowerCase();
+      if (checkoutKeyword.length > 0 && hasText && replyLower.includes(checkoutKeyword)) {
+        let adClick: any;
+        try {
+          adClick = await prisma.adClick.findUnique({ where: { customerId: customer.id } });
+        } catch (_) {
+          adClick = undefined;
+        }
+        fireCapiEvent({
+          eventName: 'InitiateCheckout',
+          customer,
+          adClick: adClick || undefined,
+          tenantId,
+          customData: { source: 'ADMIN_FORM_SENT' },
+        });
+      }
+    } catch (capiErr) {
+      console.warn('[CAPI] InitiateCheckout (admin form) skipped:', (capiErr as Error).message);
     }
 
     return {

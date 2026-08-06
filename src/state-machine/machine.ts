@@ -107,7 +107,9 @@ export class ConversationStateMachine {
     // 1. Audit Log Pesan Inbound (Masuk)
     // Skip jika pesan sudah di-log oleh BurstCoalesceService (_preLogged) — pesan asli
     // tercatat realtime saat diterima, job hasil merge tidak perlu mencatat ulang.
-    const inboundContent = incomingMessage.text?.body || (incomingMessage.location ? `[LOCATION SHARE: Lat ${incomingMessage.location.latitude}, Lng ${incomingMessage.location.longitude}]` : '[MEDIA/UNKNOWN]');
+    const inboundContent = incomingMessage.text?.body
+      || (incomingMessage.location ? `[LOCATION SHARE: Lat ${incomingMessage.location.latitude}, Lng ${incomingMessage.location.longitude}]`
+        : (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : incomingMessage.media ? '[MEDIA]' : '[MEDIA/UNKNOWN]'));
     if (!(incomingMessage as any)._preLogged) {
       await messageService.logMessage({
         tenantId,
@@ -120,7 +122,7 @@ export class ConversationStateMachine {
     }
 
     // In-memory rewriting for Promo[CODE] greeting trigger
-    if (incomingMessage.text?.body && /Promo\[(\w+)\]/i.test(incomingMessage.text.body)) {
+    if (incomingMessage.text?.body && /Promo\s*\[(\w+)\]/i.test(incomingMessage.text.body)) {
       incomingMessage.text.body = 'Halo';
     }
 
@@ -338,7 +340,6 @@ export class ConversationStateMachine {
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision, history: historyFormatted };
     if (activeConversation.is_human_handling) {
       result = await handleHumanHandlingState(handlerCtx);
-
     } else {
       switch (activeConversation.current_state) {
         case ConversationState.INITIAL:
