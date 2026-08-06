@@ -342,7 +342,7 @@ export class WahaClient implements IWahaClient {
    * Menambahkan label ke chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    */
   public async addLabel(chatId: string, labelName: string): Promise<boolean> {
-    const targetChatId = await this.toLabelChatId(chatId);
+    const targetChatId = await this.resolveActiveJid(chatId);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] addLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
@@ -409,7 +409,7 @@ export class WahaClient implements IWahaClient {
    * Menghapus label dari chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    */
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
-    const targetChatId = await this.toLabelChatId(chatId);
+    const targetChatId = await this.resolveActiveJid(chatId);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] removeLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
@@ -450,7 +450,7 @@ export class WahaClient implements IWahaClient {
    * Mengambil daftar label yang ada pada chat menggunakan API WAHA baru (GET /api/{session}/labels/chats/{chatId})
    */
   public async getChatLabels(chatId: string): Promise<string[]> {
-    const targetChatId = await this.toLabelChatId(chatId);
+    const targetChatId = await this.resolveActiveJid(chatId);
 
     if (this.shouldMock) {
       return this.mockLabels.get(targetChatId) || [];
