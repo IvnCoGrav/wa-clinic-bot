@@ -213,6 +213,7 @@ model Reservation {
   raw_text                 String?
   status                   String            @default("pending")
   google_calendar_event_id String?
+  purchase_event_sent_at   DateTime?
   is_repeat_order          Boolean           @default(false)
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
@@ -468,6 +469,12 @@ model Tenant {
   idle_greeting_min_hours Int             @default(36)
   mql_threshold_bubbles  Int               @default(5)
   mql_auto_lead_enabled  Boolean           @default(true)
+  media_retention_days   Int               @default(30)
+  cs_name                String?           @default("Cs Yusi")
+  format_visit           String?           @default("Promo[%ID%]")
+  format_checkout        String?           @default("list untuk reservasi :")
+  format_purchase        String?           @default("Payment")
+  format_value           String?           @default("Treatment = %VALUE%")
   created_at             DateTime          @default(now())
   updated_at             DateTime          @updatedAt
 

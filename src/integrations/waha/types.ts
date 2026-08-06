@@ -15,6 +15,15 @@ export interface WahaMessagePayload {
   hasMedia?: boolean;
   location?: WahaLocationPayload;
   text?: { body: string }; // Structured text payload (dipakai message-rewrite attribution)
+  message?: {
+    imageMessage?: {
+      caption?: string;
+      mimetype?: string;
+      url?: string;
+    };
+  };
+  caption?: string;
+  type?: string;
   _data?: {
     notifyName?: string;
   };

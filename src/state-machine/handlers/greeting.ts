@@ -107,7 +107,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     if (isAffirmative) {
       return {
         nextState: ConversationState.AWAITING_INTEREST,
-        replyText: `Baik Bunda, lokasi homecare menggunakan data sebelumnya di **Kelurahan ${customer.kelurahan}, Kec. ${customer.kecamatan}**. 😊\n\nJadi mau pilih treatment apa bunda? 🤗`,
+        replyText: `Baik Bunda, lokasi homecare menggunakan data sebelumnya di *Kelurahan ${customer.kelurahan}, Kec. ${customer.kecamatan}*. 😊\n\nJadi mau pilih treatment apa bunda? 🤗`,
         shouldSendReply: true,
       };
     }

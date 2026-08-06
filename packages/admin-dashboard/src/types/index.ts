@@ -39,6 +39,7 @@ export interface Reservation {
   booking_date: string | null;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   raw_text: string;
+  purchase_event_sent_at?: string | null;
   baby_details?: BabyDetail[];
   created_at: string;
 }

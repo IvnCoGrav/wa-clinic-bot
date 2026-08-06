@@ -7,6 +7,7 @@ import { resolveLandingContent, defaultLandingContent, LandingContent } from '..
 const RESERVED_SLUGS = new Set([
   'go',
   'promo',
+  'cta',
   'health',
   'api',
   'admin',
@@ -114,6 +115,109 @@ export async function landingRoutes(fastify: FastifyInstance) {
     const slug = (request.query as any)?.slug || 'default';
     const content = (await resolveLandingContent(slug)) || defaultLandingContent(slug);
     return renderLanding(reply, content, slug);
+  });
+
+  // /cta — lightweight redirect ke WhatsApp dengan Meta Pixel & tracking code
+  fastify.get('/cta', async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = (request.query || {}) as Record<string, string>;
+    const tenantSlug = query.slug || 'default';
+    const content = (await resolveLandingContent(tenantSlug)) || defaultLandingContent(tenantSlug);
+
+    const pixelId = query.p || content.meta_pixel_id || process.env.FB_PIXEL_ID || '';
+    
+    // PERBAIKAN: Selalu gunakan nomor WA dari pengaturan Tenant (Single Source of Truth).
+    // Parameter 'phone' dari URL diabaikan sebagai tujuan redirect untuk mencegah penyalahgunaan.
+    const phone = content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '6287751148065';
+    
+    let rawMsg = query.msg || query.greetings || '';
+    if (!rawMsg) {
+      const { prisma } = await import('../db/client');
+      const tenantRec = await prisma.tenant.findFirst({ where: { slug: tenantSlug } });
+      rawMsg = tenantRec?.format_visit || 'Halo Bunda, saya tertarik dengan layanan home-treatment';
+    }
+
+    // Capture attribution & generate tracking code if needed
+    let trackingCode = '';
+    try {
+      const { generateTrackingCode, memoryAdClicks } = await import('./tracking.route');
+      const ip = (request.headers['x-forwarded-for'] as string) || request.ip || '';
+      const ua = request.headers['user-agent'] || '';
+      const { trackingCode: tc, record } = await generateTrackingCode({
+        fbclid: query.fbclid || null,
+        fbp: query.fbp || null,
+        fbc: query.fbc || null,
+        ipAddress: ip.split(',')[0].trim(),
+        userAgent: ua,
+        landingUrl: request.url,
+        utmSource: query.utm_source || query.divisi || null,
+        utmMedium: query.utm_medium || null,
+        utmCampaign: query.utm_campaign || null,
+        phone: query.phone || null, // URL parameter 'phone' hanya dipakai sebagai metadata atribusi di AdClick
+        tenant_id: content.tenant_id,
+      });
+      trackingCode = tc;
+      memoryAdClicks.set(trackingCode, record);
+    } catch (err: any) {
+      request.log.warn(`[CTA TRACKING ERROR] ${err.message}`);
+    }
+
+    // Insert tracking code into message text matching Promo[code] format
+    let finalMsg = rawMsg.replace(/\r\n/g, '\n');
+    if (trackingCode) {
+      if (finalMsg.includes('%ID%')) {
+        finalMsg = finalMsg.replace(/%ID%/g, trackingCode);
+      } else if (!finalMsg.includes(`Promo[${trackingCode}]`)) {
+        finalMsg = `Promo[${trackingCode}]\n\n${finalMsg}`.trim();
+      }
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
+
+    const nonce = crypto.randomBytes(16).toString('base64');
+    reply.header(
+      'Content-Security-Policy',
+      `script-src 'nonce-${nonce}' https://connect.facebook.net; frame-ancestors 'none'; upgrade-insecure-requests;`
+    );
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-Content-Type-Options', 'nosniff');
+
+    const pixelBlock = pixelId
+      ? `
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '${pixelId}');
+  fbq('track', 'AddToCart');`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redirecting to WhatsApp...</title>
+  <script nonce="${nonce}">
+    ${pixelBlock}
+    setTimeout(function() {
+      window.location.href = ${JSON.stringify(waUrl)};
+    }, 300);
+  </script>
+</head>
+<body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #334155;">
+  <div style="text-align: center;">
+    <p>Menghubungkan ke WhatsApp...</p>
+    <a href="${waUrl}" style="color: #25d366; font-weight: bold;">Klik di sini jika tidak otomatis teralihkan</a>
+  </div>
+</body>
+</html>`;
+
+    return reply.type('text/html').status(200).send(html);
   });
 
   // /promo/:slug — landing per-slug (strict 404)

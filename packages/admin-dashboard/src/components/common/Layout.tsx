@@ -22,7 +22,8 @@ import {
   Clock,
   Bug,
   Globe,
-  Users
+  Users,
+  Headphones
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -56,6 +57,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navItems = [
     { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
     { name: 'Customer Database', path: '/admin/customers', icon: Users },
+    { name: 'Customer Service & CTA', path: '/admin/customer-service', icon: Headphones },
     { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
     { name: 'Clinic Services', path: '/admin/services', icon: Activity },
     { name: 'Delivery Fee', path: '/admin/delivery', icon: Truck },

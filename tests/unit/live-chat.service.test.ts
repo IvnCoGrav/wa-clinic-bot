@@ -168,4 +168,85 @@ describe('LiveChatService — monitor & balas admin', () => {
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe('CONVERSATION_NOT_FOUND');
   });
+
+  it('sendAdminReply gambar (WAHA): menyimpan file & memanggil sendImageMessage dengan path lokal', async () => {
+    const fake = makeFakeGateway('WAHA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628500${Date.now()}`, 'Bunda Image', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    // PNG 1x1 transparan base64 valid
+    const pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      text: 'Ini gambar pricelist',
+      imageB64: pngB64,
+      thumbB64: pngB64,
+      mimeType: 'image/png',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Admin Klinik',
+    });
+
+    expect(result.success).toBe(true);
+    expect(fake.sendImageMessage).toHaveBeenCalledTimes(1);
+    const [sentPhone, sentTarget, sentCaption] = fake.sendImageMessage.mock.calls[0];
+    expect(sentPhone).toBe(customer.phone);
+    expect(sentCaption).toBe('Ini gambar pricelist');
+    // WAHA → target berupa absolute path file lokal di storage/media/outbound
+    expect(String(sentTarget)).toMatch(/storage[\\/]media[\\/]outbound/);
+
+    const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
+    const logged = messages.find((m) => m.sender_type === 'ADMIN' && m.content === 'Ini gambar pricelist');
+    expect(logged).toBeTruthy();
+    expect(logged.payload_raw?.media?.hdUrl).toContain('/media/outbound/');
+    expect(logged.payload_raw?.media?.caption).toBe('Ini gambar pricelist');
+  });
+
+  it('sendAdminReply gambar (WABA): tanpa PUBLIC_BASE_URL → MEDIA_PUBLIC_URL_REQUIRED', async () => {
+    delete process.env.PUBLIC_BASE_URL;
+    const fake = makeFakeGateway('WABA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628510${Date.now()}`, 'Bunda WabaImg', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      imageB64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('MEDIA_PUBLIC_URL_REQUIRED');
+    expect(fake.sendImageMessage).not.toHaveBeenCalled();
+  });
+
+  it('sendAdminReply gambar (WABA): dengan PUBLIC_BASE_URL → kirim lewat URL publik', async () => {
+    const prev = process.env.PUBLIC_BASE_URL;
+    process.env.PUBLIC_BASE_URL = 'https://bot.example.com';
+    const fake = makeFakeGateway('WABA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628520${Date.now()}`, 'Bunda WabaImg2', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      text: 'Foto bukti',
+      imageB64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      mimeType: 'image/png',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(result.success).toBe(true);
+    expect(fake.sendImageMessage).toHaveBeenCalledTimes(1);
+    const [sentPhone, sentTarget, sentCaption] = fake.sendImageMessage.mock.calls[0];
+    expect(sentPhone).toBe(customer.phone);
+    expect(String(sentTarget)).toMatch(/^https:\/\/bot\.example\.com\/media\/outbound\/default-tenant\/.+\.png$/);
+    expect(sentCaption).toBe('Foto bukti');
+
+    if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = prev;
+  });
 });

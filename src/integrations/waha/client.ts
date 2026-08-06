@@ -47,6 +47,7 @@ export interface IWahaClient {
   createSession(session?: string, config?: any): Promise<string>;
   getChats(): Promise<WahaChat[]>;
   getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
+  downloadMedia(messageId: string, chatId: string): Promise<Buffer | null>;
 }
 
 /**
@@ -496,6 +497,41 @@ export class WahaClient implements IWahaClient {
     } catch (error: any) {
       console.error(`[WAHA API ERROR] getMessages failed for ${targetChatId}:`, error?.response?.data || error.message);
       return [];
+    }
+  }
+
+  /**
+   * Mengunduh media (gambar) pesan masuk dari WAHA.
+   * Endpoint: GET /api/{session}/chats/{chatId}/messages/{messageId}/media.
+   * Mengembalikan Buffer binary atau null bila gagal / tak tersedia.
+   */
+  public async downloadMedia(messageId: string, chatId: string): Promise<Buffer | null> {
+    if (this.shouldMock) {
+      // PNG 1x1 transparan sebagai deterministik mock agar alur inbound bisa diuji.
+      return Buffer.from(MOCK_QR_BASE64, 'base64');
+    }
+    try {
+      const encodedChat = encodeURIComponent(chatId);
+      const encodedMsg = encodeURIComponent(messageId);
+      const response = await axios.get(
+        `${this.baseUrl}/api/${this.session}/chats/${encodedChat}/messages/${encodedMsg}/media`,
+        {
+          headers: {
+            'X-Api-Key': this.apiKey || undefined,
+          },
+          responseType: 'arraybuffer',
+          timeout: 15000,
+        }
+      );
+      if (Buffer.isBuffer(response.data)) return response.data;
+      if (response.data instanceof ArrayBuffer) return Buffer.from(response.data);
+      if (response.data && typeof response.data === 'object') {
+        return Buffer.from(JSON.stringify(response.data));
+      }
+      return Buffer.from(response.data as any);
+    } catch (error: any) {
+      console.warn(`[WAHA API ERROR] downloadMedia failed for ${chatId}/${messageId}:`, error?.response?.data || error.message);
+      return null;
     }
   }
 

@@ -52,6 +52,10 @@ export class MockWAHAClient implements IWahaClient {
     }
   }
 
+  public async downloadMedia(messageId: string, chatId: string): Promise<Buffer | null> {
+    return Buffer.from(MOCK_QR_BASE64, 'base64');
+  }
+
   public async addLabel(chatId: string, labelId: string): Promise<boolean> {
     return true;
   }

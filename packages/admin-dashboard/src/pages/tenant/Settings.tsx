@@ -28,7 +28,8 @@ import {
   BarChart3,
   QrCode,
   Play,
-  Power
+  Power,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
@@ -106,6 +107,50 @@ export const Settings: React.FC = () => {
   const [mqlAutoLeadEnabled, setMqlAutoLeadEnabled] = useState<boolean>(true);
   const [savingMql, setSavingMql] = useState(false);
 
+  // Live Chat Media retention (per-tenant, hari)
+  const [mediaRetentionDays, setMediaRetentionDays] = useState<string>('30');
+  const [mediaEnvFallbackDays, setMediaEnvFallbackDays] = useState<number>(30);
+  const [savingMediaRetention, setSavingMediaRetention] = useState(false);
+
+  const loadMediaRetention = async () => {
+    try {
+      const res = await apiRequest('/api/admin/settings/media');
+      const d = res?.data;
+      if (d) {
+        if (d.tenantMediaRetentionDays != null) {
+          setMediaRetentionDays(String(d.tenantMediaRetentionDays));
+        }
+        if (d.envFallbackRetentionDays != null) setMediaEnvFallbackDays(d.envFallbackRetentionDays);
+      }
+    } catch (e) {
+      console.warn('Failed to load media retention settings:', e);
+    }
+  };
+
+  const handleSaveMediaRetention = async () => {
+    setSavingMediaRetention(true);
+    try {
+      const val = parseInt(mediaRetentionDays, 10);
+      if (!Number.isFinite(val) || val < 1 || val > 3650) {
+        toast('Retensi media harus angka 1-3650 (hari).', 'error');
+        return;
+      }
+      const res = await apiRequest('/api/admin/settings/media', {
+        method: 'PUT',
+        body: JSON.stringify({ mediaRetentionDays: val }),
+      });
+      if (res && res.success) {
+        toast(res.message || 'Retensi media Live Chat tersimpan.', 'success');
+        await loadMediaRetention();
+      }
+    } catch (err: any) {
+      toast(`Gagal menyimpan retensi media: ${err.message}`, 'error');
+    } finally {
+      setSavingMediaRetention(false);
+    }
+  };
+
+
   const loadMqlSettings = async () => {
     try {
       const res = await apiRequest('/api/admin/settings/mql');
@@ -176,6 +221,9 @@ export const Settings: React.FC = () => {
 
         // Fetch MQL settings
         await loadMqlSettings();
+
+        // Fetch Live Chat media retention
+        await loadMediaRetention();
       } catch (err) {
         console.warn('Failed to load global chatbot settings:', err);
       } finally {
@@ -1099,6 +1147,46 @@ export const Settings: React.FC = () => {
               >
                 <Save size={14} />
                 <span>{savingMql ? 'Memproses...' : 'Simpan Pengaturan MQL'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Live Chat Media — retensi file gambar outbound/inbound */}
+          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <ImageIcon className="text-pink-400" />
+              <span>Live Chat Media (Retensi Gambar)</span>
+            </h3>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Gambar yang dikirim admin (outbound) &amp; dari customer (inbound) disimpan di <span className="text-slate-300 font-mono">storage/media</span>.
+              File kadaluarsa dihapus otomatis oleh cron cleanup setelah melewati masa retensi ini.
+            </p>
+
+            <div className="space-y-3 p-4 rounded-xl bg-slate-950 border border-white/5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Masa Retensi (hari)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="3650"
+                  value={mediaRetentionDays}
+                  onChange={(e) => setMediaRetentionDays(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                  placeholder="Contoh: 30"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Simpan per-tenant (kolom <span className="text-slate-300 font-mono">tenants.media_retention_days</span>).
+                  Fallback global env: <span className="text-slate-300 font-mono">{mediaEnvFallbackDays}</span> hari.
+                </p>
+              </div>
+
+              <button
+                onClick={handleSaveMediaRetention}
+                disabled={savingMediaRetention}
+                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
+              >
+                <Save size={14} />
+                <span>{savingMediaRetention ? 'Memproses...' : 'Simpan Retensi Media'}</span>
               </button>
             </div>
           </div>

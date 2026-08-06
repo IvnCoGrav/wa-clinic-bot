@@ -1,5 +1,11 @@
 import { vi } from 'vitest';
 
+// Matikan burst coalescing secara global supaya semua test deterministik:
+// pesan text langsung diproses/di-enqueue, tidak tergantung nilai .env lokal
+// (mis. BURST_COALESCE_MS=5000) yang membuat pesan ter-buffer selama window
+// dan menggagalkan test yang mengharap state/enqueue per-pesan.
+process.env.BURST_COALESCE_MS = '0';
+
 // Force ORS to skip HTTP calls by clearing the API key before any module is loaded.
 // OrsClient.calculateRoute() returns null immediately when apiKey is falsy,
 // which triggers the Haversine fallback in DeliveryService (deterministic, no network).

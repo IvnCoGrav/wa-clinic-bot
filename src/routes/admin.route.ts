@@ -303,6 +303,67 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/admin/settings/media
+   * Mengambil setting retensi media Live Chat (tenants.media_retention_days).
+   * tenantMediaRetentionDays = null saat DB offline (fallback env dipakai runtime).
+   */
+  fastify.get('/api/admin/settings/media', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { mediaService } = await import('../services/media.service');
+      let tenantRetention: number | null = null;
+      try {
+        const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        tenantRetention = tenant?.media_retention_days ?? null;
+      } catch { /* DB offline → null */ }
+      return reply.status(200).send({
+        success: true,
+        data: {
+          tenantMediaRetentionDays: tenantRetention,
+          envFallbackRetentionDays: mediaService.getEnvRetentionDays(),
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/media
+   * Memperbarui retensi media Live Chat (hari) untuk tenant default.
+   */
+  fastify.put('/api/admin/settings/media', async (request: FastifyRequest<{
+    Body: { mediaRetentionDays?: number };
+  }>, reply: FastifyReply) => {
+    const { mediaRetentionDays } = request.body || {};
+    if (typeof mediaRetentionDays !== 'number' || !Number.isFinite(mediaRetentionDays) || mediaRetentionDays < 1 || mediaRetentionDays > 3650) {
+      return reply.status(400).send({ success: false, error: 'mediaRetentionDays harus berupa angka 1-3650 (hari).' });
+    }
+
+    try {
+      const updated = await prisma.tenant.update({
+        where: { id: DEFAULT_TENANT_ID },
+        data: { media_retention_days: Math.floor(mediaRetentionDays) },
+      });
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'UPDATE_MEDIA_RETENTION',
+        payload: { mediaRetentionDays: updated.media_retention_days },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: { mediaRetentionDays: updated.media_retention_days },
+        message: 'Retensi media Live Chat berhasil diperbarui.',
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
    * GET /api/admin/customers
    * Mengambil daftar customer database lengkap dengan Tracking Code, LTV, MQL Status, dan pagination
    */
@@ -451,16 +512,30 @@ export async function adminRoutes(fastify: FastifyInstance) {
    * POST /api/admin/live-chat/conversations/:id/reply
    * Admin membalas percakapan dari dashboard (disimpan sebagai sender_type=ADMIN).
    */
-  fastify.post('/api/admin/live-chat/conversations/:id/reply', async (request: FastifyRequest<{
+  fastify.post('/api/admin/live-chat/conversations/:id/reply', {
+    bodyLimit: 12 * 1024 * 1024, // izinkan upload gambar via base64 (maks ~8MB gambar)
+  }, async (request: FastifyRequest<{
     Params: { id: string };
-    Body: { text?: string; adminName?: string; acknowledgeOutsideWindow?: boolean };
+    Body: {
+      text?: string;
+      imageB64?: string;
+      thumbB64?: string;
+      mimeType?: string;
+      fileName?: string;
+      adminName?: string;
+      acknowledgeOutsideWindow?: boolean;
+    };
   }>, reply) => {
     const { id } = request.params;
-    const { text, adminName, acknowledgeOutsideWindow } = request.body || {};
+    const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow } = request.body || {};
 
     const result = await liveChatService.sendAdminReply({
       conversationId: id,
       text: text || '',
+      imageB64,
+      thumbB64,
+      mimeType,
+      fileName,
       tenantId: DEFAULT_TENANT_ID,
       adminName,
       acknowledgeOutsideWindow,
@@ -985,6 +1060,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
           public async getChats(): Promise<any[]> { return []; }
           public async getMessages(chatId: string, limit?: number): Promise<any[]> { return []; }
           public async getPhoneNumberFromLid(chatId: string): Promise<string | null> { return targetPhone; }
+          public async downloadMedia(messageId: string, chatId: string): Promise<Buffer | null> {
+            return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+          }
         }
 
         const sandboxClient = new SandboxWAHAClient();
@@ -1316,17 +1394,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
-      // CAPI Event: Lead + Purchase (Fire-and-forget side effect, tenant-aware)
+      // CAPI Event: Purchase (Fire-and-forget side effect, tenant-aware).
+      // Lead di sini TIDAK lagi dikirim — Lead hanya dipicu di momen MQL
+      // (customer.service). InitiateCheckout dipicu di momen form reservasi dikirim.
       if (existing.customer) {
-        capiService.sendCapiEvent({
-          eventName: 'Lead',
-          customer: existing.customer,
-          adClick: existing.customer.adClick || undefined,
-          tenantId: DEFAULT_TENANT_ID,
-        }).catch(err => {
-          console.error('[CAPI ERROR] Failed to send conversions event:', err.message);
-        });
-
         resolveTreatmentValue(existing.treatment_detail).then((value) => {
           capiService.sendCapiEvent({
             eventName: 'Purchase',
@@ -1335,10 +1406,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
             value,
             currency: 'IDR',
             tenantId: DEFAULT_TENANT_ID,
+            customData: { source: 'ADMIN_CONFIRM' },
           }).catch(err => {
             console.error('[CAPI ERROR] Failed to send Purchase event:', err.message);
           });
         }).catch(() => {});
+
+        // Catat waktu Purchase event terkirim → dasar disable tombol 7 hari di dashboard.
+        try {
+          await prisma.reservation.update({
+            where: { id },
+            data: { purchase_event_sent_at: new Date() },
+          });
+        } catch (sentErr) {
+          console.warn('[CAPI] Gagal set purchase_event_sent_at:', (sentErr as Error).message);
+        }
       }
 
       // Best-effort: remove 'pending payment' label setelah confirm (Task 5)
@@ -1359,15 +1441,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
         // CAPI Event fallback check for tests
         if (mock.customer) {
-          capiService.sendCapiEvent({
-            eventName: 'Lead',
-            customer: mock.customer,
-            adClick: mock.customer.adClick || undefined,
-            tenantId: DEFAULT_TENANT_ID,
-          }).catch(err => {
-            console.error('[CAPI MOCK ERROR] Failed to send conversions event:', err.message);
-          });
-
           resolveTreatmentValue(mock.treatment_detail).then((value) => {
             capiService.sendCapiEvent({
               eventName: 'Purchase',
@@ -1376,10 +1449,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
               value,
               currency: 'IDR',
               tenantId: DEFAULT_TENANT_ID,
+              customData: { source: 'ADMIN_CONFIRM' },
             }).catch(err => {
               console.error('[CAPI MOCK ERROR] Failed to send Purchase event:', err.message);
             });
           }).catch(() => {});
+          mock.purchase_event_sent_at = new Date();
         }
 
         // Best-effort: remove 'pending payment' label setelah confirm (Task 5)
@@ -2995,6 +3070,79 @@ Format JSON:
       }
     }
   );
+
+  /**
+   * GET /api/admin/customer-service
+   * Mengambil konfigurasi Customer Service untuk tenant saat ini
+   */
+  fastify.get('/api/admin/customer-service', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: DEFAULT_TENANT_ID },
+    }) || await prisma.tenant.findFirst();
+
+    return reply.status(200).send({
+      success: true,
+      data: {
+        csName: tenant?.cs_name || 'Cs Yusi',
+        whatsappNumber: tenant?.whatsapp_number || '6287751148065',
+        formatVisit: tenant?.format_visit || 'Promo[%ID%]',
+        formatCheckout: tenant?.format_checkout || 'list untuk reservasi :',
+        formatPurchase: tenant?.format_purchase || 'Payment',
+        formatValue: tenant?.format_value || 'Treatment = %VALUE%',
+      },
+    });
+  });
+
+  /**
+   * POST /api/admin/customer-service
+   * Memperbarui konfigurasi Customer Service untuk tenant saat ini
+   */
+  fastify.post('/api/admin/customer-service', async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = (request.body || {}) as {
+      csName?: string;
+      whatsappNumber?: string;
+      formatVisit?: string;
+      formatCheckout?: string;
+      formatPurchase?: string;
+      formatValue?: string;
+    };
+
+    const { prisma } = await import('../db/client');
+    let tenant = await prisma.tenant.findFirst({ where: { id: DEFAULT_TENANT_ID } });
+    if (!tenant) {
+      tenant = await prisma.tenant.findFirst();
+    }
+
+    if (!tenant) {
+      return reply.status(404).send({ error: 'Tenant tidak ditemukan' });
+    }
+
+    const updated = await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        ...(body.csName !== undefined ? { cs_name: body.csName } : {}),
+        ...(body.whatsappNumber !== undefined ? { whatsapp_number: body.whatsappNumber } : {}),
+        ...(body.formatVisit !== undefined ? { format_visit: body.formatVisit } : {}),
+        ...(body.formatCheckout !== undefined ? { format_checkout: body.formatCheckout } : {}),
+        ...(body.formatPurchase !== undefined ? { format_purchase: body.formatPurchase } : {}),
+        ...(body.formatValue !== undefined ? { format_value: body.formatValue } : {}),
+      },
+    });
+
+    return reply.status(200).send({
+      success: true,
+      message: 'Konfigurasi Customer Service berhasil diperbarui',
+      data: {
+        csName: updated.cs_name,
+        whatsappNumber: updated.whatsapp_number,
+        formatVisit: updated.format_visit,
+        formatCheckout: updated.format_checkout,
+        formatPurchase: updated.format_purchase,
+        formatValue: updated.format_value,
+      },
+    });
+  });
 
   /**
    * GET /api/admin/ai-models

@@ -8,8 +8,10 @@ import { conversationService } from '../../services/conversation.service';
 import { TEMPLATES } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { fireCapiEvent } from '../../services/capi.service';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
 import { buildPriceAnswer, isAskPrice, isPricelistLostRequest } from '../../services/price-answer.service';
+import { isLocationQueryMessage } from '../utils/location-query';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
@@ -23,8 +25,17 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   const lower = userText.toLowerCase().trim();
 
   // 0. PENGECEKAN UTAMA: Cek jika customer mengirimkan form reservasi (RESERVATION_SENT atau AWAITING_INTEREST)
-  const isFormSubmission = lower.includes('berikut list untuk reservasi') || 
-                           (lower.includes('pilihan treatment') && (lower.includes('nama bunda') || lower.includes('alamat')));
+  //    Kata kunci utama = format_checkout tenant (default "list untuk reservasi :").
+  //    Backward-compat: "berikut list untuk reservasi" tetap dikenali meski config berubah.
+  const { getTenantCapiFormats } = await import('../../services/capi.service');
+  const tenantFormats = await getTenantCapiFormats(tenantId);
+  const checkoutKeyword = tenantFormats.formatCheckout.toLowerCase();
+  const tenantCheckoutHit =
+    checkoutKeyword.length > 0 && lower.includes(checkoutKeyword.replace(/\s+/g, ' ').trim());
+  const isFormSubmission =
+    lower.includes('berikut list untuk reservasi') ||
+    tenantCheckoutHit ||
+    (lower.includes('pilihan treatment') && (lower.includes('nama bunda') || lower.includes('alamat')));
                            
   if (isFormSubmission) {
     const { parseReservationText } = await import('../../utils/reservation-text-parser');
@@ -140,21 +151,13 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // Kalibrasi Redirect: Pemicu butuh kata kunci aksi (ganti, pindah, dsb) + di/ke, atau direct query
-  const hasChangeKeyword = /(ganti|pindah|salah|ubah|bukan|yang\s+bener|alamat)/i.test(userText);
-  const isConversationalLocation = hasChangeKeyword && (
-    /di\s+/i.test(lower) || 
-    /ke\s+/i.test(lower)
-  );
-  const isDirectLocationQuery = 
-    /^(saya\s+)?(di|ke)\s+[a-z0-9]/i.test(userText.trim()) || 
-    /^(ongkir|tarif|biaya|kirim|pengiriman)\s+(ke|di)\s+/i.test(userText.trim()) || 
-    /^rumah\s+saya\s+(di|ke)\s+/i.test(userText.trim()) || 
-    /^kalau\s+(di|ke)\s+/i.test(userText.trim());
-
-  if (incomingMessage.type === 'location' || isConversationalLocation || isDirectLocationQuery) {
+  // Guard mutual recursion: jangan redirect kembali ke location bila kita sudah pernah di-hop
+  // dari location handler (intercept FAQ) — mencegah pantulan tak terbatas.
+  const interceptDepth = ctx._interceptDepth || 0;
+  if (interceptDepth === 0 && isLocationQueryMessage(incomingMessage, userText)) {
     console.log(`[LOCATION REDIRECT] Redirecting location query/change "${userText}" to handleLocationState.`);
     const { handleLocationState } = await import('./location');
-    return handleLocationState(ctx);
+    return handleLocationState({ ...ctx, _interceptDepth: interceptDepth + 1 });
   }
 
   // 1b. GATE AFIRMASI SETELAH CTA HARGA: deterministik, TANPA bergantung klasifikasi
@@ -185,6 +188,13 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         shouldSendReply: true,
       };
     }
+    // CAPI InitiateCheckout: form reservasi dikirim → user memulai checkout.
+    fireCapiEvent({
+      eventName: 'InitiateCheckout',
+      customer,
+      tenantId,
+      customData: { source: 'BOT_FORM_SENT' },
+    });
     return {
       nextState: ConversationState.RESERVATION_SENT,
       replyText: TEMPLATES.reservationFormRequest({
@@ -377,6 +387,13 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
           shouldSendReply: true,
         };
       }
+      // CAPI InitiateCheckout: form reservasi dikirim → user memulai checkout.
+      fireCapiEvent({
+        eventName: 'InitiateCheckout',
+        customer,
+        tenantId,
+        customData: { source: 'BOT_FORM_SENT' },
+      });
       return {
         nextState: ConversationState.RESERVATION_SENT,
         replyText: TEMPLATES.reservationFormRequest({
