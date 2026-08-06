@@ -15,7 +15,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wa_clinic_db?schema=public
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wa_clinic_db?schema=public
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WAHA_WEBHOOK_SECRET=${WAHA_WEBHOOK_SECRET}
       - WAHA_BASE_URL=${WAHA_BASE_URL:-http://waha:3000}
@@ -39,10 +39,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: wa_clinic_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -68,16 +66,14 @@ services:
   waha:
     image: devlikeapro/waha:noweb-2026.7.2
     restart: always
-    ports:
-      - "3001:3000"
     volumes:
       - waha_sessions:/app/.sessions
     environment:
       - WHATSAPP_SWAGGER_USERNAME=admin
-      - WHATSAPP_SWAGGER_PASSWORD=admin12345
+      - WHATSAPP_SWAGGER_PASSWORD=${WAHA_SWAGGER_PASSWORD:-admin12345}
       - WAHA_DASHBOARD_USERNAME=admin
-      - WAHA_DASHBOARD_PASSWORD=admin12345
-      - WAHA_API_KEY=my_waha_api_key_secret
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-admin12345}
+      - WAHA_API_KEY=${WAHA_API_KEY:-my_waha_api_key_secret}
       # Override WhatsApp Web version untuk mencegah regresi Noise Handshake (WA blocked stale version).
       # WAHA memakai versi ini hanya jika lebih tinggi dari bawaan (cek log "resolved version" saat start).
       # Ambil revision terbaru dari https://web.whatsapp.com/sw.js (cari "client_revision").
