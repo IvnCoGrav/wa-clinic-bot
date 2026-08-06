@@ -2431,8 +2431,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
-      // Remove label "hold" from WhatsApp/WAHA chat (dinonaktifkan di production sampai tervalidasi live)
-      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+      // Remove label "hold" from WhatsApp/WAHA chat (default ON, matikan dengan ENABLE_WAHA_HOLD_LABEL=false)
+      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
       if (enableHoldLabel) {
         try {
           const { wahaClient } = await import('../integrations/waha/client');

@@ -387,8 +387,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
 
-        // If hold label feature is disabled in production, do not check WAHA labels for release
-        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+        // If hold label feature is disabled (ENABLE_WAHA_HOLD_LABEL=false), do not check WAHA labels for release
+        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
         if (!enableHoldLabel) {
           console.log(`[LABEL SYNC DISABLED] Skipping WAHA label checks in production. Bot stays silent.`);
           await messageService.logMessage({

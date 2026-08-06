@@ -321,10 +321,28 @@ export class WahaClient implements IWahaClient {
   }
 
   /**
+   * Mengonversi chatId (misal 628123@lid, 628123@c.us, atau 628123) ke format @c.us / @g.us yang valid untuk API Label WAHA.
+   * API Label WAHA mengharapkan @c.us / @g.us, bukan @lid.
+   */
+  public async toLabelChatId(chatId: string): Promise<string> {
+    if (!chatId) return '';
+    const trimmed = chatId.trim();
+    if (trimmed.endsWith('@g.us') || trimmed.endsWith('@c.us')) {
+      return trimmed;
+    }
+    if (trimmed.endsWith('@lid')) {
+      const phone = await this.getPhoneNumberFromLid(trimmed);
+      return phone.includes('@') ? phone : `${phone}@c.us`;
+    }
+    const cleanPhone = trimmed.replace(/\D/g, '');
+    return cleanPhone ? `${cleanPhone}@c.us` : trimmed;
+  }
+
+  /**
    * Menambahkan label ke chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    */
   public async addLabel(chatId: string, labelName: string): Promise<boolean> {
-    const targetChatId = await this.resolveActiveJid(chatId);
+    const targetChatId = await this.toLabelChatId(chatId);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] addLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
@@ -355,7 +373,10 @@ export class WahaClient implements IWahaClient {
         targetLabel = createResponse.data;
       }
 
-      if (!targetLabel) return false;
+      if (!targetLabel) {
+        console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}: Could not find or create label "${labelName}"`);
+        return false;
+      }
 
       // 2. Dapatkan label yang saat ini menempel pada chat
       const currentLabelsResponse = await axios.get(
@@ -376,9 +397,10 @@ export class WahaClient implements IWahaClient {
         { labels: newLabelsList },
         { headers: this.headers, timeout: this.timeoutMs }
       );
+      console.log(`[WAHA LABEL] Successfully added label "${labelName}" to ${targetChatId}`);
       return true;
     } catch (error: any) {
-      console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}:`, error?.response?.data || error.message);
+      console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
       return false;
     }
   }
@@ -387,7 +409,7 @@ export class WahaClient implements IWahaClient {
    * Menghapus label dari chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    */
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
-    const targetChatId = await this.resolveActiveJid(chatId);
+    const targetChatId = await this.toLabelChatId(chatId);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] removeLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
@@ -416,9 +438,10 @@ export class WahaClient implements IWahaClient {
         { labels: filteredLabels },
         { headers: this.headers, timeout: this.timeoutMs }
       );
+      console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
       return true;
     } catch (error: any) {
-      console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId}:`, error?.response?.data || error.message);
+      console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
       return false;
     }
   }
@@ -427,7 +450,7 @@ export class WahaClient implements IWahaClient {
    * Mengambil daftar label yang ada pada chat menggunakan API WAHA baru (GET /api/{session}/labels/chats/{chatId})
    */
   public async getChatLabels(chatId: string): Promise<string[]> {
-    const targetChatId = await this.resolveActiveJid(chatId);
+    const targetChatId = await this.toLabelChatId(chatId);
 
     if (this.shouldMock) {
       return this.mockLabels.get(targetChatId) || [];

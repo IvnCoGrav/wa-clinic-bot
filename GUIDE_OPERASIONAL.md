@@ -142,7 +142,7 @@ Sistem tetap melayani rute HTML lama untuk kompatibilitas pengujian. Semua file 
 
 ## ⚙️ Variabel Konfigurasi Baru (.env)
 
-- **`ENABLE_WAHA_HOLD_LABEL`** (Boolean, default `false` di production): Set `true` jika ingin mengaktifkan sinkronisasi label "hold" WAHA ke HP admin WhatsApp secara otomatis saat terjadi eskalasi human handling. Secara default dinonaktifkan di production untuk menjaga kestabilan operasional sampai tervalidasi live.
+- **`ENABLE_WAHA_HOLD_LABEL`** (Boolean, default `true`): Mengaktifkan sinkronisasi label "hold" WAHA ke HP WhatsApp Business admin secara otomatis saat terjadi eskalasi human handling. Set `false` jika ingin menonaktifkan. Catatan: memerlukan akun WhatsApp Business.
 
 ### NLU Layer (Klasifikasi Intent Structured)
 
