@@ -108,8 +108,8 @@ echo "  Migrate deploy: OK"
 # 4. Verifikasi no drift
 # -----------------------------------------------------------------------------
 echo
-echo "==> [4/5] Cek drift skema (harus '-- This is an empty migration.') ..."
-DRIFT=$(docker compose exec -T app npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script 2>&1 || true)
+DATABASE_URL_VAL="${DATABASE_URL:-$(grep -E "^DATABASE_URL=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"')}"
+DRIFT=$(docker compose exec -T app npx prisma migrate diff --from-url "$DATABASE_URL_VAL" --to-schema-datamodel prisma/schema.prisma --script 2>&1 || true)
 if ! echo "$DRIFT" | grep -q "This is an empty migration"; then
   echo "WARNING: ada drift antara DB dan schema. Periksa manual:" >&2
   echo "$DRIFT" | head -40 >&2
