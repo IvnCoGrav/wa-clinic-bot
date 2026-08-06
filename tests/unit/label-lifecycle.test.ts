@@ -248,4 +248,23 @@ describe('WhatsApp Label Lifecycle', () => {
       .filter(([, label]) => lifecycleLabels.includes(label as string));
     expect(touchedLifecycle).toHaveLength(0);
   });
+
+  it('8. toLabelChatId menormalisasi JID @lid dan nomor polos ke format @c.us untuk API label', async () => {
+    vi.spyOn(wahaClient, 'getPhoneNumberFromLid').mockImplementation(async (lid: string) => {
+      if (lid.includes('7990399')) return '6285794210526';
+      return lid.replace(/@.*$/, '');
+    });
+
+    const c1 = await wahaClient.toLabelChatId('79903991054369@lid');
+    expect(c1).toBe('6285794210526@c.us');
+
+    const c2 = await wahaClient.toLabelChatId('628123456789@c.us');
+    expect(c2).toBe('628123456789@c.us');
+
+    const c3 = await wahaClient.toLabelChatId('628123456789');
+    expect(c3).toBe('628123456789@c.us');
+
+    const c4 = await wahaClient.toLabelChatId('123456789@g.us');
+    expect(c4).toBe('123456789@g.us');
+  });
 });

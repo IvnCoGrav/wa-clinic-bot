@@ -173,8 +173,8 @@ export class ConversationService {
         tenantId
       ).catch((err) => console.error('Failed to sync auto-release to DB:', err));
 
-      // Remove label "hold" from WhatsApp/WAHA chat (dinonaktifkan di production sampai tervalidasi live)
-      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+      // Remove label "hold" from WhatsApp/WAHA chat (default ON, matikan dengan ENABLE_WAHA_HOLD_LABEL=false)
+      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
       if (enableHoldLabel) {
         try {
           const { wahaClient } = require('../integrations/waha/client');
@@ -293,8 +293,8 @@ export class ConversationService {
 
     const currentStateBeforeEscalation = conversation.current_state;
 
-    // Tambahkan label "hold" secara otomatis ke chat WAHA (dinonaktifkan di production sampai tervalidasi live)
-    const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+    // Tambahkan label "hold" secara otomatis ke chat WAHA (default ON, matikan dengan ENABLE_WAHA_HOLD_LABEL=false)
+    const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
     if (enableHoldLabel) {
       try {
         const { wahaClient } = await import('../integrations/waha/client');
