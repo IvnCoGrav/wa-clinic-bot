@@ -257,6 +257,7 @@ export const LiveChatMonitor: React.FC = () => {
     try {
       await apiRequest(`/api/admin/conversation/${chat.conversationId}/release`, {
         method: 'PATCH',
+        body: JSON.stringify({}),
       });
       loadChats(true);
       if (selectedId === chat.conversationId) {

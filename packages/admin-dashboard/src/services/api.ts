@@ -6,14 +6,18 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
   
-  // Hanya set Content-Type: application/json jika ada body.
-  // Kalau tidak ada body (misal PATCH cancel/delete), jangan set —
-  // fetch akan reject kalau Content-Type json tapi body kosong.
-  const hasBody = options.body !== undefined && options.body !== null;
+  const method = (options.method || 'GET').toUpperCase();
+  const needsJsonBody = ['POST', 'PUT', 'PATCH'].includes(method);
+  
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> | undefined),
   };
-  if (hasBody && !headers['Content-Type']) {
+
+  let body = options.body;
+  if (needsJsonBody && body === undefined && !headers['Content-Type']) {
+    body = JSON.stringify({});
+    headers['Content-Type'] = 'application/json';
+  } else if (body !== undefined && body !== null && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -21,6 +25,7 @@ export async function apiRequest<T = any>(
     ...options,
     credentials: 'include',
     headers,
+    ...(body !== undefined ? { body } : {}),
   };
 
   const response = await fetch(url, mergedOptions);
