@@ -1,8 +1,9 @@
-import axios from 'axios';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { SERVICE_AREAS_ALTERNATION } from '../config/service-areas';
+import { callChatCompletionsWithFallback, getFallbackModel } from '../integrations/llm/model-fallback';
+import { CircuitBreaker } from '../utils/circuit-breaker';
 
 export interface NluEntities {
   location_text?: string;
@@ -37,6 +38,40 @@ export const VALID_INTENTS = [
 export type ValidIntentType = typeof VALID_INTENTS[number];
 
 export class NluClassifierService {
+  /**
+   * Circuit breaker untuk NLU LLM: saat SumoPod down, breker tripp -> fallback regex ~instan
+   * (mencegah tiap pesan menunggu timeout penuh 15s). Pattern sama seperti generator/phrasing.
+   */
+  private static llmBreaker: CircuitBreaker<[string, Array<{ role: 'user' | 'assistant'; content: string }>], NluClassificationResult> | null = null;
+
+  private static getBreaker(): CircuitBreaker<[string, Array<{ role: 'user' | 'assistant'; content: string }>], NluClassificationResult> {
+    if (!this.llmBreaker) {
+      this.llmBreaker = new CircuitBreaker(
+        async (text, history) => this.classifyWithLLM(text, history),
+        async (text) => this.fallbackClassify(text),
+        { name: 'LLM NLU Classifier', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
+      );
+    }
+    return this.llmBreaker;
+  }
+
+  /**
+   * Bersihkan JSON LLM: strip code fence (```json ... ```), lalu ambil blok {...} pertama.
+   * Dipakai sebelum JSON.parse agar model yang membungkus JSON dengan teks/fence tidak gagal.
+   */
+  private static sanitizeJson(raw: string): string {
+    let clean = (raw || '').trim();
+    if (clean.startsWith('```')) {
+      clean = clean.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '').trim();
+    }
+    const braceStart = clean.indexOf('{');
+    const braceEnd = clean.lastIndexOf('}');
+    if (braceStart !== -1 && braceEnd > braceStart) {
+      clean = clean.slice(braceStart, braceEnd + 1).trim();
+    }
+    return clean;
+  }
+
   /**
    * Deterministic Fallback Classifier (Regex & Keyword Matcher)
    * Triggered when LLM call fails, times out, or when LLM API Key is unavailable.
@@ -139,11 +174,7 @@ export class NluClassifierService {
     incomingText: string,
     historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
   ): Promise<NluClassificationResult> {
-    const config = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION');
-    const confidenceThreshold = config.confidenceThreshold || 0.60;
-
     const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
-    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
     // Offline / Mock check
     if (!apiKey || apiKey.startsWith('mock') || process.env.NODE_ENV === 'test') {
@@ -157,7 +188,23 @@ export class NluClassifierService {
       return fallbackResult;
     }
 
-    try {
+    // Circuit breaker: saat LLM down/tripp, regex fallback dijalankan ~instan (hindari menunggu timeout).
+    return this.getBreaker().execute(incomingText, historyMessages);
+  }
+
+  /**
+   * Jalankan klasifikasi LLM (primary + fallback model via helper) lalu parse JSON.
+   * Melempar error saat gagal agar CircuitBreaker menjatuhkan ke regex fallback.
+   */
+  private static async classifyWithLLM(
+    incomingText: string,
+    historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  ): Promise<NluClassificationResult> {
+    const config = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION');
+    const confidenceThreshold = config.confidenceThreshold || 0.60;
+    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+
       const systemPrompt = `You are a Structured NLU (Natural Language Understanding) Classifier for ${getBrandIdentity().businessName} WhatsApp Chatbot.
 Your task is to analyze customer messages and return ONLY a JSON object representing the customer's intent(s) and extracted entity data.
 
@@ -202,29 +249,33 @@ OUTPUT JSON SCHEMA ONLY:
         { role: 'user', content: `[Utterance to classify]: "${incomingText}"` },
       ];
 
-      const response = await axios.post(
-        `${baseUrl}/chat/completions`,
-        {
-          model: config.modelName,
+      const { data: responseData } = await callChatCompletionsWithFallback({
+        baseUrl,
+        apiKey,
+        model: config.modelName,
+        fallbackModel: getFallbackModel(),
+        timeoutMs: Number(process.env.LLM_TIMEOUT_NLU_MS || 15000),
+        isContentValid: (content) => {
+          try {
+            JSON.parse(this.sanitizeJson(content));
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        payload: {
           temperature: config.temperature,
           max_tokens: config.maxTokens,
           response_format: { type: 'json_object' },
           messages: messagesPayload,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000, // 10s timeout guard
-        }
-      );
+      });
 
-      let rawContent = response.data?.choices?.[0]?.message?.content?.trim();
-      
+      let rawContent = responseData?.choices?.[0]?.message?.content?.trim();
+
       // Handle DeepSeek reasoning models where content is empty and JSON is in reasoning_content
       if (!rawContent) {
-        const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';
+        const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
         const jsonMatch = reasoning.match(/\{[\s\S]*?"intents"[\s\S]*?\}/);
         if (jsonMatch) {
           rawContent = jsonMatch[0];
@@ -236,7 +287,8 @@ OUTPUT JSON SCHEMA ONLY:
         throw new Error('Empty response content from LLM');
       }
 
-      const parsed = JSON.parse(rawContent);
+      // Sanitize: strip code fence & ambil blok {...} pertama (agar model yang membungkus JSON tidak gagal parse)
+      const parsed = JSON.parse(this.sanitizeJson(rawContent));
       const intents: string[] = Array.isArray(parsed.intents)
         ? parsed.intents.filter((i: string) => VALID_INTENTS.includes(i as any))
         : [];
@@ -272,19 +324,6 @@ OUTPUT JSON SCHEMA ONLY:
       });
 
       return result;
-    } catch (err: any) {
-      console.warn(
-        `[NLU CLASSIFICATION ERROR] LLM classification failed (${err.message}). Executing deterministic regex fallback.`
-      );
-      const fallbackRes = this.fallbackClassify(incomingText);
-      console.log('[NLU CLASSIFICATION] (ERROR FALLBACK)', {
-        text: incomingText,
-        intents: fallbackRes.intents,
-        confidence: fallbackRes.confidence,
-        isFallback: true,
-      });
-      return fallbackRes;
-    }
   }
 }
 

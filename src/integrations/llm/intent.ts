@@ -1,7 +1,7 @@
-import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { llmOutageStorage } from './context';
+import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -48,10 +48,13 @@ export class LLMIntentService {
 
     try {
       console.time('LLM_INTENT_API_CALL');
-      const response = await axios.post(
-        `${this.baseUrl}/chat/completions`,
-        {
-          model: this.model,
+      const { data: responseData } = await callChatCompletionsWithFallback({
+        baseUrl: this.baseUrl,
+        apiKey: this.apiKey,
+        model: this.model,
+        fallbackModel: getFallbackModel(),
+        timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+        payload: {
           response_format: { type: 'json_object' },
           messages: [
             {
@@ -75,17 +78,10 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
             },
           ],
         },
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 8000,
-        }
-      );
+      });
       console.timeEnd('LLM_INTENT_API_CALL');
 
-      const content = response.data.choices[0].message.content;
+      const content = responseData.choices[0].message.content;
       
       let cleanContent = content.trim();
       if (cleanContent.startsWith('```')) {

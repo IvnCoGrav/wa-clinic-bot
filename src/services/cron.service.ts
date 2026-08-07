@@ -15,6 +15,7 @@ export class CronService {
       await this.sendYesterdayReviewsAndScheduleNextFollowups();
       await followUpService.checkAndSetLostCustomers(DEFAULT_TENANT_ID);
       await this.cleanupOldAdClicks();
+      await this.purgeOldLegacyStaging();
       console.log('[Cron Service] Morning Jobs Completed successfully.');
     } catch (err) {
       console.error('[Cron Service] Error running morning jobs:', err);
@@ -334,7 +335,30 @@ export class CronService {
       console.error('[Cron Service] Failed to cleanup/release old tracking codes:', err);
     }
   }
-}
 
+  /**
+   * Purge data histori chat di tabel LegacyStaging yang sudah berstatus COMMITTED atau REJECTED 
+   * dan lebih tua dari 30 hari untuk mencegah DB bloat.
+   */
+  public async purgeOldLegacyStaging(): Promise<void> {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const deleted = await prisma.legacyStaging.deleteMany({
+        where: {
+          status: { in: ['COMMITTED', 'REJECTED'] },
+          createdAt: { lt: thirtyDaysAgo },
+        },
+      });
+
+      if (deleted.count > 0) {
+        console.log(`[Cron Service] Successfully purged ${deleted.count} old committed/rejected legacy staging records (>30 days).`);
+      }
+    } catch (err: any) {
+      console.error('[Cron Service] Failed to purge old legacy staging records:', err.message || err);
+    }
+  }
+}
 
 export const cronService = new CronService();

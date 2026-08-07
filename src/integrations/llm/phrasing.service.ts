@@ -1,8 +1,8 @@
-import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
+import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -24,7 +24,9 @@ export class PhrasingService {
     return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   }
   private get model(): string {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+    const { AiModelConfigService } = require('../../config/ai-models.config');
+    const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
+    return chatConfig.modelName || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
   }
 
   constructor() {
@@ -59,25 +61,21 @@ ATURAN STRICT & ANTI-HALUSINASI (MANDAT UTAMA):
 
 HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN LAIN.`;
 
-        const response = await axios.post(
-          `${this.baseUrl}/chat/completions`,
-          {
-            model: this.model,
+        const { data: responseData } = await callChatCompletionsWithFallback({
+          baseUrl: this.baseUrl,
+          apiKey: this.apiKey,
+          model: this.model,
+          fallbackModel: getFallbackModel(),
+          timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+          payload: {
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Tolong sampaikan pesan ${req.intent} ini dengan variasi natural berdasarkan fakta tersebut. Contoh acuan pesan standar: "${req.fallbackTemplate}"` },
             ],
           },
-          {
-            headers: {
-              Authorization: `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 8000,
-          }
-        );
+        });
 
-        const content = response.data.choices[0].message.content.trim();
+        const content = responseData.choices[0].message.content.trim();
 
         // Safety Validation: Jika req.facts punya angka, pastikan angka tersebut tidak hilang/berubah di output LLM
         if (req.facts) {
@@ -111,7 +109,7 @@ HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN L
       async (req: PhrasingRequest) => {
         return req.fallbackTemplate;
       },
-      { name: 'LLM Phrasing' }
+      { name: 'LLM Phrasing', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
     );
   }
 

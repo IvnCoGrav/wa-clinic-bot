@@ -1,8 +1,8 @@
-import axios from 'axios';
 import { BOT_PERSONA_PROMPT, getMaxCharsPerReply, truncateToMaxChars } from '../../config/persona';
 import { KnowledgeChunkResult } from '../../services/knowledge.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
+import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
@@ -223,25 +223,21 @@ ATURAN EKSTRAKSI PREFERENSI:
           content: userQuestion,
         });
 
-        const response = await axios.post(
-          `${this.baseUrl}/chat/completions`,
-          {
-            model: modelConfig.modelName,
+        const { data: responseData } = await callChatCompletionsWithFallback({
+          baseUrl: this.baseUrl,
+          apiKey: this.apiKey,
+          model: modelConfig.modelName,
+          fallbackModel: getFallbackModel(),
+          timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+          payload: {
             temperature: modelConfig.temperature,
             max_tokens: modelConfig.maxTokens,
             response_format: { type: 'json_object' },
             messages: apiMessages,
           },
-          {
-            headers: {
-              Authorization: `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 8000,
-          }
-        );
+        });
 
-        const content = response.data.choices[0].message.content;
+        const content = responseData.choices[0].message.content;
         
         let parsed: { reasoning?: string; answer?: string; referenced_treatment?: string | null; needs_clarification?: boolean; extracted_preferences?: Record<string, any> };
         try {
@@ -306,7 +302,7 @@ ATURAN EKSTRAKSI PREFERENSI:
           reasoning: '[FALLBACK] LLM error or breaker open',
         };
       },
-      { name: 'LLM Generator' }
+      { name: 'LLM Generator', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
     );
   }
 
