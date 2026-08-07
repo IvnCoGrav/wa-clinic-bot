@@ -24,7 +24,7 @@ interface AgeTier {
 interface ClinicServiceItem {
   id: string;
   name: string;
-  category: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
+  category: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE';
   ageTier: AgeTier;
   durationMinutes: number;
   originalPrice: number;
@@ -45,7 +45,7 @@ export const ClinicServices: React.FC = () => {
   // Form states
   const [formId, setFormId] = useState('');
   const [formName, setFormName] = useState('');
-  const [formCategory, setFormCategory] = useState<'BABY' | 'KIDS' | 'MOMS' | 'BOTH'>('BABY');
+  const [formCategory, setFormCategory] = useState<'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE'>('BABY');
   const [formMinAge, setFormMinAge] = useState(0);
   const [formMaxAge, setFormMaxAge] = useState<number | string>('');
   const [formAgeLabel, setFormAgeLabel] = useState('');
@@ -240,7 +240,9 @@ export const ClinicServices: React.FC = () => {
                             ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                             : srv.category === 'MOMS'
                               ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : srv.category === 'BUNDLE'
+                                ? 'bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20'
+                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                       }`}>
                         {srv.category}
                       </span>
@@ -367,6 +369,7 @@ export const ClinicServices: React.FC = () => {
                     <option value="KIDS">KIDS</option>
                     <option value="MOMS">MOMS</option>
                     <option value="BOTH">BOTH</option>
+                    <option value="BUNDLE">BUNDLE</option>
                   </select>
                 </div>
 
