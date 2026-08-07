@@ -45,7 +45,7 @@ export class ConversationService {
       return conversation;
     } catch (error) {
       // Memory store fallback
-      let conv = Array.from(memoryConversations.values()).find((c) => c.customer_id === customerId && c.tenant_id === tenantId);
+      let conv = Array.from(memoryConversations.values()).find((c) => c && c.customer_id === customerId && c.tenant_id === tenantId);
       if (!conv) {
         conv = {
           id: `conv_${Date.now()}_${Math.random().toString(36).substring(7)}`,
@@ -73,7 +73,7 @@ export class ConversationService {
    */
   public clearConversationMemory(customerId: string): void {
     for (const [id, conv] of Array.from(memoryConversations.entries())) {
-      if (conv.customer_id === customerId) {
+      if (conv && conv.customer_id === customerId) {
         memoryConversations.delete(id);
       }
     }
@@ -317,6 +317,38 @@ export class ConversationService {
       },
       tenantId
     );
+  }
+
+  /**
+   * Memperbarui treatment yang terakhir dibahas dalam percakapan.
+   */
+  public async updateLastDiscussedTreatment(
+    conversationId: string,
+    tenantId: string,
+    treatmentName: string
+  ): Promise<any> {
+    const now = new Date();
+    try {
+      const updated = await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          last_discussed_treatment: treatmentName,
+          last_discussed_treatment_at: now,
+        },
+      });
+      memoryConversations.set(conversationId, updated);
+      this.publishConversationUpdated(updated, tenantId);
+      return updated;
+    } catch (error) {
+      const conv = memoryConversations.get(conversationId);
+      if (conv) {
+        conv.last_discussed_treatment = treatmentName;
+        conv.last_discussed_treatment_at = now;
+        conv.updated_at = now;
+        this.publishConversationUpdated(conv, tenantId);
+      }
+      return conv || null;
+    }
   }
 }
 

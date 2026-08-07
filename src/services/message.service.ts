@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { Direction } from '@prisma/client';
+import { Direction, Prisma } from '@prisma/client';
 import { getLiveChatHub } from './live-chat-hub.service';
 
 // In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local
@@ -86,7 +86,8 @@ export class MessageService {
           sender_name: data.senderName ?? undefined,
         },
       });
-      return saved;
+      if (saved) return saved;
+      throw new Error('Prisma create returned null/undefined (DB offline)');
     } catch (error) {
       console.warn('DB logMessage error (using fallback):', (error as Error).message);
       const fallbackMessage: any = {
@@ -211,6 +212,34 @@ export class MessageService {
       console.warn('DB updateDeliveryStatus error (using fallback):', (error as Error).message);
       return { matched: false };
     }
+  }
+
+  /**
+   * Mengambil pesan-pesan outbound terakhir yang memiliki aiReasoning pada payload_raw.
+   */
+  public async getRecentMessagesWithReasoning(tenantId: string, limit: number = 50): Promise<any[]> {
+    try {
+      const res = await prisma.message.findMany({
+        where: {
+          tenant_id: tenantId,
+          direction: Direction.OUTBOUND,
+          payload_raw: {
+            path: ['aiReasoning'],
+            not: Prisma.JsonNull,
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+      });
+      if (Array.isArray(res)) return res;
+    } catch (error) {
+      // DB offline / fallback
+    }
+    // Memory fallback untuk offline / unit test
+    return memoryMessages
+      .filter(m => m.tenant_id === tenantId && (m.direction === Direction.OUTBOUND || (m.direction as string) === 'OUTBOUND') && (m.payload_raw?.aiReasoning || m.payloadRaw?.aiReasoning))
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, limit);
   }
 }
 

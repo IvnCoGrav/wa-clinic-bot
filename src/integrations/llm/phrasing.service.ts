@@ -110,7 +110,8 @@ HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN L
       },
       async (req: PhrasingRequest) => {
         return req.fallbackTemplate;
-      }
+      },
+      { name: 'LLM Phrasing' }
     );
   }
 

@@ -205,8 +205,6 @@ ${pixelOnloadLines}
               e.preventDefault();
               if (isRedirecting) return;
 
-              clickPixelEvents.forEach(function(ev) { if (window.fbq) fbq('track', ev); });
-
               ctaBtn.style.opacity = '0.7';
 
               const safetyTimeout = setTimeout(function() {
@@ -249,6 +247,7 @@ ${pixelOnloadLines}
                 isRedirecting = true;
 
                 const trackingCode = data.trackingCode || 'promo';
+                clickPixelEvents.forEach(function(ev) { if (window.fbq) fbq('track', ev, {}, { eventID: trackingCode }); });
                 const redirectUrl = 'https://wa.me/' + defaultPhone + '?text=Promo%5B' + trackingCode + '%5D%20Halo%20Bunda%2C%20saya%20tertarik%20dengan%20layanan%20home-treatment';
                 window.location.href = redirectUrl;
               })

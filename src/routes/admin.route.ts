@@ -900,6 +900,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
         ipAddress: request.ip,
       });
 
+      try {
+        const { faqCacheService } = await import('../services/faq-cache.service');
+        await faqCacheService.invalidateAll(updated?.tenant_id || DEFAULT_TENANT_ID).catch(() => {});
+      } catch (_) {}
+
       return reply.status(200).send({
         success: true,
         message: 'Knowledge chunk updated successfully',
@@ -910,6 +915,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const updatedInMemory = knowledgeBaseService.updateInMemoryChunk(id, title, content);
       
       if (updatedInMemory) {
+        try {
+          const { faqCacheService } = await import('../services/faq-cache.service');
+          await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+        } catch (_) {}
+
         return reply.status(200).send({
           success: true,
           message: 'Knowledge chunk updated in memory fallback',
@@ -929,6 +939,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const { id } = request.params;
     try {
       await prisma.knowledgeChunk.delete({ where: { id } });
+      try {
+        const { faqCacheService } = await import('../services/faq-cache.service');
+        await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+      } catch (_) {}
+
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
@@ -953,6 +968,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     const importedCount = await knowledgeBaseService.importFaqs(faqs, DEFAULT_TENANT_ID);
+    try {
+      const { faqCacheService } = await import('../services/faq-cache.service');
+      await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+    } catch (_) {}
+
     await auditService.logAdminAction({
       apiKey: (request as any).adminKeyUsed,
       adminIdentity: (request as any).adminIdentity,
@@ -977,6 +997,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     const chunkCount = await knowledgeBaseService.importDocument(documentName, textContent, DEFAULT_TENANT_ID);
+    try {
+      const { faqCacheService } = await import('../services/faq-cache.service');
+      await faqCacheService.invalidateAll(DEFAULT_TENANT_ID).catch(() => {});
+    } catch (_) {}
+
     await auditService.logAdminAction({
       apiKey: (request as any).adminKeyUsed,
       adminIdentity: (request as any).adminIdentity,

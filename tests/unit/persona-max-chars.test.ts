@@ -9,6 +9,7 @@ import {
   BOT_PERSONA_PROMPT,
   updatePersonaInMemoryAndFile,
 } from '../../src/config/persona';
+import { faqCacheService } from '../../src/services/faq-cache.service';
 
 /**
  * Unit test fitur "Maksimal karakter per balasan AI" (persona config).
@@ -97,12 +98,16 @@ describe('getMaxCharsPerReply (cache per tenant)', () => {
 });
 
 describe('LLM generator enforcement', () => {
-  const longText =
-    'REASONING: test\nJAWABAN: Bunda, jawaban ini sengaja dibuat panjang supaya melebihi batas maksimal karakter. '.repeat(20);
+  const longTextAnswer = 'Bunda, jawaban ini sengaja dibuat panjang supaya melebihi batas maksimal karakter. '.repeat(20).trim();
+  const longTextJSON = JSON.stringify({
+    reasoning: 'test',
+    answer: longTextAnswer
+  });
 
   beforeEach(() => {
     process.env.LLM_API_KEY = 'non-mock-test-key';
     vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    faqCacheService.clearMemoryCache();
   });
 
   afterEach(() => {
@@ -116,7 +121,7 @@ describe('LLM generator enforcement', () => {
     let capturedBody: any = null;
     const postSpy = vi.spyOn(axios, 'post').mockImplementation(async (_url: any, body: any) => {
       capturedBody = body;
-      return { status: 200, data: { choices: [{ message: { content: longText } }] } };
+      return { status: 200, data: { choices: [{ message: { content: longTextJSON } }] } };
     });
 
     const generator = new LLMResponseGenerator();
@@ -135,15 +140,13 @@ describe('LLM generator enforcement', () => {
     await savePersonaToDb('Persona test', TENANT, null);
 
     const postSpy = vi.spyOn(axios, 'post').mockImplementation(async (_url: any, _body: any) => {
-      return { status: 200, data: { choices: [{ message: { content: longText } }] } };
+      return { status: 200, data: { choices: [{ message: { content: longTextJSON } }] } };
     });
 
     const generator = new LLMResponseGenerator();
     const result = await generator.generateFaqResponse('berapa harganya?', [], undefined, TENANT);
 
     expect(postSpy).toHaveBeenCalledTimes(1);
-    // Generator hanya mengembalikan bagian JAWABAN (tanpa REASONING prefix).
-    const expectedJawaban = longText.replace(/^REASONING:\s*[^\n]*\nJAWABAN:\s*/, '').trim();
-    expect(result).toBe(expectedJawaban);
+    expect(result).toBe(longTextAnswer);
   });
 });

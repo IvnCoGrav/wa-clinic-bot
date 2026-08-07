@@ -1,4 +1,9 @@
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
+import { faqCacheService } from '../src/services/faq-cache.service';
+
+beforeEach(() => {
+  faqCacheService.clearMemoryCache();
+});
 
 // Matikan burst coalescing secara global supaya semua test deterministik:
 // pesan text langsung diproses/di-enqueue, tidak tergantung nilai .env lokal
@@ -41,6 +46,7 @@ vi.mock('../src/db/client', () => {
       message: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
