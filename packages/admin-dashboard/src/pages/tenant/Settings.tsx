@@ -6,6 +6,7 @@ import { WhatsAppProviderPanel } from '../../components/settings/WhatsAppProvide
 import { AiRouterPanel } from '../../components/settings/AiRouterPanel';
 import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
 import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
+import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
 const CAPI_TOKEN_MASK = '••••••••••••••••••••••••••••••••';
@@ -689,6 +690,9 @@ export const Settings: React.FC = () => {
         savingMediaRetention={savingMediaRetention}
         handleSaveMediaRetention={handleSaveMediaRetention}
       />
+
+      {/* Install App (PWA) */}
+      <InstallAppPanel />
 
       {/* Remaining panels: Global Toggle + Branch Picker + Delivery Tiers + Broadcast */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
