@@ -28,6 +28,17 @@ export const Reservations: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [googleCalendarMockActive, setGoogleCalendarMockActive] = useState(true);
   const [editDate, setEditDate] = useState('');
+
+  useEffect(() => {
+    if (selectedRes?.booking_date) {
+      const d = new Date(selectedRes.booking_date);
+      const tzOffset = d.getTimezoneOffset() * 60000;
+      const localIso = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+      setEditDate(localIso);
+    } else {
+      setEditDate('');
+    }
+  }, [selectedRes]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
     customerId: '',
@@ -72,6 +83,14 @@ export const Reservations: React.FC = () => {
 
   const loadMore = () => {
     if (page < totalPages) loadReservations(page + 1, true);
+  };
+
+  const formatBookingDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const dayMonth = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
+    return `${dayMonth} ${time}`;
   };
 
   const handleConfirm = async (id: string) => {
@@ -298,8 +317,66 @@ export const Reservations: React.FC = () => {
             </div>
           </div>
 
-          {/* Table list */}
-          <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden shadow-xl">
+          {/* Table & Mobile list */}
+          {/* Mobile Card List (block md:hidden) */}
+          <div className="block md:hidden space-y-3.5">
+            {filtered.length === 0 ? (
+              <div className="glass-panel border border-white/5 rounded-2xl p-8 text-center text-slate-500 text-xs">
+                No reservations found matching current criteria.
+              </div>
+            ) : (
+              filtered.map((res) => (
+                <div key={res.id} className="glass-card rounded-2xl p-4 border border-white/10 shadow-lg bg-slate-900/80 space-y-3 relative">
+                  <div className="flex justify-between items-start">
+                    <div className="pr-2">
+                      <h4 className="font-bold text-white text-sm">{res.customer?.name || 'Bunda'}</h4>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">{res.customer?.phone}</p>
+                    </div>
+                    <div className="flex-shrink-0">{getStatusBadge(res.status)}</div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5">
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
+                      {res.treatment_category}
+                    </span>
+                    <span className="font-bold text-pink-300 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/20">
+                      {res.booking_date ? (
+                        formatBookingDate(res.booking_date)
+                      ) : (
+                        <span className="text-slate-500 font-normal">Belum ada jadwal</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {res.treatment_detail && (
+                    <p className="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-xl border border-white/5 line-clamp-2 leading-relaxed">
+                      {res.treatment_detail}
+                    </p>
+                  )}
+
+                  <div className="pt-2 flex justify-between items-center text-xs">
+                    {!res.booking_date ? (
+                      <button
+                        onClick={() => setSelectedRes(res)}
+                        className="px-2.5 py-1.5 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/20 font-semibold text-[11px] transition-all"
+                      >
+                        + Tambah Jadwal
+                      </button>
+                    ) : <span />}
+                    <button
+                      onClick={() => setSelectedRes(res)}
+                      className="px-3.5 py-1.5 bg-white/5 hover:bg-pink-500/10 text-slate-200 hover:text-pink-400 border border-white/10 hover:border-pink-500/20 rounded-xl transition-all font-semibold"
+                    >
+                      Manage
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View (hidden md:block) */}
+          <div className="hidden md:block glass-panel border border-white/5 rounded-2xl overflow-hidden shadow-xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -324,7 +401,7 @@ export const Reservations: React.FC = () => {
                       <tr key={res.id} className="hover:bg-white/5 transition-all">
                         <td className="py-4 px-6 font-medium text-white">
                           <p>{res.customer?.name || 'Bunda'}</p>
-                          <p className="text-xs text-slate-500">{res.customer?.phone}</p>
+                          <p className="text-xs text-slate-500 font-mono">{res.customer?.phone}</p>
                         </td>
                         <td className="py-4 px-6">
                           <span className="px-2 py-0.5 rounded bg-slate-800 text-xs text-slate-300 font-medium">
@@ -334,12 +411,12 @@ export const Reservations: React.FC = () => {
                         <td className="py-4 px-6 max-w-xs truncate" title={res.treatment_detail}>
                           {res.treatment_detail}
                         </td>
-                        <td className="py-4 px-6 font-semibold">
+                        <td className="py-4 px-6 font-semibold text-pink-300 whitespace-nowrap">
                           {res.booking_date
-                            ? new Date(res.booking_date).toLocaleString('id-ID')
+                            ? formatBookingDate(res.booking_date)
                             : (
                               <button
-                                onClick={() => { setSelectedRes(res); setEditDate(''); }}
+                                onClick={() => setSelectedRes(res)}
                                 className="px-2 py-1 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/20 text-xs font-semibold transition-all"
                               >
                                 + Tambahkan Jadwal Kunjungan
@@ -419,7 +496,7 @@ export const Reservations: React.FC = () => {
                   <p className="text-xs text-slate-400 line-clamp-2">{res.treatment_detail}</p>
                 </div>
                 <div className="pt-3 border-t border-white/5 flex items-center justify-between text-xs text-slate-300 font-semibold">
-                  <span>{res.booking_date ? new Date(res.booking_date).toLocaleString('id-ID') : ''}</span>
+                  <span>{res.booking_date ? formatBookingDate(res.booking_date) : ''}</span>
                   <button onClick={() => setSelectedRes(res)} className="text-pink-400 hover:underline">Edit</button>
                 </div>
               </div>
@@ -435,8 +512,8 @@ export const Reservations: React.FC = () => {
 
       {/* Reservation Details & Management Modal */}
       {selectedRes && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-6 shadow-2xl relative">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setSelectedRes(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
@@ -446,26 +523,26 @@ export const Reservations: React.FC = () => {
 
             {/* Modal Header */}
             <div>
-              <h3 className="text-xl font-bold text-white flex items-center space-x-2">
-                <Info size={20} className="text-pink-400" />
+              <h3 className="text-lg sm:text-xl font-bold text-white flex items-center space-x-2 pr-6">
+                <Info size={20} className="text-pink-400 flex-shrink-0" />
                 <span>Reservation Details</span>
               </h3>
               <p className="text-xs text-slate-400 mt-1">Manage state variables & manual integrations</p>
             </div>
 
             {/* Info contents split layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 text-sm">
               <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-slate-950 border border-white/5 space-y-2">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950 border border-white/5 space-y-2">
                   <span className="text-xs text-slate-500 font-semibold block uppercase">Patient Details</span>
                   <div className="flex items-center space-x-2 text-slate-200">
-                    <User size={16} className="text-slate-500" />
-                    <span>{selectedRes.customer?.name || 'Bunda'} ({selectedRes.customer?.phone})</span>
+                    <User size={16} className="text-slate-500 flex-shrink-0" />
+                    <span className="break-all">{selectedRes.customer?.name || 'Bunda'} ({selectedRes.customer?.phone})</span>
                   </div>
                   {selectedRes.customer?.kelurahan && (
                     <div className="flex items-center space-x-2 text-slate-400 text-xs">
-                      <MapPin size={14} className="text-slate-500" />
-                      <span>{selectedRes.customer?.kelurahan}, {selectedRes.customer?.kecamatan}, {selectedRes.customer?.kota}</span>
+                      <MapPin size={14} className="text-slate-500 flex-shrink-0" />
+                      <span className="break-words">{selectedRes.customer?.kelurahan}, {selectedRes.customer?.kecamatan}, {selectedRes.customer?.kota}</span>
                     </div>
                   )}
 
@@ -478,7 +555,7 @@ export const Reservations: React.FC = () => {
                       {getBabyRows(selectedRes).map((baby, i) => (
                         <div key={i} className="flex items-center space-x-2 text-slate-200">
                           <Baby size={14} className="text-pink-500/70 flex-shrink-0" />
-                          <span>
+                          <span className="break-words">
                             <span className="font-semibold">{baby.name || '-'}</span>
                             <span className="text-slate-300 text-xs"> · {baby.age || '?'}</span>
                             {baby.regAge && baby.regAge !== baby.age && (
@@ -493,7 +570,7 @@ export const Reservations: React.FC = () => {
                   )}
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-950 border border-white/5 space-y-2">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950 border border-white/5 space-y-2">
                   <span className="text-xs text-slate-500 font-semibold block uppercase">Location & Logistics</span>
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-400">Distance from Branch</span>
@@ -514,7 +591,7 @@ export const Reservations: React.FC = () => {
 
               {/* Edit Schedule section */}
               <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-slate-950 border border-white/5 space-y-3">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950 border border-white/5 space-y-3">
                   <span className="text-xs text-slate-500 font-semibold block uppercase">Set booking schedule</span>
                   <input
                     type="datetime-local"
@@ -532,7 +609,7 @@ export const Reservations: React.FC = () => {
 
                 {/* Google Calendar sync notifier */}
                 {googleCalendarMockActive && (
-                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-3 text-xs">
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-3 text-xs">
                     <AlertTriangle className="flex-shrink-0 mt-0.5" size={16} />
                     <div>
                       <p className="font-bold">Google Calendar integration is in Mock Mode</p>
@@ -551,16 +628,16 @@ export const Reservations: React.FC = () => {
                 <FileText size={12} />
                 <span>Raw Chat Submission text</span>
               </span>
-              <pre className="p-3 bg-slate-950 border border-white/5 rounded-xl text-[11px] text-slate-400 font-mono overflow-auto max-h-32 whitespace-pre-wrap">
+              <pre className="p-3 bg-slate-950 border border-white/5 rounded-xl text-[11px] text-slate-400 font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all">
                 {selectedRes.raw_text}
               </pre>
             </div>
 
             {/* Actions button footer */}
-            <div className="pt-4 border-t border-white/5 flex justify-between">
+            <div className="pt-4 border-t border-white/5 flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-0 justify-between">
               <button
                 onClick={() => handleDelete(selectedRes.id)}
-                className="px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition text-xs font-semibold flex items-center space-x-1.5"
+                className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition text-xs font-semibold flex items-center space-x-1.5"
               >
                 <X size={14} />
                 <span>Delete & Cancel</span>
@@ -576,7 +653,7 @@ export const Reservations: React.FC = () => {
                     title={purchaseWindowOpen
                       ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count / potensi repeat order.`
                       : undefined}
-                    className={`px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
+                    className={`w-full sm:w-auto justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
                       purchaseWindowOpen
                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                         : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow shadow-emerald-500/20'
@@ -594,8 +671,8 @@ export const Reservations: React.FC = () => {
 
       {/* Buat Jadwal Baru Modal (Task 9) */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setShowCreateModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
@@ -604,8 +681,8 @@ export const Reservations: React.FC = () => {
             </button>
 
             <div>
-              <h3 className="text-xl font-bold text-white flex items-center space-x-2">
-                <CalendarIcon size={20} className="text-pink-400" />
+              <h3 className="text-lg sm:text-xl font-bold text-white flex items-center space-x-2 pr-6">
+                <CalendarIcon size={20} className="text-pink-400 flex-shrink-0" />
                 <span>Buat Jadwal Baru</span>
               </h3>
               <p className="text-xs text-slate-400 mt-1">Buat reservasi manual tanpa raw text — input terstruktur</p>
@@ -646,10 +723,10 @@ export const Reservations: React.FC = () => {
               )}
               {createForm.customerId && (
                 <div className="flex items-center justify-between px-3 py-2 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs text-pink-300">
-                  <span>{createForm.customerSearch}</span>
+                  <span className="break-all">{createForm.customerSearch}</span>
                   <button
                     onClick={() => setCreateForm((prev) => ({ ...prev, customerId: '', customerSearch: '' }))}
-                    className="text-slate-400 hover:text-white"
+                    className="text-slate-400 hover:text-white flex-shrink-0 ml-2"
                   >
                     <X size={14} />
                   </button>
@@ -665,7 +742,7 @@ export const Reservations: React.FC = () => {
                   <button
                     key={cat}
                     onClick={() => setCreateForm((prev) => ({ ...prev, treatmentCategory: cat }))}
-                    className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
                       createForm.treatmentCategory === cat
                         ? 'bg-pink-500/10 border-pink-500 text-pink-400'
                         : 'border-white/5 text-slate-400 hover:text-white bg-slate-900/35'
@@ -716,7 +793,7 @@ export const Reservations: React.FC = () => {
                   <p className="text-[11px] text-slate-600">Belum ada bayi ditambahkan.</p>
                 )}
                 {createForm.babies.map((baby, i) => (
-                  <div key={i} className="flex items-center space-x-2">
+                  <div key={i} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <input
                       type="text"
                       value={baby.name}
@@ -724,19 +801,21 @@ export const Reservations: React.FC = () => {
                       placeholder="Nama bayi"
                       className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
                     />
-                    <input
-                      type="text"
-                      value={baby.ageText}
-                      onChange={(e) => updateBaby(i, 'ageText', e.target.value)}
-                      placeholder="Usia (mis. 6 bulan)"
-                      className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
-                    />
-                    <button
-                      onClick={() => setCreateForm((prev) => ({ ...prev, babies: prev.babies.filter((_, idx) => idx !== i) }))}
-                      className="p-2 text-slate-500 hover:text-rose-400"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="flex items-center space-x-2 flex-1">
+                      <input
+                        type="text"
+                        value={baby.ageText}
+                        onChange={(e) => updateBaby(i, 'ageText', e.target.value)}
+                        placeholder="Usia (mis. 6 bulan)"
+                        className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
+                      />
+                      <button
+                        onClick={() => setCreateForm((prev) => ({ ...prev, babies: prev.babies.filter((_, idx) => idx !== i) }))}
+                        className="p-2 text-slate-500 hover:text-rose-400 flex-shrink-0"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -746,7 +825,7 @@ export const Reservations: React.FC = () => {
             <div className="pt-4 border-t border-white/5 flex justify-end">
               <button
                 onClick={handleCreateReservation}
-                className="px-5 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white transition text-xs font-semibold flex items-center space-x-1.5 shadow shadow-pink-500/20"
+                className="w-full sm:w-auto justify-center px-5 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white transition text-xs font-semibold flex items-center space-x-1.5 shadow shadow-pink-500/20"
               >
                 <CalendarIcon size={14} />
                 <span>Simpan Reservasi</span>

@@ -835,6 +835,7 @@ export class CustomerService {
         name: customer.name || null,
         activeServices,
         historicalServices: Array.from(historicalServicesSet),
+        preferences: (customer.preferences as Record<string, any> | null) ?? undefined,
       };
     } catch (err: any) {
       console.warn('[Customer Service] getCustomerGroundTruth failed:', err?.message || err);
@@ -847,6 +848,7 @@ export interface CustomerGroundTruth {
   name: string | null;
   activeServices: string[];
   historicalServices: string[];
+  preferences?: Record<string, any>;
 }
 
 export const customerService = new CustomerService();
