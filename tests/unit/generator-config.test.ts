@@ -54,7 +54,7 @@ describe('LLMResponseGenerator - AiModelConfigService Integration', () => {
     expect(payload.response_format).toEqual({ type: 'json_object' });
   });
 
-  it('regresi: tanpa mock khusus, harus menggunakan default config (MiniMax-M2.7-highspeed)', async () => {
+  it('regresi: tanpa mock khusus, harus menggunakan default config (deepseek-v4-flash)', async () => {
     // Hapus spyOn agar memanggil fungsi aslinya
     vi.restoreAllMocks();
     
@@ -78,7 +78,7 @@ describe('LLMResponseGenerator - AiModelConfigService Integration', () => {
     const payload = vi.mocked(axios.post).mock.calls[0][1] as any;
 
     // Pastikan default behavior dari AiModelConfigService untuk CHAT_REPLY
-    expect(payload.model).toBe('MiniMax-M2.7-highspeed');
+    expect(payload.model).toBe('deepseek-v4-flash');
     expect(payload.temperature).toBe(0.7);
     expect(payload.max_tokens).toBe(1024);
   });
