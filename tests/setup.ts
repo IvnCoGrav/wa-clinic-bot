@@ -87,6 +87,16 @@ vi.mock('../src/db/client', () => {
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
+      aiEvaluation: {
+        findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
+        findMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        count: vi.fn().mockRejectedValue(new Error('Database offline')),
+        aggregate: vi.fn().mockRejectedValue(new Error('Database offline')),
+        create: vi.fn().mockRejectedValue(new Error('Database offline')),
+        update: vi.fn().mockRejectedValue(new Error('Database offline')),
+        upsert: vi.fn().mockRejectedValue(new Error('Database offline')),
+      },
       legacyStaging: {
         findUnique: vi.fn().mockRejectedValue(new Error('Database offline')),
         findFirst: vi.fn().mockRejectedValue(new Error('Database offline')),
