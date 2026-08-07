@@ -186,9 +186,32 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const data = await apiRequest('/api/admin/settings');
-        setGlobalBotActive(data.globalBotActive);
-        
+        const [
+          data,
+          tiersRes,
+          , // provider
+          , // qr
+          , // aiRouter
+          , // aiScope
+          , // capi
+          , // mql
+          , // media
+        ] = await Promise.all([
+          apiRequest('/api/admin/settings'),
+          apiRequest('/api/admin/delivery-tiers'),
+          loadWhatsAppProvider(),
+          loadQr(),
+          loadAiRouterConfig(),
+          loadAiScopeConfig(),
+          loadCapiConfig(),
+          loadMqlSettings(),
+          loadMediaRetention(),
+        ]);
+
+        if (data) {
+          setGlobalBotActive(data.globalBotActive);
+        }
+
         // Load branch from localStorage if available
         const localBranch = localStorage.getItem('kala_branch_settings');
         if (localBranch) {
@@ -197,33 +220,11 @@ export const Settings: React.FC = () => {
           setLng(parsed.lng);
           setBranchName(parsed.name);
         }
-        
-        // Fetch tiers from backend API
-        const tiersRes = await apiRequest('/api/admin/delivery-tiers');
+
         const list = Array.isArray(tiersRes) ? tiersRes : (tiersRes?.data || []);
         if (list.length > 0) {
           setOngkirTiers(list);
         }
-
-        // Fetch WhatsApp provider status (Fase 5)
-        await loadWhatsAppProvider();
-        // Fitur 1: muat status QR WAHA sekaligus (agar panel QR terisi tanpa klik manual)
-        await loadQr();
-
-        // Fetch AI Router config (default ON + shadow ON)
-        await loadAiRouterConfig();
-
-        // Fetch AI Rollout Scope config
-        await loadAiScopeConfig();
-
-        // Fetch Meta Pixel & CAPI config
-        await loadCapiConfig();
-
-        // Fetch MQL settings
-        await loadMqlSettings();
-
-        // Fetch Live Chat media retention
-        await loadMediaRetention();
       } catch (err) {
         console.warn('Failed to load global chatbot settings:', err);
       } finally {
