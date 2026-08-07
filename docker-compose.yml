@@ -15,7 +15,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wa_clinic_db?schema=public
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wa_clinic_db?schema=public&connection_limit=20&pool_timeout=10
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WAHA_WEBHOOK_SECRET=${WAHA_WEBHOOK_SECRET}
       - WAHA_BASE_URL=${WAHA_BASE_URL:-http://waha:3000}
@@ -36,6 +36,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    command: postgres -c shared_buffers=256MB -c work_mem=16MB -c max_connections=100
     restart: always
     environment:
       POSTGRES_USER: postgres
