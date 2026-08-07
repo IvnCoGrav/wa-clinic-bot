@@ -70,6 +70,10 @@ export class KnowledgeBaseService {
       }
       count++;
     }
+    try {
+      const { faqCacheService } = await import('./faq-cache.service');
+      await faqCacheService.invalidateAll(tenantId).catch(() => {});
+    } catch (_) {}
     return count;
   }
 
@@ -106,6 +110,10 @@ export class KnowledgeBaseService {
       }
       count++;
     }
+    try {
+      const { faqCacheService } = await import('./faq-cache.service');
+      await faqCacheService.invalidateAll(tenantId).catch(() => {});
+    } catch (_) {}
     return count;
   }
 

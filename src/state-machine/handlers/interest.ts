@@ -268,11 +268,18 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       if (isAskPrice(userText, nlu?.intents)) {
         const hasLocation = !!(customer.kelurahan && customer.lat && customer.lng);
 
-        // Resolusi anaphora: pesan generik ("berapa itu bund?") tanpa nama treatment → cari
-        // treatment yang baru saja direkomendasikan bot di riwayat percakapan (pesan assistant terakhir).
+        // Resolusi anaphora: pesan generik ("berapa itu bund?") tanpa nama treatment
         let candidateTreatmentName: string | undefined;
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-        if (treatmentCatalogService.searchCatalogItems(userText).length === 0 && ctx.history && ctx.history.length > 0) {
+        const userMatches = treatmentCatalogService.searchCatalogItems(userText);
+
+        if (userMatches.length > 0) {
+          const cleanName = userMatches[0].name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+          await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, cleanName).catch(() => {});
+        } else if (conversation.last_discussed_treatment) {
+          candidateTreatmentName = conversation.last_discussed_treatment;
+          console.log(`[PRICE ANAPHORA] No treatment in "${userText}", resolved from conversation state → "${candidateTreatmentName}".`);
+        } else if (ctx.history && ctx.history.length > 0) {
           for (let i = ctx.history.length - 1; i >= 0; i--) {
             const msg = ctx.history[i];
             if (msg.role !== 'assistant' || !msg.content) continue;
@@ -280,6 +287,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
             if (botMatch.length > 0) {
               candidateTreatmentName = botMatch[0].name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
               console.log(`[PRICE ANAPHORA] No treatment in "${userText}", resolved from bot history → "${candidateTreatmentName}".`);
+              await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, candidateTreatmentName).catch(() => {});
               break;
             }
           }
@@ -369,13 +377,18 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         }
       } catch (_) { /* abaikan, pakai entity NLU */ }
 
+      if (treatmentNameForFollowUp) {
+        await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, treatmentNameForFollowUp).catch(() => {});
+      }
+
       // 4. Generate balasan FAQ natural berbasis RAG + Persona (CTA menyatu dalam 1 generation call)
-      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp);
+      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id);
 
       return {
         nextState: ConversationState.AWAITING_INTEREST,
         replyText: faqAnswer,
         shouldSendReply: true,
+        aiReasoning: llmResponseGenerator.lastReasoning,
       };
     }
 

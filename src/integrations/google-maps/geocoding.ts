@@ -48,7 +48,8 @@ export class GeocodingService {
       async (params: any): Promise<any> => {
         const locationText = params.params.address.replace(', Surabaya', '');
         return this.mockGeocodeText(locationText);
-      }
+      },
+      { name: 'Google Geocoding' }
     );
 
     this.reverseGeocodeBreaker = new CircuitBreaker(
@@ -56,7 +57,8 @@ export class GeocodingService {
       async (params: any): Promise<any> => {
         const { lat, lng } = params.params.latlng;
         return this.mockReverseGeocode(lat, lng);
-      }
+      },
+      { name: 'Google Reverse Geocoding' }
     );
 
   }

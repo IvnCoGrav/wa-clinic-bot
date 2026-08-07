@@ -128,6 +128,8 @@ model Conversation {
   escalation_reason        String?
   consecutive_unknown_count Int               @default(0)
   review_flagged           Boolean            @default(false)
+  last_discussed_treatment String?
+  last_discussed_treatment_at DateTime?
   last_message_at          DateTime           @default(now())
   created_at               DateTime           @default(now())
   updated_at               DateTime           @updatedAt

@@ -453,6 +453,7 @@ export class ConversationStateMachine {
           conversationId: activeConversation.id,
           direction: Direction.OUTBOUND,
           content: result.replyText,
+          payloadRaw: result.aiReasoning ? { aiReasoning: result.aiReasoning } : undefined,
         });
 
         // Kirim Pricelist Image jika diinstruksikan oleh state handler.

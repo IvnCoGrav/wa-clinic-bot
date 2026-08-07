@@ -4,11 +4,18 @@ import { KnowledgeChunkResult } from '../../services/knowledge.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
+import { customerService } from '../../services/customer.service';
+import { conversationService } from '../../services/conversation.service';
 import dotenv from 'dotenv';
-dotenv.config();
+function isReferentialQuestion(userQuestion: string): boolean {
+  if (!userQuestion) return false;
+  const q = userQuestion.toLowerCase();
+  return /\b(berapa\s+itu|berapa\s+yang\s+tadi|yang\s+itu|yang\s+baru|yang\s+tadi\s+berapa|yang\s+tadi|itu\s+berapa|tadi\s+berapa|berapa\s+harganya\s+yang)\b/i.test(q);
+}
 
 export class LLMResponseGenerator {
-  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?], string>;
+  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?], string>;
+  public lastReasoning: string | null = null;
 
   private get apiKey(): string {
     return process.env.LLM_API_KEY || '';
@@ -16,17 +23,26 @@ export class LLMResponseGenerator {
   private get baseUrl(): string {
     return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   }
-  private get model(): string {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
-  }
 
   constructor() {
     this.llmBreaker = new CircuitBreaker(
-      async (userQuestion: string, contextText: string, contextChunks: KnowledgeChunkResult[], conversationId?: string, tenantId?: string, treatmentNameForFollowUp?: string) => {
+      async (
+        userQuestion: string,
+        contextText: string,
+        contextChunks: KnowledgeChunkResult[],
+        conversationId?: string,
+        tenantId?: string,
+        treatmentNameForFollowUp?: string,
+        customerId?: string
+      ) => {
         const store = llmOutageStorage.getStore();
         if (store?.simulateOutage) {
           throw new Error('SumoPod connection timeout (500 Internal Server Error)');
         }
+        
+        const { AiModelConfigService } = await import('../../config/ai-models.config');
+        const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
+
         let historyMessages: any[] = [];
         if (conversationId && tenantId) {
           try {
@@ -35,6 +51,81 @@ export class LLMResponseGenerator {
           } catch (err) {
             console.error('[LLM GENERATOR] Failed to fetch chat history:', err);
           }
+        }
+
+        let groundTruthSection = `[DATA CUSTOMER (GROUND TRUTH)]
+(Fakta dari database — BUKAN hasil tebakan. Ini kebenaran mutlak, jangan dikontradiksi oleh isi Riwayat Percakapan di bawah.)
+- Nama: Tidak diketahui
+- Layanan Aktif Saat Ini: Tidak ada
+- Layanan yang Pernah Dipakai (Historis): Tidak ada`;
+
+        if (customerId && tenantId) {
+          try {
+            const gt = await customerService.getCustomerGroundTruth(customerId, tenantId);
+            if (gt) {
+              const nameStr = gt.name && gt.name.trim() ? gt.name.trim() : 'Tidak diketahui';
+              const activeStr = gt.activeServices && gt.activeServices.length > 0 ? gt.activeServices.join(', ') : 'Tidak ada';
+              const historicalStr = gt.historicalServices && gt.historicalServices.length > 0 ? gt.historicalServices.join(', ') : 'Tidak ada';
+              groundTruthSection = `[DATA CUSTOMER (GROUND TRUTH)]
+(Fakta dari database — BUKAN hasil tebakan. Ini kebenaran mutlak, jangan dikontradiksi oleh isi Riwayat Percakapan di bawah.)
+- Nama: ${nameStr}
+- Layanan Aktif Saat Ini: ${activeStr}
+- Layanan yang Pernah Dipakai (Historis): ${historicalStr}`;
+            }
+          } catch (err) {
+            console.error('[LLM GENERATOR] Failed to fetch customer ground truth:', err);
+          }
+        }
+
+        let conversationContextSection = `[KONTEKS PERCAKAPAN]
+Treatment yang terakhir dibahas dalam percakapan ini: Belum ada`;
+
+        if (conversationId && tenantId) {
+          try {
+            const conv = await conversationService.getConversationById(conversationId, tenantId);
+            if (conv && conv.last_discussed_treatment) {
+              conversationContextSection = `[KONTEKS PERCAKAPAN]
+Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_treatment}`;
+            }
+          } catch (err) {
+            console.error('[LLM GENERATOR] Failed to fetch conversation context:', err);
+          }
+        }
+
+        // --- ATURAN KESELAMATAN FAQ CACHE ---
+        let skipCacheReason: string | null = null;
+        if (historyMessages && historyMessages.length > 0) {
+          skipCacheReason = 'Conversation has chat history';
+        } else if (treatmentNameForFollowUp && treatmentNameForFollowUp.trim().length > 0) {
+          skipCacheReason = 'treatmentNameForFollowUp is present';
+        } else if (isReferentialQuestion(userQuestion)) {
+          skipCacheReason = 'Referential/anaphora question detected';
+        }
+
+        if (!skipCacheReason && customerId && tenantId) {
+          try {
+            const gtCheck = await customerService.getCustomerGroundTruth(customerId, tenantId);
+            if (gtCheck && ((gtCheck.activeServices && gtCheck.activeServices.length > 0) || (gtCheck.historicalServices && gtCheck.historicalServices.length > 0))) {
+              skipCacheReason = 'Customer has active or historical ground truth data';
+            }
+          } catch (err) {
+            // ignore ground truth fetch error for cache decision
+          }
+        }
+
+        let cacheKey = '';
+        if (skipCacheReason) {
+          console.log(`[FAQ CACHE] SKIPPED (reason: ${skipCacheReason}) for query: "${userQuestion}"`);
+        } else {
+          const { faqCacheService } = await import('../../services/faq-cache.service');
+          cacheKey = faqCacheService.generateKey(tenantId || 'default-tenant', userQuestion, contextChunks, contextText);
+          const cachedVal = await faqCacheService.get(cacheKey);
+          if (cachedVal) {
+            console.log(`[FAQ CACHE] HIT for query: "${userQuestion}"`);
+            this.lastReasoning = '[CACHE HIT] Served from FaqCacheService';
+            return cachedVal;
+          }
+          console.log(`[FAQ CACHE] MISS for query: "${userQuestion}"`);
         }
 
         let ctaInstruction = '6. Setelah jawaban inti, tutup dengan ajakan lanjut ke pengisian list reservasi/booking yang MENYATU secara natural dengan konteks jawabanmu (bukan template terpisah).';
@@ -52,6 +143,10 @@ export class LLMResponseGenerator {
           role: 'system',
           content: `${BOT_PERSONA_PROMPT}
 
+${groundTruthSection}
+
+${conversationContextSection}
+
 TUGAS UTAMA:
 Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen berikut:
 
@@ -59,12 +154,18 @@ ${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemu
 
 ATURAN BALASAN:
 1. Lakukan analisis terlebih dahulu terhadap apa yang sedang ditanyakan/dibahas oleh customer berdasarkan pesan terakhir dan riwayat percakapan. Tuliskan analisis ini di bagian "REASONING".
-   PENTING: Jika customer menggunakan kata referensial seperti "berapa itu", "berapa yang tadi", "yang itu", "yang baru", dll., WAJIB lihat pesan BUNDAN (sebelumnya) untuk menentukan treatment apa yang sedang dibahas. Jangan menebak treatment sendiri — gunakan konteks dari riwayat.
+   PENTING: Jika customer menggunakan kata referensial seperti "berapa itu", "berapa yang tadi", "yang itu", "yang baru", dll., WAJIB gunakan info "Treatment yang terakhir dibahas" pada section [KONTEKS PERCAKAPAN] di atas sebagai sumber utama penentuan treatment. Jika section tersebut "Belum ada", baru gunakan konteks dari riwayat percakapan.
 2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "JAWABAN" (gunakan informasi dari referensi dokumen di atas). Jawab dengan singkat dan jelas.
 3. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
 4. JIKA ada LEBIH DARI SATU treatment relevan di Referensi: sebutkan SEMUANYA (jangan pilih satu secara sepihak tanpa alasan) — tetap dengan nada rekomendasi.
 5. JIKA TIDAK ADA treatment/data yang relevan dengan pertanyaan di Referensi: berikan penjelasan pelayanan homecare yang Bunda cari secara ramah dan profesional. DILARANG HARAM mengucapkan "tanya ke tim kami", "mau saya cekkan ke tim dulu", atau "tidak bisa memastikan harganya".
 6. JIKA pertanyaan customer berisi referensi ke treatment yang baru saja dibahas (misal "berapa itu", "yang tadi berapa"): langsung jawab dengan harga treatment tersebut berdasarkan Referensi. JANGAN mengulang penjelasan treatment, LANGSUNG kasih harganya.
+7. PENGECUALIAN SEMPIT UNTUK KLARIFIKASI NAMA (BUKAN "tidak tahu"):
+   JIKA nama/istilah yang disebut customer secara fuzzy match ke 2 ATAU LEBIH item BERBEDA di Referensi Dokumen (nama treatment berbeda, dengan harga ATAU durasi ATAU target usia yang berbeda satu sama lain), DAN memilih salah satu secara sepihak berisiko memberi info yang salah ke customer:
+   Anda BOLEH bertanya balik SATU KALI untuk memastikan item mana yang dimaksud, dengan menyebutkan SEMUA nama kandidat secara eksplisit dari Referensi (bukan bertanya generik "maksudnya yang mana ya?").
+   Contoh benar: "Bunda maksudnya *Paket Spa Silver* (150rb, 60 menit) atau *Paket Spa Gold* (250rb, 90 menit) ya? Biar saya kasih info yang pas 😊"
+   Contoh SALAH (tetap dilarang): "Untuk harga pastinya, boleh tanya ke tim kami dulu ya" — ini BUKAN klarifikasi nama, ini cuci tangan, TETAP dilarang.
+   Pengecualian ini TIDAK berlaku jika Referensi hanya punya SATU item yang match, atau jika customer menanyakan kebutuhan umum (bukan menyebut nama spesifik) — untuk kasus itu tetap ikuti poin 3 & 4 (mode rekomendasi, sebutkan semua opsi relevan sekaligus, bukan tanya balik).
 ${ctaInstruction}
 
 ${maxCharsInstruction}
@@ -73,10 +174,16 @@ ATURAN ANTI-HALUSINASI (WAJIB):
 - HANYA gunakan fakta yang ADA di Referensi Dokumen di atas (nama treatment, usia/kategori target, durasi, deskripsi manfaat).
 - DILARANG menambah/mengarang harga, durasi, usia, manfaat, atau detail treatment apa pun yang TIDAK tercantum di Referensi.
 - DILARANG HARAM mengucapkan frasa "tanya ke tim kami", "saya tidak bisa memastikan harganya", "bisa langsung tanya ke tim", "mau kami cekkan ke tim dulu", "nanti saya kabari", atau kalimat sejenis yang menunjukkan bot tidak tahu/cuci tangan.
+- Untuk info riwayat/status layanan customer, HANYA gunakan data di section [DATA CUSTOMER (GROUND TRUTH)] di atas. JANGAN mengambil fakta soal riwayat layanan dari [RIWAYAT PERCAKAPAN] meskipun customer menyebutkannya di sana — kalau ada perbedaan, section Ground Truth yang benar.
 
-FORMAT RESPONS (HARUS MENGIKUTI FORMAT INI):
-REASONING: [analisis Anda tentang apa yang ditanyakan customer dan konteks percakapannya. PERHATIAN: jika customer menggunakan "berapa itu", "yang tadi", dll., identifikasi treatment mana yang sedang dibahas dari riwayat chat]
-JAWABAN: [balasan Anda untuk customer]`,
+FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
+{
+  "reasoning": "analisis Anda tentang apa yang ditanyakan customer dan konteks percakapannya...",
+  "referenced_treatment": "nama treatment yang sedang dibahas jika ada, atau null",
+  "needs_clarification": true | false,
+  "answer": "balasan Anda untuk customer"
+}
+`,
         };
 
         const apiMessages: any[] = [systemMessage];
@@ -101,7 +208,10 @@ JAWABAN: [balasan Anda untuk customer]`,
         const response = await axios.post(
           `${this.baseUrl}/chat/completions`,
           {
-            model: this.model,
+            model: modelConfig.modelName,
+            temperature: modelConfig.temperature,
+            max_tokens: modelConfig.maxTokens,
+            response_format: { type: 'json_object' },
             messages: apiMessages,
           },
           {
@@ -113,31 +223,61 @@ JAWABAN: [balasan Anda untuk customer]`,
           }
         );
 
-        const content = response.data.choices[0].message.content.trim();
+        const content = response.data.choices[0].message.content;
         
-        let reasoning = '';
-        let jawaban = content;
-
-        const reasoningMatch = content.match(/REASONING:\s*([\s\S]*?)(?=JAWABAN:|$)/i);
-        const jawabanMatch = content.match(/JAWABAN:\s*([\s\S]*)/i);
-
-        if (reasoningMatch) {
-          reasoning = reasoningMatch[1].trim();
+        let parsed: { reasoning?: string; answer?: string; referenced_treatment?: string | null; needs_clarification?: boolean };
+        try {
+          let cleanContent = content.trim();
+          if (cleanContent.startsWith('```')) {
+            cleanContent = cleanContent.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '').trim();
+          }
+          parsed = JSON.parse(cleanContent);
+        } catch (err) {
+          console.error('[LLM GENERATOR] Failed to parse JSON response, raw content:', content);
+          throw err;
         }
-        if (jawabanMatch) {
-          jawaban = jawabanMatch[1].trim();
+
+        if (!parsed.answer || parsed.answer.trim() === '') {
+          console.error('[LLM GENERATOR] Parsed JSON has empty answer field, falling back.');
+          throw new Error('Empty answer from LLM JSON output');
         }
+
+        let jawaban = parsed.answer.trim();
 
         // Sanitizer: Bersihkan jika LLM tidak sengaja menghasilkan frasa "tanya ke tim / tidak bisa memastikan harga"
         jawaban = this.sanitizeTeamReferral(jawaban);
 
-        console.log(`\n🧠 [AI REASONING] for customer query "${userQuestion}":\n"${reasoning || 'No reasoning found'}"\n`);
+        this.lastReasoning = parsed.reasoning || null;
+        console.log(`\n🧠 [AI REASONING] for customer query "${userQuestion}":\n"${parsed.reasoning || 'No reasoning found'}"\n`);
+        if (parsed.referenced_treatment) {
+          console.log(`[LLM STATE SIGNAL] Model inferred referenced_treatment: "${parsed.referenced_treatment}"`);
+        }
         
-        return jawaban;
+        const finalAnswer = truncateToMaxChars(jawaban, maxChars);
+
+        if (!skipCacheReason && cacheKey) {
+          try {
+            const { faqCacheService } = await import('../../services/faq-cache.service');
+            await faqCacheService.set(cacheKey, finalAnswer);
+          } catch (cacheErr: any) {
+            console.warn('[FAQ CACHE] Failed to set cache:', cacheErr.message);
+          }
+        }
+
+        return finalAnswer;
       },
-      async (userQuestion: string, contextText: string, contextChunks: KnowledgeChunkResult[], conversationId?: string, tenantId?: string, treatmentNameForFollowUp?: string) => {
+      async (
+        userQuestion: string,
+        contextText: string,
+        contextChunks: KnowledgeChunkResult[],
+        conversationId?: string,
+        tenantId?: string,
+        treatmentNameForFollowUp?: string,
+        customerId?: string
+      ) => {
         return this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp);
-      }
+      },
+      { name: 'LLM Generator' }
     );
   }
 
@@ -189,8 +329,10 @@ JAWABAN: [balasan Anda untuk customer]`,
     contextChunks: KnowledgeChunkResult[],
     conversationId?: string,
     tenantId?: string,
-    treatmentNameForFollowUp?: string
+    treatmentNameForFollowUp?: string,
+    customerId?: string
   ): Promise<string> {
+    this.lastReasoning = null;
     const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
 
     if (!this.apiKey || this.apiKey.startsWith('mock')) {
@@ -199,7 +341,7 @@ JAWABAN: [balasan Anda untuk customer]`,
 
     try {
       console.time('LLM_GENERATOR_API_CALL');
-      const res = await this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp);
+      const res = await this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId);
       console.timeEnd('LLM_GENERATOR_API_CALL');
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
       return truncateToMaxChars(res, maxChars);

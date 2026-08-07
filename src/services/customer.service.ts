@@ -791,6 +791,62 @@ export class CustomerService {
       };
     }
   }
+
+  /**
+   * Mengambil data fakta (Ground Truth) mengenai riwayat reservasi pelanggan dari database.
+   */
+  public async getCustomerGroundTruth(
+    customerId: string,
+    tenantId: string
+  ): Promise<CustomerGroundTruth | null> {
+    try {
+      const customer = await prisma.customer.findUnique({
+        where: { id: customerId },
+        include: {
+          reservations: {
+            where: { tenant_id: tenantId },
+            orderBy: { created_at: 'desc' },
+          },
+        },
+      });
+
+      if (!customer) return null;
+
+      const activeServices: string[] = [];
+      const historicalServicesSet = new Set<string>();
+      const now = new Date();
+
+      for (const res of customer.reservations) {
+        const serviceName = res.treatment_detail || res.treatment_category;
+        if (!serviceName) continue;
+
+        const st = (res.status || '').toLowerCase();
+        if (st === 'cancelled') continue;
+
+        const isFutureOrNullDate = !res.booking_date || new Date(res.booking_date) >= now;
+        if (st === 'pending' || (st === 'confirmed' && isFutureOrNullDate)) {
+          activeServices.push(serviceName);
+        } else if (st === 'confirmed' && res.booking_date && new Date(res.booking_date) < now) {
+          historicalServicesSet.add(serviceName);
+        }
+      }
+
+      return {
+        name: customer.name || null,
+        activeServices,
+        historicalServices: Array.from(historicalServicesSet),
+      };
+    } catch (err: any) {
+      console.warn('[Customer Service] getCustomerGroundTruth failed:', err?.message || err);
+      return null;
+    }
+  }
+}
+
+export interface CustomerGroundTruth {
+  name: string | null;
+  activeServices: string[];
+  historicalServices: string[];
 }
 
 export const customerService = new CustomerService();

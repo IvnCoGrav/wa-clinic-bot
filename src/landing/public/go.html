@@ -28,6 +28,7 @@
     <img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=__FB_PIXEL_ID__&ev=PageView&noscript=1"/>
   </noscript>
   <!-- End Meta Pixel Code -->
+  <script src="/assets/clientParamBuilder.bundle.js"></script>
 
   <style>
     :root {
@@ -223,13 +224,31 @@
         return null;
       }
 
-      // Capture URL parameters & Meta cookies
+      // Capture URL parameters
       const fbclid = getQueryParam('fbclid');
       const utmSource = getQueryParam('utm_source');
       const utmMedium = getQueryParam('utm_medium');
       const utmCampaign = getQueryParam('utm_campaign');
-      const fbp = getCookie('_fbp');
-      const fbc = getCookie('_fbc');
+
+      // Inisialisasi client-side parameter builder dari Meta CAPI
+      if (typeof window.clientParamBuilder !== 'undefined') {
+        try {
+          var getIpFn = function() {
+            return fetch('https://api64.ipify.org')
+              .then(function(res) { return res.text(); })
+              .catch(function() { return ''; });
+          };
+          window.clientParamBuilder.processAndCollectAllParams(window.location.href, getIpFn)
+            .then(function(params) {
+              console.log('[ParamBuilder] Processed cookies: _fbc=' + params._fbc + ', _fbp=' + params._fbp + ', _fbi=' + params._fbi);
+            })
+            .catch(function(err) {
+              console.warn('[ParamBuilder] Error processing cookies:', err);
+            });
+        } catch (e) {
+          console.warn('[ParamBuilder] Failed to initialize:', e);
+        }
+      }
 
       const ctaBtn = document.getElementById('wa-cta');
       let isRedirecting = false;
@@ -249,7 +268,6 @@
           e.preventDefault();
 
           if (isRedirecting) return;
-          __EVENTS_ONCLICK__
 
           ctaBtn.style.opacity = '0.7';
           ctaBtn.innerText = 'Menghubungkan...';
@@ -267,8 +285,8 @@
 
           const payload = {
             fbclid: fbclid || null,
-            fbp: fbp || null,
-            fbc: fbc || null,
+            fbp: getCookie('_fbp') || null,
+            fbc: getCookie('_fbc') || null,
             landingUrl: window.location.href,
             utmSource: utmSource || null,
             utmMedium: utmMedium || null,
@@ -295,6 +313,7 @@
             isRedirecting = true;
 
             const trackingCode = data.trackingCode || 'promo';
+            __EVENTS_ONCLICK__
             const redirectUrl = `https://wa.me/${defaultPhone}?text=Promo%5B${trackingCode}%5D%20Halo%20Bunda%2C%20saya%20tertarik%20dengan%20layanan%20home-treatment`;
             window.location.href = redirectUrl;
           })

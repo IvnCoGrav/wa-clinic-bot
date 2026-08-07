@@ -639,7 +639,7 @@ export class AIRouterLLMClient {
     this.breaker = new CircuitBreaker<[AIRouterInput], AIRouterResponse>(
       async (input: AIRouterInput) => this.rawLlmCall(input),
       async (input: AIRouterInput) => ruleBasedClassify(input),
-      { failureThreshold: 0.5, slidingWindowSize: 5, cooldownPeriodMs: 60000 }
+      { name: 'AI Router LLM', failureThreshold: 0.5, slidingWindowSize: 5, cooldownPeriodMs: 60000 }
     );
   }
 

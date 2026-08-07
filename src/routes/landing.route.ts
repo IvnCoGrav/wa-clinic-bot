@@ -88,7 +88,7 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .join('\n');
   const eventsOnclick = events
     .filter((e) => CLICK_EVENTS.includes(e))
-    .map((e) => `      fbq('track', '${e}');`)
+    .map((e) => `      if (typeof fbq !== 'undefined') { fbq('track', '${e}', {}, { eventID: trackingCode }); }`)
     .join('\n');
 
   htmlContent = htmlContent
@@ -104,7 +104,8 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .replace(/__TENANT_SLUG__/g, content.slug || slug)
     .replace(/__EVENTS_ONLOAD__/g, eventsOnload)
     .replace(/__EVENTS_ONCLICK__/g, eventsOnclick)
-    .replace(/<script>/g, `<script nonce="${nonce}">`);
+    .replace(/<script>/g, `<script nonce="${nonce}">`)
+    .replace(/<script src=/g, `<script nonce="${nonce}" src=`);
 
   return reply.type('text/html').status(200).send(htmlContent);
 }
@@ -228,6 +229,26 @@ export async function landingRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: `Not Found: landing '${slug}' tidak ditemukan.` });
     }
     return renderLanding(reply, content, slug);
+  });
+
+  // /assets/:filename — serve static assets from public/ (like clientParamBuilder.bundle.js)
+  fastify.get('/assets/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
+    const { filename } = request.params;
+    if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {
+      return reply.status(400).send({ error: 'Invalid filename' });
+    }
+    try {
+      const filePath = path.join(__dirname, '../landing/public', filename);
+      const content = await fs.promises.readFile(filePath);
+      if (filename.endsWith('.js')) {
+        reply.type('application/javascript');
+      } else if (filename.endsWith('.css')) {
+        reply.type('text/css');
+      }
+      return reply.send(content);
+    } catch {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
   });
 
   // /:slug — landing per-slug (strict 404)
