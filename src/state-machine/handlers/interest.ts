@@ -382,13 +382,13 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       }
 
       // 4. Generate balasan FAQ natural berbasis RAG + Persona (CTA menyatu dalam 1 generation call)
-      const faqAnswer = await llmResponseGenerator.generateFaqResponse(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id);
+      const faqResult = await llmResponseGenerator.generateFaqResponseWithDetails(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id);
 
       return {
         nextState: ConversationState.AWAITING_INTEREST,
-        replyText: faqAnswer,
+        replyText: faqResult.answer,
         shouldSendReply: true,
-        aiReasoning: llmResponseGenerator.lastReasoning,
+        aiReasoning: faqResult.reasoning,
       };
     }
 
