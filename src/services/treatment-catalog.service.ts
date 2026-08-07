@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
+export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE';
 
 export interface AgeTier {
   minAgeMonths: number;        // Batas minimal usia (dalam bulan), misal 0
