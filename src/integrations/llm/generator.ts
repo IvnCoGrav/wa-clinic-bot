@@ -16,6 +16,7 @@ function isReferentialQuestion(userQuestion: string): boolean {
 export interface FAQResponseResult {
   answer: string;
   reasoning: string | null;
+  extracted_preferences?: Record<string, any>;
 }
 
 export class LLMResponseGenerator {
@@ -70,11 +71,15 @@ export class LLMResponseGenerator {
               const nameStr = gt.name && gt.name.trim() ? gt.name.trim() : 'Tidak diketahui';
               const activeStr = gt.activeServices && gt.activeServices.length > 0 ? gt.activeServices.join(', ') : 'Tidak ada';
               const historicalStr = gt.historicalServices && gt.historicalServices.length > 0 ? gt.historicalServices.join(', ') : 'Tidak ada';
+              const prefs = gt.preferences && Object.keys(gt.preferences).length > 0
+                ? Object.entries(gt.preferences).map(([k, v]) => `${k}: ${v}`).join('; ')
+                : 'Tidak ada';
               groundTruthSection = `[DATA CUSTOMER (GROUND TRUTH)]
 (Fakta dari database — BUKAN hasil tebakan. Ini kebenaran mutlak, jangan dikontradiksi oleh isi Riwayat Percakapan di bawah.)
 - Nama: ${nameStr}
 - Layanan Aktif Saat Ini: ${activeStr}
-- Layanan yang Pernah Dipakai (Historis): ${historicalStr}`;
+- Layanan yang Pernah Dipakai (Historis): ${historicalStr}
+- Preferensi: ${prefs}`;
             }
           } catch (err) {
             console.error('[LLM GENERATOR] Failed to fetch customer ground truth:', err);
@@ -187,8 +192,15 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
   "reasoning": "analisis Anda tentang apa yang ditanyakan customer dan konteks percakapannya...",
   "referenced_treatment": "nama treatment yang sedang dibahas jika ada, atau null",
   "needs_clarification": true | false,
-  "answer": "balasan Anda untuk customer"
+  "answer": "balasan Anda untuk customer",
+  "extracted_preferences": {}
 }
+
+ATURAN EKSTRAKSI PREFERENSI:
+- Jika customer menyebut fakta permanen BARU tentang profil mereka (nama anak, jumlah anak, usia bayi, kulit sensitif, alergi, keluhan spesifik yang berulang, informasi kehamilan/nifas, preferensi layanan jangka panjang), tuliskan ke field "extracted_preferences" sebagai object key-value singkat (misal: {"child_name": "Lala", "child_age_months": 5, "skin_sensitive": true}).
+- JANGAN tampilkan isi "extracted_preferences" ke dalam "answer".
+- Jika tidak ada fakta permanen baru, set "extracted_preferences" menjadi {}.
+- Preferensi adalah fakta stabil jangka panjang — JANGAN masukkan informasi sementara (jadwal hari ini, intensitas sesaat).
 `,
         };
 
@@ -231,7 +243,7 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
 
         const content = response.data.choices[0].message.content;
         
-        let parsed: { reasoning?: string; answer?: string; referenced_treatment?: string | null; needs_clarification?: boolean };
+        let parsed: { reasoning?: string; answer?: string; referenced_treatment?: string | null; needs_clarification?: boolean; extracted_preferences?: Record<string, any> };
         try {
           let cleanContent = content.trim();
           if (cleanContent.startsWith('```')) {
@@ -272,6 +284,12 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
         return {
           answer: finalAnswer,
           reasoning: parsed.reasoning || null,
+          extracted_preferences:
+            parsed.extracted_preferences &&
+            typeof parsed.extracted_preferences === 'object' &&
+            Object.keys(parsed.extracted_preferences).length > 0
+              ? parsed.extracted_preferences
+              : undefined,
         };
       },
       async (
@@ -358,6 +376,7 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
       return {
         answer: truncateToMaxChars(res.answer, maxChars),
         reasoning: res.reasoning,
+        extracted_preferences: res.extracted_preferences,
       };
     } catch (error) {
       console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);

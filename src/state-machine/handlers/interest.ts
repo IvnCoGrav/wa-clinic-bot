@@ -384,6 +384,25 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       // 4. Generate balasan FAQ natural berbasis RAG + Persona (CTA menyatu dalam 1 generation call)
       const faqResult = await llmResponseGenerator.generateFaqResponseWithDetails(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id);
 
+      // 4b. Simpan memori pelanggan jika LLM mengekstrak fakta permanen baru
+      if (faqResult.extracted_preferences && Object.keys(faqResult.extracted_preferences).length > 0) {
+        try {
+          const { prisma } = await import('../../db/client'); // lazy-import (pola existing)
+          const currentCust = await prisma.customer.findUnique({ where: { id: customer.id } });
+          const merged = {
+            ...((currentCust?.preferences as Record<string, any>) || {}),
+            ...faqResult.extracted_preferences,
+          };
+          await prisma.customer.update({
+            where: { id: customer.id },
+            data: { preferences: merged },
+          });
+          console.log('[CUSTOMER MEMORY] Saved new preferences:', faqResult.extracted_preferences);
+        } catch (_) {
+          // DB down → abaikan, jangan ganggu loop respon
+        }
+      }
+
       return {
         nextState: ConversationState.AWAITING_INTEREST,
         replyText: faqResult.answer,

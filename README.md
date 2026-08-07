@@ -55,6 +55,7 @@ wa-clinic-bot/
 │   │   ├── customer.service.ts    # Ops database Customer
 │   │   ├── conversation.service.ts# Ops state conversation & timeout auto-release
 │   │   ├── ai-router-evaluation.service.ts # Log evaluasi router + eskalasi UNKNOWN berulang
+│   │   │   ├── llm-evaluator.service.ts # LLM-as-evaluator: kualitas balasan AI (Tahap 3.1, tabel AiEvaluation terpisah)
 │   │   ├── message.service.ts     # Audit log & Idempotency Check (wa_message_id)
 │   │   ├── price-answer.service.ts # Jawaban harga deterministik dari catalog (anti-halusinasi)
 │   │   ├── reservation-lifecycle.service.ts # Side-effect pasca-create reservasi (follow-up, children, labels)

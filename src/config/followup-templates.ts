@@ -23,7 +23,11 @@ export type FollowUpTemplateType =
   | 'NO_PURCHASE_3'
   | 'NEXT_TREATMENT_1'
   | 'NEXT_TREATMENT_2'
-  | 'NEXT_TREATMENT_3';
+  | 'NEXT_TREATMENT_3'
+  | 'MILESTONE_3M'
+  | 'MILESTONE_6M'
+  | 'MILESTONE_9M'
+  | 'MILESTONE_12M';
 
 export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   FollowUpTemplateType,
@@ -117,6 +121,46 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Pagi Bunda ${name}! ✨ Kalau si kecil butuh pijat tumbuh kembang atau Bunda butuh relaksasi, Bidan ${getBrandIdentity().businessName} selalu siap kapan saja ya bund. Sehat selalu! ❤️`,
     ({ name }) =>
       `Salam Bunda ${name}! 💖 Terima kasih telah menjadi pelanggan setia ${getBrandIdentity().businessName}. Simpan kontak ini ya bund, kapan pun butuh treatment homecare kami siap datang! ✨`,
+  ],
+
+  // 10. Milestone Edukasi 3 Bulan (tummy time / stimulasi)
+  MILESTONE_3M: [
+    ({ name, babyName }) =>
+      `Halo Bunda ${name}! 🌸 Si kecil (${babyName || 'dek kecil'}) sudah 3 bulan, saatnya stimulasi tummy time & pijat bayi demi tumbuh kembang optimal. Mau Bidan jadwalkan? 😊`,
+    ({ name }) =>
+      `Selamat tuan Bunda ${name}! Di usia 3 bulan si kecil mulai banyak tidur & aktif bergerak. Pijat bayi rutin membantu relaksasi otot & kualitas tidurnya. Bidan siap datang lho bund! 🥰`,
+    ({ name }) =>
+      `Pagi Bunda ${name}! Usia 3 bulan itu golden moment tummy time & interaksi. Yuk amankan slot pijat stimulasi tumbuh kembang bersama ${getBrandIdentity().businessName}! ✨`,
+  ],
+
+  // 11. Milestone 6 Bulan (duduk / merangkak)
+  MILESTONE_6M: [
+    ({ name, babyName }) =>
+      `Halo Bunda ${name}! 💖 Si kecil (${babyName || 'dek kecil'}) sudah 6 bulan, mulai mau duduk & merangkak ya. Supaya otot inti & tulangnya kuat, yuk rutin pijat stimulasi bersama Bidan! 😊`,
+    ({ name }) =>
+      `Selamat pagi Bunda ${name}! Di milestone 6 bulan tumbuh kembang si kecil makin pesat. Pijat bayi bantu dukung motorik halus & tidur nyenyak. Mau Bidan jadwalkan minggu ini? ✨`,
+    ({ name }) =>
+      `Salam hangat Bunda ${name}! 🥰 Usia 6 bulan waktunya diperhatikan tummy time & perkenalan MPASI. Biar tumbuh kembang makin optimal, yuk agendakan pijat stimulasi homecare! ❤️`,
+  ],
+
+  // 12. Milestone 9 Bulan (berdiri/pelan jalan)
+  MILESTONE_9M: [
+    ({ name, babyName }) =>
+      `Halo Bunda ${name}! 🌸 Si kecil (${babyName || 'dek kecil'}) sudah 9 bulan, mulai belajar berdiri & melangkah ya. Pijat bayi bantu rawat karya bayi agar badan tetap bugar! 🥰`,
+    ({ name }) =>
+      `Selamat pagi Bunda ${name}! Di usia 9 bulan si kecil aktif merambat. Stimulasi & pijat ringan sangat bantu perkembangannya. Kunjungi kami utk sesi rutin ya bund! 😊`,
+    ({ name }) =>
+      `Pagi Bunda ${name}! 🌸 Momen 9 bulan butuh ekstra perhatian utk motorik kasar. Kami siap datang bantu pijat & stimulasi di rumah. Yuk booking slot nya! ✨`,
+  ],
+
+  // 13. Milestone 12 Bulan (MPASI / berjalan)
+  MILESTONE_12M: [
+    ({ name, babyName }) =>
+      `Halo Bunda ${name}! 🎉 Si kecil (${babyName || 'si kecil'}) sudah 1 tahun! Selamat ulang tahun ya. Saatnya perhatian tumbuh kembang & nutrisi MPASI seimbang. Pijat rutin juga tetap penting lho! 😊`,
+    ({ name }) =>
+      `Selamat ulang tahun utk si kecil, Bunda ${name}! 🎂 Di usia 12 bulan anak mulai berjalan lancar. Kami siap dampingi pijat stimulasi & tumbuh kembang bareng Bidan. Yuk booking! ✨`,
+    ({ name }) =>
+      `Pagi Bunda ${name}! 🥳 Si kecil sudah 1 tahun — usia emas eksplorasi & berjalan. Pijat rutin tetap bantu jaga kelenturan & kualitas tidurnya. Mau Bidan jadwalkan bulan ini? 😊`,
   ],
 };
 
