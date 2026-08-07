@@ -18,6 +18,11 @@ import {
   Bot,
   ImagePlus,
   X,
+  Zap,
+  Info,
+  Facebook,
+  Layers,
+  ShoppingBag,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 
@@ -52,6 +57,9 @@ interface LiveChatItem {
   isMql?: boolean;
   mqlBubbleCount?: number;
   isSandboxTest?: boolean;
+  trafficSource?: 'meta' | 'legacy' | null;
+  purchaseCount?: number;
+  ltv?: number;
 }
 
 export const LiveChatMonitor: React.FC = () => {
@@ -68,13 +76,12 @@ export const LiveChatMonitor: React.FC = () => {
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
-  const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('human_request');
+  const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const listSentinelRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
 
@@ -86,23 +93,6 @@ export const LiveChatMonitor: React.FC = () => {
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
-
-  // Infinite scroll: muat halaman berikutnya saat sentinel terlihat di ujung daftar.
-  useEffect(() => {
-    const sentinel = listSentinelRef.current;
-    if (!sentinel) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMoreRef.current) {
-          loadChats(false);
-        }
-      },
-      { rootMargin: '200px' }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, labelFilter]);
 
   // Ganti filter label → reset daftar ke halaman pertama.
   useEffect(() => {
@@ -353,10 +343,11 @@ export const LiveChatMonitor: React.FC = () => {
 
   const selectedChat = chats.find((c) => c.conversationId === selectedId);
 
-  const getChatLabel = (chat: LiveChatItem): 'medical_concern' | 'unresolved_faq' | 'human_request' => {
+  const getChatLabel = (chat: LiveChatItem): 'medical_concern' | 'unresolved_faq' | 'human_request' | 'all' => {
     if (chat.escalationReason === 'medical_concern') return 'medical_concern';
     if (chat.escalationReason === 'unresolved_faq') return 'unresolved_faq';
-    return 'human_request';
+    if (chat.isHumanHandling) return 'human_request';
+    return 'all';
   };
 
   const filteredChats = chats.filter(
@@ -365,17 +356,35 @@ export const LiveChatMonitor: React.FC = () => {
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
-    const diffMs = Date.now() - new Date(sinceStr).getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    return formatLastChat(sinceStr);
+  };
+
+  const formatLastChat = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
+
+    if (diffMins < 1) return 'Baru saja';
     if (diffMins < 60) return `${diffMins} menit lalu`;
-    const diffHours = Math.floor(diffMins / 60);
-    const remainingMins = diffMins % 60;
-    return `${diffHours} jam ${remainingMins} menit lalu`;
+    if (diffMins < 6 * 60) return `${Math.floor(diffMins / 60)} jam lalu`;
+    if (diffMins < 24 * 60) return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    if (diffMins < 7 * 24 * 60) return `${Math.floor(diffMins / (24 * 60))} hari yang lalu`;
+    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
   };
 
   const senderLabel = (m: ChatMessage) => {
     if (m.direction === 'INBOUND') return 'Customer';
     return m.sender_type === 'ADMIN' ? m.sender_name || 'Admin' : 'Bot';
+  };
+
+  const formatRp = (val: number) =>
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+
+  const formatRpShort = (val: number) => {
+    if (!val || val === 0) return 'Rp 0';
+    if (val >= 1_000_000) return `Rp ${(val / 1_000_000).toFixed(1).replace('.0', '')}jt`;
+    if (val >= 1_000) return `Rp ${Math.round(val / 1000)}rb`;
+    return `Rp ${val}`;
   };
 
   return (
@@ -436,10 +445,10 @@ export const LiveChatMonitor: React.FC = () => {
                 onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
                 className="px-2.5 py-1.5 bg-slate-900 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 focus:outline-none focus:border-pink-500 cursor-pointer"
               >
+                <option value="all">Semua (Normal + Label)</option>
                 <option value="human_request">Human Request</option>
                 <option value="medical_concern">Medical Emergency</option>
                 <option value="unresolved_faq">Unresolved FAQ</option>
-                <option value="all">Semua Label</option>
               </select>
             </div>
 
@@ -484,27 +493,6 @@ export const LiveChatMonitor: React.FC = () => {
                             <span>{chatName}</span>
                             <span className="text-[10px] text-slate-500 font-normal">({chat.customerPhone || 'Unknown'})</span>
                           </h4>
-                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                            <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                              isMedical
-                                ? 'bg-rose-500/25 text-rose-300 border border-rose-500/30'
-                                : chat.escalationReason === 'unresolved_faq'
-                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                  : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                            }`}>
-                              {isMedical ? '🚨 MEDICAL EMERGENCY' : chat.escalationReason || 'Human Request'}
-                            </span>
-                            {chat.isMql && (
-                              <span className="inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                ⚡ MQL ({chat.mqlBubbleCount ?? 0} Bubble)
-                              </span>
-                            )}
-                            {chat.isSandboxTest && (
-                              <span className="inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30" title="Chat test/simulasi (bukan WhatsApp asli)">
-                                🧪 QA TEST
-                              </span>
-                            )}
-                          </div>
                         </div>
                         {chat.isHumanHandling ? (
                           <button
@@ -523,8 +511,11 @@ export const LiveChatMonitor: React.FC = () => {
                             <span>{releasingId === chat.conversationId ? 'Releasing...' : 'Release'}</span>
                           </button>
                         ) : (
-                          <span className="px-2 py-1 rounded-lg text-[9px] font-black uppercase bg-white/5 text-slate-500 border border-white/10">
-                            Ditangani bot
+                          <span
+                            title="Ditangani bot"
+                            className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-white/5 text-slate-500 border border-white/10"
+                          >
+                            <Bot size={13} />
                           </span>
                         )}
                       </div>
@@ -534,18 +525,114 @@ export const LiveChatMonitor: React.FC = () => {
                       </p>
 
                       <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-white/5">
-                        <span className="flex items-center space-x-1">
-                          <Clock size={10} />
-                          <span>{chat.isHumanHandling ? getElapsedTime(chat.humanHandlingSince) : 'Ditangani bot'}</span>
-                        </span>
-                        <span className="font-mono text-[9px] uppercase">{chat.currentState}</span>
-                      </div>
+                          <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            <span className="flex items-center space-x-1" title={chat.isHumanHandling ? 'Ditangani admin' : 'Ditangani bot'}>
+                              <Clock size={10} />
+                              <span>
+                                {chat.isHumanHandling
+                                  ? getElapsedTime(chat.humanHandlingSince) || 'Ditangani admin'
+                                  : 'Bot'}
+                              </span>
+                            </span>
+                            {isMedical && (
+                              <span
+                                title="Medical Emergency"
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-rose-500/25 text-rose-300 border border-rose-500/30"
+                              >
+                                <AlertTriangle size={9} />
+                              </span>
+                            )}
+                            {!isMedical && chat.escalationReason === 'unresolved_faq' && (
+                              <span
+                                title="Unresolved FAQ"
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25"
+                              >
+                                <Info size={9} />
+                              </span>
+                            )}
+                            {!isMedical && chat.escalationReason !== 'unresolved_faq' && chat.isHumanHandling && (
+                              <span
+                                title="Human Request"
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-blue-500/15 text-blue-400 border border-blue-500/25"
+                              >
+                                <User size={9} />
+                              </span>
+                            )}
+                            {chat.isMql && (
+                              <span
+                                title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              >
+                                <Zap size={9} />
+                              </span>
+                            )}
+                            {chat.trafficSource === 'meta' && (
+                              <span
+                                title="Traffic Meta"
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                              >
+                                <Facebook size={9} />
+                              </span>
+                            )}
+                            {chat.trafficSource === 'legacy' && (
+                              <span
+                                title="Traffic Legacy"
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-slate-500/20 text-slate-300 border border-slate-500/30"
+                              >
+                                <Layers size={9} />
+                              </span>
+                            )}
+                            {chat.isSandboxTest && (
+                              <span
+                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                title="Chat test/simulasi (bukan WhatsApp asli)"
+                              >
+                                <CheckCircle size={9} />
+                              </span>
+                            )}
+                            {!!chat.purchaseCount && chat.purchaseCount > 0 && (
+                              <span
+                                title={
+                                  chat.purchaseCount === 1
+                                    ? `Purchase 1x (LTV: ${formatRp(chat.ltv || 0)})`
+                                    : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRp(chat.ltv || 0)})`
+                                }
+                                className={`inline-flex items-center space-x-0.5 px-1 py-0.5 rounded text-[8px] font-black border ${
+                                  chat.purchaseCount === 1
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                }`}
+                              >
+                                <ShoppingBag size={9} />
+                                <span>{chat.purchaseCount}x</span>
+                                {!!chat.ltv && chat.ltv > 0 && (
+                                  <span className="opacity-80 font-normal">({formatRpShort(chat.ltv)})</span>
+                                )}
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center space-x-2">
+                            {chat.lastMessageAt && (
+                              <span className="text-slate-400 font-sans text-[10px]">
+                                {formatLastChat(chat.lastMessageAt)}
+                              </span>
+                            )}
+                            <span className="font-mono text-[9px] uppercase">{chat.currentState}</span>
+                          </span>
+                        </div>
                     </div>
                   );
                 })}
                 {hasMore && (
-                  <div ref={listSentinelRef} className="flex justify-center py-3">
-                    <Loader size={16} className={`animate-spin text-pink-500 ${loadingMore ? '' : 'opacity-0'}`} />
+                  <div className="flex justify-center pt-2">
+                    <button
+                      onClick={() => loadChats(false)}
+                      disabled={loadingMore}
+                      className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
+                    >
+                      {loadingMore && <Loader size={11} className="animate-spin text-pink-500" />}
+                      <span>{loadingMore ? 'Memuat...' : 'Muat lebih banyak'}</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -567,6 +654,15 @@ export const LiveChatMonitor: React.FC = () => {
                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                         {selectedChat.customerPhone || 'Unknown'}@c.us
                       </p>
+                      {!!selectedChat.purchaseCount && selectedChat.purchaseCount > 0 && (
+                        <p className="text-[10px] text-emerald-400 font-medium flex items-center space-x-1 mt-0.5">
+                          <ShoppingBag size={11} />
+                          <span>{selectedChat.purchaseCount === 1 ? 'Purchase 1x' : `Repeat Order ${selectedChat.purchaseCount}x`}</span>
+                          {!!selectedChat.ltv && selectedChat.ltv > 0 && (
+                            <span className="text-slate-400">· LTV: {formatRp(selectedChat.ltv)}</span>
+                          )}
+                        </p>
+                      )}
                     </div>
                     {selectedChat.isHumanHandling ? (
                       <button
@@ -578,8 +674,12 @@ export const LiveChatMonitor: React.FC = () => {
                         <span>Kembalikan ke Bot</span>
                       </button>
                     ) : (
-                      <span className="px-3 py-1.5 bg-white/5 text-slate-500 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-wider">
-                        Ditangani Bot
+                      <span
+                        title="Ditangani Bot"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-slate-500 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-wider"
+                      >
+                        <Bot size={11} />
+                        <span>Bot</span>
                       </span>
                     )}
                   </div>
