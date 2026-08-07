@@ -161,6 +161,16 @@ if (require.main === module) {
         console.log(`🖼️ Media cleanup cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));
     }
+
+    // Start LLM-as-Judge AI quality evaluation cron (interval 6 jam default)
+    if (process.env.ENABLE_AI_EVAL_CRON === 'true') {
+      const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        setInterval(() => cron.runQualityEvaluation(), intervalHours * 60 * 60 * 1000);
+        console.log(`🧪 AI quality evaluation cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[AI EVAL START ERROR]', e));
+    }
   });
 }
 

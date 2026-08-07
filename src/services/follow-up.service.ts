@@ -223,7 +223,11 @@ export class FollowUpService {
           },
         },
         include: {
-          customer: true,
+          customer: {
+            include: {
+              children: true,
+            },
+          },
         },
         take: FOLLOWUP_BATCH_LIMIT, // Batch limit per execution (env FOLLOWUP_BATCH_LIMIT)
       });
@@ -248,6 +252,57 @@ export class FollowUpService {
   }
 
   /**
+   * Umur anak dalam bulan PENUH (year/month diff, bukan floor /30 hari).
+   */
+  private ageInFullMonths(birthDate: Date, now: Date = new Date()): number {
+    let m = (now.getFullYear() - birthDate.getFullYear()) * 12;
+    m += now.getMonth() - birthDate.getMonth();
+    if (now.getDate() < birthDate.getDate()) m -= 1;
+    return Math.max(0, m);
+  }
+
+  /**
+   * Tentukan template milestone utk follow-up NEXT_TREATMENT.
+   * 1) Hanya NEXT_TREATMENT. 2) Butuh anak dgn birth_date.
+   * 3) Kategori BABY dari reservasi terakhir customer.
+   * 4) Umur bayi ≈ milestone (3/6/9/12) dlm rentang ±1 bulan (env MILESTONE_WINDOW_DAYS).
+   */
+  public async resolveMilestoneType(
+    fu: any,
+    tenantId: string
+  ): Promise<FollowUpTemplateType | null> {
+    if (fu.type !== 'NEXT_TREATMENT') return null;
+    const child = fu.customer?.children?.[0];
+    if (!child?.birth_date) return null;
+
+    try {
+      const lastRes = await prisma.reservation.findFirst({
+        where: { customer_id: fu.customer_id, tenant_id: tenantId },
+        orderBy: { created_at: 'desc' },
+        select: { treatment_category: true },
+      });
+      if (!lastRes || lastRes.treatment_category !== 'BABY') return null;
+    } catch {
+      return null; // DB offline -> jangan blokir follow-up normal
+    }
+
+    const age = this.ageInFullMonths(child.birth_date);
+    const windowMonths = parseInt(process.env.MILESTONE_WINDOW_DAYS || '15', 10) / 30;
+
+    const milestones: Record<number, FollowUpTemplateType> = {
+      3: 'MILESTONE_3M',
+      6: 'MILESTONE_6M',
+      9: 'MILESTONE_9M',
+      12: 'MILESTONE_12M',
+    };
+
+    for (const t of Object.keys(milestones).map(Number)) {
+      if (Math.abs(age - t) <= windowMonths) return milestones[t];
+    }
+    return null;
+  }
+
+  /**
    * Eksekusi satu unit pengiriman follow-up (dengan rolling template & status update)
    */
   public async executeFollowUp(fu: any, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
@@ -260,9 +315,14 @@ export class FollowUpService {
         return false;
       }
 
-      // Map DB type + stage -> Rolling Template Type
+      // Map DB type + stage -> Rolling Template Type. Milestone hijack duluan:
+      // jika bayi tepat masuk milestone, ganti template (berlaku utk kedua gateway).
+      const milestoneType = await this.resolveMilestoneType(fu, tenantId);
       let templateType: FollowUpTemplateType = 'NO_PURCHASE_1';
-      if (fu.type === 'NO_PURCHASE') {
+      if (milestoneType) {
+        templateType = milestoneType;
+        fu._milestone = true;
+      } else if (fu.type === 'NO_PURCHASE') {
         templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}` as any;
       } else if (fu.type === 'NEXT_TREATMENT') {
         templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;

@@ -22,6 +22,7 @@ const Debug = lazy(() => import('./pages/tenant/Debug').then(m => ({ default: m.
 const LandingPage = lazy(() => import('./pages/tenant/LandingPage').then(m => ({ default: m.LandingPage })));
 const CustomerDatabase = lazy(() => import('./pages/tenant/CustomerDatabase').then(m => ({ default: m.CustomerDatabase })));
 const CustomerService = lazy(() => import('./pages/tenant/CustomerService').then(m => ({ default: m.CustomerService })));
+const AiEvaluations = lazy(() => import('./pages/tenant/AiEvaluations').then(m => ({ default: m.AiEvaluations })));
 
 export const App: React.FC = () => {
   return (
@@ -140,6 +141,13 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <CustomerService />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/ai-evaluations" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <AiEvaluations />
                 </Layout>
               </ProtectedRoute>
             } />

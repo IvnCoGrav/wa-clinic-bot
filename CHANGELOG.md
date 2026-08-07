@@ -8,6 +8,30 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-12
 
+### Added — LLM-as-Judge: AI Quality Evaluation (Tahap 3.1)
+
+**Evaluator (`src/services/llm-evaluator.service.ts` — baru):**
+- `LlmEvaluatorService` + singleton `llmEvaluatorService`: `sampleMessages(tenantId, percent)` → ambil pesan `OUTBOUND` hari ini dengan `payload_raw.aiReasoning` (filter `Prisma.JsonNull`), acak ≤10% (min 1, cap `AI_MAX_SAMPLES` default 50); `evaluateOne(sample)` → prompt judge (persona + skor 1-5 + feedback Indonesia, `response_format: json_object`, model `CHAT_REPLY`/MiniMax, timeout `AI_EVAL_TIMEOUT_MS` default 30s); `sampleAndEvaluate(tenantId)` → loop + `aiEvaluation.upsert` (unique `message_id`, idempoten).
+- Fail-safe: DB/LLM down → `console.warn` + return, tidak pernah throw/ganggu produksi.
+
+**Tabel penyimpanan (`prisma/schema.prisma` + migration `20260820000000_add_ai_evaluations`):**
+- Model `AiEvaluation` (tabel `ai_evaluations`): `message_id @unique`, `tenant_id`, `customer_phone`, `conversation_id`, `message_text`, `ai_reasoning`, `score`, `feedback`, `created_at` (+ index `tenant_id/created_at`). **Terpisah** dari `ai_router_evaluations` agar metrik akurasi router (`src/scripts/check-router-accuracy.ts`) tidak tercemar.
+
+**Cron & wiring (`src/services/cron.service.ts` + `src/app.ts`):**
+- `runQualityEvaluation()` — loop semua tenant via `getAllTenantIds` → `sampleAndEvaluate`. Dijadwalkan `setInterval` 6 jam (`AI_EVAL_INTERVAL_HOURS`), gated env `ENABLE_AI_EVAL_CRON === 'true'` (default mati/fail-close).
+
+**Admin API (`src/routes/admin.route.ts`):**
+- `GET /api/admin/ai-evaluations?days=7&limit=100` — total, avg/min/max score, daftar evaluasi terbaru untuk `DEFAULT_TENANT_ID`; DB offline → data kosong (bukan 500).
+
+**Dashboard (`packages/admin-dashboard`):**
+- Halaman **`AiEvaluations.tsx`** (baru, `lucide` Star/Gauge): kartu statistik (total, rata-rata, rentang skor) + filter 7d/30d/90d + tabel evaluasi terbaru (skor bintang berwarna, jawaban bot, feedback/reasoning, waktu). Menu sidebar & route `/admin/ai-evaluations`.
+
+**Config env (`.env.example`):** `ENABLE_AI_EVAL_CRON`, `AI_EVAL_INTERVAL_HOURS=6`, `AI_EVAL_SAMPLING_PERCENT=10`, `AI_MAX_SAMPLES=50`, `AI_EVAL_TIMEOUT_MS=30000`.
+
+**Test:** `tests/unit/llm-evaluator.test.ts` (5) + `tests/integration/ai-evaluations-admin.test.ts` (2). Verifikasi end-to-end di localhost: pesan disample → judge LLM → record `ai_evaluations` → cleanup (verified). Full suite: 1001 test hijau.
+
+**Docs:** `docs/IMPLEMENTASI_TAHAP3.md` (baru) + `docs/ROADMAP_IMPLEMENTASI_FITUR_BARU.md` (tandai 3.1 selesai, keputusan AiEvaluation terpisah + cron 6 jam ganti BullMQ 02:00).
+
 ### Added — Live Chat: Kirim & Tampilkan Gambar (outbound + inbound)
 
 **Penyimpanan media lokal & retensi:**
