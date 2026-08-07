@@ -411,6 +411,13 @@ export class WahaClient implements IWahaClient {
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
     const targetChatId = await this.resolveActiveJid(chatId);
 
+    // [WAHA WORKAROUND]: WAHA Baileys engine crashes randomly if you manipulate 
+    // labels on an @lid connection. Bypass deletion for @lid.
+    if (targetChatId.endsWith('@lid')) {
+      console.log(`[WAHA LABEL WORKAROUND] Bypassing removeLabel for "${labelName}" on ${targetChatId} to prevent WAHA Baileys crash.`);
+      return true;
+    }
+
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] removeLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
       const existing = this.mockLabels.get(targetChatId) || [];

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import { ParamBuilder, PII_DATA_TYPE } from 'capi-param-builder-nodejs';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
 import { decryptSecret } from '../utils/encryption';
@@ -20,6 +21,7 @@ export const capiBreaker = new CircuitBreaker(
   },
 
   {
+    name: 'Meta CAPI',
     failureThreshold: 0.5,
     slidingWindowSize: 10,
     cooldownPeriodMs: 30000, // 30 seconds
@@ -181,27 +183,89 @@ export class CapiService {
     }
 
     try {
-      // 2. NORMALIZE & HASH PII (Nomor HP)
+      // 2. NORMALIZE & HASH PII (Nomor HP, Nama, External ID) menggunakan Meta ParamBuilder
+      const builder = new ParamBuilder();
       const rawPhone = customer.phone || adClick.phone || '';
       const normalizedPhone = normalizePhoneToE164(rawPhone);
-      const hashedPhone = sha256Hash(normalizedPhone);
+      const hashedPhone = builder.getNormalizedAndHashedPII(normalizedPhone, PII_DATA_TYPE.PHONE);
 
-      // 3. CONSTRUCT USER DATA (Meta specs: hash phone, keep IP/UA/Cookies clean)
+      // Advanced Matching: Nama Depan & Nama Belakang dari Customer / AdClick
+      let hashedFn: string | undefined;
+      let hashedLn: string | undefined;
+      const rawName = (customer.name || customer.pushName || adClick?.name || '').trim();
+      if (rawName) {
+        const parts = rawName.split(/\s+/);
+        const firstName = parts[0];
+        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : firstName;
+        if (firstName) {
+          hashedFn = builder.getNormalizedAndHashedPII(firstName, PII_DATA_TYPE.FIRST_NAME) || undefined;
+        }
+        if (lastName) {
+          hashedLn = builder.getNormalizedAndHashedPII(lastName, PII_DATA_TYPE.LAST_NAME) || undefined;
+        }
+      }
+
+      // Advanced Matching: External ID (hashed customer.id / phone ID)
+      let hashedExternalId: string | undefined;
+      const rawExternalId = customer.id ? String(customer.id) : undefined;
+      if (rawExternalId) {
+        hashedExternalId = builder.getNormalizedAndHashedPII(rawExternalId, PII_DATA_TYPE.EXTERNAL_ID) || undefined;
+      }
+
+      // Gunakan server-side ParamBuilder untuk memproses parameter browser/IP & menambahkan appendix
+      const mockCookies: Record<string, string> = {};
+      if (adClick.fbp) mockCookies._fbp = adClick.fbp;
+      if (adClick.fbc) mockCookies._fbc = adClick.fbc;
+      if (adClick.ipAddress) mockCookies._fbi = adClick.ipAddress;
+
+      const mockQueries: Record<string, string> = {};
+      if (adClick.fbclid) mockQueries.fbclid = adClick.fbclid;
+
+      let host = 'localhost';
+      try {
+        if (adClick.landingUrl) {
+          host = new URL(adClick.landingUrl).hostname;
+        }
+      } catch {}
+
+      builder.processRequest(
+        host,
+        mockQueries,
+        mockCookies,
+        null, // referer
+        adClick.ipAddress, // xForwardedFor
+        adClick.ipAddress // remoteAddress
+      );
+
+      const fbc = builder.getFbc() || adClick.fbc;
+      const fbp = builder.getFbp() || adClick.fbp;
+      const clientIp = builder.getClientIpAddress() || adClick.ipAddress;
+
+      // 3. CONSTRUCT USER DATA (Meta specs: hash phone/name/external_id, keep IP/UA/Cookies clean)
       const userData: any = {};
       if (hashedPhone) {
         userData.ph = [hashedPhone];
       }
-      if (adClick.ipAddress) {
-        userData.client_ip_address = adClick.ipAddress;
+      if (hashedFn) {
+        userData.fn = [hashedFn];
+      }
+      if (hashedLn) {
+        userData.ln = [hashedLn];
+      }
+      if (hashedExternalId) {
+        userData.external_id = [hashedExternalId];
+      }
+      if (clientIp) {
+        userData.client_ip_address = clientIp;
       }
       if (adClick.userAgent) {
         userData.client_user_agent = adClick.userAgent;
       }
-      if (adClick.fbc) {
-        userData.fbc = adClick.fbc;
+      if (fbc) {
+        userData.fbc = fbc;
       }
-      if (adClick.fbp) {
-        userData.fbp = adClick.fbp;
+      if (fbp) {
+        userData.fbp = fbp;
       }
 
       // 4. CONSTRUCT EVENT DATA payload

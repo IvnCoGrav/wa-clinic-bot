@@ -136,5 +136,57 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       );
     });
   });
+
+  describe('4b. CAPI Parameter Builder Integration', () => {
+    beforeEach(() => {
+      vi.stubEnv('FB_PIXEL_ID', 'mock_pixel_123');
+      vi.stubEnv('FB_CAPI_ACCESS_TOKEN', 'mock_token_123');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.clearAllMocks();
+    });
+
+    it('should format fbp, fbc, and phone using Meta ParamBuilder with appendix', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { success: true },
+      } as any);
+
+      const adClick = {
+        fbclid: 'click_12345',
+        fbp: 'fb.1.1596403881668.1116446470',
+        fbc: 'fb.1.1554763741205.AbCdEfGhIjKlMnOpQrStUvWxYz1234567890',
+        ipAddress: '192.168.1.1',
+        userAgent: 'Mozilla/5.0',
+        landingUrl: 'https://example.com/page',
+      };
+
+      const res = await capiService.sendCapiEvent({
+        eventName: 'Lead',
+        customer: { id: 'cust_12345', phone: '08123456789', name: 'Bunda Jane Doe' },
+        adClick,
+      });
+
+      expect(res.success).toBe(true);
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      
+      const payload = executeSpy.mock.calls[0][1];
+      const userData = payload.data[0].user_data;
+
+      // Hashed phone must have the 8-character NodeJS CAPI Parameter Builder appendix (.ABcDEFGh or similar)
+      expect(userData.ph[0]).toMatch(/^[a-f0-9]{64}\.[a-zA-Z0-9]{8}$/);
+
+      // Advanced Matching: fn, ln, external_id must have appendix
+      expect(userData.fn[0]).toMatch(/^[a-f0-9]{64}\.[a-zA-Z0-9]{8}$/);
+      expect(userData.ln[0]).toMatch(/^[a-f0-9]{64}\.[a-zA-Z0-9]{8}$/);
+      expect(userData.external_id[0]).toMatch(/^[a-f0-9]{64}\.[a-zA-Z0-9]{8}$/);
+      
+      // fbc and fbp must have the 8-character appendix
+      expect(userData.fbc).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
+      expect(userData.fbp).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
+    });
+  });
 });
 

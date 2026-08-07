@@ -172,7 +172,11 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
 
       // 3. CAPTURE IP & USER-AGENT dari request headers langsung (no spoofing)
-      const ipAddress = request.ip || (request.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || null;
+      const cookiesHeader = request.headers.cookie || '';
+      const fbiMatch = cookiesHeader.match(/_fbi=([^;]+)/);
+      const cookieIp = fbiMatch ? decodeURIComponent(fbiMatch[1]).split('.')[0] : null;
+
+      const ipAddress = cookieIp || request.ip || (request.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || null;
       const userAgent = request.headers['user-agent'] || null;
 
       const clickData = {

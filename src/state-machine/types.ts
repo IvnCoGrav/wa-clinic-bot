@@ -29,4 +29,6 @@ export interface StateHandlerResult {
   pricelistCaption?: string;
   /** Kirim ulang pricelist walau sudah pernah terkirim (dipakai saat customer minta ulang). */
   forcePricelistResend?: boolean;
+  /** Reasoning dari LLM generator jika balasan dihasilkan oleh AI. */
+  aiReasoning?: string | null;
 }

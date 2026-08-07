@@ -101,6 +101,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     console.error('[MEDICAL FAQ STAGING ERROR] Failed to create staging record:', err.message);
                   }
                 }
+                
+                // 3. Log outbound manual reply ke tabel Messages agar terbaca oleh Bot sebagai history
+                await messageService.logMessage({
+                  tenantId: DEFAULT_TENANT_ID,
+                  conversationId: conversation.id,
+                  direction: 'OUTBOUND',
+                  content: adminReplyText,
+                  waMessageId: payload.id,
+                  senderType: 'human',
+                  senderName: 'Admin (WhatsApp)',
+                }).catch(err => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
               }
             }
           }
