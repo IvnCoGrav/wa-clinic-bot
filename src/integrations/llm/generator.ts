@@ -13,9 +13,13 @@ function isReferentialQuestion(userQuestion: string): boolean {
   return /\b(berapa\s+itu|berapa\s+yang\s+tadi|yang\s+itu|yang\s+baru|yang\s+tadi\s+berapa|yang\s+tadi|itu\s+berapa|tadi\s+berapa|berapa\s+harganya\s+yang)\b/i.test(q);
 }
 
+export interface FAQResponseResult {
+  answer: string;
+  reasoning: string | null;
+}
+
 export class LLMResponseGenerator {
-  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?], string>;
-  public lastReasoning: string | null = null;
+  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?], FAQResponseResult>;
 
   private get apiKey(): string {
     return process.env.LLM_API_KEY || '';
@@ -25,7 +29,7 @@ export class LLMResponseGenerator {
   }
 
   constructor() {
-    this.llmBreaker = new CircuitBreaker(
+    this.llmBreaker = new CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?], FAQResponseResult>(
       async (
         userQuestion: string,
         contextText: string,
@@ -122,8 +126,10 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
           const cachedVal = await faqCacheService.get(cacheKey);
           if (cachedVal) {
             console.log(`[FAQ CACHE] HIT for query: "${userQuestion}"`);
-            this.lastReasoning = '[CACHE HIT] Served from FaqCacheService';
-            return cachedVal;
+            return {
+              answer: cachedVal,
+              reasoning: '[CACHE HIT] Served from FaqCacheService',
+            };
           }
           console.log(`[FAQ CACHE] MISS for query: "${userQuestion}"`);
         }
@@ -247,7 +253,6 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
         // Sanitizer: Bersihkan jika LLM tidak sengaja menghasilkan frasa "tanya ke tim / tidak bisa memastikan harga"
         jawaban = this.sanitizeTeamReferral(jawaban);
 
-        this.lastReasoning = parsed.reasoning || null;
         console.log(`\n🧠 [AI REASONING] for customer query "${userQuestion}":\n"${parsed.reasoning || 'No reasoning found'}"\n`);
         if (parsed.referenced_treatment) {
           console.log(`[LLM STATE SIGNAL] Model inferred referenced_treatment: "${parsed.referenced_treatment}"`);
@@ -264,7 +269,10 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
           }
         }
 
-        return finalAnswer;
+        return {
+          answer: finalAnswer,
+          reasoning: parsed.reasoning || null,
+        };
       },
       async (
         userQuestion: string,
@@ -275,7 +283,10 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
         treatmentNameForFollowUp?: string,
         customerId?: string
       ) => {
-        return this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp);
+        return {
+          answer: this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp),
+          reasoning: '[FALLBACK] LLM error or breaker open',
+        };
       },
       { name: 'LLM Generator' }
     );
@@ -322,7 +333,44 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
   }
 
   /**
-   * Menghasilkan balasan FAQ natural berdasarkan RAG (Persona + Context Chunks dari Knowledge Base).
+   * Menghasilkan balasan FAQ natural beserta reasoning secara stateless (thread-safe).
+   */
+  public async generateFaqResponseWithDetails(
+    userQuestion: string,
+    contextChunks: KnowledgeChunkResult[],
+    conversationId?: string,
+    tenantId?: string,
+    treatmentNameForFollowUp?: string,
+    customerId?: string
+  ): Promise<FAQResponseResult> {
+    const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
+
+    if (!this.apiKey || this.apiKey.startsWith('mock')) {
+      const fallback = this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp);
+      return { answer: fallback, reasoning: '[MOCK_KEY] Using fallback response' };
+    }
+
+    try {
+      console.time('LLM_GENERATOR_API_CALL');
+      const res = await this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId);
+      console.timeEnd('LLM_GENERATOR_API_CALL');
+      const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
+      return {
+        answer: truncateToMaxChars(res.answer, maxChars),
+        reasoning: res.reasoning,
+      };
+    } catch (error) {
+      console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);
+      const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
+      return {
+        answer: truncateToMaxChars(this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp), maxChars),
+        reasoning: '[ERROR] API call failed',
+      };
+    }
+  }
+
+  /**
+   * Menghasilkan balasan FAQ natural (hanya string jawaban untuk kompatibilitas mundur).
    */
   public async generateFaqResponse(
     userQuestion: string,
@@ -332,24 +380,15 @@ FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
     treatmentNameForFollowUp?: string,
     customerId?: string
   ): Promise<string> {
-    this.lastReasoning = null;
-    const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
-
-    if (!this.apiKey || this.apiKey.startsWith('mock')) {
-      return this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp);
-    }
-
-    try {
-      console.time('LLM_GENERATOR_API_CALL');
-      const res = await this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId);
-      console.timeEnd('LLM_GENERATOR_API_CALL');
-      const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
-      return truncateToMaxChars(res, maxChars);
-    } catch (error) {
-      console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);
-      const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
-      return truncateToMaxChars(this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp), maxChars);
-    }
+    const result = await this.generateFaqResponseWithDetails(
+      userQuestion,
+      contextChunks,
+      conversationId,
+      tenantId,
+      treatmentNameForFollowUp,
+      customerId
+    );
+    return result.answer;
   }
 
   private fallbackFaqResponse(userQuestion: string, chunks: KnowledgeChunkResult[], treatmentNameForFollowUp?: string): string {
