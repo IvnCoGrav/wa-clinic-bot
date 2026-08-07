@@ -8,6 +8,36 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-12
 
+### Changed — Model primary chat → DeepSeek, NLU → MiniMax (berbasis benchmark) + JSON-validity fallback & breaker NLU
+
+- **Chat/generator (`AI_MODEL_CHAT`, task CHAT_REPLY) → `deepseek-v4-flash`.** Benchmark chat 8 kasus (grounding anti-halusinasi + latency): DeepSeek 8/8 balas, avg 5.0s, **bahasa Indonesia murni**, tak pernah timeout; MiniMax 6/8 (2× timeout 15s), **bocor kata asing** (Mandarin `定了` & Rusia `специально` menyusup — langgar aturan persona), sebagian mengarang jam operasional. DeepSeek menang untuk chat.
+- **NLU (`AI_MODEL_NLU`, task INTENT_CLASSIFICATION) → `MiniMax-M2.7-highspeed`.** Benchmark 20 kasus: MiniMax 100% vs DeepSeek 85–95% (kegagalan DeepSeek murni format JSON). Verifikasi jalur produksi 20/20 (100%), avg 3.5s, p95 4.6s.
+- **JSON-validity memicu fallback** (`src/integrations/llm/model-fallback.ts`): tambah param opsional `isContentValid?: (content) => boolean`. `attempt()` memvalidasi isi respons; bila primary balas JSON malformed → otomatis fallback ke `AI_MODEL_FALLBACK` (tidak hanya menunggu error HTTP/timeout). Dipakai NLU (strict JSON); generator/phrasing/ai-router tetap lenient.
+- **Sanitasi JSON + breaker NLU** (`src/services/nlu-classifier.service.ts`): `sanitizeJson()` (strip code fence + ambil blok `{...}` pertama) sebelum `JSON.parse`; `classifyWithLLM()` dilempar ke `CircuitBreaker` baru (threshold 0.7, window 20, cooldown 60s) → saat LLM down, regex fallback ~instan (0 hang per pesan, bukan menunggu timeout 15s).
+- **Config**: `.env` `.env.example` → `AI_MODEL_CHAT="deepseek-v4-flash"`, `AI_MODEL_NLU="MiniMax-M2.7-highspeed"`, `AI_MODEL_FALLBACK="qwen3.7-flash-2026-07-15"`. Sumber kebenaran runtime tetap DB `tenant_ai_config`.
+- **Phrasing (`src/integrations/llm/phrasing.service.ts`) → `deepseek-v4-flash`**: getter model kini memakai `AiModelConfigService.getModelConfig('CHAT_REPLY')` (sama seperti generator, tenant-aware) alih-alih `OPENAI_MODEL` (MiniMax). Menutup bocor karakter Mandarin/Rusia di pesan sistem (ongkir/greeting/konfirmasi lokasi) yang sempat muncul sebagai `全程` (kasus #27). Fallback ke `OPENAI_MODEL` bila config kosong.
+- **Benchmark chat** (baru): `src/scripts/benchmark-chat-models.ts` — bandingkan grounding & latency model chat dengan persona + knowledge reference asli.
+
+### Added — Fallback Model LLM (qwen3.7-flash-2026-07-15)
+
+- **`src/integrations/llm/model-fallback.ts`** (baru): `callChatCompletionsWithFallback()` — coba model utama; bila gagal (error/timeout/empty content) retry satu kali ke model cadangan `AI_MODEL_FALLBACK` (default `qwen3.7-flash-2026-07-15`, terukur 3.6–4.3s & JSON valid di `content`). Helper `getFallbackModel()`.
+- **Wiring**: dipakai semua jalur LLM — `ai-router.ts` (AIRouterLLMClient), `generator.ts`, `phrasing.service.ts`, `intent.ts`, `nlu-classifier.service.ts`. Lapisan jatuh saat model utama bermasalah: primary → fallback qwen → fallback deterministik (regex/template). Ini menekan kegagalan seperti `Empty response content from LLM`.
+- **Config env**: `AI_MODEL_FALLBACK="qwen3.7-flash-2026-07-15"` (.env.example). Tuning infrastruktur (bukan business data) → env-driven.
+- **Benchmark**: `src/scripts/benchmark-nlu-models.ts` kini membandingkan 3 model (MiniMax / deepseek-v4-flash / qwen3.7-flash-2026-07-15).
+
+### Changed — Resilience LLM terhadap latency SumoPod (timeout + retry + breaker tuning)
+
+Akar masalah: API Sumo (MiniMax-`M2.7-highspeed` & `deepseek-v4-flash`) punya latensi tinggi & fluktuatif (terukur 2.7–10s), melebihi timeout lama (router 5s, generator/phrasing/NLU 8s) → circuit breaker sering OPEN ke fallback. Perbaikan 3 lapis:
+
+- **Timeout naik & env-driven** (`.env`): `LLM_TIMEOUT_ROUTER_MS=12000`, `LLM_TIMEOUT_CHAT_MS=15000`, `LLM_TIMEOUT_NLU_MS=15000`.
+  - `ai-router.ts` — `LLM_TIMEOUT_MS` (default 12000).
+  - `generator.ts`, `phrasing.service.ts`, `intent.ts` — timeout `LLM_TIMEOUT_CHAT_MS` (default 15000).
+  - `nlu-classifier.service.ts` — timeout `LLM_TIMEOUT_NLU_MS` (default 15000).
+- **Retry transient global di AI Router** (`ai-router.ts`): tambah `isTransientError()` (ECONNABORTED/timeout/429/5xx) + `attemptWithTransientRetry()` — retry-once dgn backoff 400ms sebelum menyerah ke fallback. Error transient (API sesekali lambat) kini punya kesempatan kedua, menggntkan upgrade dari sebelumnya langsung abort.
+- **Circuit breaker tuning** (generator & phrasing): failureThreshold `0.5→0.7`, slidingWindow `10→20`, cooldown `30s→60s` — API lambat-sesekali menghasilkan fallback sesekali, bukan lockout. Breaker AI Router DIKUNCI oleh test-plan 50 skenario → tidak diubah.
+
+**Verifikasi di localhost:** latency probe (7 request) → p95 MiniMax ~7.5s & DeepSeek ~5.4s, di bawah timeout baru; full suite Vitest hijau (`npm test`), `npm run build` lolos.
+
 ### Added — LLM-as-Judge: AI Quality Evaluation (Tahap 3.1)
 
 **Evaluator (`src/services/llm-evaluator.service.ts` — baru):**

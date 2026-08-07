@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { z } from 'zod';
 import { MedicalDetectionService } from '../../services/medical-detection.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
@@ -7,6 +6,7 @@ import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { SERVICE_AREAS_ALTERNATION } from '../../config/service-areas';
 import { AiRouterConfigService } from '../../config/ai-router-config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -630,7 +630,7 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
 // LLM Client — panggil LLM, validasi Zod, retry-once dengan hint.
 // Dibungkus CircuitBreaker (CLOSED → OPEN → HALF_OPEN) reuse util existing.
 // =====================================================================
-const LLM_TIMEOUT_MS = 5000;
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_ROUTER_MS || 12000);
 
 export class AIRouterLLMClient {
   private breaker: CircuitBreaker<[AIRouterInput], AIRouterResponse>;
@@ -673,13 +673,13 @@ export class AIRouterLLMClient {
       throw new Error('LLM_API_KEY unavailable — use rule-based fallback');
     }
 
-    const firstAttempt = await this.attempt(input, null);
+    const firstAttempt = await this.attemptWithTransientRetry(input, null);
     const firstParsed = AIRouterResponseSchema.safeParse(firstAttempt);
     if (firstParsed.success) return firstParsed.data;
 
     // Retry-once dengan error hint ringkas
     const retryUserContent = buildRetryPrompt(input, firstParsed.error);
-    const secondAttempt = await this.attempt(input, retryUserContent);
+    const secondAttempt = await this.attemptWithTransientRetry(input, retryUserContent);
     const secondParsed = AIRouterResponseSchema.safeParse(secondAttempt);
     if (secondParsed.success) return secondParsed.data;
 
@@ -689,6 +689,29 @@ export class AIRouterLLMClient {
         .map((i) => `${i.path.join('.')}:${i.message}`)
         .join(' | ')}`
     );
+  }
+
+  private isTransientError(err: any): boolean {
+    const code = err?.code || '';
+    const msg = String(err?.message || '');
+    const status = err?.response?.status || err?.status || 0;
+    return (
+      code === 'ECONNABORTED' ||
+      /timeout/i.test(msg) ||
+      status === 429 ||
+      status >= 500
+    );
+  }
+
+  private async attemptWithTransientRetry(input: AIRouterInput, retryUserContent: string | null): Promise<unknown> {
+    try {
+      return await this.attempt(input, retryUserContent);
+    } catch (err: any) {
+      if (!this.isTransientError(err)) throw err;
+      console.warn(`[AI ROUTER] Transient LLM error detected, retrying once (${err?.message}).`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return this.attempt(input, retryUserContent);
+    }
   }
 
   private async attempt(input: AIRouterInput, retryUserContent: string | null): Promise<unknown> {
@@ -703,10 +726,13 @@ export class AIRouterLLMClient {
 [conversation_history]: ${input.conversationHistory.map((m) => `${m.role}: ${m.content}`).join('\n') || '(kosong)'}
 [last_customer_message]: "${input.lastCustomerMessage}"`;
 
-    const response = await axios.post(
-      `${this.baseUrl}/chat/completions`,
-      {
-        model: this.model,
+    const { data: responseData } = await callChatCompletionsWithFallback({
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKey,
+      model: this.model,
+      fallbackModel: getFallbackModel(),
+      timeoutMs: LLM_TIMEOUT_MS,
+      payload: {
         response_format: { type: 'json_object' },
         temperature: 0.1,
         messages: [
@@ -715,20 +741,13 @@ export class AIRouterLLMClient {
           { role: 'user', content: userContent },
         ],
       },
-      {
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: LLM_TIMEOUT_MS,
-      }
-    );
+    });
 
-    let rawContent = response.data?.choices?.[0]?.message?.content?.trim() || '';
+    let rawContent = responseData?.choices?.[0]?.message?.content?.trim() || '';
 
     // DeepSeek-style: JSON bisa berada di reasoning_content
     if (!rawContent) {
-      const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';
+      const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
       const jsonMatch = reasoning.match(/\{[\s\S]*\}/);
       if (jsonMatch) rawContent = jsonMatch[0];
     }
