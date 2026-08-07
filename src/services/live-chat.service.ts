@@ -24,6 +24,21 @@ export interface LiveChatConversationItem {
   mqlBubbleCount?: number;
   mqlTriggeredAt?: Date | null;
   isSandboxTest?: boolean;
+  trafficSource?: 'meta' | 'legacy' | null;
+  purchaseCount?: number;
+  ltv?: number;
+}
+
+/** Deteksi sumber traffic dari baris ad_clicks. */
+function detectTrafficSource(adClick: any, isLegacy: boolean): 'meta' | 'legacy' | null {
+  if (!adClick) {
+    return isLegacy ? 'legacy' : null;
+  }
+  const utm = `${adClick.utmSource || ''} ${adClick.utmMedium || ''} ${adClick.utmCampaign || ''}`.toLowerCase();
+  if (adClick.fbclid || adClick.fbc || /meta|facebook|instagram/i.test(utm)) {
+    return 'meta';
+  }
+  return isLegacy ? 'legacy' : null;
 }
 
 export interface AdminReplyResult {
@@ -54,6 +69,7 @@ export class LiveChatService {
     try {
       const rows = await prisma.customer.findMany({
         where: { id: { in: customerIds }, tenant_id: tenantId },
+        include: { adClick: true, reservations: true },
       });
       customers = new Map(rows.map((c) => [c.id, c]));
     } catch (error) {
@@ -62,6 +78,18 @@ export class LiveChatService {
         const c = await customerService.getCustomerById(id, tenantId);
         if (c) customers.set(id, c);
       }
+    }
+
+    const { resolveTreatmentValue } = await import('./capi.service');
+    const customerStats = new Map<string, { purchaseCount: number; ltv: number }>();
+    for (const [id, cust] of customers.entries()) {
+      let ltv = 0;
+      const resList = cust.reservations || [];
+      for (const r of resList) {
+        const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
+        ltv += val || 0;
+      }
+      customerStats.set(id, { purchaseCount: resList.length, ltv });
     }
 
     // Batch fetch pesan terakhir per conversation (1 query, bukan N query).
@@ -88,11 +116,14 @@ export class LiveChatService {
     }
 
     const items = conversations.map((c) =>
-      this.serialize({
-        ...c,
-        customer: customers.get(c.customer_id),
-        messages: lastMessagesByConv.get(c.id) || [],
-      })
+      this.serialize(
+        {
+          ...c,
+          customer: customers.get(c.customer_id),
+          messages: lastMessagesByConv.get(c.id) || [],
+        },
+        customerStats.get(c.customer_id)
+      )
     );
     // Urutan sudah dijamin DB (human handling di atas, lalu last_message_at desc) — stabil antar halaman.
     return { items, hasMore: conversations.length === take };
@@ -277,7 +308,7 @@ export class LiveChatService {
     };
   }
 
-  private serialize(c: any): LiveChatConversationItem {
+  private serialize(c: any, stats?: { purchaseCount: number; ltv: number }): LiveChatConversationItem {
     return {
       conversationId: c.id,
       customerId: c.customer_id,
@@ -294,6 +325,9 @@ export class LiveChatService {
       mqlBubbleCount: c.customer?.mql_bubble_count || 0,
       mqlTriggeredAt: c.customer?.mql_triggered_at || null,
       isSandboxTest: !!c.customer?.is_sandbox_test,
+      trafficSource: detectTrafficSource(c.customer?.adClick, !!c.customer?.is_legacy_source),
+      purchaseCount: stats?.purchaseCount ?? (c.customer?.reservations?.length || 0),
+      ltv: stats?.ltv || 0,
     };
   }
 
