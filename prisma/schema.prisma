@@ -90,6 +90,7 @@ model Customer {
   is_legacy_source        Boolean   @default(false)
   legacy_scraped_at       DateTime?
   ai_override             AiOverride?
+  preferences             Json?
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
@@ -168,6 +169,22 @@ model AiRouterEvaluation {
   @@index([intent_match])
   @@index([escalation_match])
   @@map("ai_router_evaluations")
+}
+
+model AiEvaluation {
+  id             String   @id @default(cuid())
+  tenant_id      String   @default("default-tenant")
+  message_id     String   @unique
+  customer_phone String
+  conversation_id String?
+  message_text   String   @db.Text
+  ai_reasoning   String?  @db.Text
+  score          Int?
+  feedback       String?  @db.Text
+  created_at     DateTime @default(now())
+
+  @@index([tenant_id, created_at])
+  @@map("ai_evaluations")
 }
 
 model Message {

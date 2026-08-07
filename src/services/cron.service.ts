@@ -248,7 +248,30 @@ export class CronService {
   }
 
   /**
-   /**
+/**
+   * LLM-as-Judge — evaluasi kualitas balasan bot otomatis untuk SEMUA tenant.
+   * Idempoten & best-effort: DB/LLM down → silent, tidak pernah mengganggu produksi.
+   * Di-trigger dari boot app.ts via setInterval (gated ENABLE_AI_EVAL_CRON).
+   */
+  public async runQualityEvaluation(): Promise<void> {
+    try {
+      const { llmEvaluatorService } = await import('./llm-evaluator.service');
+      const { getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      const samplingPercent = parseInt(process.env.AI_EVAL_SAMPLING_PERCENT || '10', 10);
+      let evaluated = 0;
+      for (const tenantId of tenants) {
+        evaluated += await llmEvaluatorService.sampleAndEvaluate(tenantId, samplingPercent);
+      }
+      if (evaluated > 0) {
+        console.log(`[Cron Service] AI quality evaluation selesai (${evaluated} pesan dievaluasi).`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running AI quality evaluation:', (err as Error).message);
+    }
+  }
+
+  /**
    * Me-release trackingCode dari record AdClick yang berumur > 100 hari dan tidak menghasilkan penjualan 
    * (belum/tidak confirm, atau customer berstatus lost).
    * CATATAN ARSITEKTUR (REKONSILIASI ROI):
