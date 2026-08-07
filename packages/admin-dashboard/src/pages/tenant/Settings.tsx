@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
+import { WhatsAppProviderPanel } from '../../components/settings/WhatsAppProviderPanel';
+import { AiRouterPanel } from '../../components/settings/AiRouterPanel';
+import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
+import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
 const CAPI_TOKEN_MASK = '••••••••••••••••••••••••••••••••';
@@ -608,367 +612,90 @@ export const Settings: React.FC = () => {
       </div>
 
       {/* WhatsApp Gateway — channel utama + sub-tab WAHA/WABA */}
-      <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-base font-bold text-white flex items-center space-x-2">
-            <MessageCircle className="text-pink-400" />
-            <span>WhatsApp Gateway</span>
-          </h3>
-          <button
-            onClick={loadWhatsAppProvider}
-            className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white flex items-center space-x-1"
-          >
-            <RefreshCw size={10} />
-            <span>Refresh</span>
-          </button>
-        </div>
+      <WhatsAppProviderPanel
+        provider={provider}
+        providerTab={providerTab}
+        setProviderTab={setProviderTab}
+        savingProvider={savingProvider}
+        handleToggleProvider={handleToggleProvider}
+        loadWhatsAppProvider={loadWhatsAppProvider}
+        wahaStatus={wahaStatus}
+        wahaSessionId={wahaSessionId}
+        qrData={qrData}
+        qrStatus={qrStatus}
+        qrMessage={qrMessage}
+        loadingQr={loadingQr}
+        startingSession={startingSession}
+        resettingSession={resettingSession}
+        disconnectingSession={disconnectingSession}
+        canStartSession={canStartSession}
+        canResetSession={canResetSession}
+        loadQr={loadQr}
+        handleDisconnectSession={handleDisconnectSession}
+        handleStartSession={handleStartSession}
+        handleResetSession={handleResetSession}
+        wabaConfigured={wabaConfigured}
+        wabaPhoneNumberId={wabaPhoneNumberId}
+        setWabaPhoneNumberId={setWabaPhoneNumberId}
+        wabaBusinessAccountId={wabaBusinessAccountId}
+        setWabaBusinessAccountId={setWabaBusinessAccountId}
+        wabaAccessToken={wabaAccessToken}
+        setWabaAccessToken={setWabaAccessToken}
+        wabaWebhookVerifyToken={wabaWebhookVerifyToken}
+        setWabaWebhookVerifyToken={setWabaWebhookVerifyToken}
+        handleSaveWabaConfig={handleSaveWabaConfig}
+        wabaTemplates={wabaTemplates}
+        handleSaveWabaTemplate={handleSaveWabaTemplate}
+      />
 
-        {/* Channel aktif + toggle */}
-        <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
-          <div className="flex items-center space-x-3">
-            <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${provider === 'WABA' ? 'bg-pink-500/20 text-pink-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
-              {provider === 'WABA' ? 'Meta Cloud API v25.0' : 'WAHA Self-Hosted'}
-            </span>
-            <p className="text-[10px] text-slate-500">Channel outbound aktif untuk follow-up &amp; reminder engine. Safety net default WAHA.</p>
-          </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => handleToggleProvider('WAHA')}
-              disabled={savingProvider || provider === 'WAHA'}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${provider === 'WAHA' ? 'bg-emerald-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-            >
-              WAHA
-            </button>
-            <button
-              onClick={() => handleToggleProvider('WABA')}
-              disabled={savingProvider || provider === 'WABA'}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${provider === 'WABA' ? 'bg-pink-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-            >
-              WABA
-            </button>
-          </div>
-        </div>
+      {/* AI Router Engine & AI Rollout Scope */}
+      <AiRouterPanel
+        aiRouterEnabled={aiRouterEnabled}
+        aiRouterShadowMode={aiRouterShadowMode}
+        savingAiRouter={savingAiRouter}
+        handleToggleAiRouter={handleToggleAiRouter}
+        aiScope={aiScope}
+        setAiScope={setAiScope}
+        aiScopeCutoffAt={aiScopeCutoffAt}
+        setAiScopeCutoffAt={setAiScopeCutoffAt}
+        aiScopeSummary={aiScopeSummary}
+        savingAiScope={savingAiScope}
+        handleSaveAiScope={handleSaveAiScope}
+      />
 
-        {/* Sub-tab WAHA / WABA */}
-        <div className="flex space-x-1 p-1 rounded-xl bg-slate-950 border border-white/5 w-fit">
-          <button
-            onClick={() => setProviderTab('WAHA')}
-            className={`px-4 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center space-x-1.5 ${providerTab === 'WAHA' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:bg-white/5'}`}
-          >
-            <MessageCircle size={12} />
-            <span>WAHA</span>
-          </button>
-          <button
-            onClick={() => setProviderTab('WABA')}
-            className={`px-4 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center space-x-1.5 ${providerTab === 'WABA' ? 'bg-pink-500 text-white' : 'text-slate-400 hover:bg-white/5'}`}
-          >
-            <MessageCircle size={12} />
-            <span>WABA</span>
-          </button>
-        </div>
+      {/* Meta Pixel & CAPI Settings */}
+      <MetaCapiPanel
+        metaPixelId={metaPixelId}
+        setMetaPixelId={setMetaPixelId}
+        capiAccessToken={capiAccessToken}
+        setCapiAccessToken={setCapiAccessToken}
+        capiConfigured={capiConfigured}
+        capiSource={capiSource}
+        savingCapi={savingCapi}
+        handleSaveCapi={handleSaveCapiConfig}
+      />
 
-        {/* Tab WAHA */}
-        {providerTab === 'WAHA' && (
-          <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-            <h4 className="text-xs font-bold text-emerald-300 flex items-center space-x-2">
-              <MessageCircle size={12} />
-              <span>WAHA Session (Self-Hosted)</span>
-            </h4>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
-              Gateway WhatsApp self-hosted via WAHA. Kirim teks bebas (tidak terikat HSM template Meta), cocok untuk percakapan dalam 24h window.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-500">Status Session</span>
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wahaStatus === 'WORKING' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                    {wahaStatus}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">{wahaStatus === 'WORKING' ? 'Session terhubung' : 'Cek dashboard WAHA — mungkin butuh re-scan QR'}</p>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-500">Session ID</span>
-                  <span className="text-[11px] font-mono text-slate-300">{wahaSessionId}</span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">WAHA dashboard: <span className="text-slate-300">port 3001</span></p>
-              </div>
-            </div>
+      {/* MQL Automation & Media Retention Settings */}
+      <MqlSettingsPanel
+        mqlThresholdBubbles={mqlThresholdBubbles}
+        setMqlThresholdBubbles={setMqlThresholdBubbles}
+        mqlAutoLeadEnabled={mqlAutoLeadEnabled}
+        setMqlAutoLeadEnabled={setMqlAutoLeadEnabled}
+        savingMql={savingMql}
+        handleSaveMql={handleSaveMqlSettings}
+        mediaRetentionDays={mediaRetentionDays}
+        setMediaRetentionDays={setMediaRetentionDays}
+        mediaEnvFallbackDays={mediaEnvFallbackDays}
+        savingMediaRetention={savingMediaRetention}
+        handleSaveMediaRetention={handleSaveMediaRetention}
+      />
 
-            {/* Fitur 1: Konek WhatsApp via QR — scan QR dari Admin UI tanpa perlu dashboard WAHA */}
-            <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-emerald-300 flex items-center space-x-2">
-                  <QrCode size={12} />
-                  <span>Koneksi WhatsApp (Scan QR)</span>
-                </h4>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={loadQr}
-                    disabled={loadingQr}
-                    className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/5 text-[9px] font-bold text-slate-300 hover:text-white flex items-center space-x-1 disabled:opacity-50"
-                  >
-                    <RefreshCw size={9} className={loadingQr ? 'animate-spin' : ''} />
-                    <span>Segarkan</span>
-                  </button>
-
-                  <button
-                    onClick={handleDisconnectSession}
-                    disabled={disconnectingSession || resettingSession || startingSession}
-                    className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 text-[9px] font-bold flex items-center space-x-1 disabled:opacity-50"
-                    title="Putuskan koneksi WAHA (Logout / Stop Session)"
-                  >
-                    <Power size={9} />
-                    <span>{disconnectingSession ? 'Memutuskan...' : 'Putuskan Koneksi'}</span>
-                  </button>
-                  {canStartSession && (
-                    <button
-                      onClick={canResetSession ? handleResetSession : handleStartSession}
-                      disabled={resettingSession || startingSession}
-                      className={`px-2.5 py-1 rounded-lg text-white text-[9px] font-bold flex items-center space-x-1 disabled:opacity-50 ${
-                        canResetSession ? 'bg-rose-500 hover:bg-rose-600' : 'bg-emerald-500 hover:bg-emerald-600'
-                      }`}
-                    >
-                      <Play size={9} fill="currentColor" />
-                      <span>
-                        {canResetSession
-                          ? resettingSession
-                            ? 'Mereset...'
-                            : 'Reset & Scan Ulang'
-                          : startingSession
-                            ? 'Memulai...'
-                            : 'Mulai Session / Scan QR Baru'}
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {loadingQr && !qrData ? (
-                <div className="flex items-center justify-center py-8">
-                  <RefreshCw size={20} className="animate-spin text-emerald-400" />
-                </div>
-              ) : qrData && qrStatus === 'SCAN_QR_CODE' ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="p-3 bg-white rounded-xl w-fit">
-                    <img
-                      src={`data:${qrData.mimetype};base64,${qrData.data}`}
-                      alt="QR WhatsApp Session"
-                      className="w-72 h-72"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 text-center leading-relaxed">
-                    Pindai dengan <span className="text-emerald-300 font-semibold">WhatsApp &gt; Setelan &gt; Perangkat Tertaut &gt; Tautkan Perangkat</span>.
-                    QR kedaluwarsa otomatis (~20 detik) — klik <span className="text-slate-300">Segarkan</span> untuk QR baru.
-                  </p>
-                </div>
-              ) : qrStatus === 'WORKING' ? (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px]">
-                  <Check size={14} />
-                  <span>Session terhubung — WhatsApp aktif. QR tidak diperlukan.</span>
-                </div>
-              ) : (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] leading-relaxed">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
-                    <span>{qrMessage || 'Session WAHA terputus / belum terhubung.'}</span>
-                  </div>
-                  {canStartSession && (
-                    <p className="mt-2 text-amber-400/80">
-                      {canResetSession
-                        ? 'Session FAILED sudah-paired tidak bisa dipulihkan dengan start biasa. Klik <span className="font-bold">Reset &amp; Scan Ulang</span> untuk membuat session baru dan memunculkan QR.'
-                        : 'Klik tombol <span className="font-bold font-mono text-emerald-300">Mulai Session / Scan QR Baru</span> di atas untuk menghubungkan nomor WhatsApp baru.'}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab WABA */}
-        {providerTab === 'WABA' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950/50 border border-white/5">
-              <div>
-                <h4 className="text-xs font-bold text-pink-300 flex items-center space-x-2">
-                  <MessageCircle size={12} />
-                  <span>WABA (Meta Cloud API)</span>
-                </h4>
-                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                  Outbound wajib memakai <span className="text-pink-400 font-semibold">HSM template</span> (patuh regulasi, hanya dalam 24h window percakapan). Kredensial disimpan terenkripsi AES-256.
-                </p>
-              </div>
-              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${wabaConfigured ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                {wabaConfigured ? 'CONFIGURED' : 'NOT CONFIGURED'}
-              </span>
-            </div>
-
-            {/* Kredensial WABA */}
-            <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-              <h4 className="text-xs font-bold text-white flex items-center space-x-2">
-                <KeyRound size={12} className="text-pink-400" />
-                <span>Kredensial WABA</span>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold">Phone Number ID</label>
-                  <input
-                    type="text"
-                    value={wabaPhoneNumberId}
-                    onChange={(e) => setWabaPhoneNumberId(e.target.value)}
-                    placeholder="123456789"
-                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold">Business Account ID</label>
-                  <input
-                    type="text"
-                    value={wabaBusinessAccountId}
-                    onChange={(e) => setWabaBusinessAccountId(e.target.value)}
-                    placeholder="000000000000000"
-                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold">Access Token (isi hanya saat ganti)</label>
-                  <input
-                    type="password"
-                    value={wabaAccessToken}
-                    onChange={(e) => setWabaAccessToken(e.target.value)}
-                    placeholder="EAA..."
-                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold">Webhook Verify Token</label>
-                  <input
-                    type="text"
-                    value={wabaWebhookVerifyToken}
-                    onChange={(e) => setWabaWebhookVerifyToken(e.target.value)}
-                    placeholder="verify_token"
-                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={handleSaveWabaConfig}
-                disabled={savingProvider}
-                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
-              >
-                <Save size={12} />
-                <span>{savingProvider ? 'Saving...' : 'Save WABA Config'}</span>
-              </button>
-            </div>
-
-            {/* Template status */}
-            <div className="space-y-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-              <h4 className="text-xs font-bold text-white flex items-center space-x-2">
-                <FileCheck size={12} className="text-pink-400" />
-                <span>Status Template HSM (9 stage follow-up)</span>
-              </h4>
-              {wabaTemplates.length === 0 ? (
-                <p className="text-[10px] text-slate-500">Belum ada data template. Refresh untuk memuat.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  {wabaTemplates.map((t) => (
-                    <div key={t.type} className="p-2.5 rounded-lg bg-slate-950 border border-white/5 flex items-center justify-between space-x-2">
-                      <div className="min-w-0">
-                        <p className="text-[10px] text-slate-300 font-semibold truncate">{t.type}</p>
-                        <p className="text-[9px] text-slate-500 truncate">{t.templateName}</p>
-                        <div className="flex items-center space-x-1 mt-1">
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${t.category === 'MARKETING' ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>
-                            {t.category}
-                          </span>
-                          {t.status === 'APPROVED' ? (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300 flex items-center space-x-0.5">
-                              <FileCheck size={8} /> APPROVED
-                            </span>
-                          ) : t.status === 'PENDING' ? (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300 flex items-center space-x-0.5">
-                              <FileClock size={8} /> PENDING
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-rose-500/20 text-rose-300 flex items-center space-x-0.5">
-                              <FileX size={8} /> {t.status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <p className="text-[9px] text-slate-500">
-                Edit mapping &amp; status template di menu <span className="text-pink-400">Follow-Up Templates</span>. Template belum APPROVED akan otomatis di-skip follow-up WABA (aman patuh Meta).
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Meta Pixel & CAPI — konversi iklan, berlaku utk semua provider (WAHA & WABA) */}
-      <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <BarChart3 className="text-pink-400" />
-              <span>Meta Pixel &amp; CAPI (Konversi Iklan)</span>
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed mt-1">
-              Berlaku untuk semua provider WhatsApp (<span className="text-emerald-400 font-semibold">WAHA</span> &amp; <span className="text-pink-400 font-semibold">WABA</span>). Digunakan landing page (Pixel) &amp; server-side event Lead/Purchase ke Meta (CAPI).
-            </p>
-          </div>
-          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${capiSource === 'db' && capiConfigured ? 'bg-emerald-500/20 text-emerald-300' : capiSource === 'db' ? 'bg-amber-500/20 text-amber-300' : capiSource === 'env' ? 'bg-sky-500/20 text-sky-300' : 'bg-rose-500/20 text-rose-300'}`}>
-            {capiSource === 'db' && capiConfigured ? 'CONFIGURED'
-              : capiSource === 'db' ? 'PARTIAL'
-              : capiSource === 'env' ? 'ENV FALLBACK'
-              : 'NOT CONFIGURED'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 rounded-xl bg-slate-950/50 border border-white/5">
-          <div className="space-y-1">
-            <label className="text-[10px] text-slate-400 uppercase font-bold">Meta Pixel ID</label>
-            <input
-              type="text"
-              value={metaPixelId}
-              onChange={(e) => setMetaPixelId(e.target.value)}
-              placeholder="123456789012345"
-              className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-            />
-            <p className="text-[9px] text-slate-500">ID Pixel Facebook (dipakai tracking landing &amp; ad clicks).</p>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] text-slate-400 uppercase font-bold">CAPI Access Token (isi hanya saat ganti)</label>
-            <input
-              type="password"
-              value={capiAccessToken}
-              onChange={(e) => setCapiAccessToken(e.target.value)}
-              placeholder="EAA..."
-              className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
-            />
-            <p className="text-[9px] text-slate-500">{capiConfigured ? 'Token tersimpan (terenkripsi). Kosongkan utk tidak mengubah.' : 'Belum ada token. Disimpan terenkripsi AES-256.'}</p>
-          </div>
-        </div>
-
-        <button
-          onClick={handleSaveCapiConfig}
-          disabled={savingCapi}
-          className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
-        >
-          <Save size={12} />
-          <span>{savingCapi ? 'Saving...' : 'Save Meta Pixel & CAPI'}</span>
-        </button>
-      </div>
-
+      {/* Remaining panels: Global Toggle + Branch Picker + Delivery Tiers + Broadcast */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Left column: Bot Toggle & Branch picker */}
+
+        {/* Left column: Global Bot Toggle + Branch picker */}
         <div className="space-y-8">
-          
+
           {/* Bot ON/OFF Toggle */}
           <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-bold text-white flex items-center space-x-2">
@@ -978,216 +705,13 @@ export const Settings: React.FC = () => {
             <p className="text-xs text-slate-400 leading-relaxed">
               Enable or disable the AI responder engine globally. When disabled, all incoming WhatsApp messages are automatically bypassed and routed directly to human handling.
             </p>
-
             <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5 mt-4">
-              <span className="text-sm font-semibold text-slate-300">
-                AI Auto-Responder Bot
-              </span>
+              <span className="text-sm font-semibold text-slate-300">AI Auto-Responder Bot</span>
               <button
                 onClick={() => handleSaveGlobalToggle(!globalBotActive)}
                 className={`w-14 h-7 rounded-full transition-all relative ${globalBotActive ? 'bg-emerald-500' : 'bg-rose-500'}`}
               >
                 <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${globalBotActive ? 'translate-x-7' : ''}`}></div>
-              </button>
-            </div>
-          </div>
-
-          {/* AI Router Engine Toggle */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <ShieldCheck className="text-pink-400" />
-              <span>AI Router Engine</span>
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Default <span className="text-emerald-400 font-semibold">ON</span> (shadow mode aman). Aktifkan untuk mengevaluasi intent via LLM router.
-              Matikan shadow mode (<span className="text-amber-400 font-semibold">full mode</span>) hanya setelah 3 gate akurasi di README lolos.
-            </p>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
-                <div>
-                  <span className="text-sm font-semibold text-slate-300">AI Router Engine</span>
-                  <p className="text-[10px] text-slate-500">Klasifikasi intent via LLM router per pesan</p>
-                </div>
-                <button
-                  onClick={() => handleToggleAiRouter('enabled', !aiRouterEnabled)}
-                  disabled={savingAiRouter}
-                  className={`w-14 h-7 rounded-full transition-all relative disabled:opacity-50 ${aiRouterEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
-                >
-                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiRouterEnabled ? 'translate-x-7' : ''}`}></div>
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
-                <div>
-                  <span className="text-sm font-semibold text-slate-300">Shadow Mode</span>
-                  <p className="text-[10px] text-slate-500">{aiRouterShadowMode ? 'Hanya LOG perbandingan, tidak ubah keputusan produksi' : 'Full mode: keputusan router dapat mengubah alur produksi'}</p>
-                </div>
-                <button
-                  onClick={() => handleToggleAiRouter('shadowMode', !aiRouterShadowMode)}
-                  disabled={savingAiRouter || !aiRouterEnabled}
-                  className={`w-14 h-7 rounded-full transition-all relative disabled:opacity-50 ${aiRouterShadowMode ? 'bg-amber-500' : 'bg-slate-600'}`}
-                >
-                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiRouterShadowMode ? 'translate-x-7' : ''}`}></div>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* AI Rollout Scope — AI hanya untuk customer baru */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <ShieldCheck className="text-pink-400" />
-              <span>AI Rollout Scope</span>
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Batasi AI hanya untuk customer <span className="text-emerald-400 font-semibold">baru</span> (created_at &gt;= cutoff).
-              Customer <span className="text-amber-400 font-semibold">legacy</span> otomatis di-senyapkan &amp; dirutekan ke human handling
-              pada state idle/reset (sesi percakapan berjalan tidak dipotong). Berlaku utk pesan setelah simpan.
-            </p>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
-                <div>
-                  <span className="text-sm font-semibold text-slate-300">Cakupan AI</span>
-                  <p className="text-[10px] text-slate-500">
-                    {aiScope === 'NEW_ONLY' ? 'Hanya customer baru dapat AI (rollout bertahap)' : 'Semua customer dapat AI (rollout penuh)'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setAiScope(aiScope === 'NEW_ONLY' ? 'ALL' : 'NEW_ONLY')}
-                  disabled={savingAiScope}
-                  className={`w-14 h-7 rounded-full transition-all relative disabled:opacity-50 ${aiScope === 'ALL' ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                >
-                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${aiScope === 'ALL' ? 'translate-x-7' : ''}`}></div>
-                </button>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Cutoff Rollout (created_at &lt; cutoff = legacy)</label>
-                <input
-                  type="datetime-local"
-                  value={aiScopeCutoffAt}
-                  onChange={(e) => setAiScopeCutoffAt(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Total</div>
-                  <div className="text-lg font-bold text-white">{aiScopeSummary.totalCustomers}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Baru (AI)</div>
-                  <div className="text-lg font-bold text-emerald-400">{aiScopeSummary.newCustomers}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Legacy</div>
-                  <div className="text-lg font-bold text-amber-400">{aiScopeSummary.legacyCustomers}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-950 border border-white/5">
-                  <div className="text-[9px] uppercase tracking-wider text-slate-500">Tersenyapkan</div>
-                  <div className="text-lg font-bold text-pink-400">{aiScopeSummary.silencedByScope}</div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={handleSaveAiScope}
-              disabled={savingAiScope}
-              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
-            >
-              <Save size={12} />
-              <span>{savingAiScope ? 'Saving...' : 'Simpan AI Rollout Scope'}</span>
-            </button>
-          </div>
-
-          {/* MQL Automation & Lead Event Configuration */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <BarChart3 className="text-pink-400" />
-              <span>MQL Automation & Trigger Event Lead</span>
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Kualifikasi customer otomatis menjadi <span className="text-emerald-400 font-semibold">Minimum Qualified Lead (MQL)</span> ketika jumlah pesan/bubble chat dari customer mencapai ambang batas yang ditentukan.
-            </p>
-
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Target Bubble Chat ke- (Threshold MQL)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={mqlThresholdBubbles}
-                  onChange={(e) => setMqlThresholdBubbles(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
-                  placeholder="Contoh: 5"
-                />
-                <p className="text-[10px] text-slate-500">Saat customer mengirim bubble ke-{mqlThresholdBubbles}, status customer otomatis berubah menjadi MQL.</p>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5">
-                <div>
-                  <span className="text-sm font-semibold text-slate-300">Auto-Trigger Event 'Lead' (Meta CAPI)</span>
-                  <p className="text-[10px] text-slate-500">Kirim event Lead otomatis ke Meta CAPI 1x saat customer mencapai status MQL</p>
-                </div>
-                <button
-                  onClick={() => setMqlAutoLeadEnabled(!mqlAutoLeadEnabled)}
-                  className={`w-14 h-7 rounded-full transition-all relative ${mqlAutoLeadEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
-                >
-                  <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${mqlAutoLeadEnabled ? 'translate-x-7' : ''}`}></div>
-                </button>
-              </div>
-
-              <button
-                onClick={handleSaveMqlSettings}
-                disabled={savingMql}
-                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
-              >
-                <Save size={14} />
-                <span>{savingMql ? 'Memproses...' : 'Simpan Pengaturan MQL'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Live Chat Media — retensi file gambar outbound/inbound */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <ImageIcon className="text-pink-400" />
-              <span>Live Chat Media (Retensi Gambar)</span>
-            </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Gambar yang dikirim admin (outbound) &amp; dari customer (inbound) disimpan di <span className="text-slate-300 font-mono">storage/media</span>.
-              File kadaluarsa dihapus otomatis oleh cron cleanup setelah melewati masa retensi ini.
-            </p>
-
-            <div className="space-y-3 p-4 rounded-xl bg-slate-950 border border-white/5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Masa Retensi (hari)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="3650"
-                  value={mediaRetentionDays}
-                  onChange={(e) => setMediaRetentionDays(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
-                  placeholder="Contoh: 30"
-                />
-                <p className="text-[10px] text-slate-500">
-                  Simpan per-tenant (kolom <span className="text-slate-300 font-mono">tenants.media_retention_days</span>).
-                  Fallback global env: <span className="text-slate-300 font-mono">{mediaEnvFallbackDays}</span> hari.
-                </p>
-              </div>
-
-              <button
-                onClick={handleSaveMediaRetention}
-                disabled={savingMediaRetention}
-                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 disabled:opacity-50"
-              >
-                <Save size={14} />
-                <span>{savingMediaRetention ? 'Memproses...' : 'Simpan Retensi Media'}</span>
               </button>
             </div>
           </div>
@@ -1272,7 +796,7 @@ export const Settings: React.FC = () => {
 
         {/* Right column: Tiering Ongkir & Broadcast Engine */}
         <div className="space-y-8">
-          
+
           {/* Delivery fee tiering */}
           <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
             <div className="flex justify-between items-center">
@@ -1284,7 +808,7 @@ export const Settings: React.FC = () => {
                 Haversine Active
               </span>
             </div>
-            
+
             <p className="text-xs text-slate-400 leading-relaxed">
               Tentukan tarif biaya pengiriman (ongkir) normal dan potongan promo berdasarkan jarak haversine rute dari koordinat spa ke lokasi customer. Editor lengkap dengan simulasi ada di menu <span className="text-pink-400 font-semibold">Delivery Fee</span>.
             </p>
@@ -1333,9 +857,7 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => {
-                        setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id));
-                      }}
+                      onClick={() => { setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id)); }}
                       className="p-2 w-full rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition flex justify-center items-center"
                       title="Hapus Tier"
                     >
@@ -1347,9 +869,7 @@ export const Settings: React.FC = () => {
 
               <div className="pt-2 flex justify-between">
                 <button
-                  onClick={() => {
-                    setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 30000, promoDiscount: 5000 }]);
-                  }}
+                  onClick={() => { setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 30000, promoDiscount: 5000 }]); }}
                   className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white flex items-center space-x-1"
                 >
                   <Plus size={10} />
@@ -1369,12 +889,12 @@ export const Settings: React.FC = () => {
 
           {/* Broadcast & Quiet Hours with Alert Banner */}
           <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-6">
-            
+
             {/* Out of scope Alert banner */}
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-3 text-xs">
               <AlertTriangle className="flex-shrink-0 mt-0.5" size={16} />
               <div>
-                <p className="font-bold">Broadcast & Quiet Hours Engine</p>
+                <p className="font-bold">Broadcast &amp; Quiet Hours Engine</p>
                 <p className="mt-0.5 text-[10px] text-amber-500/80">
                   ⚠️ **PEMBERITAHUAN:** Fitur backend Tier 3 belum aktif. Tampilan di bawah ini bersifat mockup UI mandiri.
                 </p>
@@ -1408,7 +928,7 @@ export const Settings: React.FC = () => {
                     className="w-full p-2 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
                   />
                 </div>
-                
+
                 <div className="space-y-1.5">
                   <label className="text-xs text-slate-400">Quiet Hours (Start - End)</label>
                   <div className="flex space-x-2 items-center">
