@@ -171,6 +171,37 @@ if (require.main === module) {
         console.log(`🧪 AI quality evaluation cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[AI EVAL START ERROR]', e));
     }
+
+    // Start Daily Ops Report cron (runs interval to check per tenant settings or env fallback)
+    import('./services/daily-report.service').then(({ dailyReportService }) => {
+      const { prisma } = require('./db/client');
+      const { getAllTenantIds } = require('./services/media.service');
+      
+      setInterval(async () => {
+        try {
+          const nowUtc = new Date();
+          const wibTime = new Date(nowUtc.getTime() + (7 * 60 * 60 * 1000));
+          const currentWibHour = wibTime.getUTCHours();
+          
+          const envEnabled = process.env.ENABLE_DAILY_REPORT_CRON === 'true';
+          const envHour = parseInt(process.env.DAILY_REPORT_HOUR || '7', 10);
+          
+          const tenants = await getAllTenantIds();
+          for (const tId of tenants) {
+            const tenant = await prisma.tenant.findUnique({ where: { id: tId } });
+            const isEnabled = tenant ? (tenant.daily_report_enabled || envEnabled) : envEnabled;
+            const targetHour = tenant ? (tenant.daily_report_hour ?? envHour) : envHour;
+            
+            if (isEnabled && currentWibHour === targetHour) {
+              await dailyReportService.sendDailyReport(tId);
+            }
+          }
+        } catch (err: any) {
+          console.error('[DAILY REPORT CRON ERROR]', err.message);
+        }
+      }, 30 * 60 * 1000);
+      console.log(`📈 Daily Ops Report cron background worker started (checking every 30m WIB)`);
+    }).catch(e => console.error('[DAILY REPORT START ERROR]', e));
   });
 }
 
