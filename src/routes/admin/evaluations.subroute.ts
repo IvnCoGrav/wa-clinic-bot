@@ -352,4 +352,21 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * GET /api/admin/debug/conversations
+   */
+  fastify.get(
+    '/api/admin/debug/conversations',
+    async (request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) => {
+      try {
+        const { collectConversationTrace } = await import('../../services/system-debug.service');
+        const limit = parseInt(request.query?.limit || '50', 10) || 50;
+        const data = await collectConversationTrace(limit);
+        return reply.status(200).send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, message: err?.message });
+      }
+    }
+  );
 }

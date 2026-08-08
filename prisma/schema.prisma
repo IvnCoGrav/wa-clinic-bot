@@ -493,6 +493,7 @@ model Tenant {
   mql_threshold_bubbles  Int               @default(5)
   mql_auto_lead_enabled  Boolean           @default(true)
   media_retention_days   Int               @default(30)
+  pricelist_image_url    String?
   cs_name                String?           @default("Cs Yusi")
   format_visit           String?           @default("Promo[%ID%]")
   format_checkout        String?           @default("list untuk reservasi :")

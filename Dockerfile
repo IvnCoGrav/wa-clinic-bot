@@ -44,6 +44,9 @@ RUN npx prisma generate
 # Copy built code from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/config/surabaya_sidoarjo_subdistricts.json ./src/config/surabaya_sidoarjo_subdistricts.json
+# Aset statis (mis. gambar pricelist default assets/pricelist_spa.jpg) — wajib ikut
+# dicopy supaya pengiriman pricelist image tidak gagal di container.
+COPY --from=builder /app/assets ./assets
 # Admin dashboard SPA (diserve bot di /admin/*)
 COPY --from=builder /app/packages/admin-dashboard/dist ./packages/admin-dashboard/dist
 

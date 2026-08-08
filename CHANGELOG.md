@@ -8,6 +8,52 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-08
 
+### Fixed — Formatting WhatsApp SATU tanda (dampak dari balasan LLM `**tebal**`)
+
+Model LLM terbiasa meniru Markdown GANDA (`**tebal**`) yang di WhatsApp tampil
+mentah (dua bintang tidak di-render). Perbaikan berlapis:
+
+- **Instruksi prompt diperjelas** di system prompt utama (`generator.ts`),
+  `phrasing.service.ts`, dan persona (`persona.ts` GAYA BAHASA +
+  `persona_custom.txt`): bold WAJIB pakai SATU bintang `*teks*`, DILARANG `**`.
+- **Safety-net runtime** (`src/utils/whatsapp-format.ts`): `normalizeWhatsAppFormat`
+  mengonversi `**teks**` → `*teks*`, `__teks__` → `_teks_`, `~~teks~~` → `~teks~`,
+  dipasang di batas kirim `WAHA client.sendText` dan `WABA sendTextMessage`.
+- **Template statis dibersihkan**: `confirmFuzzyLocation`, `greetingWithLocation`
+  dst sudah pakai `*Keputih*` (bukan `**Keputih**`).
+- DB persona tenant di-sync ulang via `npx tsx src/scripts/push-persona.ts`.
+
+### Added — Gambar pricelist tenant-aware + bisa diganti dari Admin Dashboard
+
+Gambar pricelist WhatsApp kini dikonfigurasi per-tenant (tersimpan di DB),
+bisa di-upload/diubah dari Admin Dashboard, dan dikirim melalui gateway tenant
+(WAHA/WABA) dengan hasil pengiriman yang dicek — memperbaiki kegagalan senyap
+di route real WhatsApp.
+
+- **Root cause lama**: `machine.ts` memakai `wahaClient.sendImage` langsung dengan
+  path relatif `assets/pricelist_spa.jpg` yang TIDAK dicopy ke image Docker,
+  sehingga pembacaan file gagal di container; tambahan, `pricelist_sent=true`
+  ditulis ke DB walau pengiriman gagal (kirim ulang ter-skip).
+- **Config tenant-aware baru** (`src/services/pricelist-config.service.ts`):
+  sumber gambar diprioritaskan `tenants.pricelist_image_url` (DB) →
+  env `CLINIC_PRICELIST_IMAGE_URL` → aset default `assets/pricelist_spa.jpg`.
+  Resolve per provider: WAHA bisa path file lokal/URL; WABA butuh URL publik
+  atau relative `/media/outbound/...`.
+- **Machine fix** (`src/state-machine/machine.ts`): kirim via
+  `resolveGatewayForTenant(tenantId).sendImageMessage()` (per-kebutuhan),
+  cek `sendResult.success`, dan set `pricelist_sent=true` HANYA setelah sukses.
+  Kegagalan resolve (mis. WABA tanpa URL publik) dilog dengan jelas.
+- **Schema & migration**: kolom `tenants.pricelist_image_url`
+  (`prisma/migrations/20260821000000_add_tenant_pricelist_image`).
+- **Admin API** (`src/routes/admin/settings.subroute.ts`):
+  `GET|PUT /api/admin/settings/pricelist-image` — PUT menerima `imageUrl`
+  (http(s) atau `/media/outbound/...`) ATAU upload base64
+  (`imageB64` + `mimeType` + `fileName`) yang disimpan sebagai media outbound.
+- **Admin dashboard** (`packages/admin-dashboard`): panel `PricelistImagePanel`
+  di halaman Settings — pratinjau, pakai URL, upload gambar, reset ke default.
+- **Dockerfile**: runner kini `COPY --from=builder /app/assets ./assets`
+  (folder aset gambar ikut ke container).
+
 ### Added — Performance & Latency Audit (production, 2026-08-08) + tindak lanjut P1–P6
 
 Audit produksi (`docs/PERF_AUDIT_2026-08-08.md`) menemukan seluruh koneksi & query DB sehat
