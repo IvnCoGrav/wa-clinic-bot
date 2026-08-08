@@ -192,3 +192,8 @@ Settings → AI Router Engine**. Env vars di bawah HANYA fallback saat DB tidak 
 - **`OPENAI_BASE_URL`** / **`OPENAI_MODEL`** (default `https://api.openai.com/v1` / `MiniMax-M2.7-highspeed`): Base URL & model untuk Phrasing Service (generate balasan natural via LLM). Fallback ke template statis saat LLM down/API key kosong.
 - **`LLM_API_KEY`** (String, wajib untuk Phrasing Service): API key untuk LLM endpoint.
 - **Cek akurasi:** `npx tsx src/scripts/check-router-accuracy.ts --days=7` — jadwal cek hari ke-1/3/7 ada di README.
+
+### Laporan Operasional Harian (Daily Ops Report)
+
+- **`ENABLE_DAILY_REPORT_CRON`** (Boolean, default `false`): Mengaktifkan pengiriman Laporan Operasional Harian otomatis ke Telegram.
+- **`DAILY_REPORT_HOUR`** (Number, default `7`): Menentukan jam pengiriman laporan harian dalam zona waktu WIB (UTC+7). Laporan akan merangkum performa (sales, chat, atribusi) hari sebelumnya secara penuh (00:00 s.d 23:59 WIB).

@@ -26,6 +26,7 @@ export enum AlertType {
   MEDICAL_CONCERN_MEDIUM = 'MEDICAL_CONCERN_MEDIUM',
   FOLLOWUP_FAILED = 'FOLLOWUP_FAILED',
   WABA_MESSAGE_FAILED = 'WABA_MESSAGE_FAILED',
+  DAILY_OPS_REPORT = 'DAILY_OPS_REPORT',
 }
 
 
@@ -35,6 +36,9 @@ export interface AlertPayload {
   message: string;
   provider?: 'ORS' | 'Google Maps' | 'Meta CAPI' | string;
   metadata?: Record<string, any>;
+  rawMessage?: boolean;
+  botToken?: string;
+  chatId?: string;
 }
 
 export class AlertService {
@@ -74,7 +78,7 @@ export class AlertService {
     const lastTime = this.lastAlertTimes.get(key) || 0;
 
     // 1. Throttling Check per Trigger Type
-    if (now - lastTime < this.cooldownMs && process.env.NODE_ENV !== 'test') {
+    if (payload.type !== AlertType.DAILY_OPS_REPORT && now - lastTime < this.cooldownMs && process.env.NODE_ENV !== 'test') {
       return { sent: false, throttled: true, channel: 'console' };
     }
 
@@ -86,12 +90,17 @@ export class AlertService {
     console.warn(`\n🚨 ${formattedLog}`, sanitizedMeta ? JSON.stringify(sanitizedMeta) : '');
 
     // 2. Try Dispatch via Telegram Bot API
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const botToken = payload.botToken || process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = payload.chatId || process.env.TELEGRAM_CHAT_ID;
 
     if (botToken && chatId) {
       try {
-        const text = `🚨 *[${payload.severity}] ${payload.type}*\n${payload.message}\n${payload.provider ? `*Provider:* ${payload.provider}\n` : ''}\`\`\`json\n${JSON.stringify(sanitizedMeta || {}, null, 2)}\n\`\`\``;
+        let text = '';
+        if (payload.rawMessage) {
+          text = payload.message;
+        } else {
+          text = `🚨 *[${payload.severity}] ${payload.type}*\n${payload.message}\n${payload.provider ? `*Provider:* ${payload.provider}\n` : ''}\`\`\`json\n${JSON.stringify(sanitizedMeta || {}, null, 2)}\n\`\`\``;
+        }
         const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -493,6 +493,10 @@ model Tenant {
   mql_threshold_bubbles  Int               @default(5)
   mql_auto_lead_enabled  Boolean           @default(true)
   media_retention_days   Int               @default(30)
+  daily_report_enabled   Boolean           @default(false)
+  daily_report_hour      Int               @default(7)
+  telegram_bot_token     String?
+  telegram_chat_id       String?
   pricelist_image_url    String?
   cs_name                String?           @default("Cs Yusi")
   format_visit           String?           @default("Promo[%ID%]")
@@ -557,4 +561,17 @@ model GeneralFaqStaging {
   @@index([tenant_id])
   @@index([status])
   @@map("general_faq_staging")
+}
+
+model DailyReportLog {
+  id          String   @id @default(uuid())
+  tenant_id   String   @default("default-tenant")
+  report_date String   // format "YYYY-MM-DD" (WIB)
+  sent_at     DateTime @default(now())
+  status      String   @default("sent") // "sent" | "failed"
+  metadata    Json?    // opsional: simpan snapshot angka yang dikirim
+
+  @@unique([tenant_id, report_date])
+  @@index([tenant_id])
+  @@map("daily_report_logs")
 }
