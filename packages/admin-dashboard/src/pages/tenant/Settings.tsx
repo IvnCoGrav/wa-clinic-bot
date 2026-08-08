@@ -8,6 +8,7 @@ import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
 import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
 import { PricelistImagePanel } from '../../components/settings/PricelistImagePanel';
 import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
+import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
 const CAPI_TOKEN_MASK = '••••••••••••••••••••••••••••••••';
@@ -711,6 +712,9 @@ export const Settings: React.FC = () => {
         savingMediaRetention={savingMediaRetention}
         handleSaveMediaRetention={handleSaveMediaRetention}
       />
+
+      {/* Daily Ops Report Settings Panel */}
+      <DailyReportPanel />
 
       {/* Install App (PWA) */}
       <InstallAppPanel />
