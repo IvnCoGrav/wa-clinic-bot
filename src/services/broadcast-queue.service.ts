@@ -285,6 +285,13 @@ export class BroadcastQueueService {
     if (this.worker) await this.worker.close();
     if (this.redisClient) await this.redisClient.quit().catch(() => {});
   }
+
+  /**
+   * Status koneksi Redis (dipakai health endpoint untuk deteksi degradasi).
+   */
+  public isRedisEnabled(): boolean {
+    return this.redisEnabled;
+  }
 }
 
 export const broadcastQueueService = new BroadcastQueueService();

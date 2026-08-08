@@ -131,7 +131,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     try {
       const queryStatus = (request.query as any).status || 'PENDING';
       const items = await prisma.legacyStaging.findMany({
-        where: { tenantId: 'default', status: queryStatus as any },
+        where: { tenantId: DEFAULT_TENANT_ID, status: queryStatus as any },
         orderBy: { leadCreatedAt: 'desc' },
       });
       return reply.status(200).send({ success: true, count: items.length, data: items });
@@ -202,26 +202,48 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/medical-faq-staging
+   * Paginated + batch chunk lookup (P3 audit): hindari N+1 findUnique per row.
    */
   fastify.get('/api/admin/medical-faq-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const queryStatus = (request.query as any).status || 'PENDING';
-      const items = await prisma.medicalFaqStaging.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: queryStatus as any },
-        orderBy: { created_at: 'desc' },
-      });
-      const itemsWithChunks = await Promise.all(
-        items.map(async (item) => {
-          if (item.matched_chunk_id) {
-            const chunk = await prisma.knowledgeChunk.findUnique({ where: { id: item.matched_chunk_id } });
-            return { ...item, matchedChunk: chunk };
-          }
-          return item;
-        })
+      const { status = 'PENDING', page = '1', limit = '50' } = (request.query as any) || {};
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+
+      const where: any = { tenant_id: DEFAULT_TENANT_ID, status };
+      const [items, total] = await Promise.all([
+        prisma.medicalFaqStaging.findMany({
+          where,
+          orderBy: { created_at: 'desc' },
+          skip: (pageNum - 1) * limitNum,
+          take: limitNum,
+        }),
+        prisma.medicalFaqStaging.count({ where }),
+      ]);
+
+      // Batch lookup chunk terlampir: 1 query untuk semua matched_chunk_id
+      const chunkIds = items.filter((i) => i.matched_chunk_id).map((i) => i.matched_chunk_id as string);
+      const chunks = chunkIds.length
+        ? await prisma.knowledgeChunk.findMany({ where: { id: { in: chunkIds } } })
+        : [];
+      const chunkMap = new Map(chunks.map((c) => [c.id, c]));
+
+      const itemsWithChunks = items.map((item) =>
+        item.matched_chunk_id ? { ...item, matchedChunk: chunkMap.get(item.matched_chunk_id) ?? null } : item
       );
-      return reply.status(200).send({ success: true, data: itemsWithChunks });
+
+      return reply.status(200).send({
+        success: true,
+        data: itemsWithChunks,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+      });
     } catch (err) {
-      return reply.status(200).send({ success: true, data: [] });
+      return reply
+        .status(200)
+        .send({ success: true, data: [], total: 0, page: 1, limit: 50, totalPages: 1 });
     }
   });
 
@@ -278,26 +300,48 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/general-faq-staging
+   * Paginated + batch chunk lookup (P3 audit): hindari N+1 findUnique per row.
    */
   fastify.get('/api/admin/general-faq-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const queryStatus = (request.query as any).status || 'PENDING';
-      const items = await prisma.generalFaqStaging.findMany({
-        where: { tenant_id: DEFAULT_TENANT_ID, status: queryStatus as any },
-        orderBy: { created_at: 'desc' },
-      });
-      const itemsWithChunks = await Promise.all(
-        items.map(async (item) => {
-          if (item.matched_chunk_id) {
-            const chunk = await prisma.knowledgeChunk.findUnique({ where: { id: item.matched_chunk_id } });
-            return { ...item, matchedChunk: chunk };
-          }
-          return item;
-        })
+      const { status = 'PENDING', page = '1', limit = '50' } = (request.query as any) || {};
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+
+      const where: any = { tenant_id: DEFAULT_TENANT_ID, status };
+      const [items, total] = await Promise.all([
+        prisma.generalFaqStaging.findMany({
+          where,
+          orderBy: { created_at: 'desc' },
+          skip: (pageNum - 1) * limitNum,
+          take: limitNum,
+        }),
+        prisma.generalFaqStaging.count({ where }),
+      ]);
+
+      // Batch lookup chunk terlampir: 1 query untuk semua matched_chunk_id
+      const chunkIds = items.filter((i) => i.matched_chunk_id).map((i) => i.matched_chunk_id as string);
+      const chunks = chunkIds.length
+        ? await prisma.knowledgeChunk.findMany({ where: { id: { in: chunkIds } } })
+        : [];
+      const chunkMap = new Map(chunks.map((c) => [c.id, c]));
+
+      const itemsWithChunks = items.map((item) =>
+        item.matched_chunk_id ? { ...item, matchedChunk: chunkMap.get(item.matched_chunk_id) ?? null } : item
       );
-      return reply.status(200).send({ success: true, data: itemsWithChunks });
+
+      return reply.status(200).send({
+        success: true,
+        data: itemsWithChunks,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+      });
     } catch (err) {
-      return reply.status(200).send({ success: true, data: [] });
+      return reply
+        .status(200)
+        .send({ success: true, data: [], total: 0, page: 1, limit: 50, totalPages: 1 });
     }
   });
 

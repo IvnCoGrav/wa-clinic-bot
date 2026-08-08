@@ -26,6 +26,21 @@ export interface ResolvedLocation {
   matchedSpan?: string;
 }
 
+function getSubdistrictsFilePath(): string {
+  const candidates = [
+    path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+    path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+    path.resolve(__dirname, '../../config/surabaya_sidoarjo_subdistricts.json'),
+    path.resolve(__dirname, '../../../src/config/surabaya_sidoarjo_subdistricts.json'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return candidates[0];
+}
+
 const googleMapsClient = new Client({});
 
 /**
@@ -396,7 +411,7 @@ export class GeocodingService {
     // bukan hardcoded — supaya semua kecamatan di data ter-cover.
     let kecamatanSet = new Set<string>();
     try {
-      const filePathForGate = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
+      const filePathForGate = getSubdistrictsFilePath();
       if (fs.existsSync(filePathForGate)) {
         const dataForGate = JSON.parse(fs.readFileSync(filePathForGate, 'utf-8'));
         kecamatanSet = new Set(dataForGate.map((d: any) => d.Kecamatan.toLowerCase()));
@@ -417,7 +432,7 @@ export class GeocodingService {
     // 1. Coba cocokkan dengan local subdistricts JSON database
     let kecamatanOnlyFallback: ResolvedLocation | null = null;
     try {
-      const filePath = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
+      const filePath = getSubdistrictsFilePath();
       if (fs.existsSync(filePath)) {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         
@@ -800,7 +815,7 @@ OUTPUT JSON:
     kota?: string | null
   ): ResolvedLocation | null {
     try {
-      const filePath = path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json');
+      const filePath = getSubdistrictsFilePath();
       if (!fs.existsSync(filePath)) {
         return null;
       }

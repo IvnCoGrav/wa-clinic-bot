@@ -3,6 +3,7 @@ import { KnowledgeChunkResult } from '../../services/knowledge.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
 import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/language-sanitizer';
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
@@ -247,8 +248,8 @@ ATURAN EKSTRAKSI PREFERENSI:
           }
           parsed = JSON.parse(cleanContent);
         } catch (err) {
-          console.error('[LLM GENERATOR] Failed to parse JSON response, raw content:', content);
-          throw err;
+          console.warn('[LLM GENERATOR] Failed to parse JSON response, using raw content as soft fallback. Raw content:', content);
+          parsed = { answer: content, reasoning: '[SOFT FALLBACK] JSON parse failed, using raw text' };
         }
 
         if (!parsed.answer || parsed.answer.trim() === '') {
@@ -260,6 +261,17 @@ ATURAN EKSTRAKSI PREFERENSI:
 
         // Sanitizer: Bersihkan jika LLM tidak sengaja menghasilkan frasa "tanya ke tim / tidak bisa memastikan harga"
         jawaban = this.sanitizeTeamReferral(jawaban);
+
+        // Sanitizer aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
+        const sanitizedJawaban = stripNonIndonesianScripts(jawaban);
+        if (sanitizedJawaban !== jawaban) {
+          console.warn(
+            `[LLM GENERATOR] Karakter aksara asing bocor, di-bersihkan: ` +
+              `"${containsForeignScripts(jawaban) ? jawaban : ''}".
+`
+          );
+          jawaban = sanitizedJawaban;
+        }
 
         console.log(`\n🧠 [AI REASONING] for customer query "${userQuestion}":\n"${parsed.reasoning || 'No reasoning found'}"\n`);
         if (parsed.referenced_treatment) {
