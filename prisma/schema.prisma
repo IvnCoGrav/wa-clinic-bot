@@ -138,6 +138,8 @@ model Conversation {
 
   @@index([tenant_id])
   @@index([tenant_id, is_human_handling, last_message_at])
+  @@index([tenant_id, escalation_reason])
+  @@index([tenant_id, review_flagged])
   @@map("conversations")
 }
 
@@ -240,6 +242,8 @@ model Reservation {
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
+  @@index([customer_id])
+  @@index([customer_id, status])
   @@map("reservations")
 }
 

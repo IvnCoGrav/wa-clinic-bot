@@ -922,17 +922,35 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     const { wahaClient } = await import('../../integrations/waha/client');
     const wahaStatus = await wahaClient.getSessionStatus();
     const uptime = process.uptime();
+
+    // Laporkan status Redis yang SEBENARNYA (bukan hardcode fallback) agar admin
+    // bisa mendeteksi degradasi durable queue / live-chat / FAQ cache saat Redis turun.
+    const { broadcastQueueService } = await import('../../services/broadcast-queue.service');
+    const { faqCacheService } = await import('../../services/faq-cache.service');
+    const { queueService } = await import('../../services/queue.service');
+    const broadcastRedis = broadcastQueueService.isRedisEnabled();
+    const faqCacheRedis = faqCacheService.isRedisEnabled();
+    const messageQueueRedis = queueService.isRedisEnabled();
+    const redisQueue = broadcastRedis && faqCacheRedis && messageQueueRedis
+      ? 'ACTIVE'
+      : 'IN_MEMORY_FALLBACK_ACTIVE';
+
     return reply.status(200).send({
       success: true,
       timestamp: new Date().toISOString(),
       wahaStatus,
-      redisQueue: 'IN_MEMORY_FALLBACK_ACTIVE',
+      redisQueue,
       haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
       telegramEmergencyAlerts: 'CONFIGURED',
       systemUptimeSeconds: uptime,
       data: {
         wahaStatus,
-        redisQueue: 'IN_MEMORY_FALLBACK_ACTIVE',
+        redisQueue,
+        redisDetail: {
+          messageQueue: messageQueueRedis ? 'ACTIVE' : 'IN_MEMORY_FALLBACK_ACTIVE',
+          broadcastQueue: broadcastRedis ? 'ACTIVE' : 'IN_MEMORY_FALLBACK_ACTIVE',
+          faqCache: faqCacheRedis ? 'ACTIVE' : 'IN_MEMORY_FALLBACK_ACTIVE',
+        },
         haversineLocationEngine: 'ACTIVE_MULTIPLIER_1.25X',
         telegramEmergencyAlerts: 'CONFIGURED',
         systemUptimeSeconds: uptime,

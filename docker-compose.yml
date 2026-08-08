@@ -30,9 +30,23 @@ services:
       - TRACKING_API_KEY=${TRACKING_API_KEY}
       - FB_PIXEL_ID=${FB_PIXEL_ID}
       - FB_CAPI_ACCESS_TOKEN=${FB_CAPI_ACCESS_TOKEN}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       postgres:
         condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   postgres:
     image: postgres:16-alpine
@@ -85,3 +99,4 @@ volumes:
   waha_sessions:
   caddy_data:
   caddy_config:
+  redis_data:

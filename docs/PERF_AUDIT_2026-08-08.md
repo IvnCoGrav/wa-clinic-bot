@@ -3,6 +3,7 @@
 **Server:** `43.157.197.148` (2 vCPU / 4GB) · Compose project `wa-clinic-bot` (4 kontainer: app, caddy, postgres, waha)
 **Scope:** koneksi database (Postgres + Redis), endpoint Admin Panel, landing page, infrastruktur.
 **Excluded (sesuai scope):** latency chatbot WhatsApp (Humanizer Typing WPM=48 BY DESIGN) dan latency LLM call (1–3s wajar).
+**Referensi testing tindak lanjut P1–P8:** [`docs/TESTING_REFERENCE_PERF_AUDIT_2026-08-08.md`](./TESTING_REFERENCE_PERF_AUDIT_2026-08-08.md) → cara re-run/perintah gate standar.
 
 **Metode pengukuran:**
 - `src/scripts/db-health-check.ts` — dijalankan via `node` di dalam kontainer `app` (DB loopback).
@@ -182,4 +183,31 @@ Disarankan audit ulang 1×/bulan sebagai baseline (data live sudah mulai terisi)
 
 ---
 
-*Laporan hasil audit satu-pass 2026-08-08 terhadap server production. Data diukur saat trafik masih sangat rendah; angka akan berubah saat live. Prioritas disusun dari dampak terbesar, bukan sekadar daftar diagnosis.*
+## 7) Tes lanjutan 2026-08-08 (follow-up 6 hipotesis admin "terasa lambat")
+
+Pengukuran dari sisi klien (Surabaya → `app.kalababyspa.online`) + inspeksi kode, setelah audit P1–P8.
+
+| # | Hipotesis | Hasil | Verdict |
+|---|---|---|---|
+| 1 | RTT geografis | ping `43.157.197.148` avg **47 ms** (min 21, max 111); TCP connect ~`98 ms` | **Bukan bottleneck** per-request; terakumulasi via waterfall |
+| 2 | Waterfall API admin | `Overview.tsx:47-51` memuat `health` → `reservations/count` **berurutan**; `Settings.tsx` sudah `Promise.all` (paralel) — pola **tidak konsisten** antar halaman | **Nyata**: inkonsistensi implementation, bukan arsitektur |
+| 3 | TTFB cold vs warm | Warm eksternal `health` 161–199ms (termasuk RTT+TLS; sisi app ≈ 100ms); warm `index.html` 159ms | Konsisten audit; cold start masih sulit diukur tanpa redeploy |
+| 4 | Redis-absent vs polling | Layout polling `/health` tiap **120s per tab**, Overview tiap 60s; beban kecil tapi terakumulasi saat contention | Fix P1 (Redis) siap, belum deploy |
+| 5 | **Kompresi asset** | **Caddyfile tanpa `encode` → NOL gzip/brotli di semua respon**. `index.js` 201KB raw → gzip 63KB (**hemat 68.6%**); `Overview.js` 392.75KB raw → gzip **108KB (72%**) — terkonfirmasi Vite build | **Temuan berdampak terbesar** — efek di tiap halaman admin |
+| 6 | Contention 2 vCPU | Konfirmasi dari audit P1–P4: `reservations-list` 3ms→81ms saat concurrency=8; polling + batch memperparah | Nyata saat beban, tidak terlihat baseline idle |
+
+**Kesimpulan:** keluhan "terasa lambat" paling banyak disumbang **ketiadaan kompresi (P7) + waterfall di halaman tertentu + polling opak**, bukan RTT. Angka kompresi terukur lebih besar dari perkiraan audit awal (estimasi `samakan` gzip; aktual 68–72% hemat).
+
+### Perbaikan yang sudah diterapkan di repo (belum dideploy)
+- `Caddyfile`: tambah `encode gzip zstd` → seluruh respon (asset admin, landing, API) terkompresi otomatis.
+- `packages/admin-dashboard/src/pages/tenant/Overview.tsx`: `Promise.all` untuk `health` + `reservations/count` (hilangkan waterfall 1-RTT).
+- **Gate verifikasi lokal:** `npm run build` (tsc) hijau, `npm test` → **106 files / 1010 tests passed**, build admin dashboard sukses (Overview chunk gzip 108KB).
+
+### Keputusan terbuka
+- Interval polling health (`Layout` 120s / `Overview` 60s) **status quo** sementara — trade-off responsitas vs beban saat contention; interval bisa diturunkan (mis. 300s) sebagai penyetelan terpisah bila diminta.
+- Semua perubahan **wajib deploy sekali lewat gate double-confirm** (termasuk 1 baris Caddyfile) — tidak ada kategori "perbaikan cepat bebas izin".
+- Setelah deploy, ukur ulang TTFB & waktu loading admin dari sisi klien (bukan loopback) untuk konfirmasi selisih sesuai perhitungan.
+
+---
+
+*Laporan hasil audit satu-pass 2026-08-08 terhadap server production. Data diukur saat trafik masih sangat rendah; angka akan berubah saat live. Prioritas disusun dari dampak terbesar, bukan sekadar daftar diagnosis. Follow-up 2026-08-08 menambah pengujian 6 hipotesis dari sisi klien + perbaikan kompresi & waterfall.*

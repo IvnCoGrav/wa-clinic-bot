@@ -44,11 +44,13 @@ export const Overview: React.FC = () => {
 
   const fetchStatus = async () => {
     try {
-      const data = await apiRequest('/api/admin/health');
+      const [data, reservations] = await Promise.all([
+        apiRequest('/api/admin/health'),
+        apiRequest('/api/admin/reservations/count'),
+      ]);
       setHealthData(data);
       
       // Load recent reservations to update stats count dynamically
-      const reservations = await apiRequest('/api/admin/reservations/count');
       const count = reservations?.count ?? 0;
       setStats(prev => ({
         ...prev,

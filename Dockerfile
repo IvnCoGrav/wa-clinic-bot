@@ -43,6 +43,7 @@ RUN npx prisma generate
 
 # Copy built code from builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/config/surabaya_sidoarjo_subdistricts.json ./src/config/surabaya_sidoarjo_subdistricts.json
 # Admin dashboard SPA (diserve bot di /admin/*)
 COPY --from=builder /app/packages/admin-dashboard/dist ./packages/admin-dashboard/dist
 

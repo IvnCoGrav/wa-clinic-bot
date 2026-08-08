@@ -1,5 +1,6 @@
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
+import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/language-sanitizer';
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
 import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
@@ -77,6 +78,16 @@ HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN L
 
         const content = responseData.choices[0].message.content.trim();
 
+        // Sanitasi aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
+        // seperti DeepSeek — lihat dokumentasi language-sanitizer.ts
+        const sanitizedContent = stripNonIndonesianScripts(content);
+        if (sanitizedContent !== content) {
+          console.warn(
+            `[PHRASING SERVICE] Karakter aksara asing bocor, di-bersihkan: ` +
+              `"${containsForeignScripts(content) ? content : ''}" (${(content.length - sanitizedContent.length)} char dibuang).`
+          );
+        }
+
         // Safety Validation: Jika req.facts punya angka, pastikan angka tersebut tidak hilang/berubah di output LLM
         if (req.facts) {
           for (const [key, value] of Object.entries(req.facts)) {
@@ -84,16 +95,16 @@ HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN L
               const numStr = value.toString();
               const formattedIdStr = value.toLocaleString('id-ID');
               // Jika angka tidak ditemukan dalam bentuk raw maupun formatted (misal 15000 / 15.000)
-              if (!content.includes(numStr) && !content.includes(formattedIdStr)) {
+              if (!sanitizedContent.includes(numStr) && !sanitizedContent.includes(formattedIdStr)) {
                 // Khusus float (jarak) misal 5.4 -> check 5.4 or 5,4
                 if (typeof value === 'number' && !Number.isInteger(value)) {
                   const floatFixed = value.toFixed(1);
                   const floatComma = floatFixed.replace('.', ',');
-                  if (content.includes(floatFixed) || content.includes(floatComma)) {
+                  if (sanitizedContent.includes(floatFixed) || sanitizedContent.includes(floatComma)) {
                     continue;
                   }
                 }
-                console.warn(`[PHRASING SERVICE SAFETY TRIGGER] Fact number ${key}=${value} mutated/missing in LLM output: "${content}". Falling back to static template.`);
+                console.warn(`[PHRASING SERVICE SAFETY TRIGGER] Fact number ${key}=${value} mutated/missing in LLM output: "${sanitizedContent}". Falling back to static template.`);
                 return req.fallbackTemplate;
               }
             }
@@ -101,10 +112,10 @@ HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN L
         }
 
         if (req.conversationId) {
-          openerTracker.record(req.conversationId, content);
+          openerTracker.record(req.conversationId, sanitizedContent);
         }
 
-        return content;
+        return sanitizedContent;
       },
       async (req: PhrasingRequest) => {
         return req.fallbackTemplate;

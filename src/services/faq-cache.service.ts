@@ -151,6 +151,13 @@ export class FaqCacheService {
   public clearMemoryCache(): void {
     this.memoryMap.clear();
   }
+
+  /**
+   * Status koneksi Redis (dipakai health endpoint untuk deteksi degradasi).
+   */
+  public isRedisEnabled(): boolean {
+    return this.redisEnabled;
+  }
 }
 
 export const faqCacheService = new FaqCacheService();
