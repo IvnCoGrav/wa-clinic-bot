@@ -110,11 +110,11 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
       const mockCustomer = { id: 'cust_999', phone: '628123456789', name: 'Bunda Rian', created_at: new Date() };
       vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue(mockCustomer as any);
       
-      vi.mocked(prisma.message.findFirst).mockResolvedValue(null);
+      vi.mocked(prisma.message.findMany).mockResolvedValue([]);
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null);
 
       const customerUpdateSpy = vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
-      const messageCreateSpy = vi.mocked(prisma.message.create).mockResolvedValue({} as any);
+      const messageCreateSpy = vi.mocked(prisma.message.createMany).mockResolvedValue({ count: 2 } as any);
       const reservationCreateSpy = vi.mocked(prisma.reservation.create).mockResolvedValue({} as any);
       const stagingUpdateSpy = vi.mocked(prisma.legacyStaging.update).mockResolvedValue({} as any);
 
@@ -133,14 +133,15 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
       );
 
       // B. Verify historical messages created with original timestamps
-      expect(messageCreateSpy).toHaveBeenCalledTimes(2);
-      expect(messageCreateSpy).toHaveBeenNthCalledWith(
-        1,
+      expect(messageCreateSpy).toHaveBeenCalledTimes(1);
+      expect(messageCreateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            content: 'Halo Bidan Yusi',
-            created_at: new Date(1784000000 * 1000),
-          }),
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              content: 'Halo Bidan Yusi',
+              created_at: new Date(1784000000 * 1000),
+            }),
+          ]),
         })
       );
 
@@ -194,8 +195,8 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
       const getOrCreateSpy = vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue(mockCustomer as any);
 
       vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
-      vi.mocked(prisma.message.findFirst).mockResolvedValue(null);
-      vi.mocked(prisma.message.create).mockResolvedValue({} as any);
+      vi.mocked(prisma.message.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.message.createMany).mockResolvedValue({ count: 1 } as any);
       vi.mocked(prisma.legacyStaging.update).mockResolvedValue({} as any);
 
       // Spy on followUpService — pastikan tidak pernah dipanggil
@@ -253,8 +254,8 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
       const mockCustomer = { id: 'cust_legacy_002', phone: '628111000002', created_at: new Date() };
       vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue(mockCustomer as any);
       vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
-      vi.mocked(prisma.message.findFirst).mockResolvedValue(null);
-      vi.mocked(prisma.message.create).mockResolvedValue({} as any);
+      vi.mocked(prisma.message.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.message.createMany).mockResolvedValue({ count: 1 } as any);
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.reservation.create).mockResolvedValue({} as any);
       vi.mocked(prisma.legacyStaging.update).mockResolvedValue({} as any);
@@ -309,8 +310,8 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
       const mockCustomer = { id: 'cust_legacy_003', phone: '628111000003', created_at: new Date() };
       vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue(mockCustomer as any);
       vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
-      vi.mocked(prisma.message.findFirst).mockResolvedValue(null);
-      vi.mocked(prisma.message.create).mockResolvedValue({} as any);
+      vi.mocked(prisma.message.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.message.createMany).mockResolvedValue({ count: 2 } as any);
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.reservation.create).mockResolvedValue({} as any);
       vi.mocked(prisma.legacyStaging.update).mockResolvedValue({} as any);

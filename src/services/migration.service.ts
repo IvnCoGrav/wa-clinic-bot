@@ -186,36 +186,43 @@ export class MigrationService {
         const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
         // 3. Impor Riwayat Pesan Historis
+        // Batch: deteksi duplikat 1 query per record + createMany (P4 audit)
+        // untuk menghindari N+1 findFirst+create per pesan.
         const rawMsgs = (staging.rawMessagesJson as any[]) || [];
-        for (const msg of rawMsgs) {
-          const timestamp = new Date(msg.timestamp);
-          const content = msg.body || '';
-          
-          try {
-            // Cek duplikasi log pesan agar aman jika dijalankan berulang
-            const exists = await prisma.message.findFirst({
-              where: {
-                conversation_id: conversation.id,
-                content,
-                created_at: timestamp,
-              },
-            });
+        if (rawMsgs.length > 0) {
+          const existing = await prisma.message.findMany({
+            where: { conversation_id: conversation.id },
+            select: { content: true, created_at: true },
+          });
+          const existingKeys = new Set(existing.map((m) => `${m.created_at.getTime()}:${m.content}`));
 
-            if (!exists) {
-              await prisma.message.create({
-                data: {
-                  tenant_id: tenantId,
-                  conversation_id: conversation.id,
-                  direction: msg.fromMe ? 'OUTBOUND' : 'INBOUND',
-                  content,
-                  wa_message_id: msg.id || `legacy_${staging.id}_${Math.random().toString(36).substring(7)}`,
-                  payload_raw: msg,
-                  created_at: timestamp,
-                },
-              });
+          const toCreate = rawMsgs
+            .filter((msg) => {
+              const ts = new Date(msg.timestamp);
+              const key = `${ts.getTime()}:${msg.body || ''}`;
+              return !existingKeys.has(key);
+            })
+            .map((msg) => ({
+              tenant_id: tenantId,
+              conversation_id: conversation.id,
+              direction: msg.fromMe ? ('OUTBOUND' as const) : ('INBOUND' as const),
+              content: msg.body || '',
+              wa_message_id: msg.id || `legacy_${staging.id}_${Math.random().toString(36).substring(7)}`,
+              payload_raw: msg,
+              created_at: new Date(msg.timestamp),
+            }));
+
+          if (toCreate.length > 0) {
+            try {
+              await prisma.message.createMany({ data: toCreate });
+            } catch (msgErr) {
+              // Beberapa provider DB offline: fallback per-row (toleran)
+              for (const one of toCreate) {
+                try {
+                  await prisma.message.create({ data: one });
+                } catch (_) {}
+              }
             }
-          } catch (msgErr) {
-            // Abaikan error per pesan
           }
         }
 

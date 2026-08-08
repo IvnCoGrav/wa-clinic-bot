@@ -6,6 +6,59 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-08
+
+### Added — Performance & Latency Audit (production, 2026-08-08) + tindak lanjut P1–P6
+
+Audit produksi (`docs/PERF_AUDIT_2026-08-08.md`) menemukan seluruh koneksi & query DB sehat
+(raw connect ~57–78ms; pooled query p50 ≤2ms; idle-in-transaction 0), namun ada prioritas
+perbaikan infrastruktur. Tindak lanjut yang dikerjakan:
+
+- **P1 — Redis di docker-compose** (`docker-compose.yml`): service `redis:7-alpine` baru
+  (appended-only, maxmemory 128MB LRU, healthcheck `redis-cli ping`) + env `REDIS_HOST=REDIS_PORT` di app.
+  Sebelumnya seluruh antrian (BullMQ message shards, broadcast queue, live-chat pub/sub, FAQ cache)
+  berjalan di in-memory fallback sejak boot karena tak ada Redis.
+- **P1 — Health endpoint tidak lagi hardcode** (`src/routes/admin/settings.subroute.ts`):
+  `GET /api/admin/health` kini melapor `redisQueue` nyata (`ACTIVE` vs `IN_MEMORY_FALLBACK_ACTIVE`)
+  agregat dari 3 konsumen + detail per-komponen. Accessor publik `isRedisEnabled()` baru di
+  `broadcast-queue.service.ts` dan `faq-cache.service.ts`.
+- **P2 — GIN expression index FTS** (`prisma/migrations/20260808120000_add_knowledge_chunks_fts_gin_index`):
+  `GIN (to_tsvector('simple', content))` untuk `knowledge_chunks` — query FTS tak lagi menghitung
+  `to_tsvector` per-baris saat dataset besar. (Expression index, tak-ekpresikan di Prisma schema.)
+- **P3 — Paginasi + batch lookup FAQ staging** (`src/routes/admin/migration.subroute.ts`):
+  endpoint `GET /api/admin/medical-faq-staging` & `/general-faq-staging` mendukung `page`/`limit`
+  (cap 200) dan resolusi `matched_chunk_id` kini 1 query batch (`IN`) bukan N+1 `findUnique`.
+- **P4 — Batch import pesan historis** (`src/services/migration.service.ts`): `commitApprovedRecords`
+  mendeteksi duplikat dgn 1 query `findMany` + `createMany` per conversation (gantikan N+1
+  `findFirst`+`create` per pesan), dengan fallback per-row saat `createMany` gagal (DB offline).
+- **P6 — Index tambahan** (`prisma/migrations/20260808130000_add_admin_filter_indexes` +
+  `prisma/schema.prisma`): indexPath `conversations(tenant_id, escalation_reason)`,
+  `(tenant_id, review_flagged)`, `reservations(customer_id)`, `(customer_id, status)` — nama mengikuti
+  konvensi Prisma agar `migrate diff` tetap kosong.
+- **P8 — Fix tenant legacy-staging** (`src/routes/admin/migration.subroute.ts`): filter
+  `tenantId: 'default'` → `DEFAULT_TENANT_ID` (inkonsisten dgn `getOrCreate` yang menulis
+  `'default-tenant'`, sehingga `/api/admin/legacy-staging` selama ini selalu kosong).
+
+Semua perubahan lolos gate: `npm run build` (tsc) hijau, `npm test` 1010/1010 green (offline, mock DB+Redis).
+
+### Added �?" Follow-up audit 2026-08-08: kompresi asset (P7) + waterfall admin (dari docs/PERF_AUDIT section 7)
+
+Tes lanjutan 6 hipotesis (RTT, waterfall, TTFB, Redis/polling, kompresi, contention) dari klien
+menemukan penyebab dominan keluhan "admin terasa lambat" adalah **ketiadaan kompresi** + waterfall
+di sebagian halaman, bukan RTT (avg 49ms). Tindak lanjut yang dikerjakan (belum dideploy �?" tunggu
+gate double-confirm):
+
+- **P7 �?" Kompresi Caddy aktif** (`Caddyfile`): tambah dirrective `encode gzip zstd` di site `app.kalababyspa.online`.
+  Sebelumnya seluruh respon (asset admin, landing, API) terkirim **uncompressed** �?" `index.js`
+  201KB raw �+� gzip 63KB (hemat 68.6%), chunk `Overview.js` 392.75KB → gzip 108KB (hemat ~72%).
+- **Overview waterfall → paralel** (`packages/admin-dashboard/src/pages/tenant/Overview.tsx`):
+  `health` + `reservations/count` kini load via `Promise.all` (sebelumnya berurutan, +1 RTT tiap
+  refresh); konsisten dengan `Settings.tsx` yang sudah paralel.
+
+Keputusan terbuka dicatat di doc: interval polling health (Layout 120s / Overview 60s) tetap status quo.
+
+---
+
 ## [Unreleased] - 2026-08-12
 
 ### Changed — Model primary chat → DeepSeek, NLU → MiniMax (berbasis benchmark) + JSON-validity fallback & breaker NLU
