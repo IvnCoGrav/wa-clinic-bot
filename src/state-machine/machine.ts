@@ -9,7 +9,6 @@ import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { customerService } from '../services/customer.service';
 import { TypingService, typingService } from '../services/typing.service';
-import { wahaClient } from '../integrations/waha/client';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
@@ -459,7 +458,10 @@ export class ConversationStateMachine {
         // Kirim Pricelist Image jika diinstruksikan oleh state handler.
         // Default hanya 1x per customer; boleh dikirim ulang jika handler set forcePricelistResend
         // (mis. saat customer minta pricelist lagi karena hilang / tidak terkirim).
+        // Sumber gambar dibaca per-tenant (tenants.pricelist_image_url → env → aset default)
+        // dan dikirim via gateway tenant (WAHA path/URL, WABA URL publik).
         if (result.sendPricelistImage) {
+          let sendOk = false;
           try {
             const { prisma } = await import('../db/client');
             const dbCustomer = await prisma.customer.findUnique({
@@ -468,12 +470,20 @@ export class ConversationStateMachine {
             const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
 
             if (!alreadySent || result.forcePricelistResend) {
-              const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
+              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+              const gateway = await resolveGatewayForTenant(tenantId);
+              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
               const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
-              await wahaClient.sendImage(chatId, pricelistUrl, caption);
 
-              // Tandai terkirim HANYA jika sebelumnya belum pernah (jangan reset ulang).
-              if (dbCustomer && !dbCustomer.pricelist_sent) {
+              if (!pricelistTarget) {
+                console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}. Spring source image perlu URL publik/media outbound.`);
+              } else {
+                const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+                sendOk = sendResult.success;
+              }
+
+              // Tandai terkirim HANYA jika pengiriman benar-benar sukses.
+              if (sendOk && dbCustomer && !dbCustomer.pricelist_sent) {
                 await prisma.customer.update({
                   where: { id: customer.id },
                   data: { pricelist_sent: true }
@@ -485,9 +495,16 @@ export class ConversationStateMachine {
             }
           } catch (dbErr: any) {
             console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
-            const pricelistUrl = process.env.CLINIC_PRICELIST_IMAGE_URL || 'assets/pricelist_spa.jpg';
-            const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
-            await wahaClient.sendImage(chatId, pricelistUrl, caption);
+            // Best-effort tetap kirim walaupun DB offline (tidak membalikkan transaksi).
+            if (!sendOk) {
+              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+              const gateway = await resolveGatewayForTenant(tenantId);
+              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+              const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
+              if (pricelistTarget) {
+                await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+              }
+            }
           }
         }
       }

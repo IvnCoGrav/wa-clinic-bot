@@ -1,5 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { normalizeWhatsAppFormat } from '../../utils/whatsapp-format';
 dotenv.config();
 
 export interface WahaChat {
@@ -111,6 +112,25 @@ export class WahaClient implements IWahaClient {
       // Abaikan error, fallback ke JID asal
     }
 
+    return chatId;
+  }
+
+  /**
+   * Mengonversi JID apapun (termasuk @lid) ke JID primer (@c.us / @g.us).
+   * Penting untuk memanipulasi label, karena label harus menempel ke JID primer
+   * agar bisa muncul di aplikasi WhatsApp Business.
+   */
+  private async resolvePrimaryJid(chatId: string): Promise<string> {
+    if (chatId.includes('@g.us')) return chatId;
+    
+    if (chatId.includes('@lid')) {
+      const pn = await this.getPhoneNumberFromLid(chatId);
+      return `${pn}@c.us`;
+    }
+    
+    if (!chatId.includes('@c.us')) {
+      return `${chatId}@c.us`;
+    }
     return chatId;
   }
 
@@ -230,9 +250,11 @@ export class WahaClient implements IWahaClient {
    */
   public async sendText(chatId: string, text: string): Promise<boolean> {
     const targetChatId = await this.resolveActiveJid(chatId);
+    // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
+    const normalizedText = normalizeWhatsAppFormat(text);
 
     if (this.shouldMock) {
-      console.log(`[MOCK WAHA OUTBOUND] sendText -> chatId: ${targetChatId} | text: "${text}"`);
+      console.log(`[MOCK WAHA OUTBOUND] sendText -> chatId: ${targetChatId} | text: "${normalizedText}"`);
       return true;
     }
 
@@ -241,7 +263,7 @@ export class WahaClient implements IWahaClient {
         `${this.baseUrl}/api/sendText`,
         {
           chatId: targetChatId,
-          text,
+          text: normalizedText,
           session: this.session,
         },
         { headers: this.headers, timeout: this.timeoutMs }
@@ -342,7 +364,7 @@ export class WahaClient implements IWahaClient {
    * Menambahkan label ke chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    */
   public async addLabel(chatId: string, labelName: string): Promise<boolean> {
-    const targetChatId = await this.resolveActiveJid(chatId);
+    const targetChatId = await this.resolvePrimaryJid(chatId);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] addLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
@@ -409,14 +431,7 @@ export class WahaClient implements IWahaClient {
    * Menghapus label dari chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    */
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
-    const targetChatId = await this.resolveActiveJid(chatId);
-
-    // [WAHA WORKAROUND]: WAHA Baileys engine crashes randomly if you manipulate 
-    // labels on an @lid connection. Bypass deletion for @lid.
-    if (targetChatId.endsWith('@lid')) {
-      console.log(`[WAHA LABEL WORKAROUND] Bypassing removeLabel for "${labelName}" on ${targetChatId} to prevent WAHA Baileys crash.`);
-      return true;
-    }
+    const targetChatId = await this.resolvePrimaryJid(chatId);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] removeLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
@@ -457,7 +472,7 @@ export class WahaClient implements IWahaClient {
    * Mengambil daftar label yang ada pada chat menggunakan API WAHA baru (GET /api/{session}/labels/chats/{chatId})
    */
   public async getChatLabels(chatId: string): Promise<string[]> {
-    const targetChatId = await this.resolveActiveJid(chatId);
+    const targetChatId = await this.resolvePrimaryJid(chatId);
 
     if (this.shouldMock) {
       return this.mockLabels.get(targetChatId) || [];

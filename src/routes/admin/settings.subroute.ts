@@ -126,6 +126,93 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/settings/pricelist-image
+   */
+  fastify.get('/api/admin/settings/pricelist-image', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { getPricelistImageUrl, DEFAULT_PRICELIST_IMAGE } = await import('../../services/pricelist-config.service');
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: DEFAULT_TENANT_ID },
+        select: { pricelist_image_url: true },
+      });
+      return reply.status(200).send({
+        success: true,
+        data: {
+          pricelistImageUrl: tenant?.pricelist_image_url ?? null,
+          effectiveUrl: await getPricelistImageUrl(DEFAULT_TENANT_ID),
+          envFallbackUrl: process.env.CLINIC_PRICELIST_IMAGE_URL || null,
+          defaultUrl: DEFAULT_PRICELIST_IMAGE,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * PUT /api/admin/settings/pricelist-image
+   * Menerima imageUrl (URL publik / path /media/outbound/...) ATAU upload base64
+   * (imageB64+mimeType+fileName) yang disimpan sebagai media outbound tenant.
+   */
+  fastify.put(
+    '/api/admin/settings/pricelist-image',
+    {
+      bodyLimit: 12 * 1024 * 1024, // izinkan upload gambar via base64
+    },
+    async (
+      request: FastifyRequest<{
+        Body: { imageUrl?: string | null; imageB64?: string; mimeType?: string; fileName?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { imageUrl, imageB64, mimeType, fileName } = request.body || {};
+
+      let storedUrl: string | null = null;
+      try {
+        if (imageB64) {
+          // Upload gambar baru → simpan sebagai media outbound tenant, lalu
+          // simpan relative URL-nya (resolve otomatis per provider saat kirim).
+          const { mediaService } = await import('../../services/media.service');
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId: DEFAULT_TENANT_ID,
+            imageB64,
+            mimeType,
+            fileName,
+          });
+          storedUrl = saved.hdUrl;
+        } else {
+          storedUrl = typeof imageUrl === 'string' ? imageUrl.trim() || null : null;
+          if (storedUrl !== null && !/^https?:\/\//i.test(storedUrl) && !storedUrl.startsWith('/media/outbound/')) {
+            return reply
+              .status(400)
+              .send({ success: false, error: 'imageUrl harus berupa URL publik (http/https) atau path /media/outbound/...' });
+          }
+        }
+
+        const { setPricelistImageUrl } = await import('../../services/pricelist-config.service');
+        const result = await setPricelistImageUrl(DEFAULT_TENANT_ID, storedUrl);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_PRICELIST_IMAGE',
+          targetId: DEFAULT_TENANT_ID,
+          payload: { pricelist_image_url: result.url },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Gambar pricelist berhasil diperbarui.',
+          data: { pricelistImageUrl: result.url },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/persona
    */
   fastify.get('/api/admin/persona', async (request: FastifyRequest, reply: FastifyReply) => {

@@ -5,6 +5,7 @@ import {
   TemplateComponent,
 } from './gateway.types';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from './graph.constants';
+import { normalizeWhatsAppFormat } from '../../utils/whatsapp-format';
 
 const TYPING_INDICATOR_MAX_MS = 25000;
 
@@ -48,7 +49,8 @@ export class WabaGatewayDriver implements WhatsAppGateway {
           recipient_type: 'individual',
           to,
           type: 'text',
-          text: { preview_url: false, body: text },
+          // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
+          text: { preview_url: false, body: normalizeWhatsAppFormat(text) },
         },
         { headers: this.headers, timeout: 10000 }
       );

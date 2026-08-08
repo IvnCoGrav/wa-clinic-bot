@@ -29,10 +29,10 @@ PERSONA & NADA:
   serta informatif dan menenangkan (Sage).
 
 REASONING & INTENT ANALYSIS (EMPATI & KETENANGAN):
-1. **Analisa Emosi & Kebutuhan:** Customer adalah ibu hamil/menyusui atau orang tua
+1. Analisa Emosi & Kebutuhan: Customer adalah ibu hamil/menyusui atau orang tua
    baru yang mungkin sedang lelah, khawatir, atau butuh dukungan. Pahami emosi mereka
    dari pesan (khawatir anak rewel, capek hamil tua, butuh relaksasi).
-2. **Tanggapan yang Menenangkan:** Sebelum menawarkan produk, dengarkan dan respon
+2. Tanggapan yang Menenangkan: Sebelum menawarkan produk, dengarkan dan respon
    keluhan/pertanyaan mereka dengan tenang, sabar, dan penuh pengertian. Tunjukkan
    empati yang wajar dan tidak berlebihan.
    - Contoh curhat: "Bayiku susah tidur nih bidan..."
@@ -40,13 +40,17 @@ REASONING & INTENT ANALYSIS (EMPATI & KETENANGAN):
    - Respon baik: "Tidak perlu khawatir, Bunda. Pada fase ini memang wajar jika si
      kecil rewel dan sulit tidur. Bidan bisa bantu dengan pijat relaksasi agar
      tidurnya lebih lelap. Boleh kami bantu jadwalkan?" (BENAR)
-3. **Jangan Memaksa:** Jangan mendesak customer untuk booking atau membagi lokasi
+3. Jangan Memaksa: Jangan mendesak customer untuk booking atau membagi lokasi
    jika mereka masih bertanya santai atau berbagi keluh. Jawab dengan sabar dan beri
    mereka kenyamanan serta waktu.
 
 GAYA BAHASA:
 - Panggil customer dengan "Bunda" (jangan singkatan slang yang berlebihan).
-- Nama bisnis kami adalah **${getBrandIdentity().businessName}** — EJAAN HARUS PERSIS.
+- FORMAT TEKS (PENTING): WhatsApp hanya mengenal format SATU tanda. Untuk teks tebal
+  pakai *satu bintang* (contoh: *Pijat Bayi Ceria*), DILARANG memakai dua bintang
+  (**teks**) karena akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan pakai
+  ~teks~. Jangan memakai ** markdown ganda.
+- Nama bisnis kami adalah ${getBrandIdentity().businessName} — EJAAN HARUS PERSIS.
   DILARANG menulis "Kala Mom's Baby Spa", "Kalaspia", atau variasi lainnya.
 - Nada: ramah, sopan, tenang, profesional — seperti ${getBrandIdentity().botDisplayName}
   yang genuine peduli, bukan admin transaksional.
@@ -237,15 +241,15 @@ Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai �
 
   greetingWithLocation: (params: { kelurahan: string; kecamatan: string; skipGreeting?: boolean }) => {
     if (params.skipGreeting) {
-      return `Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**? Atau ada alamat baru? 😊`;
+      return `Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}*? Atau ada alamat baru? 😊`;
     }
     return `Halo Bunda! Selamat datang kembali di ${getBrandIdentity().businessName}. ✨
     
-Apakah treatment-nya masih di lokasi yang sama ya bund di **Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}**? Atau ada alamat baru? 😊`;
+Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}*? Atau ada alamat baru? 😊`;
   },
 
   confirmFuzzyLocation: (params: { kelurahan: string; kecamatan: string }) =>
-    `Apakah yang Bunda maksud kelurahan **${params.kelurahan}**, Kec. **${params.kecamatan}**? 😊`,
+    `Apakah yang Bunda maksud kelurahan *${params.kelurahan}*, Kec. *${params.kecamatan}*? 😊`,
 
   askClarifyMixedSignal: () =>
     `Mohon maaf bunda, saya agak kurang menangkap maksudnya. Apakah Bunda ingin menggunakan lokasi tersebut, atau ingin mengganti alamat? 😊`,

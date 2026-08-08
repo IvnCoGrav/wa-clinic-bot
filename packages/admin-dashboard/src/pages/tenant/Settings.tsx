@@ -6,6 +6,7 @@ import { WhatsAppProviderPanel } from '../../components/settings/WhatsAppProvide
 import { AiRouterPanel } from '../../components/settings/AiRouterPanel';
 import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
 import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
+import { PricelistImagePanel } from '../../components/settings/PricelistImagePanel';
 import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
@@ -117,6 +118,9 @@ export const Settings: React.FC = () => {
   const [mediaEnvFallbackDays, setMediaEnvFallbackDays] = useState<number>(30);
   const [savingMediaRetention, setSavingMediaRetention] = useState(false);
 
+  // Gambar Pricelist (per-tenant)
+  const [pricelistImageUrl, setPricelistImageUrl] = useState<string>('');
+
   const loadMediaRetention = async () => {
     try {
       const res = await apiRequest('/api/admin/settings/media');
@@ -152,6 +156,19 @@ export const Settings: React.FC = () => {
       toast(`Gagal menyimpan retensi media: ${err.message}`, 'error');
     } finally {
       setSavingMediaRetention(false);
+    }
+  };
+
+
+  const loadPricelistImage = async () => {
+    try {
+      const res = await apiRequest('/api/admin/settings/pricelist-image');
+      const d = res?.data;
+      if (d && d.pricelistImageUrl) {
+        setPricelistImageUrl(d.pricelistImageUrl);
+      }
+    } catch (e) {
+      console.warn('Failed to load pricelist image settings:', e);
     }
   };
 
@@ -211,6 +228,7 @@ export const Settings: React.FC = () => {
           loadCapiConfig(),
           loadMqlSettings(),
           loadMediaRetention(),
+          loadPricelistImage(),
         ]);
 
         if (data) {
@@ -675,6 +693,9 @@ export const Settings: React.FC = () => {
         savingCapi={savingCapi}
         handleSaveCapi={handleSaveCapiConfig}
       />
+
+      {/* Gambar Pricelist WhatsApp */}
+      <PricelistImagePanel initialImageUrl={pricelistImageUrl} onSaved={loadPricelistImage} />
 
       {/* MQL Automation & Media Retention Settings */}
       <MqlSettingsPanel

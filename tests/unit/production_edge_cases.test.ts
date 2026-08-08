@@ -951,7 +951,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     const res = await testStateMachine.processMessage(ctx);
     expect(res.nextState).toBe(ConversationState.LOCATION_CONFIRMED);
     expect(res.replyText).toContain('Perkenalkan, saya Bidan Yusi');
-    expect(res.replyText).toContain('Apakah yang Bunda maksud kelurahan **Keputih**');
+    expect(res.replyText).toContain('Apakah yang Bunda maksud kelurahan *Keputih*');
   });
 
   it('27. should automatically add label "hold" to chat room on human handling escalation', async () => {
