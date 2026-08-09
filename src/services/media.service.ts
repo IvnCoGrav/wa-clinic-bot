@@ -11,6 +11,9 @@ const MEDIA_ROOT = path.join(process.cwd(), 'storage', 'media');
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const MAX_OUTBOUND_BYTES = 8 * 1024 * 1024; // 8 MB
+const DEFAULT_QUOTA_BYTES = 200 * 1024 * 1024; // 200 MB per tenant
+const DEFAULT_MESSAGE_RETENTION_DAYS = 120;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface SavedMedia {
   scope: 'outbound' | 'inbound';
@@ -43,19 +46,34 @@ function toRelativeUrl(scope: 'outbound' | 'inbound', tenantId: string, filename
   return `/media/${scope}/${tenantId}/${filename}`;
 }
 
+// Konvensi penamaan: HD `{stem}.jpg` → thumb `{stem}_thumb.jpg`.
+function withThumbName(filename: string): string {
+  return filename.replace(/(\.\w+)$/, '_thumb$1');
+}
+
+function isThumbName(filename: string): boolean {
+  return /_thumb\.\w+$/.test(filename);
+}
+
 /**
  * MediaService: simpan & bersihkan gambar Live Chat.
  * - Outbound: admin kirim gambar → storage/media/outbound/<tenantId>/ (folder publik,
  *   dibutuhkan Meta/WABA & WAHA utk mengambil file).
  * - Inbound: gambar customer → storage/media/inbound/<tenantId>/ (folder privat,
  *   hanya bisa diakses dashboard via cookie admin session).
- * - Retensi: media pasti dihapus otomatis setelah media_retention_days (per-tenant)
- *   melalui CronService.runMediaCleanup().
+ * - Retensi berjenjang per-tenant:
+ *   1) media_retention_days (default 30): file HD dihapus, diganti blur thumb (~10KB)
+ *      yang dipertahankan supaya pratinjau history tidak rusak. Gambar pricelist
+ *      (tenants.pricelist_image_url) dikecualikan — permanen.
+ *   2) message_retention_days (default 120): record pesan (teks chat) dihapus beserta
+ *      file media yang yatim. Customer & conversation (data CRM) tetap dipertahankan.
+ * - Kuota: media_quota_bytes (default 200 MB/tenant) dihitung outbound + inbound.
  */
 export class MediaService {
   /**
    * Menyimpan gambar outbound (HD + thumbnail) yang diupload admin.
    * imageB64 dan thumbB64 berupa data URI atau raw base64.
+   * Bila thumbB64 tidak diberikan, blur thumbnail dibuat server-side via sharp.
    */
   public async saveOutboundMedia(params: {
     tenantId: string;
@@ -72,6 +90,7 @@ export class MediaService {
     if (hdBuf.length > MAX_OUTBOUND_BYTES) {
       throw new Error(`Gambar terlalu besar (maks ${MAX_OUTBOUND_BYTES / (1024 * 1024)} MB).`);
     }
+    await this.enforceQuota(tenantId, hdBuf.length);
 
     const dir = scopeDir('outbound', tenantId);
     const stem = randomUUID().replace(/-/g, '');
@@ -80,14 +99,24 @@ export class MediaService {
     fs.writeFileSync(hdPath, hdBuf);
 
     let thumbUrl: string | null = null;
-    const thumbFile = `${stem}_thumb.${ext}`;
     if (thumbB64) {
+      const thumbFile = `${stem}_thumb.${ext}`;
       try {
-        const thumbBuf = this.decodeBase64(thumbB64);
-        fs.writeFileSync(path.join(dir, thumbFile), thumbBuf);
+        fs.writeFileSync(path.join(dir, thumbFile), this.decodeBase64(thumbB64));
         thumbUrl = toRelativeUrl('outbound', tenantId, thumbFile);
       } catch {
         // thumbnail opsional — gagal ditulis tidak menghalangi kirim HD
+      }
+    } else {
+      const blur = await this.createBlurThumb(hdBuf, mime);
+      if (blur) {
+        const thumbFile = `${stem}_thumb.jpg`;
+        try {
+          fs.writeFileSync(path.join(dir, thumbFile), blur.data);
+          thumbUrl = toRelativeUrl('outbound', tenantId, thumbFile);
+        } catch {
+          // best-effort
+        }
       }
     }
 
@@ -101,21 +130,66 @@ export class MediaService {
   }
 
   /**
-   * Menulis media inbound (gambar dari customer) menjadi file lokal.
+   * Menulis media inbound (gambar dari customer) menjadi file lokal (HD + blur thumb).
    */
   public async saveInboundMedia(params: {
     tenantId: string;
     buffer: Buffer;
     mimeType?: string;
-  }): Promise<{ hdPath: string; hdUrl: string }> {
+  }): Promise<{ hdPath: string; hdUrl: string; thumbPath: string | null; thumbUrl: string | null }> {
     const { tenantId, buffer, mimeType } = params;
     const mime = mimeType && ALLOWED_MIME.has(mimeType) ? mimeType : 'image/jpeg';
     const ext = extFromMime(mime);
+
+    await this.enforceQuota(tenantId, buffer.length);
+
     const dir = scopeDir('inbound', tenantId);
     const stem = randomUUID().replace(/-/g, '');
     const file = `${stem}.${ext}`;
-    fs.writeFileSync(path.join(dir, file), buffer);
-    return { hdPath: path.join(dir, file), hdUrl: toRelativeUrl('inbound', tenantId, file) };
+    const hdPath = path.join(dir, file);
+    fs.writeFileSync(hdPath, buffer);
+
+    let thumbPath: string | null = null;
+    let thumbUrl: string | null = null;
+    const blur = await this.createBlurThumb(buffer, mime);
+    if (blur) {
+      const thumbFile = `${stem}_thumb.jpg`;
+      try {
+        thumbPath = path.join(dir, thumbFile);
+        fs.writeFileSync(thumbPath, blur.data);
+        thumbUrl = toRelativeUrl('inbound', tenantId, thumbFile);
+      } catch {
+        // best-effort
+      }
+    }
+
+    return { hdPath, hdUrl: toRelativeUrl('inbound', tenantId, file), thumbPath, thumbUrl };
+  }
+
+  /**
+   * Generate blur thumbnail (~10KB, JPEG) server-side via sharp.
+   * Best-effort: null bila gagal (mis. file korup / sharp tidak tersedia).
+   */
+  public async createBlurThumb(
+    buffer: Buffer,
+    _mimeType?: string
+  ): Promise<{ data: Buffer; mimeType: string } | null> {
+    try {
+      const sharp = (await import('sharp')).default;
+      const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+      if (!meta.width || !meta.height) return null;
+
+      let pipeline = sharp(buffer, { failOn: 'none' });
+      if (meta.width > 256 || meta.height > 256) {
+        pipeline = pipeline.resize({ width: 256, withoutEnlargement: true });
+      }
+      const data = await pipeline.blur(1.5).jpeg({ quality: 50 }).toBuffer();
+      if (!data || data.length === 0) return null;
+      return { data, mimeType: 'image/jpeg' };
+    } catch (err: any) {
+      console.warn('[MEDIA] Gagal generate blur thumbnail:', err?.message || err);
+      return null;
+    }
   }
 
   /**
@@ -184,41 +258,235 @@ export class MediaService {
   }
 
   /**
-   * Hapus file media (outbound & inbound) yang umurnya > retentionDays.
-   * Memindai recursively storage/media/*. Best-effort: setiap file dihapus via unlink.
+   * Kuota media per tenant (bytes). Sumber: tenants.media_quota_bytes → env
+   * MEDIA_QUOTA_BYTES → default 200 MB. 0 = tanpa batas.
    */
-  public async deleteExpiredMedia(tenantId: string, retentionDays: number): Promise<number> {
-    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-    let removed = 0;
-    const walk = (dir: string) => {
+  public async getQuotaBytes(tenantId: string): Promise<number> {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { media_quota_bytes: true },
+      });
+      if (tenant && tenant.media_quota_bytes > 0) return tenant.media_quota_bytes;
+    } catch {
+      // DB offline → fallback env/default
+    }
+    const n = parseInt(process.env.MEDIA_QUOTA_BYTES || '', 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_QUOTA_BYTES;
+  }
+
+  /**
+   * Retensi pesan (teks chat) per tenant (hari). Sumber: tenants.message_retention_days
+   * → env MESSAGE_RETENTION_DAYS → default 120.
+   */
+  public async getMessageRetentionDays(tenantId: string): Promise<number> {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { message_retention_days: true },
+      });
+      if (tenant && tenant.message_retention_days > 0) return tenant.message_retention_days;
+    } catch {
+      // DB offline → fallback env/default
+    }
+    const n = parseInt(process.env.MESSAGE_RETENTION_DAYS || '', 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_MESSAGE_RETENTION_DAYS;
+  }
+
+  /**
+   * Total byte media yang dipakai tenant (outbound + inbound) di disk.
+   */
+  public getTenantMediaUsageBytes(tenantId: string): number {
+    let total = 0;
+    for (const scope of ['outbound', 'inbound'] as const) {
+      const base = path.join(MEDIA_ROOT, scope, tenantId);
       let entries: fs.Dirent[] = [];
       try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
+        entries = fs.readdirSync(base, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        try {
+          total += fs.statSync(path.join(base, entry.name)).size;
+        } catch {
+          // best-effort
+        }
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Tolak penyimpanan bila melewati kuota media tenant.
+   */
+  private async enforceQuota(tenantId: string, newBytes: number): Promise<void> {
+    const quota = await this.getQuotaBytes(tenantId);
+    if (quota <= 0) return;
+    const usage = this.getTenantMediaUsageBytes(tenantId);
+    if (usage + newBytes > quota) {
+      const quotaMb = Math.ceil(quota / (1024 * 1024));
+      const usedMb = (usage / (1024 * 1024)).toFixed(1);
+      throw new Error(`Kuota media tenant ${quotaMb} MB sudah penuh (terpakai ${usedMb} MB). Upload dibatalkan.`);
+    }
+  }
+
+  /**
+   * Hapus file media (outbound & inbound) yang umurnya > retentionDays (retensi 30 hari).
+   * - HD lama dihapus, blur thumb dipertahankan (pratinjau history tidak rusak).
+   * - File tanpa thumb dibuatkan blur thumb dulu; bila gagal, HD dipertahankan.
+   * - Gambar pricelist (tenants.pricelist_image_url) dikecualikan — permanen.
+   * - Referensi payload_raw.media pada pesan terkait diperbarui (hdUrl → null).
+   * Best-effort: setiap langkah gagal tidak menghentikan proses.
+   */
+  public async deleteExpiredMedia(tenantId: string, retentionDays: number): Promise<number> {
+    const cutoff = Date.now() - retentionDays * DAY_MS;
+    let removed = 0;
+
+    // Proteksi pricelist image (config tenant, bukan media chat history).
+    let pricelistRel: string | undefined;
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { pricelist_image_url: true },
+      });
+      if (tenant?.pricelist_image_url) pricelistRel = tenant.pricelist_image_url;
+    } catch {
+      // DB offline → tanpa informasi proteksi
+    }
+
+    const processDir = async (scope: 'outbound' | 'inbound') => {
+      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(base, { withFileTypes: true });
       } catch {
         return;
       }
+
       for (const entry of entries) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-        } else {
-          try {
-            const st = fs.statSync(full);
-            if (st.mtimeMs < cutoff) {
-              fs.unlinkSync(full);
-              removed++;
-            }
-          } catch { /* best-effort */ }
+        if (!entry.isFile()) continue;
+        const full = path.join(base, entry.name);
+
+        // Thumbnail dikelola oleh purge pesan (message_retention_days), bukan retensi HD.
+        if (isThumbName(entry.name)) continue;
+
+        let st: fs.Stats;
+        try {
+          st = fs.statSync(full);
+        } catch {
+          continue;
         }
+        if (st.mtimeMs >= cutoff) continue; // belum kadaluarsa
+
+        const relUrl = toRelativeUrl(scope, tenantId, entry.name);
+        if (pricelistRel && relUrl === pricelistRel) continue; // pricelist permanen
+
+        const thumbRel = await this.ensureThumbForHd(scope, tenantId, entry.name, full);
+        if (!thumbRel) {
+          console.warn(`[MEDIA RETENTION] HD tanpa ganti blur dipertahankan (gagal generate thumb): ${relUrl}`);
+          continue;
+        }
+
+        try {
+          fs.unlinkSync(full);
+          removed++;
+        } catch {
+          continue;
+        }
+        await this.updateMediaRefsAfterHdDelete(tenantId, relUrl, thumbRel);
       }
     };
-    for (const scope of ['outbound', 'inbound'] as const) {
-      const base = path.join(MEDIA_ROOT, scope, tenantId);
-      if (fs.existsSync(base)) {
-        walk(base);
-      }
-    }
+
+    await processDir('outbound');
+    await processDir('inbound');
     return removed;
+  }
+
+  /**
+   * Pastikan file HD punya blur thumb di disk (pakai yang ada atau generate baru).
+   * Mengembalikan relative URL thumb, atau null bila gagal.
+   */
+  private async ensureThumbForHd(
+    scope: 'outbound' | 'inbound',
+    tenantId: string,
+    hdName: string,
+    hdFullPath: string
+  ): Promise<string | null> {
+    const thumbName = withThumbName(hdName);
+    const thumbPath = path.join(path.dirname(hdFullPath), thumbName);
+    if (fs.existsSync(thumbPath)) {
+      return toRelativeUrl(scope, tenantId, thumbName);
+    }
+    try {
+      const hdBuf = fs.readFileSync(hdFullPath);
+      const blur = await this.createBlurThumb(hdBuf);
+      if (!blur) return null;
+      fs.writeFileSync(thumbPath, blur.data);
+      return toRelativeUrl(scope, tenantId, thumbName);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Perbarui referensi media pada pesan yang menunjuk ke HD yang baru dihapus:
+   * hdUrl → null, dan url (legacy inbound) → thumbUrl agar pratinjau tidak putus.
+   */
+  private async updateMediaRefsAfterHdDelete(
+    tenantId: string,
+    hdRelUrl: string,
+    thumbRelUrl: string
+  ): Promise<void> {
+    try {
+      await prisma.message.updateMany({
+        where: { tenant_id: tenantId, payload_raw: { path: ['media', 'hdUrl'], equals: hdRelUrl } },
+        data: { payload_raw: { unset: ['media', 'hdUrl'] } },
+      });
+      await prisma.message.updateMany({
+        where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
+        data: { payload_raw: { path: ['media', 'url'], set: thumbRelUrl } },
+      });
+    } catch {
+      // DB offline / best-effort
+    }
+  }
+
+  /**
+   * Hapus record pesan (teks chat) yang umurnya > messageRetentionDays (retensi 120 hari)
+   * beserta file media yang hanya dirujuk pesan tersebut (thumb yatim).
+   * Customer & conversation tetap dipertahankan. Best-effort saat DB offline.
+   */
+  public async deleteExpiredMessages(
+    tenantId: string,
+    retentionDays: number
+  ): Promise<{ deleted: number; mediaFiles: number }> {
+    const cutoff = new Date(Date.now() - retentionDays * DAY_MS);
+    let deleted = 0;
+    let mediaFiles = 0;
+    try {
+      const oldMessages = await prisma.message.findMany({
+        where: { tenant_id: tenantId, created_at: { lt: cutoff } },
+        select: { payload_raw: true },
+        take: 5000,
+      });
+      for (const m of oldMessages) {
+        const media = (m.payload_raw as any)?.media;
+        for (const u of [media?.hdUrl, media?.url, media?.thumbUrl]) {
+          if (typeof u === 'string' && u.startsWith('/media/')) {
+            if (this.deleteFile(u)) mediaFiles++;
+          }
+        }
+      }
+      const res = await prisma.message.deleteMany({
+        where: { tenant_id: tenantId, created_at: { lt: cutoff } },
+      });
+      deleted = res?.count ?? 0;
+    } catch {
+      // DB offline → best-effort
+    }
+    return { deleted, mediaFiles };
   }
 
   /**

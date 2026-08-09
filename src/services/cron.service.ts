@@ -74,6 +74,32 @@ export class CronService {
   }
 
   /**
+   * Retensi pesan (teks chat) — hapus record messages yang umurnya melebihi
+   * message_retention_days per tenant (fallback env MESSAGE_RETENTION_DAYS).
+   * File media (thumb) yang hanya dirujuk pesan terhapus ikut dibersihkan.
+   * Customer & conversation (data CRM) tetap dipertahankan.
+   */
+  public async runMessageRetentionCleanup(): Promise<void> {
+    try {
+      const { mediaService, getAllTenantIds } = await import('./media.service');
+      const tenants = await getAllTenantIds();
+      let deleted = 0;
+      let mediaFiles = 0;
+      for (const tenantId of tenants) {
+        const retention = await mediaService.getMessageRetentionDays(tenantId);
+        const res = await mediaService.deleteExpiredMessages(tenantId, retention);
+        deleted += res.deleted;
+        mediaFiles += res.mediaFiles;
+      }
+      if (deleted > 0 || mediaFiles > 0) {
+        console.log(`[Cron Service] Message retention selesai (${deleted} pesan > retensi dihapus, ${mediaFiles} file media dibersihkan).`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running message retention cleanup:', (err as Error).message);
+    }
+  }
+
+  /**
    * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
    */
   private async sendMorningReminders(): Promise<void> {

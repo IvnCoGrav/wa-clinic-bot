@@ -493,6 +493,8 @@ model Tenant {
   mql_threshold_bubbles  Int               @default(5)
   mql_auto_lead_enabled  Boolean           @default(true)
   media_retention_days   Int               @default(30)
+  media_quota_bytes      Int               @default(209715200)
+  message_retention_days Int               @default(120)
   daily_report_enabled   Boolean           @default(false)
   daily_report_hour      Int               @default(7)
   telegram_bot_token     String?

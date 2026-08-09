@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { prisma } from '../../src/db/client';
 import { mediaService, getAllTenantIds } from '../../src/services/media.service';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
@@ -101,5 +102,97 @@ describe('MediaService — penyimpanan & pembersihan media Live Chat', () => {
   it('getAllTenantIds: fallback ke tenant default saat DB offline', async () => {
     const ids = await getAllTenantIds();
     expect(ids).toContain(DEFAULT_TENANT_ID);
+  });
+
+  it('saveInboundMedia: menulis HD + blur thumb inbound', async () => {
+    const saved = await mediaService.saveInboundMedia({
+      tenantId: DEFAULT_TENANT_ID,
+      buffer: Buffer.from(PNG_B64, 'base64'),
+      mimeType: 'image/png',
+    });
+
+    expect(fs.existsSync(saved.hdPath)).toBe(true);
+    expect(saved.thumbUrl).toMatch(/^\/media\/inbound\/default-tenant\/.+_thumb\.jpg$/);
+    expect(saved.thumbPath && fs.existsSync(saved.thumbPath)).toBe(true);
+  });
+
+  it('saveOutboundMedia tanpa thumbB64: generate blur thumb server-side', async () => {
+    const saved = await mediaService.saveOutboundMedia({ tenantId: DEFAULT_TENANT_ID, imageB64: PNG_B64 });
+    expect(saved.thumbUrl).toMatch(/^\/media\/outbound\/default-tenant\/.+_thumb\.jpg$/);
+    expect(fs.existsSync(mediaService.filePathFromRelativeUrl(saved.thumbUrl!)!)).toBe(true);
+  });
+
+  it('createBlurThumb: hasil JPEG kecil (< 80KB) untuk pratinjau', async () => {
+    const blur = await mediaService.createBlurThumb(Buffer.from(PNG_B64, 'base64'), 'image/png');
+    expect(blur).toBeTruthy();
+    expect(blur!.mimeType).toBe('image/jpeg');
+    expect(blur!.data.length).toBeGreaterThan(0);
+    expect(blur!.data.length).toBeLessThan(80 * 1024);
+  });
+
+  it('kuota: upload ditolak saat melebihi MEDIA_QUOTA_BYTES (outbound & inbound)', async () => {
+    process.env.MEDIA_QUOTA_BYTES = '5';
+    try {
+      await expect(
+        mediaService.saveOutboundMedia({ tenantId: DEFAULT_TENANT_ID, imageB64: PNG_B64 })
+      ).rejects.toThrow(/Kuota media tenant/);
+      await expect(
+        mediaService.saveInboundMedia({
+          tenantId: DEFAULT_TENANT_ID,
+          buffer: Buffer.from(PNG_B64, 'base64'),
+        })
+      ).rejects.toThrow(/Kuota media tenant/);
+    } finally {
+      delete process.env.MEDIA_QUOTA_BYTES;
+    }
+  });
+
+  it('getQuotaBytes: fallback env/default 200MB saat DB offline', async () => {
+    delete process.env.MEDIA_QUOTA_BYTES;
+    expect(await mediaService.getQuotaBytes(DEFAULT_TENANT_ID)).toBe(200 * 1024 * 1024);
+    process.env.MEDIA_QUOTA_BYTES = '1048576';
+    expect(await mediaService.getQuotaBytes(DEFAULT_TENANT_ID)).toBe(1048576);
+    delete process.env.MEDIA_QUOTA_BYTES;
+  });
+
+  it('getMessageRetentionDays: fallback env/default 120 hari saat DB offline', async () => {
+    delete process.env.MESSAGE_RETENTION_DAYS;
+    expect(await mediaService.getMessageRetentionDays(DEFAULT_TENANT_ID)).toBe(120);
+    process.env.MESSAGE_RETENTION_DAYS = '365';
+    expect(await mediaService.getMessageRetentionDays(DEFAULT_TENANT_ID)).toBe(365);
+    delete process.env.MESSAGE_RETENTION_DAYS;
+  });
+
+  it('deleteExpiredMedia: hapus HD tapi pertahankan blur thumb (pratinjau tidak rusak)', async () => {
+    const saved = await mediaService.saveOutboundMedia({ tenantId: DEFAULT_TENANT_ID, imageB64: PNG_B64 });
+    const thumbAbs = mediaService.filePathFromRelativeUrl(saved.thumbUrl!)!;
+    expect(fs.existsSync(thumbAbs)).toBe(true);
+
+    const past = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(saved.hdPath, past, past);
+
+    const removed = await mediaService.deleteExpiredMedia(DEFAULT_TENANT_ID, 30);
+    expect(removed).toBeGreaterThan(0);
+    expect(fs.existsSync(saved.hdPath)).toBe(false);
+    expect(fs.existsSync(thumbAbs)).toBe(true);
+  });
+
+  it('deleteExpiredMedia: gambar pricelist dikecualikan (permanen)', async () => {
+    const saved = await mediaService.saveOutboundMedia({ tenantId: DEFAULT_TENANT_ID, imageB64: PNG_B64 });
+    // DB offline di-mock reject → override satu panggilan untuk mensimulasikan config tenant.
+    (prisma.tenant.findUnique as any).mockResolvedValueOnce({ id: DEFAULT_TENANT_ID, pricelist_image_url: saved.hdUrl });
+
+    const past = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(saved.hdPath, past, past);
+
+    const removed = await mediaService.deleteExpiredMedia(DEFAULT_TENANT_ID, 30);
+    expect(removed).toBe(0);
+    expect(fs.existsSync(saved.hdPath)).toBe(true);
+  });
+
+  it('deleteExpiredMessages: best-effort 0 saat DB offline (tidak melempar)', async () => {
+    const res = await mediaService.deleteExpiredMessages(DEFAULT_TENANT_ID, 120);
+    expect(res.deleted).toBe(0);
+    expect(res.mediaFiles).toBe(0);
   });
 });
