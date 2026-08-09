@@ -133,7 +133,7 @@ function getGateway(tenantId: string): WhatsAppGateway {
 
 | Aspek | WAHA | WABA |
 |---|---|---|
-| Endpoint | `POST /api/webhook/waha` | `GET /api/webhook/waba` (hub.challenge verify) + `POST /api/webhook/waba` |
+| Endpoint | `POST /webhook` | `GET /api/webhook/waba` (hub.challenge verify) + `POST /api/webhook/waba` |
 | Auth | Header API key | `X-Hub-Signature-256` HMAC-SHA256 + verify token |
 | Sender ID | JID `62812...@c.us` / `@lid` | `wa_id` polos `62812...` |
 | Media | URL langsung / base64 | `media_id` → download via Graph API + Bearer token sebelum expired |

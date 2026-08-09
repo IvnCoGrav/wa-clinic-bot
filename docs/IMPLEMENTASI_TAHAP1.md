@@ -1,8 +1,8 @@
 # Implementation Plan — Tahap 1 (High Impact & Retention)
 
-**Versi:** 1.0
+**Versi:** 1.1
 **Tanggal:** 12 Agustus 2026
-**Status:** RENCANA TERKUNCI — Menunggu Persetujuan Eksekusi
+**Status:** ✅ SELESAI — terimplementasi (migration `20260819000000_add_customer_preferences`, `resolveMilestoneType` di follow-up.service, test `follow-up-milestone.test.ts` & `customer-memory.test.ts`)
 **Induk:** `docs/ROADMAP_IMPLEMENTASI_FITUR_BARU.md` (Blueprint Keseluruhan Fase 1-3)
 **Batas Lingkup:** HANYA **Tahap 1**. Tahap 2 & 3 ada di dokumen induk.
 

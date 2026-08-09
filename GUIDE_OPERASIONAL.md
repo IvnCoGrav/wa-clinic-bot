@@ -185,11 +185,11 @@ Settings → AI Router Engine**. Env vars di bawah HANYA fallback saat DB tidak 
 ### Legacy Scrape & Label Reconciliation
 
 - **`ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER`** (Boolean, default `false`): Aktifkan scraping per-contact saat chat di-label `legacy` oleh admin. Scraping membaca histori pesan sampai form reservasi pertama → simpan ke LegacyStaging.
-- **`LABEL_RECONCILIATION_INTERVAL_MS`** (Number, default `3600000` = 60 menit): Interval cron re-sync label WA vs status DB (Label Reconciliation Service).
+- **`LABEL_RECONCILIATION_INTERVAL_HOURS`** (Number, default `4`): Interval cron re-sync label WA vs status DB (Label Reconciliation Service).
 
 ### Phrasing Service (Natural Language Response)
 
-- **`OPENAI_BASE_URL`** / **`OPENAI_MODEL`** (default `https://api.openai.com/v1` / `MiniMax-M2.7-highspeed`): Base URL & model untuk Phrasing Service (generate balasan natural via LLM). Fallback ke template statis saat LLM down/API key kosong.
+- **`OPENAI_BASE_URL`** / **`OPENAI_MODEL`** (default kode `https://api.openai.com/v1` / `MiniMax-M2.7-highspeed`; `.env.example` memakai `https://ai.sumopod.com/v1`): Base URL & model untuk Phrasing Service (generate balasan natural via LLM). Fallback ke template statis saat LLM down/API key kosong.
 - **`LLM_API_KEY`** (String, wajib untuk Phrasing Service): API key untuk LLM endpoint.
 - **Cek akurasi:** `npx tsx src/scripts/check-router-accuracy.ts --days=7` — jadwal cek hari ke-1/3/7 ada di README.
 

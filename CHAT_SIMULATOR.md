@@ -61,7 +61,7 @@ Berikut adalah rekap kronologis seluruh revisi dan iterasi pengembangan dari awa
 
 ### 📍 Revisi 6: Integrasi Production Credentials
 - Mengonfigurasi kredensial produksi di `.env` dan `.env.example`:
-  - `WAHA_BASE_URL="http://localhost:8080"`
+  - `WAHA_BASE_URL="http://localhost:3001"`
   - `WAHA_API_KEY="3659a2481bce46a2801173dc5ec7d668"`
   - `OPENAI_BASE_URL="https://ai.sumopod.com/v1"`
   - `OPENAI_MODEL="MiniMax-M2.7-highspeed"`

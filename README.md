@@ -1,6 +1,6 @@
-# WAHA Clinic Automation Chatbot Engine (Fase 1)
+# WAHA Clinic Automation Chatbot Engine
 
-Engine percakapan otomatis berbasis **State Machine** untuk bisnis Klinik Treatment / Kecantikan. Terintegrasi dengan **WAHA (WhatsApp HTTP API)**, **Typing Simulation Service**, **Knowledge Base RAG (Postgres Full-Text Search)**, dan **Persona Config**.
+Engine percakapan otomatis berbasis **State Machine** untuk bisnis Klinik Treatment / Kecantikan. Terintegrasi dengan **WAHA (WhatsApp HTTP API)** dan **Meta Cloud API (WABA)**, **Humanizer Typing Simulation Service**, **Knowledge Base RAG (Postgres Full-Text Search)**, **AI Router**, dan **Persona Config** (tenant-aware, dari DB).
 
 ---
 
@@ -8,9 +8,10 @@ Engine percakapan otomatis berbasis **State Machine** untuk bisnis Klinik Treatm
 
 - **Backend**: Node.js + TypeScript, Fastify Framework
 - **Database**: PostgreSQL (Prisma ORM) dengan Full-Text Search (`'simple'` dictionary)
-- **Channel**: WAHA (WhatsApp HTTP API Self-Hosted)
-- **Geocoding**: Google Maps Geocoding API (Text & Reverse Geocoding)
-- **Deployment**: Dockerfile & Docker Compose
+- **Channel**: WAHA (WhatsApp HTTP API Self-Hosted) + Meta Cloud API (WABA), dual-gateway per tenant
+- **Geocoding**: Gazetteer kelurahan/kecamatan (fuzzy match) → LLM fallback; jarak via OpenRouteService (ORS) + fallback Haversine
+- **LLM**: Multi-model (MiniMax / DeepSeek / Qwen) via SumoPod endpoint, per-task config tenant-aware dari DB
+- **Deployment**: Dockerfile & Docker Compose (app + postgres + redis + caddy + waha)
 
 ---
 
@@ -19,66 +20,67 @@ Engine percakapan otomatis berbasis **State Machine** untuk bisnis Klinik Treatm
 ```text
 wa-clinic-bot/
 ├── prisma/
-│   └── schema.prisma              # Skema database (Customers, Conversations, Messages, KnowledgeChunks)
-├── docs/
-│   └── KNOWN_ISSUES.md            # Tech debt & known issues (drift migrasi, enum ordering, dsb)
+│   ├── schema.prisma              # Skema database (23 model: Customer, Conversation, Message, Reservation, dsb)
+│   └── migrations/                # Migrasi Prisma (20260721070211_init … 20260823000000_*)
+├── docs/                          # Dokumentasi teknis & audit (KNOWN_ISSUES, META_FUNNEL, PERF_AUDIT, dsb)
 ├── src/
-│   ├── config/
-│   │   ├── env.ts                 # Environment variables parser
-│   │   ├── clinic.ts              # Titik awal lokasi klinik & threshold ongkir
-│   │   └── persona.ts             # Persona & tone of voice system prompt untuk LLM
+│   ├── app.ts                     # Fastify server entry point (buildApp())
+│   ├── config/                    # Config tenant-aware (sumber kebenaran DB, fallback env)
+│   │   ├── tenant.ts              # DEFAULT_TENANT_ID
+│   │   ├── clinic.ts              # Titik lokasi klinik & threshold ongkir
+│   │   ├── persona.ts             # Persona & tone of voice system prompt untuk LLM
+│   │   ├── brand.ts               # Brand identity (tenant-aware)
+│   │   ├── ai-models.config.ts    # Registry model per task LLM (CHAT/NLU/HARVESTING/…)
+│   │   ├── ai-router-config.ts    # Konfigurasi AI Router per tenant (DB → env → default)
+│   │   ├── ai-eligibility-config.ts # AI rollout scope per tenant
+│   │   ├── idle-greeting.config.ts # Sapaan hangat setelah idle
+│   │   ├── llm-context.ts         # Batas riwayat percakapan ke LLM
+│   │   ├── service-areas.ts       # Wilayah layanan (CSV env / daftar default)
+│   │   ├── medical-keywords.ts    # Single source keyword medis
+│   │   └── followup-templates.ts  # Rolling template follow-up
 │   ├── db/
 │   │   └── client.ts              # Prisma singleton client
 │   ├── integrations/
-│   │   ├── waha/
-│   │   │   ├── client.ts          # WAHA API client (sendText, sendSeen, startTyping, stopTyping)
-│   │   │   └── types.ts           # Type definitions event webhook WAHA
-│   │   ├── google-maps/
-│   │   │   └── geocoding.ts       # Geocoding & Reverse Geocoding
+│   │   ├── waha/                  # WAHA HTTP API client (sendText, sendImage, label, dsb)
+│   │   ├── whatsapp/              # Gateway abstraction (WAHA + WABA drivers, normalizer, factory)
+│   │   ├── google-maps/           # Geocoding gazetteer + LLM fallback
+│   │   ├── ors/                   # OpenRouteService Directions API
 │   │   └── llm/
 │   │       ├── ai-router.ts       # AI Router Engine (LLM intent classifier + circuit breaker + shadow mode)
-│   │       ├── intent.ts          # NLU Intent Classifier (11 intent + medical_query)
+│   │       ├── intent.ts          # NLU Intent (interested, faq_question, medical_query, …)
 │   │       ├── generator.ts       # Persona-based RAG FAQ Response Generator
 │   │       ├── phrasing.service.ts # Natural language response generation via LLM (intent + facts)
+│   │       ├── model-fallback.ts  # Fallback model (primary → qwen → deterministik)
 │   │       └── opener-tracker.ts  # Anti-repetition opener tracking (TTL 2 jam)
 │   ├── state-machine/
-│   │   ├── machine.ts             # Core State Machine Orchestrator (Wrapper typingService)
-│   │   └── handlers/
-│   │       ├── greeting.ts        # INITIAL -> AWAITING_LOCATION
-│   │       ├── location.ts        # AWAITING_LOCATION (Hitung ongkir & 3x Retry Counter)
-│   │       ├── interest.ts        # AWAITING_INTEREST (Handling faq_question tanpa reset state)
-│   │       └── human.ts           # HUMAN_HANDLING (Silent bot & Auto-release restore)
-│   ├── services/
-│   │   ├── typing.service.ts      # Simulasi ngetik (sendSeen -> startTyping -> delay -> stopTyping -> sendText)
-│   │   ├── knowledge.service.ts   # Knowledge Base FTS ('simple' dictionary & text chunker)
-│   │   ├── delivery.service.ts    # Logic ongkir (Haversine & boundary tiering)
-│   │   ├── customer.service.ts    # Ops database Customer
-│   │   ├── conversation.service.ts# Ops state conversation & timeout auto-release
-│   │   ├── ai-router-evaluation.service.ts # Log evaluasi router + eskalasi UNKNOWN berulang
-│   │   │   ├── llm-evaluator.service.ts # LLM-as-evaluator: kualitas balasan AI (Tahap 3.1, tabel AiEvaluation terpisah)
-│   │   ├── message.service.ts     # Audit log & Idempotency Check (wa_message_id)
-│   │   ├── price-answer.service.ts # Jawaban harga deterministik dari catalog (anti-halusinasi)
-│   │   ├── reservation-lifecycle.service.ts # Side-effect pasca-create reservasi (follow-up, children, labels)
-│   │   ├── label-reconciliation.service.ts # Cron re-sync label WA vs status DB
-│   │   └── per-contact-legacy-scrape.service.ts # Scraping legacy per-contact saat label 'legacy'
+│   │   ├── machine.ts             # Core State Machine Orchestrator
+│   │   └── handlers/              # greeting, location, location-confirmation, interest, human
+│   ├── services/                  # Queue, customer, conversation, message, follow-up, capi,
+│   │   │                          # media, cron, alert, live-chat, broadcast-queue, command,
+│   │   │                          # purchase-detection, daily-report, child, treatment-catalog,
+│   │   │                          # nlu-classifier, price-answer, waba-*, llm-evaluator, dsb.
 │   ├── routes/
-│   │   ├── webhook.route.ts       # POST webhook WAHA (event: "message") + Guard Clause
-│   │   ├── waba-webhook.route.ts  # Webhook WABA Meta Cloud (HMAC verify, normalizer, idempotency)
-│   │   └── admin.route.ts         # REST Endpoints: Human Handling, Import FAQ, Create Reservation, Provider Toggle
-│   ├── scripts/
-│   │   └── check-router-accuracy.ts # Cek akurasi shadow mode (gate matikan shadow)
-│   └── app.ts                     # Fastify server entry point
-├── tests/
-│   ├── unit/
-│   │   ├── delivery.test.ts       # Test ongkir & boundary exact values (5.0, 5.01, 6.0, 6.01, 10.0, 10.01)
-│   │   ├── typing.test.ts         # Test formula delay (800ms base + 40ms/char, cap 4s)
-│   │   ├── knowledge.test.ts      # Test text chunker & FTS search
-│   │   ├── state-machine.test.ts  # Test transisi state & auto-release
-│   │   └── ai-router-engine.test.ts # Test AI Router (50 skenario test plan + observability + UNKNOWN eskalasi)
-│   └── integration/
-│       └── waha-webhook.test.ts   # Test WAHA event, idempotency & guard clause
+│   │   ├── webhook.route.ts       # POST /webhook (WAHA)
+│   │   ├── waba-webhook.route.ts  # GET|POST /api/webhook/waba (Meta Cloud)
+│   │   ├── admin.route.ts         # REST Admin API (+ admin/ subroutes: auth, customers,
+│   │   │                          #   livechat, reservations, knowledge, landings, settings, dsb)
+│   │   ├── landing.route.ts       # Landing page (/{slug}, /promo/:slug, /go, /cta, /assets)
+│   │   ├── tracking.route.ts      # /api/tracking/* & /api/tenant/:slug
+│   │   ├── media.route.ts         # /media/:scope/:tenant/:file
+│   │   └── health.route.ts        # /health
+│   ├── cli/                       # chat-simulator.ts, seed-faq.ts, scrape-all.ts, dsb
+│   ├── scripts/                   # check-router-accuracy.ts, push-persona.ts, benchmark-*, dsb
+│   ├── utils/                     # encryption, circuit-breaker, jid, similarity, whatsapp-format, dsb
+│   └── landing/public/            # go.html, external-tracker.js, clientParamBuilder.bundle.js
+├── tests/                         # Vitest (unit + integration), setup.ts mock DB & Redis
+├── packages/
+│   ├── admin-dashboard/           # React SPA dashboard admin (di-serve bot di /admin/*)
+│   └── click-catcher/             # RETIRED — referensi saja, tidak dipakai lagi
+├── scripts/                       # copy-landing-assets.js, backup.sh, deploy-*.sh
+├── assets/                        # Aset gambar (pricelist_spa.jpg, dsb)
 ├── Dockerfile
 ├── docker-compose.yml
+├── Caddyfile
 ├── .env.example
 └── README.md
 ```
@@ -88,53 +90,51 @@ wa-clinic-bot/
 ## ⚡ Panduan Setup & Running Lokal
 
 ### 1. Environment Variables (`.env`)
-Salin `.env.example` menjadi `.env` lalu isi nilainya:
+Salin `.env.example` menjadi `.env` lalu isi nilainya. **Wajib diisi sebelum boot**:
+`ADMIN_API_KEY` (boot akan throw bila kosong), `DATABASE_URL`, `WAHA_BASE_URL`/`WAHA_API_KEY`,
+dan `WAHA_WEBHOOK_SECRET` (wajib di produksi).
 
 ```env
 PORT=3000
 HOST=0.0.0.0
+ADMIN_API_KEY="my_secure_random_admin_api_key"
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/wa_clinic_db?schema=public"
 
 # WAHA Config
 WAHA_BASE_URL="http://localhost:3001"
 WAHA_API_KEY="my_waha_api_key_secret"
 WAHA_SESSION="default"
+WAHA_WEBHOOK_SECRET=""
 
-# Google Maps API Key
-GOOGLE_MAPS_API_KEY="AIzaSy..."
-
-# Konfigurasi Titik Klinik
-CLINIC_LAT=-7.2574719
-CLINIC_LNG=112.7520883
-CLINIC_NAME="Klinik Kecantikan Utama Surabaya"
+# Klinik
+CLINIC_LAT=-7.34886
+CLINIC_LNG=112.751677
+CLINIC_NAME="Kala Moms and Baby Spa"
 
 # Timeout Auto-Release Human Handling (Jam)
 HUMAN_HANDLING_TIMEOUT_HOURS=6
-
-# URL Form Reservasi
-RESERVATION_FORM_URL="https://klinik-treatment.com/booking"
 ```
+
+> Daftar lengkap var (Redis, ORS, LLM, Media, WABA, Telegram, dsb.) ada di `.env.example`.
 
 ### 2. Jalankan WAHA Docker (NOWEB Engine)
 
-Chatbot ini merekomendasikan penggunaan **WAHA versi NOWEB (Baileys Engine)** karena sangat hemat memori RAM (~100 MB) dan stabil untuk produksi. Jalankan perintah terminal berikut untuk menyalakannya:
+Chatbot ini merekomendasikan penggunaan **WAHA versi NOWEB (Baileys Engine)** karena sangat hemat memori RAM (~100 MB) dan stabil untuk produksi. **Versi di-pin** di `docker-compose.yml` (`devlikeapro/waha:noweb-2026.7.2`) — **JANGAN pakai tag `:latest`**. Jalankan via Compose agar sesi tersimpan permanen:
 
 ```bash
-docker run -d \
-  --name waha \
-  -p 3001:3000 \
-  -e WHATSAPP_API_KEY=my_waha_api_key_secret \
-  devlikeapro/waha:noweb
+docker compose up -d waha
 ```
+
+Scan QR dari WAHA dashboard: `http://localhost:3001/dashboard/` (user/pass default: `admin` / `admin12345`).
 
 ### 3. Jalankan Aplikasi dengan Docker Compose
 
-Untuk menyalakan database PostgreSQL dan server bot:
-
 ```bash
-docker-compose up -d --build
-docker-compose exec app npx prisma migrate dev --name init
+docker compose up -d --build
+docker compose exec app npx prisma migrate deploy
 ```
+
+Compose menyediakan 5 service: `app`, `postgres` (16-alpine), `redis` (7-alpine), `caddy`, dan `waha`.
 
 ---
 
@@ -231,11 +231,16 @@ Landing page iklan kini disajikan **langsung oleh bot** di port utama (domain ya
 - **Event server (CAPI):** funnel konversi end-to-end — `Contact` (first contact), `Lead` (MQL), `InitiateCheckout` (form reservasi dikirim), `Purchase` (deteksi pesan "Payment <nominal>" ATAU admin tandai lunas, dedup 7 hari via `purchase_event_sent_at`). Semua event memakai `event_id = adClick.trackingCode` supaya Meta men-dedup. Konfigurasi kata kunci per tenant (`format_checkout`, `format_purchase`, `format_value`).
 - Tracking atribusi **same-origin**: `POST /api/tracking/click` (guard `X-Tracking-Api-Key`) menangkap `fbclid`, UTM, `_fbp`/`_fbc`.
 - 📖 Referensi arsitektur lengkap: **[`docs/META_FUNNEL.md`](docs/META_FUNNEL.md)**.
+- 🌐 Integrasi **Landing Page Eksternal** (Skema URL Redirect): `GET /cta` siap dipakai
+  sebagai click-catcher + `GET /assets/external-tracker.js` sebagai jembatan atribusi
+  untuk LP luar (WordPress/Elementor/HTML). Di Admin Dashboard (**Landing Page**) sudah
+  ada card *copy-paste snippet* + modal panduan integrasi. Panduan:
+  **[`docs/INTEGRASI_LANDING_EXTERNAL.md`](docs/INTEGRASI_LANDING_EXTERNAL.md)**
 - Header keamanan: CSP `script-src 'nonce-…' https://connect.facebook.net; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
 
 **Preview URL di admin:** dikontrol `LANDING_BASE_URL` (fallback `TRACKING_API_BASE_URL`); jika kosong, preview memakai path relatif same-origin (`/{slug}`).
 
-### 3. Endpoints Admin Knowledge Base
+### 4. Endpoints Admin Knowledge Base
 
 - **Import FAQ (Bulk JSON)**:
   `POST /api/admin/knowledge/faq`
