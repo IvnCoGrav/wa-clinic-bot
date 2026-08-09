@@ -162,6 +162,16 @@ if (require.main === module) {
       }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));
     }
 
+    // Start message retention cron (hapus record chat teks yang melebihi retensi)
+    if (process.env.ENABLE_MESSAGE_RETENTION_CRON === 'true') {
+      const intervalHours = parseInt(process.env.MESSAGE_RETENTION_INTERVAL_HOURS || '24', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        setInterval(() => cron.runMessageRetentionCleanup(), intervalHours * 60 * 60 * 1000);
+        console.log(`🧾 Message retention cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[MESSAGE RETENTION START ERROR]', e));
+    }
+
     // Start LLM-as-Judge AI quality evaluation cron (interval 6 jam default)
     if (process.env.ENABLE_AI_EVAL_CRON === 'true') {
       const intervalHours = parseInt(process.env.AI_EVAL_INTERVAL_HOURS || '6', 10);

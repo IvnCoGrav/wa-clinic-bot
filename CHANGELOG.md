@@ -8,6 +8,86 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-08
 
+### Added — Laporan Operasional Harian via Telegram (Daily Ops Report)
+
+Bot kini dapat mengirim **laporan performa operasional harian** ke Telegram (merangkum HARI SEBELUMNYA, 00:00–23:59 WIB) secara otomatis maupun manual dari Admin Dashboard.
+
+- **`src/services/daily-report.service.ts`** (baru): `DailyReportService` —
+  - `sendDailyReport(tenantId)` — cek log idempoten (`daily_report_logs`, unique `tenant_id + report_date`), generate data, format markdown, kirim via `alertService.notifyAlert(type=DAILY_OPS_REPORT, rawMessage)` dengan token/chat-id per tenant (fallback env), lalu upsert log status `sent`/`failed`.
+  - `generateReport()` — agregasi data: **Sales** (reservasi confirmed, omzet dari katalog treatment exact/fuzzy match, customer baru vs repeat), **Chat** (percakapan, pesan masuk/keluar), **Atribusi iklan** (klik & konversi ke reservasi), **Kesehatan ops** (eskalasi medis high/medium/pending, eskalasi non-medis, antrian staging FAQ medis/umum), **Insight** (ringkasan AI dari pesan inbound + top lokasi + out-of-coverage).
+  - `generateInsights()` — ringkasan tema percakapan via LLM (model `SUMMARIZATION`, `callChatCompletionsWithFallback`), fail-safe saat LLM down.
+  - `formatForTelegram()` — markdown Telegram dengan footer link Control Panel (`ADMIN_DASHBOARD_URL`).
+- **Schema & migration** (`prisma/migrations/20260822000000_add_daily_report`): kolom `tenants.daily_report_enabled` (bool, default false) & `tenants.daily_report_hour` (int, default 7 WIB) + model `DailyReportLog` (tabel `daily_report_logs`).
+- **Cron** (`src/app.ts`): worker `setInterval` 30 menit memeriksa jam WIB — bila `daily_report_enabled` (tenant) atau `ENABLE_DAILY_REPORT_CRON=true` (env) dan jam = target, kirim laporan per tenant.
+- **Admin API** (`src/routes/admin/settings.subroute.ts`):
+  - `GET|PUT /api/admin/settings/daily-report` — baca/tulis `enabled`, `reportHour` (0-23 WIB), `telegramBotToken`, `telegramChatId` (per tenant; audit `UPDATE_DAILY_REPORT_SETTINGS`).
+  - `POST /api/admin/settings/daily-report/test-send` — kirim laporan instan (audit `TEST_SEND_DAILY_REPORT`).
+- **Alert service** (`src/services/alert.service.ts`): enum `AlertType.DAILY_OPS_REPORT`.
+- **Dashboard** (`packages/admin-dashboard/src/components/settings/DailyReportPanel.tsx`): panel **Laporan Operasional Harian** di Settings — toggle aktif, jam kirim, input token/chat-id Telegram, status `CONFIGURED`/`NOT CONFIGURED`, tombol "Kirim Sekarang".
+- **Config env (`.env.example`)**: `ENABLE_DAILY_REPORT_CRON=false`, `DAILY_REPORT_HOUR=7`, `ADMIN_DASHBOARD_URL`.
+- **Test**: `tests/unit/daily-report.test.ts` (idempotensi, tenant resolve, upsert log, error handling).
+
+### Added — Media Quota & Message Retention (pembersihan otomatis)
+
+- **Schema & migration** (`prisma/migrations/20260823000000_add_media_quota_and_message_retention`): kolom `tenants.media_quota_bytes` (default 200 MB) & `tenants.message_retention_days` (default 120).
+- **`src/services/media.service.ts`**: `getMediaQuota()` (tenant → env `MEDIA_QUOTA_BYTES` → 200 MB) & `getMessageRetentionDays()` (tenant → env `MESSAGE_RETENTION_DAYS` → 120). Gambar pricelist (`pricelist_image_url`) dikecualikan dari pembersihan (permanen).
+- **`src/services/cron.service.ts`**: `runMessageRetentionCleanup()` — hapus record pesan teks yang melebihi retensi per tenant.
+- **Cron** (`src/app.ts`): gated `ENABLE_MESSAGE_RETENTION_CRON=true`, interval `MESSAGE_RETENTION_INTERVAL_HOURS` (default 24 jam).
+- **Config env (`.env.example`)**: `MEDIA_QUOTA_BYTES`, `ENABLE_MESSAGE_RETENTION_CRON`, `MESSAGE_RETENTION_INTERVAL_HOURS`, `MESSAGE_RETENTION_DAYS`.
+
+---
+
+## [Unreleased] - 2026-08-07
+
+### Added — PWA Admin Dashboard (Install Sebagai App)
+
+- **`packages/admin-dashboard`**: `public/manifest.json` (icon maskable `pwa-icon.svg`), `public/sw.js` (Service Worker cache-first untuk asset admin), register SW via `main.tsx`, meta tags PWA di `index.html` (`theme-color`, `apple-mobile-web-app-capable`).
+- **Backend** (`src/routes/admin.route.ts`): route handler untuk `/admin/sw.js`, `manifest.json`, `pwa-icon.svg`, `favicon.ico`.
+- **UI**: panel **Install App (PWA)** di Settings (`components/settings/InstallAppPanel.tsx`) — panduan install & status.
+
+### Added — Kategori Treatment BUNDLE + Persona Kalem-Profesional
+
+- **Kategori `BUNDLE`**: `treatment-catalog.service.ts` (`TreatmentCategoryType` + `BUNDLE`) + dropdown & badge di `ClinicServices.tsx`.
+- **Persona**: `src/config/persona.ts` + `src/config/persona_custom.txt` — gaya kalem-profesional (Sage-Innocent-Caregiver); `src/scripts/push-persona.ts` untuk sync persona ke DB tenant.
+
+### Changed — Live Chat & Reservations Mobile-Friendly + Concurrent Settings
+
+- **`LiveChatMonitor.tsx`** & **`Reservations.tsx`**: revamp responsive untuk HP (card list `md:hidden`, layout adaptif).
+- **`Settings.tsx`**: fetch config admin secara paralel (`Promise.all`) — mengurangi latency load.
+- **WAHA fixes**: `client.ts` pakai `resolveActiveJid` (bukan `toLabelChatId`) untuk API labels (cegah crash di WA Business) + auto-fetch `WAHA_NOWEB_WA_VERSION` (env override dimatikan di compose).
+- **LLM**: refactor `reasoning` return di generator agar stateless & thread-safe di bawah concurrent workers; FAQ response caching (`faq-cache.service.ts`), ground truth fixes, treatment state tracking & AI reasoning logging.
+
+### Tests
+- Baru: `tests/unit/faq-cache.test.ts`, `tests/unit/llm-ground-truth.test.ts`, `tests/unit/llm-clarification.test.ts`, `tests/unit/generator-config.test.ts`, `tests/integration/generator-admin-config.test.ts`, `tests/unit/ai-reasoning-logging.test.ts`.
+
+---
+
+## [Unreleased] - 2026-08-08
+
+### Added — Jembatan Landing Page Eksternal (Skema 2: URL Redirect)
+
+Landing Page Eksternal (WordPress, Elementor, HTML polos) sekarang bisa dipasang
+tanpa microservice tambahan: link CTA cukup menunjuk ke `GET /cta` bot dan satu
+script `external-tracker.js` otomatis menyalin atribusi iklan (fbclid, gclid,
+UTM, dsb.) dari address bar ke link tersebut.
+
+- **Aset baru** `src/landing/public/external-tracker.js`, tersaji via
+  `GET /assets/external-tracker.js` (endpoint `/assets/:filename` existing).
+  Sifat: read-only & fail-open — hanya menambah query string pada `<a href="/cta">`,
+  idempoten (atribut `data-external-tracker-applied`), plus MutationObserver
+  (throttle 250 ms) untuk menangkap CTA yang baru dirender dinamis (Elementor/SPA).
+- Whitelist param atribusi (tidak menyentuh param sistem bot: slug, p, phone, msg).
+- Panduan lengkap: `docs/INTEGRASI_LANDING_EXTERNAL.md`.
+- **UI Admin Dashboard**: card **Integrasi Landing Page Eksternal** di halaman Landing
+  Page (snippet siap salin + tombol copy + tombol "Lihat Panduan") dan modal panduan
+  `components/modals/ExternalIntegrationModal.tsx` (alur, kode per platform dengan
+  tombol salin masing-masing, tabel whitelist param, info keamanan). Domain snippet
+  diambil dinamis dari `window.location.origin`.
+- **Refactor Event Meta CAPI Inbound**: Mengubah event CAPI saat chat WhatsApp pertama kali masuk dari `Lead` menjadi `Contact` di `src/routes/webhook.route.ts` untuk memisahkan event kontak pertama dengan event `Lead` pada tahap MQL (`customer.service.ts`).
+- **Fleksibilitas Tracking Code Regex**: Memperbarui parser tracking code di `landing.route.ts` dan `webhook.route.ts` menggunakan RegEx dinamis `/(?:Promo\s*)?\[(\w{2,4})\]/i`. Variabel `%ID%` otomatis dibungkus kurung siku `[code]`, sehingga admin bebas mengganti template pesan di UI Dashboard tanpa merusak pelacakan CAPI maupun balasan AI.
+- Tes `tests/integration/landing-serving.test.ts`: `/assets/external-tracker.js`
+  tersaji `application/javascript` + filter nama file invalid tetap 400.
+
 ### Fixed — Formatting WhatsApp SATU tanda (dampak dari balasan LLM `**tebal**`)
 
 Model LLM terbiasa meniru Markdown GANDA (`**tebal**`) yang di WhatsApp tampil
@@ -291,7 +371,7 @@ Akar masalah: API Sumo (MiniMax-`M2.7-highspeed` & `deepseek-v4-flash`) punya la
 - **`src/services/treatment-catalog.service.ts`**: `resolveTreatmentCategory()` — auto-detect kategori treatment dari detail teks.
 - **`src/services/legacy-harvesting.service.ts`**: tambah logging untuk harvesting engine.
 - **`src/app.ts`**: boot `PhrasingService`, `OpenerTracker`, `LabelReconciliationService`.
-- **`.env.example`**: tambah `ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER`, `PHRASING_MODEL`, `PHRASING_BASE_URL`.
+- **`.env.example`**: tambah `ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER` (Phrasing Service memakai `OPENAI_BASE_URL`/`OPENAI_MODEL` yang sudah ada — tidak ada env `PHRASING_*`).
 
 **Tests (baru):**
 - `tests/unit/price-answer.test.ts` (10 test: isAskPrice, buildPriceAnswer, pricelist lost)
@@ -441,7 +521,7 @@ Sebelumnya input Pixel ID / CAPI token hanya via `.env` atau edit DB manual — 
 **Fase 1 — Satu Sumber Brand**
 - **`src/config/brand.ts`** (baru): `DEFAULT_BRAND_IDENTITY`, `getBrandIdentity(tenant?)`, `setBrandIdentity()`, `resetBrandIdentity()` — satu sumber brand (`Kala Moms and Baby Spa` / `Bidan Yusi`), siap baca `Tenant.name` di masa depan.
 - **`src/config/persona.ts`**: hapus `BRAND_IDENTITY` lokal → import dari `./brand`; `DEFAULT_PERSONA_PROMPT`, greeting, `notInterestedReply`, reminder, followup diparameterisasi brand.
-- **`src/services/followup-templates.service.ts`**: 49 literal "Kala Spa" → `getBrandIdentity().businessName`.
+- **`src/config/followup-templates.ts`**: 49 literal "Kala Spa" → `getBrandIdentity().businessName`.
 - **`src/state-machine/handlers/greeting.ts`** (intro + multi-intent), **`interest.ts`** (judul katalog), **`machine.ts`** (caption pricelist): brand dari `getBrandIdentity()`.
 - **`src/routes/webhook.route.ts`**: filter bot auto-reply → `adminReplyText.startsWith('Pricelist ')`.
 - **`src/routes/tracking.route.ts`**: fallback `clinic_name` → brand; hapus nomor produksi `6287751148065` → `process.env.DEFAULT_WHATSAPP_PHONE`.

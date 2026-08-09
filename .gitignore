@@ -66,6 +66,7 @@ skills-lock.json
 # Local runtime storage & scratch
 storage/
 scratch/
+temp/
 
 
 

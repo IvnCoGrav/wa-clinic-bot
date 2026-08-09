@@ -60,7 +60,7 @@ Ganti semua ejaan menyimpang ke default resmi:
 | `machine.ts:397,412` caption | "Kala Moms & Baby Spa" | `brand.ts` |
 | `click-catcher/src/server.ts:41,142` | "Kala Baby & Moms Spa" | `brand.ts` (dari env `CLINIC_NAME` fallback) |
 | `webhook.route.ts:67` filter caption | "Pricelist Kala Moms & Baby Spa" | jadikan regex dari brand (hindari string-literal rapuh) |
-| `admin-dashboard` (Layout/Login/AiSandbox/AiPersona/Settings) | beragam | konsisten; default `brand.ts`, override dari endpoint `/api/admin/tenant` |
+| `admin-dashboard` (Layout/Login/AiSandbox/AiPersona/Settings) | beragam | konsisten; default `brand.ts` (`VITE_CLINIC_NAME`), persona dari `/api/admin/persona` (tidak ada endpoint `/api/admin/tenant`) |
 
 ### 1.3 Verifikasi
 - `npm run build` (tsc) hijau.
@@ -132,7 +132,7 @@ Tujuan: harga/ongkir/nomor tidak lagi nilai produksi di code.
 Tujuan: menyinkronkan angka/konfigurasi yang saling bertentangan.
 
 ### 4.1 Graph API version
-- `waba.driver.ts:8` (v25.0), `client.ts:16` (v20.0), `capi.service.ts:120` (v19.0) → satu konstanta `GRAPH_API_VERSION = 'v25.0'` di `src/integrations/whatsapp/constants.ts`, dipakai semua.
+- `waba.driver.ts:8` (v25.0), `client.ts:16` (v20.0), `capi.service.ts:120` (v19.0) → satu konstanta `GRAPH_API_VERSION = 'v25.0'` di `src/integrations/whatsapp/graph.constants.ts`, dipakai semua.
 - `client.ts` legacy (v20.0) tampak dead code → tandai deprecation, verifikasi factory tidak memakainya (audit lanjutan kecil).
 
 ### 4.2 History konteks LLM

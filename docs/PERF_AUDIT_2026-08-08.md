@@ -167,7 +167,7 @@
 ### P8 — Catatan non-fatal
 - `pg_stat_statements` tidak terpasang → aktifkan untuk slow-query monitoring.
 - `GET /api/admin/legacy-staging` filter hardcode `'default'` (inkonsisten dengan `'default-tenant'`) → perbaiki ke `DEFAULT_TENANT_ID`.
-- Beberapa route yang dipanggil dashboard tidak ada backend (mis. `/api/admin/debug/conversations`, `/api/admin/harvest/staging/export-md`) → dead link, bukan isu performa.
+- `/api/admin/debug/conversations` **kini sudah ada** (`src/routes/admin/evaluations.subroute.ts`); yang masih belum ada: `/api/admin/harvest/staging/export-md` → dead link, bukan isu performa.
 - App container jalan di commit lama (`710e759`); repo berlaku di `4ab5817` — `connection_limit=20/pool_timeout=10` belum teraplikasi di live.
 
 ---
