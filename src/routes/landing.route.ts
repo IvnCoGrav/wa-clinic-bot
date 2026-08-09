@@ -162,12 +162,14 @@ export async function landingRoutes(fastify: FastifyInstance) {
       request.log.warn(`[CTA TRACKING ERROR] ${err.message}`);
     }
 
-    // Insert tracking code into message text matching Promo[code] format
+    // Insert tracking code into message text matching Promo[code] or [code] format
     let finalMsg = rawMsg.replace(/\r\n/g, '\n');
     if (trackingCode) {
-      if (finalMsg.includes('%ID%')) {
-        finalMsg = finalMsg.replace(/%ID%/g, trackingCode);
-      } else if (!finalMsg.includes(`Promo[${trackingCode}]`)) {
+      if (finalMsg.includes('[%ID%]')) {
+        finalMsg = finalMsg.replace(/\[%ID%\]/g, `[${trackingCode}]`);
+      } else if (finalMsg.includes('%ID%')) {
+        finalMsg = finalMsg.replace(/%ID%/g, `[${trackingCode}]`);
+      } else if (!finalMsg.includes(`[${trackingCode}]`)) {
         finalMsg = `Promo[${trackingCode}]\n\n${finalMsg}`.trim();
       }
     }
@@ -231,7 +233,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
     return renderLanding(reply, content, slug);
   });
 
-  // /assets/:filename — serve static assets from public/ (like clientParamBuilder.bundle.js)
+  // /assets/:filename — serve static assets dari public/ (clientParamBuilder.bundle.js, external-tracker.js)
   fastify.get('/assets/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
     const { filename } = request.params;
     if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {

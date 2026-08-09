@@ -129,4 +129,17 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     expect(body.slug).toBe('promo-baby');
     expect(body.meta_capi_access_token).toBeUndefined();
   });
+
+  it('9. GET /assets/external-tracker.js tersaji (jembatan LP eksternal)', async () => {
+    const res = await app.inject({ method: 'GET', url: '/assets/external-tracker.js' });
+    expect(res.statusCode).toBe(200);
+    expect(String(res.headers['content-type'])).toContain('application/javascript');
+    expect(res.body).toContain('external-tracker.js');
+    expect(res.body).toContain('data-external-tracker-applied');
+  });
+
+  it('10. GET /assets/:filename menolak filename tidak valid', async () => {
+    const res = await app.inject({ method: 'GET', url: '/assets/foo%20bar.js' });
+    expect(res.statusCode).toBe(400);
+  });
 });

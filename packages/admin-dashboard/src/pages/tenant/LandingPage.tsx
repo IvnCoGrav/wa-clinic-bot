@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { ExternalIntegrationModal } from '../../components/modals/ExternalIntegrationModal';
 import {
   Globe,
   Plus,
@@ -18,6 +19,10 @@ import {
   Check,
   X,
   LayoutTemplate,
+  Code,
+  Copy,
+  Link2,
+  BookOpen,
 } from 'lucide-react';
 
 interface LandingListItem {
@@ -75,6 +80,10 @@ export const LandingPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<LandingDetail | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Modal & card integrasi LP eksternal
+  const [isExternalModalOpen, setIsExternalModalOpen] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
 
   // Form states
   const [formTitle, setFormTitle] = useState('');
@@ -267,6 +276,20 @@ export const LandingPage: React.FC = () => {
     ? landings[0].previewUrl.replace(/\/[^/]+$/, '')
     : window.location.origin;
 
+  const scriptSnippet = `<script src="${window.location.origin.replace(/\/$/, '')}/assets/external-tracker.js" defer></script>`;
+
+  const handleCopyScript = async () => {
+    try {
+      await navigator.clipboard.writeText(scriptSnippet);
+    } catch {
+      toast('Gagal menyalin kode.', 'error');
+      return;
+    }
+    setCopiedScript(true);
+    toast('Script embed disalin ke clipboard!', 'success');
+    setTimeout(() => setCopiedScript(false), 2500);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -295,6 +318,51 @@ export const LandingPage: React.FC = () => {
           >
             <Plus size={14} />
             <span>Tambah Landing Page</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Card integrasi LP eksternal */}
+      <div className="glass-panel border border-white/5 rounded-2xl p-5 space-y-3">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Link2 className="text-sky-400" size={18} />
+              <span>Integrasi Landing Page Eksternal</span>
+            </h3>
+            <p className="text-[10px] text-slate-400">
+              Hubungkan Landing Page luar (WordPress / Elementor / HTML) ke atribusi iklan &amp; WhatsApp. Script disajikan langsung oleh bot.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsExternalModalOpen(true)}
+            className="px-3 py-2 bg-white/5 hover:bg-pink-500/10 border border-white/10 text-slate-300 hover:text-pink-300 rounded-xl text-[10px] font-bold transition flex items-center gap-1.5"
+          >
+            <BookOpen size={14} />
+            <span>Lihat Panduan Integrasi</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex-1 min-w-[260px] flex items-center gap-2 bg-slate-950/70 border border-white/10 rounded-xl px-3 py-2">
+            <Code size={14} className="text-pink-400 flex-shrink-0" />
+            <input
+              readOnly
+              value={scriptSnippet}
+              onFocus={(e) => e.target.select()}
+              className="w-full bg-transparent text-[11px] font-mono text-emerald-300 focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={handleCopyScript}
+            className={`px-3 py-2 rounded-xl text-[10px] font-bold transition flex items-center gap-1.5 border ${
+              copiedScript
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                : 'bg-white/5 text-slate-300 border-white/10 hover:bg-pink-500/10 hover:text-pink-300'
+            }`}
+          >
+            {copiedScript ? <Check size={14} /> : <Copy size={14} />}
+            <span>{copiedScript ? 'Tersalin!' : 'Salin Script'}</span>
           </button>
         </div>
       </div>
@@ -671,6 +739,11 @@ export const LandingPage: React.FC = () => {
           </li>
         </ul>
       </div>
+
+      {/* Modal panduan integrasi LP eksternal */}
+      {isExternalModalOpen && (
+        <ExternalIntegrationModal open onClose={() => setIsExternalModalOpen(false)} />
+      )}
     </div>
   );
 };
