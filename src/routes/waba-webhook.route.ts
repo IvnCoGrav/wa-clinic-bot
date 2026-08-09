@@ -124,8 +124,9 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
             mimeType: msg.mimeType || 'image/jpeg',
           });
           msgMedia = {
-            url: saved.hdUrl,
+            url: saved.thumbUrl || saved.hdUrl,
             hdUrl: saved.hdUrl,
+            thumbUrl: saved.thumbUrl,
             mimeType: msg.mimeType || 'image/jpeg',
             caption: msg.caption || null,
           };

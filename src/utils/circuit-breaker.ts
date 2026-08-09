@@ -8,6 +8,7 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
   private lastStateChange: number = Date.now();
   private requestHistory: boolean[] = []; // true = success, false = failure
   private name: string = 'Unnamed Service';
+  private usedFallback = false;
 
   constructor(
     private requestFunction: (...args: TArgs) => Promise<TResult>,
@@ -30,6 +31,11 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
   public getState(): CircuitState {
     this.checkCooldown();
     return this.state;
+  }
+
+  /** Apakah hasil eksekusi terakhir berasal dari fallbackFunction (bukan requestFunction). */
+  public wasFallbackUsed(): boolean {
+    return this.usedFallback;
   }
 
   private checkCooldown(): void {
@@ -75,9 +81,11 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
 
   public async execute(...args: TArgs): Promise<TResult> {
     this.checkCooldown();
+    this.usedFallback = false;
 
     if (this.state === 'OPEN') {
       console.warn(`[Circuit Breaker: ${this.name}] Blocked request (circuit is OPEN). Triggering fallback.`);
+      this.usedFallback = true;
       return this.fallbackFunction(...args);
     }
 
@@ -105,6 +113,7 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
         `[Circuit Breaker: ${this.name}] Request Failure! Reason: [${reasonCategory}] | HTTP Status: ${status} | Code: ${code} | Message: ${errMsg}`
       );
       this.recordResult(false);
+      this.usedFallback = true;
       return this.fallbackFunction(...args);
     }
   }
