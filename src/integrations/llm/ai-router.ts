@@ -315,12 +315,23 @@ function buildMixedReasoning(text: string): string {
 function isAskingClinicLocation(text: string): boolean {
   const lower = text.toLowerCase();
   const asksWhere =
-    /\b(klinik|homecare|spa|tempatnya|lokasinya|kantornya|rumahnya)\b/i.test(lower) &&
+    /\b(klinik|homecare|spa|tempat|lokasi|kantor|rumah)(nya)?\b/i.test(lower) &&
     /\b(mana|dimana|di mana|dekat mana|wilayah mana)\b/i.test(lower);
   const providesOwnLocation =
     /\bsaya\s+(di|tinggal|dekat|rumah)\b/i.test(lower) ||
     /\b(dekat|sekitar)\s+(indomaret|alfamart|alfamidi|jalan|jl\.?|rumah|komplek)\b/i.test(lower);
   return asksWhere && !providesOwnLocation;
+}
+
+// "di/ke/dari <kata>" sebagai penanda lokasi bebas (mis. "di wedoro") saat customer
+// mengisi lokasi. Kata deiktik/pertanyaan ("mana", "sini", "sekitar", dsb) di-exclude.
+const DI_PREFIX_LOCATION_RE = /\b(?:di|ke|dari)\s+([a-z][a-z0-9]{1,40})\b/i;
+const DI_PREFIX_NON_LOCATION_WORDS = /^(mana|sini|situ|sana|sekitar|dekat|dalam|antara|atas|bawah|belakang|depan|mana)$/i;
+
+function hasDiPrefixLocation(lower: string): boolean {
+  const m = lower.match(DI_PREFIX_LOCATION_RE);
+  if (!m || !m[1]) return false;
+  return !DI_PREFIX_NON_LOCATION_WORDS.test(m[1]);
 }
 
 /**
@@ -364,6 +375,33 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
         reasoning_note: 'State AWAITING_LOCATION dan pesan mengandung sebutan lokasi → PROVIDE_LOCATION',
       };
     }
+    // Lokasi bebas "di/ke/dari <kata>" tanpa marker wilayah dikenal (mis. "di wedoro")
+    if (hasDiPrefixLocation(lower) && !isAskingClinicLocation(lower)) {
+      return {
+        intent: 'PROVIDE_LOCATION',
+        extracted_data: {
+          ...emptyExtraction(),
+          location_mention: extractLocationMention(text),
+        },
+        affirmation_signal: 'NONE',
+        needs_human_escalation: false,
+        escalation_reason: 'NONE',
+        confidence_score: 0.7,
+        reasoning_note: 'State AWAITING_LOCATION dengan penanda "di/ke/dari <tempat>" → PROVIDE_LOCATION',
+      };
+    }
+    // Keberatan harga ("harganya mahal banget") bukan info lokasi → jalur FAQ klarifikasi
+    if (PRICE_OBJECTION_RE.test(lower)) {
+      return {
+        intent: 'ASK_FAQ',
+        extracted_data: emptyExtraction(),
+        affirmation_signal: detectAffirmationSignal(text),
+        needs_human_escalation: false,
+        escalation_reason: 'NONE',
+        confidence_score: 0.7,
+        reasoning_note: `State AWAITING_LOCATION tapi pesan keberatan harga ("${text.trim().slice(0, 60)}") → ASK_FAQ klarifikasi`,
+      };
+    }
     if (isQuestion(lower)) {
       return {
         intent: 'ASK_FAQ',
@@ -380,6 +418,19 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
   // 3. STATE PRIORITY: AWAITING_CONFIRMATION
   if (state === 'AWAITING_CONFIRMATION') {
     const signal = detectAffirmationSignal(text);
+    // MIXED didahulukan: afirmasi + koreksi/keberatan dalam 1 pesan (mis. "iya bener tapi
+    // kok harganya beda") butuh klarifikasi, TIDAK boleh jatuh ke jalur pertanyaan sela.
+    if (signal === 'MIXED') {
+      return {
+        intent: 'UNKNOWN',
+        extracted_data: emptyExtraction(),
+        affirmation_signal: 'MIXED',
+        needs_human_escalation: false,
+        escalation_reason: 'NONE',
+        confidence_score: 0.6,
+        reasoning_note: buildMixedReasoning(text),
+      };
+    }
     // Pertanyaan sela (mis. "btw ada promo gak sih") BUKAN jawaban atas pertanyaan konfirmasi → ASK_FAQ
     if (isQuestion(lower)) {
       return {
@@ -412,17 +463,6 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
         escalation_reason: 'NONE',
         confidence_score: 0.85,
         reasoning_note: 'Penolakan murni saat menunggu konfirmasi',
-      };
-    }
-    if (signal === 'MIXED') {
-      return {
-        intent: 'UNKNOWN',
-        extracted_data: emptyExtraction(),
-        affirmation_signal: 'MIXED',
-        needs_human_escalation: false,
-        escalation_reason: 'NONE',
-        confidence_score: 0.6,
-        reasoning_note: buildMixedReasoning(text),
       };
     }
   }
@@ -551,6 +591,20 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
     };
   }
 
+  // 8b. Keberatan harga non-pertanyaan (mis. "harganya mahal banget") → klarifikasi FAQ,
+  // bukan UNKNOWN. Pertanyaan harga tetap lebih dulu lewat jalur ASK_FAQ normal.
+  if (PRICE_OBJECTION_RE.test(lower)) {
+    return {
+      intent: 'ASK_FAQ',
+      extracted_data: emptyExtraction(),
+      affirmation_signal: detectAffirmationSignal(text),
+      needs_human_escalation: false,
+      escalation_reason: 'NONE',
+      confidence_score: 0.7,
+      reasoning_note: `Keberatan harga ("${text.trim().slice(0, 60)}") → perlu klarifikasi / FAQ harga lanjutan`,
+    };
+  }
+
   // 9. ASK_FAQ
   if (isQuestion(lower)) {
     return {
@@ -645,6 +699,16 @@ export class AIRouterLLMClient {
 
   public getCircuitState(): string {
     return this.breaker.getState();
+  }
+
+  /**
+   * True jika pemanggilan terakhir execute() berakhir di fallbackFunction
+   * (LLM gagal / circuit OPEN), bukan dari rawLlmCall yang sukses.
+   * Digunakan agar `source` di AIRouterDecision merefleksikan jalur sebenarnya
+   * tanpa memodifikasi objek response (tetap identik dgn ruleBasedClassify murni).
+   */
+  public wasFallbackUsed(): boolean {
+    return this.breaker.wasFallbackUsed();
   }
 
   private get apiKey(): string {
@@ -800,7 +864,8 @@ export class AIRouterService {
     let source: 'llm' | 'fallback';
     try {
       response = await this.client.classify(input);
-      source = 'llm';
+      // `wasFallbackUsed?.()` kompatibel dengan fake client (hanya punya classify) di test.
+      source = this.client.wasFallbackUsed?.() ? 'fallback' : 'llm';
     } catch (err: any) {
       console.warn(`[AI ROUTER] LLM path failed (${err.message}). Using rule-based fallback.`);
       response = ruleBased;

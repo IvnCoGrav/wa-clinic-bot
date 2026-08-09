@@ -73,10 +73,17 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'bintik merah',
   'ruam',
   'ruam parah',
+  'merah-merah',
   'kulit mengelupas',
   'eksim',
   'bisul',
   'bentol-bentol',
+
+  // Pregnancy / Musculoskeletal Concerns (mis. pinggang hamil menjalar)
+  'pinggang sakit',
+  'nyeri pinggang',
+  'sakit menjalar',
+  'kontraksi',
 
   // Postpartum & Maternal Health Concerns
   'jahitan pasca melahirkan',

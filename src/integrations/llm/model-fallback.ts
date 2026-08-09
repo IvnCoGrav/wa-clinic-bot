@@ -28,12 +28,14 @@ export interface ChatCompletionsWithFallbackResult {
 export async function callChatCompletionsWithFallback(
   call: ChatCompletionsWithFallbackCall
 ): Promise<ChatCompletionsWithFallbackResult> {
-  const attempt = async (model: string): Promise<any> => {
+  const attempt = async (model: string, overrideBaseUrl?: string, overrideApiKey?: string): Promise<any> => {
+    const finalBaseUrl = overrideBaseUrl || call.baseUrl;
+    const finalApiKey = overrideApiKey || call.apiKey;
     const resp = await axios.post(
-      `${call.baseUrl}/chat/completions`,
+      `${finalBaseUrl}/chat/completions`,
       { ...call.payload, model },
       {
-        headers: { Authorization: `Bearer ${call.apiKey}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${finalApiKey}`, 'Content-Type': 'application/json' },
         timeout: call.timeoutMs,
       }
     );
@@ -53,6 +55,8 @@ export async function callChatCompletionsWithFallback(
     console.warn(
       `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${call.fallbackModel} (${err?.message || String(err)})`
     );
-    return { data: (await attempt(call.fallbackModel)).data, model: call.fallbackModel, usedFallback: true };
+    const fallbackBaseUrl = process.env.LLM_FALLBACK_BASE_URL ? process.env.LLM_FALLBACK_BASE_URL.replace(/\/$/, '') : call.baseUrl;
+    const fallbackApiKey = process.env.LLM_FALLBACK_API_KEY || call.apiKey;
+    return { data: (await attempt(call.fallbackModel, fallbackBaseUrl, fallbackApiKey)).data, model: call.fallbackModel, usedFallback: true };
   }
 }

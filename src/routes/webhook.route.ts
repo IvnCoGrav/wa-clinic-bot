@@ -164,8 +164,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const mimeType = payload.message?.imageMessage?.mimetype || 'image/jpeg';
             const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
             inboundMedia = {
-              url: saved.hdUrl,
+              url: saved.thumbUrl || saved.hdUrl,
               hdUrl: saved.hdUrl,
+              thumbUrl: saved.thumbUrl,
               mimeType,
               caption: imageCaption || null,
             };
@@ -306,7 +307,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       // --- ATTRIBUTION CHECK ---
       const bodyText = incomingMessage.text?.body || '';
-      const promoMatch = bodyText.match(/Promo\s*\[(\w+)\]/i);
+      const promoMatch = bodyText.match(/(?:Promo\s*)?\[(\w{2,4})\]/i);
       if (isNewCustomerRecord && promoMatch) {
         const trackingCode = promoMatch[1];
         // 1. Memory fallback update (untuk unit testing/in-memory cache)
@@ -342,29 +343,29 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           console.error('[ATTRIBUTION ERROR] Failed to update AdClick attribution:', err.message);
         }
 
-        // 3. Trigger Meta CAPI 'Lead' event (karena chat WA dari CTA berhasil masuk ke server)
+        // 3. Trigger Meta CAPI 'Contact' event (karena chat WA dari CTA berhasil masuk ke server)
         try {
           const { capiService } = await import('../services/capi.service');
           capiService.sendCapiEvent({
-            eventName: 'Lead',
+            eventName: 'Contact',
             customer,
             tenantId: DEFAULT_TENANT_ID,
             customData: {
               trackingCode,
               source: 'WHATSAPP_INBOUND_CTA',
             },
-          }).catch((err) => console.error('[CAPI LEAD ERROR]', err.message));
+          }).catch((err) => console.error('[CAPI CONTACT ERROR]', err.message));
         } catch (capiErr: any) {
-          console.error('[CAPI LEAD ERROR]', capiErr.message);
+          console.error('[CAPI CONTACT ERROR]', capiErr.message);
         }
       }
 
       // --- MESSAGE-REWRITE: Strip kode tracking dari body sebelum masuk state machine ---
       // Ini HARUS dilakukan setelah attribution block agar kode sudah dicatat ke DB,
       // tapi sebelum state machine membaca incomingMessage.text.body.
-      // "Promo[a7] halo bunda" → "halo bunda"  |  "Promo[a7]" (saja) → "Halo"
+      // "Promo[a7] halo bunda" atau "Order [a7] halo" → "halo bunda"  |  "Promo[a7]" (saja) → "Halo"
       if (promoMatch && incomingMessage.text) {
-        const stripped = bodyText.replace(/Promo\s*\[\w+\]\s*/gi, '').trim();
+        const stripped = bodyText.replace(/(?:Promo\s*)?\[\w{2,4}\]\s*/gi, '').trim();
         incomingMessage.text.body = stripped || 'Halo';
       }
 
