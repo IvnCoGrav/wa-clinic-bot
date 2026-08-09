@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     expose:
       - "3000"
+    volumes:
+      - storage_data:/app/storage
     # Forward SEMUA var dari .env server ke container app (LLM/ORS/Redis/admin keys dll).
     # Nilai di blok `environment` di bawah tetap MENIMPA env_file — jadi var jaringan
     # (DATABASE_URL, WAHA_BASE_URL, PORT, HOST) aman memakai nilai container.
@@ -26,7 +28,6 @@ services:
       - CLINIC_LNG=${CLINIC_LNG:-112.7520883}
       - CLINIC_NAME=${CLINIC_NAME}
       - HUMAN_HANDLING_TIMEOUT_HOURS=${HUMAN_HANDLING_TIMEOUT_HOURS:-6}
-      - RESERVATION_FORM_URL=${RESERVATION_FORM_URL:-https://klinik-treatment.com/booking}
       - TRACKING_API_KEY=${TRACKING_API_KEY}
       - FB_PIXEL_ID=${FB_PIXEL_ID}
       - FB_CAPI_ACCESS_TOKEN=${FB_CAPI_ACCESS_TOKEN}
@@ -89,6 +90,8 @@ services:
       - WAHA_DASHBOARD_USERNAME=admin
       - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-admin12345}
       - WAHA_API_KEY=${WAHA_API_KEY:-my_waha_api_key_secret}
+      - WAHA_CLIENT_DEVICE_NAME=Mac OS
+      - WAHA_CLIENT_BROWSER_NAME=Safari
       # Secara default, override WA_VERSION dimatikan agar engine (Baileys) dapat melakukan auto-fetch
       # versi terbaru dari WhatsApp Web saat sesi dimulai. Aktifkan kembali HANYA jika auto-fetch rusak.
       # - WAHA_NOWEB_WA_VERSION=2.3000.1044619432
@@ -100,3 +103,4 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  storage_data:
