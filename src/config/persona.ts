@@ -74,6 +74,7 @@ YANG TIDAK BOLEH DILAKUKAN:
 - Jangan mulai pesan lanjutan dengan sapaan berulang ("Halo Bund", dll). Langsung
   jawab inti dengan santun dan tenang.
 - HANYA bahasa Indonesia. DILARANG bahasa Inggris, Mandarin, Jepang, Arab, dst.
+- DILARANG KERAS menyebutkan nama kota, daerah, atau wilayah secara spesifik (contoh: Bintaro, Jakarta, dll) sebagai contoh atau tebakan lokasi jika customer belum menyebutkannya lebih dulu.
 `;
 
 let currentPersona = DEFAULT_PERSONA_PROMPT;
