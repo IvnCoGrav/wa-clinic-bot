@@ -64,12 +64,60 @@ export class NluClassifierService {
     if (clean.startsWith('```')) {
       clean = clean.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '').trim();
     }
+    const extracted = this.extractBalancedJson(clean);
+    if (extracted) return extracted;
     const braceStart = clean.indexOf('{');
     const braceEnd = clean.lastIndexOf('}');
     if (braceStart !== -1 && braceEnd > braceStart) {
       clean = clean.slice(braceStart, braceEnd + 1).trim();
     }
     return clean;
+  }
+
+  /**
+   * Ambil objek JSON terbesar yang BALANCED ({...} pasangan lengkap) dan bisa di-parse.
+   * Menggantikan pendekatan regex/lastIndexOf yang rapuh terhadap `}` di dalam teks
+   * atau string value (sering terjadi pada output reasoning model seperti DeepSeek).
+   */
+  private static extractBalancedJson(raw: string): string | null {
+    const s = (raw || '').trim();
+    let candidate = s.indexOf('{');
+    let validFallback: string | null = null;
+
+    while (candidate !== -1) {
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+
+      for (let j = candidate; j < s.length; j++) {
+        const ch = s[j];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (ch === '\\') escaped = true;
+          else if (ch === '"') inString = false;
+        } else {
+          if (ch === '"') inString = true;
+          else if (ch === '{') depth++;
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              const slice = s.slice(candidate, j + 1);
+              try {
+                const parsed = JSON.parse(slice);
+                if (parsed && Array.isArray(parsed.intents)) return slice;
+                validFallback = validFallback || slice;
+              } catch {
+                /* malformed, coba titik mulai berikutnya */
+              }
+              break;
+            }
+          }
+        }
+      }
+      candidate = s.indexOf('{', candidate + 1);
+    }
+
+    return validFallback;
   }
 
   /**
@@ -276,9 +324,9 @@ OUTPUT JSON SCHEMA ONLY:
       // Handle DeepSeek reasoning models where content is empty and JSON is in reasoning_content
       if (!rawContent) {
         const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
-        const jsonMatch = reasoning.match(/\{[\s\S]*?"intents"[\s\S]*?\}/);
+        const jsonMatch = this.extractBalancedJson(reasoning);
         if (jsonMatch) {
-          rawContent = jsonMatch[0];
+          rawContent = jsonMatch;
           console.log(`[NLU CLASSIFICATION] Extracted JSON from reasoning_content`);
         }
       }

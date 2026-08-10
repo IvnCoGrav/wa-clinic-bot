@@ -56,16 +56,17 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             }
             public async sendImage(chatId: string, fileUrl: string, caption?: string): Promise<boolean> {
               try {
+                const imageTag = `🖼️ [Media Gambar Terkirim]\nURL: ${fileUrl}${caption ? '\nCaption: ' + caption : ''}`;
                 this.sentMessages.push({
                   type: 'image',
-                  text: `${caption ? caption + '\n' : ''}[Gambar tidak dapat ditampilkan di sandbox — kirim gambar (send image) dimatikan di terminal & sandbox]`,
+                  text: imageTag,
                   fileUrl,
                 });
                 return true;
               } catch (err: any) {
                 this.sentMessages.push({
                   type: 'text',
-                  text: '[Gagal kirim gambar di sandbox — kirim gambar (send image) dimatikan di terminal & sandbox]',
+                  text: '🖼️ [Gagal kirim media gambar di sandbox]',
                 });
                 return false;
               }
@@ -272,10 +273,57 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             recent,
           },
         });
+  /**
+   * GET /api/admin/ai-audit-summary
+   * Aggregates real-time LLM audit logs (tokens, cost_idr, model breakdown, recent transactions)
+   */
+  fastify.get(
+    '/api/admin/ai-audit-summary',
+    async (request: FastifyRequest<{ Querystring: { days?: string; limit?: string } }>, reply: FastifyReply) => {
+      try {
+        const days = Math.max(1, Math.min(90, parseInt(request.query?.days || '7', 10) || 7));
+        const limit = Math.max(1, Math.min(200, parseInt(request.query?.limit || '50', 10) || 50));
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const where = { tenant_id: DEFAULT_TENANT_ID, created_at: { gte: since } };
+
+        const [recent, totalLogs, stats] = await Promise.all([
+          prisma.llmAuditLog.findMany({ where, orderBy: { created_at: 'desc' }, take: limit }),
+          prisma.llmAuditLog.count({ where }),
+          prisma.llmAuditLog.aggregate({
+            where,
+            _sum: { prompt_tokens: true, completion_tokens: true, cost_idr: true },
+          }),
+        ]);
+
+        const totalPromptTokens = stats._sum.prompt_tokens ?? 0;
+        const totalCompletionTokens = stats._sum.completion_tokens ?? 0;
+        const totalCostIdr = stats._sum.cost_idr ?? 0;
+
+        return reply.status(200).send({
+          success: true,
+          data: {
+            days,
+            totalLogs,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens: totalPromptTokens + totalCompletionTokens,
+            totalCostIdr,
+            recent,
+          },
+        });
       } catch (err: any) {
-        return reply
-          .status(200)
-          .send({ success: true, data: { total: 0, avgScore: 0, minScore: 0, maxScore: 0, recent: [] } });
+        return reply.status(200).send({
+          success: true,
+          data: {
+            days: 7,
+            totalLogs: 0,
+            totalPromptTokens: 0,
+            totalCompletionTokens: 0,
+            totalTokens: 0,
+            totalCostIdr: 0,
+            recent: [],
+          },
+        });
       }
     }
   );
