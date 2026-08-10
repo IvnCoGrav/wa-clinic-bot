@@ -5,6 +5,7 @@ import { auditService } from '../../services/audit.service';
 import { customerService } from '../../services/customer.service';
 import { googleCalendarService } from '../../services/google-calendar.service';
 import { capiService, resolveTreatmentValue } from '../../services/capi.service';
+import { extractRupiahAmount } from '../../services/purchase-detection.service';
 import { parseReservationText, extractBabyDetails } from '../../utils/reservation-text-parser';
 import { memoryReservations } from './stores';
 
@@ -559,4 +560,228 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * POST /api/admin/reservation/:id/approve-purchase
+   * Moderasi outlier: admin menyetujui event Purchase yang ditahan queue
+   * (purchase_review_status='pending'). Event dikirim ke Meta CAPI dengan
+   * event_time HISTORIS (purchase_occurred_at) agar attribution akurat.
+   * Event >7 hari ditolak — Meta akan drop event yang terlalu lama.
+   */
+  fastify.post(
+    '/api/admin/reservation/:id/approve-purchase',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          include: {
+            customer: {
+              include: { adClick: true },
+            },
+          },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+        if (existing.purchase_review_status !== 'pending') {
+          return reply.status(400).send({
+            success: false,
+            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}).`,
+          });
+        }
+        if (!existing.purchase_occurred_at) {
+          return reply.status(400).send({
+            success: false,
+            error: 'purchase_occurred_at kosong — event ini tidak masuk queue moderasi.',
+          });
+        }
+
+        // Meta drop event lebih tua dari ~7 hari -> beri peringatan (warning) tapi tetap izinkan pengiriman.
+        const occurredAt = new Date(existing.purchase_occurred_at);
+        const isOlderThan7Days = Date.now() - occurredAt.getTime() > 7 * 24 * 60 * 60 * 1000;
+        const warning = isOlderThan7Days
+          ? 'Event pembayaran ini terjadi lebih dari 7 hari yang lalu. Meta CAPI mungkin akan mengabaikan event historis lama ini.'
+          : undefined;
+
+        resolveTreatmentValue(existing.treatment_detail || existing.raw_text)
+          .then((value) => {
+            return capiService.sendCapiEvent({
+              eventName: 'Purchase',
+              customer: existing.customer,
+              adClick: existing.customer?.adClick || undefined,
+              value,
+              currency: 'IDR',
+              tenantId: DEFAULT_TENANT_ID,
+              eventTime: Math.floor(occurredAt.getTime() / 1000),
+              customData: {
+                source: 'ADMIN_MODERATION_APPROVE',
+                reservationId: existing.id,
+                purchaseOccurredAt: existing.purchase_occurred_at?.toISOString(),
+              },
+            });
+          })
+          .then((result) => {
+            if (!result.success) {
+              console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${result.message}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[CAPI ERROR] Failed to send approved Purchase event:', err.message);
+          });
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: {
+            purchase_review_status: 'approved',
+            purchase_event_sent_at: new Date(),
+          },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'APPROVE_PURCHASE_EVENT',
+          targetId: id,
+          payload: { purchase_occurred_at: existing.purchase_occurred_at.toISOString() },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation, warning });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.purchase_review_status = 'approved';
+          mock.purchase_event_sent_at = new Date();
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/reservation/:id/reject-purchase
+   * Moderasi outlier: admin menandai event Purchase sebagai outlier.
+   * TIDAK menembakkan CAPI; data keuangan internal tetap aman tercatat.
+   */
+  fastify.post(
+    '/api/admin/reservation/:id/reject-purchase',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+        if (existing.purchase_review_status !== 'pending') {
+          return reply.status(400).send({
+            success: false,
+            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}).`,
+          });
+        }
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: { purchase_review_status: 'ignored_outlier' },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'REJECT_PURCHASE_EVENT',
+          targetId: id,
+          payload: { reason: 'ignored_outlier' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.purchase_review_status = 'ignored_outlier';
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/capi-queue
+   * Meja kerja Advertiser (Meta CAPI Queue): daftar reservasi yang pernah
+   * terdeteksi pembayaran (purchase_occurred_at ter-set) beserta data atribusi
+   * (paid/organic + UTM) dan estimasi sisa usia event sebelum Meta drop (7 hari).
+   */
+  fastify.get('/api/admin/capi-queue', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const rows = await prisma.reservation.findMany({
+        where: {
+          tenant_id: DEFAULT_TENANT_ID,
+          purchase_occurred_at: { not: null },
+        },
+        orderBy: { purchase_occurred_at: 'desc' },
+        include: {
+          customer: {
+            include: { adClick: true },
+          },
+        },
+      });
+
+      const now = Date.now();
+      const data = rows.map((r) => {
+        const occurredAt = r.purchase_occurred_at ? new Date(r.purchase_occurred_at).getTime() : 0;
+        const ageMs = Math.max(0, now - occurredAt);
+        const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
+        const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+        return {
+          id: r.id,
+          status: r.status,
+          treatment_detail: r.treatment_detail,
+          raw_text: r.raw_text,
+          purchase_occurred_at: r.purchase_occurred_at,
+          purchase_event_sent_at: r.purchase_event_sent_at,
+          purchase_review_status: r.purchase_review_status,
+          value: r.purchase_value ?? extractRupiahAmount(r.raw_text || ''),
+          customer: {
+            name: r.customer?.name || 'Bunda',
+            phone: r.customer?.phone || '',
+          },
+          attribution: {
+            isPaid: !!r.customer?.adClick,
+            trackingCode: r.customer?.adClick?.trackingCode || null,
+            landingUrl: r.customer?.adClick?.landingUrl || null,
+          },
+          utm: {
+            campaign: r.customer?.adClick?.utmCampaign || null,
+            source: r.customer?.adClick?.utmSource || null,
+            medium: r.customer?.adClick?.utmMedium || null,
+          },
+          ageHours,
+          daysOld,
+          expiresInDays: Math.max(0, 7 - daysOld),
+          metaDropRisk: daysOld > 7,
+        };
+      });
+
+      const pending = data.filter((d) => d.purchase_review_status === 'pending').length;
+
+      return reply.status(200).send({ success: true, data, total: data.length, pending });
+    } catch (err: any) {
+      const rows = Array.from(memoryReservations.values()).filter((r) => r.purchase_occurred_at);
+      return reply.status(200).send({
+        success: true,
+        data: rows,
+        total: rows.length,
+        pending: rows.filter((r) => r.purchase_review_status === 'pending').length,
+        note: 'Fallback in-memory mode (DB offline)',
+      });
+    }
+  });
 }

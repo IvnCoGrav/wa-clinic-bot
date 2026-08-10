@@ -27,6 +27,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
    * Termasuk IDEMPOTENCY CHECK (`wa_message_id`) & EXPLICIT GUARD CLAUSE for HUMAN HANDLING.
    */
   fastify.post('/webhook', async (request: FastifyRequest<{ Body: WahaWebhookEvent }>, reply: FastifyReply) => {
+    const startTime = Date.now();
     const correlationId = crypto.randomUUID();
     return contextStorage.run({ correlationId }, async () => {
       // --- SECURITY VERIFICATION (X-Webhook-Secret) ---
@@ -240,6 +241,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+      conversationService.updateLastCustomerMessageAt(conversation.id, DEFAULT_TENANT_ID).catch(() => {});
 
       // --- GUARD CLAUSE: BLOCKED CUSTOMER (Tergolong di awal pemrosesan, setelah Idempotency Check) ---
       if (customer.status === 'blocked') {

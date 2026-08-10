@@ -24,6 +24,7 @@ import { settingsAdminRoutes } from './admin/settings.subroute';
 import { wabaAdminRoutes } from './admin/waba.subroute';
 import { migrationAdminRoutes } from './admin/migration.subroute';
 import { evaluationsAdminRoutes } from './admin/evaluations.subroute';
+import { metaAttributionAdminRoutes } from './admin/meta-attribution.subroute';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
@@ -95,6 +96,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(wabaAdminRoutes);
   fastify.register(migrationAdminRoutes);
   fastify.register(evaluationsAdminRoutes);
+  fastify.register(metaAttributionAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');

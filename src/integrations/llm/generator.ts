@@ -225,7 +225,7 @@ ATURAN EKSTRAKSI PREFERENSI:
           content: userQuestion,
         });
 
-        const { data: responseData } = await callChatCompletionsWithFallback({
+        const { data: responseData, model: usedModel } = await callChatCompletionsWithFallback({
           baseUrl: this.baseUrl,
           apiKey: this.apiKey,
           model: modelConfig.modelName,
@@ -238,6 +238,23 @@ ATURAN EKSTRAKSI PREFERENSI:
             messages: apiMessages,
           },
         });
+
+        if (responseData?.usage) {
+          try {
+            const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
+            recordLlmUsage({
+              tenant_id: tenantId,
+              customer_phone: customerId || 'unknown',
+              conversation_id: conversationId,
+              model_name: usedModel || modelConfig.modelName,
+              task_type: 'CHAT_REPLY',
+              prompt_tokens: responseData.usage.prompt_tokens || 0,
+              completion_tokens: responseData.usage.completion_tokens || 0,
+            });
+          } catch (logErr) {
+            // Safe fire-and-forget
+          }
+        }
 
         const content = responseData.choices[0].message.content;
         

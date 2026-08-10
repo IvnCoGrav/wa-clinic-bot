@@ -193,7 +193,10 @@ export class MessageService {
     waMessageId: string,
     tenantId: string,
     status: 'sent' | 'delivered' | 'read' | 'failed',
-    timestamp?: number
+    timestamp?: number,
+    metaErrorCode?: string | null,
+    metaErrorDesc?: string | null,
+    metaPricingCategory?: string | null
   ): Promise<{ matched: boolean }> {
     if (!waMessageId) return { matched: false };
 
@@ -201,9 +204,12 @@ export class MessageService {
     const ts = timestamp ? new Date(timestamp * 1000) : new Date();
     if (status === 'delivered') data.delivered_at = ts;
     if (status === 'read') data.read_at = ts;
+    if (metaErrorCode !== undefined) data.meta_error_code = metaErrorCode;
+    if (metaErrorDesc !== undefined) data.meta_error_desc = metaErrorDesc;
+    if (metaPricingCategory !== undefined) data.meta_pricing_category = metaPricingCategory;
 
     try {
-      const result = await prisma.message.updateMany({
+      const result = await (prisma.message as any).updateMany({
         where: { wa_message_id: waMessageId, tenant_id: tenantId },
         data,
       });

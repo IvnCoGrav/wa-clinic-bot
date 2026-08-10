@@ -1,5 +1,10 @@
 import { prisma } from '../db/client';
-import { resolveTreatmentValue, fireCapiEvent, getTenantCapiFormats } from './capi.service';
+import {
+  resolveTreatmentValue,
+  fireCapiEvent,
+  getTenantCapiFormats,
+  getTenantAutoSendPurchaseCapi,
+} from './capi.service';
 
 /**
  * Deteksi event Purchase dari pesan masuk customer.
@@ -11,8 +16,11 @@ import { resolveTreatmentValue, fireCapiEvent, getTenantCapiFormats } from './ca
  * purchase_event_sent_at pada reservasi terakhir customer agar tombol "Tandai
  * Lunas" di dashboard nonaktif selama 7 hari (cegah double-count & cover repeat order).
  *
- * Rule anti false-positive: WAJIB ada nominal rupiah (angka) di pesan selain keyword.
- * Tanpa angka → skip (jalur admin confirm yang menangani).
+ * Moderasi outlier (default ON): event TIDAK langsung dikirim. purchase_occurred_at
+ * dicatat & purchase_review_status='pending' → masuk queue moderasi admin
+ * (approve-purchase / reject-purchase). Hanya bila tenant.auto_send_purchase_capi
+ * = true, event ditembakkan langsung. Rule anti false-positive: WAJIB ada nominal
+ * rupiah (angka) di pesan selain keyword. Tanpa angka → skip.
  */
 
 const PURCHASE_DEDUP_WINDOW_MS = 1000 * 60 * 60 * 24 * 7; // 7 hari
@@ -82,6 +90,12 @@ export async function maybeFirePurchaseEvent(params: {
     });
     if (!reservation) return false;
 
+    // Sudah ditahan menunggu review admin → jangan re-queue (anti double-count).
+    // (purchase_occurred_at membedakan "ditahan" dari default 'pending' row lama.)
+    if (reservation.purchase_review_status === 'pending' && reservation.purchase_occurred_at) {
+      return false;
+    }
+
     const alreadySentRecently =
       reservation.purchase_event_sent_at &&
       Date.now() - new Date(reservation.purchase_event_sent_at).getTime() < PURCHASE_DEDUP_WINDOW_MS;
@@ -90,24 +104,42 @@ export async function maybeFirePurchaseEvent(params: {
     // Nilai definitif: nominal dari pesan customer (lebih akurat), fallback katalog.
     const value = amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
 
-    fireCapiEvent({
-      eventName: 'Purchase',
-      customer,
-      adClick: reservation.customer?.adClick || customer.adClick || undefined,
-      value,
-      currency: 'IDR',
-      tenantId,
-      customData: { source: 'CUSTOMER_PAYMENT_MESSAGE', reservationId: reservation.id },
-    });
+    // Kebijakan moderasi: default tahan (false = moderasi manual aktif) sampai
+    // admin approve/reject di dashboard. Hanya true → kirim langsung.
+    const autoSend = await getTenantAutoSendPurchaseCapi(tenantId);
 
-    // Catat pengiriman event → dasar disable tombol "Tandai Lunas" 7 hari di dashboard.
+    const updateData: any = {
+      purchase_occurred_at: new Date(),
+      purchase_value: value,
+    };
+
+    if (autoSend) {
+      fireCapiEvent({
+        eventName: 'Purchase',
+        customer,
+        adClick: reservation.customer?.adClick || customer.adClick || undefined,
+        value,
+        currency: 'IDR',
+        tenantId,
+        customData: { source: 'CUSTOMER_PAYMENT_MESSAGE', reservationId: reservation.id },
+      });
+      updateData.purchase_event_sent_at = new Date();
+      updateData.purchase_review_status = 'approved';
+    } else {
+      updateData.purchase_review_status = 'pending';
+      console.log(
+        `[CAPI HELD] Purchase event queued for admin review (reservation ${reservation.id}, customer ${customer.id}, value ${value})`
+      );
+    }
+
+    // Catat pengiriman/penahanan → dasar status moderasi di dashboard.
     try {
       await prisma.reservation.update({
         where: { id: reservation.id },
-        data: { purchase_event_sent_at: new Date() },
+        data: updateData,
       });
     } catch (dbErr) {
-      console.warn('[CAPI] Failed to persist purchase_event_sent_at:', (dbErr as Error).message);
+      console.warn('[CAPI] Failed to persist purchase review state:', (dbErr as Error).message);
     }
 
     return true;

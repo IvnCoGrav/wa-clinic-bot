@@ -117,6 +117,22 @@ export async function getTenantCapiFormats(tenantId?: string): Promise<{
 }
 
 /**
+ * Kebijakan moderasi Purchase CAPI per tenant (auto_send_purchase_capi).
+ * Default false = moderasi manual aktif (event ditahan ke queue admin review).
+ * Tenant-aware: dibaca dari kolom tenant DB; fallback false bila DB offline.
+ */
+export async function getTenantAutoSendPurchaseCapi(tenantId?: string): Promise<boolean> {
+  if (!tenantId) return false;
+  try {
+    const { prisma } = await import('../db/client');
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    return tenant?.auto_send_purchase_capi ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fire-and-forget helper: kirim event CAPI jika customer punya atribusi adClick,
  * log error via console tanpa melempar exception (tidak merusak critical path).
  */
@@ -128,6 +144,7 @@ export function fireCapiEvent(params: {
   currency?: string;
   tenantId?: string;
   customData?: Record<string, any>;
+  eventTime?: number;
 }): void {
   capiService.sendCapiEvent(params).catch((err) => {
     console.error(`[CAPI ERROR] Failed to send ${params.eventName} event:`, err.message);
@@ -150,14 +167,11 @@ export class CapiService {
     currency?: string;
     tenantId?: string;
     customData?: Record<string, any>;
+    eventTime?: number;
   }): Promise<{ success: boolean; message?: string }> {
-    const { eventName, customer, adClick, value, currency, tenantId, customData } = params;
+    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime } = params;
 
-    // 1. GUARD CLAUSE: Jika tidak ada data adClick, lewatkan pemanggilan (CAPI tidak dikirim tanpa data attribution)
-    if (!adClick) {
-      console.log(`[CAPI] Skipping event ${eventName} for customer ${customer.phone}: No adClick attribution data available.`);
-      return { success: false, message: 'Skipped: No attribution data' };
-    }
+    const isPaid = !!adClick;
 
     // 2. Tenant-aware credentials (DB menang, env fallback)
     let pixelId = process.env.FB_PIXEL_ID;
@@ -183,9 +197,9 @@ export class CapiService {
     }
 
     try {
-      // 2. NORMALIZE & HASH PII (Nomor HP, Nama, External ID) menggunakan Meta ParamBuilder
+      // 2. NORMALIZE & HASH PII (Nomor HP, Nama, External ID, Kota, Zipcode, Country) menggunakan Meta ParamBuilder
       const builder = new ParamBuilder();
-      const rawPhone = customer.phone || adClick.phone || '';
+      const rawPhone = customer.phone || adClick?.phone || '';
       const normalizedPhone = normalizePhoneToE164(rawPhone);
       const hashedPhone = builder.getNormalizedAndHashedPII(normalizedPhone, PII_DATA_TYPE.PHONE);
 
@@ -212,18 +226,32 @@ export class CapiService {
         hashedExternalId = builder.getNormalizedAndHashedPII(rawExternalId, PII_DATA_TYPE.EXTERNAL_ID) || undefined;
       }
 
+      // Advanced Matching: City (Kota), Zipcode (Kode Pos), & Country (Negara)
+      let hashedCity: string | undefined;
+      let hashedZip: string | undefined;
+      let hashedCountry: string | undefined;
+      const rawCity = (customer.kota || customer.pending_kota || '').trim();
+      if (rawCity) {
+        hashedCity = builder.getNormalizedAndHashedPII(rawCity, PII_DATA_TYPE.CITY) || undefined;
+      }
+      const rawZip = (customer.zipcode || customer.pending_zipcode || '').trim();
+      if (rawZip) {
+        hashedZip = builder.getNormalizedAndHashedPII(rawZip, PII_DATA_TYPE.ZIP_CODE) || undefined;
+      }
+      hashedCountry = builder.getNormalizedAndHashedPII('id', PII_DATA_TYPE.COUNTRY) || undefined;
+
       // Gunakan server-side ParamBuilder untuk memproses parameter browser/IP & menambahkan appendix
       const mockCookies: Record<string, string> = {};
-      if (adClick.fbp) mockCookies._fbp = adClick.fbp;
-      if (adClick.fbc) mockCookies._fbc = adClick.fbc;
-      if (adClick.ipAddress) mockCookies._fbi = adClick.ipAddress;
+      if (adClick?.fbp) mockCookies._fbp = adClick.fbp;
+      if (adClick?.fbc) mockCookies._fbc = adClick.fbc;
+      if (adClick?.ipAddress) mockCookies._fbi = adClick.ipAddress;
 
       const mockQueries: Record<string, string> = {};
-      if (adClick.fbclid) mockQueries.fbclid = adClick.fbclid;
+      if (adClick?.fbclid) mockQueries.fbclid = adClick.fbclid;
 
       let host = 'localhost';
       try {
-        if (adClick.landingUrl) {
+        if (adClick?.landingUrl) {
           host = new URL(adClick.landingUrl).hostname;
         }
       } catch {}
@@ -233,15 +261,15 @@ export class CapiService {
         mockQueries,
         mockCookies,
         null, // referer
-        adClick.ipAddress, // xForwardedFor
-        adClick.ipAddress // remoteAddress
+        adClick?.ipAddress || null, // xForwardedFor
+        adClick?.ipAddress || null // remoteAddress
       );
 
-      const fbc = builder.getFbc() || adClick.fbc;
-      const fbp = builder.getFbp() || adClick.fbp;
-      const clientIp = builder.getClientIpAddress() || adClick.ipAddress;
+      const fbc = builder.getFbc() || adClick?.fbc;
+      const fbp = builder.getFbp() || adClick?.fbp;
+      const clientIp = builder.getClientIpAddress() || adClick?.ipAddress;
 
-      // 3. CONSTRUCT USER DATA (Meta specs: hash phone/name/external_id, keep IP/UA/Cookies clean)
+      // 3. CONSTRUCT USER DATA (Meta specs: hash phone/name/external_id/city/zip/country, keep IP/UA/Cookies clean)
       const userData: any = {};
       if (hashedPhone) {
         userData.ph = [hashedPhone];
@@ -255,10 +283,19 @@ export class CapiService {
       if (hashedExternalId) {
         userData.external_id = [hashedExternalId];
       }
+      if (hashedCity) {
+        userData.ct = [hashedCity];
+      }
+      if (hashedZip) {
+        userData.zp = [hashedZip];
+      }
+      if (hashedCountry) {
+        userData.country = [hashedCountry];
+      }
       if (clientIp) {
         userData.client_ip_address = clientIp;
       }
-      if (adClick.userAgent) {
+      if (adClick?.userAgent) {
         userData.client_user_agent = adClick.userAgent;
       }
       if (fbc) {
@@ -269,26 +306,32 @@ export class CapiService {
       }
 
       // 4. CONSTRUCT EVENT DATA payload
-      //    event_id = trackingCode ad click (auto-derive). Meta menduplikasi event yang
-      //    memiliki event_id sama, jadi event yang sama dikirim 2x (mis. Purchase dari
-      //    keyword "Payment" + dari admin confirm) tidak akan double-count, dan Pixel
-      //    server-side (eventID) ter-dedup dengan CAPI.
+      //    event_id = trackingCode ad click (auto-derive) atau synthetic ID untuk organic
       const eventData: any = {
         event_name: eventName,
-        event_time: Math.floor(Date.now() / 1000),
-        event_source_url: adClick.landingUrl || undefined,
+        // eventTime opsional (Unix seconds) → dipakai moderator saat mengirim
+        // event Purchase historis; default = waktu saat ini.
+        event_time: eventTime ?? Math.floor(Date.now() / 1000),
+        event_source_url: adClick?.landingUrl || undefined,
         action_source: 'chat',
         user_data: userData,
+        custom_data: {
+          ...(customData || {}),
+          traffic_source: isPaid ? 'paid' : 'organic',
+          ...(adClick?.utmSource ? { utm_source: adClick.utmSource } : {}),
+          ...(adClick?.utmMedium ? { utm_medium: adClick.utmMedium } : {}),
+          ...(adClick?.utmCampaign ? { utm_campaign: adClick.utmCampaign } : {}),
+        },
       };
-      if (adClick.trackingCode) {
+      if (adClick?.trackingCode) {
         eventData.event_id = adClick.trackingCode;
+      } else {
+        eventData.event_id = `org_${customer.id}_${eventName.toLowerCase()}_${Math.floor(Date.now() / 1000)}`;
       }
 
       if (value !== undefined) {
-        eventData.custom_data = {
-          value: Number(value),
-          currency: currency || 'IDR',
-        };
+        eventData.custom_data.value = Number(value);
+        eventData.custom_data.currency = currency || 'IDR';
       }
 
       const payload = {
@@ -313,6 +356,145 @@ export class CapiService {
       // 6. SILENT FAIL: Log error tetapi jangan throw Exception agar tidak merusak critical path caller
       console.error(`[CAPI ERROR] Conversions API failed silently:`, error.message);
       return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * LIVE TEST CAPI — memverifikasi Pixel ID & Access Token Meta valid tanpa
+   * menunggu transaksi riil. Berbeda dari sendCapiEvent: panggilan dibuat LANGSUNG
+   * ke Graph API (tanpa Circuit Breaker) agar response body error Meta yang asli
+   * (mis. OAuthException code 190 = token expired) bisa dilihat admin di dashboard.
+   *
+   * @param params.eventName   Nama event test (default 'Contact')
+   * @param params.value       Nilai konversi opsional (untuk Purchase)
+   * @param params.currency    Mata uang (default 'IDR')
+   * @param params.testEventCode  Kode Test Events dari Meta Events Manager (opsional).
+   *                              Bila diisi, event tidak akan dihitung di Ads Manager.
+   * @param params.tenantId    Tenant-aware: fallback env FB_PIXEL_ID / FB_CAPI_ACCESS_TOKEN
+   * @param params.ipAddress   IP request admin (dipakai sebagai client_ip_address test)
+   * @param params.userAgent   User-Agent request admin
+   */
+  public async testCapiConnection(params: {
+    eventName?: string;
+    value?: number;
+    currency?: string;
+    testEventCode?: string;
+    tenantId?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<{
+    success: boolean;
+    status: number | null;
+    message: string;
+    metaErrorCode?: number;
+    metaErrorSubcode?: number;
+    responseBody?: any;
+    pixelIdConfigured: boolean;
+    tokenConfigured: boolean;
+    source: 'db' | 'env' | 'none';
+  }> {
+    // 1. Resolve credentials tenant-aware (DB menang, env fallback) — sama dengan sendCapiEvent
+    let pixelId = process.env.FB_PIXEL_ID;
+    let accessToken = process.env.FB_CAPI_ACCESS_TOKEN;
+    let source: 'db' | 'env' | 'none' = 'none';
+
+    if (params.tenantId) {
+      try {
+        const { prisma } = await import('../db/client');
+        const tenant = await prisma.tenant.findUnique({ where: { id: params.tenantId } });
+        if (tenant?.meta_pixel_id) pixelId = tenant.meta_pixel_id;
+        if (tenant?.meta_capi_access_token) {
+          const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
+          if (decrypted) accessToken = decrypted;
+        }
+        if (tenant?.meta_pixel_id || tenant?.meta_capi_access_token) source = 'db';
+      } catch (err) {
+        console.warn(`[CAPI TEST WARNING] Gagal baca config CAPI tenant ${params.tenantId}, pakai env fallback:`, (err as Error).message);
+      }
+    }
+    if (source === 'none' && process.env.FB_PIXEL_ID && process.env.FB_CAPI_ACCESS_TOKEN) {
+      source = 'env';
+    }
+
+    const pixelIdConfigured = Boolean(pixelId);
+    const tokenConfigured = Boolean(accessToken);
+
+    if (!pixelId || !accessToken) {
+      return {
+        success: false,
+        status: null,
+        message: `Kredensial CAPI tidak lengkap (Pixel ID ${pixelIdConfigured ? 'OK' : 'MISSING'}, Access Token ${tokenConfigured ? 'OK' : 'MISSING'}). Konfigurasi dulu di Operational Settings.`,
+        pixelIdConfigured,
+        tokenConfigured,
+        source,
+      };
+    }
+
+    // 2. Bangun payload event test minimal (event_id unik agar tidak bertabrakan dengan event riil)
+    const eventName = params.eventName || 'Contact';
+    const eventData: any = {
+      event_name: eventName,
+      event_time: Math.floor(Date.now() / 1000),
+      event_id: `capi_test_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      action_source: 'website',
+      user_data: {
+        client_ip_address: params.ipAddress || undefined,
+        client_user_agent: params.userAgent || 'Admin CAPI Test',
+      },
+    };
+    if (params.value !== undefined && params.value !== null && !Number.isNaN(Number(params.value))) {
+      eventData.custom_data = {
+        value: Number(params.value),
+        currency: params.currency || 'IDR',
+      };
+    }
+    if (params.testEventCode && params.testEventCode.trim()) {
+      eventData.test_event_code = params.testEventCode.trim();
+    }
+
+    const payload = { data: [eventData] };
+    const url = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
+
+    console.log(`[CAPI TEST] Sending test ${eventName} event to Meta (pixel ${pixelId})...`);
+
+    // 3. Kirim LANGSUNG (tanpa breaker) agar error asli Meta terbaca
+    try {
+      const response = await axios.post(url, payload, { timeout: 10000 });
+      return {
+        success: true,
+        status: response.status,
+        message: `Event test '${eventName}' diterima Meta (HTTP ${response.status}). Kredensial valid.`,
+        responseBody: response.data,
+        pixelIdConfigured,
+        tokenConfigured,
+        source,
+      };
+    } catch (err: any) {
+      const status = err?.response?.status || null;
+      const errorBody = err?.response?.data?.error || null;
+      const metaErrorCode = errorBody?.code;
+      const metaErrorSubcode = errorBody?.error_subcode;
+
+      let hint = '';
+      if (metaErrorCode === 190) {
+        hint = ' → Access Token invalid/expired. Rotate token di Operational Settings.';
+      } else if (metaErrorCode === 100) {
+        hint = ' → Kemungkinan Pixel ID salah atau parameter tidak valid.';
+      } else if (metaErrorCode === 10) {
+        hint = ' → Access token tidak memiliki izin untuk pixel ini.';
+      }
+
+      return {
+        success: false,
+        status,
+        message: `${errorBody?.message || err?.message || 'Gagal menghubungi Meta Graph API'}${hint}`,
+        metaErrorCode,
+        metaErrorSubcode,
+        responseBody: errorBody,
+        pixelIdConfigured,
+        tokenConfigured,
+        source,
+      };
     }
   }
 }

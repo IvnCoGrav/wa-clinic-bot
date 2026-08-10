@@ -51,17 +51,28 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       let processedStatuses = 0;
       for (const st of statuses) {
         const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(st.phoneNumberId);
-        await messageService.updateDeliveryStatus(st.messageId, tenantId, st.status, st.timestamp);
+        const errCode = st.errors?.[0]?.code ? String(st.errors[0].code) : null;
+        const errDesc = st.errors?.map((e: any) => e?.error_data?.details || e?.title || e?.message).filter(Boolean).join(' | ') || null;
+        const pricingCategory = (st as any).pricing?.category || (st as any).pricing_category || null;
+
+        await messageService.updateDeliveryStatus(
+          st.messageId,
+          tenantId,
+          st.status,
+          st.timestamp,
+          errCode,
+          errDesc,
+          pricingCategory
+        );
         if (st.status === 'failed') {
-          const detail = st.errors?.map((e) => e?.error_data?.details || e?.title || e?.message).filter(Boolean).join(' | ');
-          console.warn(`[WABA STATUS] Pesan ${st.messageId} gagal dikirim (tenant=${tenantId}): ${detail || 'unknown'}`);
+          console.warn(`[WABA STATUS] Pesan ${st.messageId} gagal dikirim (tenant=${tenantId}, code=${errCode}): ${errDesc || 'unknown'}`);
           try {
             const { alertService, AlertType, AlertSeverity } = await import('../services/alert.service');
             await alertService.notifyAlert({
               type: AlertType.WABA_MESSAGE_FAILED,
               severity: AlertSeverity.CRITICAL,
-              message: `[WABA TEMPLATE FAILED] Pesan ${st.messageId} gagal dikirim (tenant=${tenantId}).`,
-              metadata: { tenantId, messageId: st.messageId, errors: st.errors },
+              message: `[WABA TEMPLATE FAILED] Pesan ${st.messageId} gagal dikirim (tenant=${tenantId}, code=${errCode}).`,
+              metadata: { tenantId, messageId: st.messageId, errors: st.errors, errorCode: errCode },
             });
           } catch (alertErr) {
             console.error('[WABA STATUS] Gagal kirim alert failed:', (alertErr as Error).message);
