@@ -196,24 +196,35 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       let dbNote: string | undefined;
       let totalClicks = 0;
       let matchedChats = 0;
+      let mqlLeads = 0;
+      let pendingPurchases = 0;
+      let approvedPurchases = 0;
+      let ignoredOutliers = 0;
       let purchaseEvents = 0;
 
       try {
-        const [clicks, matched, purchases] = await Promise.all([
+        const [clicks, matched, mqlCount, pendingCount, approvedCount, rejectedCount] = await Promise.all([
           prisma.adClick.count({ where: { tenant_id: DEFAULT_TENANT_ID, ...dateRange } }),
           prisma.adClick.count({ where: { tenant_id: DEFAULT_TENANT_ID, ...dateRange, matchedAt: { not: null } } }),
-          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_event_sent_at: dateRange.createdAt } }),
+          prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID, is_mql: true } }),
+          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'pending' } }),
+          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'approved' } }),
+          prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'ignored_outlier' } }),
         ]);
         totalClicks = clicks;
         matchedChats = matched;
-        purchaseEvents = purchases;
+        mqlLeads = mqlCount;
+        pendingPurchases = pendingCount;
+        approvedPurchases = approvedCount;
+        ignoredOutliers = rejectedCount;
+        purchaseEvents = approvedCount;
       } catch (err: any) {
         dbNote = `DB offline: ${err?.message?.slice(0, 160)}`;
       }
 
       const unmatchedDrain = totalClicks - matchedChats;
       const conversionRate = totalClicks > 0 ? (matchedChats / totalClicks) * 100 : 0;
-      const capiEventsDelivered = matchedChats + purchaseEvents;
+      const capiEventsDelivered = matchedChats + approvedPurchases;
 
       // Kesehatan CAPI (tenant-aware + env fallback), token TIDAK pernah dibocorkan
       let tenant: any = null;
@@ -239,8 +250,20 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           unmatchedDrain,
           conversionRate: Math.round(conversionRate * 100) / 100,
           purchaseEvents,
+          pendingPurchases,
+          approvedPurchases,
+          ignoredOutliers,
+          mqlLeads,
+          funnel: {
+            step1_adClicks: totalClicks,
+            step2_contactMatched: matchedChats,
+            step3_mqlLeads: mqlLeads,
+            step4_pendingPurchases: pendingPurchases,
+            step5_approvedPurchases: approvedPurchases,
+            step5_outliersFiltered: ignoredOutliers,
+          },
           capiEventsDelivered,
-          capiNote: 'Contact diestimasi dari jumlah klik yang MATCHED; Purchase dari reservasi ber-event terkirim.',
+          capiNote: 'Contact diestimasi dari jumlah klik yang MATCHED; Purchase dari reservasi ber-status approved.',
           capiHealth: {
             pixelIdConfigured,
             tokenConfigured,

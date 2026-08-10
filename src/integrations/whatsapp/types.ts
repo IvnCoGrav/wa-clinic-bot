@@ -36,6 +36,15 @@ export interface WhatsAppIncomingMessage {
     mimeType?: string;
     caption?: string | null;
   };
+  /** Native Meta Click-to-WhatsApp (CTWA) referral payload */
+  referral?: {
+    source_url?: string;
+    source_type?: string;
+    source_id?: string;
+    headline?: string;
+    body?: string;
+    ctwa_clid?: string;
+  };
 }
 
 export interface WhatsAppStatus {

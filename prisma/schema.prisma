@@ -411,6 +411,7 @@ model AdClick {
   utmSource   String?
   utmMedium   String?
   utmCampaign String?
+  ctwa_clid   String?
   phone       String?
   matchedAt   DateTime?
   customerId  String?   @unique
@@ -490,6 +491,7 @@ model Tenant {
   waba_business_account_id  String?
   waba_access_token         String?
   waba_webhook_verify_token String?
+  waba_app_secret           String?
   ai_router_enabled         Boolean          @default(true)
   ai_router_shadow_mode     Boolean          @default(true)
   ai_customer_scope         AiCustomerScope  @default(NEW_ONLY)
