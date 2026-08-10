@@ -81,13 +81,15 @@ export const LiveChatMonitor: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
 
-  // Auto-scroll ke pesan terbaru saat thread berubah / pesan baru masuk.
+  // Auto-scroll internal container ke pesan terbaru saat thread berubah / pesan baru masuk.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
   }, [messages, selectedId]);
 
   useEffect(() => {
@@ -165,7 +167,8 @@ export const LiveChatMonitor: React.FC = () => {
   useEffect(() => {
     loadChats(true);
 
-    const unsubscribe = connectLiveChatSse({      onStatusChange: (connected) => setSseConnected(connected),
+    const unsubscribe = connectLiveChatSse({
+      onStatusChange: (connected) => setSseConnected(connected),
       onEvent: (type, payload) => {
         if (type === 'message.created') {
           const conversationId = payload.conversationId;
@@ -173,15 +176,25 @@ export const LiveChatMonitor: React.FC = () => {
             id: payload.messageId || `sse_${Date.now()}`,
             direction: payload.direction,
             content: payload.content || '',
-            sender_type: payload.senderType || null,
-            sender_name: payload.senderName || null,
-            created_at: payload.createdAt || new Date().toISOString(),
+            sender_type: payload.senderType || payload.sender_type || null,
+            sender_name: payload.senderName || payload.sender_name || null,
+            created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
             media: extractMedia(payload),
           };
 
-          // Append ke thread yang sedang dibuka (hindari duplikat by id)
+          // Append ke thread yang sedang dibuka (hindari duplikat by id / timestamp & content)
           if (selectedIdRef.current === conversationId) {
-            setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+            setMessages((prev) =>
+              prev.some(
+                (m) =>
+                  m.id === msg.id ||
+                  (m.content === msg.content &&
+                    m.direction === msg.direction &&
+                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 3000)
+              )
+                ? prev
+                : [...prev, msg]
+            );
           }
 
           // Update preview daftar
@@ -193,7 +206,7 @@ export const LiveChatMonitor: React.FC = () => {
                 ? c
                 : {
                     ...c,
-                    lastMessageAt: payload.createdAt || c.lastMessageAt,
+                    lastMessageAt: payload.createdAt || payload.created_at || c.lastMessageAt,
                     lastMessages: [...(c.lastMessages || []), msg].slice(-3),
                   }
             );
@@ -686,7 +699,7 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
 
                 {/* Chat Bubbles Container */}
-                <div className="flex-1 overflow-y-auto py-4 space-y-3 my-4 pr-1">
+                <div ref={chatContainerRef} className="flex-1 overflow-y-auto py-4 space-y-3 my-4 pr-1">
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-slate-600 text-xs">
                       <MessageCircle size={32} className="mb-2 text-slate-700" />
@@ -697,16 +710,16 @@ export const LiveChatMonitor: React.FC = () => {
                       const isCustomer = msg.direction === 'INBOUND';
                       const isAdmin = msg.direction === 'OUTBOUND' && msg.sender_type === 'ADMIN';
                       return (
-                        <div key={msg.id} className={`flex ${isCustomer ? 'justify-end' : 'justify-start'}`}>
+                        <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
                           <div className={`max-w-[80%] rounded-2xl p-3.5 text-xs leading-relaxed ${
                             isCustomer
-                              ? 'bg-pink-500 text-white rounded-tr-none'
+                              ? 'bg-slate-800 text-slate-100 rounded-tl-none border border-white/5'
                               : isAdmin
-                                ? 'bg-emerald-600/80 text-white rounded-tl-none'
-                                : 'bg-slate-800 text-slate-100 rounded-tl-none border border-white/5'
+                                ? 'bg-emerald-600/80 text-white rounded-tr-none'
+                                : 'bg-pink-500 text-white rounded-tr-none'
                           }`}>
                             <span className={`block text-[8px] font-black uppercase tracking-wider mb-1 flex items-center space-x-1 ${
-                              isCustomer ? 'text-pink-100' : isAdmin ? 'text-emerald-100' : 'text-slate-400'
+                              isCustomer ? 'text-slate-400' : isAdmin ? 'text-emerald-100' : 'text-pink-100'
                             }`}>
                               {!isCustomer && !isAdmin && <Bot size={9} />}
                               <span>{senderLabel(msg)}</span>
@@ -732,7 +745,6 @@ export const LiveChatMonitor: React.FC = () => {
                       );
                     })
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
 
                 {/* Reply Composer */}
