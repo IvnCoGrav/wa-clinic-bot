@@ -17,15 +17,12 @@ WhatsApp (WAHA) terputus.
 | **Docker Compose** | `/opt/wa-clinic-bot/docker-compose.yml` |
 | **Session WAHA** | `default` (volume `waha_sessions`)   |
 
-> ⚠️ **PERINGATAN KEAMANAN**
+> ✅ **STATUS KEAMANAN (TER-UPDATE)**
 >
-> Password di atas tercantum agar Anda bisa langsung mengakses server. **SEGERA**
-> setelah bisa, ganti dengan SSH key pair (jauh lebih aman):
-> 1. Jalankan `ssh-keygen` di PC Anda.
-> 2. Upload key: `ssh-copy-id ubuntu@43.157.197.148`
->    (atau `cat ~/.ssh/id_ed25519.pub | ssh -p 1403 ubuntu@43.157.197.148 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"`).
-> 3. Matikan login password di `/etc/ssh/sshd_config` → `PasswordAuthentication no`.
-> 4. Jangan pernah commit file ini ke repository publik / bagikan ke siapa pun.
+> Server kini telah dikonfigurasi menggunakan **SSH Key Authentication** yang jauh lebih aman (Password tidak lagi digunakan untuk akses utama). 
+> Kunci telah dipasang di `~/.ssh/id_ed25519_klinik` pada komputer lokal dengan alias SSH `klinik-server`.
+> 
+> *(Opsional)* Jika Anda ingin menonaktifkan total login menggunakan password, Anda bisa mengubah `PasswordAuthentication no` di `/etc/ssh/sshd_config` server.
 
 ---
 

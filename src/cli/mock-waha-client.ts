@@ -42,12 +42,13 @@ export class MockWAHAClient implements IWahaClient {
   public async sendImage(chatId: string, fileUrl: string, caption?: string): Promise<boolean> {
     try {
       process.stdout.write('\r\x1b[K');
-      console.log(`\x1b[36m\x1b[1mBot [IMAGE]:\x1b[0m \x1b[36m${caption || fileUrl}\x1b[0m\n`);
-      console.log('\x1b[90m[INFO] Kirim gambar (send image) dimatikan di terminal & sandbox — gambar tidak dapat ditampilkan di CLI. Gambar asli hanya muncul di WhatsApp asli.\x1b[0m\n');
+      console.log(`\x1b[36m\x1b[1mBot [🖼️ MEDIA GAMBAR TERKIRIM]:\x1b[0m \x1b[36m${fileUrl}\x1b[0m`);
+      if (caption) {
+        console.log(`\x1b[36mCaption: ${caption}\x1b[0m\n`);
+      }
       return true;
     } catch (err: any) {
       console.error('\x1b[31m[CLI ERROR] sendImage gagal:\x1b[0m', err?.message || err);
-      console.error('\x1b[90m[INFO] Kirim gambar (send image) dimatikan di terminal & sandbox — gambar tidak dapat ditampilkan di CLI.\x1b[0m\n');
       return false;
     }
   }
