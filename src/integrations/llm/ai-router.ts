@@ -790,7 +790,7 @@ export class AIRouterLLMClient {
 [conversation_history]: ${input.conversationHistory.map((m) => `${m.role}: ${m.content}`).join('\n') || '(kosong)'}
 [last_customer_message]: "${input.lastCustomerMessage}"`;
 
-    const { data: responseData } = await callChatCompletionsWithFallback({
+    const { data: responseData, model: usedModel } = await callChatCompletionsWithFallback({
       baseUrl: this.baseUrl,
       apiKey: this.apiKey,
       model: this.model,
@@ -806,6 +806,21 @@ export class AIRouterLLMClient {
         ],
       },
     });
+
+    if (responseData?.usage) {
+      try {
+        const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
+        recordLlmUsage({
+          customer_phone: 'router-audit',
+          model_name: usedModel || this.model,
+          task_type: 'NLU_ROUTING',
+          prompt_tokens: responseData.usage.prompt_tokens || 0,
+          completion_tokens: responseData.usage.completion_tokens || 0,
+        });
+      } catch (logErr) {
+        // Safe fire-and-forget
+      }
+    }
 
     let rawContent = responseData?.choices?.[0]?.message?.content?.trim() || '';
 

@@ -51,6 +51,8 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
     vi.clearAllMocks();
     memoryAdClicks.clear();
     memoryReservations.clear();
+    customerService.clearCustomerMemory('62899998888');
+    customerService.clearCustomerMemory('62899990000');
     vi.stubEnv('TRACKING_API_KEY', 'valid_track_key');
     vi.stubEnv('ADMIN_API_KEY', 'valid_admin_key');
     await seedAiScopeAll();
@@ -120,15 +122,16 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
   describe('2. Webhook Interception & In-Memory Rewriting', () => {
     it('should link AdClick for a new customer sending Promo[CODE], log original Promo[CODE] to DB, and process as Halo greeting', async () => {
       // Mock trackingCode entry in memory fallback
-      const trackingCode = 'promo22';
+      const trackingCode = 'pr22';
       const adClickData = {
-        id: 'cuid_promo22',
+        id: 'cuid_pr22',
         trackingCode,
         fbclid: 'fb_click_22',
         matchedAt: null,
         customerId: null,
       };
       memoryAdClicks.set(trackingCode, adClickData);
+      vi.spyOn(customerService, 'getCustomerByPhone').mockResolvedValueOnce(null);
 
       const dbLogMsgSpy = vi.spyOn(messageService, 'logMessage').mockResolvedValue({} as any);
 
@@ -147,8 +150,8 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
           session: 'default',
           payload: {
             id: 'msg_9988',
-            from: '62899990000@c.us',
-            body: 'Promo[promo22]',
+            from: '62899998888@c.us',
+            body: 'Promo[pr22]',
             fromMe: false,
             timestamp: Math.floor(Date.now() / 1000),
           },
@@ -159,7 +162,7 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
 
       // 1. Verify AdClick is matched/linked in memory
       expect(adClickData.matchedAt).toBeDefined();
-      const customer = await customerService.getCustomerByPhone('62899990000', DEFAULT_TENANT_ID);
+      const customer = await customerService.getCustomerByPhone('62899998888', DEFAULT_TENANT_ID);
       expect(customer).toBeDefined();
       expect(adClickData.customerId).toBe(customer.id);
 

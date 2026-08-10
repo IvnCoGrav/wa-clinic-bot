@@ -230,6 +230,10 @@ export interface MessageTraceEntry {
   direction: string;
   content: string;
   wa_message_id: string | null;
+  delivery_status: string | null;
+  meta_error_code: string | null;
+  meta_error_desc: string | null;
+  meta_pricing_category: string | null;
   customerPhone: string | null;
   customerName: string | null;
 }
@@ -249,6 +253,10 @@ export async function collectRecentMessages(limit = 50): Promise<{ entries: Mess
         direction: m.direction,
         content: (m.content || '').slice(0, 300),
         wa_message_id: m.wa_message_id,
+        delivery_status: m.delivery_status ?? null,
+        meta_error_code: m.meta_error_code ?? null,
+        meta_error_desc: m.meta_error_desc ?? null,
+        meta_pricing_category: m.meta_pricing_category ?? null,
         customerPhone: m.conversation?.customer?.phone ?? null,
         customerName: m.conversation?.customer?.name ?? null,
       })),
@@ -267,6 +275,8 @@ export interface ConversationTraceEntry {
   consecutive_unknown_count: number;
   location_attempts: number;
   last_message_at: string;
+  last_customer_message_at: string | null;
+  is_within_24h_window: boolean;
   customerPhone: string | null;
   customerName: string | null;
 }
@@ -279,19 +289,29 @@ export async function collectConversationTrace(limit = 50): Promise<{ entries: C
       orderBy: { last_message_at: 'desc' },
       take: Math.min(200, Math.max(1, limit)),
     });
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
     return {
-      entries: rows.map((c: any) => ({
-        id: c.id,
-        current_state: c.current_state,
-        is_human_handling: c.is_human_handling,
-        human_handling_since: c.human_handling_since ? c.human_handling_since.toISOString() : null,
-        escalation_reason: c.escalation_reason,
-        consecutive_unknown_count: c.consecutive_unknown_count ?? 0,
-        location_attempts: c.location_attempts ?? 0,
-        last_message_at: c.last_message_at.toISOString(),
-        customerPhone: c.customer?.phone ?? null,
-        customerName: c.customer?.name ?? null,
-      })),
+      entries: rows.map((c: any) => {
+        const lastCustMsgMs = c.last_customer_message_at ? new Date(c.last_customer_message_at).getTime() : null;
+        const isWithin24h = lastCustMsgMs !== null ? (now - lastCustMsgMs) <= TWENTY_FOUR_HOURS_MS : false;
+
+        return {
+          id: c.id,
+          current_state: c.current_state,
+          is_human_handling: c.is_human_handling,
+          human_handling_since: c.human_handling_since ? c.human_handling_since.toISOString() : null,
+          escalation_reason: c.escalation_reason,
+          consecutive_unknown_count: c.consecutive_unknown_count ?? 0,
+          location_attempts: c.location_attempts ?? 0,
+          last_message_at: c.last_message_at.toISOString(),
+          last_customer_message_at: c.last_customer_message_at ? c.last_customer_message_at.toISOString() : null,
+          is_within_24h_window: isWithin24h,
+          customerPhone: c.customer?.phone ?? null,
+          customerName: c.customer?.name ?? null,
+        };
+      }),
     };
   } catch (err: any) {
     return { entries: [], dbNote: `DB offline: ${err?.message?.slice(0, 160)}` };

@@ -350,6 +350,18 @@ export class ConversationService {
       return conv || null;
     }
   }
+  public async updateLastCustomerMessageAt(conversationId: string, tenantId: string): Promise<void> {
+    const now = new Date();
+    try {
+      await (prisma.conversation as any).update({
+        where: { id: conversationId },
+        data: { last_customer_message_at: now },
+      });
+    } catch {
+      const conv = memoryConversations.get(conversationId);
+      if (conv) conv.last_customer_message_at = now;
+    }
+  }
 }
 
 export const conversationService = new ConversationService();

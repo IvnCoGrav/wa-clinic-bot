@@ -1,5 +1,6 @@
 import React from 'react';
-import { BarChart3, KeyRound, ShieldCheck, Check } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BarChart3, KeyRound, ShieldCheck, Check, FileClock, ArrowRight } from 'lucide-react';
 
 interface Props {
   metaPixelId: string;
@@ -10,6 +11,9 @@ interface Props {
   capiSource: string;
   savingCapi: boolean;
   handleSaveCapi: () => void;
+  autoSendPurchaseCapi: boolean;
+  savingPurchaseModeration: boolean;
+  handleTogglePurchaseModeration: (val: boolean) => void;
 }
 
 export const MetaCapiPanel: React.FC<Props> = ({
@@ -21,6 +25,9 @@ export const MetaCapiPanel: React.FC<Props> = ({
   capiSource,
   savingCapi,
   handleSaveCapi,
+  autoSendPurchaseCapi,
+  savingPurchaseModeration,
+  handleTogglePurchaseModeration,
 }) => {
   return (
     <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
@@ -80,6 +87,45 @@ export const MetaCapiPanel: React.FC<Props> = ({
         >
           <span>{savingCapi ? 'Menyimpan CAPI...' : 'Simpan Kredensial CAPI'}</span>
         </button>
+      </div>
+
+      {/* Moderasi Event Purchase Meta CAPI (Outlier Filter Queue) */}
+      <div className="border-t border-white/5 pt-4 mt-1">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-bold text-white flex items-center space-x-2">
+            <FileClock className="text-pink-400" size={14} />
+            <span>Moderasi Purchase Meta (CAPI)</span>
+          </h4>
+          <Link
+            to="/admin/meta-capi-queue"
+            className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] font-semibold transition"
+          >
+            <span>Buka Meta CAPI Queue</span>
+            <ArrowRight size={12} />
+          </Link>
+        </div>
+        <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
+          Jika OFF, transaksi pembayaran ditahan di queue moderasi (Pending Review) sampai di-approve admin —
+          mencegah data outlier terkirim ke Meta.
+        </p>
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-950 border border-white/5">
+          <div className="pr-3">
+            <span className="text-sm font-semibold text-slate-300">Auto-send Purchase CAPI</span>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {autoSendPurchaseCapi
+                ? 'Aktif — event pembayaran langsung dikirim ke Meta.'
+                : 'Off — event ditahan di queue moderasi (Pending Review Meta) sampai di-approve admin.'}
+            </p>
+          </div>
+          <button
+            onClick={() => handleTogglePurchaseModeration(!autoSendPurchaseCapi)}
+            disabled={savingPurchaseModeration}
+            className={`w-14 h-7 rounded-full transition-all relative flex-shrink-0 ${autoSendPurchaseCapi ? 'bg-emerald-500' : 'bg-rose-500'} ${savingPurchaseModeration ? 'opacity-50' : ''}`}
+            title="Toggle moderasi event Purchase Meta CAPI"
+          >
+            <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${autoSendPurchaseCapi ? 'translate-x-7' : ''}`}></div>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -29,7 +29,6 @@ import {
   RefreshCw,
   KeyRound,
   FileCheck,
-  FileClock,
   FileX,
   Save,
   BarChart3,
@@ -113,6 +112,10 @@ export const Settings: React.FC = () => {
   const [mqlThresholdBubbles, setMqlThresholdBubbles] = useState<number>(5);
   const [mqlAutoLeadEnabled, setMqlAutoLeadEnabled] = useState<boolean>(true);
   const [savingMql, setSavingMql] = useState(false);
+
+  // Moderasi Event Purchase Meta CAPI (Outlier Filter Queue)
+  const [autoSendPurchaseCapi, setAutoSendPurchaseCapi] = useState<boolean>(false);
+  const [savingPurchaseModeration, setSavingPurchaseModeration] = useState(false);
 
   // Live Chat Media retention (per-tenant, hari)
   const [mediaRetentionDays, setMediaRetentionDays] = useState<string>('30');
@@ -206,6 +209,40 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const loadPurchaseModeration = async () => {
+    try {
+      const res = await apiRequest('/api/admin/purchase-moderation');
+      if (res && res.data && typeof res.data.autoSendPurchaseCapi === 'boolean') {
+        setAutoSendPurchaseCapi(res.data.autoSendPurchaseCapi);
+      }
+    } catch (e) {
+      console.warn('Failed to load purchase moderation settings:', e);
+    }
+  };
+
+  const handleSavePurchaseModeration = async (val: boolean) => {
+    setSavingPurchaseModeration(true);
+    try {
+      const res = await apiRequest('/api/admin/purchase-moderation', {
+        method: 'PATCH',
+        body: JSON.stringify({ autoSendPurchaseCapi: val }),
+      });
+      if (res && res.success) {
+        setAutoSendPurchaseCapi(val);
+        toast(
+          val
+            ? 'Auto-send Purchase CAPI aktif. Semua event pembayaran dikirim langsung ke Meta.'
+            : 'Moderasi manual aktif. Event pembayaran ditahan di Meta CAPI Queue untuk review admin.',
+          'success'
+        );
+      }
+    } catch (err: any) {
+      toast(`Gagal menyimpan pengaturan moderasi: ${err.message}`, 'error');
+    } finally {
+      setSavingPurchaseModeration(false);
+    }
+  };
+
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -219,6 +256,7 @@ export const Settings: React.FC = () => {
           , // capi
           , // mql
           , // media
+          , // purchaseModeration
         ] = await Promise.all([
           apiRequest('/api/admin/settings'),
           apiRequest('/api/admin/delivery-tiers'),
@@ -230,6 +268,7 @@ export const Settings: React.FC = () => {
           loadMqlSettings(),
           loadMediaRetention(),
           loadPricelistImage(),
+          loadPurchaseModeration(),
         ]);
 
         if (data) {
@@ -693,6 +732,9 @@ export const Settings: React.FC = () => {
         capiSource={capiSource}
         savingCapi={savingCapi}
         handleSaveCapi={handleSaveCapiConfig}
+        autoSendPurchaseCapi={autoSendPurchaseCapi}
+        savingPurchaseModeration={savingPurchaseModeration}
+        handleTogglePurchaseModeration={handleSavePurchaseModeration}
       />
 
       {/* Gambar Pricelist WhatsApp */}

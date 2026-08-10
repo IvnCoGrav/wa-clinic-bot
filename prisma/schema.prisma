@@ -49,45 +49,45 @@ enum AiOverride {
 }
 
 model Customer {
-  id                 String         @id @default(uuid())
-  tenant_id          String         @default("default-tenant")
-  phone              String         @unique
-  name               String?
-  kelurahan          String?
-  kecamatan          String?
-  kota               String?
-  lat                Float?
-  lng                Float?
-  distance_km        Float?
-  ongkir             Int?
-  is_out_of_coverage Boolean        @default(false)
-  pending_kelurahan  String?
-  pending_kecamatan  String?
-  pending_kota       String?
-  pending_lat        Float?
-  pending_lng        Float?
-  zipcode            String?
-  pending_zipcode    String?
-  status             String         @default("active")
-  block_reason       String?
-  blocked_at         DateTime?
-  created_at         DateTime       @default(now())
-  updated_at         DateTime       @updatedAt
-  conversations      Conversation[]
-  reservations       Reservation[]
-  follow_ups         FollowUp[]
-  children           Child[]
-  adClick            AdClick?
-  pricelist_sent     Boolean        @default(false)
-  share_location_sent Boolean       @default(false)
-  is_sandbox_test    Boolean        @default(false)
-  marketing_opt_in        Boolean   @default(false)
+  id                      String         @id @default(uuid())
+  tenant_id               String         @default("default-tenant")
+  phone                   String         @unique
+  name                    String?
+  kelurahan               String?
+  kecamatan               String?
+  kota                    String?
+  lat                     Float?
+  lng                     Float?
+  distance_km             Float?
+  ongkir                  Int?
+  is_out_of_coverage      Boolean        @default(false)
+  pending_kelurahan       String?
+  pending_kecamatan       String?
+  pending_kota            String?
+  pending_lat             Float?
+  pending_lng             Float?
+  zipcode                 String?
+  pending_zipcode         String?
+  status                  String         @default("active")
+  block_reason            String?
+  blocked_at              DateTime?
+  created_at              DateTime       @default(now())
+  updated_at              DateTime       @updatedAt
+  conversations           Conversation[]
+  reservations            Reservation[]
+  follow_ups              FollowUp[]
+  children                Child[]
+  adClick                 AdClick?
+  pricelist_sent          Boolean        @default(false)
+  share_location_sent     Boolean        @default(false)
+  is_sandbox_test         Boolean        @default(false)
+  marketing_opt_in        Boolean        @default(false)
   marketing_opt_in_at     DateTime?
   marketing_opt_in_source String?
-  is_mql                  Boolean   @default(false)
+  is_mql                  Boolean        @default(false)
   mql_triggered_at        DateTime?
-  mql_bubble_count        Int       @default(0)
-  is_legacy_source        Boolean   @default(false)
+  mql_bubble_count        Int            @default(0)
+  is_legacy_source        Boolean        @default(false)
   legacy_scraped_at       DateTime?
   ai_override             AiOverride?
   preferences             Json?
@@ -117,24 +117,25 @@ model Child {
 }
 
 model Conversation {
-  id                       String             @id @default(uuid())
-  tenant_id                String             @default("default-tenant")
-  customer_id              String
-  customer                 Customer           @relation(fields: [customer_id], references: [id], onDelete: Cascade)
-  current_state            ConversationState  @default(INITIAL)
-  previous_state           ConversationState?
-  location_attempts        Int                @default(0)
-  is_human_handling        Boolean            @default(false)
-  human_handling_since     DateTime?
-  escalation_reason        String?
-  consecutive_unknown_count Int               @default(0)
-  review_flagged           Boolean            @default(false)
-  last_discussed_treatment String?
+  id                          String             @id @default(uuid())
+  tenant_id                   String             @default("default-tenant")
+  customer_id                 String
+  customer                    Customer           @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  current_state               ConversationState  @default(INITIAL)
+  previous_state              ConversationState?
+  location_attempts           Int                @default(0)
+  is_human_handling           Boolean            @default(false)
+  human_handling_since        DateTime?
+  escalation_reason           String?
+  consecutive_unknown_count   Int                @default(0)
+  review_flagged              Boolean            @default(false)
+  last_discussed_treatment    String?
   last_discussed_treatment_at DateTime?
-  last_message_at          DateTime           @default(now())
-  created_at               DateTime           @default(now())
-  updated_at               DateTime           @updatedAt
-  messages                 Message[]
+  last_message_at             DateTime           @default(now())
+  last_customer_message_at    DateTime?
+  created_at                  DateTime           @default(now())
+  updated_at                  DateTime           @updatedAt
+  messages                    Message[]
 
   @@index([tenant_id])
   @@index([tenant_id, is_human_handling, last_message_at])
@@ -144,28 +145,28 @@ model Conversation {
 }
 
 model AiRouterEvaluation {
-  id                String   @id @default(cuid())
-  tenant_id         String   @default("default-tenant")
+  id        String @id @default(cuid())
+  tenant_id String @default("default-tenant")
 
-  customer_phone    String
-  message_text      String   @db.Text
-  current_state     String
+  customer_phone String
+  message_text   String @db.Text
+  current_state  String
 
   llm_raw_output    Json?
   llm_intent        String?
   llm_confidence    Float?
-  llm_used_fallback Boolean  @default(false)
+  llm_used_fallback Boolean @default(false)
 
-  legacy_intent     String
-  legacy_escalated  Boolean
+  legacy_intent    String
+  legacy_escalated Boolean
 
-  intent_match      Boolean
-  escalation_match  Boolean
-  mismatch_notes    String?  @db.Text
+  intent_match     Boolean
+  escalation_match Boolean
+  mismatch_notes   String? @db.Text
 
-  response_time_ms  Int?
+  response_time_ms Int?
 
-  created_at        DateTime @default(now())
+  created_at DateTime @default(now())
 
   @@index([tenant_id, created_at])
   @@index([intent_match])
@@ -174,36 +175,39 @@ model AiRouterEvaluation {
 }
 
 model AiEvaluation {
-  id             String   @id @default(cuid())
-  tenant_id      String   @default("default-tenant")
-  message_id     String   @unique
-  customer_phone String
+  id              String   @id @default(cuid())
+  tenant_id       String   @default("default-tenant")
+  message_id      String   @unique
+  customer_phone  String
   conversation_id String?
-  message_text   String   @db.Text
-  ai_reasoning   String?  @db.Text
-  score          Int?
-  feedback       String?  @db.Text
-  created_at     DateTime @default(now())
+  message_text    String   @db.Text
+  ai_reasoning    String?  @db.Text
+  score           Int?
+  feedback        String?  @db.Text
+  created_at      DateTime @default(now())
 
   @@index([tenant_id, created_at])
   @@map("ai_evaluations")
 }
 
 model Message {
-  id              String       @id @default(uuid())
-  tenant_id       String       @default("default-tenant")
-  conversation_id String
-  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
-  wa_message_id   String?      @unique
-  direction       Direction
-  content         String
-  sender_type     String?      @default("BOT")
-  sender_name     String?
-  payload_raw     Json?
-  delivery_status String?
-  delivered_at    DateTime?
-  read_at         DateTime?
-  created_at      DateTime     @default(now())
+  id                    String       @id @default(uuid())
+  tenant_id             String       @default("default-tenant")
+  conversation_id       String
+  conversation          Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  wa_message_id         String?      @unique
+  direction             Direction
+  content               String
+  sender_type           String?      @default("BOT")
+  sender_name           String?
+  payload_raw           Json?
+  delivery_status       String?
+  meta_error_code       String?
+  meta_error_desc       String?
+  meta_pricing_category String?
+  delivered_at          DateTime?
+  read_at               DateTime?
+  created_at            DateTime     @default(now())
 
   @@index([tenant_id])
   @@index([conversation_id, tenant_id, created_at])
@@ -235,6 +239,9 @@ model Reservation {
   status                   String            @default("pending")
   google_calendar_event_id String?
   purchase_event_sent_at   DateTime?
+  purchase_occurred_at     DateTime?
+  purchase_value           Int?
+  purchase_review_status   String            @default("pending")
   is_repeat_order          Boolean           @default(false)
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
@@ -266,8 +273,8 @@ model WabaTemplate {
   tenant_id     String   @default("default-tenant")
   type          String // FollowUpTemplateType: NO_PURCHASE_1, NEXT_TREATMENT_1, dst
   variant       Int // 1, 2, 3 (mapping ke follow-up stage)
-  template_name String   // Nama HSM template di Meta (ter-approve)
-  category      String   // UTILITY | MARKETING
+  template_name String // Nama HSM template di Meta (ter-approve)
+  category      String // UTILITY | MARKETING
   language_code String   @default("id")
   status        String   @default("APPROVED") // APPROVED | PENDING | REJECTED | PAUSED
   is_active     Boolean  @default(true)
@@ -317,12 +324,12 @@ model ClinicService {
 }
 
 model TenantPersona {
-  id                 String   @id @default(uuid())
-  tenant_id          String   @unique
-  persona            String // Teks persona Bidan Yusi (system prompt)
-  max_chars_per_reply Int?   // Batas maksimal karakter untuk 1 balasan AI (null = tanpa limit)
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  tenant_id           String   @unique
+  persona             String // Teks persona Bidan Yusi (system prompt)
+  max_chars_per_reply Int? // Batas maksimal karakter untuk 1 balasan AI (null = tanpa limit)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
   @@map("tenant_persona")
 }
@@ -468,45 +475,46 @@ model LandingPage {
 }
 
 model Tenant {
-  id                     String            @id @default(uuid())
-  slug                   String            @unique
-  name                   String
-  whatsapp_number        String            @default("6287751148065")
-  meta_pixel_id          String?
-  meta_capi_access_token String?
-  landing_type           LandingType       @default(STRUCTURED_JSON)
-  landing_content        Json?
-  raw_html_content       String?
-  whatsapp_provider      WhatsappProvider  @default(WAHA)
-  waha_session_id        String?           @default("default")
-  waba_phone_number_id   String?
-  waba_business_account_id String?
-  waba_access_token      String?
+  id                        String           @id @default(uuid())
+  slug                      String           @unique
+  name                      String
+  whatsapp_number           String           @default("6287751148065")
+  meta_pixel_id             String?
+  meta_capi_access_token    String?
+  landing_type              LandingType      @default(STRUCTURED_JSON)
+  landing_content           Json?
+  raw_html_content          String?
+  whatsapp_provider         WhatsappProvider @default(WAHA)
+  waha_session_id           String?          @default("default")
+  waba_phone_number_id      String?
+  waba_business_account_id  String?
+  waba_access_token         String?
   waba_webhook_verify_token String?
-  ai_router_enabled      Boolean           @default(true)
-  ai_router_shadow_mode  Boolean           @default(true)
-  ai_customer_scope      AiCustomerScope   @default(NEW_ONLY)
-  ai_scope_cutoff_at     DateTime          @default(now())
-  manual_reply_escalates Boolean           @default(true)
-  idle_greeting_enabled  Boolean           @default(true)
-  idle_greeting_min_hours Int             @default(36)
-  mql_threshold_bubbles  Int               @default(5)
-  mql_auto_lead_enabled  Boolean           @default(true)
-  media_retention_days   Int               @default(30)
-  media_quota_bytes      Int               @default(209715200)
-  message_retention_days Int               @default(120)
-  daily_report_enabled   Boolean           @default(false)
-  daily_report_hour      Int               @default(7)
-  telegram_bot_token     String?
-  telegram_chat_id       String?
-  pricelist_image_url    String?
-  cs_name                String?           @default("Cs Yusi")
-  format_visit           String?           @default("Promo[%ID%]")
-  format_checkout        String?           @default("list untuk reservasi :")
-  format_purchase        String?           @default("Payment")
-  format_value           String?           @default("Treatment = %VALUE%")
-  created_at             DateTime          @default(now())
-  updated_at             DateTime          @updatedAt
+  ai_router_enabled         Boolean          @default(true)
+  ai_router_shadow_mode     Boolean          @default(true)
+  ai_customer_scope         AiCustomerScope  @default(NEW_ONLY)
+  ai_scope_cutoff_at        DateTime         @default(now())
+  manual_reply_escalates    Boolean          @default(true)
+  idle_greeting_enabled     Boolean          @default(true)
+  idle_greeting_min_hours   Int              @default(36)
+  mql_threshold_bubbles     Int              @default(5)
+  mql_auto_lead_enabled     Boolean          @default(true)
+  media_retention_days      Int              @default(30)
+  media_quota_bytes         Int              @default(209715200)
+  message_retention_days    Int              @default(120)
+  daily_report_enabled      Boolean          @default(false)
+  daily_report_hour         Int              @default(7)
+  telegram_bot_token        String?
+  telegram_chat_id          String?
+  pricelist_image_url       String?
+  cs_name                   String?          @default("Cs Yusi")
+  format_visit              String?          @default("Promo[%ID%]")
+  format_checkout           String?          @default("list untuk reservasi :")
+  format_purchase           String?          @default("Payment")
+  format_value              String?          @default("Treatment = %VALUE%")
+  auto_send_purchase_capi   Boolean          @default(false)
+  created_at                DateTime         @default(now())
+  updated_at                DateTime         @updatedAt
 
   @@index([slug])
   @@map("tenants")
@@ -568,12 +576,29 @@ model GeneralFaqStaging {
 model DailyReportLog {
   id          String   @id @default(uuid())
   tenant_id   String   @default("default-tenant")
-  report_date String   // format "YYYY-MM-DD" (WIB)
+  report_date String // format "YYYY-MM-DD" (WIB)
   sent_at     DateTime @default(now())
   status      String   @default("sent") // "sent" | "failed"
-  metadata    Json?    // opsional: simpan snapshot angka yang dikirim
+  metadata    Json? // opsional: simpan snapshot angka yang dikirim
 
   @@unique([tenant_id, report_date])
   @@index([tenant_id])
   @@map("daily_report_logs")
+}
+
+model LlmAuditLog {
+  id                String   @id @default(uuid())
+  tenant_id         String   @default("default-tenant")
+  customer_phone    String
+  conversation_id   String?
+  model_name        String
+  task_type         String // NLU_ROUTING, CHAT_REPLY, dst
+  prompt_tokens     Int
+  completion_tokens Int
+  cost_idr          Float
+  created_at        DateTime @default(now())
+
+  @@index([tenant_id, created_at])
+  @@index([customer_phone])
+  @@map("llm_audit_logs")
 }

@@ -40,6 +40,8 @@ export interface Reservation {
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
   raw_text: string;
   purchase_event_sent_at?: string | null;
+  purchase_occurred_at?: string | null;
+  purchase_review_status?: 'pending' | 'approved' | 'ignored_outlier' | string;
   baby_details?: BabyDetail[];
   created_at: string;
 }

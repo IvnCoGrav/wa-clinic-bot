@@ -75,14 +75,13 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       vi.clearAllMocks();
     });
 
-    it('should skip CAPI call if adClick data is not provided', async () => {
+    it('should process organic CAPI call with organic traffic_source if adClick data is not provided', async () => {
       const response = await capiService.sendCapiEvent({
         eventName: 'Lead',
-        customer: { phone: '08123456789' },
-        adClick: undefined, // missing attribution data
+        customer: { id: 'cust-organic-123', phone: '08123456789' },
+        adClick: undefined, // missing attribution data -> Organic traffic
       });
-      expect(response.success).toBe(false);
-      expect(response.message).toContain('Skipped: No attribution data');
+      expect(response.success).toBe(true);
     });
 
     it('should handle API errors silently without throwing exceptions', async () => {

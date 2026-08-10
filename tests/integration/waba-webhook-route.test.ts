@@ -105,7 +105,7 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).status).toBe('STATUS_PROCESSED');
-    expect(updateSpy).toHaveBeenCalledWith('wamid.delivered', 'tenant-status-1', 'delivered', 1691000100);
+    expect(updateSpy).toHaveBeenCalledWith('wamid.delivered', 'tenant-status-1', 'delivered', 1691000100, null, null, null);
   });
 
   it('POST failed status triggers WABA_MESSAGE_FAILED alert', async () => {

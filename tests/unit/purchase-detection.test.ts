@@ -35,6 +35,10 @@ describe('purchase-detection.service', () => {
 
     const baseCustomer = { id: 'c1', phone: '628123', adClick: undefined };
 
+    const mockTenantAutoSend = (autoSend: boolean) => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({ auto_send_purchase_capi: autoSend } as any);
+    };
+
     it('tidak fire event jika pesan tanpa keyword format_purchase', async () => {
       const fired = await maybeFirePurchaseEvent({
         customer: baseCustomer,
@@ -45,7 +49,8 @@ describe('purchase-detection.service', () => {
       expect(fired).toBe(false);
     });
 
-    it('fire Purchase & set purchase_event_sent_at saat keyword + nominal', async () => {
+    it('fire Purchase & set status approved saat auto_send_purchase_capi = true', async () => {
+      mockTenantAutoSend(true);
       vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
         id: 'r1',
         customer_id: 'c1',
@@ -54,6 +59,8 @@ describe('purchase-detection.service', () => {
         treatment_detail: 'Pijat Bayi',
         treatment_category: 'BABY',
         purchase_event_sent_at: null,
+        purchase_occurred_at: null,
+        purchase_review_status: 'pending',
         customer: { id: 'c1', adClick: { trackingCode: 'TC1' } },
       } as any);
       vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
@@ -75,8 +82,79 @@ describe('purchase-detection.service', () => {
       }));
       expect(prisma.reservation.update).toHaveBeenCalledWith({
         where: { id: 'r1' },
-        data: { purchase_event_sent_at: expect.any(Date) },
+        data: {
+          purchase_occurred_at: expect.any(Date),
+          purchase_event_sent_at: expect.any(Date),
+          purchase_review_status: 'approved',
+          purchase_value: 250000,
+        },
       });
+    });
+
+    it('TIDAK fire CAPI & set pending saat moderasi manual aktif (default false)', async () => {
+      mockTenantAutoSend(false);
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r2',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'pending',
+        treatment_detail: 'Pijat Bayi',
+        treatment_category: 'BABY',
+        purchase_event_sent_at: null,
+        purchase_occurred_at: null,
+        purchase_review_status: 'pending',
+        customer: { id: 'c1', adClick: { trackingCode: 'TC1' } },
+      } as any);
+      vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
+
+      const fireSpy = vi.spyOn(capi, 'fireCapiEvent').mockImplementation(() => {});
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Payment 250000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(true);
+      expect(fireSpy).not.toHaveBeenCalled();
+      expect(prisma.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'r2' },
+        data: {
+          purchase_occurred_at: expect.any(Date),
+          purchase_review_status: 'pending',
+          purchase_value: 250000,
+        },
+      });
+    });
+
+    it('skip re-queue jika reservasi sudah ditahan pending review (purchase_occurred_at ter-set)', async () => {
+      mockTenantAutoSend(true);
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r3',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'pending',
+        treatment_detail: 'Pijat Bayi',
+        treatment_category: 'BABY',
+        purchase_event_sent_at: null,
+        purchase_occurred_at: new Date(),
+        purchase_review_status: 'pending',
+        customer: { id: 'c1', adClick: { trackingCode: 'TC1' } },
+      } as any);
+
+      const fireSpy = vi.spyOn(capi, 'fireCapiEvent').mockImplementation(() => {});
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Payment 250000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(false);
+      expect(fireSpy).not.toHaveBeenCalled();
+      expect(prisma.reservation.update).not.toHaveBeenCalled();
     });
 
     it('tidak fire jika keyword ada tapi tanpa nominal (anti false-positive)', async () => {
