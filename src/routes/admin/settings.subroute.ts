@@ -1046,6 +1046,67 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/admin/purchase-moderation
+   */
+  fastify.get('/api/admin/purchase-moderation', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+      return reply.status(200).send({
+        success: true,
+        data: {
+          autoSendPurchaseCapi: tenant?.auto_send_purchase_capi ?? false,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, data: { autoSendPurchaseCapi: false } });
+    }
+  });
+
+  /**
+   * PATCH /api/admin/purchase-moderation
+   * Toggle kebijakan moderasi event Purchase Meta CAPI per tenant.
+   * false (default) = event ditahan ke queue moderasi admin; true = auto-kirim.
+   */
+  fastify.patch(
+    '/api/admin/purchase-moderation',
+    async (
+      request: FastifyRequest<{
+        Body: { autoSendPurchaseCapi: boolean };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { autoSendPurchaseCapi } = request.body || {};
+      if (typeof autoSendPurchaseCapi !== 'boolean') {
+        return reply.status(400).send({ error: 'Body harus berisi autoSendPurchaseCapi (boolean).' });
+      }
+
+      try {
+        const updated = await prisma.tenant.update({
+          where: { id: DEFAULT_TENANT_ID },
+          data: { auto_send_purchase_capi: autoSendPurchaseCapi },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_PURCHASE_MODERATION',
+          targetId: DEFAULT_TENANT_ID,
+          payload: { autoSendPurchaseCapi: updated.auto_send_purchase_capi },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Auto-send Purchase CAPI ${autoSendPurchaseCapi ? 'diaktifkan' : 'dinonaktifkan (moderasi manual aktif)'}.`,
+          data: { autoSendPurchaseCapi: updated.auto_send_purchase_capi },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/settings/daily-report
    */
   fastify.get('/api/admin/settings/daily-report', async (_request: FastifyRequest, reply: FastifyReply) => {

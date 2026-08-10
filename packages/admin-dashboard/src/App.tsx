@@ -23,6 +23,8 @@ const LandingPage = lazy(() => import('./pages/tenant/LandingPage').then(m => ({
 const CustomerDatabase = lazy(() => import('./pages/tenant/CustomerDatabase').then(m => ({ default: m.CustomerDatabase })));
 const CustomerService = lazy(() => import('./pages/tenant/CustomerService').then(m => ({ default: m.CustomerService })));
 const AiEvaluations = lazy(() => import('./pages/tenant/AiEvaluations').then(m => ({ default: m.AiEvaluations })));
+const MetaClickCatcher = lazy(() => import('./pages/tenant/MetaClickCatcher').then(m => ({ default: m.MetaClickCatcher })));
+const MetaCapiQueue = lazy(() => import('./pages/tenant/MetaCapiQueue').then(m => ({ default: m.MetaCapiQueue })));
 
 export const App: React.FC = () => {
   return (
@@ -148,6 +150,20 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <AiEvaluations />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/meta-click-catcher" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <MetaClickCatcher />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/meta-capi-queue" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <MetaCapiQueue />
                 </Layout>
               </ProtectedRoute>
             } />

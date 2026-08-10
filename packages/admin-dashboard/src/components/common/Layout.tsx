@@ -25,6 +25,8 @@ import {
   Users,
   Headphones,
   Gauge,
+  MousePointerClick,
+  BadgeCheck,
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,6 +36,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [wahaStatus, setWahaStatus] = useState<string>('UNKNOWN');
   const [redisQueueFallback, setRedisQueueFallback] = useState<boolean>(false);
+  const [capiPendingCount, setCapiPendingCount] = useState(0);
 
   useEffect(() => {
     async function fetchSystemHealth() {
@@ -50,12 +53,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    async function fetchCapiPending() {
+      try {
+        const data = await apiRequest('/api/admin/capi-queue');
+        const pending = Number(data?.pending) || 0;
+        setCapiPendingCount(pending);
+      } catch (err) {
+        console.warn('Failed to fetch capi queue count:', err);
+      }
+    }
+    fetchCapiPending();
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     navigate('/admin/login');
   };
 
-  const navItems = [
+  const navItems: { name: string; path: string; icon: any; badge?: number }[] = [
     { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
     { name: 'Customer Database', path: '/admin/customers', icon: Users },
     { name: 'Customer Service & CTA', path: '/admin/customer-service', icon: Headphones },
@@ -69,6 +85,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },
     { name: 'AI Persona settings', path: '/admin/persona', icon: Volume2 },
     { name: 'Landing Page', path: '/admin/landing', icon: Globe },
+    { name: 'Meta Click Catcher', path: '/admin/meta-click-catcher', icon: MousePointerClick },
+    { name: 'Meta CAPI Queue', path: '/admin/meta-capi-queue', icon: BadgeCheck, badge: capiPendingCount },
     { name: 'Operational Settings', path: '/admin/settings', icon: SettingsIcon },
     { name: 'AI Quality Evaluation', path: '/admin/ai-evaluations', icon: Gauge },
     { name: 'System Debug', path: '/admin/debug', icon: Bug },
@@ -107,7 +125,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 }`}
               >
                 <Icon size={18} className={isActive ? 'text-pink-400' : 'text-slate-400'} />
-                <span>{item.name}</span>
+                <span className="flex-1">{item.name}</span>
+                {!!item.badge && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      isActive ? 'bg-pink-500 text-white' : 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
