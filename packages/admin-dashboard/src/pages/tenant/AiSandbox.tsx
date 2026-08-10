@@ -179,7 +179,8 @@ export const AiSandbox: React.FC = () => {
     try {
       const data = await apiRequest('/api/admin/sandbox/chat', {
         method: 'POST',
-        body: JSON.stringify({ text: userText, simulateOutage: sumoPodOutage, sandboxPhone })
+        body: JSON.stringify({ text: userText, simulateOutage: sumoPodOutage, sandboxPhone }),
+        timeoutMs: 45000,
       });
 
       const endTime = Date.now();

@@ -48,15 +48,18 @@ export class LLMIntentService {
 
     try {
       console.time('LLM_INTENT_API_CALL');
-      const { data: responseData } = await callChatCompletionsWithFallback({
-        baseUrl: this.baseUrl,
-        apiKey: this.apiKey,
-        model: this.model,
-        fallbackModel: getFallbackModel(),
-        timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
-        payload: {
-          response_format: { type: 'json_object' },
-          messages: [
+      const startedAt = Date.now();
+      let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+      try {
+        callResult = await callChatCompletionsWithFallback({
+          baseUrl: this.baseUrl,
+          apiKey: this.apiKey,
+          model: this.model,
+          fallbackModel: getFallbackModel(),
+          timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+          payload: {
+            response_format: { type: 'json_object' },
+            messages: [
             {
               role: 'system',
                content: `${BOT_PERSONA_PROMPT}
@@ -79,7 +82,39 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
           ],
         },
       });
+      } catch (err: any) {
+        try {
+          const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+          auditLlmCall({
+            customer_phone: 'intent-audit',
+            task_type: 'INTENT_DETECTION',
+            model_name: this.model,
+            baseUrl: this.baseUrl,
+            startedAt,
+            error: err,
+          });
+        } catch {
+          // Fire-and-forget
+        }
+        throw err;
+      }
       console.timeEnd('LLM_INTENT_API_CALL');
+
+      const responseData = callResult.data;
+
+      try {
+        const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+        auditLlmCall({
+          customer_phone: 'intent-audit',
+          task_type: 'INTENT_DETECTION',
+          model_name: callResult.model,
+          baseUrl: callResult.baseUrl,
+          startedAt,
+          usage: responseData?.usage,
+        });
+      } catch (logErr) {
+        // Fire-and-forget
+      }
 
       const content = responseData.choices[0].message.content;
       
