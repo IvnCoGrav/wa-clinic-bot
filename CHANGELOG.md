@@ -6,7 +6,26 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
-## [Unreleased] - 2026-08-08
+## [Unreleased] - 2026-08-10
+
+### Changed — Rantai fallback LLM 4-lapis (env-driven, tanpa hardcode)
+
+- **`src/integrations/llm/model-fallback.ts`** — `callChatCompletionsWithFallback` kini mendukung rantai bertingkat:
+  1. Model primary (mis. MiniMax-M2.7-highspeed via SumoPod).
+  2. Rantai model cadangan **dalam provider yang sama** (`AI_MODEL_FALLBACK_CHAIN`, dipisah koma, dicoba berurutan — mis. `deepseek-v4-flash` → `qwen3.7-flash-2026-07-15`, semuanya via baseUrl + API key primary).
+  3. **Penyelamat terakhir provider eksternal** (`LLM_FALLBACK_BASE_URL` + `LLM_FALLBACK_API_KEY`, model = `AI_MODEL_FALLBACK`) — sebelum dilempar ke breaker/regex.
+  - Env `AI_MODEL_FALLBACK_CHAIN` kosong → perilaku lama dipertahankan (fallback tunggal langsung ke eksternal bila dikonfigurasi). `getFallbackChain()` mengekspos rantai untuk test.
+- **Config env (`.env.example`)**: `AI_MODEL_FALLBACK_CHAIN`, `LLM_FALLBACK_BASE_URL` (last-resort), `LLM_FALLBACK_API_KEY`.
+- **Test**: `tests/unit/model-fallback-chain.test.ts` (parse rantai, primary→chain SumoPod, chain→eksternal, semua gagal→throw); `tests/setup.ts` blanking `AI_MODEL_FALLBACK_CHAIN` agar test legacy deterministik.
+
+### Added — Audit LLM menyeluruh + mode eval A/B model NLU + json-extract bersama
+
+- **Audit semua call site LLM** (`src/utils/llm-audit-buffer.ts` — `auditLlmCall()`): kini mencakup 6 task — `CHAT_REPLY` (generator), `NLU_CLASSIFICATION` (nlu-classifier), `NLU_ROUTING` (ai-router), `INTENT_DETECTION` (intent.ts), `PHRASING` (phrasing.service), `SUMMARIZATION` (daily-report). Setiap panggilan dicatat sukses (token usage + provider aktual) ataupun error (message), dengan `latency_ms` dan `eval_run`; fire-and-forget, tidak mengganggu alur utama.
+- **Mode eval A/B NLU tanpa ubah config DB**: env `NLU_PRIMARY_MODEL` (`minimax` → `MiniMax-M2.7-highspeed`, `deepseek-sumopod` → `deepseek-v4-flash`) + `NLU_EVAL_RUN` (label window, tersimpan di `llm_audit_logs.eval_run`). Log window `[NLU EVAL]` saat aktif; kosongkan untuk kembali ke `AI_MODEL_NLU`/DB.
+- **`src/utils/json-extract.ts`** (baru): pipeline ekstraksi & perbaikan JSON output LLM — strip code fence → parse utuh → blok `{..}` balanced (string-aware) → perbaikan JSON terpotong (tutup brace kurang / potong progresif di batas `,` `}`) → slice naive. Dipakai `nlu-classifier.service.ts` (sanitizeJson + reasoning_content) dan `ai-router.ts` (reasoning_content) — menggantikan regex `/\{[\s\S]*\}/` yang rapuh & tidak menangani JSON terpotong di tengah value.
+- **`maxTokens` NLU 256 → 1024** (registry `INTENT_CLASSIFICATION`) — ruang tarik napas bagi model reasoning; aman karena `response_format: json_object` + fallback `isContentValid`.
+- **Config env (`.env.example`)**: `NLU_PRIMARY_MODEL`, `NLU_EVAL_RUN`.
+- **Test**: `tests/unit/json-extract.test.ts` (11 kasus: balanced, prefer-key, string berisi `}`, JSON terpotong dengan prefiks teks, code fence).
 
 ### Added — Laporan Operasional Harian via Telegram (Daily Ops Report)
 

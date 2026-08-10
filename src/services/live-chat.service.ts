@@ -235,10 +235,8 @@ export class LiveChatService {
     }
 
     if (!sendResult.success) {
-      if (hasImage) {
-        // best-effort hapus file yang baru disimpan bila pengiriman gagal
-        const { mediaService } = await import('./media.service');
-        if (mediaMeta?.hdUrl) mediaService.deleteFile(mediaMeta.hdUrl);
+      if (hasImage && mediaMeta?.hdUrl) {
+        console.warn(`[LIVE CHAT MEDIA] Pengiriman gambar ke WhatsApp gagal, tetapi file tetap tersimpan di storage: ${mediaMeta.hdUrl}`);
       }
       return {
         success: false,

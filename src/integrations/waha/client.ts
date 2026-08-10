@@ -80,6 +80,16 @@ export class WahaClient implements IWahaClient {
     return parseInt(process.env.HUMANIZER_HTTP_TIMEOUT_MS || '10000', 10);
   }
 
+  /**
+   * Timeout khusus untuk operasi media (sendImage & fetch gambar remote).
+   * Upload media ke server WhatsApp via WAHA bisa jauh lebih lambat dari
+   * endpoint interact biasa, sehingga pakai timeout khusus (default 30s)
+   * — jangan menumpang HUMANIZER_HTTP_TIMEOUT_MS (10s) yang terlalu ketat.
+   */
+  private get mediaTimeoutMs() {
+    return parseInt(process.env.WAHA_SEND_TIMEOUT_MS || '30000', 10);
+  }
+
   private get shouldMock(): boolean {
     return (
       process.env.NODE_ENV === 'test' ||
@@ -299,7 +309,7 @@ export class WahaClient implements IWahaClient {
 
       if (url.startsWith('http://') || url.startsWith('https://')) {
         // Fetch remote image lewat axios sebagai arraybuffer
-        const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
+        const response = await axios.get(url, { responseType: 'arraybuffer', timeout: this.mediaTimeoutMs });
         base64Data = Buffer.from(response.data, 'binary').toString('base64');
         mimetype = String(response.headers['content-type'] || 'image/jpeg');
 
@@ -308,16 +318,35 @@ export class WahaClient implements IWahaClient {
         const lastSegment = urlPathname.substring(urlPathname.lastIndexOf('/') + 1);
         if (lastSegment) filename = lastSegment;
       } else {
-        // Baca file lokal
+        // Baca file lokal (dukung path absolut & relative /media/outbound/... atau storage/media/...)
         const fs = await import('fs/promises');
+        const { existsSync } = await import('fs');
         const path = await import('path');
-        const resolvedPath = path.resolve(url);
+
+        let resolvedPath = path.resolve(url);
+        if (!existsSync(resolvedPath)) {
+          if (url.startsWith('/media/') || url.startsWith('media/')) {
+            const relClean = url.replace(/^\/?media\//, '');
+            resolvedPath = path.join(process.cwd(), 'storage', 'media', relClean);
+          } else if (url.startsWith('/storage/') || url.startsWith('storage/')) {
+            const relClean = url.replace(/^\/?storage\//, '');
+            resolvedPath = path.join(process.cwd(), 'storage', relClean);
+          } else if (!path.isAbsolute(url)) {
+            resolvedPath = path.join(process.cwd(), url);
+          }
+        }
+
+        if (!existsSync(resolvedPath)) {
+          throw new Error(`File media lokal tidak ditemukan di: ${resolvedPath} (input original: ${url})`);
+        }
+
         const fileBuffer = await fs.readFile(resolvedPath);
         base64Data = fileBuffer.toString('base64');
 
         const ext = path.extname(resolvedPath).toLowerCase();
         if (ext === '.png') mimetype = 'image/png';
         else if (ext === '.gif') mimetype = 'image/gif';
+        else if (ext === '.webp') mimetype = 'image/webp';
         filename = path.basename(resolvedPath);
       }
 
@@ -333,7 +362,7 @@ export class WahaClient implements IWahaClient {
           caption,
           session: this.session,
         },
-        { headers: this.headers, timeout: this.timeoutMs }
+        { headers: this.headers, timeout: this.mediaTimeoutMs }
       );
       return response.status === 200 || response.status === 201;
     } catch (error: any) {

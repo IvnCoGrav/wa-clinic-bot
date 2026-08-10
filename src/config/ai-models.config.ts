@@ -80,7 +80,7 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       provider: process.env.AI_PROVIDER_NLU || 'MiniMax',
       modelName: process.env.AI_MODEL_NLU || 'MiniMax-M2.7-highspeed',
       description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
-      maxTokens: 256,
+      maxTokens: 1024,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
     },

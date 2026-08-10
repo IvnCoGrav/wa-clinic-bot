@@ -771,10 +771,14 @@ OUTPUT JSON:
       console.timeEnd('LLM_GEOCODE_API_CALL');
 
       let content = response.data?.choices?.[0]?.message?.content?.trim();
+      const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';
+
+      if (reasoning) {
+        console.log(`\n[LLM REASONING (GEOCODE)]:\n${reasoning}\n`);
+      }
       
       // Handle DeepSeek reasoning models: content kosong, jawaban di reasoning_content
-      if (!content) {
-        const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';
+      if (!content && reasoning) {
         // Coba extract JSON dari reasoning content
         const jsonMatch = reasoning.match(/\{[\s\S]*?"kelurahan"[\s\S]*?\}/);
         if (jsonMatch) {
@@ -786,6 +790,9 @@ OUTPUT JSON:
       if (!content) {
         return null;
       }
+
+      // Bersihkan teks dari markdown code block (seperti ```json ... ```) agar tidak merusak JSON.parse
+      content = content.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 
       const parsed = JSON.parse(content);
       if (!parsed.kelurahan && !parsed.kecamatan) {

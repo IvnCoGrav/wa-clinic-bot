@@ -10,10 +10,19 @@ export function isLocationQueryMessage(incomingMessage: WhatsAppIncomingMessage,
   const lower = userText.toLowerCase().trim();
   const hasChangeKeyword = /(ganti|pindah|salah|ubah|bukan|yang\s+bener|alamat)/i.test(userText);
   const isConversationalLocation = hasChangeKeyword && (/di\s+/i.test(lower) || /ke\s+/i.test(lower));
+  
+  // Clean all leading greetings and polite introductory phrases (repeated to handle multi-word prefixes)
+  const cleanPrefix = lower
+    .replace(/^(?:halo|hola|hi|hei|p|assalamualaikum|salam|pagi|siang|sore|malam|permisi|kak|min|mbak|mas|bunda|bund|mau\s+tanya|nanya|tolong|mohon|sekalian)[,\.\s]*/gi, '')
+    .replace(/^(?:halo|hola|hi|hei|p|assalamualaikum|salam|pagi|siang|sore|malam|permisi|kak|min|mbak|mas|bunda|bund|mau\s+tanya|nanya|tolong|mohon|sekalian)[,\.\s]*/gi, '')
+    .trim();
+
   const isDirectLocationQuery =
-    /^(saya\s+)?(di|ke)\s+[a-z0-9]/i.test(userText.trim()) ||
-    /^(ongkir|tarif|biaya|kirim|pengiriman)\s+(ke|di)\s+/i.test(userText.trim()) ||
-    /^rumah\s+saya\s+(di|ke)\s+/i.test(userText.trim()) ||
-    /^kalau\s+(di|ke)\s+/i.test(userText.trim());
+    /^(saya\s+)?(di|ke)\s+[a-z0-9]/i.test(cleanPrefix) ||
+    /^(ongkir|tarif|biaya|kirim|pengiriman)\s+(ke|di)\s+/i.test(cleanPrefix) ||
+    /^rumah\s+saya\s+(di|ke)\s+/i.test(cleanPrefix) ||
+    /^kalau\s+(di|ke)\s+/i.test(cleanPrefix) ||
+    /\b(tarif|ongkir|biaya|kirim|pengiriman)\s+(ke|di)\s+[a-z0-9]/i.test(cleanPrefix);
+    
   return incomingMessage.type === 'location' || isConversationalLocation || isDirectLocationQuery;
 }

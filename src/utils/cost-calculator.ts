@@ -15,24 +15,24 @@ export interface ModelPricing {
 
 /**
  * Tabel tarif per 1.000 token (IDR) berdasarkan provider/model.
- * Menggunakan tarif resmi SumoPod / DeepSeek Proxy:
- * - Cache Hit Input: $0.003625 / 1M (~Rp 0.065 per 1k)
- * - Cache Miss Input: $0.435 / 1M (~Rp 7.83 per 1k)
- * - Output Tokens: $0.87 / 1M (~Rp 15.66 per 1k)
+ * Menggunakan tarif resmi SumoPod Proxy:
+ * - DeepSeek Cache Hit: $0.003 / 1M
+ * - DeepSeek Cache Miss: $0.14 / 1M
+ * - DeepSeek Output Tokens: $0.28 / 1M
  */
 const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
   // DeepSeek / SumoPod Proxy Pricing
   'deepseek-chat': {
     provider: 'SumoPod (DeepSeek)',
-    promptCostPer1kIdr: (0.435 / 1000) * USD_TO_IDR, // Cache Miss
-    promptCacheHitCostPer1kIdr: (0.003625 / 1000) * USD_TO_IDR, // Cache Hit (Hemat 98%!)
-    completionCostPer1kIdr: (0.87 / 1000) * USD_TO_IDR,
+    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Cache Miss
+    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR, // Cache Hit
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR,
   },
   'deepseek-v4-flash': {
     provider: 'SumoPod (DeepSeek)',
-    promptCostPer1kIdr: (0.435 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.003625 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.87 / 1000) * USD_TO_IDR,
+    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR,
   },
   'deepseek-reasoner': {
     provider: 'SumoPod (DeepSeek Reasoner)',
@@ -41,11 +41,13 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
     completionCostPer1kIdr: (2.19 / 1000) * USD_TO_IDR,
   },
 
-  // MiniMax Models
+  // MiniMax Models (via SumoPod)
+  // Tarif per Agust 2026: promo diskon 90% — Input $0.03 / 1M, Output $0.12 / 1M
+  // (harga normal: $0.30 / 1M input, $1.20 / 1M output; konteks 204.800 token).
   'minimax-m2.7-highspeed': {
     provider: 'MiniMax',
-    promptCostPer1kIdr: 0.002 * USD_TO_IDR,
-    completionCostPer1kIdr: 0.006 * USD_TO_IDR,
+    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR,
   },
 
   // OpenAI Models
@@ -65,8 +67,9 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
   // Qwen Models
   'qwen3.7-flash-2026-07-15': {
     provider: 'Alibaba Qwen',
-    promptCostPer1kIdr: 0.001 * USD_TO_IDR,
-    completionCostPer1kIdr: 0.003 * USD_TO_IDR,
+    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.006 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.13 / 1000) * USD_TO_IDR,
   },
 
   // Google Gemini
@@ -86,9 +89,28 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
 
 const DEFAULT_PRICING: ModelPricing = {
   provider: 'LLM Provider',
-  promptCostPer1kIdr: 0.002 * USD_TO_IDR,
-  completionCostPer1kIdr: 0.006 * USD_TO_IDR,
+  promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
+  completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR,
 };
+
+/**
+ * Menentukan provider aktual dari base URL yang benar-benar dipakai request
+ * (SumoPod vs DeepSeek Direct vs OpenAI), bukan dari nama model — karena nama
+ * model bisa sama tapi di-host oleh provider berbeda (mis. deepseek-v4-flash
+ * di SumoPod vs di api.deepseek.com).
+ */
+export function deriveProvider(baseUrl?: string | null): string {
+  const raw = (baseUrl || '').toLowerCase();
+  if (!raw) return 'LLM Provider';
+  if (raw.includes('sumopod')) return 'SumoPod';
+  if (raw.includes('api.deepseek.com') || raw.includes('deepseek.com')) return 'DeepSeek Direct';
+  if (raw.includes('api.openai.com') || raw.includes('openai.azure') || raw.includes('ai.azure.com')) return 'OpenAI';
+  try {
+    return new URL(raw).host;
+  } catch {
+    return raw.replace(/^https?:\/\//, '').split('/')[0] || 'LLM Provider';
+  }
+}
 
 /**
  * Menghitung estimasi total biaya LLM dalam Rupiah (IDR) berdasarkan token prompt (miss & hit) dan completion.

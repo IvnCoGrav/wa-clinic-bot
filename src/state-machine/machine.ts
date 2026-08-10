@@ -477,6 +477,9 @@ export class ConversationStateMachine {
 
               if (!pricelistTarget) {
                 console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}. Spring source image perlu URL publik/media outbound.`);
+              } else if (customer.is_sandbox_test) {
+                console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
+                sendOk = true;
               } else {
                 const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
                 sendOk = sendResult.success;
@@ -502,7 +505,11 @@ export class ConversationStateMachine {
               const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
               const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
               if (pricelistTarget) {
-                await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+                if (customer.is_sandbox_test) {
+                  console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
+                } else {
+                  await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+                }
               }
             }
           }

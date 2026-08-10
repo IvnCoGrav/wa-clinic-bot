@@ -74,7 +74,7 @@ Berikut adalah rekap kronologis seluruh revisi dan iterasi pengembangan dari awa
 
 ### 📍 Revisi 8: Migrasi Distance Calculation ke OpenRouteService (ORS)
 1. **Pembuatan Modul ORS Client (`src/integrations/ors/client.ts`)**:
-   - Memanggil OpenRouteService Directions API via `POST https://api.openrouteservice.org/v2/directions/cycling-electric`.
+   - Memanggil OpenRouteService Directions API via `POST https://api.heigit.org/openrouteservice/v2/directions/cycling-electric`.
    - Mengirim payload koordinat dalam format spesifikasi ORS: `[[lng_klinik, lat_klinik], [lng_customer, lat_customer]]`.
    - Menerima hasil jarak dalam meter (`features[0].properties.summary.distance`) dan durasi dalam detik.
    - Dilengkapi interface `IOrsClient` & `ORS_HTTP_TIMEOUT_MS=10000` (default 10 detik).

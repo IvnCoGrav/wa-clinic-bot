@@ -184,8 +184,8 @@ export class DeliveryService {
     );
 
     if (orsResult && typeof orsResult.distanceMeters === 'number') {
-      // Konversi meter ke km (presisi 1 desimal, misal 12.2 km)
-      distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(1));
+      // Konversi meter ke km (presisi 2 desimal)
+      distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(2));
       isEstimated = false;
     } else {
       // 2. FALLBACK: Haversine + circuity factor
@@ -193,7 +193,7 @@ export class DeliveryService {
         `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with ${HAVERSINE_CIRCUITY_FACTOR}x circuity multiplier.`
       );
       const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
-      distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(1));
+      distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(2));
       isEstimated = true;
     }
 

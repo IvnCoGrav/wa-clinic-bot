@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MedicalDetectionService } from '../../services/medical-detection.service';
+import { extractJsonContent } from '../../utils/json-extract';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
@@ -88,7 +89,7 @@ current_state punya prioritas atas tebakan bebas Anda. Jika current_state = AWAI
 
 DAFTAR INTENT:
 - GREETING: sapaan awal tanpa isi lain ("halo", "assalamualaikum", "bubid")
-- PROVIDE_LOCATION: pelanggan menyebut nama daerah/alamat (lengkap atau sebagian, termasuk typo)
+- PROVIDE_LOCATION: pelanggan menyebut nama daerah/alamat (lengkap atau sebagian, termasuk typo). WAJIB DIPILIH jika customer menyebut lokasi meskipun dibarengi pertanyaan harga (mis. "ke rungkut kidul berapa ya"). Pastikan Anda mengisi "location_mention".
 - ASK_FAQ: pertanyaan umum (harga, treatment, jam operasional, bahan, dll) yang bisa dijawab dari knowledge base
 - INTERESTED_IN_BOOKING: pelanggan menyatakan minat untuk booking/reservasi tanpa detail lengkap (mis. "mau dong", "gimana caranya booking", "oke saya mau coba")
 - PROVIDE_RESERVATION_DETAILS: pelanggan mengisi detail reservasi dalam kalimat bebas di chat (nama, treatment yang diminta, tanggal/jam yang diinginkan) — ingat sistem TIDAK memakai form/link eksternal, semua diisi via teks chat
@@ -790,51 +791,73 @@ export class AIRouterLLMClient {
 [conversation_history]: ${input.conversationHistory.map((m) => `${m.role}: ${m.content}`).join('\n') || '(kosong)'}
 [last_customer_message]: "${input.lastCustomerMessage}"`;
 
-    const { data: responseData, model: usedModel } = await callChatCompletionsWithFallback({
-      baseUrl: this.baseUrl,
-      apiKey: this.apiKey,
-      model: this.model,
-      fallbackModel: getFallbackModel(),
-      timeoutMs: LLM_TIMEOUT_MS,
-      payload: {
-        response_format: { type: 'json_object' },
-        temperature: 0.1,
-        messages: [
-          { role: 'system', content: AI_ROUTER_SYSTEM_PROMPT },
-          ...historyMsgs,
-          { role: 'user', content: userContent },
-        ],
-      },
-    });
-
-    if (responseData?.usage) {
+    const startedAt = Date.now();
+    let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+    try {
+      callResult = await callChatCompletionsWithFallback({
+        baseUrl: this.baseUrl,
+        apiKey: this.apiKey,
+        model: this.model,
+        fallbackModel: getFallbackModel(),
+        timeoutMs: LLM_TIMEOUT_MS,
+        payload: {
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+          messages: [
+            { role: 'system', content: AI_ROUTER_SYSTEM_PROMPT },
+            ...historyMsgs,
+            { role: 'user', content: userContent },
+          ],
+        },
+      });
+    } catch (err: any) {
       try {
-        const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
-        const details = responseData.usage.prompt_tokens_details || responseData.usage.prompt_tokens_details;
-        const cachedTokens = details?.cached_tokens || details?.cache_read_input_tokens || 0;
-        recordLlmUsage({
+        const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+        auditLlmCall({
           customer_phone: 'router-audit',
-          model_name: usedModel || this.model,
           task_type: 'NLU_ROUTING',
-          prompt_tokens: responseData.usage.prompt_tokens || 0,
-          completion_tokens: responseData.usage.completion_tokens || 0,
-          cached_prompt_tokens: cachedTokens,
+          model_name: this.model,
+          baseUrl: this.baseUrl,
+          startedAt,
+          error: err,
         });
-      } catch (logErr) {
-        // Safe fire-and-forget
+      } catch {
+        // Fire-and-forget
       }
+      throw err;
+    }
+
+    const responseData = callResult.data;
+    const usedModel = callResult.model;
+
+    try {
+      const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+      auditLlmCall({
+        customer_phone: 'router-audit',
+        task_type: 'NLU_ROUTING',
+        model_name: usedModel,
+        baseUrl: callResult.baseUrl,
+        startedAt,
+        usage: responseData?.usage,
+      });
+    } catch (logErr) {
+      // Safe fire-and-forget
     }
 
     let rawContent = responseData?.choices?.[0]?.message?.content?.trim() || '';
+    const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
 
-    // DeepSeek-style: JSON bisa berada di reasoning_content
-    if (!rawContent) {
-      const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
-      const jsonMatch = reasoning.match(/\{[\s\S]*\}/);
-      if (jsonMatch) rawContent = jsonMatch[0];
+    if (reasoning) {
+      console.log(`\n[LLM REASONING (ROUTER)]:\n${reasoning}\n`);
     }
 
-    if (!rawContent) throw new Error('Empty response content from LLM');
+    // DeepSeek-style: JSON bisa berada di reasoning_content (juga menangani JSON terpotong)
+    if (!rawContent && reasoning) {
+      const jsonMatch = extractJsonContent(reasoning);
+      if (jsonMatch) rawContent = jsonMatch;
+    }
+
+    if (!rawContent) throw new Error(`Empty response content from LLM. Reasoning was: ${reasoning ? 'Present' : 'Empty'}`);
 
     let clean = rawContent.trim();
     if (clean.startsWith('```')) {
