@@ -26,10 +26,12 @@ interface LlmAuditLogEntry {
   tenant_id: string;
   customer_phone: string;
   conversation_id: string | null;
+  provider?: string | null;
   model_name: string;
   task_type: string;
   prompt_tokens: number;
   completion_tokens: number;
+  cached_prompt_tokens?: number;
   cost_idr: number;
   created_at: string;
 }
@@ -50,15 +52,8 @@ const scoreColor = (s: number) => {
   return 'text-rose-400';
 };
 
-const getModelProvider = (modelName: string) => {
-  const m = (modelName || '').toLowerCase();
-  if (m.includes('deepseek')) return 'DeepSeek';
-  if (m.includes('gpt') || m.includes('openai')) return 'OpenAI';
-  if (m.includes('qwen')) return 'Alibaba Qwen';
-  if (m.includes('minimax')) return 'MiniMax';
-  if (m.includes('gemini')) return 'Google Gemini';
-  if (m.includes('claude')) return 'Anthropic';
-  return 'LLM Provider';
+const getModelProvider = (log: LlmAuditLogEntry) => {
+  return log.provider || 'LLM Provider';
 };
 
 const formatRupiah = (val: number) => {
@@ -245,7 +240,7 @@ export const AiEvaluations: React.FC = () => {
                         </td>
                         <td className="px-5 py-3 text-xs text-slate-200 font-mono font-medium">
                           <span className="text-[10px] text-pink-400 font-sans block font-semibold">
-                            {getModelProvider(log.model_name)}
+                            {getModelProvider(log)}
                           </span>
                           <span>{log.model_name}</span>
                         </td>
@@ -253,7 +248,26 @@ export const AiEvaluations: React.FC = () => {
                           {log.customer_phone}
                         </td>
                         <td className="px-5 py-3 text-right text-xs font-mono text-slate-300">
-                          {log.prompt_tokens} in / {log.completion_tokens} out
+                          <div className="flex items-center justify-end gap-1.5">
+                            {log.cached_prompt_tokens && log.cached_prompt_tokens > 0 ? (
+                              <span
+                                className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full"
+                                title={`Cache Hit (${log.cached_prompt_tokens} tokens)`}
+                              >
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>Hit</span>
+                              </span>
+                            ) : (
+                              <span
+                                className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full"
+                                title="Cache Miss"
+                              >
+                                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                                <span>Miss</span>
+                              </span>
+                            )}
+                            <span>{log.prompt_tokens} in / {log.completion_tokens} out</span>
+                          </div>
                         </td>
                         <td className="px-5 py-3 text-right font-bold text-emerald-400 text-xs">
                           {formatRupiah(log.cost_idr)}

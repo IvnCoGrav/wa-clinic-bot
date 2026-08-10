@@ -3,6 +3,7 @@ import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { SERVICE_AREAS_ALTERNATION } from '../config/service-areas';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../integrations/llm/model-fallback';
+import { extractBalancedJson, extractJsonContent } from '../utils/json-extract';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 
 export interface NluEntities {
@@ -58,66 +59,21 @@ export class NluClassifierService {
   /**
    * Bersihkan JSON LLM: strip code fence (```json ... ```), lalu ambil blok {...} pertama.
    * Dipakai sebelum JSON.parse agar model yang membungkus JSON dengan teks/fence tidak gagal.
+   * Implementasi bersama di src/utils/json-extract.ts — juga menangani JSON terpotong.
    */
   private static sanitizeJson(raw: string): string {
+    const extracted = extractJsonContent(raw, ['intents']);
+    if (extracted) return extracted;
     let clean = (raw || '').trim();
     if (clean.startsWith('```')) {
       clean = clean.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/, '').trim();
     }
-    const extracted = this.extractBalancedJson(clean);
-    if (extracted) return extracted;
     const braceStart = clean.indexOf('{');
     const braceEnd = clean.lastIndexOf('}');
     if (braceStart !== -1 && braceEnd > braceStart) {
       clean = clean.slice(braceStart, braceEnd + 1).trim();
     }
     return clean;
-  }
-
-  /**
-   * Ambil objek JSON terbesar yang BALANCED ({...} pasangan lengkap) dan bisa di-parse.
-   * Menggantikan pendekatan regex/lastIndexOf yang rapuh terhadap `}` di dalam teks
-   * atau string value (sering terjadi pada output reasoning model seperti DeepSeek).
-   */
-  private static extractBalancedJson(raw: string): string | null {
-    const s = (raw || '').trim();
-    let candidate = s.indexOf('{');
-    let validFallback: string | null = null;
-
-    while (candidate !== -1) {
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-
-      for (let j = candidate; j < s.length; j++) {
-        const ch = s[j];
-        if (inString) {
-          if (escaped) escaped = false;
-          else if (ch === '\\') escaped = true;
-          else if (ch === '"') inString = false;
-        } else {
-          if (ch === '"') inString = true;
-          else if (ch === '{') depth++;
-          else if (ch === '}') {
-            depth--;
-            if (depth === 0) {
-              const slice = s.slice(candidate, j + 1);
-              try {
-                const parsed = JSON.parse(slice);
-                if (parsed && Array.isArray(parsed.intents)) return slice;
-                validFallback = validFallback || slice;
-              } catch {
-                /* malformed, coba titik mulai berikutnya */
-              }
-              break;
-            }
-          }
-        }
-      }
-      candidate = s.indexOf('{', candidate + 1);
-    }
-
-    return validFallback;
   }
 
   /**
@@ -258,7 +214,7 @@ Your task is to analyze customer messages and return ONLY a JSON object represen
 
 ALLOWED INTENTS (A single message MAY contain multiple intents!):
 - "greeting": Friendly greetings (e.g., "Halo", "Selamat pagi", "P", "Assalamualaikum").
-- "provide_location": Customer shares their location, address, area, or landmark (e.g., "Saya di Rungkut", "Dekat Indomaret Sidoklumpuk").
+- "provide_location": Customer shares their location, address, area, or landmark (e.g., "Saya di Rungkut", "Dekat Indomaret Sidoklumpuk"). CRITICAL: If they ask a price and mention a location together (e.g., "ke rungkut kidul berapa ya"), you MUST include BOTH "provide_location" and "ask_price", and extract "location_text".
 - "ask_price": Inquiring about service prices, packages, promo rates, or delivery fees (e.g., "Pijat bayi berapa ya?", "Ongkir ke waru berapa?").
 - "ask_schedule": Inquiring about clinic operating hours, available slots, or appointment dates.
 - "express_interest": Customer wants to book, make a reservation, or try a treatment.
@@ -297,34 +253,86 @@ OUTPUT JSON SCHEMA ONLY:
         { role: 'user', content: `[Utterance to classify]: "${incomingText}"` },
       ];
 
-      const { data: responseData } = await callChatCompletionsWithFallback({
-        baseUrl,
-        apiKey,
-        model: config.modelName,
-        fallbackModel: getFallbackModel(),
-        timeoutMs: Number(process.env.LLM_TIMEOUT_NLU_MS || 15000),
-        isContentValid: (content) => {
-          try {
-            JSON.parse(this.sanitizeJson(content));
-            return true;
-          } catch {
-            return false;
-          }
-        },
-        payload: {
-          temperature: config.temperature,
-          max_tokens: config.maxTokens,
-          response_format: { type: 'json_object' },
-          messages: messagesPayload,
-        },
-      });
+      // A/B toggle window campaign (eval): pilih model primary tanpa ubah DB config.
+      // 'minimax' → MiniMax-M2.7-highspeed, 'deepseek-sumopod' → deepseek-v4-flash via SumoPod.
+      // Di luar mode eval (env kosong) → pakai config DB/registry apa adanya.
+      const evalPrimary = process.env.NLU_PRIMARY_MODEL;
+      const evalRun = process.env.NLU_EVAL_RUN || null;
+      const primaryModel =
+        evalPrimary === 'minimax'
+          ? 'MiniMax-M2.7-highspeed'
+          : evalPrimary === 'deepseek-sumopod'
+            ? 'deepseek-v4-flash'
+            : config.modelName;
+      if (evalRun && evalPrimary) {
+        console.log(`[NLU EVAL] run="${evalRun}" primary="${primaryModel}" (override dari config "${config.modelName}")`);
+      }
+
+      const startedAt = Date.now();
+      let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+      try {
+        callResult = await callChatCompletionsWithFallback({
+          baseUrl,
+          apiKey,
+          model: primaryModel,
+          fallbackModel: getFallbackModel(),
+          timeoutMs: Number(process.env.LLM_TIMEOUT_NLU_MS || 15000),
+          isContentValid: (content) => {
+            try {
+              JSON.parse(this.sanitizeJson(content));
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          payload: {
+            temperature: config.temperature,
+            max_tokens: config.maxTokens,
+            response_format: { type: 'json_object' },
+            messages: messagesPayload,
+          },
+        });
+      } catch (err: any) {
+        const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+        auditLlmCall({
+          customer_phone: 'nlu-audit',
+          task_type: 'NLU_CLASSIFICATION',
+          model_name: primaryModel,
+          baseUrl,
+          startedAt,
+          error: err,
+          eval_run: evalRun,
+        });
+        throw err;
+      }
+
+      const responseData = callResult.data;
+
+      try {
+        const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+        auditLlmCall({
+          customer_phone: 'nlu-audit',
+          task_type: 'NLU_CLASSIFICATION',
+          model_name: callResult.model,
+          baseUrl: callResult.baseUrl,
+          startedAt,
+          usage: responseData?.usage,
+          eval_run: evalRun,
+        });
+      } catch {
+        // Fire-and-forget
+      }
 
       let rawContent = responseData?.choices?.[0]?.message?.content?.trim();
+      const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
+
+      if (reasoning) {
+        console.log(`\n[LLM REASONING (NLU)]:\n${reasoning}\n`);
+      }
 
       // Handle DeepSeek reasoning models where content is empty and JSON is in reasoning_content
-      if (!rawContent) {
-        const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
-        const jsonMatch = this.extractBalancedJson(reasoning);
+      if (!rawContent && reasoning) {
+        const jsonMatch = extractJsonContent(reasoning, ['intents']);
         if (jsonMatch) {
           rawContent = jsonMatch;
           console.log(`[NLU CLASSIFICATION] Extracted JSON from reasoning_content`);
@@ -332,7 +340,7 @@ OUTPUT JSON SCHEMA ONLY:
       }
 
       if (!rawContent) {
-        throw new Error('Empty response content from LLM');
+        throw new Error(`Empty response content from LLM. Reasoning was: ${reasoning ? 'Present' : 'Empty'}`);
       }
 
       // Sanitize: strip code fence & ambil blok {...} pertama (agar model yang membungkus JSON tidak gagal parse)

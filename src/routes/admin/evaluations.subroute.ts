@@ -307,6 +307,12 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
         const totalCompletionTokens = stats._sum.completion_tokens ?? 0;
         const totalCostIdr = stats._sum.cost_idr ?? 0;
 
+        const formattedRecent = recent.map((item) => ({
+          ...item,
+          // Provider asli dari DB (deriveProvider baseUrl aktual: SumoPod / DeepSeek Direct),
+          // bukan ditimpa mapping nama model — supaya dashboard jujur soal jalur request.
+        }));
+
         return reply.status(200).send({
           success: true,
           data: {
@@ -316,7 +322,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             totalCompletionTokens,
             totalTokens: totalPromptTokens + totalCompletionTokens,
             totalCostIdr,
-            recent,
+            recent: formattedRecent,
           },
         });
       } catch (err: any) {

@@ -225,38 +225,58 @@ ATURAN EKSTRAKSI PREFERENSI:
           content: userQuestion,
         });
 
-        const { data: responseData, model: usedModel } = await callChatCompletionsWithFallback({
-          baseUrl: this.baseUrl,
-          apiKey: this.apiKey,
-          model: modelConfig.modelName,
-          fallbackModel: getFallbackModel(),
-          timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
-          payload: {
-            temperature: modelConfig.temperature,
-            max_tokens: modelConfig.maxTokens,
-            response_format: { type: 'json_object' },
-            messages: apiMessages,
-          },
-        });
-
-        if (responseData?.usage) {
+        const startedAt = Date.now();
+        let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+        try {
+          callResult = await callChatCompletionsWithFallback({
+            baseUrl: this.baseUrl,
+            apiKey: this.apiKey,
+            model: modelConfig.modelName,
+            fallbackModel: getFallbackModel(),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+            payload: {
+              temperature: modelConfig.temperature,
+              max_tokens: modelConfig.maxTokens,
+              response_format: { type: 'json_object' },
+              messages: apiMessages,
+            },
+          });
+        } catch (err: any) {
           try {
-            const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
-            const details = responseData.usage.prompt_tokens_details;
-            const cachedTokens = details?.cached_tokens || details?.cache_read_input_tokens || 0;
-            recordLlmUsage({
+            const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+            auditLlmCall({
               tenant_id: tenantId,
               customer_phone: customerId || 'unknown',
               conversation_id: conversationId,
-              model_name: usedModel || modelConfig.modelName,
               task_type: 'CHAT_REPLY',
-              prompt_tokens: responseData.usage.prompt_tokens || 0,
-              completion_tokens: responseData.usage.completion_tokens || 0,
-              cached_prompt_tokens: cachedTokens,
+              model_name: modelConfig.modelName,
+              baseUrl: this.baseUrl,
+              startedAt,
+              error: err,
             });
-          } catch (logErr) {
-            // Safe fire-and-forget
+          } catch {
+            // Fire-and-forget
           }
+          throw err;
+        }
+
+        const responseData = callResult.data;
+        const usedModel = callResult.model;
+
+        try {
+          const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+          auditLlmCall({
+            tenant_id: tenantId,
+            customer_phone: customerId || 'unknown',
+            conversation_id: conversationId,
+            task_type: 'CHAT_REPLY',
+            model_name: usedModel || modelConfig.modelName,
+            baseUrl: callResult.baseUrl,
+            startedAt,
+            usage: responseData?.usage,
+          });
+        } catch (logErr) {
+          // Safe fire-and-forget
         }
 
         const content = responseData.choices[0].message.content;

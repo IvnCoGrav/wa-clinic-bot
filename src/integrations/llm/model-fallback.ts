@@ -4,6 +4,22 @@ export function getFallbackModel(): string {
   return process.env.AI_MODEL_FALLBACK || 'qwen3.7-flash-2026-07-15';
 }
 
+/**
+ * Rantai fallback DALAM provider yang sama (mis. SumoPod), dipisah koma.
+ * Contoh: AI_MODEL_FALLBACK_CHAIN="deepseek-v4-flash,qwen3.7-flash-2026-07-15"
+ * berarti: primary gagal → coba deepseek-v4-flash → coba qwen — SEMUANYA via
+ * baseUrl + apiKey yang sama dengan primary. Penyelamat terakhir di provider
+ * EKSTERNAL diatur terpisah via LLM_FALLBACK_BASE_URL/LLM_FALLBACK_API_KEY
+ * (model-nya = AI_MODEL_FALLBACK / fallbackModel). Kosongkan env ini untuk
+ * kembali ke perilaku lama: fallback tunggal langsung ke eksternal.
+ */
+export function getFallbackChain(): string[] {
+  return (process.env.AI_MODEL_FALLBACK_CHAIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export interface ChatCompletionsWithFallbackCall {
   baseUrl: string;
   apiKey: string;
@@ -23,6 +39,8 @@ export interface ChatCompletionsWithFallbackResult {
   data: any;
   model: string;
   usedFallback: boolean;
+  /** Base URL dari provider yang benar-benar melayani request (SumoPod / DeepSeek Direct / dst). */
+  baseUrl: string;
 }
 
 export async function callChatCompletionsWithFallback(
@@ -49,14 +67,58 @@ export async function callChatCompletionsWithFallback(
   };
 
   try {
-    return { data: (await attempt(call.model)).data, model: call.model, usedFallback: false };
+    return { data: (await attempt(call.model)).data, model: call.model, usedFallback: false, baseUrl: call.baseUrl };
   } catch (err: any) {
-    if (!call.fallbackModel) throw err;
-    console.warn(
-      `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${call.fallbackModel} (${err?.message || String(err)})`
-    );
-    const fallbackBaseUrl = process.env.LLM_FALLBACK_BASE_URL ? process.env.LLM_FALLBACK_BASE_URL.replace(/\/$/, '') : call.baseUrl;
-    const fallbackApiKey = process.env.LLM_FALLBACK_API_KEY || call.apiKey;
-    return { data: (await attempt(call.fallbackModel, fallbackBaseUrl, fallbackApiKey)).data, model: call.fallbackModel, usedFallback: true };
+    const chain = getFallbackChain().filter((m) => m !== call.model);
+    let lastErr: any = err;
+
+    // 1) Rantai model cadangan dalam provider yang sama (mis. SumoPod: deepseek → qwen).
+    //    Bisa dikosongkan via env AI_MODEL_FALLBACK_CHAIN untuk perilaku lama.
+    for (const fbModel of chain) {
+      try {
+        console.warn(
+          `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${fbModel} via provider yang sama (${lastErr?.message || String(lastErr)})`
+        );
+        const resp = await attempt(fbModel);
+        console.log(`[LLM FALLBACK OK] ${fbModel} berhasil via ${call.baseUrl}`);
+        return { data: resp.data, model: fbModel, usedFallback: true, baseUrl: call.baseUrl };
+      } catch (e: any) {
+        lastErr = e;
+      }
+    }
+
+    // 2) Penyelamat terakhir: provider EKSTERNAL (mis. DeepSeek Direct) bila
+    //    LLM_FALLBACK_BASE_URL dikonfigurasi. Model = fallbackModel (AI_MODEL_FALLBACK).
+    const externalBaseUrl = process.env.LLM_FALLBACK_BASE_URL ? process.env.LLM_FALLBACK_BASE_URL.replace(/\/$/, '') : null;
+    if (externalBaseUrl && call.fallbackModel && call.fallbackModel !== call.model) {
+      try {
+        const externalApiKey = process.env.LLM_FALLBACK_API_KEY || call.apiKey;
+        console.warn(
+          `[LLM MODEL FALLBACK] ${call.model}${chain.length ? '/' + chain.join(',') : ''} gagal, mencoba last-resort ${call.fallbackModel} via ${externalBaseUrl} (${lastErr?.message || String(lastErr)})`
+        );
+        const resp = await attempt(call.fallbackModel, externalBaseUrl, externalApiKey);
+        console.log(`[LLM FALLBACK OK] ${call.fallbackModel} berhasil via ${externalBaseUrl}`);
+        return { data: resp.data, model: call.fallbackModel, usedFallback: true, baseUrl: externalBaseUrl };
+      } catch (e: any) {
+        lastErr = e;
+      }
+    }
+
+    // 3) Perilaku lama (tanpa AI_MODEL_FALLBACK_CHAIN & tanpa LLM_FALLBACK_BASE_URL):
+    //    fallback tunggal dengan baseUrl/key yang sama dengan primary.
+    if (chain.length === 0 && !externalBaseUrl && call.fallbackModel && call.fallbackModel !== call.model) {
+      try {
+        console.warn(
+          `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${call.fallbackModel} (${lastErr?.message || String(lastErr)})`
+        );
+        const resp = await attempt(call.fallbackModel);
+        console.log(`[LLM FALLBACK OK] ${call.fallbackModel} berhasil via ${call.baseUrl}`);
+        return { data: resp.data, model: call.fallbackModel, usedFallback: true, baseUrl: call.baseUrl };
+      } catch (e: any) {
+        lastErr = e;
+      }
+    }
+
+    throw lastErr;
   }
 }

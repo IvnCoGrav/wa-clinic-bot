@@ -26,7 +26,11 @@ export class OrsClient implements IOrsClient {
   private apiKey: string;
 
   constructor() {
-    this.baseUrl = (process.env.ORS_BASE_URL || 'https://api.openrouteservice.org').replace(/\/$/, '');
+    let rawBaseUrl = process.env.ORS_BASE_URL || 'https://api.heigit.org/openrouteservice';
+    if (rawBaseUrl.includes('api.openrouteservice.org')) {
+      rawBaseUrl = rawBaseUrl.replace('api.openrouteservice.org', 'api.heigit.org/openrouteservice');
+    }
+    this.baseUrl = rawBaseUrl.replace(/\/$/, '');
     this.profile = process.env.ORS_PROFILE || 'cycling-electric';
     this.apiKey = process.env.ORS_API_KEY || '';
   }

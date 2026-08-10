@@ -130,9 +130,9 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|cukur|gundul|potong|pijat|massage|spa|nanya|tanya|bisa|apakah|gimana|bagaimana|apa|persyaratan|syarat|paket|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
   const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex;
   const interceptDepth = ctx._interceptDepth || 0;
-  // Guard mutual recursion: pesan lokasi tetap diproses sebagai lokasi (jangan di-intercept FAQ),
-  // dan jangan intercept ulang bila sudah di-arahkan kembali dari interest handler (hop > 0).
-  const skipFaqIntercept = isLocationQueryMessage(incomingMessage, rawTextLocation) || interceptDepth > 0;
+  const rawBodyText = incomingMessage.text?.body?.trim() || '';
+  const hasNluLocationEntity = Boolean(nluConfident && nluLocationText);
+  const skipFaqIntercept = isLocationQueryMessage(incomingMessage, rawBodyText) || hasNluLocationEntity || interceptDepth > 0;
   if (hasFaqIntent && !skipFaqIntercept) {
     console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
     const { handleInterestState } = await import('./interest');
@@ -154,6 +154,8 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
   // Bersihkan teks dari awalan query yang tidak relevan untuk geocoding
   const textLocation = rawTextLocation.toLowerCase()
+    // Bersihkan sapaan di awal
+    .replace(/^(halo|hola|hi|hei|p|assalamualaikum|salam|pagi|siang|sore|malam|permisi|kak|min|mbak|mas|bund|bunda)[,\.\s]*/gi, '')
     .replace(/^(kalau\s+)?(ke|di)\s+/gi, '')
     .replace(/^(alamat\s+|rumah\s+)?saya\s+(di|ke)\s+/gi, '')
     .replace(/^(ongkir\s+|tarif\s+|biaya\s+|kirim\s+|pengiriman\s+)(ke|di)\s+/gi, '')

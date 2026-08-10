@@ -355,18 +355,55 @@ export class DailyReportService {
       const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
       const modelConfig = AiModelConfigService.getModelConfig('SUMMARIZATION');
 
-      const { data } = await callChatCompletionsWithFallback({
-        baseUrl,
-        apiKey,
-        model: modelConfig.modelName,
-        fallbackModel: getFallbackModel(),
-        timeoutMs: 15000,
-        payload: {
-          temperature: modelConfig.temperature,
-          max_tokens: 150,
-          messages: [{ role: 'user', content: prompt }]
+      const startedAt = Date.now();
+      let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+      try {
+        callResult = await callChatCompletionsWithFallback({
+          baseUrl,
+          apiKey,
+          model: modelConfig.modelName,
+          fallbackModel: getFallbackModel(),
+          timeoutMs: 15000,
+          payload: {
+            temperature: modelConfig.temperature,
+            max_tokens: 150,
+            messages: [{ role: 'user', content: prompt }]
+          }
+        });
+      } catch (err: any) {
+        try {
+          const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+          auditLlmCall({
+            tenant_id: tenantId,
+            customer_phone: 'report-audit',
+            task_type: 'SUMMARIZATION',
+            model_name: modelConfig.modelName,
+            baseUrl,
+            startedAt,
+            error: err,
+          });
+        } catch {
+          // Fire-and-forget
         }
-      });
+        throw err;
+      }
+
+      const data = callResult.data;
+
+      try {
+        const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+        auditLlmCall({
+          tenant_id: tenantId,
+          customer_phone: 'report-audit',
+          task_type: 'SUMMARIZATION',
+          model_name: callResult.model,
+          baseUrl: callResult.baseUrl,
+          startedAt,
+          usage: data?.usage,
+        });
+      } catch (logErr) {
+        // Fire-and-forget
+      }
 
       const summary = data.choices[0]?.message?.content?.trim();
       return summary || "Ringkasan kosong.";

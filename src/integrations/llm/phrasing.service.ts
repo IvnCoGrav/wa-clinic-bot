@@ -4,6 +4,7 @@ import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/l
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
 import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -63,19 +64,59 @@ ATURAN STRICT & ANTI-HALUSINASI (MANDAT UTAMA):
 
 HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN LAIN.`;
 
-        const { data: responseData } = await callChatCompletionsWithFallback({
-          baseUrl: this.baseUrl,
-          apiKey: this.apiKey,
-          model: this.model,
-          fallbackModel: getFallbackModel(),
-          timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
-          payload: {
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Tolong sampaikan pesan ${req.intent} ini dengan variasi natural berdasarkan fakta tersebut. Contoh acuan pesan standar: "${req.fallbackTemplate}"` },
-            ],
-          },
-        });
+        const tenantId = req.tenantId || DEFAULT_TENANT_ID;
+        const startedAt = Date.now();
+        let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+        try {
+          callResult = await callChatCompletionsWithFallback({
+            baseUrl: this.baseUrl,
+            apiKey: this.apiKey,
+            model: this.model,
+            fallbackModel: getFallbackModel(),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+            payload: {
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Tolong sampaikan pesan ${req.intent} ini dengan variasi natural berdasarkan fakta tersebut. Contoh acuan pesan standar: "${req.fallbackTemplate}"` },
+              ],
+            },
+          });
+        } catch (err: any) {
+          try {
+            const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+            auditLlmCall({
+              tenant_id: tenantId,
+              customer_phone: 'phrasing-audit',
+              conversation_id: req.conversationId,
+              task_type: 'PHRASING',
+              model_name: this.model,
+              baseUrl: this.baseUrl,
+              startedAt,
+              error: err,
+            });
+          } catch {
+            // Fire-and-forget
+          }
+          throw err;
+        }
+
+        const responseData = callResult.data;
+
+        try {
+          const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+          auditLlmCall({
+            tenant_id: tenantId,
+            customer_phone: 'phrasing-audit',
+            conversation_id: req.conversationId,
+            task_type: 'PHRASING',
+            model_name: callResult.model,
+            baseUrl: callResult.baseUrl,
+            startedAt,
+            usage: responseData?.usage,
+          });
+        } catch (logErr) {
+          // Fire-and-forget
+        }
 
         const content = responseData.choices[0].message.content.trim();
 

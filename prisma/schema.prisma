@@ -591,11 +591,16 @@ model LlmAuditLog {
   tenant_id         String   @default("default-tenant")
   customer_phone    String
   conversation_id   String?
+  provider          String?
   model_name        String
   task_type         String // NLU_ROUTING, CHAT_REPLY, dst
   prompt_tokens     Int
   completion_tokens Int
+  cached_prompt_tokens Int    @default(0)
   cost_idr          Float
+  error_code        String?
+  latency_ms        Int?
+  eval_run          String?
   created_at        DateTime @default(now())
 
   @@index([tenant_id, created_at])
