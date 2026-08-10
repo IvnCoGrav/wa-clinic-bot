@@ -352,7 +352,7 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
     // Tenant punya waba_access_token terenkripsi (via encryptSecret)
     const { encryptSecret } = await import('../../src/utils/encryption');
     const encryptedToken = encryptSecret('EAA_real_media_token');
-    vi.mocked(prisma.tenant.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
       id: 'tenant-media',
       waba_access_token: encryptedToken,
     } as any);
@@ -438,5 +438,117 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
     const payload = enqueueSpy.mock.calls[0][0];
     expect(payload.incomingMessage._mediaUrl).toBeUndefined();
     expect(payload.incomingMessage.type).toBe('image');
+  });
+
+  it('POST /api/webhook/waba executes attribution matching and strips promo code for new customer', async () => {
+    const body = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{
+        changes: [{
+          value: {
+            metadata: { phone_number_id: 'pn_promo_1' },
+            contacts: [{ profile: { name: 'Bunda Test' } }],
+            messages: [{
+              id: 'wamid_promo_1',
+              from: '628111222333',
+              timestamp: '1691001000',
+              type: 'text',
+              text: { body: 'Promo[a7] halo min' },
+            }],
+          },
+        }],
+      }],
+    });
+
+    vi.spyOn(wabaTenantService, 'resolveTenantByPhoneNumberId').mockResolvedValue('tenant-promo');
+    vi.spyOn(messageService, 'isDuplicateMessage').mockResolvedValue(false);
+    vi.spyOn(customerService, 'getCustomerByPhone').mockResolvedValue(null); // New customer!
+    vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue({
+      id: 'cust-promo-new',
+      phone: '628111222333',
+      status: 'active',
+    } as any);
+    vi.spyOn(conversationService, 'getOrCreateConversation').mockResolvedValue({
+      id: 'conv-promo-1',
+    } as any);
+
+    const attrMod = await import('../../src/services/ad-attribution.service');
+    const attrSpy = vi.spyOn(attrMod, 'matchAdClickAndFireContact').mockResolvedValue({
+      matched: true,
+      trackingCode: 'a7',
+      strippedText: 'halo min',
+    });
+
+    const enqueueSpy = vi.fn().mockResolvedValue(undefined);
+    const queueMod = await import('../../src/services/queue.service');
+    (queueMod.queueService as any).enqueueMessage = enqueueSpy;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/waba',
+      payload: body,
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(attrSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bodyText: 'Promo[a7] halo min',
+        isNewCustomerRecord: true,
+      })
+    );
+    const payload = enqueueSpy.mock.calls[0][0];
+    expect(payload.incomingMessage.text.body).toBe('halo min');
+  });
+
+  it('POST /api/webhook/waba triggers purchase event detection on Payment message', async () => {
+    const body = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{
+        changes: [{
+          value: {
+            metadata: { phone_number_id: 'pn_pay_1' },
+            contacts: [{ profile: { name: 'Bunda Pay' } }],
+            messages: [{
+              id: 'wamid_pay_1',
+              from: '628444555666',
+              timestamp: '1691002000',
+              type: 'text',
+              text: { body: 'Payment 250000' },
+            }],
+          },
+        }],
+      }],
+    });
+
+    vi.spyOn(wabaTenantService, 'resolveTenantByPhoneNumberId').mockResolvedValue('tenant-pay');
+    vi.spyOn(messageService, 'isDuplicateMessage').mockResolvedValue(false);
+    vi.spyOn(customerService, 'getCustomerByPhone').mockResolvedValue({ id: 'cust-pay' } as any);
+    vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue({
+      id: 'cust-pay',
+      phone: '628444555666',
+      status: 'active',
+    } as any);
+    vi.spyOn(conversationService, 'getOrCreateConversation').mockResolvedValue({
+      id: 'conv-pay-1',
+    } as any);
+
+    const purchaseMod = await import('../../src/services/purchase-detection.service');
+    const purchaseSpy = vi.spyOn(purchaseMod, 'maybeFirePurchaseEvent').mockResolvedValue(true);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/waba',
+      payload: body,
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body) },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(purchaseSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Payment 250000',
+        tenantId: 'tenant-pay',
+      })
+    );
   });
 });

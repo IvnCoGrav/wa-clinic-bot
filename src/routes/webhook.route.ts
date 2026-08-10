@@ -14,6 +14,7 @@ import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { contextStorage } from '../utils/context';
 import { memoryAdClicks } from './tracking.route';
 import { prisma } from '../db/client';
+import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { normalizeWahaJid } from '../utils/jid';
@@ -307,68 +308,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // --- ATTRIBUTION CHECK ---
+      // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
       const bodyText = incomingMessage.text?.body || '';
-      const promoMatch = bodyText.match(/(?:Promo\s*)?\[(\w{2,4})\]/i);
-      if (isNewCustomerRecord && promoMatch) {
-        const trackingCode = promoMatch[1];
-        // 1. Memory fallback update (untuk unit testing/in-memory cache)
-        const memClick = memoryAdClicks.get(trackingCode);
-        if (memClick) {
-          if (!memClick.matchedAt) {
-            memClick.matchedAt = new Date();
-            memClick.customerId = customer.id;
-            console.log(`[ATTRIBUTION SUCCESS - MEMORY] Linked trackingCode ${trackingCode} to new customer ${phone} (ID: ${customer.id})`);
-          } else {
-            console.log(`[ATTRIBUTION SKIP - MEMORY] TrackingCode ${trackingCode} has already been matched.`);
-          }
-        }
+      const attributionResult = await matchAdClickAndFireContact({
+        bodyText,
+        isNewCustomerRecord,
+        customer,
+        tenantId: DEFAULT_TENANT_ID,
+      });
 
-        // 2. Prisma DB Atomic updateMany (menghindari race condition)
-        try {
-          const updateResult = await prisma.adClick.updateMany({
-            where: {
-              trackingCode,
-              matchedAt: null,
-            },
-            data: {
-              matchedAt: new Date(),
-              customerId: customer.id,
-            },
-          });
-          if (updateResult.count === 1) {
-            console.log(`[ATTRIBUTION SUCCESS] Linked trackingCode ${trackingCode} to new customer ${phone} (ID: ${customer.id})`);
-          } else if (!memClick) {
-            console.log(`[ATTRIBUTION SKIP] TrackingCode ${trackingCode} is invalid or already matched.`);
-          }
-        } catch (err: any) {
-          console.error('[ATTRIBUTION ERROR] Failed to update AdClick attribution:', err.message);
-        }
-
-        // 3. Trigger Meta CAPI 'Contact' event (karena chat WA dari CTA berhasil masuk ke server)
-        try {
-          const { capiService } = await import('../services/capi.service');
-          capiService.sendCapiEvent({
-            eventName: 'Contact',
-            customer,
-            tenantId: DEFAULT_TENANT_ID,
-            customData: {
-              trackingCode,
-              source: 'WHATSAPP_INBOUND_CTA',
-            },
-          }).catch((err) => console.error('[CAPI CONTACT ERROR]', err.message));
-        } catch (capiErr: any) {
-          console.error('[CAPI CONTACT ERROR]', capiErr.message);
-        }
-      }
-
-      // --- MESSAGE-REWRITE: Strip kode tracking dari body sebelum masuk state machine ---
-      // Ini HARUS dilakukan setelah attribution block agar kode sudah dicatat ke DB,
-      // tapi sebelum state machine membaca incomingMessage.text.body.
-      // "Promo[a7] halo bunda" atau "Order [a7] halo" → "halo bunda"  |  "Promo[a7]" (saja) → "Halo"
-      if (promoMatch && incomingMessage.text) {
-        const stripped = bodyText.replace(/(?:Promo\s*)?\[\w{2,4}\]\s*/gi, '').trim();
-        incomingMessage.text.body = stripped || 'Halo';
+      if (incomingMessage.text && attributionResult.strippedText) {
+        incomingMessage.text.body = attributionResult.strippedText;
       }
 
 

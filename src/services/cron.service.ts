@@ -16,6 +16,7 @@ export class CronService {
       await followUpService.checkAndSetLostCustomers(DEFAULT_TENANT_ID);
       await this.cleanupOldAdClicks();
       await this.purgeOldLegacyStaging();
+      await this.checkPendingPurchaseModerationAlerts();
       console.log('[Cron Service] Morning Jobs Completed successfully.');
     } catch (err) {
       console.error('[Cron Service] Error running morning jobs:', err);
@@ -383,6 +384,36 @@ export class CronService {
       }
     } catch (err: any) {
       console.error('[Cron Service] Failed to purge old legacy staging records:', err.message || err);
+    }
+  }
+
+  /**
+   * P1.4 Auto-Approve Guard — Memeriksa reservasi berstatus `pending` review
+   * yang sudah berumur >24 jam dan mengirimkan notifikasi alert Telegram.
+   */
+  public async checkPendingPurchaseModerationAlerts(): Promise<void> {
+    try {
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+      const pendingCount = await prisma.reservation.count({
+        where: {
+          purchase_review_status: 'pending',
+          purchase_occurred_at: { lt: twentyFourHoursAgo },
+        },
+      });
+
+      if (pendingCount > 0) {
+        const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+        await alertService.notifyAlert({
+          type: AlertType.PENDING_PURCHASE_MODERATION,
+          severity: AlertSeverity.WARNING,
+          message: `[CAPI MODERATION ALERT] Ada ${pendingCount} data Purchase CAPI yang tertahan (pending review >24 jam). Mohon periksa Dashboard Advertiser.`,
+          metadata: { pendingCount, thresholdHours: 24 },
+        });
+      }
+    } catch (err: any) {
+      console.error('[Cron Service] Failed to check pending purchase moderation alerts:', err.message || err);
     }
   }
 }

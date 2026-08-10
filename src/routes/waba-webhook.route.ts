@@ -8,6 +8,7 @@ import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { wabaTenantService } from '../services/waba-tenant.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
+import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -30,7 +31,29 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
   fastify.post('/api/webhook/waba', async (request: FastifyRequest, reply: FastifyReply) => {
     const correlationId = crypto.randomUUID();
 
-    const appSecret = process.env.WABA_APP_SECRET || '';
+    let appSecret = process.env.WABA_APP_SECRET || '';
+    if (!appSecret) {
+      try {
+        const body = request.body as any;
+        const phoneNumberId = body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+        if (phoneNumberId) {
+          const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(phoneNumberId);
+          if (tenantId) {
+            const { prisma } = await import('../db/client');
+            const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+            if (tenant?.waba_app_secret) {
+              const { decryptSecret } = await import('../utils/encryption');
+              try {
+                appSecret = decryptSecret(tenant.waba_app_secret) || tenant.waba_app_secret;
+              } catch {
+                appSecret = tenant.waba_app_secret;
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
     const rawBody = (request as any).rawBody ?? Buffer.from(JSON.stringify(request.body));
     const signature = request.headers['x-hub-signature-256'] as string | undefined;
 
@@ -99,11 +122,27 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         continue;
       }
 
+      const existingCustomer = await customerService.getCustomerByPhone(msg.fromNumber, tenantId);
+      const isNewCustomerRecord = !existingCustomer;
+
       const customer = await customerService.getOrCreateCustomer(
         msg.fromNumber,
         msg.contactName,
         tenantId
       );
+
+      // --- ATTRIBUTION CHECK & CAPI CONTACT (SHARED SERVICE) ---
+      const attributionResult = await matchAdClickAndFireContact({
+        bodyText: msg.text || '',
+        isNewCustomerRecord,
+        customer,
+        tenantId,
+        referral: msg.referral,
+      });
+
+      if (attributionResult.strippedText && msg.text) {
+        msg.text = attributionResult.strippedText;
+      }
 
       // Best-effort: resolve URL media WABA (image) & simpan ke storage/media/inbound
       // agar bisa dirender di Live Chat (blur + download). Gagal tidak menghalangi alur.
@@ -176,6 +215,21 @@ const conversation = await conversationService.getOrCreateConversation(customer.
       }
 
       const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+
+      // --- PURCHASE EVENT DETECTION FOR WABA (sebelum state machine / human handling) ---
+      if (msg.type === 'text' && msg.text) {
+        try {
+          const { maybeFirePurchaseEvent } = await import('../services/purchase-detection.service');
+          await maybeFirePurchaseEvent({
+            customer,
+            conversation,
+            text: msg.text,
+            tenantId,
+          });
+        } catch (purchaseErr) {
+          console.warn('[CAPI] WABA Purchase detection error:', (purchaseErr as Error).message);
+        }
+      }
 
       const incomingMessage: any = {
         id: msg.messageId,

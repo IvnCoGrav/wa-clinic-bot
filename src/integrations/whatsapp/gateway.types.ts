@@ -52,5 +52,12 @@ export interface NormalizedInboundMessage {
   mimeType?: string;
   contactName?: string;
   phoneNumberId?: string;
+  referral?: {
+    ctwaClid?: string;
+    sourceUrl?: string;
+    sourceType?: string;
+    headline?: string;
+    body?: string;
+  };
   rawPayload: unknown;
 }
