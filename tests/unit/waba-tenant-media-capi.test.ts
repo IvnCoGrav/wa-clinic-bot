@@ -101,7 +101,7 @@ describe('resolveWabaMediaUrl', () => {
     expect(result?.url).toContain('lookaside.fbsbx.com');
     expect(result?.mimeType).toBe('image/jpeg');
     const callUrl = mockedAxios.get.mock.calls[0][0] as string;
-    expect(callUrl).toContain('/v25.0/media_id_987');
+    expect(callUrl).toContain('/v26.0/media_id_987');
   });
 
   it('should return null on Graph API failure', async () => {

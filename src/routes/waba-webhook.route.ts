@@ -57,6 +57,10 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     const rawBody = (request as any).rawBody ?? Buffer.from(JSON.stringify(request.body));
     const signature = request.headers['x-hub-signature-256'] as string | undefined;
 
+    if (!appSecret) {
+      console.warn(`[WABA SECURITY WARNING] Neither tenant waba_app_secret nor global WABA_APP_SECRET configured. Skipping HMAC signature validation (UNSECURE dev mode). [${correlationId}]`);
+    }
+
     if (!verifyMetaSignature(rawBody, signature, appSecret)) {
       console.warn(`[WABA SECURITY] Invalid HMAC signature from ${request.ip} [${correlationId}]`);
       return reply.status(401).send({ error: 'Invalid signature' });
