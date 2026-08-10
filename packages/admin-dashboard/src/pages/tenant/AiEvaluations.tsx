@@ -50,6 +50,17 @@ const scoreColor = (s: number) => {
   return 'text-rose-400';
 };
 
+const getModelProvider = (modelName: string) => {
+  const m = (modelName || '').toLowerCase();
+  if (m.includes('deepseek')) return 'DeepSeek';
+  if (m.includes('gpt') || m.includes('openai')) return 'OpenAI';
+  if (m.includes('qwen')) return 'Alibaba Qwen';
+  if (m.includes('minimax')) return 'MiniMax';
+  if (m.includes('gemini')) return 'Google Gemini';
+  if (m.includes('claude')) return 'Anthropic';
+  return 'LLM Provider';
+};
+
 const formatRupiah = (val: number) => {
   if (val == null || isNaN(val)) return 'Rp 0';
   return 'Rp ' + val.toLocaleString('id-ID', { maximumFractionDigits: 2 });
@@ -233,7 +244,10 @@ export const AiEvaluations: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-5 py-3 text-xs text-slate-200 font-mono font-medium">
-                          {log.model_name}
+                          <span className="text-[10px] text-pink-400 font-sans block font-semibold">
+                            {getModelProvider(log.model_name)}
+                          </span>
+                          <span>{log.model_name}</span>
                         </td>
                         <td className="px-5 py-3 text-xs text-slate-400 font-mono">
                           {log.customer_phone}
