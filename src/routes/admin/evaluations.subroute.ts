@@ -273,6 +273,14 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             recent,
           },
         });
+      } catch (err: any) {
+        return reply
+          .status(200)
+          .send({ success: true, data: { total: 0, avgScore: 0, minScore: 0, maxScore: 0, recent: [] } });
+      }
+    }
+  );
+
   /**
    * GET /api/admin/ai-audit-summary
    * Aggregates real-time LLM audit logs (tokens, cost_idr, model breakdown, recent transactions)
