@@ -32,7 +32,7 @@ export class OrsClient implements IOrsClient {
   }
 
   private get timeoutMs(): number {
-    return parseInt(process.env.ORS_HTTP_TIMEOUT_MS || '10000', 10);
+    return parseInt(process.env.ORS_HTTP_TIMEOUT_MS || '2500', 10);
   }
 
   /**
