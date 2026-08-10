@@ -810,12 +810,15 @@ export class AIRouterLLMClient {
     if (responseData?.usage) {
       try {
         const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
+        const details = responseData.usage.prompt_tokens_details || responseData.usage.prompt_tokens_details;
+        const cachedTokens = details?.cached_tokens || details?.cache_read_input_tokens || 0;
         recordLlmUsage({
           customer_phone: 'router-audit',
           model_name: usedModel || this.model,
           task_type: 'NLU_ROUTING',
           prompt_tokens: responseData.usage.prompt_tokens || 0,
           completion_tokens: responseData.usage.completion_tokens || 0,
+          cached_prompt_tokens: cachedTokens,
         });
       } catch (logErr) {
         // Safe fire-and-forget

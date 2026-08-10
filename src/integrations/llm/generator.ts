@@ -242,6 +242,8 @@ ATURAN EKSTRAKSI PREFERENSI:
         if (responseData?.usage) {
           try {
             const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
+            const details = responseData.usage.prompt_tokens_details;
+            const cachedTokens = details?.cached_tokens || details?.cache_read_input_tokens || 0;
             recordLlmUsage({
               tenant_id: tenantId,
               customer_phone: customerId || 'unknown',
@@ -250,6 +252,7 @@ ATURAN EKSTRAKSI PREFERENSI:
               task_type: 'CHAT_REPLY',
               prompt_tokens: responseData.usage.prompt_tokens || 0,
               completion_tokens: responseData.usage.completion_tokens || 0,
+              cached_prompt_tokens: cachedTokens,
             });
           } catch (logErr) {
             // Safe fire-and-forget
