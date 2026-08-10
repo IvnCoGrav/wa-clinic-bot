@@ -25,6 +25,17 @@ export function normalizeWabaPayload(
         let mediaId: string | undefined;
         let caption: string | undefined;
         let mimeType: string | undefined;
+        let referral: NormalizedInboundMessage['referral'] | undefined;
+
+        if (msg.referral) {
+          referral = {
+            ctwaClid: msg.referral.ctwa_clid,
+            sourceUrl: msg.referral.source_url,
+            sourceType: msg.referral.source_type,
+            headline: msg.referral.headline,
+            body: msg.referral.body,
+          };
+        }
 
         if (msg.type === 'text' && msg.text) {
           type = 'text';
@@ -58,6 +69,7 @@ export function normalizeWabaPayload(
           mimeType,
           contactName,
           phoneNumberId,
+          referral,
           rawPayload: msg,
         });
       }
