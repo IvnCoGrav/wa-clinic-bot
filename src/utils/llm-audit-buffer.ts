@@ -9,6 +9,7 @@ export interface LlmAuditLogPayload {
   task_type: string; // NLU_ROUTING, CHAT_REPLY, dst
   prompt_tokens: number;
   completion_tokens: number;
+  cached_prompt_tokens?: number;
 }
 
 const buffer: LlmAuditLogPayload[] = [];
@@ -25,12 +26,13 @@ export function recordLlmUsage(payload: LlmAuditLogPayload): void {
   try {
     const promptTokens = payload.prompt_tokens || 0;
     const completionTokens = payload.completion_tokens || 0;
-    const { totalCostIdr } = calculateLlmCost(payload.model_name, promptTokens, completionTokens);
+    const cachedTokens = payload.cached_prompt_tokens || 0;
+    const { totalCostIdr } = calculateLlmCost(payload.model_name, promptTokens, completionTokens, cachedTokens);
 
     // Shadow Logging ke console (untuk memverifikasi kalkulasi tanpa harus langsung query DB)
     console.log(
       `[LLM AUDIT SHADOW] Task: ${payload.task_type} | Model: ${payload.model_name} | ` +
-        `Tokens: ${promptTokens} in / ${completionTokens} out | ` +
+        `Tokens: ${promptTokens} in (${cachedTokens} cached) / ${completionTokens} out | ` +
         `Cost: Rp ${totalCostIdr.toLocaleString('id-ID')} | Phone: ${payload.customer_phone}`
     );
 
@@ -68,7 +70,12 @@ export async function flushLlmAuditBuffer(): Promise<void> {
   try {
     const { prisma } = await import('../db/client');
     const records = itemsToFlush.map((item) => {
-      const { totalCostIdr } = calculateLlmCost(item.model_name, item.prompt_tokens, item.completion_tokens);
+      const { totalCostIdr } = calculateLlmCost(
+        item.model_name,
+        item.prompt_tokens,
+        item.completion_tokens,
+        item.cached_prompt_tokens || 0
+      );
       return {
         tenant_id: item.tenant_id || DEFAULT_TENANT_ID,
         customer_phone: item.customer_phone,
