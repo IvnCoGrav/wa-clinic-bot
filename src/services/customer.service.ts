@@ -6,6 +6,17 @@ const memoryCustomers = new Map<string, any>();
 
 export class CustomerService {
   /**
+   * Koerce input koordinat (bisa string dari WAHA/LLM/DB) menjadi number,
+   * demi menghindari error Prisma "Expected Float, provided String".
+   * null/undefined/NaN → null.
+   */
+  private static toNumberOrNull(value: unknown): number | null {
+    if (value === undefined || value === null) return null;
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /**
    * Cari customer berdasarkan nomor telepon unik dan tenantId, atau buat record baru jika belum ada.
    */
   public async getOrCreateCustomer(
@@ -112,8 +123,8 @@ export class CustomerService {
           kelurahan: data.kelurahan,
           kecamatan: data.kecamatan,
           kota: data.kota,
-          lat: data.lat,
-          lng: data.lng,
+          lat: CustomerService.toNumberOrNull(data.lat),
+          lng: CustomerService.toNumberOrNull(data.lng),
           distance_km: data.distanceKm,
           ongkir: data.ongkir,
           is_out_of_coverage: data.isOutOfCoverage ?? false,
@@ -128,8 +139,8 @@ export class CustomerService {
             kelurahan: data.kelurahan ?? cust.kelurahan,
             kecamatan: data.kecamatan ?? cust.kecamatan,
             kota: data.kota ?? cust.kota,
-            lat: data.lat ?? cust.lat,
-            lng: data.lng ?? cust.lng,
+            lat: CustomerService.toNumberOrNull(data.lat) ?? cust.lat,
+            lng: CustomerService.toNumberOrNull(data.lng) ?? cust.lng,
             distance_km: data.distanceKm ?? cust.distance_km,
             ongkir: data.ongkir ?? cust.ongkir,
             is_out_of_coverage: data.isOutOfCoverage ?? cust.is_out_of_coverage,
@@ -196,8 +207,8 @@ export class CustomerService {
           pending_kelurahan: data.kelurahan,
           pending_kecamatan: data.kecamatan,
           pending_kota: data.kota,
-          pending_lat: data.lat,
-          pending_lng: data.lng,
+          pending_lat: CustomerService.toNumberOrNull(data.lat),
+          pending_lng: CustomerService.toNumberOrNull(data.lng),
           pending_zipcode: data.zipcode,
         },
       });
@@ -209,8 +220,8 @@ export class CustomerService {
             pending_kelurahan: data.kelurahan !== undefined ? data.kelurahan : cust.pending_kelurahan,
             pending_kecamatan: data.kecamatan !== undefined ? data.kecamatan : cust.pending_kecamatan,
             pending_kota: data.kota !== undefined ? data.kota : cust.pending_kota,
-            pending_lat: data.lat !== undefined ? data.lat : cust.pending_lat,
-            pending_lng: data.lng !== undefined ? data.lng : cust.pending_lng,
+            pending_lat: CustomerService.toNumberOrNull(data.lat) ?? cust.pending_lat,
+            pending_lng: CustomerService.toNumberOrNull(data.lng) ?? cust.pending_lng,
             pending_zipcode: data.zipcode !== undefined ? data.zipcode : cust.pending_zipcode,
             updated_at: new Date(),
           });
@@ -324,10 +335,18 @@ export class CustomerService {
     tenantId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      // Koerce dulu: pending_lat/lng bisa string bila dibuat lewat jalur yang tidak
+      // melewati normalize (mis. data lama / webhook payload string).
+      const pendingLat = CustomerService.toNumberOrNull(pendingData.pending_lat);
+      const pendingLng = CustomerService.toNumberOrNull(pendingData.pending_lng);
+      if (pendingLat === null || pendingLng === null) {
+        return { success: false, error: 'Koordinat pending tidak valid (bukan angka).' };
+      }
+
       // Hitung rute/jarak & ongkir terlebih dahulu
       const delivery = await deliveryCalculator({
-        lat: pendingData.pending_lat,
-        lng: pendingData.pending_lng,
+        lat: pendingLat,
+        lng: pendingLng,
       });
 
       try {
@@ -346,8 +365,8 @@ export class CustomerService {
               kelurahan: pendingData.pending_kelurahan,
               kecamatan: pendingData.pending_kecamatan,
               kota: pendingData.pending_kota,
-              lat: pendingData.pending_lat,
-              lng: pendingData.pending_lng,
+              lat: pendingLat,
+              lng: pendingLng,
               zipcode: pendingData.pending_zipcode || null,
               distance_km: delivery.distanceKm,
               ongkir: delivery.ongkir,
@@ -373,8 +392,8 @@ export class CustomerService {
               kelurahan: pendingData.pending_kelurahan,
               kecamatan: pendingData.pending_kecamatan,
               kota: pendingData.pending_kota,
-              lat: pendingData.pending_lat,
-              lng: pendingData.pending_lng,
+              lat: pendingLat,
+              lng: pendingLng,
               zipcode: pendingData.pending_zipcode || null,
               distance_km: delivery.distanceKm,
               ongkir: delivery.ongkir,

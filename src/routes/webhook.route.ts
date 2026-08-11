@@ -122,11 +122,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
 
-      // --- FILTER CHAT GRUP (Abaikan group messages) ---
+      // --- FILTER CHAT GRUP & NON-PERSONAL (Abaikan group/broadcast/status/newsletter) ---
+      // status@broadcast & newsletter JID bukan chat 1-on-1: tanpa filter, normalizeWahaJid
+      // menghasilkan phone palsu (mis. "status") dan mencemari DB dengan customer sampah.
       const isGroup = (payload.from && payload.from.endsWith('@g.us')) || 
                       (payload.chatId && payload.chatId.endsWith('@g.us'));
       if (isGroup) {
         return reply.status(200).send({ status: 'IGNORED_GROUP_MESSAGE' });
+      }
+      const fromJid = payload.from || payload.chatId || '';
+      if (fromJid.includes('@broadcast') || fromJid.includes('@newsletter') || fromJid.includes('status@')) {
+        return reply.status(200).send({ status: 'IGNORED_NON_PERSONAL' });
       }
 
       const waMessageId = payload.id;
@@ -148,6 +154,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_ADMIN' });
       }
       const phone = (await wahaClient.getPhoneNumberFromLid(chatId)) || normalizeWahaJid(chatId);
+      // Guard: JID yang tidak bisa diekstrak jadi nomor HP (junk/status) jangan sampai
+      // membuat customer ber-phone kosong/aneh di database.
+      if (!phone) {
+        console.warn(`[NO PHONE] Skipping message from unparseable chat ${chatId || '(unknown)'}.`);
+        return reply.status(200).send({ status: 'IGNORED_NO_PHONE' });
+      }
       const contactName = payload._data?.notifyName;
 
       // --- MEDIA INBOUND (gambar customer) ---
@@ -284,8 +296,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         text: payload.body ? { body: payload.body } : undefined,
         location: payload.location
           ? {
-              latitude: payload.location.latitude,
-              longitude: payload.location.longitude,
+              // WAHA kadang mengirim lat/lng sebagai string — koerce ke number
+              // supaya tidak menabrak kolom Float di Prisma.
+              latitude: Number(payload.location.latitude),
+              longitude: Number(payload.location.longitude),
             }
           : undefined,
         media: inboundMedia,
@@ -370,7 +384,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const currentLabels = await wahaClient.getChatLabels(chatId);
         const hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
 
-        if (!hasHoldLabel) {
+        if (!hasHoldLabel && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false') {
           console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
           const restoredState = conversation.previous_state || ConversationState.INITIAL;
           conversation = await conversationService.updateConversationState(
