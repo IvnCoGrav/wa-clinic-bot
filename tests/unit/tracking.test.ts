@@ -76,12 +76,36 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
     });
 
     it('should process organic CAPI call with organic traffic_source if adClick data is not provided', async () => {
+      const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        status: 200,
+        data: { events_received: 1 },
+      } as any);
+
       const response = await capiService.sendCapiEvent({
         eventName: 'Lead',
         customer: { id: 'cust-organic-123', phone: '08123456789' },
         adClick: undefined, // missing attribution data -> Organic traffic
       });
       expect(response.success).toBe(true);
+
+      const payload = executeSpy.mock.calls[0][1];
+      expect(payload.data[0].custom_data.traffic_source).toBe('organic');
+    });
+
+    it('breaker fallback (error/400) TIDAK boleh dicatat sebagai sukses', async () => {
+      // Fallback circuit breaker mengembalikan fake status 200 dengan penanda isFallback.
+      vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+        isFallback: true,
+        status: 200,
+        data: { success: false, note: 'Circuit Breaker Active Fallback (CAPI)' },
+      } as any);
+
+      const response = await capiService.sendCapiEvent({
+        eventName: 'Contact',
+        customer: { id: 'cust-fallback-1', phone: '08123456789' },
+      });
+
+      expect(response.success).toBe(false);
     });
 
     it('should handle API errors silently without throwing exceptions', async () => {

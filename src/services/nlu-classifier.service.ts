@@ -239,7 +239,9 @@ OUTPUT JSON SCHEMA ONLY:
     "treatment_name": "string or omit"
   },
   "confidence": 0.0 to 1.0
-}`;
+}
+
+You MUST end your response with this complete JSON block (values may be null/omitted as appropriate), even if you performed internal reasoning first.`;
 
       // Build context messages from history (up to LLM_HISTORY_LIMIT messages)
       const contextMsgs = historyMessages.slice(-LLM_HISTORY_LIMIT).map((m) => ({

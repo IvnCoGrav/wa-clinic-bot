@@ -147,3 +147,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   text→location flush, state non-open-ended tidak merge, batch lintas window, max-messages).
   Full suite 796 test hijau.
 
+---
+
+## 8. [Ops] Token CAPI tenant invalid (code 190) + Redis `noeviction` belum ter-deploy
+
+- **Status:** open (ops) — butuh aksi di server, bukan bug kode.
+- **Gejala:** request Meta CAPI tenant gagal silent dengan `error.code 190` (invalid OAuth token);
+  token tersimpan di DB sudah di-revoke, fallback env `FB_CAPI_ACCESS_TOKEN` juga belum valid.
+  Sejak 2026-08-11, log menunjukkan prefix termask token saat decrypt gagal (mis. `EAA…abcd`)
+  untuk memudahkan pengecekan.
+- **Fix:**
+  1. Rotasi token via Admin API `PATCH /api/admin/capi-config` (dashboard → Settings → CAPI) dengan token yang masih aktif; setelah itu warning `[CAPI WARNING]` hilang dari log.
+  2. `docker-compose.yml` Redis memakai `--maxmemory-policy noeviction` — terapkan lewat deploy berikutnya (jangan `allkeys-lru`, antrian/kunci bisa ter-evict saat memory penuh).
+- **Verifikasi pasca-fix:** `docker stats` saat jam ramai (RSS Redis stabil, tidak ada evict), log tanpa `[CAPI WARNING]`/code 190.
+

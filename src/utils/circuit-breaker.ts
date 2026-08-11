@@ -110,11 +110,27 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
       }
 
       console.error(
-        `[Circuit Breaker: ${this.name}] Request Failure! Reason: [${reasonCategory}] | HTTP Status: ${status} | Code: ${code} | Message: ${errMsg}`
+        `[Circuit Breaker: ${this.name}] Request Failure! Reason: [${reasonCategory}] | HTTP Status: ${status} | Code: ${code} | Message: ${errMsg}` +
+        this.formatResponseBody(err)
       );
       this.recordResult(false);
       this.usedFallback = true;
       return this.fallbackFunction(...args);
+    }
+  }
+
+  /**
+   * Lampirkan body response error (mis. JSON error asli dari Meta/Google) ke log,
+   * agar root cause (contohnya pesan validasi 400 Meta CAPI) bisa dibaca langsung.
+   */
+  private formatResponseBody(err: any): string {
+    const body = err?.response?.data;
+    if (body === undefined || body === null) return '';
+    try {
+      const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+      return bodyStr ? ` | Response Body: ${bodyStr.length > 500 ? bodyStr.substring(0, 500) + '…' : bodyStr}` : '';
+    } catch {
+      return '';
     }
   }
 }

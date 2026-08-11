@@ -1,4 +1,5 @@
 import { IWahaClient, wahaClient } from '../integrations/waha/client';
+import { measure } from '../utils/timer';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -319,9 +320,7 @@ export class TypingService {
           const adjustedMs = Math.round(typingDelayMs / this.speedFactor);
           console.log(`[TYPING DELAY] Bubble ${i + 1}: original=${typingDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedMs}ms`);
           
-          console.time(`TYPING_DELAY_BUBBLE_${i + 1}`);
-          await this.sleep(typingDelayMs);
-          console.timeEnd(`TYPING_DELAY_BUBBLE_${i + 1}`);
+          await measure(`TYPING_DELAY_BUBBLE_${i + 1}`, () => this.sleep(typingDelayMs));
 
           await this.client.stopTyping(chatId);
           typingStopped = true; // Status typing di-stop secara normal
@@ -341,9 +340,7 @@ export class TypingService {
           const adjustedInter = Math.round(interBubbleDelayMs / this.speedFactor);
           console.log(`[INTER-BUBBLE DELAY] Between bubble ${i + 1} and ${i + 2}: original=${interBubbleDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedInter}ms`);
           
-          console.time(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`);
-          await this.sleep(interBubbleDelayMs);
-          console.timeEnd(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`);
+          await measure(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`, () => this.sleep(interBubbleDelayMs));
         }
       }
 
