@@ -484,7 +484,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           // Sinkronkan kolom flag (event label.chat.deleted bisa terlewat; safety-net tetap reconciliation)
           customerService.setLabelFlags(phone, { isHoldLabeled: false }).catch(() => {});
           const restoredState = conversation.previous_state || ConversationState.INITIAL;
-          conversation = await conversationService.updateConversationState(
+          const updatedConv = await conversationService.updateConversationState(
             conversation.id,
             {
               currentState: restoredState,
@@ -493,6 +493,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             },
             DEFAULT_TENANT_ID
           );
+          if (updatedConv) {
+            conversation = updatedConv;
+          } else {
+            conversation.is_human_handling = false;
+            conversation.human_handling_since = null;
+            conversation.current_state = restoredState;
+          }
         } else {
           console.log(`[EXPLICIT GUARD CLAUSE] Conversation ${conversation.id} is in HUMAN_HANDLING mode. Logging inbound message and BYPASSING all LLM & auto-replies.`);
 

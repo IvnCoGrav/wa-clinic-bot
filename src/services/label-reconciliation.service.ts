@@ -39,11 +39,15 @@ export class LabelReconciliationService {
         const chatId = `${customer.phone}@c.us`;
         const hasConfirmedHistory = confirmedPhoneSet.has(customer.phone);
 
-        let currentLabels: string[] = [];
+        let currentLabels: string[] | null = null;
         try {
-          currentLabels = await wahaClient.getChatLabels(chatId);
+          currentLabels = await wahaClient.getChatLabelsOrNull(chatId);
+          if (currentLabels === null) {
+            console.warn(`[LABEL RECONCILIATION] getChatLabelsOrNull returned null for ${chatId} (WAHA offline/timeout). Skipping.`);
+            continue;
+          }
         } catch (err: any) {
-          console.warn(`[LABEL RECONCILIATION] getChatLabels failed for ${chatId}:`, err.message);
+          console.warn(`[LABEL RECONCILIATION] getChatLabelsOrNull failed for ${chatId}:`, err.message);
           continue;
         }
 
