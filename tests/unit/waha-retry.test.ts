@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WahaClient } from '../../src/integrations/waha/client';
+import { clearLabelCache } from '../../src/integrations/waha/label-cache';
 import axios from 'axios';
 
 vi.mock('axios');
@@ -24,6 +25,7 @@ function http400Error(): any {
 describe('WahaClient — retry transien & concurrency limiter', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    clearLabelCache();
     delete process.env.WAHA_BASE_URL;
     delete process.env.WAHA_RETRY_ATTEMPTS;
     delete process.env.WAHA_RETRY_BACKOFF_MS;
@@ -105,5 +107,72 @@ describe('WahaClient — retry transien & concurrency limiter', () => {
     expect(ok).toBe(true);
     expect(mockedAxios.post).toHaveBeenCalledTimes(2);
     expect(mockedAxios.post.mock.calls[0][0]).toContain('/api/sendSeen');
+  });
+
+  it('addLabel: timeout transien pada GET labels → retry → sukses di percobaan kedua', async () => {
+    forceRealHttp();
+    process.env.WAHA_RETRY_BACKOFF_MS = '0';
+    mockedAxios.get
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ data: { value: [{ id: 'l1', name: 'hold' }] } })
+      .mockResolvedValueOnce({ data: { value: [] } });
+    mockedAxios.post.mockResolvedValue({ data: { id: 'l1', name: 'hold' } });
+    mockedAxios.put.mockResolvedValue({ status: 200 });
+
+    const client = new WahaClient();
+    const ok = await client.addLabel('628123456789@c.us', 'hold');
+
+    expect(ok).toBe(true);
+    // GET /labels 2x (retry) + GET /labels/chats 1x
+    expect(mockedAxios.get).toHaveBeenCalledTimes(3);
+    expect(mockedAxios.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('removeLabel: timeout transien → retry → sukses di percobaan kedua', async () => {
+    forceRealHttp();
+    process.env.WAHA_RETRY_BACKOFF_MS = '0';
+    mockedAxios.get
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ data: { value: [{ id: 'l1', name: 'hold' }] } });
+    mockedAxios.put.mockResolvedValue({ status: 200 });
+
+    const client = new WahaClient();
+    const ok = await client.removeLabel('628123456789@c.us', 'hold');
+
+    expect(ok).toBe(true);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('getChatLabels: timeout transien → retry → sukses, call berikutnya dari cache (tanpa HTTP)', async () => {
+    forceRealHttp();
+    process.env.WAHA_RETRY_BACKOFF_MS = '0';
+    mockedAxios.get
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ data: { value: [{ id: 'l1', name: 'hold' }] } });
+
+    const client = new WahaClient();
+    const labels = await client.getChatLabels('628123456789@c.us');
+
+    expect(labels).toEqual(['hold']);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+
+    const again = await client.getChatLabels('628123456789@c.us');
+    expect(again).toEqual(['hold']);
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2); // tidak ada HTTP tambahan
+  });
+
+  it('getPhoneNumberFromLid: timeout transien → retry → sukses di percobaan kedua', async () => {
+    forceRealHttp();
+    process.env.WAHA_RETRY_BACKOFF_MS = '0';
+    mockedAxios.get
+      .mockRejectedValueOnce(timeoutError())
+      .mockResolvedValueOnce({ data: { pn: '6285794210526@c.us' } });
+
+    const client = new WahaClient();
+    const pn = await client.getPhoneNumberFromLid('79903991054369@lid');
+
+    expect(pn).toBe('6285794210526');
+    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
   });
 });
