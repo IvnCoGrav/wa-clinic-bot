@@ -219,17 +219,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
       let labels: string[] | null = null;
 
-      if (existingCustomer && existingCustomer.is_admin_labeled === true) {
+      if (existingCustomer && existingCustomer.labels_synced_at !== null && existingCustomer.is_admin_labeled === true) {
         console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
         return reply.status(200).send({ status: 'IGNORED_ADMIN' });
       }
-      if (!existingCustomer) {
+      if (!existingCustomer || existingCustomer.labels_synced_at === null) {
         labels = await wahaClient.getChatLabels(chatId);
-        if (labels.some(l => l.toLowerCase() === 'admin')) {
+        const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
+        const isHold = labels.some(l => l.toLowerCase() === 'hold');
+        if (existingCustomer) {
+          customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: isHold }).catch(() => {});
+        }
+        if (isAdmin) {
           console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
           return reply.status(200).send({ status: 'IGNORED_ADMIN' });
         }
       }
+
 
       // --- MEDIA INBOUND (gambar customer) ---
       // Deteksi image, unduh file dari WAHA, simpan ke storage/media/inbound/<tenantId>,
@@ -455,12 +461,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         // Fast path: baca Customer.is_hold_labeled dari DB (nol HTTP ke WAHA).
         // Fallback: kolom belum tersync (DB offline / customer baru) → tanya WAHA (cached).
         let hasHoldLabel = false;
-        if (customer && typeof customer.is_hold_labeled === 'boolean') {
+        if (customer && customer.labels_synced_at !== null && typeof customer.is_hold_labeled === 'boolean') {
           hasHoldLabel = customer.is_hold_labeled;
         } else {
-          const currentLabels = await wahaClient.getChatLabels(chatId);
-          hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
+          if (labels === null) {
+            labels = await wahaClient.getChatLabels(chatId);
+          }
+          hasHoldLabel = labels.some(l => l.toLowerCase() === 'hold');
+          const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
+          customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: hasHoldLabel }).catch(() => {});
         }
+
 
         if (!hasHoldLabel && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false') {
           console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);

@@ -91,7 +91,9 @@ model Customer {
   legacy_scraped_at       DateTime?
   is_admin_labeled        Boolean        @default(false)
   is_hold_labeled         Boolean        @default(false)
+  labels_synced_at        DateTime?
   ai_override             AiOverride?
+
   preferences             Json?
 
   @@index([tenant_id])
