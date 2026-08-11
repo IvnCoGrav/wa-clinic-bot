@@ -9,6 +9,11 @@ export interface WahaChat {
   unreadCount?: number;
 }
 
+export interface WahaContact {
+  id: string;
+  pushname?: string;
+}
+
 export interface WahaMessage {
   id: string;
   body: string;
@@ -48,6 +53,7 @@ export interface IWahaClient {
   createSession(session?: string, config?: any): Promise<string>;
   getChats(): Promise<WahaChat[]>;
   getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
+  getContact(phone: string): Promise<WahaContact | null>;
   downloadMedia(messageId: string, chatId: string): Promise<Buffer | null>;
 }
 
@@ -59,6 +65,10 @@ export class WahaClient implements IWahaClient {
   private baseUrl: string;
   private apiKey: string;
   private session: string;
+
+  // Semaphore sederhana untuk membatasi call HTTP WAHA yang berjalan bersamaan
+  private concurrentCalls = 0;
+  private limiterQueue: Array<() => void> = [];
 
   constructor() {
     this.baseUrl = (process.env.WAHA_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -95,6 +105,77 @@ export class WahaClient implements IWahaClient {
       process.env.NODE_ENV === 'test' ||
       process.env.WAHA_MOCK === 'true'
     );
+  }
+
+  private get retryAttempts(): number {
+    return parseInt(process.env.WAHA_RETRY_ATTEMPTS || '2', 10);
+  }
+
+  private get retryBackoffMs(): number {
+    return parseInt(process.env.WAHA_RETRY_BACKOFF_MS || '1500', 10);
+  }
+
+  private get maxConcurrentCalls(): number {
+    return parseInt(process.env.WAHA_MAX_CONCURRENT_CALLS || '6', 10);
+  }
+
+  /**
+   * Batasi jumlah call HTTP interaktif WAHA yang berjalan bersamaan (global per client).
+   * Tanpa ini, beberapa shard BullMQ yang memproses paralel bisa membombardir WAHA
+   * (sendText + typing + seen sekaligus) → timeout beruntun seperti di log produksi.
+   * maxConcurrentCalls <= 0 = nonaktifkan limiter.
+   */
+  private async runSerialized<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.maxConcurrentCalls <= 0) {
+      return fn();
+    }
+    if (this.concurrentCalls >= this.maxConcurrentCalls) {
+      await new Promise<void>((resolve) => this.limiterQueue.push(resolve));
+    }
+    this.concurrentCalls++;
+    try {
+      return await fn();
+    } finally {
+      this.concurrentCalls--;
+      const next = this.limiterQueue.shift();
+      if (next) next();
+    }
+  }
+
+  /**
+   * Retry HANYA untuk error transien (timeout/koneksi), BUKAN 4xx/5xx.
+   * WAHA kadang lambat saat beban tinggi — satu retry dengan backoff pendek
+   * menyelamatkan reply yang sebelumnya hilang tanpa jejak (worker BullMQ
+   * tidak mengulang job yang gagal).
+   */
+  private async withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    let lastErr: any;
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastErr = err;
+        if (!this.isTransientError(err) || attempt >= this.retryAttempts) {
+          throw err;
+        }
+        console.warn(`[WAHA RETRY] ${label} gagal (percobaan ${attempt}/${this.retryAttempts}), coba ulang dalam ${this.retryBackoffMs}ms: ${err?.message || err}`);
+        await this.sleep(this.retryBackoffMs);
+      }
+    }
+    throw lastErr;
+  }
+
+  private isTransientError(err: any): boolean {
+    const code = err?.code || '';
+    const msg = String(err?.message || err || '');
+    return (
+      ['ECONNABORTED', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'EPIPE', 'ECONNRESET'].includes(code) ||
+      /timeout|socket hang up|econnaborted|econnreset|network/i.test(msg)
+    );
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async resolveActiveJid(chatId: string): Promise<string> {
@@ -185,14 +266,18 @@ export class WahaClient implements IWahaClient {
     }
 
     try {
-      await axios.post(
-        `${this.baseUrl}/api/sendSeen`,
-        {
-          chatId: targetChatId,
-          messageId: messageId || undefined,
-          session: this.session,
-        },
-        { headers: this.headers, timeout: this.timeoutMs }
+      await this.runSerialized(() =>
+        this.withRetry('sendSeen', () =>
+          axios.post(
+            `${this.baseUrl}/api/sendSeen`,
+            {
+              chatId: targetChatId,
+              messageId: messageId || undefined,
+              session: this.session,
+            },
+            { headers: this.headers, timeout: this.timeoutMs }
+          )
+        )
       );
       return true;
     } catch (error: any) {
@@ -213,13 +298,15 @@ export class WahaClient implements IWahaClient {
     }
 
     try {
-      await axios.post(
-        `${this.baseUrl}/api/startTyping`,
-        {
-          chatId: targetChatId,
-          session: this.session,
-        },
-        { headers: this.headers, timeout: this.timeoutMs }
+      await this.runSerialized(() =>
+        axios.post(
+          `${this.baseUrl}/api/startTyping`,
+          {
+            chatId: targetChatId,
+            session: this.session,
+          },
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
       );
       return true;
     } catch (error: any) {
@@ -240,13 +327,15 @@ export class WahaClient implements IWahaClient {
     }
 
     try {
-      await axios.post(
-        `${this.baseUrl}/api/stopTyping`,
-        {
-          chatId: targetChatId,
-          session: this.session,
-        },
-        { headers: this.headers, timeout: this.timeoutMs }
+      await this.runSerialized(() =>
+        axios.post(
+          `${this.baseUrl}/api/stopTyping`,
+          {
+            chatId: targetChatId,
+            session: this.session,
+          },
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
       );
       return true;
     } catch (error: any) {
@@ -269,14 +358,18 @@ export class WahaClient implements IWahaClient {
     }
 
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/api/sendText`,
-        {
-          chatId: targetChatId,
-          text: normalizedText,
-          session: this.session,
-        },
-        { headers: this.headers, timeout: this.timeoutMs }
+      const response = await this.runSerialized(() =>
+        this.withRetry('sendText', () =>
+          axios.post(
+            `${this.baseUrl}/api/sendText`,
+            {
+              chatId: targetChatId,
+              text: normalizedText,
+              session: this.session,
+            },
+            { headers: this.headers, timeout: this.timeoutMs }
+          )
+        )
       );
       return response.status === 200 || response.status === 201;
     } catch (error: any) {
@@ -405,55 +498,57 @@ export class WahaClient implements IWahaClient {
       return true;
     }
 
-    try {
-      // 1. Dapatkan ID label dari daftar label yang ada di session
-      const labelsListResponse = await axios.get(
-        `${this.baseUrl}/api/${this.session}/labels`,
-        { headers: this.headers, timeout: this.timeoutMs }
-      );
-      const labels = labelsListResponse.data?.value || labelsListResponse.data || [];
-      let targetLabel = labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
-
-      // Jika label belum ada di session, kita buat baru
-      if (!targetLabel) {
-        const createResponse = await axios.post(
+    return this.runSerialized(async () => {
+      try {
+        // 1. Dapatkan ID label dari daftar label yang ada di session
+        const labelsListResponse = await axios.get(
           `${this.baseUrl}/api/${this.session}/labels`,
-          { name: labelName, color: 1 },
           { headers: this.headers, timeout: this.timeoutMs }
         );
-        targetLabel = createResponse.data;
-      }
+        const labels = labelsListResponse.data?.value || labelsListResponse.data || [];
+        let targetLabel = labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
 
-      if (!targetLabel) {
-        console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}: Could not find or create label "${labelName}"`);
+        // Jika label belum ada di session, kita buat baru
+        if (!targetLabel) {
+          const createResponse = await axios.post(
+            `${this.baseUrl}/api/${this.session}/labels`,
+            { name: labelName, color: 1 },
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          targetLabel = createResponse.data;
+        }
+
+        if (!targetLabel) {
+          console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}: Could not find or create label "${labelName}"`);
+          return false;
+        }
+
+        // 2. Dapatkan label yang saat ini menempel pada chat
+        const currentLabelsResponse = await axios.get(
+          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        );
+        const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
+
+        // 3. Gabungkan label target jika belum terpasang
+        const alreadyHas = currentLabels.some((l: any) => l.id === targetLabel.id);
+        if (alreadyHas) return true;
+
+        const newLabelsList = [...currentLabels, targetLabel].map((l: any) => ({ id: l.id }));
+
+        // 4. Update label chat menggunakan PUT
+        await axios.put(
+          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+          { labels: newLabelsList },
+          { headers: this.headers, timeout: this.timeoutMs }
+        );
+        console.log(`[WAHA LABEL] Successfully added label "${labelName}" to ${targetChatId}`);
+        return true;
+      } catch (error: any) {
+        console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
         return false;
       }
-
-      // 2. Dapatkan label yang saat ini menempel pada chat
-      const currentLabelsResponse = await axios.get(
-        `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-        { headers: this.headers, timeout: this.timeoutMs }
-      );
-      const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
-
-      // 3. Gabungkan label target jika belum terpasang
-      const alreadyHas = currentLabels.some((l: any) => l.id === targetLabel.id);
-      if (alreadyHas) return true;
-
-      const newLabelsList = [...currentLabels, targetLabel].map((l: any) => ({ id: l.id }));
-
-      // 4. Update label chat menggunakan PUT
-      await axios.put(
-        `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-        { labels: newLabelsList },
-        { headers: this.headers, timeout: this.timeoutMs }
-      );
-      console.log(`[WAHA LABEL] Successfully added label "${labelName}" to ${targetChatId}`);
-      return true;
-    } catch (error: any) {
-      console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
-      return false;
-    }
+    });
   }
 
   /**
@@ -470,31 +565,33 @@ export class WahaClient implements IWahaClient {
       return true;
     }
 
-    try {
-      // 1. Dapatkan label yang saat ini menempel pada chat
-      const currentLabelsResponse = await axios.get(
-        `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-        { headers: this.headers, timeout: this.timeoutMs }
-      );
-      const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
+    return this.runSerialized(async () => {
+      try {
+        // 1. Dapatkan label yang saat ini menempel pada chat
+        const currentLabelsResponse = await axios.get(
+          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        );
+        const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
 
-      // 2. Filter buang label yang sesuai dengan nama target
-      const filteredLabels = currentLabels
-        .filter((l: any) => l.name.toLowerCase() !== labelName.toLowerCase())
-        .map((l: any) => ({ id: l.id }));
+        // 2. Filter buang label yang sesuai dengan nama target
+        const filteredLabels = currentLabels
+          .filter((l: any) => l.name.toLowerCase() !== labelName.toLowerCase())
+          .map((l: any) => ({ id: l.id }));
 
-      // 3. Update label chat menggunakan PUT
-      await axios.put(
-        `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-        { labels: filteredLabels },
-        { headers: this.headers, timeout: this.timeoutMs }
-      );
-      console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
-      return true;
-    } catch (error: any) {
-      console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
-      return false;
-    }
+        // 3. Update label chat menggunakan PUT
+        await axios.put(
+          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+          { labels: filteredLabels },
+          { headers: this.headers, timeout: this.timeoutMs }
+        );
+        console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
+        return true;
+      } catch (error: any) {
+        console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
+        return false;
+      }
+    });
   }
 
   /**
@@ -571,6 +668,28 @@ export class WahaClient implements IWahaClient {
     } catch (error: any) {
       console.error(`[WAHA API ERROR] getMessages failed for ${targetChatId}:`, error?.response?.data || error.message);
       return [];
+    }
+  }
+
+  /**
+   * Mengambil profil kontak (pushname) dari WAHA.
+   * Endpoint: GET /api/{session}/contacts/{phone}.
+   * Mengembalikan null bila gagal / kontak tidak ditemukan (best-effort).
+   */
+  public async getContact(phone: string): Promise<WahaContact | null> {
+    if (this.shouldMock) return null;
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/${this.session}/contacts/${encodeURIComponent(phone)}`,
+        {
+          headers: this.headers,
+          timeout: this.timeoutMs,
+        }
+      );
+      return response.data || null;
+    } catch (error: any) {
+      console.warn(`[WAHA API ERROR] getContact failed for ${phone}:`, error?.response?.data || error.message);
+      return null;
     }
   }
 
