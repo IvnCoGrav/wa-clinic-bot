@@ -238,8 +238,7 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     expect(queuedMedia.caption).toBe('Foto hasil USG');
 
     // 3. File benar-benar tersimpan di storage/media/inbound/<tenantId>.
-    const relPath = queuedMedia.hdUrl.replace('/media/inbound/', '');
-    const filePath = path.join(process.cwd(), 'storage', 'media', 'inbound', relPath);
+    const filePath = mediaService.filePathFromRelativeUrl(queuedMedia.hdUrl)!;
     expect(fs.existsSync(filePath)).toBe(true);
 
     // 4. Tunggu worker memproses → pesan INBOUND tercatat dengan payload_raw.media.

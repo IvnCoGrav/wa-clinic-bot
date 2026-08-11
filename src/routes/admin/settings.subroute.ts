@@ -439,6 +439,14 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       const oldVal = AiModelConfigService.globalBotActive;
       AiModelConfigService.globalBotActive = globalBotActive;
 
+      // Jika bot di-ON-kan kembali, otomatis release percakapan yang sempat di-escalate karena 'Global bot disabled'
+      if (globalBotActive) {
+        const { conversationService } = await import('../../services/conversation.service');
+        await conversationService.releaseDisabledBotConversations(DEFAULT_TENANT_ID).catch((err: any) => {
+          console.warn('[GLOBAL BOT TOGGLE] Gagal release percakapan:', err.message);
+        });
+      }
+
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
