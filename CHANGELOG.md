@@ -8,6 +8,23 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-11
 
+### Added — Kolom DB label WhatsApp (admin/hold) + event-driven sync + admin dashboard
+
+- **Prisma**: kolom `is_admin_labeled` & `is_hold_labeled` di `Customer` (default `false`) — migrasi `20260828000000_add_customer_label_flags`. Kolom ini adalah sumber kebenaran status label 'admin'/'hold', sehingga bot tidak perlu HTTP call ke WAHA setiap pesan masuk untuk mengecek label.
+- **Webhook** (`src/routes/webhook.route.ts`): handler event WAHA `label.chat.added` / `label.chat.deleted`:
+  - Sync kolom DB via `customerService.setLabelFlags()` (DB offline → memory fallback, best-effort).
+  - Pesan masuk memakai fast-path kolom DB: label 'admin' → eager handover ke admin tanpa `getChatLabels`; label 'hold' → bot silent dengan fallback 2.5s ke `getChatLabels` bila kolom tidak ter-set (event bisa lewat).
+  - Cache label per-chat TTL pendek (`src/integrations/waha/label-cache.ts`).
+- **`src/integrations/waha/client.ts`**: `syncLabelColumn()` sebagai choke-point tunggal — setiap `addLabel`/`removeLabel`/`batchUpdateLabels` (mock & real) meng-update kolom DB. Sync redundan dihapus dari `conversation.service.ts`, `customers.subroute.ts`, `livechat.subroute.ts`.
+- **Admin API**: `PATCH /api/admin/customers/:id/label` (`{ label: 'admin'|'hold', enabled: boolean }`) — update kolom DB + mirror ke WAHA (best-effort) + audit log; `GET /api/admin/customers` kini memuat `isAdminLabeled`/`isHoldLabeled` per row.
+- **Admin dashboard** (`CustomerDatabase.tsx`): kolom "Label WA" dengan toggle pill Admin/Hold (via `useUiFeedback` — toast + confirm modal, tanpa `window.confirm`).
+- **Lainnya**: `label-reconciliation.service.ts` & `reservation-lifecycle.service.ts` kini membaca kolom DB sebagai sumber kebenaran; `mockCustomer` memory diinisialisasi flag `false`.
+- **Test**: `tests/integration/label-events.test.ts` (7 skenario event + fast-path DB), `tests/integration/admin-customer-label.test.ts` (6 skenario API), `tests/unit/waha-label-cache.test.ts`, `tests/unit/waha-retry.test.ts` & `tests/unit/label-lifecycle.test.ts` diperbarui.
+
+---
+
+## [Unreleased] - 2026-08-11
+
 ### Changed — Mitigasi burst WAHA: retry transien + concurrency limiter + timer unik
 
 - **`src/integrations/waha/client.ts`** — WahaClient kini punya lapisan ketahanan:

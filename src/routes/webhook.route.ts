@@ -18,7 +18,43 @@ import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { normalizeWahaJid } from '../utils/jid';
+import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 dotenv.config();
+
+/**
+ * Handler event label.chat.added / label.chat.deleted dari WAHA.
+ * Meng-update kolom Customer.is_admin_labeled / is_hold_labeled (best-effort)
+ * supaya jalur pesan masuk bisa membaca status label dari DB tanpa HTTP call
+ * ke WAHA. Label lain di-cache-invalidate supaya fallback getChatLabels segar.
+ * Event dengan payload.label null (mis. baru selesai scan QR) dilewati —
+ * LabelReconciliationService tetap menjadi safety-net periodik.
+ */
+async function handleLabelChatEvent(event: WahaWebhookEvent): Promise<void> {
+  try {
+    const payload: any = event.payload;
+    const chatId: string | undefined = payload?.chatId;
+    const labelName: string | undefined = payload?.label?.name || payload?.labelName;
+    if (!chatId || !labelName) return;
+
+    const phone = normalizeWahaJid(chatId);
+    if (!phone) return;
+
+    const lower = labelName.toLowerCase();
+    if (lower !== 'admin' && lower !== 'hold') {
+      invalidateCachedLabels(chatId);
+      return;
+    }
+
+    const isAdded = event.event === 'label.chat.added';
+    await customerService.setLabelFlags(phone, {
+      isAdminLabeled: lower === 'admin' ? isAdded : undefined,
+      isHoldLabeled: lower === 'hold' ? isAdded : undefined,
+    });
+    invalidateCachedLabels(chatId);
+  } catch (err: any) {
+    console.warn(`[LABEL EVENT] Failed to process label event ${event.event}:`, err.message);
+  }
+}
 
 
 export async function webhookRoutes(fastify: FastifyInstance) {
@@ -43,8 +79,22 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       const event = request.body;
 
+      // --- EVENT LABEL (Task: event-driven label sync) ---
+      // WAHA mengirim label.chat.added / label.chat.deleted setiap kali label
+      // berubah di WhatsApp Business (termasuk manual oleh admin di aplikasi WA
+      // Business). Dipakai untuk meng-update kolom Customer.is_admin_labeled /
+      // is_hold_labeled agar jalur pesan masuk tidak perlu memanggil WAHA sama sekali
+      // (LabelReconciliationService tetap jalan sebagai safety-net periodik).
+      if (!event) {
+        return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
+      }
+      if (event.event === 'label.chat.added' || event.event === 'label.chat.deleted') {
+        await handleLabelChatEvent(event);
+        return reply.status(200).send({ status: 'LABEL_EVENT_PROCESSED' });
+      }
+
       // Filter hanya event "message" atau "message.any"
-      if (!event || (event.event !== 'message' && event.event !== 'message.any')) {
+      if (event.event !== 'message' && event.event !== 'message.any') {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
       }
 
@@ -147,13 +197,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Extrak nomor HP internasional dari JID WAHA (misal "79903991054369@lid" -> "6285794210526")
       const chatId = payload.from;
 
+      // Resolve LID→JID primer (@c.us) SEKALI di awal handler; hasilnya dipakai
+      // untuk menurunkan phone DAN menjadi cache key label (getChatLabels di bawah
+      // memakai hasil resolve yang sama via label-cache, sehingga /lids/* dan
+      // /labels/chats/* hanya di-hit maks 1x per chat dalam window TTL 15 detik).
+      const resolvedJid = await wahaClient.resolvePrimaryJid(chatId);
+
       // --- REVISI USER: BYPASS EMPLOYEE/ADMIN CHATS ---
-      const labels = await wahaClient.getChatLabels(chatId);
-      if (labels.some(l => l.toLowerCase() === 'admin')) {
-        console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
-        return reply.status(200).send({ status: 'IGNORED_ADMIN' });
-      }
-      const phone = (await wahaClient.getPhoneNumberFromLid(chatId)) || normalizeWahaJid(chatId);
+      // Fast path: baca Customer.is_admin_labeled dari DB (nol HTTP ke WAHA).
+      // Fallback: customer belum punya record / DB offline → tanya WAHA (dengan
+      // cache TTL 15s dari label-cache, jadi murah).
+      const phone = resolvedJid.replace(/@.*$/, '') || normalizeWahaJid(chatId);
       // Guard: JID yang tidak bisa diekstrak jadi nomor HP (junk/status) jangan sampai
       // membuat customer ber-phone kosong/aneh di database.
       if (!phone) {
@@ -161,6 +215,21 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_NO_PHONE' });
       }
       const contactName = payload._data?.notifyName;
+
+      const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+      let labels: string[] | null = null;
+
+      if (existingCustomer && existingCustomer.is_admin_labeled === true) {
+        console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
+        return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+      }
+      if (!existingCustomer) {
+        labels = await wahaClient.getChatLabels(chatId);
+        if (labels.some(l => l.toLowerCase() === 'admin')) {
+          console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
+          return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+        }
+      }
 
       // --- MEDIA INBOUND (gambar customer) ---
       // Deteksi image, unduh file dari WAHA, simpan ke storage/media/inbound/<tenantId>,
@@ -199,9 +268,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // berlabel 'legacy' dan customer belum pernah di-scrape, kita picu scraping
       // historis per-kontak dan return 200 TANPA masuk ke state machine.
       if (process.env.ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER === 'true') {
+        // Ambil label dari WAHA hanya jika belum di-fetch di jalur admin bypass
+        if (labels === null) {
+          labels = await wahaClient.getChatLabels(chatId);
+        }
         if (labels.some(l => l.toLowerCase() === 'legacy')) {
-          const existingCust = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
-          if (existingCust && !existingCust.legacy_scraped_at) {
+          if (existingCustomer && !existingCustomer.legacy_scraped_at) {
             console.log(`[LEGACY SCRAPE TRIGGER] Chat ${chatId} labeled 'legacy', customer not yet scraped. Triggering.`);
             // Log inbound message ke audit trail
             const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
@@ -230,7 +302,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
 
       // Periksa apakah customer baru (belum ada record di database)
-      const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
       const isNewCustomerRecord = !existingCustomer;
 
       // Ambil/Buat record Customer & Conversation
@@ -381,11 +452,20 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
 
         // Periksa apakah admin telah melepas label 'hold' di WhatsApp
-        const currentLabels = await wahaClient.getChatLabels(chatId);
-        const hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
+        // Fast path: baca Customer.is_hold_labeled dari DB (nol HTTP ke WAHA).
+        // Fallback: kolom belum tersync (DB offline / customer baru) → tanya WAHA (cached).
+        let hasHoldLabel = false;
+        if (customer && typeof customer.is_hold_labeled === 'boolean') {
+          hasHoldLabel = customer.is_hold_labeled;
+        } else {
+          const currentLabels = await wahaClient.getChatLabels(chatId);
+          hasHoldLabel = currentLabels.some(l => l.toLowerCase() === 'hold');
+        }
 
         if (!hasHoldLabel && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false') {
           console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
+          // Sinkronkan kolom flag (event label.chat.deleted bisa terlewat; safety-net tetap reconciliation)
+          customerService.setLabelFlags(phone, { isHoldLabeled: false }).catch(() => {});
           const restoredState = conversation.previous_state || ConversationState.INITIAL;
           conversation = await conversationService.updateConversationState(
             conversation.id,

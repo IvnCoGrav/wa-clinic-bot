@@ -89,6 +89,8 @@ model Customer {
   mql_bubble_count        Int            @default(0)
   is_legacy_source        Boolean        @default(false)
   legacy_scraped_at       DateTime?
+  is_admin_labeled        Boolean        @default(false)
+  is_hold_labeled         Boolean        @default(false)
   ai_override             AiOverride?
   preferences             Json?
 

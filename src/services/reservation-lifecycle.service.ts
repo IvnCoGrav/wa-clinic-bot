@@ -79,23 +79,18 @@ export class ReservationLifecycleService {
       console.warn('[LIFECYCLE LABEL] Could not count prior confirmed reservations:', err.message);
     }
 
-    // Best-effort: selalu hapus 'new customer'
-    wahaClient.removeLabel(chatId, 'new customer').catch((err: any) =>
-      console.warn('[LIFECYCLE LABEL] removeLabel "new customer" failed:', err.message)
-    );
-
+    // Best-effort: satu operasi atomik (1x GET + 1x PUT) untuk semua perubahan label
+    const remove: string[] = ['new customer'];
+    const add: string[] = [];
     if (priorConfirmedCount > 0) {
-      wahaClient.addLabel(chatId, 'repeat').catch((err: any) =>
-        console.warn('[LIFECYCLE LABEL] addLabel "repeat" failed:', err.message)
-      );
-      wahaClient.removeLabel(chatId, 'pending payment').catch((err: any) =>
-        console.warn('[LIFECYCLE LABEL] removeLabel "pending payment" failed:', err.message)
-      );
+      add.push('repeat');
+      remove.push('pending payment');
     } else {
-      wahaClient.addLabel(chatId, 'pending payment').catch((err: any) =>
-        console.warn('[LIFECYCLE LABEL] addLabel "pending payment" failed:', err.message)
-      );
+      add.push('pending payment');
     }
+    wahaClient.batchUpdateLabels(chatId, { add, remove }).catch((err: any) =>
+      console.warn('[LIFECYCLE LABEL] batchUpdateLabels failed:', err.message)
+    );
     // Catatan: label 'legacy' dibiarkan tak tersentuh.
   }
 }
