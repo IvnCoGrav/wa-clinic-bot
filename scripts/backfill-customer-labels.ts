@@ -14,12 +14,16 @@ export async function runBackfillCustomerLabels(options?: { batchSize?: number }
   let totalProcessed = 0;
   let totalUpdated = 0;
   let hasMore = true;
+  const processedIds = new Set<string>();
 
   while (hasMore) {
     let unsyncedCustomers: Array<{ id: string; phone: string }> = [];
     try {
       unsyncedCustomers = await prisma.customer.findMany({
-        where: { labels_synced_at: null },
+        where: {
+          labels_synced_at: null,
+          id: { notIn: Array.from(processedIds) },
+        },
         select: { id: true, phone: true },
         take: batchSize,
       });
@@ -28,10 +32,9 @@ export async function runBackfillCustomerLabels(options?: { batchSize?: number }
       // Fallback untuk test environment (saat DB offline / Prisma ter-mock)
       const memoryStore = customerService.getMemoryCustomers();
       unsyncedCustomers = Array.from(memoryStore.values())
-        .filter((c: any) => c.labels_synced_at === null)
+        .filter((c: any) => c.labels_synced_at === null && !processedIds.has(c.id))
         .map((c: any) => ({ id: c.id, phone: c.phone }))
         .slice(0, batchSize);
-
     }
 
     if (!unsyncedCustomers || unsyncedCustomers.length === 0) {
@@ -42,9 +45,16 @@ export async function runBackfillCustomerLabels(options?: { batchSize?: number }
     console.log(`[BACKFILL LABELS] Processing batch of ${unsyncedCustomers.length} customers...`);
 
     for (const cust of unsyncedCustomers) {
+      processedIds.add(cust.id);
+      totalProcessed++;
       const chatId = `${cust.phone}@c.us`;
       try {
-        const labels = await wahaClient.getChatLabels(chatId);
+        const labels = await wahaClient.getChatLabelsOrNull(chatId);
+        if (labels === null) {
+          console.warn(`[BACKFILL LABELS] WAHA fetch returned null for ${chatId} (WAHA down/timeout). Leaving labels_synced_at = null.`);
+          continue; // Jangan set labels_synced_at agar di-retry di run berikutnya
+        }
+
         const isAdmin = labels.some((l) => l.toLowerCase() === 'admin');
         const isHold = labels.some((l) => l.toLowerCase() === 'hold');
 
@@ -55,11 +65,8 @@ export async function runBackfillCustomerLabels(options?: { batchSize?: number }
 
         totalUpdated++;
       } catch (err: any) {
-        console.warn(`[BACKFILL LABELS] Failed to fetch labels for ${chatId}:`, err.message);
-        // Tetap set labels_synced_at agar tidak ter-stuck di loop jika WAHA error permanen untuk 1 nomor
-        await customerService.setLabelFlags(cust.phone, { isAdminLabeled: false, isHoldLabeled: false }).catch(() => {});
+        console.warn(`[BACKFILL LABELS] Error processing ${chatId}:`, err.message);
       }
-      totalProcessed++;
     }
   }
 

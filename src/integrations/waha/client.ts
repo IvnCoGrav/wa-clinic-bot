@@ -51,6 +51,8 @@ export interface IWahaClient {
   addLabel(chatId: string, labelName: string): Promise<boolean>;
   removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
+  getChatLabelsOrNull(chatId: string): Promise<string[] | null>;
+
   getSessionStatus(session?: string): Promise<string>;
   startSession(session?: string): Promise<string>;
   stopSession(session?: string): Promise<boolean>;
@@ -756,11 +758,10 @@ export class WahaClient implements IWahaClient {
   }
 
   /**
-   * Mengambil daftar label yang ada pada chat menggunakan API WAHA baru (GET /api/{session}/labels/chats/{chatId})
-   * Hasil di-cache TTL pendek (label-cache.ts) untuk menghindari HTTP call blocking
-   * berulang di jalur webhook; cache di-invalidate oleh mutasi label apapun.
+   * Mengambil daftar label yang ada pada chat menggunakan API WAHA baru.
+   * Mengembalikan string[] jika sukses, atau null jika WAHA error/timeout/down.
    */
-  public async getChatLabels(chatId: string): Promise<string[]> {
+  public async getChatLabelsOrNull(chatId: string): Promise<string[] | null> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
 
     const cached = getCachedLabels(targetChatId);
@@ -782,10 +783,16 @@ export class WahaClient implements IWahaClient {
       setCachedLabels(targetChatId, names);
       return names;
     } catch (error: any) {
-      console.warn(`[WAHA API ERROR] getChatLabels failed for ${targetChatId}:`, error?.response?.data || error.message);
-      return [];
+      console.warn(`[WAHA API ERROR] getChatLabelsOrNull failed for ${targetChatId}:`, error?.response?.data || error.message);
+      return null;
     }
   }
+
+  public async getChatLabels(chatId: string): Promise<string[]> {
+    const res = await this.getChatLabelsOrNull(chatId);
+    return res || [];
+  }
+
 
   /**
    * Mengambil daftar chat dari WAHA (GET /api/chats)
