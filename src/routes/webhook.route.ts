@@ -224,17 +224,20 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_ADMIN' });
       }
       if (!existingCustomer || existingCustomer.labels_synced_at === null) {
-        labels = await wahaClient.getChatLabels(chatId);
-        const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
-        const isHold = labels.some(l => l.toLowerCase() === 'hold');
-        if (existingCustomer) {
-          customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: isHold }).catch(() => {});
-        }
-        if (isAdmin) {
-          console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
-          return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+        labels = await wahaClient.getChatLabelsOrNull(chatId);
+        if (labels !== null) {
+          const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
+          const isHold = labels.some(l => l.toLowerCase() === 'hold');
+          if (existingCustomer) {
+            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: isHold }).catch(() => {});
+          }
+          if (isAdmin) {
+            console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
+            return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+          }
         }
       }
+
 
 
       // --- MEDIA INBOUND (gambar customer) ---
@@ -465,12 +468,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           hasHoldLabel = customer.is_hold_labeled;
         } else {
           if (labels === null) {
-            labels = await wahaClient.getChatLabels(chatId);
+            labels = await wahaClient.getChatLabelsOrNull(chatId);
           }
-          hasHoldLabel = labels.some(l => l.toLowerCase() === 'hold');
-          const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
-          customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: hasHoldLabel }).catch(() => {});
+          if (labels !== null) {
+            hasHoldLabel = labels.some(l => l.toLowerCase() === 'hold');
+            const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
+            customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: hasHoldLabel }).catch(() => {});
+          }
         }
+
 
 
         if (!hasHoldLabel && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false') {

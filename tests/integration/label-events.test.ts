@@ -167,7 +167,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
     const phone = `6283334${Date.now()}`;
     wahaClient.mockLabels.set(`${phone}@c.us`, ['Admin']);
 
-    const getLabelsSpy = vi.spyOn(wahaClient, 'getChatLabels');
+    const getLabelsSpy = vi.spyOn(wahaClient, 'getChatLabelsOrNull');
     const res = await app.inject({
       method: 'POST',
       url: '/webhook',
@@ -180,6 +180,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
     getLabelsSpy.mockRestore();
     wahaClient.mockLabels.delete(`${phone}@c.us`);
   });
+
 
   it('event dengan label null (baru selesai scan QR) atau label non-admin/hold → dilewati dengan aman', async () => {
     const phone = `6283335${Date.now()}`;

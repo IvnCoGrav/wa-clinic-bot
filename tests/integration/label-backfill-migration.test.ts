@@ -49,7 +49,7 @@ describe('Stage 5: Label Backfill & Safety Migration (TC 41 - 44)', () => {
     customer.labels_synced_at = null;
 
     wahaClient.mockLabels.set(`${phone}@c.us`, ['hold']);
-    const getLabelsSpy = vi.spyOn(wahaClient, 'getChatLabels');
+    const getLabelsSpy = vi.spyOn(wahaClient, 'getChatLabelsOrNull');
 
     const res = await app.inject({
       method: 'POST',
@@ -58,8 +58,9 @@ describe('Stage 5: Label Backfill & Safety Migration (TC 41 - 44)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    // Karena labels_synced_at null, fast-path DIBATALKAN dan memanggil getChatLabels ke WAHA
+    // Karena labels_synced_at null, fast-path DIBATALKAN dan memanggil getChatLabelsOrNull ke WAHA
     expect(getLabelsSpy).toHaveBeenCalledWith(`${phone}@c.us`);
+
 
     // Dan labels_synced_at sekarang diisi
     const refreshed = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
@@ -124,4 +125,46 @@ describe('Stage 5: Label Backfill & Safety Migration (TC 41 - 44)', () => {
 
     wahaClient.mockLabels.delete(`${phone}@c.us`);
   });
+
+  it('[TC 45] WAHA error/timeout (getChatLabelsOrNull returns null) → labels_synced_at TETAP null', async () => {
+    const phone = `6286665${Date.now()}`;
+    const cust = await customerService.getOrCreateCustomer(phone, 'WAHA Down Customer', DEFAULT_TENANT_ID);
+    cust.labels_synced_at = null;
+
+    // Spy getChatLabelsOrNull to return null (simulating WAHA down)
+    const spy = vi.spyOn(wahaClient, 'getChatLabelsOrNull').mockResolvedValueOnce(null);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload: messagePayload(`msg_tc45_${Date.now()}`, phone),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const refreshed = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    // Karena WAHA return null (gagal), labels_synced_at TIDAK BOLEH di-mark synced
+    expect(refreshed.labels_synced_at).toBeNull();
+
+    spy.mockRestore();
+  });
+
+  it('[TC 46] Backfill Script saat WAHA down (returns null) → melewati customer tanpa menyetel labels_synced_at', async () => {
+    const phone = `6286666${Date.now()}`;
+    const cust = await customerService.getOrCreateCustomer(phone, 'Backfill Fail Target', DEFAULT_TENANT_ID);
+    cust.labels_synced_at = null;
+
+    const spy = vi.spyOn(wahaClient, 'getChatLabelsOrNull').mockImplementation(async (chatId) => {
+      if (chatId.includes(phone)) return null;
+      return [];
+    });
+
+    await runBackfillCustomerLabels({ batchSize: 10 });
+
+    const refreshed = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    expect(refreshed.labels_synced_at).toBeNull();
+
+    spy.mockRestore();
+  });
+
 });
+
