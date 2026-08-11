@@ -10,6 +10,8 @@
     "chat": "tsx src/cli/chat-simulator.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed:faq": "tsx src/cli/seed-faq.ts",
