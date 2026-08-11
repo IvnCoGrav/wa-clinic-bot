@@ -11,7 +11,10 @@ export const capiBreaker = new CircuitBreaker(
     return axios.post(url, payload, { timeout: 5000 });
   },
   async () => {
+    // PENTING: fallback ini TIDAK boleh dianggap sukses oleh caller — ditandai
+    // `isFallback: true` supaya sendCapiEvent tidak mencatat [CAPI SUCCESS] palsu.
     return {
+      isFallback: true,
       data: { success: false, note: 'Circuit Breaker Active Fallback (CAPI)' },
       status: 200,
       statusText: 'OK',
@@ -184,7 +187,13 @@ export class CapiService {
         if (tenant?.meta_capi_access_token) {
           const decrypted = decryptCapiToken(tenant.meta_capi_access_token);
           if (decrypted) accessToken = decrypted;
-          else console.warn(`[CAPI WARNING] Token CAPI tenant ${tenantId} gagal didecrypt, pakai env fallback.`);
+          else {
+            // Tampilkan prefix termask (mis. "EAA…abcd") supaya ops tahu apakah
+            // token DB plaintext legacy valid atau korup/salah format.
+            const token = tenant.meta_capi_access_token;
+            const mask = token.length > 10 ? `${token.substring(0, 4)}…${token.slice(-4)}` : '(token sangat pendek)';
+            console.warn(`[CAPI WARNING] Token CAPI tenant ${tenantId} gagal didecrypt (${mask}), pakai env fallback.`);
+          }
         }
       } catch (err) {
         console.warn(`[CAPI WARNING] Gagal baca config CAPI tenant ${tenantId}, pakai env fallback:`, (err as Error).message);
@@ -343,7 +352,14 @@ export class CapiService {
       console.log(`[CAPI] Sending event ${eventName} to Meta for customer ${customer.phone}`);
 
       // 5. EXECUTE VIA CIRCUIT BREAKER
-      const response = await capiBreaker.execute(url, payload);
+      const response: any = await capiBreaker.execute(url, payload);
+
+      // Fallback breaker aktif (error/400/500) → event TIDAK terkirim. Jangan
+      // mencatat SUCCESS palsu: fallback mengembalikan fake status 200.
+      if (response?.isFallback) {
+        console.error(`[CAPI FALLBACK] Event ${eventName} untuk customer ${customer.phone} TIDAK terkirim ke Meta (circuit breaker fallback aktif).`);
+        return { success: false, message: 'Circuit breaker fallback: event tidak terkirim' };
+      }
 
       if (response && response.status === 200) {
         console.log(`[CAPI SUCCESS] Successfully sent event ${eventName} to Meta CAPI.`);

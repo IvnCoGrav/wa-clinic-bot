@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { getStringSimilarity } from '../../utils/similarity';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
+import { measure } from '../../utils/timer';
 dotenv.config();
 
 const INDONESIAN_STOP_WORDS = new Set([
@@ -82,7 +83,7 @@ export class GeocodingService {
    * Mengambil koordinat & informasi administratif dari input teks.
    */
   public async geocodeText(locationText: string): Promise<ResolvedLocation> {
-    console.time('GEOCODING_TOTAL');
+    return measure('GEOCODING_TOTAL', async () => {
     try {
       if (!this.apiKey || this.apiKey.startsWith('mock')) {
         return this.mockGeocodeText(locationText);
@@ -146,9 +147,8 @@ export class GeocodingService {
     } catch (error) {
       console.error('Error in Google Maps geocodeText, falling back to local database:', error);
       return this.mockGeocodeText(locationText);
-    } finally {
-      console.timeEnd('GEOCODING_TOTAL');
     }
+    });
   }
 
   /**
@@ -723,8 +723,6 @@ export class GeocodingService {
     }
 
     try {
-      console.time('LLM_GEOCODE_API_CALL');
-
       const systemPrompt = `Anda adalah asisten geocoding untuk area Sidoarjo dan Surabaya, Jawa Timur, Indonesia.
 Tugas: Identifikasi nama kelurahan/desa, kecamatan, dan kota/kabupaten dari teks lokasi yang diberikan.
 
@@ -740,6 +738,9 @@ ATURAN:
 - Fokus pada area Sidoarjo dan Surabaya saja
 - Nama kelurahan harus nama resmi dari data administrasi, bukan nama dusun/RT
 
+PENTING: Anda WAJIB mengakhiri jawaban dengan blok JSON final berikut (boleh berisi null),
+walaupun Anda melakukan reasoning internal terlebih dahulu — JSON final harus lengkap.
+
 OUTPUT JSON:
 {
   "kelurahan": "nama kelurahan atau null",
@@ -747,28 +748,28 @@ OUTPUT JSON:
   "kota": "nama kota/kabupaten atau null"
 }`;
 
-      const response = await axios.post(
-        `${baseUrl}/chat/completions`,
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Lokasi: "${locationText}"` },
-          ],
-          temperature: 0.1,
-          max_tokens: 128,
-          response_format: { type: 'json_object' },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
+      const response = await measure('LLM_GEOCODE_API_CALL', () =>
+        axios.post(
+          `${baseUrl}/chat/completions`,
+          {
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: `Lokasi: "${locationText}"` },
+            ],
+            temperature: 0.1,
+            max_tokens: 512,
+            response_format: { type: 'json_object' },
           },
-          timeout: 8000,
-        }
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 8000,
+          }
+        )
       );
-
-      console.timeEnd('LLM_GEOCODE_API_CALL');
 
       let content = response.data?.choices?.[0]?.message?.content?.trim();
       const reasoning = response.data?.choices?.[0]?.message?.reasoning_content || '';

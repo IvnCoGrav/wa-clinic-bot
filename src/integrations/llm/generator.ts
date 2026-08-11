@@ -7,6 +7,7 @@ import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/l
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
+import { measure } from '../../utils/timer';
 import dotenv from 'dotenv';
 function isReferentialQuestion(userQuestion: string): boolean {
   if (!userQuestion) return false;
@@ -418,9 +419,9 @@ ATURAN EKSTRAKSI PREFERENSI:
     }
 
     try {
-      console.time('LLM_GENERATOR_API_CALL');
-      const res = await this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId);
-      console.timeEnd('LLM_GENERATOR_API_CALL');
+      const res = await measure('LLM_GENERATOR_API_CALL', () =>
+        this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId)
+      );
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
       return {
         answer: truncateToMaxChars(res.answer, maxChars),

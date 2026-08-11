@@ -6,6 +6,27 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-11
+
+### Changed — Mitigasi burst WAHA: retry transien + concurrency limiter + timer unik
+
+- **`src/integrations/waha/client.ts`** — WahaClient kini punya lapisan ketahanan:
+  - `withRetry()` — retry **hanya** untuk error transien (timeout / `ECONNABORTED` / socket hang / network); error 4xx/5xx langsung gagal tanpa retry. Env `WAHA_RETRY_ATTEMPTS` (default 2) & `WAHA_RETRY_BACKOFF_MS` (default 1500).
+  - `runSerialized()` — semaphore global membatasi call HTTP WAHA berjalan bersamaan (`WAHA_MAX_CONCURRENT_CALLS`, default 6) untuk meredam burst dari queue 5-shard yang menumpuk di antrian WAHA.
+  - Diterapkan: `sendText` & `sendSeen` (retry + limiter), `startTyping`/`stopTyping`/`addLabel`/`removeLabel` (limiter).
+- **`src/utils/timer.ts`** (baru) — `measure(label, fn)`: timer unik per invokasi (`LABEL#N`, `performance.now()`), ditutup di blok `finally` sehingga aman saat throw. Mengganti `console.time`/`console.timeEnd` di `typing.service.ts`, `geocoding.ts`, `intent.ts`, `generator.ts` — menghilangkan warning `Label already exists`/`No such label` saat eksekusi paralel.
+- **`src/integrations/google-maps/geocoding.ts`** — `max_tokens` LLM geocode 128 → 512 + instruksi "akhiri dengan JSON final" (mengurangi output terpotong).
+- **`src/services/nlu-classifier.service.ts`** — system prompt NLU ditambah instruksi akhiri dengan JSON final.
+- **`src/integrations/llm/intent.ts`** — perbaikan sintaks array `messages` (korupsi hasil edit sebelumnya yang mematahkan collection 45 file test).
+- **Test**: `tests/unit/waha-retry.test.ts` (5 test: retry transien, non-retry 4xx, retry habis, limiter, sendSeen) & `tests/unit/timer.test.ts` (3 test: hasil + durasi, label unik paralel, finally saat throw).
+
+### Changed — Ops: Redis noeviction & warning decrypt CAPI termask
+
+- **`docker-compose.yml`** — Redis `--maxmemory-policy allkeys-lru` → `noeviction` (antrian/kunci tidak boleh di-evict saat memory penuh). **Perlu deploy ulang Redis di server.**
+- **`src/services/capi.service.ts`** — saat token CAPI tenant gagal didecrypt, warning kini menampilkan prefix termask token tersimpan (mis. `EAA…abcd`) supaya ops bisa membedakan token legacy yang valid vs korup.
+
+---
+
 ## [Unreleased] - 2026-08-10
 
 ### Changed — Rantai fallback LLM 4-lapis (env-driven, tanpa hardcode)
