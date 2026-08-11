@@ -14,7 +14,9 @@
     "prisma:migrate": "prisma migrate dev",
     "seed:faq": "tsx src/cli/seed-faq.ts",
     "scrape:all": "tsx src/cli/scrape-all.ts",
-    "sync:history": "tsx src/scripts/sync-waha-history.ts"
+    "sync:history": "tsx src/scripts/sync-waha-history.ts",
+    "backfill:labels": "tsx scripts/backfill-customer-labels.ts"
+
   },
   "dependencies": {
     "@fastify/rate-limit": "^8.1.1",
