@@ -107,6 +107,9 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             public async getMessages(chatId: string, limit?: number): Promise<any[]> {
               return [];
             }
+            public async getContact(phone: string): Promise<import('../../integrations/waha/client').WahaContact | null> {
+              return null;
+            }
             public async getPhoneNumberFromLid(chatId: string): Promise<string | null> {
               return targetPhone;
             }

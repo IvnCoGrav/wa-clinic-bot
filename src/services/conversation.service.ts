@@ -95,11 +95,26 @@ export class ConversationService {
    * Daftar percakapan per tenant dengan paging offset (dengan memory store fallback saat DB offline).
    * Urutan: human-handling di atas (yang butuh aksi admin), lalu sisanya by last_message_at desc —
    * dipindah ke DB supaya stabil antar halaman (infinite scroll).
+   *
+   * `mode` memisahkan percakapan berdasarkan asal customer:
+   * - 'all'    : semua percakapan (default, backward compatible)
+   * - 'real'   : hanya customer WhatsApp asli (is_sandbox_test = false)
+   * - 'sandbox': hanya customer test/simulasi (is_sandbox_test = true)
+   * Filter dilakukan di level DB (join relasi customer) agar pagination offset tetap akurat.
    */
-  public async listConversations(tenantId: string, take = 50, offset = 0): Promise<any[]> {
+  public async listConversations(
+    tenantId: string,
+    take = 50,
+    offset = 0,
+    mode: 'all' | 'real' | 'sandbox' = 'all'
+  ): Promise<any[]> {
     try {
+      const where: any = { tenant_id: tenantId };
+      if (mode !== 'all') {
+        where.customer = { is_sandbox_test: mode === 'sandbox' };
+      }
       const convs = await prisma.conversation.findMany({
-        where: { tenant_id: tenantId },
+        where,
         orderBy: [
           { is_human_handling: 'desc' },
           { last_message_at: 'desc' },
@@ -110,13 +125,26 @@ export class ConversationService {
       convs.forEach((c) => memoryConversations.set(c.id, c));
       return convs;
     } catch (error) {
-      return Array.from(memoryConversations.values())
+      const { customerService } = await import('./customer.service');
+      const all = Array.from(memoryConversations.values())
         .filter((c) => c.tenant_id === tenantId)
         .sort((a, b) => {
           if (!!a.is_human_handling !== !!b.is_human_handling) return a.is_human_handling ? -1 : 1;
           return new Date(b.updated_at || b.last_message_at).getTime() - new Date(a.updated_at || a.last_message_at).getTime();
-        })
-        .slice(offset, offset + take);
+        });
+      const filtered = mode === 'all' ? all : [];
+      if (mode !== 'all') {
+        for (const c of all) {
+          try {
+            const cust = await customerService.getCustomerById(c.customer_id, tenantId);
+            if (cust && !!cust.is_sandbox_test === (mode === 'sandbox')) filtered.push(c);
+          } catch (e) {
+            // Customer tak ditemukan di memory store → ikutkan saja agar tidak kehilangan data (fail-open)
+            if (mode === 'real') filtered.push(c);
+          }
+        }
+      }
+      return filtered.slice(offset, offset + take);
     }
   }
 
@@ -293,15 +321,19 @@ export class ConversationService {
 
     const currentStateBeforeEscalation = conversation.current_state;
 
-    // Tambahkan label "hold" secara otomatis ke chat WAHA (default ON, matikan dengan ENABLE_WAHA_HOLD_LABEL=false)
+    // Tambahkan label "hold" secara otomatis ke chat WAHA (kecuali untuk global_bot_disabled)
     const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
-    if (enableHoldLabel) {
+    const isGlobalDisabled = escalationReason === 'global_bot_disabled' || escalationReason === 'Global bot disabled';
+
+    if (enableHoldLabel && !isGlobalDisabled) {
       try {
         const { wahaClient } = await import('../integrations/waha/client');
         await wahaClient.addLabel(`${phone}@c.us`, 'hold');
       } catch (err: any) {
         console.warn(`[LABEL ERROR] Failed to auto-add hold label during escalation:`, err.message);
       }
+    } else if (isGlobalDisabled) {
+      console.log(`[LABEL SKIP] Skipping hold label addition because escalation reason is global_bot_disabled.`);
     } else {
       console.log(`[LABEL SKIP] Skipping hold label addition in production (feature flag disabled).`);
     }
@@ -361,6 +393,56 @@ export class ConversationService {
       const conv = memoryConversations.get(conversationId);
       if (conv) conv.last_customer_message_at = now;
     }
+  }
+
+  /**
+   * Mengembalikan semua percakapan yang di-escalate karena 'Global bot disabled'
+   * kembali ke state semula & melepas flag human handling saat Bot di-ON-kan lagi.
+   */
+  public async releaseDisabledBotConversations(tenantId: string): Promise<number> {
+    let releasedCount = 0;
+    try {
+      const { wahaClient } = await import('../integrations/waha/client');
+      const { customerService } = await import('./customer.service');
+
+      const isGlobalDisabledReason = (r: string | null) =>
+        r && (r === 'global_bot_disabled' || r === 'Global bot disabled' || r.toLowerCase().includes('global bot'));
+
+      let convsToRelease: any[] = [];
+      try {
+        convsToRelease = await prisma.conversation.findMany({
+          where: {
+            tenant_id: tenantId,
+            is_human_handling: true,
+            escalation_reason: { in: ['global_bot_disabled', 'Global bot disabled'] },
+          },
+        });
+      } catch {
+        convsToRelease = Array.from(memoryConversations.values()).filter(
+          (c) => c && c.tenant_id === tenantId && c.is_human_handling && isGlobalDisabledReason(c.escalation_reason)
+        );
+      }
+
+      for (const conv of convsToRelease) {
+        const restoredState = conv.previous_state || ConversationState.INITIAL;
+        await this.updateConversationState(
+          conv.id,
+          {
+            currentState: restoredState,
+            isHumanHandling: false,
+            humanHandlingSince: null,
+            escalationReason: null,
+          },
+          tenantId
+        );
+        releasedCount++;
+
+        // Label hold tidak perlu dihapus karena saat global_bot_disabled label hold tidak ditambahkan
+      }
+    } catch (err: any) {
+      console.warn('[GLOBAL BOT RELEASE ERROR]', err.message);
+    }
+    return releasedCount;
   }
 }
 

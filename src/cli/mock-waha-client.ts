@@ -104,4 +104,8 @@ export class MockWAHAClient implements IWahaClient {
   public async getMessages(chatId: string, limit?: number): Promise<import('../integrations/waha/client').WahaMessage[]> {
     return [];
   }
+
+  public async getContact(phone: string): Promise<import('../integrations/waha/client').WahaContact | null> {
+    return null;
+  }
 }

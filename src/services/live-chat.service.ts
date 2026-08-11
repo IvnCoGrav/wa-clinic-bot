@@ -55,8 +55,13 @@ export class LiveChatService {
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (dengan sender_type/sender_name).
    * Paging offset-based untuk infinite scroll; hasMore=true bila masih ada halaman berikutnya.
    */
-  public async getConversationList(tenantId: string, take = 50, offset = 0): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
-    const conversations = await conversationService.listConversations(tenantId, take, offset);
+  public async getConversationList(
+    tenantId: string,
+    take = 50,
+    offset = 0,
+    mode: 'all' | 'real' | 'sandbox' = 'all'
+  ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
+    const conversations = await conversationService.listConversations(tenantId, take, offset, mode);
     if (conversations.length === 0) {
       return { items: [], hasMore: false };
     }
@@ -170,6 +175,18 @@ export class LiveChatService {
     const customer = await customerService.getCustomerById(conversation.customer_id, tenantId);
     if (!customer || !customer.phone) {
       return { success: false, error: { code: 'CUSTOMER_NOT_FOUND', message: 'Customer dari conversation tidak ditemukan.' } };
+    }
+
+    // QA TEST guard: jangan pernah kirim balasan admin ke nomor dummy chat test/simulasi
+    // lewat gateway WhatsApp asli (WAHA/WABA). Chat sandbox hanya boleh dilihat/dianalisis.
+    if (customer.is_sandbox_test) {
+      return {
+        success: false,
+        error: {
+          code: 'SANDBOX_REPLY_BLOCKED',
+          message: 'Balasan admin ke chat test/simulasi (sandbox) diblokir untuk melindungi WhatsApp asli. Gunakan hanya untuk pemantauan.',
+        },
+      };
     }
 
     const gateway = await resolveGatewayForTenant(tenantId);
