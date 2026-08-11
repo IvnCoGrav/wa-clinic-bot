@@ -210,7 +210,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id } = request.params;
       const { label, enabled } = request.body || {};
-      if (label !== 'admin' && label !== 'hold') {
+      const normalizedLabel = String(label || '').toLowerCase();
+      if (normalizedLabel !== 'admin' && normalizedLabel !== 'hold') {
         return reply.status(400).send({ success: false, error: 'label harus "admin" atau "hold".' });
       }
       if (typeof enabled !== 'boolean') {
@@ -225,8 +226,8 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
         // 1. Kolom DB adalah sumber kebenaran
         await customerService.setLabelFlags(customer.phone, {
-          isAdminLabeled: label === 'admin' ? enabled : undefined,
-          isHoldLabeled: label === 'hold' ? enabled : undefined,
+          isAdminLabeled: normalizedLabel === 'admin' ? enabled : undefined,
+          isHoldLabeled: normalizedLabel === 'hold' ? enabled : undefined,
         });
 
         // 2. Mirror ke WAHA (best-effort, tidak pernah throw)
@@ -234,14 +235,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         try {
           const { wahaClient } = await import('../../integrations/waha/client');
           if (enabled) {
-            wahaOk = await wahaClient.addLabel(`${customer.phone}@c.us`, label);
+            wahaOk = await wahaClient.addLabel(`${customer.phone}@c.us`, normalizedLabel);
           } else {
-            wahaOk = await wahaClient.removeLabel(`${customer.phone}@c.us`, label);
+            wahaOk = await wahaClient.removeLabel(`${customer.phone}@c.us`, normalizedLabel);
           }
         } catch (err: any) {
           wahaOk = false;
-          console.warn(`[LABEL] Gagal mirror label "${label}" ke WAHA utk ${customer.phone}:`, err.message);
+          console.warn(`[LABEL] Gagal mirror label "${normalizedLabel}" ke WAHA utk ${customer.phone}:`, err.message);
         }
+
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
