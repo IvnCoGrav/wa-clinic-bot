@@ -44,23 +44,65 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/live-chat/conversations
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (termasuk sender_type/sender_name).
+   * Query `mode`: all (default) | real (WhatsApp asli) | sandbox (chat test/simulasi QA).
    */
   fastify.get(
     '/api/admin/live-chat/conversations',
     async (
       request: FastifyRequest<{
-        Querystring: { limit?: string; offset?: string };
+        Querystring: { limit?: string; offset?: string; mode?: string };
       }>,
       reply
     ) => {
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const offset = Math.max(parseInt(request.query.offset || '0', 10) || 0, 0);
-        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset);
-        return reply.status(200).send({ success: true, count: items.length, hasMore, data: items });
+        const modeRaw = request.query.mode || 'all';
+        const mode: 'all' | 'real' | 'sandbox' =
+          modeRaw === 'real' || modeRaw === 'sandbox' ? modeRaw : 'all';
+        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode);
+        return reply.status(200).send({ success: true, count: items.length, hasMore, mode, data: items });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }
+    }
+  );
+
+  /**
+   * POST /api/admin/live-chat/sync-history
+   * Backfill history chat dari WAHA ke DB bot (batch per `limit`, idempoten by wa_message_id).
+   * Response berisi nextOffset + hasMore untuk "Load More" lanjutan.
+   */
+  fastify.post(
+    '/api/admin/live-chat/sync-history',
+    async (
+      request: FastifyRequest<{
+        Body: { limit?: number; offset?: number; messagesPerChat?: number };
+      }>,
+      reply
+    ) => {
+      const body = request.body || {};
+      const limit = Math.min(Math.max(parseInt(String(body.limit || '50'), 10) || 50, 1), 200);
+      const offset = Math.max(parseInt(String(body.offset || '0'), 10) || 0, 0);
+      const messagesPerChat = Math.min(Math.max(parseInt(String(body.messagesPerChat || '100'), 10) || 100, 1), 500);
+
+      const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
+      const result = await wahaHistorySyncService.syncChats(limit, offset, messagesPerChat, DEFAULT_TENANT_ID);
+
+      if (!result.success) {
+        return reply.status(500).send({ success: false, error: result.error || 'Sync history gagal.' });
+      }
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'LIVE_CHAT_SYNC_HISTORY',
+        targetId: DEFAULT_TENANT_ID,
+        payload: { limit, offset, messagesPerChat, syncedChats: result.syncedChats, syncedMessages: result.syncedMessages, totalChats: result.totalChats },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({ success: true, data: result });
     }
   );
 
@@ -125,6 +167,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         const status =
           code === 'WABA_OUTSIDE_WINDOW'
             ? 409
+            : code === 'SANDBOX_REPLY_BLOCKED'
+            ? 403
             : code === 'CONVERSATION_NOT_FOUND' || code === 'CUSTOMER_NOT_FOUND'
             ? 404
             : 400;
