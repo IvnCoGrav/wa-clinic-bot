@@ -217,4 +217,50 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
     const refreshed = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
     expect(refreshed.is_hold_labeled).toBe(true);
   });
+
+  it('[TC 17] Malformed Webhook Payload → penanganan aman (return 200) tanpa melempar exception', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload: { event: 'label.chat.added', session: 'default', payload: {} },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('[TC 18] Idempotent Webhook Delivery → menerima event label sama berulang kali tetap stabil', async () => {
+    const phone = `6283337${Date.now()}`;
+    await customerService.getOrCreateCustomer(phone, 'Idempotent Test', DEFAULT_TENANT_ID);
+
+    const payload = labelEvent('label.chat.added', `${phone}@c.us`, 'hold');
+    const res1 = await app.inject({ method: 'POST', url: '/webhook', payload });
+    const res2 = await app.inject({ method: 'POST', url: '/webhook', payload });
+    expect(res1.statusCode).toBe(200);
+    expect(res2.statusCode).toBe(200);
+    const refreshed = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    expect(refreshed.is_hold_labeled).toBe(true);
+  });
+
+  it('[TC 19] Case-insensitive Webhook Label Name → "HoLd" atau "ADMIN" terdeteksi dengan tepat', async () => {
+    const phone = `6283338${Date.now()}`;
+    await customerService.getOrCreateCustomer(phone, 'Case Insensitive Test', DEFAULT_TENANT_ID);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload: labelEvent('label.chat.added', `${phone}@c.us`, 'HoLd'),
+    });
+    expect(res.statusCode).toBe(200);
+    const refreshed = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
+    expect(refreshed.is_hold_labeled).toBe(true);
+  });
+
+  it('[TC 20] Label event dengan format JID LID (@lid) → ter-resolve atau diabaikan tanpa error crash', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook',
+      payload: labelEvent('label.chat.added', '1234567890@lid', 'hold'),
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });
+

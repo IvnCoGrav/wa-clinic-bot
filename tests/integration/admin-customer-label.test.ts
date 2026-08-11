@@ -131,4 +131,66 @@ describe('Admin Customer Label (DB-column) API', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('[TC 07] Tenant Isolation → customer dari tenant lain tidak dapat di-patch label oleh admin tenant lain', async () => {
+    const otherCustomer = await customerService.getOrCreateCustomer(`628999${Date.now()}`, 'Other Tenant Customer', 'other-tenant-id');
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/customers/${otherCustomer.id}/label`,
+      headers: ADMIN_HEADERS, // Admin default tenant
+      payload: { label: 'hold', enabled: true },
+    });
+    // Customer milik tenant lain tidak ditemukan pada konteks default-tenant atau return 404
+    expect([404, 403]).toContain(res.statusCode);
+  });
+
+  it('[TC 08] Simulasi WAHA Down → API merespons wahaOk=false tetapi DB tetap di-update secara graceful', async () => {
+    const mockAdd = vi.spyOn(wahaClient, 'addLabel').mockResolvedValueOnce(false);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/customers/${customerId}/label`,
+      headers: ADMIN_HEADERS,
+      payload: { label: 'hold', enabled: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.wahaOk).toBe(false);
+    const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
+    expect(refreshed.is_hold_labeled).toBe(true);
+    mockAdd.mockRestore();
+  });
+
+  it('[TC 09] Eksekusi paralel → memanggil API tambah & hapus label bersamaan tetap konsisten', async () => {
+    const p1 = app.inject({
+      method: 'PATCH',
+      url: `/api/admin/customers/${customerId}/label`,
+      headers: ADMIN_HEADERS,
+      payload: { label: 'hold', enabled: true },
+    });
+    const p2 = app.inject({
+      method: 'PATCH',
+      url: `/api/admin/customers/${customerId}/label`,
+      headers: ADMIN_HEADERS,
+      payload: { label: 'hold', enabled: false },
+    });
+    const [res1, res2] = await Promise.all([p1, p2]);
+    expect(res1.statusCode).toBe(200);
+    expect(res2.statusCode).toBe(200);
+    const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
+    expect(typeof refreshed.is_hold_labeled).toBe('boolean');
+  });
+
+  it('[TC 10] Case-insensitive label parameter → "HOLD" atau "Hold" diproses dengan benar', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/customers/${customerId}/label`,
+      headers: ADMIN_HEADERS,
+      payload: { label: 'HOLD', enabled: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
+    expect(refreshed.is_hold_labeled).toBe(true);
+  });
 });
+
