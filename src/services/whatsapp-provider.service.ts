@@ -154,7 +154,7 @@ export class WhatsappProviderService {
     const secret = process.env.WAHA_WEBHOOK_SECRET || '';
     const webhook: any = {
       url: webhookUrl,
-      events: ['session.status', 'message'],
+      events: ['session.status', 'message', 'label.chat.added', 'label.chat.deleted'],
       retries: {
         policy: 'constant',
         delaySeconds: 2,
