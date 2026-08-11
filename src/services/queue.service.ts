@@ -4,6 +4,7 @@ import { stateMachine } from '../state-machine/machine';
 import { StateHandlerContext } from '../state-machine/types';
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
+import { hashPiiPhone } from '../utils/logger-sanitizer';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -61,11 +62,24 @@ export class QueueService {
         }
       });
 
+      // Event listener untuk pemulihan koneksi saat Redis kambuh / reconnect di background
+      this.redisClient.on('ready', () => {
+        if (!this.redisEnabled) {
+          console.log(`\n⚡ [QUEUE] Redis connection restored/ready at ${host}:${port}. Restoring BullMQ mode...`);
+          this.redisEnabled = true;
+          if (this.bullQueues.size === 0) {
+            this.initBullMQShards();
+          }
+        }
+      });
+
       this.redisClient.connect()
         .then(() => {
           console.log(`\n⚡ [QUEUE] Successfully connected to Redis at ${host}:${port}. Initializing sharded BullMQ...`);
           this.redisEnabled = true;
-          this.initBullMQShards();
+          if (this.bullQueues.size === 0) {
+            this.initBullMQShards();
+          }
         })
         .catch((err) => {
           console.error(`\n🚨 [CRITICAL ALERT] Redis connection failed during startup: ${err.message}. Entering In-Memory Message Queue Fallback Mode. Please check Redis server immediately.`);
@@ -85,6 +99,22 @@ export class QueueService {
     const host = process.env.REDIS_HOST || 'localhost';
     const port = parseInt(process.env.REDIS_PORT || '6379', 10);
 
+    const defaultJobOptions = {
+      attempts: 3,
+      backoff: {
+        type: 'exponential' as const,
+        delay: 2000,
+      },
+      removeOnComplete: {
+        age: 3600, // Simpan histori job sukses max 1 jam
+        count: 1000, // atau max 1000 entri
+      },
+      removeOnFail: {
+        age: 86400, // Simpan histori job gagal max 24 jam untuk audit
+        count: 5000,
+      },
+    };
+
     for (let i = 0; i < this.shardsCount; i++) {
       const queueName = `message_queue_shard_${i}`;
       
@@ -94,18 +124,23 @@ export class QueueService {
         maxRetriesPerRequest: null,
       });
 
-      // 1. Buat Queue
-      const queue = new Queue(queueName, { connection });
+      // 1. Buat Queue dengan defaultJobOptions
+      const queue = new Queue(queueName, { connection, defaultJobOptions });
       this.bullQueues.set(queueName, queue);
 
       // 2. Buat Worker dengan concurrency = 1 (proses pesan berurutan per antrian)
       const worker = new Worker(
         queueName,
         async (job: Job<QueuePayload>) => {
-          const ctx = await this.resolveFreshContext(job.data);
-          if (!ctx) return;
-          console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${ctx.customer.phone} (Tenant: ${ctx.tenantId})`);
-          await stateMachine.processMessage(ctx);
+          try {
+            const ctx = await this.resolveFreshContext(job.data);
+            if (!ctx) return;
+            console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${hashPiiPhone(ctx.customer.phone)} (Tenant: ${ctx.tenantId})`);
+            await stateMachine.processMessage(ctx);
+          } catch (err: any) {
+            console.error(`[QUEUE BullMQ - Shard ${i}] Exception during processMessage for job ${job.id}:`, err.message);
+            throw err; // Throw agar BullMQ mencatat attempt gagal dan menjalankan retry backoff
+          }
         },
         {
           connection,
@@ -113,8 +148,26 @@ export class QueueService {
         }
       );
 
-      worker.on('failed', (job, err) => {
-        console.error(`[QUEUE BullMQ - Shard ${i}] Job ${job?.id} failed:`, err.message);
+      worker.on('failed', async (job, err) => {
+        const phone = job?.data?.phone || job?.data?.customerId || 'unknown';
+        const sanitizedPhone = hashPiiPhone(phone);
+        console.error(`[QUEUE BullMQ - Shard ${i}] Job ${job?.id} failed for ${sanitizedPhone} (attempt ${job?.attemptsMade}):`, err.message);
+
+        // Jika sudah mencapai batas attempts (final failure), kirimkan critical alert
+        if (job && job.attemptsMade >= (job.opts?.attempts || 1)) {
+          console.error(`🚨 [QUEUE BullMQ - Shard ${i}] Job ${job.id} PERMANENTLY FAILED after ${job.attemptsMade} attempts.`);
+          try {
+            const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+            await alertService.notifyAlert({
+              type: AlertType.QUEUE_JOB_FAILED,
+              severity: AlertSeverity.CRITICAL,
+              message: `[QUEUE JOB FAILED] Job ${job.id} (customer: ${sanitizedPhone}) permanently failed after max retries: ${err.message}`,
+              metadata: { tenantId: job.data?.tenantId, customerId: job.data?.customerId, phone: sanitizedPhone, error: err.message },
+            });
+          } catch (alertErr: any) {
+            console.error('[QUEUE ALERT ERROR] Gagal mengirimkan alert queue failed:', alertErr.message);
+          }
+        }
       });
 
       this.bullWorkers.set(queueName, worker);

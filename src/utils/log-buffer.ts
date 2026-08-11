@@ -5,6 +5,8 @@
  * Fungsionalitas hanya aktif setelah installLogBuffer() dipanggil (saat app start).
  */
 
+import { hashPiiPhone } from './logger-sanitizer';
+
 export type LogLevel = 'log' | 'info' | 'warn' | 'error';
 
 export interface LogEntry {
@@ -18,6 +20,14 @@ const MAX_ENTRIES = 500;
 const buffer: LogEntry[] = [];
 let nextId = 1;
 let installed = false;
+
+// Match phone number patterns (e.g. 628123456789, 08123456789, +628123456789)
+const PHONE_PATTERN = /(?:\+?62|0)8[1-9]\d{6,11}/g;
+
+function sanitizeStringPii(str: string): string {
+  if (!str) return str;
+  return str.replace(PHONE_PATTERN, (match) => hashPiiPhone(match));
+}
 
 function safeStringify(v: unknown): string {
   if (v instanceof Error) return `${v.name}: ${v.message}`;
@@ -34,7 +44,8 @@ function safeStringify(v: unknown): string {
 }
 
 function capture(level: LogLevel, args: unknown[]): void {
-  const msg = args.map((a) => safeStringify(a)).join(' ');
+  const rawMsg = args.map((a) => safeStringify(a)).join(' ');
+  const msg = sanitizeStringPii(rawMsg);
   buffer.push({ id: nextId++, ts: new Date().toISOString(), level, msg });
   if (buffer.length > MAX_ENTRIES) {
     buffer.splice(0, buffer.length - MAX_ENTRIES);

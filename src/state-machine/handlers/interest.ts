@@ -101,17 +101,17 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
       return {
         nextState: ConversationState.HUMAN_HANDLING,
-        replyText: `Terima kasih Bunda, Data reservasi sudah kami terima ya Bund. 😊${shareNote}`,
+        replyText: `Baik Bunda, data reservasi sudah kami terima ya bund. Kami cek dulu ya bund. 😊${shareNote}`,
         shouldSendReply: true,
         isHumanHandling: true,
       };
     } else {
-      // Jika format kurang lengkap, minta lengkapi field yang kurang
+      // Jika format kurang lengkap (nama & alamat kosong sama sekali), minta lengkapi
       const missing = parseResult.missingFields || [];
       const missingStr = missing.join(', ');
       return {
         nextState: ConversationState.RESERVATION_SENT,
-        replyText: `Maaf Bunda, data reservasi yang dikirimkan kurang lengkap. Mohon isi bagian berikut ya bund: ${missingStr}. Terima kasih! 😊`,
+        replyText: `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`,
         shouldSendReply: true,
       };
     }
@@ -163,13 +163,16 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   // 1b. GATE AFIRMASI SETELAH CTA HARGA: deterministik, TANPA bergantung klasifikasi
   // intent (NLU/LLM produksi sering salah-misrout "boleh bund" → off_topic → balasan
   // generik interestUnrelatedFollowUp, padahal itu persetujuan booking).
-  // CTA "Mau coba {nama} bunda ?" (TEMPLATES.priceCta) HANYA muncul setelah lokasi
+  // CTA "Kira-kira mau treatment *{nama}* di hari apa..." (TEMPLATES.priceCta) HANYA muncul setelah lokasi
   // customer terkunci (buildPriceAnswer: hasLocation → priceCta). Jadi afirmasi singkat
   // setelah CTA = lanjut form reservasi, tanpa tanya lokasi ulang.
   const lastAssistantMsg = ctx.history && ctx.history.length > 0
     ? [...ctx.history].reverse().find((m) => m.role === 'assistant' && !!m.content)
     : undefined;
-  const isPriceCtaMessage = (content: string) => /^Mau coba .+\?$/mi.test(content.trim());
+  const isPriceCtaMessage = (content: string) =>
+    /^Mau coba .+\?$/mi.test(content.trim()) ||
+    /mau treatment .* di hari apa/i.test(content.trim()) ||
+    /mau coba /i.test(content.trim());
   const isShortAffirmAfterCta =
     lastAssistantMsg !== undefined &&
     isPriceCtaMessage(lastAssistantMsg.content) &&

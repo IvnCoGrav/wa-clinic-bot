@@ -135,9 +135,8 @@ No. Hp : 08123456789`;
     const result = parseReservationText(rawText);
     expect(result.success).toBe(false);
     expect(result.error).toContain('Field berikut tidak terbaca atau kosong');
-    expect(result.missingFields).toContain('Nama Bunda');
-    expect(result.missingFields).toContain('Alamat & Shareloc');
-    expect(result.missingFields).toContain('Treatment Detail');
+    expect(result.missingFields).toContain('Nama Bunda/Bayi');
+    expect(result.missingFields).toContain('Alamat');
   });
 
   it('6. should successfully parse multiline form text with wrapped/inline labels', () => {
@@ -296,6 +295,38 @@ Pilihan treatment (Moms & Nifas) : Pijat Postpartum Nifas`;
     expect(res.reservation).toBeDefined();
     expect(res.reservation!.treatmentCategory).toBe(TreatmentCategory.MOMS);
     expect(res.reservation!.treatmentDetail).toContain('Pijat Postpartum Nifas');
+  });
+
+  it('7. should successfully parse customer Rosita Elvina reservation text', () => {
+    const rawText = `Berikut list untuk reservasi :
+
+Hari dan tanggal : Sabtu 11 Juni 2026
+Nama Bunda: Rosita Elvina
+Alamat & Shareloc : jalan Manukan krido X blok 5j no 3
+Kec : Tandes
+Kota : Surabaya
+No. Hp : 08123456789
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi : Kian Alvino Yafie
+Usia Bayi/Anak : 35 hari
+Treatment : Paket bundling cukur rambut dan pijat ceria
+
+Pilihan treatment (Moms) :
+
+Usia Kehamilan (Jika hamil):
+Treatment :`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation).toBeDefined();
+    expect(res.reservation!.name).toBe('Rosita Elvina');
+    expect(res.reservation!.kec).toBe('Tandes');
+    expect(res.reservation!.kota).toBe('Surabaya');
+    expect(res.reservation!.treatmentCategory).toBe(TreatmentCategory.BABY);
+    expect(res.reservation!.treatmentDetail).toContain('Paket bundling cukur rambut dan pijat ceria');
+    expect(res.reservation!.treatmentDetail).toContain('Kian Alvino Yafie');
   });
 });
 

@@ -218,7 +218,7 @@ export async function collectAiRouterSummary(days = 7): Promise<AiRouterSummary>
     out.medicalMismatches = medicalMismatches.map((m) => ({ ...m, created_at: m.created_at.toISOString() }));
     out.recentEvaluations = recent.map((r) => ({ ...r, created_at: r.created_at.toISOString() }));
   } catch (err: any) {
-    out.dbNote = `DB offline: ${err?.message?.slice(0, 160)}`;
+    out.dbNote = 'DB offline';
   }
 
   return out;
@@ -249,7 +249,7 @@ export async function collectRecentMessages(limit = 50): Promise<{ entries: Mess
     return {
       entries: rows.map((m: any) => ({
         id: m.id,
-        created_at: m.created_at.toISOString(),
+        created_at: typeof m.created_at === 'string' ? m.created_at : m.created_at.toISOString(),
         direction: m.direction,
         content: (m.content || '').slice(0, 300),
         wa_message_id: m.wa_message_id,
@@ -262,7 +262,27 @@ export async function collectRecentMessages(limit = 50): Promise<{ entries: Mess
       })),
     };
   } catch (err: any) {
-    return { entries: [], dbNote: `DB offline: ${err?.message?.slice(0, 160)}` };
+    const { messageService } = await import('./message.service');
+    const memoryMessages = messageService.getMemoryMessages() || [];
+    const entries: MessageTraceEntry[] = memoryMessages
+      .filter((m: any) => !m.tenant_id || m.tenant_id === DEFAULT_TENANT_ID)
+      .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, limit)
+      .map((m: any) => ({
+        id: m.id || 'mem_' + Math.random(),
+        created_at: typeof m.created_at === 'string' ? m.created_at : (m.created_at?.toISOString?.() || new Date().toISOString()),
+        direction: m.direction || 'UNKNOWN',
+        content: (m.content || '').slice(0, 300),
+        wa_message_id: m.wa_message_id ?? null,
+        delivery_status: m.delivery_status ?? null,
+        meta_error_code: m.meta_error_code ?? null,
+        meta_error_desc: m.meta_error_desc ?? null,
+        meta_pricing_category: m.meta_pricing_category ?? null,
+        customerPhone: m.phone || m.customerPhone || null,
+        customerName: m.customerName || null,
+      }));
+
+    return { entries, dbNote: 'DB offline (using memory fallback)' };
   }
 }
 
@@ -301,12 +321,12 @@ export async function collectConversationTrace(limit = 50): Promise<{ entries: C
           id: c.id,
           current_state: c.current_state,
           is_human_handling: c.is_human_handling,
-          human_handling_since: c.human_handling_since ? c.human_handling_since.toISOString() : null,
+          human_handling_since: c.human_handling_since ? (typeof c.human_handling_since === 'string' ? c.human_handling_since : c.human_handling_since.toISOString()) : null,
           escalation_reason: c.escalation_reason,
           consecutive_unknown_count: c.consecutive_unknown_count ?? 0,
           location_attempts: c.location_attempts ?? 0,
-          last_message_at: c.last_message_at.toISOString(),
-          last_customer_message_at: c.last_customer_message_at ? c.last_customer_message_at.toISOString() : null,
+          last_message_at: typeof c.last_message_at === 'string' ? c.last_message_at : c.last_message_at.toISOString(),
+          last_customer_message_at: c.last_customer_message_at ? (typeof c.last_customer_message_at === 'string' ? c.last_customer_message_at : c.last_customer_message_at.toISOString()) : null,
           is_within_24h_window: isWithin24h,
           customerPhone: c.customer?.phone ?? null,
           customerName: c.customer?.name ?? null,
@@ -314,7 +334,36 @@ export async function collectConversationTrace(limit = 50): Promise<{ entries: C
       }),
     };
   } catch (err: any) {
-    return { entries: [], dbNote: `DB offline: ${err?.message?.slice(0, 160)}` };
+    const { conversationService } = await import('./conversation.service');
+    const memoryConvs = conversationService.getMemoryConversations() || [];
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const entries: ConversationTraceEntry[] = memoryConvs
+      .filter((c: any) => !c.tenant_id || c.tenant_id === DEFAULT_TENANT_ID)
+      .sort((a: any, b: any) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
+      .slice(0, limit)
+      .map((c: any) => {
+        const lastCustMsgMs = c.last_customer_message_at ? new Date(c.last_customer_message_at).getTime() : null;
+        const isWithin24h = lastCustMsgMs !== null ? (now - lastCustMsgMs) <= TWENTY_FOUR_HOURS_MS : false;
+
+        return {
+          id: c.id,
+          current_state: c.current_state || 'INITIAL',
+          is_human_handling: !!c.is_human_handling,
+          human_handling_since: c.human_handling_since ? (typeof c.human_handling_since === 'string' ? c.human_handling_since : c.human_handling_since.toISOString()) : null,
+          escalation_reason: c.escalation_reason ?? null,
+          consecutive_unknown_count: c.consecutive_unknown_count ?? 0,
+          location_attempts: c.location_attempts ?? 0,
+          last_message_at: typeof c.last_message_at === 'string' ? c.last_message_at : (c.last_message_at?.toISOString?.() || new Date().toISOString()),
+          last_customer_message_at: c.last_customer_message_at ? (typeof c.last_customer_message_at === 'string' ? c.last_customer_message_at : c.last_customer_message_at.toISOString()) : null,
+          is_within_24h_window: isWithin24h,
+          customerPhone: c.customerPhone || null,
+          customerName: c.customerName || null,
+        };
+      });
+
+    return { entries, dbNote: 'DB offline (using memory fallback)' };
   }
 }
 

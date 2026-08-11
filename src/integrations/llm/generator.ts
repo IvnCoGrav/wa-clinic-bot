@@ -1,3 +1,4 @@
+import { getWibTimeInfo } from '../../utils/time-wib';
 import { BOT_PERSONA_PROMPT, getMaxCharsPerReply, truncateToMaxChars } from '../../config/persona';
 import { KnowledgeChunkResult } from '../../services/knowledge.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
@@ -152,9 +153,14 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
           ? `BATAS KARAKTER (WAJIB): Balasan pada bagian JAWABAN TIDAK BOLEH MELEBIHI ${maxChars} karakter. Ringkas, padat, langsung ke inti jawaban, tetap hangat dan ramah. Jangan menulis jawaban yang panjang bertele-tele.`
           : '';
 
+        const wibInfo = getWibTimeInfo();
+
         const systemMessage = {
           role: 'system',
           content: `${BOT_PERSONA_PROMPT}
+
+WAKTU SEKARANG: ${wibInfo.wibTimeString}
+REKOMENDASI SAPAAN WAKTU: "${wibInfo.greetingRecommendation}"
 
 ${groundTruthSection}
 

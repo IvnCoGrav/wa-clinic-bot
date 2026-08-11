@@ -9,6 +9,7 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
   private requestHistory: boolean[] = []; // true = success, false = failure
   private name: string = 'Unnamed Service';
   private usedFallback = false;
+  private halfOpenProbeActive = false;
 
   constructor(
     private requestFunction: (...args: TArgs) => Promise<TResult>,
@@ -43,6 +44,7 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
       const now = Date.now();
       if (now - this.lastStateChange >= this.cooldownPeriodMs) {
         this.state = 'HALF_OPEN';
+        this.halfOpenProbeActive = false;
         this.lastStateChange = now;
         console.log(`[Circuit Breaker: ${this.name}] Transitioning to HALF_OPEN after cooldown.`);
       }
@@ -66,6 +68,7 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
         }
       }
     } else if (this.state === 'HALF_OPEN') {
+      this.halfOpenProbeActive = false;
       if (success) {
         this.state = 'CLOSED';
         this.requestHistory = []; // Reset history
@@ -87,6 +90,15 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
       console.warn(`[Circuit Breaker: ${this.name}] Blocked request (circuit is OPEN). Triggering fallback.`);
       this.usedFallback = true;
       return this.fallbackFunction(...args);
+    }
+
+    if (this.state === 'HALF_OPEN') {
+      if (this.halfOpenProbeActive) {
+        console.warn(`[Circuit Breaker: ${this.name}] HALF_OPEN probe already in progress. Routing request to fallback.`);
+        this.usedFallback = true;
+        return this.fallbackFunction(...args);
+      }
+      this.halfOpenProbeActive = true;
     }
 
     try {
@@ -116,6 +128,8 @@ export class CircuitBreaker<TArgs extends any[], TResult> {
       this.recordResult(false);
       this.usedFallback = true;
       return this.fallbackFunction(...args);
+    } finally {
+      this.halfOpenProbeActive = false;
     }
   }
 
