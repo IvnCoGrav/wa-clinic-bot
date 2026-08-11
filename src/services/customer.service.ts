@@ -5,7 +5,12 @@ import { Customer } from '@prisma/client';
 const memoryCustomers = new Map<string, any>();
 
 export class CustomerService {
+  public getMemoryCustomers(): Map<string, any> {
+    return memoryCustomers;
+  }
+
   /**
+
    * Koerce input koordinat (bisa string dari WAHA/LLM/DB) menjadi number,
    * demi menghindari error Prisma "Expected Float, provided String".
    * null/undefined/NaN → null.
@@ -26,10 +31,9 @@ export class CustomerService {
     phone: string,
     flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean }
   ): Promise<void> {
-    const data: any = {};
+    const data: any = { labels_synced_at: new Date() };
     if (flags.isAdminLabeled !== undefined) data.is_admin_labeled = flags.isAdminLabeled;
     if (flags.isHoldLabeled !== undefined) data.is_hold_labeled = flags.isHoldLabeled;
-    if (Object.keys(data).length === 0) return;
 
     try {
       await prisma.customer.updateMany({
@@ -42,6 +46,7 @@ export class CustomerService {
       if (cust) {
         if (flags.isAdminLabeled !== undefined) cust.is_admin_labeled = flags.isAdminLabeled;
         if (flags.isHoldLabeled !== undefined) cust.is_hold_labeled = flags.isHoldLabeled;
+        cust.labels_synced_at = new Date();
       }
     }
   }
@@ -49,7 +54,8 @@ export class CustomerService {
   /**
    * Cari customer berdasarkan nomor telepon unik dan tenantId, atau buat record baru jika belum ada.
    */
-  public async getOrCreateCustomer(    phone: string,
+  public async getOrCreateCustomer(
+    phone: string,
     name: string | undefined,
     tenantId: string,
     options?: { skipFollowUpScheduling?: boolean }
@@ -65,6 +71,7 @@ export class CustomerService {
             tenant_id: tenantId,
             phone,
             name: name || null,
+            labels_synced_at: new Date(),
           },
         });
 
@@ -113,6 +120,7 @@ export class CustomerService {
           legacy_scraped_at: null,
           is_admin_labeled: false,
           is_hold_labeled: false,
+          labels_synced_at: new Date(),
           created_at: new Date(),
           updated_at: new Date(),
         };
