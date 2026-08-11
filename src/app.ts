@@ -34,6 +34,15 @@ export function buildApp() {
     }
   }
 
+  const wabaAppSecret = process.env.WABA_APP_SECRET;
+  if (!wabaAppSecret) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('\n⚠️ [SECURITY NOTICE] WABA_APP_SECRET environment variable is not defined globally. WABA webhook requests will rely on per-tenant DB secrets or fail-closed.\n');
+    } else {
+      console.warn('\n⚠️ [SECURITY WARNING] WABA_APP_SECRET environment variable is not defined. WABA webhook endpoint will skip signature verification in dev mode.\n');
+    }
+  }
+
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),

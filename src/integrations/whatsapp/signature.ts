@@ -10,9 +10,14 @@ import crypto from 'crypto';
 export function verifyMetaSignature(
   rawBody: string | Buffer,
   signature: string | undefined,
-  appSecret: string
+  appSecret: string,
+  strictMode = false
 ): boolean {
   if (!signature || !appSecret || appSecret === 'mock_secret') {
+    if (strictMode) {
+      // Production mode: Tolak (fail-closed) jika signature atau secret tidak terkonfigurasi
+      return false;
+    }
     // Jika dalam environment testing/development tanpa app secret, lewati verifikasi
     return true;
   }

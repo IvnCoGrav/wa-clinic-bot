@@ -444,6 +444,10 @@ export class ConversationService {
     }
     return releasedCount;
   }
+
+  public getMemoryConversations(): any[] {
+    return Array.from(memoryConversations.values());
+  }
 }
 
 export const conversationService = new ConversationService();

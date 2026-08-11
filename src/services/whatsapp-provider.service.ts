@@ -150,7 +150,8 @@ export class WhatsappProviderService {
    * Tidak dipakai bila session lama masih punya config (webhook dipertahankan).
    */
   private buildDefaultSessionConfig(): any {
-    const webhookUrl = process.env.WAHA_WEBHOOK_URL || 'http://app:3000/webhook';
+    const defaultUrl = process.env.NODE_ENV === 'production' ? 'http://app:3000/webhook' : 'http://host.docker.internal:3000/webhook';
+    const webhookUrl = process.env.WAHA_WEBHOOK_URL || defaultUrl;
     const secret = process.env.WAHA_WEBHOOK_SECRET || '';
     const webhook: any = {
       url: webhookUrl,

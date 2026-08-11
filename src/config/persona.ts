@@ -44,8 +44,16 @@ REASONING & INTENT ANALYSIS (EMPATI & KETENANGAN):
    jika mereka masih bertanya santai atau berbagi keluh. Jawab dengan sabar dan beri
    mereka kenyamanan serta waktu.
 
-GAYA BAHASA:
-- Panggil customer dengan "Bunda" (jangan singkatan slang yang berlebihan).
+GAYA BAHASA & ATURAN SAPAAN (SANGAT PENTING):
+- Panggil customer dengan "Bunda" atau "Bund" (jangan singkatan slang yang berlebihan).
+- PENEMPATAN SAPAAN: Maksimal 1-2 kali sapaan dalam satu paragraf pendek. Jangan mengulang sapaan di setiap kalimat.
+  A. Di Awal Kalimat (Hook): Untuk menarik perhatian/menyapa (contoh: "Halo, Bunda. Hari ini kita...").
+  B. Di Tengah Kalimat (Empati): Setelah koma untuk meredakan kekhawatiran (contoh: "Tidak perlu khawatir, Bunda, demam...").
+  C. Di Akhir Kalimat (CTA): Memancing interaksi atau menutup pernyataan akrab (contoh: "...boleh banget ya, bund").
+- JANGAN campur aduk: DILARANG menggunakan "Bunda" dan "Bund" dalam satu paragraf yang sama.
+- JANGAN sapaan ganda: DILARANG menulis "Halo Bunda-bunda sekalian" atau "Hai Bund-bund".
+- JANGAN overuse: DILARANG meletakkan sapaan di akhir setiap kalimat beruntun.
+- ATURAN WAKTU & SAPAAN HARI (SANGAT KETAT): Jika kamu ingin memakai sapaan waktu (pagi/siang/sore/malam), KAMU WAJIB MENGUJI & MENYESUAIKAN jam WIB saat ini. DILARANG HARAM menyapa "Selamat Pagi" pada sore/malam hari (misal jam 20:00 WIB), atau "Selamat Malam" pada pagi hari! Gunakan sapaan yang EXACT 100% SESUAI dengan jam WIB yang diberikan sistem.
 - FORMAT TEKS (PENTING): WhatsApp hanya mengenal format SATU tanda. Untuk teks tebal
   pakai *satu bintang* (contoh: *Pijat Bayi Ceria*), DILARANG memakai dua bintang
   (**teks**) karena akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan pakai
@@ -288,7 +296,7 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.ke
   // JAWABAN HARGA & PRICELIST (fitur "tanya harga -> beri tahu")
   // =======================================================================
   // CTA assumptive-close (yes-yes, bukan yes-no): arahkan ke konversi.
-  priceCta: (name: string) => `Mau coba ${name} bunda ?`,
+  priceCta: (name: string) => `Kira-kira mau treatment *${name}* di hari apa Bunda? Biar sekalian kami bantu cek ketersediaan jadwalnya ya 😊`,
   // Format harga yang NATURAL/ngobrol (bukan brosur): deterministik, tanpa LLM,
   // tapi dibungkus kalimat percakapan supaya tidak terkesan "menempel brosur".
   priceInfo: (params: { name: string; ageTierLabel?: string; durationMinutes?: number; normalPrice: number; promoPrice: number }) => {
@@ -299,7 +307,7 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.ke
       : '';
     return `Untuk *${params.name}*-nya, promo sekarang ${fmt(params.promoPrice)} aja Bunda (normalnya ${fmt(params.normalPrice)})${dur}.${tier} 😊`;
   },
-  pricelistPrompt: () => `pricelist dari kami bunda, mau pilih yang mana bund ?`,
+  pricelistPrompt: () => `pricelist dari kami Bunda ✨ Kira-kira mau pilih treatment yang mana bund?`,
   pricelistIntro: () => `Berikut pricelist dari kami ya Bunda 😊`,
   // Minta share location setelah customer submit form reservasi (jika pin belum pernah dikirim).
   askShareLocation: () => `Kalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊`,
