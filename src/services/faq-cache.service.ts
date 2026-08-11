@@ -37,6 +37,13 @@ export class FaqCacheService {
         }
       });
 
+      this.redisClient.on('ready', () => {
+        if (!this.redisEnabled) {
+          console.log('[FAQ CACHE] Redis reconnected and ready.');
+          this.redisEnabled = true;
+        }
+      });
+
       this.redisClient.connect().then(() => {
         this.redisEnabled = true;
         console.log('[FAQ CACHE] Redis connected successfully.');

@@ -96,7 +96,7 @@ export class BurstCoalesceService {
     // 2. Pesan non-text (location/media) → flush buffer tertunda (jika ada) lalu passthrough.
     if (!this.isTextMessage(incomingMessage)) {
       if (existing) {
-        this.flush(key);
+        await this.flush(key);
       }
       return { handled: false };
     }
@@ -106,7 +106,7 @@ export class BurstCoalesceService {
     // passthrough ke machine command gate.
     if (this.isCommandText(incomingMessage.text?.body || '')) {
       if (existing) {
-        this.flush(key);
+        await this.flush(key);
       }
       return { handled: false };
     }
@@ -114,7 +114,7 @@ export class BurstCoalesceService {
     // 3. State bukan open-ended → flush buffer lalu passthrough (jangan tunda balasan state menunggu input).
     if (!OPEN_ENDED_STATES.has(conversation.current_state)) {
       if (existing) {
-        this.flush(key);
+        await this.flush(key);
       }
       return { handled: false };
     }
@@ -131,7 +131,7 @@ export class BurstCoalesceService {
 
     // 5. Buffer sudah penuh → flush dulu, mulai batch baru dengan pesan ini.
     if (existing && existing.messages.length >= this.getMaxMessages()) {
-      this.flush(key);
+      await this.flush(key);
     }
 
     const current = this.buffers.get(key);
@@ -139,11 +139,11 @@ export class BurstCoalesceService {
       // Reset timer: setiap pesan baru memperpanjang window.
       clearTimeout(current.timer);
       current.messages.push(incomingMessage);
-      current.timer = setTimeout(() => this.flush(key), this.getWindowMs());
+      current.timer = setTimeout(() => { this.flush(key).catch(e => console.error('[BURST COALESCE TIMER ERROR]', e)); }, this.getWindowMs());
       return { handled: true };
     }
 
-    const timer = setTimeout(() => this.flush(key), this.getWindowMs());
+    const timer = setTimeout(() => { this.flush(key).catch(e => console.error('[BURST COALESCE TIMER ERROR]', e)); }, this.getWindowMs());
     this.buffers.set(key, {
       tenantId,
       customerId: opts.customerId,
@@ -161,7 +161,7 @@ export class BurstCoalesceService {
    * text.body = join '\n' (LLM/NLU membaca konteks utuh); id/timestamp = pesan terakhir;
    * flag `_preLogged` memberitahu machine.ts untuk tidak log inbound lagi.
    */
-  private flush(key: string): void {
+  private async flush(key: string): Promise<void> {
     const buf = this.buffers.get(key);
     if (!buf || buf.messages.length === 0) {
       this.buffers.delete(key);
@@ -190,15 +190,17 @@ export class BurstCoalesceService {
     };
 
     const payload: QueuePayload = { tenantId, customerId, phone, incomingMessage: mergedMessage };
-    queueService.enqueueMessage(payload).catch((err) => {
+    try {
+      await queueService.enqueueMessage(payload);
+    } catch (err: any) {
       console.error('[BURST COALESCE] Failed to enqueue merged message:', err.message);
-    });
+    }
   }
 
   /** Flush semua buffer (dipakai saat shutdown & test). */
-  public flushAll(): void {
+  public async flushAll(): Promise<void> {
     for (const key of Array.from(this.buffers.keys())) {
-      this.flush(key);
+      await this.flush(key);
     }
   }
 

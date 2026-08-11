@@ -247,6 +247,10 @@ export class MessageService {
       .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
       .slice(0, limit);
   }
+
+  public getMemoryMessages(): any[] {
+    return memoryMessages;
+  }
 }
 
 

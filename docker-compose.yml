@@ -17,7 +17,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wa_clinic_db?schema=public&connection_limit=20&pool_timeout=10
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/wa_clinic_db?schema=public&connection_limit=20&pool_timeout=10
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WAHA_WEBHOOK_SECRET=${WAHA_WEBHOOK_SECRET}
       - WAHA_BASE_URL=${WAHA_BASE_URL:-http://waha:3000}
@@ -36,6 +36,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
 
   redis:
     image: redis:7-alpine
@@ -48,6 +53,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
   postgres:
     image: postgres:16-alpine
@@ -55,7 +65,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: wa_clinic_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -64,6 +74,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
   caddy:
     image: caddy:2
@@ -86,12 +101,17 @@ services:
       - waha_sessions:/app/.sessions
     environment:
       - WHATSAPP_SWAGGER_USERNAME=admin
-      - WHATSAPP_SWAGGER_PASSWORD=${WAHA_SWAGGER_PASSWORD:-admin12345}
+      - WHATSAPP_SWAGGER_PASSWORD=${WAHA_SWAGGER_PASSWORD:?WAHA_SWAGGER_PASSWORD must be set in .env}
       - WAHA_DASHBOARD_USERNAME=admin
-      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-admin12345}
-      - WAHA_API_KEY=${WAHA_API_KEY:-my_waha_api_key_secret}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:?WAHA_DASHBOARD_PASSWORD must be set in .env}
+      - WAHA_API_KEY=${WAHA_API_KEY:?WAHA_API_KEY must be set in .env}
       - WAHA_CLIENT_DEVICE_NAME=Mac OS
       - WAHA_CLIENT_BROWSER_NAME=Safari
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
       # Secara default, override WA_VERSION dimatikan agar engine (Baileys) dapat melakukan auto-fetch
       # versi terbaru dari WhatsApp Web saat sesi dimulai. Aktifkan kembali HANYA jika auto-fetch rusak.
       # - WAHA_NOWEB_WA_VERSION=2.3000.1044619432

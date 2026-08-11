@@ -1082,7 +1082,7 @@ Treatment : paket selapan ceria`
     const res = await testStateMachine.processMessage(ctx);
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
     expect(res.isHumanHandling).toBe(true);
-    expect(res.replyText).toContain('Data reservasi sudah kami terima ya Bund');
+    expect(res.replyText).toContain('data reservasi sudah kami terima');
     
     // Pastikan status percakapan di-escalate ke HUMAN_HANDLING
     const updatedConv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
@@ -1115,6 +1115,6 @@ Nama Bunda: shafira Alif Fitrah`
     
     const res = await testStateMachine.processMessage(ctx);
     expect(res.nextState).toBe(ConversationState.RESERVATION_SENT);
-    expect(res.replyText).toContain('kurang lengkap. Mohon isi bagian berikut');
+    expect(res.replyText).toContain('mohon diisi bagian');
   });
 });

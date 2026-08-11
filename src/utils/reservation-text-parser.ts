@@ -91,6 +91,7 @@ export function parseReservationText(rawText: string): ParseResult {
   let momsTreatment = '';
 
   let currentSection: 'GENERAL' | 'BABY' | 'MOMS' = 'GENERAL';
+  let pendingField: string | null = null;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -100,8 +101,15 @@ export function parseReservationText(rawText: string): ParseResult {
     const lowerNorm = lower.replace(/\s+/g, ' ');
 
     // Transisi Section berdasarkan header
-    if (lowerNorm.includes('pilihan treatment (baby & kids)') || lowerNorm.includes('pilihan treatment (baby')) {
+    if (
+      /pilihan\s+treatment\s*\(?\s*(baby|bayi|anak|kids)/i.test(lowerNorm) ||
+      /treatment\s*\(?\s*(baby|bayi|anak|kids)/i.test(lowerNorm) ||
+      lowerNorm.includes('baby & kids') ||
+      lowerNorm.includes('baby and kids') ||
+      lowerNorm.includes('pijat bayi')
+    ) {
       currentSection = 'BABY';
+      pendingField = null;
       const colonIdx = trimmed.indexOf(':');
       if (colonIdx !== -1) {
         const val = trimmed.substring(colonIdx + 1).trim();
@@ -109,8 +117,14 @@ export function parseReservationText(rawText: string): ParseResult {
       }
       continue;
     }
-    if (lowerNorm.includes('pilihan treatment (moms')) {
+    if (
+      /pilihan\s+treatment\s*\(?\s*(moms|mom|ibu|hamil|nifas)/i.test(lowerNorm) ||
+      /treatment\s*\(?\s*(moms|mom|ibu|hamil|nifas)/i.test(lowerNorm) ||
+      lowerNorm.includes('moms & nifas') ||
+      lowerNorm.includes('moms and nifas')
+    ) {
       currentSection = 'MOMS';
+      pendingField = null;
       const colonIdx = trimmed.indexOf(':');
       if (colonIdx !== -1) {
         const val = trimmed.substring(colonIdx + 1).trim();
@@ -121,78 +135,88 @@ export function parseReservationText(rawText: string): ParseResult {
 
     const colonIdx = trimmed.indexOf(':');
     if (colonIdx === -1) {
-      // Cek apakah ada line gabungan tanpa colon (jarang terjadi, tapi untuk safety)
+      // Jika baris ini tidak punya titik dua `:`, tapi baris sebelumnya punya label dengan nilai kosong
+      if (pendingField) {
+        const value = trimmed;
+        if (pendingField === 'name') name = value;
+        else if (pendingField === 'phone') phone = value;
+        else if (pendingField === 'address') address = value;
+        else if (pendingField === 'date') dateStr = value;
+        else if (pendingField === 'kec') kec = value;
+        else if (pendingField === 'kota') kota = value;
+        else if (pendingField === 'babyName') { babyName = value; babyNameLines.push(value); }
+        else if (pendingField === 'babyAge') { babyAge = value; babyAgeLines.push(value); }
+        else if (pendingField === 'babyTreatment') babyTreatment = value;
+        else if (pendingField === 'momsPregnancyAge') momsPregnancyAge = value;
+        else if (pendingField === 'momsTreatment') momsTreatment = value;
+        pendingField = null;
+      }
       continue;
     }
 
+    pendingField = null;
     const label = trimmed.substring(0, colonIdx).trim().toLowerCase().replace(/\s+/g, ' ');
     const value = trimmed.substring(colonIdx + 1).trim();
 
+    const setOrPending = (val: string, fieldName: string, setter: (v: string) => void) => {
+      if (val) {
+        setter(val);
+      } else {
+        pendingField = fieldName;
+      }
+    };
+
     if (currentSection === 'GENERAL') {
-      if (label.includes('nama bunda')) {
-        name = value;
-      } else if (label.includes('no') && label.includes('hp')) {
-        phone = value;
+      if (label.includes('nama bunda') || label.includes('nama ibu') || label === 'nama') {
+        setOrPending(value, 'name', (v) => (name = v));
+      } else if (label.includes('no') && (label.includes('hp') || label.includes('wa') || label.includes('telp') || label.includes('telepon'))) {
+        setOrPending(value, 'phone', (v) => (phone = v));
       } else if (label.includes('alamat')) {
-        address = value;
-      } else if (label.includes('hari dan tanggal') || label.includes('tanggal')) {
-        dateStr = value;
-      } else if (label === 'kec') {
-        kec = value;
-      } else if (label === 'kota') {
-        kota = value;
+        setOrPending(value, 'address', (v) => (address = v));
+      } else if (label.includes('hari') || label.includes('tanggal')) {
+        setOrPending(value, 'date', (v) => (dateStr = v));
+      } else if (label === 'kec' || label.includes('kecamatan')) {
+        setOrPending(value, 'kec', (v) => (kec = v));
+      } else if (label === 'kota' || label.includes('kabupaten') || label.includes('kab')) {
+        setOrPending(value, 'kota', (v) => (kota = v));
       } else if (label.includes('kec') && label.includes('kota')) {
-        // Gabungan Kec & Kota (misal: "Kec & Kota : Sukolilo, Surabaya")
         const parts = value.split(/[,\/]/);
         kec = parts[0]?.trim() || '';
         kota = parts[1]?.trim() || '';
+      } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
+        setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
       }
     } else if (currentSection === 'BABY') {
-      if (label.includes('nama bayi')) {
-        babyName = value;
-        babyNameLines.push(value);
-      } else if (label.includes('usia')) {
-        babyAge = value;
-        babyAgeLines.push(value);
-      } else if (label === 'treatment') {
-        babyTreatment = value;
+      if (label.includes('nama bayi') || label.includes('nama anak') || label.includes('nama baby') || label.includes('nama pasien')) {
+        setOrPending(value, 'babyName', (v) => { babyName = v; babyNameLines.push(v); });
+      } else if (label.includes('usia') || label.includes('umur')) {
+        setOrPending(value, 'babyAge', (v) => { babyAge = v; babyAgeLines.push(v); });
+      } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
+        setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
       }
     } else if (currentSection === 'MOMS') {
-      if (label.includes('usia kehamilan')) {
-        momsPregnancyAge = value;
-      } else if (label === 'treatment') {
-        momsTreatment = value;
+      if (label.includes('usia kehamilan') || label.includes('usia hamil') || label.includes('uk')) {
+        setOrPending(value, 'momsPregnancyAge', (v) => (momsPregnancyAge = v));
+      } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
+        setOrPending(value, 'momsTreatment', (v) => (momsTreatment = v));
       }
     }
   }
 
   const babies = buildBabyDetails(babyNameLines, babyAgeLines);
 
-  // Validasi Field Krusial
+  // Jika Nama Bunda kosong tapi Nama Bayi ada, gunakan nama bayi
+  if (!name && (babyName || babyNameLines.length > 0)) {
+    name = babyName || babyNameLines[0] || '';
+  }
+
+  // Validasi Field Krusial: Minimal Alamat & (Nama Bunda atau Nama Bayi)
   const missingFields: string[] = [];
-  if (!name) missingFields.push('Nama Bunda');
-  if (!phone) missingFields.push('No. Hp');
-  if (!address) missingFields.push('Alamat & Shareloc');
+  const hasName = !!name || !!babyName || babyNameLines.length > 0;
+  const hasAddress = !!address || !!kec || !!kota;
 
-  const hasBabyTreatment = !!babyTreatment || !!babyName || babyNameLines.length > 0;
-  const hasMomsTreatment = !!momsTreatment || !!momsPregnancyAge;
-  const treatmentDetailParts: string[] = [];
-
-  if (hasBabyTreatment && babyTreatment) {
-    const babyParts = babies.length > 0
-      ? babies.map((b) => `Bayi: ${b.name || '-'}, Usia: ${b.age || '-'}`).join(' | ')
-      : `Bayi: ${babyName || '-'}, Usia: ${babyAge || '-'}`;
-    treatmentDetailParts.push(`Baby: ${babyTreatment} (${babyParts})`);
-  }
-  if (hasMomsTreatment && momsTreatment) {
-    treatmentDetailParts.push(`Moms: ${momsTreatment} (Kehamilan: ${momsPregnancyAge || '-'})`);
-  }
-
-  const treatmentDetail = treatmentDetailParts.join(' | ');
-
-  if (!treatmentDetail) {
-    missingFields.push('Treatment Detail');
-  }
+  if (!hasName) missingFields.push('Nama Bunda/Bayi');
+  if (!hasAddress) missingFields.push('Alamat');
 
   if (missingFields.length > 0) {
     return {
@@ -201,6 +225,27 @@ export function parseReservationText(rawText: string): ParseResult {
       missingFields,
     };
   }
+
+  const hasBabyTreatment = !!babyTreatment || !!babyName || babyNameLines.length > 0;
+  const hasMomsTreatment = !!momsTreatment || !!momsPregnancyAge;
+  const treatmentDetailParts: string[] = [];
+
+  if (hasBabyTreatment) {
+    const effBabyTreatment = babyTreatment || 'Treatment / Pijat Bayi';
+    const babyParts = babies.length > 0
+      ? babies.map((b) => `Bayi: ${b.name || '-'}, Usia: ${b.age || '-'}`).join(' | ')
+      : `Bayi: ${babyName || '-'}, Usia: ${babyAge || '-'}`;
+    treatmentDetailParts.push(`Baby: ${effBabyTreatment} (${babyParts})`);
+  }
+  if (hasMomsTreatment || momsPregnancyAge) {
+    const effMomsTreatment = momsTreatment || 'Treatment Moms';
+    treatmentDetailParts.push(`Moms: ${effMomsTreatment} (Kehamilan: ${momsPregnancyAge || '-'})`);
+  }
+  if (treatmentDetailParts.length === 0) {
+    treatmentDetailParts.push(`Treatment: ${babyTreatment || momsTreatment || 'Treatment Homecare'}`);
+  }
+
+  const treatmentDetail = treatmentDetailParts.join(' | ');
 
   // Tentukan Treatment Category
   let treatmentCategory: TreatmentCategory = TreatmentCategory.BABY;

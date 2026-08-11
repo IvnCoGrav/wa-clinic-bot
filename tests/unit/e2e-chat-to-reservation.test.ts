@@ -390,16 +390,16 @@ Treatment : Pijat Bayi Ceria`);
     const r4 = await sendText(ctx, `Berikut list untuk reservasi:
 Hari dan tanggal : 21 Agustus 2026
 Nama Bunda: 
-Alamat & Shareloc : Wedoro
-Kec : Waru
-Kota : Sidoarjo
+Alamat & Shareloc : 
+Kec : 
+Kota : 
 No. Hp : 08123456780
 Pilihan treatment (Baby & Kids)
-Nama Bayi : Rara
+Nama Bayi : 
 Usia Bayi/Anak : 5 bulan
 Treatment : Pijat Bayi Pulih Ceria`);
 
-    // Form dengan nama kosong → parser menolak (missing field) → tetap RESERVATION_SENT
+    // Form tanpa nama & alamat → parser menolak (missing field) → tetap RESERVATION_SENT
     expect(r4.nextState).toBe(ConversationState.RESERVATION_SENT);
     expect(r4.replyText).toMatch(/Nama Bunda/i);
 

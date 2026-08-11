@@ -50,6 +50,10 @@ COPY --from=builder /app/assets ./assets
 # Admin dashboard SPA (diserve bot di /admin/*)
 COPY --from=builder /app/packages/admin-dashboard/dist ./packages/admin-dashboard/dist
 
+# Ensure non-root execution
+RUN chown -R node:node /app
+USER node
+
 EXPOSE 3000
 
 CMD ["node", "dist/app.js"]
