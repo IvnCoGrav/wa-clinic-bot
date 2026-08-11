@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { prisma } from '../../src/db/client';
@@ -8,7 +8,7 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 describe('MediaService — penyimpanan & pembersihan media Live Chat', () => {
-  afterEach(() => {
+  afterAll(() => {
     const root = path.join(process.cwd(), 'storage', 'media');
     for (const scope of ['outbound', 'inbound']) {
       const dir = path.join(root, scope, DEFAULT_TENANT_ID);
@@ -16,6 +16,9 @@ describe('MediaService — penyimpanan & pembersihan media Live Chat', () => {
         fs.rmSync(dir, { recursive: true, force: true });
       } catch { /* best-effort */ }
     }
+  });
+
+  afterEach(() => {
     delete process.env.PUBLIC_BASE_URL;
   });
 

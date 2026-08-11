@@ -23,6 +23,8 @@ import {
   Facebook,
   Layers,
   ShoppingBag,
+  FlaskConical,
+  RefreshCw,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 
@@ -77,8 +79,12 @@ export const LiveChatMonitor: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('all');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [syncingHistory, setSyncingHistory] = useState(false);
+  const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
+  const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +112,13 @@ export const LiveChatMonitor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [labelFilter]);
 
+  // Ganti filter sumber (WhatsApp asli / sandbox) → reset daftar ke halaman pertama.
+  useEffect(() => {
+    if (firstRenderRef.current) return;
+    loadChats(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceFilter]);
+
   const loadChats = async (reset = false) => {
     if (reset) setLoading(true);
     if (loadingMoreRef.current && !reset) return;
@@ -117,7 +130,7 @@ export const LiveChatMonitor: React.FC = () => {
     }
     try {
       const offset = reset ? 0 : chatsRef.current.length;
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}`);
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}`);
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
       if (reset) {
@@ -147,8 +160,31 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
-  const loadThread = async (conversationId: string) => {
+  const handleSyncHistory = async (offset = 0) => {
+    setSyncingHistory(true);
     try {
+      const res = await apiRequest('/api/admin/live-chat/sync-history', {
+        method: 'POST',
+        body: JSON.stringify({ limit: 50, offset }),
+      });
+      const data = res?.data || res;
+      if (!data || data.success === false) {
+        throw new Error(data?.error || 'Sync history gagal.');
+      }
+      setSyncNextOffset(data.hasMore ? data.nextOffset : null);
+      setSyncProgress(
+        `Sync selesai: ${data.syncedChats} chat diproses (${data.syncedMessages} pesan baru) dari total ${data.totalChats}${data.hasMore ? ' — klik Load More untuk lanjut' : ''}`
+      );
+      loadChats(true);
+      toast(`Sync history: ${data.syncedMessages} pesan dari ${data.syncedChats} chat ditambahkan.`, 'success');
+    } catch (err: any) {
+      toast(`Sync history gagal: ${err.message}`, 'error');
+    } finally {
+      setSyncingHistory(false);
+    }
+  };
+
+  const loadThread = async (conversationId: string) => {    try {
       const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages`);
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
       setMessages(list.map((m) => ({ ...m, media: extractMedia(m) })));
@@ -413,7 +449,21 @@ export const LiveChatMonitor: React.FC = () => {
             Pantau percakapan dan balas langsung dari dashboard secara real-time.
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => handleSyncHistory(syncNextOffset ?? 0)}
+            disabled={syncingHistory}
+            className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
+              syncNextOffset !== null
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30'
+            }`}
+            title={syncNextOffset !== null ? 'Lanjutkan sinkronisasi batch berikutnya' : 'Backfill history chat dari WAHA ke Live Chat (batch 50)'}
+          >
+            {syncingHistory ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            <span>{syncingHistory ? 'Menyinkronkan...' : syncNextOffset !== null ? `Load More Sync (${syncNextOffset})` : 'Sync WAHA History'}</span>
+          </button>
+          <div className="flex items-center space-x-2">
           {sseConnected ? (
             <>
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -432,7 +482,15 @@ export const LiveChatMonitor: React.FC = () => {
             </>
           )}
         </div>
+        </div>
       </div>
+
+      {syncProgress && (
+        <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25 text-sky-300 text-xs font-medium flex items-center space-x-2">
+          <RefreshCw size={14} />
+          <span>{syncProgress}</span>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs font-medium flex items-center space-x-2">
@@ -463,6 +521,35 @@ export const LiveChatMonitor: React.FC = () => {
                 <option value="medical_concern">Medical Emergency</option>
                 <option value="unresolved_faq">Unresolved FAQ</option>
               </select>
+            </div>
+
+            {/* Filter sumber percakapan: WhatsApp asli vs sandbox/test */}
+            <div className="flex items-center space-x-1 p-1 bg-slate-900/80 border border-white/10 rounded-xl w-fit">
+              {(
+                [
+                  { value: 'all', label: 'Semua' },
+                  { value: 'real', label: 'WhatsApp Asli' },
+                  { value: 'sandbox', label: 'Sandbox/Test' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSourceFilter(opt.value)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer ${
+                    sourceFilter === opt.value
+                      ? opt.value === 'sandbox'
+                        ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40'
+                        : opt.value === 'real'
+                          ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-white/10 text-white border border-white/20'
+                      : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                  }`}
+                >
+                  {opt.value === 'sandbox' && <FlaskConical size={10} />}
+                  {opt.value === 'real' && <CheckCircle size={10} />}
+                  <span>{opt.label}</span>
+                </button>
+              ))}
             </div>
 
             {filteredChats.length === 0 ? (
@@ -658,6 +745,12 @@ export const LiveChatMonitor: React.FC = () => {
               <div className="glass-panel border border-white/5 rounded-2xl p-6 h-[635px] flex flex-col justify-between">
                 {/* Header Info */}
                 <div className="border-b border-white/5 pb-4 space-y-2">
+                  {selectedChat.isSandboxTest && (
+                    <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold uppercase tracking-wider">
+                      <FlaskConical size={12} />
+                      <span>QA TEST — chat simulasi, bukan WhatsApp asli (balasan diblokir)</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-base font-bold text-white flex items-center space-x-2">
@@ -749,6 +842,13 @@ export const LiveChatMonitor: React.FC = () => {
 
                 {/* Reply Composer */}
                 <div className="border-t border-white/5 pt-4">
+                  {selectedChat.isSandboxTest ? (
+                    <div className="flex items-center justify-center space-x-2 px-3 py-3 rounded-xl bg-slate-900/60 border border-purple-500/25 text-purple-300/80 text-[10px] font-bold uppercase tracking-wider">
+                      <FlaskConical size={12} />
+                      <span>Chat sandbox — balasan admin diblokir otomatis</span>
+                    </div>
+                  ) : (
+                  <>
                   {selectedImage && (
                     <div className="relative inline-block mb-2">
                       <img
@@ -805,6 +905,8 @@ export const LiveChatMonitor: React.FC = () => {
                       <span>{sending ? 'Mengirim...' : 'Kirim'}</span>
                     </button>
                   </div>
+                </>
+                  )}
                 </div>
               </div>
             ) : (

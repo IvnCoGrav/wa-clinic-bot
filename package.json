@@ -13,7 +13,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed:faq": "tsx src/cli/seed-faq.ts",
-    "scrape:all": "tsx src/cli/scrape-all.ts"
+    "scrape:all": "tsx src/cli/scrape-all.ts",
+    "sync:history": "tsx src/scripts/sync-waha-history.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "^8.1.1",

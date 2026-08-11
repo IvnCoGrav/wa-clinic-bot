@@ -110,6 +110,62 @@ describe('LiveChatService — monitor & balas admin', () => {
     expect(messages.some((m) => m.sender_type === 'ADMIN' && m.content === 'Baik Bunda, kami proses ya')).toBe(true);
   });
 
+  it('getConversationList: mode memisahkan sandbox/test vs WhatsApp asli', async () => {
+    const phoneReal = `628800${Date.now()}`;
+    const phoneSand = `628900${Date.now()}`;
+    const customerReal = await customerService.getOrCreateCustomer(phoneReal, 'Bunda Real', DEFAULT_TENANT_ID);
+    const convReal = await conversationService.getOrCreateConversation(customerReal.id, DEFAULT_TENANT_ID);
+    const customerSand = await customerService.getOrCreateCustomer(phoneSand, 'Bunda Sandbox', DEFAULT_TENANT_ID);
+    customerSand.is_sandbox_test = true; // memory store fallback (DB offline di test)
+    const convSand = await conversationService.getOrCreateConversation(customerSand.id, DEFAULT_TENANT_ID);
+
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: convReal.id,
+      direction: Direction.INBOUND,
+      content: 'Halo asli',
+    });
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: convSand.id,
+      direction: Direction.INBOUND,
+      content: 'Halo test',
+    });
+
+    const all = await liveChatService.getConversationList(DEFAULT_TENANT_ID, 50, 0, 'all');
+    expect(all.items.some((c) => c.conversationId === convReal.id)).toBe(true);
+    expect(all.items.some((c) => c.conversationId === convSand.id)).toBe(true);
+
+    const real = await liveChatService.getConversationList(DEFAULT_TENANT_ID, 50, 0, 'real');
+    expect(real.items.some((c) => c.conversationId === convReal.id)).toBe(true);
+    expect(real.items.some((c) => c.conversationId === convSand.id)).toBe(false);
+
+    const sandbox = await liveChatService.getConversationList(DEFAULT_TENANT_ID, 50, 0, 'sandbox');
+    expect(sandbox.items.some((c) => c.conversationId === convSand.id)).toBe(true);
+    expect(sandbox.items.some((c) => c.conversationId === convReal.id)).toBe(false);
+    expect(sandbox.items.find((c) => c.conversationId === convSand.id)?.isSandboxTest).toBe(true);
+  });
+
+  it('sendAdminReply: chat sandbox/test → SANDBOX_REPLY_BLOCKED tanpa memanggil gateway', async () => {
+    const fake = makeFakeGateway('WAHA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628910${Date.now()}`, 'Bunda Sandbox Reply', DEFAULT_TENANT_ID);
+    customer.is_sandbox_test = true;
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      text: 'Halo test',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Admin',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('SANDBOX_REPLY_BLOCKED');
+    expect(fake.sendTextMessage).not.toHaveBeenCalled();
+  });
+
   it('sendAdminReply: text kosong → EMPTY_REPLY tanpa memanggil gateway', async () => {
     const fake = makeFakeGateway('WAHA');
     createTestGateway(fake, DEFAULT_TENANT_ID);
