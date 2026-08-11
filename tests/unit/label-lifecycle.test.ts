@@ -93,10 +93,9 @@ describe('WhatsApp Label Lifecycle', () => {
     expect(addLabelSpy).toHaveBeenCalledWith(`${phone}@c.us`, 'new customer');
   });
 
-  it('2. Form reservasi pertama masuk → addLabel("pending payment") + removeLabel("new customer")', async () => {
+  it('2. Form reservasi pertama masuk → batchUpdateLabels(add: pending payment, remove: new customer)', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
-    const addLabelSpy = vi.spyOn(wahaClient, 'addLabel');
-    const removeLabelSpy = vi.spyOn(wahaClient, 'removeLabel');
+    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
     const { customer } = await setupInterestConversation(`6289921${Date.now()}`, 'Bunda NC');
     const res = await stateMachine.processMessage({
@@ -113,15 +112,16 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(addLabelSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, 'pending payment');
-    expect(addLabelSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, 'repeat');
-    expect(removeLabelSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, 'new customer');
+    expect(batchSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, {
+      add: ['pending payment'],
+      remove: ['new customer'],
+    });
+    expect(batchSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, expect.objectContaining({ add: ['repeat'] }));
   });
 
-  it('3. Customer riwayat confirmed ≥1 kirim form baru → addLabel("repeat"), bukan "pending payment"', async () => {
+  it('3. Customer riwayat confirmed ≥1 kirim form baru → batchUpdateLabels(add: repeat, remove: new customer + pending payment)', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(1);
-    const addLabelSpy = vi.spyOn(wahaClient, 'addLabel');
-    const removeLabelSpy = vi.spyOn(wahaClient, 'removeLabel');
+    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
     const { customer } = await setupInterestConversation(`6289931${Date.now()}`, 'Bunda Repeat');
     const res = await stateMachine.processMessage({
@@ -138,9 +138,11 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(addLabelSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, 'repeat');
-    expect(addLabelSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, 'pending payment');
-    expect(removeLabelSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, 'new customer');
+    expect(batchSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, {
+      add: ['repeat'],
+      remove: ['new customer', 'pending payment'],
+    });
+    expect(batchSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, expect.objectContaining({ add: ['pending payment'] }));
   });
 
   it('4. Admin klik "Tandai Lunas" (PATCH confirm) → removeLabel("pending payment") + status confirmed', async () => {
@@ -173,7 +175,7 @@ describe('WhatsApp Label Lifecycle', () => {
 
   it('5. Customer berlabel "legacy" mengisi form → label lifecycle jalan, "legacy" TIDAK pernah di-remove', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
-    const removeLabelSpy = vi.spyOn(wahaClient, 'removeLabel');
+    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
     const { customer } = await setupInterestConversation(`6289951${Date.now()}`, 'Bunda Legacy');
     // Tandai sebagai legacy source + beri label 'legacy' di WA
@@ -193,15 +195,20 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(removeLabelSpy).not.toHaveBeenCalledWith(`${customer.phone}@c.us`, 'legacy');
     // new customer tetap dihapus, pending payment ditambahkan sesuai riwayat
-    expect(removeLabelSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, 'new customer');
+    expect(batchSpy).toHaveBeenCalledWith(`${customer.phone}@c.us`, {
+      add: ['pending payment'],
+      remove: ['new customer'],
+    });
+    // legacy tidak boleh muncul di daftar remove manapun
+    for (const call of batchSpy.mock.calls) {
+      expect(call[1].remove).not.toContain('legacy');
+    }
   });
 
-  it('6. addLabel/removeLabel gagal (mock error) → operasi inti reservasi tetap sukses', async () => {
+  it('6. batchUpdateLabels gagal (mock error) → operasi inti reservasi tetap sukses', async () => {
     vi.mocked(prisma.reservation.count as any).mockResolvedValueOnce(0);
-    vi.spyOn(wahaClient, 'addLabel').mockRejectedValue(new Error('WAHA timeout'));
-    vi.spyOn(wahaClient, 'removeLabel').mockRejectedValue(new Error('WAHA timeout'));
+    vi.spyOn(wahaClient, 'batchUpdateLabels').mockRejectedValue(new Error('WAHA timeout'));
 
     const { customer } = await setupInterestConversation(`6289961${Date.now()}`, 'Bunda Resilient');
     const res = await stateMachine.processMessage({
@@ -222,10 +229,9 @@ describe('WhatsApp Label Lifecycle', () => {
     expect(res.isHumanHandling).toBe(true);
   });
 
-  it('7. Flag ENABLE_LIFECYCLE_LABELS=false → tidak ada addLabel/removeLabel lifecycle', async () => {
+  it('7. Flag ENABLE_LIFECYCLE_LABELS=false → tidak ada batchUpdateLabels lifecycle', async () => {
     process.env.ENABLE_LIFECYCLE_LABELS = 'false';
-    const addLabelSpy = vi.spyOn(wahaClient, 'addLabel');
-    const removeLabelSpy = vi.spyOn(wahaClient, 'removeLabel');
+    const batchSpy = vi.spyOn(wahaClient, 'batchUpdateLabels');
 
     const { customer } = await setupInterestConversation(`6289971${Date.now()}`, 'Bunda NoFlag');
     const res = await stateMachine.processMessage({
@@ -242,29 +248,25 @@ describe('WhatsApp Label Lifecycle', () => {
     });
 
     expect(res.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    // Hanya boleh memanggil label selain 'new customer'/'pending payment'/'repeat' (tidak ada).
-    const lifecycleLabels = ['new customer', 'pending payment', 'repeat'];
-    const touchedLifecycle = [...addLabelSpy.mock.calls, ...removeLabelSpy.mock.calls]
-      .filter(([, label]) => lifecycleLabels.includes(label as string));
-    expect(touchedLifecycle).toHaveLength(0);
+    expect(batchSpy).not.toHaveBeenCalled();
   });
 
-  it('8. toLabelChatId menormalisasi JID @lid dan nomor polos ke format @c.us untuk API label', async () => {
+  it('8. resolvePrimaryJid menormalisasi JID @lid dan nomor polos ke format @c.us untuk API label', async () => {
     vi.spyOn(wahaClient, 'getPhoneNumberFromLid').mockImplementation(async (lid: string) => {
       if (lid.includes('7990399')) return '6285794210526';
       return lid.replace(/@.*$/, '');
     });
 
-    const c1 = await wahaClient.toLabelChatId('79903991054369@lid');
+    const c1 = await wahaClient.resolvePrimaryJid('79903991054369@lid');
     expect(c1).toBe('6285794210526@c.us');
 
-    const c2 = await wahaClient.toLabelChatId('628123456789@c.us');
+    const c2 = await wahaClient.resolvePrimaryJid('628123456789@c.us');
     expect(c2).toBe('628123456789@c.us');
 
-    const c3 = await wahaClient.toLabelChatId('628123456789');
+    const c3 = await wahaClient.resolvePrimaryJid('628123456789');
     expect(c3).toBe('628123456789@c.us');
 
-    const c4 = await wahaClient.toLabelChatId('123456789@g.us');
+    const c4 = await wahaClient.resolvePrimaryJid('123456789@g.us');
     expect(c4).toBe('123456789@g.us');
   });
 });

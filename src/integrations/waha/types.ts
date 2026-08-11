@@ -29,8 +29,14 @@ export interface WahaMessagePayload {
   };
 }
 
+export interface WahaLabelChatPayload {
+  labelId?: string;
+  chatId?: string;
+  label?: { id?: string; name?: string; color?: number; colorHex?: string } | null;
+}
+
 export interface WahaWebhookEvent {
-  event: 'message' | 'message.any' | 'state.change';
+  event: 'message' | 'message.any' | 'state.change' | 'label.chat.added' | 'label.chat.deleted';
   session: string;
-  payload: WahaMessagePayload;
+  payload: WahaMessagePayload & Partial<WahaLabelChatPayload>;
 }

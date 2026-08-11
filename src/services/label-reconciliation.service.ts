@@ -11,8 +11,10 @@ import { wahaClient } from '../integrations/waha/client';
  * - 'legacy' tidak pernah disentuh
  *
  * Cron ini membandingkan label yang terpasang di WAHA dengan status DB dan
- * memperbaiki drift (label hilang / salah). Best-effort penuh; tidak pernah
- * melempar error ke pemanggil.
+ * memperbaiki drift (label hilang / salah). Sekaligus berperan sebagai safety-net
+ * untuk kolom Customer.is_admin_labeled / is_hold_labeled (Task: event-driven
+ * label sync) — meng-copy event webhook label yang mungkin terlewat.
+ * Best-effort penuh; tidak pernah melempar error ke pemanggil.
  */
 export class LabelReconciliationService {
   public async reconcileLabels(tenantId: string): Promise<{ driftsFound: number; driftsFixed: number }> {
@@ -43,6 +45,20 @@ export class LabelReconciliationService {
         } catch (err: any) {
           console.warn(`[LABEL RECONCILIATION] getChatLabels failed for ${chatId}:`, err.message);
           continue;
+        }
+
+        // Safety-net kolom flag label (Task: event-driven label sync) — sync dari
+        // label yang sudah di-fetch, tanpa HTTP tambahan. Meng-copy event webhook
+        // label.chat.added/deleted yang mungkin terlewat.
+        try {
+          const isAdmin = currentLabels.some((l) => l.toLowerCase() === 'admin');
+          const isHold = currentLabels.some((l) => l.toLowerCase() === 'hold');
+          await prisma.customer.updateMany({
+            where: { phone: customer.phone },
+            data: { is_admin_labeled: isAdmin, is_hold_labeled: isHold },
+          });
+        } catch (err: any) {
+          // DB offline — kolom flag tidak bisa di-sync; label WAHA tetap disinkronkan di path lain
         }
 
         const hasPendingPayment = currentLabels.some((l) => l.toLowerCase() === 'pending payment');

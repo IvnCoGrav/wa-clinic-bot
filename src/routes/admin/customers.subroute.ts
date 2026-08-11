@@ -194,6 +194,76 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/admin/customers/:id/label
+   * Set/toggle label 'admin' atau 'hold' untuk customer.
+   * Sumber kebenaran = kolom DB (is_admin_labeled / is_hold_labeled); mirror ke
+   * WAHA (addLabel/removeLabel) bersifat best-effort agar label tampil di aplikasi WA.
+   */
+  fastify.patch(
+    '/api/admin/customers/:id/label',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { label: 'admin' | 'hold'; enabled: boolean };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { label, enabled } = request.body || {};
+      if (label !== 'admin' && label !== 'hold') {
+        return reply.status(400).send({ success: false, error: 'label harus "admin" atau "hold".' });
+      }
+      if (typeof enabled !== 'boolean') {
+        return reply.status(400).send({ success: false, error: 'enabled wajib boolean.' });
+      }
+
+      try {
+        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+        if (!customer) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        }
+
+        // 1. Kolom DB adalah sumber kebenaran
+        await customerService.setLabelFlags(customer.phone, {
+          isAdminLabeled: label === 'admin' ? enabled : undefined,
+          isHoldLabeled: label === 'hold' ? enabled : undefined,
+        });
+
+        // 2. Mirror ke WAHA (best-effort, tidak pernah throw)
+        let wahaOk = true;
+        try {
+          const { wahaClient } = await import('../../integrations/waha/client');
+          if (enabled) {
+            wahaOk = await wahaClient.addLabel(`${customer.phone}@c.us`, label);
+          } else {
+            wahaOk = await wahaClient.removeLabel(`${customer.phone}@c.us`, label);
+          }
+        } catch (err: any) {
+          wahaOk = false;
+          console.warn(`[LABEL] Gagal mirror label "${label}" ke WAHA utk ${customer.phone}:`, err.message);
+        }
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: enabled ? 'ADD_LABEL' : 'REMOVE_LABEL',
+          targetId: id,
+          payload: { label, enabled, wahaOk },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Label "${label}" ${enabled ? 'dipasang' : 'dilepas'} untuk ${customer.name || customer.phone}.`,
+          data: { id, phone: customer.phone, label, enabled, wahaOk },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/customers/flagged
    * REST Endpoint untuk melihat percakapan yang di-flag untuk review
    */

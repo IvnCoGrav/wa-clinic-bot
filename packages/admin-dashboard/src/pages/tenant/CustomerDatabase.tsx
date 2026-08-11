@@ -34,6 +34,8 @@ interface CustomerItem {
   reservationCount: number;
   createdAt: string;
   updatedAt: string;
+  isAdminLabeled: boolean;
+  isHoldLabeled: boolean;
 }
 
 interface ChatMessage {
@@ -46,7 +48,7 @@ interface ChatMessage {
 }
 
 export const CustomerDatabase: React.FC = () => {
-  const { toast } = useUiFeedback();
+  const { toast, confirm } = useUiFeedback();
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [search, setSearch] = useState('');
@@ -106,6 +108,35 @@ export const CustomerDatabase: React.FC = () => {
     setCopiedCode(code);
     toast(`Tracking Code ${code} disalin!`, 'info');
     setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleToggleLabel = async (customer: CustomerItem, label: 'admin' | 'hold', enabled: boolean) => {
+    const labelName = label === 'admin' ? 'Admin' : 'Hold';
+    const ok = await confirm({
+      title: `${enabled ? 'Pasang' : 'Lepas'} Label "${labelName}"`,
+      message: `${enabled ? 'Pasang' : 'Lepas'} label WhatsApp "${labelName}" untuk ${customer.name || customer.phone}?`,
+      confirmText: `Ya, ${enabled ? 'Pasang' : 'Lepas'}`,
+      danger: !enabled,
+    });
+    if (!ok) return;
+
+    try {
+      const res = await apiRequest(`/api/admin/customers/${customer.id}/label`, {
+        method: 'PATCH',
+        body: JSON.stringify({ label, enabled }),
+      });
+      if (res && res.success) {
+        toast(res.message || `Label "${labelName}" diperbarui.`);
+        if (!res.data?.wahaOk) {
+          toast('Label tersimpan di database, tapi gagal di-mirror ke WhatsApp (cek WAHA).', 'error');
+        }
+        loadCustomers();
+      } else {
+        toast(res?.error || `Gagal memperbarui label "${labelName}".`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal memperbarui label: ${err.message}`, 'error');
+    }
   };
 
   // Open Chat History Modal
@@ -232,6 +263,7 @@ export const CustomerDatabase: React.FC = () => {
                   <th className="py-3 px-4">Tracking Code (ID)</th>
                   <th className="py-3 px-4">No HP / Nama</th>
                   <th className="py-3 px-4">Status MQL</th>
+                  <th className="py-3 px-4">Label WA</th>
                   <th className="py-3 px-4">LTV (Lifetime Value)</th>
                   <th className="py-3 px-4 text-right">Aksi</th>
                 </tr>
@@ -283,6 +315,34 @@ export const CustomerDatabase: React.FC = () => {
                           Regular ({customer.mqlBubbleCount} Bubble)
                         </span>
                       )}
+                    </td>
+
+                    {/* Label WA */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={() => handleToggleLabel(customer, 'admin', !customer.isAdminLabeled)}
+                          title={customer.isAdminLabeled ? 'Klik untuk lepas label Admin' : 'Klik untuk pasang label Admin'}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border transition ${
+                            customer.isAdminLabeled
+                              ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
+                              : 'bg-slate-800/60 text-slate-500 border-white/5 hover:text-slate-300 hover:border-white/20'
+                          }`}
+                        >
+                          Admin
+                        </button>
+                        <button
+                          onClick={() => handleToggleLabel(customer, 'hold', !customer.isHoldLabeled)}
+                          title={customer.isHoldLabeled ? 'Klik untuk lepas label Hold' : 'Klik untuk pasang label Hold'}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border transition ${
+                            customer.isHoldLabeled
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              : 'bg-slate-800/60 text-slate-500 border-white/5 hover:text-slate-300 hover:border-white/20'
+                          }`}
+                        >
+                          Hold
+                        </button>
+                      </div>
                     </td>
 
                     {/* LTV */}

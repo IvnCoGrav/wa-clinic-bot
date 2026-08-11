@@ -1,6 +1,13 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { normalizeWhatsAppFormat } from '../../utils/whatsapp-format';
+import {
+  getCachedLabels,
+  setCachedLabels,
+  invalidateCachedLabels,
+  getCachedLidPhone,
+  setCachedLidPhone,
+} from './label-cache';
 dotenv.config();
 
 export interface WahaChat {
@@ -69,6 +76,12 @@ export class WahaClient implements IWahaClient {
   // Semaphore sederhana untuk membatasi call HTTP WAHA yang berjalan bersamaan
   private concurrentCalls = 0;
   private limiterQueue: Array<() => void> = [];
+
+  // Mutex per-chat untuk operasi mutasi label (addLabel/removeLabel/batchUpdateLabels).
+  // Read-modify-write label WAHA dari 2 pemanggilan nyaris bersamaan untuk chat yang
+  // sama bisa saling menimpa (lost update); kunci per targetChatId memastikan operasi
+  // mutasi untuk chat yang sama dijalankan sekuensial.
+  private labelLocks = new Map<string, Promise<void>>();
 
   constructor() {
     this.baseUrl = (process.env.WAHA_BASE_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -178,6 +191,53 @@ export class WahaClient implements IWahaClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Sinkronkan kolom Customer.is_admin_labeled / is_hold_labeled untuk mutasi
+   * label yang dilakukan BOT via API (event WAHA label.chat.added/deleted adalah
+   * jalur utama untuk perubahan dari aplikasi WA Business / admin).
+   * Best-effort penuh (DB offline → memory fallback via customerService).
+   */
+  private async syncLabelColumn(
+    targetChatId: string,
+    labelName: string,
+    isAdded: boolean
+  ): Promise<void> {
+    const lower = (labelName || '').toLowerCase();
+    if (lower !== 'admin' && lower !== 'hold') return;
+    const phone = targetChatId.replace(/@.*$/, '');
+    if (!phone) return;
+    try {
+      const { customerService } = await import('../../services/customer.service');
+      await customerService.setLabelFlags(phone, {
+        isAdminLabeled: lower === 'admin' ? isAdded : undefined,
+        isHoldLabeled: lower === 'hold' ? isAdded : undefined,
+      });
+    } catch (err: any) {
+      console.warn(`[LABEL SYNC] Failed to sync "${lower}" column for ${targetChatId}:`, err.message);
+    }
+  }
+
+  /**
+   * Mutex per targetChatId untuk mutasi label. Calls untuk chat yang sama
+   * dieksekusi sekuensial; chat berbeda tetap paralel.
+   */
+  private async withLabelLock<T>(chatId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.labelLocks.get(chatId) || Promise.resolve();
+    let release!: () => void;
+    const curr = new Promise<void>((resolve) => { release = resolve; });
+    this.labelLocks.set(chatId, curr);
+    // Jangan biarkan reject dari pemanggil sebelumnya memutus rantai antrian
+    await prev.catch(() => {});
+    try {
+      return await fn();
+    } finally {
+      release();
+      if (this.labelLocks.get(chatId) === curr) {
+        this.labelLocks.delete(chatId);
+      }
+    }
+  }
+
   private async resolveActiveJid(chatId: string): Promise<string> {
     // 1. Jika sudah berupa @lid, gunakan langsung (karena ini JID paling presisi dari webhook)
     if (chatId.includes('@lid')) {
@@ -192,9 +252,11 @@ export class WahaClient implements IWahaClient {
     try {
       const targetPn = chatId.includes('@c.us') ? chatId : `${chatId}@c.us`;
       const encodedPn = encodeURIComponent(targetPn);
-      const response = await axios.get(
-        `${this.baseUrl}/api/${this.session}/lids/pn/${encodedPn}`,
-        { headers: this.headers, timeout: this.timeoutMs }
+      const response = await this.withRetry('resolveActiveJid', () =>
+        axios.get(
+          `${this.baseUrl}/api/${this.session}/lids/pn/${encodedPn}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
       );
       if (response.data?.lid) {
         return response.data.lid;
@@ -210,8 +272,11 @@ export class WahaClient implements IWahaClient {
    * Mengonversi JID apapun (termasuk @lid) ke JID primer (@c.us / @g.us).
    * Penting untuk memanipulasi label, karena label harus menempel ke JID primer
    * agar bisa muncul di aplikasi WhatsApp Business.
+   *
+   * PUBLIC: dipakai webhook handler untuk resolve SEKALI per pesan masuk,
+   * hasilnya diturunkan ke nomor HP & cache key label.
    */
-  private async resolvePrimaryJid(chatId: string): Promise<string> {
+  public async resolvePrimaryJid(chatId: string): Promise<string> {
     if (chatId.includes('@g.us')) return chatId;
     
     if (chatId.includes('@lid')) {
@@ -227,6 +292,8 @@ export class WahaClient implements IWahaClient {
 
   /**
    * Mengonversi JID LID (misal: 79903991054369@lid) kembali ke nomor HP asli (misal: 6285794210526)
+   * Hasil resolusi di-cache TTL pendek (lihat label-cache.ts) agar jalur webhook tidak
+   * memanggil /lids/* berulang kali untuk chat yang sama dalam window singkat.
    */
   public async getPhoneNumberFromLid(lid: string): Promise<string> {
     if (!lid.includes('@lid')) {
@@ -237,15 +304,22 @@ export class WahaClient implements IWahaClient {
       return lid.replace(/@.*$/, '');
     }
 
+    const cached = getCachedLidPhone(lid);
+    if (cached) return cached;
+
     try {
       const encodedLid = encodeURIComponent(lid);
-      const response = await axios.get(
-        `${this.baseUrl}/api/${this.session}/lids/${encodedLid}`,
-        { headers: this.headers, timeout: this.timeoutMs }
+      const response = await this.withRetry('getPhoneNumberFromLid', () =>
+        axios.get(
+          `${this.baseUrl}/api/${this.session}/lids/${encodedLid}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
       );
       const pn = response.data?.pn;
       if (pn) {
-        return pn.replace(/@.*$/, '');
+        const cleaned = pn.replace(/@.*$/, '');
+        setCachedLidPhone(lid, cleaned);
+        return cleaned;
       }
     } catch (err) {
       // Abaikan error, fallback ke user part
@@ -465,25 +539,8 @@ export class WahaClient implements IWahaClient {
   }
 
   /**
-   * Mengonversi chatId (misal 628123@lid, 628123@c.us, atau 628123) ke format @c.us / @g.us yang valid untuk API Label WAHA.
-   * API Label WAHA mengharapkan @c.us / @g.us, bukan @lid.
-   */
-  public async toLabelChatId(chatId: string): Promise<string> {
-    if (!chatId) return '';
-    const trimmed = chatId.trim();
-    if (trimmed.endsWith('@g.us') || trimmed.endsWith('@c.us')) {
-      return trimmed;
-    }
-    if (trimmed.endsWith('@lid')) {
-      const phone = await this.getPhoneNumberFromLid(trimmed);
-      return phone.includes('@') ? phone : `${phone}@c.us`;
-    }
-    const cleanPhone = trimmed.replace(/\D/g, '');
-    return cleanPhone ? `${cleanPhone}@c.us` : trimmed;
-  }
-
-  /**
    * Menambahkan label ke chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
+   * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
    */
   public async addLabel(chatId: string, labelName: string): Promise<boolean> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
@@ -495,64 +552,73 @@ export class WahaClient implements IWahaClient {
         existing.push(labelName);
       }
       this.mockLabels.set(targetChatId, existing);
+      invalidateCachedLabels(targetChatId);
+      await this.syncLabelColumn(targetChatId, labelName, true);
       return true;
     }
 
-    return this.runSerialized(async () => {
-      try {
-        // 1. Dapatkan ID label dari daftar label yang ada di session
-        const labelsListResponse = await axios.get(
-          `${this.baseUrl}/api/${this.session}/labels`,
-          { headers: this.headers, timeout: this.timeoutMs }
-        );
-        const labels = labelsListResponse.data?.value || labelsListResponse.data || [];
-        let targetLabel = labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
-
-        // Jika label belum ada di session, kita buat baru
-        if (!targetLabel) {
-          const createResponse = await axios.post(
+    return this.withLabelLock(targetChatId, () =>
+      this.runSerialized(() =>
+        this.withRetry('addLabel', async () => {
+          // 1. Dapatkan ID label dari daftar label yang ada di session
+          const labelsListResponse = await axios.get(
             `${this.baseUrl}/api/${this.session}/labels`,
-            { name: labelName, color: 1 },
             { headers: this.headers, timeout: this.timeoutMs }
           );
-          targetLabel = createResponse.data;
-        }
+          const labels = labelsListResponse.data?.value || labelsListResponse.data || [];
+          let targetLabel = labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
 
-        if (!targetLabel) {
-          console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}: Could not find or create label "${labelName}"`);
-          return false;
-        }
+          // Jika label belum ada di session, kita buat baru
+          if (!targetLabel) {
+            const createResponse = await axios.post(
+              `${this.baseUrl}/api/${this.session}/labels`,
+              { name: labelName, color: 1 },
+              { headers: this.headers, timeout: this.timeoutMs }
+            );
+            targetLabel = createResponse.data;
+          }
 
-        // 2. Dapatkan label yang saat ini menempel pada chat
-        const currentLabelsResponse = await axios.get(
-          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-          { headers: this.headers, timeout: this.timeoutMs }
-        );
-        const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
+          if (!targetLabel) {
+            console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId}: Could not find or create label "${labelName}"`);
+            return false;
+          }
 
-        // 3. Gabungkan label target jika belum terpasang
-        const alreadyHas = currentLabels.some((l: any) => l.id === targetLabel.id);
-        if (alreadyHas) return true;
+          // 2. Dapatkan label yang saat ini menempel pada chat
+          const currentLabelsResponse = await axios.get(
+            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
 
-        const newLabelsList = [...currentLabels, targetLabel].map((l: any) => ({ id: l.id }));
+          // 3. Gabungkan label target jika belum terpasang
+          const alreadyHas = currentLabels.some((l: any) => l.id === targetLabel.id);
+          if (alreadyHas) return true;
 
-        // 4. Update label chat menggunakan PUT
-        await axios.put(
-          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-          { labels: newLabelsList },
-          { headers: this.headers, timeout: this.timeoutMs }
-        );
-        console.log(`[WAHA LABEL] Successfully added label "${labelName}" to ${targetChatId}`);
-        return true;
-      } catch (error: any) {
-        console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
-        return false;
-      }
+          const newLabelsList = [...currentLabels, targetLabel].map((l: any) => ({ id: l.id }));
+
+          // 4. Update label chat menggunakan PUT
+          await axios.put(
+            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+            { labels: newLabelsList },
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          invalidateCachedLabels(targetChatId);
+          console.log(`[WAHA LABEL] Successfully added label "${labelName}" to ${targetChatId}`);
+          return true;
+        })
+      )
+    ).then(async (ok) => {
+        if (ok) await this.syncLabelColumn(targetChatId, labelName, true);
+        return ok;
+      }).catch((error: any) => {
+      console.error(`[WAHA API ERROR] addLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
+      return false;
     });
   }
 
   /**
    * Menghapus label dari chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
+   * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
    */
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
@@ -562,55 +628,159 @@ export class WahaClient implements IWahaClient {
       const existing = this.mockLabels.get(targetChatId) || [];
       const filtered = existing.filter(l => l !== labelName);
       this.mockLabels.set(targetChatId, filtered);
+      invalidateCachedLabels(targetChatId);
+      await this.syncLabelColumn(targetChatId, labelName, false);
       return true;
     }
 
-    return this.runSerialized(async () => {
-      try {
-        // 1. Dapatkan label yang saat ini menempel pada chat
-        const currentLabelsResponse = await axios.get(
-          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-          { headers: this.headers, timeout: this.timeoutMs }
-        );
-        const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
+    return this.withLabelLock(targetChatId, () =>
+      this.runSerialized(() =>
+        this.withRetry('removeLabel', async () => {
+          // 1. Dapatkan label yang saat ini menempel pada chat
+          const currentLabelsResponse = await axios.get(
+            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
 
-        // 2. Filter buang label yang sesuai dengan nama target
-        const filteredLabels = currentLabels
-          .filter((l: any) => l.name.toLowerCase() !== labelName.toLowerCase())
-          .map((l: any) => ({ id: l.id }));
+          // 2. Filter buang label yang sesuai dengan nama target
+          const filteredLabels = currentLabels
+            .filter((l: any) => l.name.toLowerCase() !== labelName.toLowerCase())
+            .map((l: any) => ({ id: l.id }));
 
-        // 3. Update label chat menggunakan PUT
-        await axios.put(
-          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-          { labels: filteredLabels },
-          { headers: this.headers, timeout: this.timeoutMs }
-        );
-        console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
-        return true;
-      } catch (error: any) {
-        console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
-        return false;
-      }
+          // 3. Update label chat menggunakan PUT
+          await axios.put(
+            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+            { labels: filteredLabels },
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          invalidateCachedLabels(targetChatId);
+          console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
+          return true;
+        })
+      )
+    ).then(async (ok) => {
+        if (ok) await this.syncLabelColumn(targetChatId, labelName, false);
+        return ok;
+      }).catch((error: any) => {
+      console.error(`[WAHA API ERROR] removeLabel failed for ${targetChatId} (label: "${labelName}"):`, error?.response?.data || error.message);
+      return false;
+    });
+  }
+
+  /**
+   * Aplikasikan beberapa perubahan label untuk 1 chat sebagai SATU operasi atomik
+   * (1x GET daftar label session + 1x GET label chat + 1x PUT), bukan berkali-kali
+   * GET/PUT terpisah per label yang bisa saling menimpa (race condition).
+   *
+   * Best-effort: return false bila gagal, tidak pernah melempar ke pemanggil.
+   * addLabel/removeLabel tetap dipertahankan untuk pemakaian 1-label di tempat lain.
+   */
+  public async batchUpdateLabels(
+    chatId: string,
+    changes: { add?: string[]; remove?: string[] }
+  ): Promise<boolean> {
+    const targetChatId = await this.resolvePrimaryJid(chatId);
+    const toAdd = changes.add || [];
+    const toRemove = (changes.remove || []).map(l => l.toLowerCase());
+
+    if (this.shouldMock) {
+      const existing = this.mockLabels.get(targetChatId) || [];
+      const next = existing.filter(l => !toRemove.includes(l.toLowerCase()));
+      for (const l of toAdd) if (!next.includes(l)) next.push(l);
+      this.mockLabels.set(targetChatId, next);
+      invalidateCachedLabels(targetChatId);
+      for (const l of toAdd) await this.syncLabelColumn(targetChatId, l, true);
+      for (const l of toRemove) await this.syncLabelColumn(targetChatId, l, false);
+      console.log(`[MOCK WAHA OUTBOUND] batchUpdateLabels -> chatId: ${targetChatId} | add: ${JSON.stringify(toAdd)} | remove: ${JSON.stringify(toRemove)}`);
+      return true;
+    }
+
+    return this.withLabelLock(targetChatId, () =>
+      this.runSerialized(() =>
+        this.withRetry('batchUpdateLabels', async () => {
+          // 1. Ambil semua label yang ada di session
+          const labelsListResponse = await axios.get(
+            `${this.baseUrl}/api/${this.session}/labels`,
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          const sessionLabels = labelsListResponse.data?.value || labelsListResponse.data || [];
+
+          // 2. Pastikan semua label yang mau ditambah sudah ada id-nya (buat jika belum ada)
+          const addTargets: any[] = [];
+          for (const name of toAdd) {
+            let found = sessionLabels.find((l: any) => l.name.toLowerCase() === name.toLowerCase());
+            if (!found) {
+              const createResponse = await axios.post(
+                `${this.baseUrl}/api/${this.session}/labels`,
+                { name, color: 1 },
+                { headers: this.headers, timeout: this.timeoutMs }
+              );
+              found = createResponse.data;
+              sessionLabels.push(found);
+            }
+            if (found) addTargets.push(found);
+          }
+
+          // 3. Ambil label yang saat ini menempel di chat (SEKALI, bukan per-operasi)
+          const currentLabelsResponse = await axios.get(
+            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+          const currentLabels = currentLabelsResponse.data?.value || currentLabelsResponse.data || [];
+
+          // 4. Hitung state akhir: buang yang di-remove, tambah yang di-add (dedupe by id)
+          const afterRemove = currentLabels.filter((l: any) => !toRemove.includes(l.name.toLowerCase()));
+          const finalMap = new Map<string, any>(afterRemove.map((l: any) => [l.id, l]));
+          for (const t of addTargets) finalMap.set(t.id, t);
+          const finalList = Array.from(finalMap.values()).map((l: any) => ({ id: l.id }));
+
+          // 5. Satu kali PUT untuk semua perubahan
+          await axios.put(
+            `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+            { labels: finalList },
+            { headers: this.headers, timeout: this.timeoutMs }
+          );
+
+          invalidateCachedLabels(targetChatId);
+          for (const l of toAdd) await this.syncLabelColumn(targetChatId, l, true);
+          for (const l of toRemove) await this.syncLabelColumn(targetChatId, l, false);
+          console.log(`[WAHA LABEL] batchUpdateLabels OK for ${targetChatId} | add: ${JSON.stringify(toAdd)} | remove: ${JSON.stringify(toRemove)}`);
+          return true;
+        })
+      )
+    ).catch((error: any) => {
+      console.error(`[WAHA API ERROR] batchUpdateLabels failed for ${targetChatId}:`, error?.response?.data || error.message);
+      return false;
     });
   }
 
   /**
    * Mengambil daftar label yang ada pada chat menggunakan API WAHA baru (GET /api/{session}/labels/chats/{chatId})
+   * Hasil di-cache TTL pendek (label-cache.ts) untuk menghindari HTTP call blocking
+   * berulang di jalur webhook; cache di-invalidate oleh mutasi label apapun.
    */
   public async getChatLabels(chatId: string): Promise<string[]> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
+
+    const cached = getCachedLabels(targetChatId);
+    if (cached) return cached;
 
     if (this.shouldMock) {
       return this.mockLabels.get(targetChatId) || [];
     }
 
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
-        { headers: this.headers, timeout: this.timeoutMs }
+      const response = await this.withRetry('getChatLabels', () =>
+        axios.get(
+          `${this.baseUrl}/api/${this.session}/labels/chats/${targetChatId}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
       );
       const chatLabels = response.data?.value || response.data || [];
-      return chatLabels.map((l: any) => typeof l === 'string' ? l : l.name);
+      const names = chatLabels.map((l: any) => typeof l === 'string' ? l : l.name);
+      setCachedLabels(targetChatId, names);
+      return names;
     } catch (error: any) {
       console.warn(`[WAHA API ERROR] getChatLabels failed for ${targetChatId}:`, error?.response?.data || error.message);
       return [];

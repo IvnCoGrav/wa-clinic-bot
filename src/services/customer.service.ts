@@ -17,10 +17,39 @@ export class CustomerService {
   }
 
   /**
+   * Set flag label chat (is_admin_labeled / is_hold_labeled) pada semua customer
+   * dengan nomor HP tersebut. Chat WhatsApp adalah entitas lintas-tenant, jadi
+   * update dilakukan via updateMany tanpa filter tenant (mencakup semua tenant).
+   * Best-effort penuh: DB offline → update memory store saja, tidak pernah throw.
+   */
+  public async setLabelFlags(
+    phone: string,
+    flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean }
+  ): Promise<void> {
+    const data: any = {};
+    if (flags.isAdminLabeled !== undefined) data.is_admin_labeled = flags.isAdminLabeled;
+    if (flags.isHoldLabeled !== undefined) data.is_hold_labeled = flags.isHoldLabeled;
+    if (Object.keys(data).length === 0) return;
+
+    try {
+      await prisma.customer.updateMany({
+        where: { phone },
+        data,
+      });
+    } catch (error) {
+      // Memory fallback (DB offline / test)
+      const cust = memoryCustomers.get(phone);
+      if (cust) {
+        if (flags.isAdminLabeled !== undefined) cust.is_admin_labeled = flags.isAdminLabeled;
+        if (flags.isHoldLabeled !== undefined) cust.is_hold_labeled = flags.isHoldLabeled;
+      }
+    }
+  }
+
+  /**
    * Cari customer berdasarkan nomor telepon unik dan tenantId, atau buat record baru jika belum ada.
    */
-  public async getOrCreateCustomer(
-    phone: string,
+  public async getOrCreateCustomer(    phone: string,
     name: string | undefined,
     tenantId: string,
     options?: { skipFollowUpScheduling?: boolean }
@@ -82,6 +111,8 @@ export class CustomerService {
           blocked_at: null,
           is_legacy_source: false,
           legacy_scraped_at: null,
+          is_admin_labeled: false,
+          is_hold_labeled: false,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -773,6 +804,8 @@ export class CustomerService {
             createdAt: c.created_at,
             updatedAt: c.updated_at,
             aiOverride: c.ai_override || null,
+            isAdminLabeled: !!c.is_admin_labeled,
+            isHoldLabeled: !!c.is_hold_labeled,
           };
         })
       );
@@ -802,6 +835,8 @@ export class CustomerService {
           createdAt: c.created_at || new Date(),
           updatedAt: c.updated_at || new Date(),
           aiOverride: c.ai_override || null,
+          isAdminLabeled: !!c.is_admin_labeled,
+          isHoldLabeled: !!c.is_hold_labeled,
         })),
         total: list.length,
         page: 1,
