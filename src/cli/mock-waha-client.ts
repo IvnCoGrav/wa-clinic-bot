@@ -69,6 +69,11 @@ export class MockWAHAClient implements IWahaClient {
     return [];
   }
 
+  public async getChatLabelsOrNull(chatId: string): Promise<string[] | null> {
+    return [];
+  }
+
+
   public async getSessionStatus(session?: string): Promise<string> {
     return 'WORKING';
   }
