@@ -97,6 +97,7 @@ describe('Tier 1 Extra Items — E1 (JID Normalization), E2 (Memory Pruning), E3
       vi.spyOn(customerService, 'getOrCreateCustomer').mockResolvedValue(mockCust as any);
       vi.spyOn(conversationService, 'getOrCreateConversation').mockResolvedValue(mockConv as any);
       vi.spyOn(wahaClient, 'getChatLabels').mockResolvedValue(['hold']); // Active hold label
+      vi.spyOn(wahaClient, 'getChatLabelsOrNull').mockResolvedValue(['hold']); // Active hold label
 
       const sendTextSpy = vi.spyOn(wahaClient, 'sendText').mockResolvedValue(undefined as any);
 
