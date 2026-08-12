@@ -16,6 +16,11 @@ process.env.BURST_COALESCE_MS = '0';
 // which triggers the Haversine fallback in DeliveryService (deterministic, no network).
 process.env.ORS_API_KEY = '';
 
+// Blank WAHA_WEBHOOK_SECRET so the /webhook route runs in no-auth mode during tests
+// (deterministic, not dependent on the local .env value). Test files that intentionally
+// verify the secret/401 path (e.g. waha-webhook.test.ts) set their own value explicitly.
+process.env.WAHA_WEBHOOK_SECRET = '';
+
 // Blank LLM keys so the AI Router (default ON) never hits the network during tests.
 // rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
 // rule-based classification (deterministic, offline). Tests that exercise the LLM path

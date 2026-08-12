@@ -150,8 +150,8 @@ describe('WAHA Webhook & Guard Clause Integration Tests', () => {
     });
     expect(resValidHeader.statusCode).toBe(200);
 
-    // Cleanup env
-    delete process.env.WAHA_WEBHOOK_SECRET;
+    // Cleanup env to blank so subsequent tests run in no-auth mode
+    process.env.WAHA_WEBHOOK_SECRET = '';
   });
 
   it('POST /webhook: should bypass messages from numbers labeled as Admin', async () => {
