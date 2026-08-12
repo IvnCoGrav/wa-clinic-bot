@@ -190,14 +190,20 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     fallbackTemplate: fallbackGreeting,
   });
 
-  // Multi-intent: greeting + ask_price/faq + belum ada lokasi → JANGAN menolak, langsung
-  // alihkan ke menanyakan lokasi dulu (harga dibahas setelah lokasi diketahui).
+  // Multi-intent: greeting + ask_price/faq + belum ada lokasi → JAWAB pertanyaan customer
+  // via interest handler, lalu prepend greeting header wajib di depannya.
   if ((hasAskPrice || hasFaqQuestion) && !hasProvideLocation) {
-    return {
-      nextState: ConversationState.AWAITING_LOCATION,
-      replyText: TEMPLATES.askLocationFirstPrice(),
-      shouldSendReply: true,
-    };
+    const { handleInterestState } = await import('./interest');
+    const interestResult = await handleInterestState({ ...ctx, conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any });
+    
+    // Prepend greeting header wajib di depan jawaban AI
+    if (interestResult.replyText) {
+      interestResult.replyText = TEMPLATES.firstContactGreetingHeader() + '\n\n' + interestResult.replyText;
+    }
+    
+    // Tetap set nextState ke AWAITING_LOCATION karena lokasi belum diketahui
+    interestResult.nextState = ConversationState.AWAITING_LOCATION;
+    return interestResult;
   }
 
   // 4. Default Greeting Baru (Belum punya lokasi)

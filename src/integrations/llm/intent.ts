@@ -57,7 +57,7 @@ export class LLMIntentService {
             apiKey: this.apiKey,
             model: this.model,
             fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 120000),
             payload: {
               response_format: { type: 'json_object' },
               messages: [

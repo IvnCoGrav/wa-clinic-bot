@@ -1,5 +1,6 @@
 import { calculateLlmCost, deriveProvider } from './cost-calculator';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { isSimpleLogMode } from './stage-logger';
 
 export interface LlmAuditLogPayload {
   tenant_id?: string;
@@ -37,12 +38,14 @@ export function recordLlmUsage(payload: LlmAuditLogPayload): void {
     const cachedTokens = payload.cached_prompt_tokens || 0;
     const { totalCostIdr } = calculateLlmCost(payload.model_name, promptTokens, completionTokens, cachedTokens);
 
-    // Shadow Logging ke console (untuk memverifikasi kalkulasi tanpa harus langsung query DB)
-    console.log(
-      `[LLM AUDIT SHADOW] Task: ${payload.task_type} | Model: ${payload.model_name} | ` +
-        `Tokens: ${promptTokens} in (${cachedTokens} cached) / ${completionTokens} out | ` +
-        `Cost: Rp ${totalCostIdr.toLocaleString('id-ID')} | Phone: ${payload.customer_phone}`
-    );
+    // Shadow Logging ke console (hanya saat mode debug/verbose)
+    if (!isSimpleLogMode()) {
+      console.log(
+        `[LLM AUDIT SHADOW] Task: ${payload.task_type} | Model: ${payload.model_name} | ` +
+          `Tokens: ${promptTokens} in (${cachedTokens} cached) / ${completionTokens} out | ` +
+          `Cost: Rp ${totalCostIdr.toLocaleString('id-ID')} | Phone: ${payload.customer_phone}`
+      );
+    }
 
     buffer.push({
       ...payload,
@@ -152,7 +155,9 @@ export async function flushLlmAuditBuffer(): Promise<void> {
       await (prisma as any).llmAuditLog.createMany({
         data: records,
       });
-      console.log(`[LLM AUDIT BUFFER] Successfully batch inserted ${records.length} log items to database.`);
+      if (!isSimpleLogMode()) {
+        console.log(`[LLM AUDIT BUFFER] Successfully batch inserted ${records.length} log items to database.`);
+      }
     }
   } catch (err: any) {
     console.warn('[LLM AUDIT BUFFER] Failed to batch insert to database (DB offline / schema pending):', err?.message || err);

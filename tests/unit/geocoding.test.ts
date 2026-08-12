@@ -67,16 +67,15 @@ describe('Geocoding Service Local Database & Ambiguity Unit Tests', () => {
     expect(res.matchedSpan?.toLowerCase()).toBe('kenjern');
   });
 
-  it('9. should resolve fuzzy subdistrict with complex new suffix/prefix price variations', async () => {
+  it('9. should return kecamatan ambiguity for broad subdistrict name ("gayungan") unless explicit kelurahan is specified', async () => {
     const res1 = await geocodingService.geocodeText('gayungan ongkirnya berapaan ya');
-    // gayungan is a kelurahan — may resolve as precise or fuzzy depending on match
-    expect(res1.kelurahan?.toLowerCase()).toBe('gayungan');
+    // Gayungan is a broad Kecamatan containing 4 subdistricts — requires kelurahan clarification
+    expect(res1.isPrecise).toBe(false);
+    expect(res1.ambiguityResults?.length).toBeGreaterThan(1);
 
-    const res2 = await geocodingService.geocodeText('min itung ongkir dong gayungan');
+    const res2 = await geocodingService.geocodeText('kelurahan gayungan ongkirnya berapaan ya');
+    expect(res2.isPrecise).toBe(true);
     expect(res2.kelurahan?.toLowerCase()).toBe('gayungan');
-
-    const res3 = await geocodingService.geocodeText('berapa harganya kalau ke gayungan');
-    expect(res3.kelurahan?.toLowerCase()).toBe('gayungan');
   });
 
   it('10. should resolve precisely to Kelurahan Kenjeran if prefix is explicit', async () => {

@@ -66,7 +66,7 @@ export class PhrasingService {
         const templateConstraint = isGreetingIntent
           ? `ATURAN KHUSUS GREETING (SANGAT KETAT): Ini pesan GREETING. Pertahankan MINIMAL ${keepPercent}% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. Hanya ubah SEKITAR ${greetingChangePercent}% teks, misalnya ganti sedikit kata sapaan/penghubung/penutup saja. DILARANG menulis ulang pesan dari nol, mengganti struktur kalimat utama, atau mengubah fakta/brand name. Intinya: hasil akhir harus terlihat nyaris sama dengan teks acuan, hanya dengan variasi kecil yang wajar.\n\n`
           : isOngkirIntent
-          ? `ATURAN KHUSUS ONGKIR INFO (SANGAT KETAT): Ini pesan ONGKIR_INFO. Pertahankan MINIMAL 85% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. DILARANG KERAS menambah pesan/basa-basi penutup baru seperti menyuruh customer sabar di perjalanan, mendoakan perjalanan, atau nasihat di luar konteks. HANYA sampaikan jarak, ongkir, dan penutup ajakan memilih treatment yang ada di teks acuan.\n\n`
+          ? `ATURAN KHUSUS ONGKIR INFO (SANGAT KETAT): Ini pesan ONGKIR_INFO. Pertahankan MINIMAL 85% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. DILARANG KERAS menambah pesan/basa-basi penutup baru. DILARANG KERAS menanyakan ketersediaan waktu/jadwal (contoh terlarang: "kapan siap ditangani", "kapan mau dijadwalkan"). HARUS SELALU diakhiri persis dengan menanyakan pilihan treatment seperti di teks acuan (contoh: "Jadi mau pilih treatment apa bunda?").\n\n`
           : '';
 
         const systemPrompt = `${BOT_PERSONA_PROMPT}
@@ -101,7 +101,7 @@ ${templateConstraint}`;
             apiKey: this.apiKey,
             model: this.model,
             fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 120000),
             payload: {
               messages: [
                 { role: 'system', content: systemPrompt },

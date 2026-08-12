@@ -685,7 +685,7 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
 // LLM Client — panggil LLM, validasi Zod, retry-once dengan hint.
 // Dibungkus CircuitBreaker (CLOSED → OPEN → HALF_OPEN) reuse util existing.
 // =====================================================================
-const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_ROUTER_MS || 12000);
+const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_ROUTER_MS || 120000);
 
 export class AIRouterLLMClient {
   private breaker: CircuitBreaker<[AIRouterInput], AIRouterResponse>;

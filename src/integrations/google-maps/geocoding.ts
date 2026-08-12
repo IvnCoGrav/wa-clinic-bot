@@ -409,20 +409,52 @@ export class GeocodingService {
 
     // Kumpulkan daftar nama kecamatan & kota luas langsung dari gazetteer,
     // bukan hardcoded — supaya semua kecamatan di data ter-cover.
-    let kecamatanSet = new Set<string>();
+    let kecamatanMap = new Map<string, any[]>();
     try {
       const filePathForGate = getSubdistrictsFilePath();
       if (fs.existsSync(filePathForGate)) {
         const dataForGate = JSON.parse(fs.readFileSync(filePathForGate, 'utf-8'));
-        kecamatanSet = new Set(dataForGate.map((d: any) => d.Kecamatan.toLowerCase()));
+        for (const entry of dataForGate) {
+          const kecKey = entry.Kecamatan.toLowerCase().replace(/\s+/g, '');
+          const existing = kecamatanMap.get(kecKey) || [];
+          existing.push(entry);
+          kecamatanMap.set(kecKey, existing);
+        }
       }
     } catch (e) {
       // ignore — fallback ke list statis
     }
+
+    const cleanNorm = cleanText.replace(/\s+/g, '');
+    const lowerNorm = lower.replace(/\s+/g, '');
     const staticImpreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
-    const isKecamatanOnlyName = cleanText.length > 0 && kecamatanSet.has(cleanText);
-    const isStaticImpreciseWord = cleanText.length > 0 && staticImpreciseWords.includes(cleanText);
-    if ((isKecamatanOnlyName || isStaticImpreciseWord) && !hasExplicitKelurahanKeyword) {
+
+    // Cek apakah cleanText/lowerNorm mencocoki nama kecamatan luas di database
+    let matchedKecSubdistricts: any[] | null = null;
+    let matchedKecName = '';
+    for (const [kecKey, entries] of kecamatanMap.entries()) {
+      if (cleanNorm === kecKey || lowerNorm.includes(kecKey) || (cleanNorm.length >= 4 && kecKey.includes(cleanNorm))) {
+        matchedKecSubdistricts = entries;
+        matchedKecName = entries[0]?.Kecamatan || cleanText;
+        break;
+      }
+    }
+
+    const isStaticImpreciseWord = cleanText.length > 0 && staticImpreciseWords.some(w => cleanNorm.includes(w.replace(/\s+/g, '')));
+    const hasSpecificKelurahanInText = matchedKecSubdistricts ? matchedKecSubdistricts.some(d => {
+      const kelLower = d.Kelurahan_Desa.toLowerCase();
+      const kecLower = d.Kecamatan.toLowerCase();
+      return kelLower !== kecLower && lower.includes(kelLower);
+    }) : false;
+
+    if ((matchedKecSubdistricts || isStaticImpreciseWord) && !hasExplicitKelurahanKeyword && !hasSpecificKelurahanInText) {
+      if (matchedKecSubdistricts && matchedKecSubdistricts.length > 1) {
+        return {
+          isPrecise: false,
+          ambiguityResults: matchedKecSubdistricts,
+          matchedSpan: matchedKecName,
+        };
+      }
       return {
         isPrecise: false,
         kota: cleanText,
@@ -456,15 +488,23 @@ export class GeocodingService {
             const matchedKelurahanLower = item.Kelurahan_Desa.toLowerCase();
             
             // Check if this kelurahan name is also a broad kecamatan name in Sidoarjo/Surabaya
-            const kecNames = new Set(data.map((d: any) => d.Kecamatan.toLowerCase()));
-            const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel') || lower.includes('ds');
-            if (kecNames.has(matchedKelurahanLower) && !hasExplicitKelurahan) {
-              // Simpan sebagai fallback, jangan return langsung — coba LLM dulu
-              kecamatanOnlyFallback = {
-                isPrecise: false,
-                kota: matchedSpan,
-                matchedSpan,
-              };
+            const matchedKelNorm = matchedKelurahanLower.replace(/\s+/g, '');
+            const kecNames = new Set<string>(data.map((d: any) => String(d.Kecamatan || '').toLowerCase()));
+            const isAlsoKecamatanName = Array.from(kecNames).some(k => k === matchedKelurahanLower || k.replace(/\s+/g, '') === matchedKelNorm);
+            const hasExplicitKelurahan = lower.includes('kelurahan') || lower.includes('desa') || lower.includes('kel ') || lower.includes('kelurahan ') || lower.includes('ds ');
+
+            if (isAlsoKecamatanName && !hasExplicitKelurahan) {
+              const subdistrictsInKec = data.filter((d: any) =>
+                d.Kecamatan.toLowerCase() === matchedKelurahanLower ||
+                d.Kecamatan.toLowerCase().replace(/\s+/g, '') === matchedKelNorm
+              );
+              if (subdistrictsInKec.length > 1) {
+                return {
+                  isPrecise: false,
+                  ambiguityResults: subdistrictsInKec,
+                  matchedSpan,
+                };
+              }
             }
 
             const exactMatches = data.filter((d: any) => d.Kelurahan_Desa.toLowerCase() === matchedKelurahanLower);
