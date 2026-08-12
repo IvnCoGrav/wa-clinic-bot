@@ -6,6 +6,27 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ---
 
+## [Unreleased] - 2026-08-12
+
+### Fixed — Audit log kegagalan pesan outbound + Host-bind mount storage media + Resolusi JID LID
+
+- **`src/state-machine/machine.ts` & `src/services/message.service.ts`**:
+  - Balasan bot yang gagal terkirim (WAHA error / socket timeout / queue paused) kini **selalu dicatat ke database/memory** dengan `delivery_status: 'failed'`, `meta_error_code: 'WAHA_SEND_TEXT'`, dan detail error pada `payload_raw.sendError`. Menghilangkan bug di mana pesan gagal kirim hilang tanpa jejak di audit trail `messages`.
+  - `machine.ts` kini **wajib** menggunakan `${customer.phone}@c.us` (nomor HP asli customer) sebagai target `chatId` outbound, mencegah pengiriman ke JID LID palsu (seperti `79903991054369@c.us`) yang menyebabkan pesan `200 OK` di WAHA tetapi tidak pernah sampai ke HP customer.
+  - `src/integrations/waha/client.ts`: `resolvePrimaryJid` dilarang membuat JID `@c.us` dari angka mentah LID jika resolusi `/lids/` WAHA gagal.
+- **Persistent Storage & Permission Media (`docker-compose.yml`)**:
+  - Mengubah volume `app` dari Docker Named Volume (`storage_data:/app/storage`) menjadi **Host-Bind Mount (`./storage:/app/storage`)**.
+  - Folder `./storage` di host server kini dimiliki oleh `node:node` dengan izin tulis (permission `777`). Menghilangkan error `EACCES: permission denied` yang menyebabkan file gambar gagal ditulis dan terhapus setiap kali container di-rebuild.
+  - Service `waha` pada `docker-compose.yml` ditambahkan `extra_hosts: ["host.docker.internal:host-gateway"]` agar resolusi webhook di Linux host berjalan stabil.
+  - `src/routes/webhook.route.ts` ditambahkan log warning `[WAHA MEDIA WARNING]` jika pengunduhan gambar dari WAHA mengembalikan `null`.
+- **Test Suite**:
+  - `tests/setup.ts`: Menambahkan blanking `process.env.WAHA_WEBHOOK_SECRET = ''` agar test webhook deterministik dan bebas dari polusi `.env` lokal.
+  - `tests/unit/waha-client-qr.test.ts`: Mem-mock panggilan `axios.put` config webhook pada `startSession`.
+  - `src/services/conversation.service.ts`: `escalateToHumanHandling` mem-`await` pemanggilan `addLabel('hold')` sehingga assertion `getChatLabels` pada test deterministik.
+  - Test suite: **127 dari 127 file test (1.204 unit & integration test) 100% PASSED (0 FAIL)**.
+
+---
+
 ## [Unreleased] - 2026-08-11
 
 ### Added — Kolom DB label WhatsApp (admin/hold) + event-driven sync + admin dashboard
