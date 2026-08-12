@@ -12,6 +12,7 @@ import { ConversationState } from '@prisma/client';
 import { abuseDetectionService } from '../services/abuse-detection.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { contextStorage } from '../utils/context';
+import { stageLog } from '../utils/stage-logger';
 import { memoryAdClicks } from './tracking.route';
 import { prisma } from '../db/client';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
@@ -214,6 +215,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         console.warn(`[NO PHONE] Skipping message from unparseable chat ${chatId || '(unknown)'}.`);
         return reply.status(200).send({ status: 'IGNORED_NO_PHONE' });
       }
+
+      const msgObj = payload.message as any;
+      const inboundTextPreview = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || (payload.type === 'image' ? '[GAMBAR]' : '[MEDIA]');
+      stageLog('INCOMING', `Customer: "${inboundTextPreview.slice(0, 50).replace(/\n/g, ' ')}${inboundTextPreview.length > 50 ? '...' : ''}"`, phone);
       const contactName = payload._data?.notifyName;
 
       const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);

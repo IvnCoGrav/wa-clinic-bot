@@ -29,6 +29,9 @@ process.env.LLM_API_KEY = '';
 process.env.OPENAI_API_KEY = '';
 process.env.AI_MODEL_ROUTER = '';
 process.env.AI_MODEL_FALLBACK_CHAIN = ''; // blanking rantai fallback supaya test legacy (model-fallback) deterministik
+process.env.HUMANIZER_TYPING_AVERAGE_WPM = '48';
+process.env.HUMANIZER_MAX_TYPING_DELAY_MS = '6500';
+process.env.HUMANIZER_TYPING_REACTION_MS = '300';
 
 // Mock Prisma client globally for all unit and integration tests to fail fast
 // and trigger the in-memory fallback stores instantly when Postgres is offline.

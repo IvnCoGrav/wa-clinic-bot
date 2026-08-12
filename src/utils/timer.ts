@@ -20,6 +20,8 @@ function nextSeq(label: string): number {
  * Ukur durasi fn() dan log `label#seq xxxx.xxxms` (format mirip console.time).
  * Timer SELALU ditutup (blok finally), termasuk saat fn() throw / early-return.
  */
+import { isSimpleLogMode } from './stage-logger';
+
 export async function measure<T>(label: string, fn: () => Promise<T>): Promise<T> {
   const seq = nextSeq(label);
   const start = performance.now();
@@ -27,6 +29,8 @@ export async function measure<T>(label: string, fn: () => Promise<T>): Promise<T
     return await fn();
   } finally {
     const ms = performance.now() - start;
-    console.log(`${label}#${seq} ${ms.toFixed(3)}ms`);
+    if (!isSimpleLogMode()) {
+      console.log(`${label}#${seq} ${ms.toFixed(3)}ms`);
+    }
   }
 }

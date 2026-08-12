@@ -378,6 +378,15 @@ export class WahaClient implements IWahaClient {
   }
 
   /**
+   * Timeout khusus untuk indikator UI presencia (startTyping, stopTyping).
+   * Nilai kecil (default 3s) agar tidak menyandera pipeline pengiriman sendText
+   * bila WAHA terhambat.
+   */
+  private get presenceTimeoutMs(): number {
+    return parseInt(process.env.WAHA_PRESENCE_TIMEOUT_MS || '3000', 10);
+  }
+
+  /**
    * Mulai indikator status mengetik (startTyping)
    */
   public async startTyping(chatId: string): Promise<boolean> {
@@ -396,7 +405,7 @@ export class WahaClient implements IWahaClient {
             chatId: targetChatId,
             session: this.session,
           },
-          { headers: this.headers, timeout: this.timeoutMs }
+          { headers: this.headers, timeout: this.presenceTimeoutMs }
         )
       );
       return true;
@@ -425,7 +434,7 @@ export class WahaClient implements IWahaClient {
             chatId: targetChatId,
             session: this.session,
           },
-          { headers: this.headers, timeout: this.timeoutMs }
+          { headers: this.headers, timeout: this.presenceTimeoutMs }
         )
       );
       return true;
