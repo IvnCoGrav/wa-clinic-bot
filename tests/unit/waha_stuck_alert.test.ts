@@ -21,9 +21,11 @@ describe('WAHA Session Stuck Starting Alert Unit Tests', () => {
     };
 
     // Mock QueueService pause/resume
+    let isPaused = false;
     mockQueueService = {
-      pauseQueue: vi.fn().mockResolvedValue(undefined),
-      resumeQueue: vi.fn().mockResolvedValue(undefined),
+      pauseQueue: vi.fn().mockImplementation(async () => { isPaused = true; }),
+      resumeQueue: vi.fn().mockImplementation(async () => { isPaused = false; }),
+      isQueuePaused: vi.fn().mockImplementation(() => isPaused),
     };
 
     // Instantiate service using mocks
@@ -129,20 +131,24 @@ describe('WAHA Session Stuck Starting Alert Unit Tests', () => {
     );
   });
 
-  it('5. Sesi terputus (WORKING -> DISCONNECTED) memicu pauseQueue & alert WAHA_DISCONNECTED', async () => {
+  it('5. Sesi terputus (WORKING -> DISCONNECTED 2x berturut) memicu pauseQueue & alert WAHA_DISCONNECTED', async () => {
     // Sesi aktif awal
     monitor.setLastKnownStatus('WORKING');
     getStatusSpy.mockResolvedValue('DISCONNECTED');
 
+    // Polling 1: belum pause
     await monitor.checkStatus();
+    expect(mockQueueService.pauseQueue).not.toHaveBeenCalled();
 
-    // Harus memicu pauseQueue
+    // Polling 2: mencukupi threshold 2x berturut -> pauseQueue!
+    await monitor.checkStatus();
     expect(mockQueueService.pauseQueue).toHaveBeenCalledTimes(1);
   });
 
   it('6. Sesi tersambung kembali (DISCONNECTED -> WORKING) memicu resumeQueue', async () => {
-    // Sesi terputus awal
+    // Sesi terputus awal dan queue sedang terpause
     monitor.setLastKnownStatus('DISCONNECTED');
+    mockQueueService.pauseQueue();
     getStatusSpy.mockResolvedValue('WORKING');
 
     await monitor.checkStatus();

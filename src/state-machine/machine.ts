@@ -445,16 +445,26 @@ export class ConversationStateMachine {
         replyText: result.replyText,
       });
 
-      if (resultHuman.success) {
-        // Audit Log Pesan Outbound (Keluar)
-        await messageService.logMessage({
-          tenantId,
-          conversationId: activeConversation.id,
-          direction: Direction.OUTBOUND,
-          content: result.replyText,
-          payloadRaw: result.aiReasoning ? { aiReasoning: result.aiReasoning } : undefined,
-        });
+      // Audit Log Pesan Outbound (Keluar): dicatat SELALU — baik terkirim maupun
+      // gagal. Sebelumnya kegagalan sendText (WAHA down/timeout) tidak tercatat sama
+      // sekali (success=false → log dilewati), sehingga chat tidak terkirim tapi log
+      // pengiriman tidak menunjukkan jejak kegagalan. Kini gagal → delivery_status.
+      // Tambahkan error send ke payload_raw agar traceable.
+      const reason = result.aiReasoning ? { aiReasoning: result.aiReasoning } : undefined;
+      await messageService.logMessage({
+        tenantId,
+        conversationId: activeConversation.id,
+        direction: Direction.OUTBOUND,
+        content: result.replyText,
+        payloadRaw: !resultHuman.success
+          ? { ...(reason || {}), sendError: resultHuman.error || 'WAHA sendText failed' }
+          : reason,
+        deliveryStatus: resultHuman.success ? 'sent' : 'failed',
+        metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
+        metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',
+      });
 
+      if (resultHuman.success) {
         // Kirim Pricelist Image jika diinstruksikan oleh state handler.
         // Default hanya 1x per customer; boleh dikirim ulang jika handler set forcePricelistResend
         // (mis. saat customer minta pricelist lagi karena hilang / tidak terkirim).

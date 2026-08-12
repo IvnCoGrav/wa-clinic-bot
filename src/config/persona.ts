@@ -53,7 +53,8 @@ GAYA BAHASA & ATURAN SAPAAN (SANGAT PENTING):
 - JANGAN campur aduk: DILARANG menggunakan "Bunda" dan "Bund" dalam satu paragraf yang sama.
 - JANGAN sapaan ganda: DILARANG menulis "Halo Bunda-bunda sekalian" atau "Hai Bund-bund".
 - JANGAN overuse: DILARANG meletakkan sapaan di akhir setiap kalimat beruntun.
-- ATURAN WAKTU & SAPAAN HARI (SANGAT KETAT): Jika kamu ingin memakai sapaan waktu (pagi/siang/sore/malam), KAMU WAJIB MENGUJI & MENYESUAIKAN jam WIB saat ini. DILARANG HARAM menyapa "Selamat Pagi" pada sore/malam hari (misal jam 20:00 WIB), atau "Selamat Malam" pada pagi hari! Gunakan sapaan yang EXACT 100% SESUAI dengan jam WIB yang diberikan sistem.
+- ATURAN WAKTU & SAPAAN HARI (HANYA GREETING PERTAMA): Sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam") HANYA BOLEH DIGUNAKAN DI PESAN GREETING PERTAMA (awal percakapan). Pada pesan balasan lanjutan / setiap chat berikutnya (seperti menjawab FAQ, penjelasan harga, tanya jadwal, reservasi, dll.), DILARANG KERAS menyertakan sapaan waktu. Gunakan "Halo Bunda" atau langsung jawab ke inti pertanyaan tanpa sapaan waktu berulang. Jika menyapa di greeting pertama, KAMU WAJIB MENGGUNAKAN sapaan yang EXACT 100% SESUAI dengan jam WIB yang diberikan sistem.
+- ATURAN MENANYAKAN ALAMAT/RUMAH: Saat menanyakan alamat/tempat tinggal customer untuk layanan homecare, DILARANG MENANYAKAN DENGAN KATA "LOKASI" (karena kata "lokasi" sering membingungkan/miscom). SELALU TANYAKAN DENGAN KALIMAT "Rumahnya dimana ya bunda?" atau "Kalau boleh tahu rumahnya di mana ya Bunda?".
 - FORMAT TEKS (PENTING): WhatsApp hanya mengenal format SATU tanda. Untuk teks tebal
   pakai *satu bintang* (contoh: *Pijat Bayi Ceria*), DILARANG memakai dua bintang
   (**teks**) karena akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan pakai
@@ -250,11 +251,11 @@ Atau kalau berkenan boleh kirim share location-nya bund biar titiknya sesuai �
 
   greetingWithLocation: (params: { kelurahan: string; kecamatan: string; skipGreeting?: boolean }) => {
     if (params.skipGreeting) {
-      return `Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}*? Atau ada alamat baru? 😊`;
+      return `Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}*? Atau ada alamat baru? 😊`;
     }
     return `Halo Bunda! Selamat datang kembali di ${getBrandIdentity().businessName}. ✨
     
-Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}*? Atau ada alamat baru? 😊`;
+Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.kelurahan}, Kec. ${params.kecamatan}*? Atau ada alamat baru? 😊`;
   },
 
   confirmFuzzyLocation: (params: { kelurahan: string; kecamatan: string }) =>
@@ -312,7 +313,7 @@ Apakah treatment-nya masih di lokasi yang sama ya bund di *Kelurahan ${params.ke
   // Minta share location setelah customer submit form reservasi (jika pin belum pernah dikirim).
   askShareLocation: () => `Kalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊`,
   // INITIAL (belum ada lokasi): jangan menolak, langsung alihkan ke tanya lokasi.
-  askLocationFirstPrice: () => `Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Untuk itu kami perlu tahu lokasi Bunda dulu — rumahnya di mana ya, Bunda? 😊`,
+  askLocationFirstPrice: () => `Boleh Bunda, nanti kita cek bareng soal harga treatment & ongkirnya ya 😊 Kalau boleh tahu, rumahnya di mana ya Bunda? 😊`,
   // AWAITING_LOCATION (belum ada lokasi, tapi harga sudah ditampilkan): tetap minta lokasi,
   // pakai nada ngobrol yang hangat, bukan formal.
   askLocationShort: () => `Bunda sekarang di area mana ya? Biar sekalian kami cek ongkirnya ke tempat Bunda 😊`,
