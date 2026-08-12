@@ -12,6 +12,8 @@ import { fireCapiEvent } from '../../services/capi.service';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
 import { buildPriceAnswer, isAskPrice, isPricelistLostRequest } from '../../services/price-answer.service';
 import { isLocationQueryMessage } from '../utils/location-query';
+import { stageLog } from '../../utils/stage-logger';
+import { parseAgeTextToBirthDate, parseAgeTextToMonths, monthsBetween } from '../../utils/age-calculator';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
@@ -243,12 +245,45 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
 
     intentResult = { intent: mappedIntent, confidence: nlu!.confidence };
     console.log(`[INTENT DETECTED] (NLU Layer) Customer: "${userText}" → NLU intents: [${nlu!.intents.join(',')}] → Mapped: ${mappedIntent} (conf: ${nlu!.confidence.toFixed(2)})`);
+    stageLog('INTENT', `Intent: [${mappedIntent}] (Confidence: ${nlu!.confidence.toFixed(2)})`, customer.phone);
   } else {
     // Fallback to legacy LLM intent service (5-intent classifier)
     intentResult = await llmIntentService.detectIntent(userText);
     console.log(`[INTENT DETECTED] (Legacy LLM) Customer Message: "${userText}" → Intent: ${intentResult.intent}`);
+    stageLog('INTENT', `Intent (Legacy): [${intentResult.intent}]`, customer.phone);
   }
 
+  // --- SMART AGE MATCHER ---
+  // Jika pesan menyebutkan umur (misal "anak 8 bulan", "bayi 6 bln") dan intent-nya 'other',
+  // re-map secara pintar ke 'faq_question' agar diproses oleh pencarian katalog umur + RAG FAQ LLM.
+  const detectedAgeMonths = parseAgeTextToMonths(userText);
+  if (intentResult.intent === 'other' && detectedAgeMonths !== null) {
+    console.log(`[SMART AGE MATCH] Detected age ${detectedAgeMonths} months in "${userText}". Re-mapping intent 'other' -> 'faq_question'.`);
+    stageLog('INTENT', `Smart Age Match: Usia ${detectedAgeMonths} bulan → Re-mapped to faq_question`, customer.phone);
+    intentResult.intent = 'faq_question';
+  }
+
+  // --- QUESTION OVERRIDE GUARD ---
+  // Jika customer mengajukan pertanyaan (mengandung '?', 'tanya', 'berapa', 'brp', 'apakah', 'usia', dst.),
+  // JANGAN izinkan intent ter-map ke 'interested' (karena frasa seperti "saya ingin tanya" sering disalahartikan sebagai minat reservasi).
+  // Pertanyaan WAJIB dijawab terlebih dahulu sebagai 'faq_question'!
+  const isQuestionMessage = /\?/.test(userText) || /\b(tanya|bertanya|berapa|brp|apakah|bagaimana|kapan|dimana|usia|umur)\b/i.test(userText);
+  if (intentResult.intent === 'interested' && isQuestionMessage) {
+    console.log(`[QUESTION OVERRIDE] Message "${userText}" is a question but was mapped to 'interested'. Overriding to 'faq_question'.`);
+    stageLog('INTENT', `Question Override: Intent 'interested' -> Re-mapped to 'faq_question'`, customer.phone);
+    intentResult.intent = 'faq_question';
+  }
+
+  // --- REFERENTIAL SELECTION GUARD ---
+  // Jika customer menjawab dengan frasa referensial pilihan treatment (misal "yang tadi saja",
+  // "itu aja bund", "yang barusan", "yang itu", "yg tadi aja") dan intent-nya 'other',
+  // re-map ke 'interested' karena customer sedang MEMILIH treatment yang sudah dibahas sebelumnya.
+  const isReferentialSelection = /\b(yang\s+(tadi|itu|barusan|pertama|kedua)|itu\s+(aja|saja)|tadi\s+(aja|saja)|yg\s+(tadi|itu|barusan))\b/i.test(userText);
+  if (intentResult.intent === 'other' && isReferentialSelection) {
+    console.log(`[REFERENTIAL SELECTION] Message "${userText}" is a treatment selection (referential). Re-mapping intent 'other' -> 'interested'.`);
+    stageLog('INTENT', `Referential Selection: Intent 'other' -> Re-mapped to 'interested'`, customer.phone);
+    intentResult.intent = 'interested';
+  }
   switch (intentResult.intent) {
     case 'medical_query':
     case 'complaint':
@@ -321,25 +356,39 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       let chunksToUse = relevantChunks;
       if (chunksToUse.length === 0) {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-        // Coba match treatment spesifik dari pertanyaan
-        const matchedItems = treatmentCatalogService.searchCatalogItems(userText);
-        const catalogItems = matchedItems.length > 0
-          ? matchedItems
-          : treatmentCatalogService.getAllServices();
+        
+        let catalogItems: any[] = [];
+        let isAgeMatch = false;
+
+        if (detectedAgeMonths !== null) {
+          catalogItems = treatmentCatalogService.getServicesByAge(detectedAgeMonths);
+          if (catalogItems.length > 0) {
+            isAgeMatch = true;
+            console.log(`[AGE SMART MATCH] Injecting ${catalogItems.length} catalog items for age ${detectedAgeMonths} months.`);
+          }
+        }
+
+        if (catalogItems.length === 0) {
+          const matchedItems = treatmentCatalogService.searchCatalogItems(userText);
+          catalogItems = matchedItems.length > 0 ? matchedItems : treatmentCatalogService.getAllServices();
+        }
+
         if (catalogItems.length > 0) {
-          const isSpecific = matchedItems.length > 0;
+          const isSpecific = catalogItems.length < treatmentCatalogService.getAllServices().length;
           const catalogData = treatmentCatalogService.formatCatalogData(catalogItems);
           chunksToUse = [{
-            id: isSpecific ? 'treatment-catalog-specific' : 'treatment-catalog',
+            id: isAgeMatch ? 'treatment-catalog-age' : (isSpecific ? 'treatment-catalog-specific' : 'treatment-catalog'),
             tenantId,
             sourceType: 'catalog' as any,
-            title: isSpecific
-              ? 'Layanan Treatment Relevan dengan Pertanyaan'
-              : `Katalog Layanan Treatment ${getBrandIdentity().businessName}`,
+            title: isAgeMatch
+              ? `Layanan Treatment yang Cocok untuk Usia Terdeteksi`
+              : (isSpecific
+                ? 'Layanan Treatment Relevan dengan Pertanyaan'
+                : `Katalog Layanan Treatment ${getBrandIdentity().businessName}`),
             content: catalogData,
             documentName: 'treatment-catalog',
           }];
-          console.log(`[FAQ CATALOG FALLBACK] No KB match for "${userText}", injecting ${isSpecific ? 'specific' : 'full'} treatment catalog as context.`);
+          console.log(`[FAQ CATALOG FALLBACK] Injecting ${isAgeMatch ? 'age-filtered' : (isSpecific ? 'specific' : 'full')} treatment catalog as context.`);
         }
       }
 
@@ -385,7 +434,8 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       }
 
       // 4. Generate balasan FAQ natural berbasis RAG + Persona (CTA menyatu dalam 1 generation call)
-      const faqResult = await llmResponseGenerator.generateFaqResponseWithDetails(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id);
+      const isLocationKnown = conversation.current_state !== ConversationState.INITIAL && conversation.current_state !== ConversationState.AWAITING_LOCATION;
+      const faqResult = await llmResponseGenerator.generateFaqResponseWithDetails(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id, isLocationKnown);
 
       // 4b. Simpan memori pelanggan jika LLM mengekstrak fakta permanen baru
       if (faqResult.extracted_preferences && Object.keys(faqResult.extracted_preferences).length > 0) {

@@ -25,6 +25,39 @@ const memoryKnowledgeChunks: Array<{
   documentName?: string | null;
 }> = [];
 
+/**
+ * Membersihkan query pencarian dari kata basa-basi, sapaan, dan slang percakapan.
+ * Menghasilkan teks bersih yang terfokus pada kata kunci domain penting untuk FTS.
+ */
+export function sanitizeQueryForFts(userQuery: string): string {
+  if (!userQuery || typeof userQuery !== 'string') return '';
+  let text = userQuery.toLowerCase();
+
+  // 1. Buang sapaan & kata pengantar basa-basi
+  text = text.replace(/\b(selamat\s+(pagi|siang|sore|malam)|halo|hallo|hai|permisi|mohon\s+info|mau\s+tanya|ingin\s+tanya|bisa\s+tolong|bantu|kira\s+kira)\b/gi, ' ');
+
+  // 2. Normalisasi singkatan & slang umum
+  text = text
+    .replace(/\bmin\.(?=\s*(?:di|usia|umur|berapa|\d))/gi, 'minimal ')
+    .replace(/\bmin\b(?=\s*(?:di|usia|umur|berapa|\d))/gi, 'minimal ')
+    .replace(/\bbrp\b/gi, 'berapa')
+    .replace(/\butk\b/gi, 'untuk')
+    .replace(/\bbln\b/gi, 'bulan')
+    .replace(/\bthn\b/gi, 'tahun')
+    .replace(/\bdgn\b/gi, 'dengan')
+    .replace(/\b(klo|kalo)\b/gi, 'kalau')
+    .replace(/\bkrn\b/gi, 'karena');
+
+  // 3. Hapus tanda baca & stopword umum tanpa membuang kata domain penting
+  text = text
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|gimana|bagaimana|siapa|saya)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text;
+}
+
 export class KnowledgeBaseService {
   /**
    * Update a chunk directly in memory store (fallback/testing).
@@ -124,17 +157,11 @@ export class KnowledgeBaseService {
   public async searchRelevantChunks(userQuery: string, limit = 3, tenantId: string): Promise<KnowledgeChunkResult[]> {
     if (!userQuery || userQuery.trim().length === 0) return [];
 
-    const cleanQuery = userQuery
-      .toLowerCase()
-      .replace(/[^a-zA-Z0-9\s]/g, ' ')
-      .replace(/\b(apakah|yang|nanti|ya|dong|kah|sih|min|bunda|kak|ga|gak|apa|di|ke|dari|ini|itu|dengan|untuk|gimana|bagaimana|siapa)\b/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
+    const cleanQuery = sanitizeQueryForFts(userQuery);
     const queryToSearch = cleanQuery.length > 0 ? cleanQuery : userQuery;
 
     try {
-      // 1. Try websearch_to_tsquery with cleanQuery (robust against extra natural language stop words)
+      // 1. Try websearch_to_tsquery with cleanQuery (robust against extra natural language stop words & slang)
       let rawResults = await prisma.$queryRaw<any[]>`
         SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
                ts_rank(to_tsvector('simple', content), websearch_to_tsquery('simple', ${queryToSearch})) as rank
@@ -144,7 +171,23 @@ export class KnowledgeBaseService {
         LIMIT ${limit};
       `;
 
-      // 2. Fallback to plainto_tsquery with raw userQuery if clean search yields no results
+      // 2. Fallback ke OR-based tsquery jika pencarian ketat AND bernilai 0
+      if ((!rawResults || rawResults.length === 0) && cleanQuery.length > 0) {
+        const terms = cleanQuery.split(/\s+/).filter((w) => w.length > 2);
+        if (terms.length > 1) {
+          const orQuery = terms.join(' | ');
+          rawResults = await prisma.$queryRaw<any[]>`
+            SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",
+                   ts_rank(to_tsvector('simple', content), to_tsquery('simple', ${orQuery})) as rank
+            FROM knowledge_chunks
+            WHERE tenant_id = ${tenantId} AND to_tsvector('simple', content) @@ to_tsquery('simple', ${orQuery})
+            ORDER BY rank DESC
+            LIMIT ${limit};
+          `;
+        }
+      }
+
+      // 3. Fallback to plainto_tsquery with raw userQuery if clean search yields no results
       if (!rawResults || rawResults.length === 0) {
         rawResults = await prisma.$queryRaw<any[]>`
           SELECT id, tenant_id as "tenantId", source_type as "sourceType", title, content, document_name as "documentName",

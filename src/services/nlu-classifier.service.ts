@@ -278,7 +278,7 @@ You MUST end your response with this complete JSON block (values may be null/omi
           apiKey,
           model: primaryModel,
           fallbackModel: getFallbackModel(),
-          timeoutMs: Number(process.env.LLM_TIMEOUT_NLU_MS || 15000),
+          timeoutMs: Number(process.env.LLM_TIMEOUT_NLU_MS || 120000),
           isContentValid: (content) => {
             try {
               JSON.parse(this.sanitizeJson(content));

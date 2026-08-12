@@ -15,6 +15,28 @@ const YEAR_DAYS = 365.25;
 const MONTH_DAYS = 30.44;
 
 /**
+ * Ekstrak total usia dalam bulan langsung dari teks usia Indonesia.
+ * Contoh: "6 bulan" → 6; "1 tahun 2 bulan" → 14; "1 tahun" → 12.
+ * Mengembalikan null jika teks tidak memuat unit usia bulan/tahun.
+ */
+export function parseAgeTextToMonths(ageText: string): number | null {
+  if (!ageText || typeof ageText !== 'string') return null;
+  const lower = ageText.toLowerCase();
+
+  let years = 0;
+  let months = 0;
+
+  const yearMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:tahun|thn|th\b|taon)\b/);
+  if (yearMatch) years = parseFloat(yearMatch[1].replace(',', '.')) || 0;
+
+  const monthMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:bulan|bln|bl\b)\b/);
+  if (monthMatch) months = parseFloat(monthMatch[1].replace(',', '.')) || 0;
+
+  if (years === 0 && months === 0) return null;
+  return Math.round(years * 12 + months);
+}
+
+/**
  * Estimasi tanggal lahir dari teks usia Indonesia.
  * Contoh: "6 bulan" → referenceDate - 6 bulan; "1 tahun 2 bulan" → -14 bulan;
  * "3 minggu" → -21 hari; "10 hari" → -10 hari.

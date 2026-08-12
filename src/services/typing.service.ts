@@ -1,5 +1,6 @@
 import { IWahaClient, wahaClient } from '../integrations/waha/client';
 import { measure } from '../utils/timer';
+import { stageLog, isSimpleLogMode } from '../utils/stage-logger';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -318,11 +319,16 @@ export class TypingService {
 
           const typingDelayMs = this.calculateTypingDelay(bubbleContent);
           const adjustedMs = Math.round(typingDelayMs / this.speedFactor);
-          console.log(`[TYPING DELAY] Bubble ${i + 1}: original=${typingDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedMs}ms`);
+          if (!isSimpleLogMode()) {
+            console.log(`[TYPING DELAY] Bubble ${i + 1}: original=${typingDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedMs}ms`);
+          } else {
+            stageLog('TYPING', `Simulasi pengetikan bubble ${i + 1}/${bubbles.length} (${(adjustedMs / 1000).toFixed(1)}s)`, chatId.replace(/@.*$/, ''));
+          }
           
           await measure(`TYPING_DELAY_BUBBLE_${i + 1}`, () => this.sleep(typingDelayMs));
 
-          await this.client.stopTyping(chatId);
+          // Stop typing secara non-blocking (fire-and-forget) agar tidak menunda pengiriman sendText
+          this.client.stopTyping(chatId).catch(() => {});
           typingStopped = true; // Status typing di-stop secara normal
         }
 
@@ -332,13 +338,18 @@ export class TypingService {
           throw new Error(`WAHA sendText failed on bubble ${i + 1} of ${bubbles.length}`);
         }
 
+        const previewText = bubbleContent.slice(0, 45).replace(/\n/g, ' ');
+        stageLog('OUTBOUND', `Outbound terkirim (${i + 1}/${bubbles.length}): "${previewText}${bubbleContent.length > 45 ? '...' : ''}"`, chatId.replace(/@.*$/, ''));
+
         bubblesSent++;
 
         // Inter-bubble delay jika masih ada bubble berikutnya
         if (isEnabled && i < bubbles.length - 1) {
           const interBubbleDelayMs = this.calculateInterBubbleDelay();
           const adjustedInter = Math.round(interBubbleDelayMs / this.speedFactor);
-          console.log(`[INTER-BUBBLE DELAY] Between bubble ${i + 1} and ${i + 2}: original=${interBubbleDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedInter}ms`);
+          if (!isSimpleLogMode()) {
+            console.log(`[INTER-BUBBLE DELAY] Between bubble ${i + 1} and ${i + 2}: original=${interBubbleDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedInter}ms`);
+          }
           
           await measure(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`, () => this.sleep(interBubbleDelayMs));
         }

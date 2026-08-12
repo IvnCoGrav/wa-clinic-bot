@@ -23,7 +23,7 @@ export interface FAQResponseResult {
 }
 
 export class LLMResponseGenerator {
-  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?], FAQResponseResult>;
+  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?, boolean?], FAQResponseResult>;
 
   private get apiKey(): string {
     return process.env.LLM_API_KEY || '';
@@ -33,7 +33,7 @@ export class LLMResponseGenerator {
   }
 
   constructor() {
-    this.llmBreaker = new CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?], FAQResponseResult>(
+    this.llmBreaker = new CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?, boolean?], FAQResponseResult>(
       async (
         userQuestion: string,
         contextText: string,
@@ -41,7 +41,8 @@ export class LLMResponseGenerator {
         conversationId?: string,
         tenantId?: string,
         treatmentNameForFollowUp?: string,
-        customerId?: string
+        customerId?: string,
+        isLocationKnown?: boolean
       ) => {
         const store = llmOutageStorage.getStore();
         if (store?.simulateOutage) {
@@ -142,9 +143,18 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
           console.log(`[FAQ CACHE] MISS for query: "${userQuestion}"`);
         }
 
-        let ctaInstruction = '6. Setelah jawaban inti, tutup dengan ajakan lanjut ke pengisian list reservasi/booking yang MENYATU secara natural dengan konteks jawabanmu (bukan template terpisah).';
-        if (treatmentNameForFollowUp && treatmentNameForFollowUp.trim()) {
-          ctaInstruction = `6. Setelah jawaban inti, tutup dengan ajakan lanjut booking yang MENYATU secara natural dengan konteks jawabanmu. Sebutkan nama treatment "${treatmentNameForFollowUp.trim()}" dan tawarkan bantu jadwalkan.`;
+        let ctaInstruction = '';
+        if (isLocationKnown) {
+          if (treatmentNameForFollowUp && treatmentNameForFollowUp.trim()) {
+            ctaInstruction = `6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, tutup dengan ajakan lanjut booking yang MENYATU secara natural dengan konteks jawabanmu. Sebutkan nama treatment "${treatmentNameForFollowUp.trim()}" (contoh: "Mau saya bantu jadwalkan ${treatmentNameForFollowUp.trim()} sekalian, Bunda? 🙏🏻"). DILARANG menanyakan alamat/rumah lagi karena kami sudah tahu.`;
+          } else {
+            ctaInstruction = '6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, tutup pesan dengan menanyakan apakah Bunda tertarik lanjut ke reservasi. DILARANG menanyakan alamat/rumah lagi karena kami sudah tahu.';
+          }
+        } else {
+          ctaInstruction = '6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, Anda WAJIB MENGAKHIRI PESAN dengan menanyakan area/rumah tempat tinggal customer secara ramah (contoh: "Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"). DILARANG KERAS menanyakan hal lain (seperti bertanya usia bayi) di akhir kalimat, HARUS menanyakan rumah/daerah. DILARANG KERAS memakai kata "lokasi".';
+          if (treatmentNameForFollowUp && treatmentNameForFollowUp.trim()) {
+            ctaInstruction = `6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, tutup dengan ajakan lanjut booking yang MENYATU secara natural dengan konteks jawabanmu. Sebutkan nama treatment "${treatmentNameForFollowUp.trim()}" dan WAJIB tanyakan rumah customer di akhir chat (contoh: "Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ongkirnya untuk treatment ${treatmentNameForFollowUp.trim()} 🙏🏻"). DILARANG KERAS menanyakan hal lain. DILARANG KERAS memakai kata "lokasi".`;
+          }
         }
 
         // Batas maksimal karakter per balasan AI (tenant-aware, dari persona config).
@@ -174,9 +184,9 @@ ${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemu
 ATURAN BALASAN:
 1. Lakukan analisis terlebih dahulu terhadap apa yang sedang ditanyakan/dibahas oleh customer berdasarkan pesan terakhir dan riwayat percakapan. Tuliskan analisis ini di bagian "REASONING".
    PENTING: Jika customer menggunakan kata referensial seperti "berapa itu", "berapa yang tadi", "yang itu", "yang baru", dll., WAJIB gunakan info "Treatment yang terakhir dibahas" pada section [KONTEKS PERCAKAPAN] di atas sebagai sumber utama penentuan treatment. Jika section tersebut "Belum ada", baru gunakan konteks dari riwayat percakapan.
-2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "JAWABAN" (gunakan informasi dari referensi dokumen di atas). Jawab dengan singkat dan jelas.
+2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "JAWABAN" (gunakan informasi dari referensi dokumen di atas). Jawab layaknya chat WhatsApp biasa yang mengalir natural. DILARANG KERAS menggunakan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:", "Berikut adalah informasi yang diminta", atau sejenisnya. Langsung ke inti jawaban dengan gaya bahasa ngobrol!
    FORMAT TEKS (WAJIB): WhatsApp hanya mengenali format SATU tanda. Untuk teks tebal pakai SATU bintang (*teks*), DILARANG memakai dua bintang (**teks**) karena markdown ganda akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan ~teks~.
-3. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
+3. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog kaku. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
 4. JIKA ada LEBIH DARI SATU treatment relevan di Referensi: sebutkan SEMUANYA (jangan pilih satu secara sepihak tanpa alasan) — tetap dengan nada rekomendasi.
 5. JIKA TIDAK ADA treatment/data yang relevan dengan pertanyaan di Referensi: berikan penjelasan pelayanan homecare yang Bunda cari secara ramah dan profesional. DILARANG HARAM mengucapkan "tanya ke tim kami", "mau saya cekkan ke tim dulu", atau "tidak bisa memastikan harganya".
 6. JIKA pertanyaan customer berisi referensi ke treatment yang baru saja dibahas (misal "berapa itu", "yang tadi berapa"): langsung jawab dengan harga treatment tersebut berdasarkan Referensi. JANGAN mengulang penjelasan treatment, LANGSUNG kasih harganya.
@@ -186,7 +196,7 @@ ATURAN BALASAN:
    Contoh benar: "Bunda maksudnya *Paket Spa Silver* (150rb, 60 menit) atau *Paket Spa Gold* (250rb, 90 menit) ya? Biar saya kasih info yang pas 😊"
    Contoh SALAH (tetap dilarang): "Untuk harga pastinya, boleh tanya ke tim kami dulu ya" — ini BUKAN klarifikasi nama, ini cuci tangan, TETAP dilarang.
    Pengecualian ini TIDAK berlaku jika Referensi hanya punya SATU item yang match, atau jika customer menanyakan kebutuhan umum (bukan menyebut nama spesifik) — untuk kasus itu tetap ikuti poin 3 & 4 (mode rekomendasi, sebutkan semua opsi relevan sekaligus, bukan tanya balik).
-8. ATURAN SAPAAN (DILARANG SAPAAN WAKTU): Ini adalah balasan FAQ/informasi lanjutan. DILARANG KERAS menyertakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam"). Gunakan "Halo Bunda" atau langsung jawab ke inti pertanyaan.
+8. ATURAN SAPAAN (DILARANG SAPAAN WAKTU DAN GREETING HEADER): Ini adalah balasan FAQ/informasi lanjutan. DILARANG KERAS menyertakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam"). DILARANG mengulangi greeting header ("Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi...") karena greeting header sudah ditambahkan otomatis oleh sistem di depan pesanmu. Langsung jawab ke inti pertanyaan.
 ${ctaInstruction}
 
 ${maxCharsInstruction}
@@ -241,7 +251,7 @@ ATURAN EKSTRAKSI PREFERENSI:
             apiKey: this.apiKey,
             model: modelConfig.modelName,
             fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 15000),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 120000),
             payload: {
               temperature: modelConfig.temperature,
               max_tokens: modelConfig.maxTokens,
@@ -356,7 +366,8 @@ ATURAN EKSTRAKSI PREFERENSI:
         conversationId?: string,
         tenantId?: string,
         treatmentNameForFollowUp?: string,
-        customerId?: string
+        customerId?: string,
+        isLocationKnown?: boolean
       ) => {
         return {
           answer: this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp),
@@ -416,7 +427,8 @@ ATURAN EKSTRAKSI PREFERENSI:
     conversationId?: string,
     tenantId?: string,
     treatmentNameForFollowUp?: string,
-    customerId?: string
+    customerId?: string,
+    isLocationKnown?: boolean
   ): Promise<FAQResponseResult> {
     const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
 
@@ -427,7 +439,7 @@ ATURAN EKSTRAKSI PREFERENSI:
 
     try {
       const res = await measure('LLM_GENERATOR_API_CALL', () =>
-        this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId)
+        this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId, isLocationKnown)
       );
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
       return {
@@ -454,7 +466,8 @@ ATURAN EKSTRAKSI PREFERENSI:
     conversationId?: string,
     tenantId?: string,
     treatmentNameForFollowUp?: string,
-    customerId?: string
+    customerId?: string,
+    isLocationKnown?: boolean
   ): Promise<string> {
     const result = await this.generateFaqResponseWithDetails(
       userQuestion,
