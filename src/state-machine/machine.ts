@@ -47,7 +47,7 @@ export class ConversationStateMachine {
     const { commandService } = await import('../services/command.service');
     const cmdResult = await commandService.tryHandle(ctx, tenantId);
     if (cmdResult) {
-      const cmdChatId = (incomingMessage as any).chatId || `${customer.phone}@c.us`;
+      const cmdChatId = `${customer.phone}@c.us`;
       const cmdSent = await this.typingSvc.simulateHumanReply({
         chatId: cmdChatId,
         incomingMessageId: incomingMessage.id,
@@ -436,8 +436,9 @@ export class ConversationStateMachine {
 
     // 5. Kirim Balasan Otomatis via Typing Simulation Service jika required
     if (result.shouldSendReply && result.replyText) {
-      // Memulai alur simulasi ngetik manusia: sendSeen -> reading delay -> per bubble (startTyping -> typing delay -> stopTyping -> sendText)
-      const chatId = (incomingMessage as any).chatId || `${customer.phone}@c.us`;
+      // Selalu gunakan nomor HP asli customer (customer.phone@c.us) sebagai target chatId
+      // agar pesan tidak terkirim ke JID palsu (mis. LID number@c.us) jika resolusi LID WAHA gagal.
+      const chatId = `${customer.phone}@c.us`;
       const resultHuman = await this.typingSvc.simulateHumanReply({
         chatId,
         incomingMessageId: incomingMessage.id,

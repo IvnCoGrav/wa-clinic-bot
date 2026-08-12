@@ -264,7 +264,11 @@ export class WahaClient implements IWahaClient {
     
     if (chatId.includes('@lid')) {
       const pn = await this.getPhoneNumberFromLid(chatId);
-      return `${pn}@c.us`;
+      const rawLidUser = chatId.replace(/@.*$/, '');
+      if (pn && pn !== rawLidUser) {
+        return `${pn}@c.us`;
+      }
+      return chatId;
     }
     
     if (!chatId.includes('@c.us')) {
