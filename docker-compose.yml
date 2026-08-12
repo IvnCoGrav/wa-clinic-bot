@@ -6,7 +6,7 @@ services:
     expose:
       - "3000"
     volumes:
-      - storage_data:/app/storage
+      - ./storage:/app/storage
     # Forward SEMUA var dari .env server ke container app (LLM/ORS/Redis/admin keys dll).
     # Nilai di blok `environment` di bawah tetap MENIMPA env_file — jadi var jaringan
     # (DATABASE_URL, WAHA_BASE_URL, PORT, HOST) aman memakai nilai container.
@@ -111,6 +111,8 @@ services:
       - WAHA_NOWEB_STORE_FULLSYNC=true
       - WAHA_NOWEB_STORE_FULL_SYNC=true
       - WAHA_WEBHOOKS=[{"url":"http://host.docker.internal:3000/webhook","events":["message","message.any","session.status"]}]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:
@@ -127,4 +129,3 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
-  storage_data:
