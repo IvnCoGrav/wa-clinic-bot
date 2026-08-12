@@ -114,12 +114,18 @@ describe('WahaClient — getAuthQr / getSessionStatus / startSession', () => {
       expect(await client.getSessionStatus()).toBe('DISCONNECTED');
     });
 
-    it('startSession POST ke /api/sessions/{name}/start dan mengembalikan STARTED', async () => {
+    it('startSession PUT config webhook lalu POST ke /api/sessions/{name}/start dan mengembalikan STARTED', async () => {
       forceRealHttp();
+      mockedAxios.put.mockResolvedValueOnce({ status: 200, data: {} });
       mockedAxios.post.mockResolvedValueOnce({ status: 200, data: {} });
 
       const client = newClient();
       expect(await client.startSession()).toBe('STARTED');
+      expect(mockedAxios.put).toHaveBeenCalledWith(
+        expect.stringContaining('/api/sessions/default'),
+        expect.objectContaining({ config: expect.anything() }),
+        expect.anything()
+      );
       expect(mockedAxios.post).toHaveBeenCalledWith(
         expect.stringContaining('/api/sessions/default/start'),
         expect.anything(),
@@ -129,10 +135,20 @@ describe('WahaClient — getAuthQr / getSessionStatus / startSession', () => {
 
     it('startSession mengembalikan FAILED saat request gagal', async () => {
       forceRealHttp();
+      mockedAxios.put.mockResolvedValueOnce({ status: 200, data: {} });
       mockedAxios.post.mockRejectedValueOnce({ response: { data: { status: 500 } } });
 
       const client = newClient();
       expect(await client.startSession()).toBe('FAILED');
+    });
+
+    it('startSession tetap lanjut ke start walau PUT config webhook gagal (best-effort)', async () => {
+      forceRealHttp();
+      mockedAxios.put.mockRejectedValueOnce({ response: { data: { status: 500 } } });
+      mockedAxios.post.mockResolvedValueOnce({ status: 200, data: {} });
+
+      const client = newClient();
+      expect(await client.startSession()).toBe('STARTED');
     });
 
     it('getSession GET ke /api/sessions/{name} dan mengembalikan objek session', async () => {
