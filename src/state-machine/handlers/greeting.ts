@@ -29,11 +29,19 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   // 2. Deteksi teks lokasi terarah (Direct Location Query / Geocoding Dini)
   // NLU Enhancement: Prefer location_text entity from NLU over raw text for geocoding
   const nluLocationText = ctx.nluResult?.entities?.location_text;
-  const textForGeocode = nluLocationText || userText;
 
-  const hasLocationKeyword = /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
-                             /^ongkir\s+ke\s+[a-z]+/i.test(userText.trim()) || 
-                             /^rumah\s+saya\s+di\s+[a-z]+/i.test(userText.trim()) || 
+  // Ekstraksi frasa kandidat lokasi dari kalimat percakapan (misal "Rumah sy di kalijudan taruna V")
+  const extractedLocationPhrase = (() => {
+    const match = userText.match(/\b(?:di|ke|rumah\s*(?:saya|sy)?\s*di|alamat\s*(?:saya|sy)?\s*di|daerah|kelurahan|desa|kecamatan)\s+([^,.!?\n]+)/i);
+    return match ? match[1].trim() : null;
+  })();
+
+  const textForGeocode = nluLocationText || extractedLocationPhrase || userText;
+
+  const hasLocationKeyword = !!extractedLocationPhrase ||
+                             /\bongkir\s+(?:ke|di)\s+[a-z]+/i.test(userText.trim()) ||
+                             /\b(di|ke|rumah\s*(?:saya|sy)?\s*di|alamat\s*(?:saya|sy)?\s*di)\s+[a-z]+/i.test(userText.trim()) ||
+                             /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
                              /^kalau\s+di\s+[a-z]+/i.test(userText.trim());
 
   // NLU: If NLU confident-detected provide_location intent, treat as location text
@@ -107,7 +115,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     if (isAffirmative) {
       return {
         nextState: ConversationState.AWAITING_INTEREST,
-        replyText: `Baik Bunda, lokasi homecare menggunakan data sebelumnya di *Kelurahan ${customer.kelurahan}, Kec. ${customer.kecamatan}*. 😊\n\nJadi mau pilih treatment apa bunda? 🤗`,
+        replyText: `Baik Bunda, alamat homecare menggunakan data sebelumnya di *Kelurahan ${customer.kelurahan}, Kec. ${customer.kecamatan}*. 😊\n\nJadi mau pilih treatment apa bunda? 🤗`,
         shouldSendReply: true,
       };
     }

@@ -326,12 +326,24 @@ export class ConversationService {
     const isGlobalDisabled = escalationReason === 'global_bot_disabled' || escalationReason === 'Global bot disabled';
 
     if (enableHoldLabel && !isGlobalDisabled) {
-      try {
-        const { wahaClient } = await import('../integrations/waha/client');
-        await wahaClient.addLabel(`${phone}@c.us`, 'hold');
-      } catch (err: any) {
-        console.warn(`[LABEL ERROR] Failed to auto-add hold label during escalation:`, err.message);
-      }
+      import('../integrations/waha/client')
+        .then(({ wahaClient }) => {
+          wahaClient.addLabel(`${phone}@c.us`, 'hold').catch((err: any) => console.warn(`[LABEL ERROR] Failed to auto-add hold label:`, err.message));
+          
+          const groupJidStr = process.env.ESCALATION_GROUP_JID || '120363428465130209@g.us';
+          if (groupJidStr) {
+            const groupJids = groupJidStr.split(',').map(j => j.trim()).filter(Boolean);
+            const customerName = conversation.customer?.name || 'Pelanggan';
+            const cleanPhone = phone.replace(/\D/g, '');
+            const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+            const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: HUMAN_HANDLING\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
+            
+            for (const gJid of groupJids) {
+              wahaClient.sendText(gJid, alertText).catch((err: any) => console.warn(`[GROUP ALERT ERROR] Failed to send group alert to ${gJid}:`, err.message));
+            }
+          }
+        })
+        .catch((err: any) => console.warn(`[WAHA CLIENT ERROR] Failed to import wahaClient:`, err.message));
     } else if (isGlobalDisabled) {
       console.log(`[LABEL SKIP] Skipping hold label addition because escalation reason is global_bot_disabled.`);
     } else {

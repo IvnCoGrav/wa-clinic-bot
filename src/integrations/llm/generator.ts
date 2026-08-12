@@ -160,7 +160,7 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
           content: `${BOT_PERSONA_PROMPT}
 
 WAKTU SEKARANG: ${wibInfo.wibTimeString}
-REKOMENDASI SAPAAN WAKTU: "${wibInfo.greetingRecommendation}"
+DILARANG SAPAAN WAKTU: Ini balasan FAQ / chat lanjutan (bukan greeting pertama). DILARANG KERAS menyertakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam").
 
 ${groundTruthSection}
 
@@ -186,6 +186,7 @@ ATURAN BALASAN:
    Contoh benar: "Bunda maksudnya *Paket Spa Silver* (150rb, 60 menit) atau *Paket Spa Gold* (250rb, 90 menit) ya? Biar saya kasih info yang pas 😊"
    Contoh SALAH (tetap dilarang): "Untuk harga pastinya, boleh tanya ke tim kami dulu ya" — ini BUKAN klarifikasi nama, ini cuci tangan, TETAP dilarang.
    Pengecualian ini TIDAK berlaku jika Referensi hanya punya SATU item yang match, atau jika customer menanyakan kebutuhan umum (bukan menyebut nama spesifik) — untuk kasus itu tetap ikuti poin 3 & 4 (mode rekomendasi, sebutkan semua opsi relevan sekaligus, bukan tanya balik).
+8. ATURAN SAPAAN (DILARANG SAPAAN WAKTU): Ini adalah balasan FAQ/informasi lanjutan. DILARANG KERAS menyertakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam"). Gunakan "Halo Bunda" atau langsung jawab ke inti pertanyaan.
 ${ctaInstruction}
 
 ${maxCharsInstruction}

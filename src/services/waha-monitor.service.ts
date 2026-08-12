@@ -10,6 +10,7 @@ export class WahaMonitorService {
   private alertService: AlertService;
   private queueService: QueueService;
   private isStuckAlertActive: boolean = false;
+  private consecutiveFailures: number = 0;
 
   private constructor(alertService?: AlertService, queueService?: QueueService) {
     this.alertService = alertService || new AlertService();
@@ -50,6 +51,7 @@ export class WahaMonitorService {
     this.startingTimestamp = null;
     this.lastKnownStatus = null;
     this.isStuckAlertActive = false;
+    this.consecutiveFailures = 0;
   }
 
   /**
@@ -119,14 +121,24 @@ export class WahaMonitorService {
     }
 
     // 2. Deteksi transisi untuk pause/resume queue (WAHA_DISCONNECTED)
-    if (this.lastKnownStatus === 'WORKING' && currentStatus !== 'WORKING') {
-      await this.queueService.pauseQueue();
-    } else if (
-      this.lastKnownStatus !== null &&
-      this.lastKnownStatus !== 'WORKING' &&
-      currentStatus === 'WORKING'
-    ) {
-      await this.queueService.resumeQueue();
+    const disconnectThreshold = parseInt(process.env.WAHA_DISCONNECT_THRESHOLD || '2', 10);
+    const isPaused = typeof this.queueService?.isQueuePaused === 'function' ? this.queueService.isQueuePaused() : false;
+
+    if (currentStatus !== 'WORKING') {
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= disconnectThreshold && !isPaused) {
+        console.warn(`[WAHA MONITOR] Session not WORKING (${currentStatus}) for ${this.consecutiveFailures} consecutive checks (threshold ${disconnectThreshold}). Pausing message queue.`);
+        await this.queueService.pauseQueue();
+      } else if (!isPaused) {
+        console.warn(`[WAHA MONITOR] Session not WORKING (${currentStatus}) check ${this.consecutiveFailures}/${disconnectThreshold}. Waiting for next check before pausing queue.`);
+      }
+    } else {
+      // currentStatus === 'WORKING'
+      this.consecutiveFailures = 0;
+      if (isPaused) {
+        console.log(`[WAHA MONITOR] Session returned to WORKING. Resuming message queue.`);
+        await this.queueService.resumeQueue();
+      }
     }
 
     this.lastKnownStatus = currentStatus;

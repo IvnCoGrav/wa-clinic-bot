@@ -67,6 +67,9 @@ export class MessageService {
     tenantId: string;
     senderType?: string;
     senderName?: string;
+    deliveryStatus?: 'sent' | 'delivered' | 'read' | 'failed';
+    metaErrorCode?: string;
+    metaErrorDesc?: string;
   }) {
     if (data.waMessageId) {
       memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
@@ -84,6 +87,9 @@ export class MessageService {
           payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
           sender_type: data.senderType ?? undefined,
           sender_name: data.senderName ?? undefined,
+          delivery_status: data.deliveryStatus ?? undefined,
+          meta_error_code: data.metaErrorCode ?? undefined,
+          meta_error_desc: data.metaErrorDesc ?? undefined,
         },
       });
       if (saved) return saved;
@@ -100,6 +106,9 @@ export class MessageService {
         payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
         sender_type: data.senderType || resolveSenderType(data),
         sender_name: data.senderName || null,
+        delivery_status: data.deliveryStatus ?? null,
+        meta_error_code: data.metaErrorCode ?? null,
+        meta_error_desc: data.metaErrorDesc ?? null,
         created_at: new Date(),
       };
       memoryMessages.push(fallbackMessage);

@@ -2,6 +2,20 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { phrasingService } from '../../src/integrations/llm/phrasing.service';
 import { llmResponseGenerator } from '../../src/integrations/llm/generator';
 import { openerTracker } from '../../src/integrations/llm/opener-tracker';
+import { callChatCompletionsWithFallback } from '../../src/integrations/llm/model-fallback';
+import { AiModelConfigService } from '../../src/config/ai-models.config';
+
+vi.mock('../../src/integrations/llm/model-fallback', () => ({
+  callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
+    data: { choices: [{ message: { content: 'Halo Bunda! Terima kasih sudah menghubungi kami.' } }] },
+  }),
+  getFallbackModel: vi.fn().mockReturnValue('mock-fallback'),
+}));
+vi.mock('../../src/config/ai-models.config', () => ({
+  AiModelConfigService: {
+    getModelConfig: vi.fn().mockReturnValue({ modelName: 'mock-model', temperature: 0.7 }),
+  },
+}));
 
 describe('Phrasing Service & Humanizer Layer Tests', () => {
   beforeEach(() => {
@@ -35,6 +49,124 @@ describe('Phrasing Service & Humanizer Layer Tests', () => {
       });
 
       expect(result).toBe('Mohon tunggu sebentar');
+    });
+  });
+
+  describe('5. Greeting Constraint (Humanizer 10%)', () => {
+    const callMock = vi.mocked(callChatCompletionsWithFallback);
+
+    beforeEach(() => {
+      process.env.HUMANIZER_ENABLED = 'true';
+      process.env.LLM_API_KEY = 'real-key-for-greeting-test';
+      vi.mocked(AiModelConfigService.getModelConfig).mockReturnValue({ modelName: 'mock-model', temperature: 0.7 } as any);
+      callMock.mockClear();
+      callMock.mockResolvedValue({
+        data: { choices: [{ message: { content: 'Halo Bunda! Terima kasih sudah menghubungi kami.' } }] },
+      });
+    });
+
+    it('menambahkan constraint 10% pada system prompt untuk intent greeting', async () => {
+      await phrasingService.generate({
+        intent: 'greeting',
+        fallbackTemplate: 'Halo Bunda! Terima kasih sudah menghubungi kami.',
+      });
+
+      expect(callMock).toHaveBeenCalledTimes(1);
+      const call = callMock.mock.calls[0][0];
+      const systemPrompt = (call.payload as any).messages.find((m: any) => m.role === 'system').content;
+      expect(systemPrompt).toContain('ATURAN KHUSUS GREETING');
+      expect(systemPrompt).toContain('Pertahankan MINIMAL 90%');
+      expect(systemPrompt).toContain('SEKITAR 10%');
+    });
+
+    it('tidak menambahkan constraint greeting untuk intent selain greeting', async () => {
+      await phrasingService.generate({
+        intent: 'ongkir_info',
+        fallbackTemplate: 'Ongkir Rp10.000 ya bunda',
+      });
+
+      const call = callMock.mock.calls[0][0];
+      const systemPrompt = (call.payload as any).messages.find((m: any) => m.role === 'system').content;
+      expect(systemPrompt).not.toContain('ATURAN KHUSUS GREETING');
+    });
+
+    it('menambahkan constraint sapaan waktu hanya untuk greeting dan melarang untuk intent lain', async () => {
+      await phrasingService.generate({
+        intent: 'greeting',
+        fallbackTemplate: 'Halo Bunda!',
+      });
+
+      const call1 = callMock.mock.calls[0][0];
+      const prompt1 = (call1.payload as any).messages.find((m: any) => m.role === 'system').content;
+      expect(prompt1).toContain('REKOMENDASI SAPAAN WAKTU');
+
+      callMock.mockClear();
+      await phrasingService.generate({
+        intent: 'faq_question',
+        fallbackTemplate: 'Pijat hamil aman untuk kehamilan > 12 minggu',
+      });
+
+      const call2 = callMock.mock.calls[0][0];
+      const prompt2 = (call2.payload as any).messages.find((m: any) => m.role === 'system').content;
+      expect(prompt2).toContain('DILARANG SAPAAN WAKTU');
+      expect(prompt2).not.toContain('REKOMENDASI SAPAAN WAKTU');
+    });
+
+    it('menambahkan constraint khusus ongkir_info pada system prompt', async () => {
+      await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { distanceKm: 15.8, normalPrice: 25000, promoPrice: 20000 },
+        fallbackTemplate: 'Ongkir Rp20.000 ya bund',
+      });
+
+      const call = callMock.mock.calls[0][0];
+      const systemPrompt = (call.payload as any).messages.find((m: any) => m.role === 'system').content;
+      expect(systemPrompt).toContain('ATURAN KHUSUS ONGKIR INFO (SANGAT KETAT)');
+      expect(systemPrompt).toContain('Pertahankan MINIMAL 85%');
+    });
+
+    it('trigger fallback ke static template jika output LLM mengandung halusinasi saran perjalanan', async () => {
+      callMock.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: 'Ongkirnya 20.000 ya bund. Tetap sabar ya dalam perjalanan nanti kalau sudah sampai bisa istirahat' } }] },
+      });
+
+      const result = await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { distanceKm: 15.8, normalPrice: 25000, promoPrice: 20000 },
+        fallbackTemplate: 'Template Ongkir Statis 20.000',
+      });
+
+      expect(result).toBe('Template Ongkir Statis 20.000');
+    });
+
+    it('membersihkan double greeting dan mengganti kata lokasi menjadi rumahnya pada output LLM', async () => {
+      callMock.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: 'Selamat Siang, Selamat datang, Bunda! ✨ Boleh tahu dimana lokasinya ya, Bunda? 🙏🏻' } }] },
+      });
+
+      const result = await phrasingService.generate({
+        intent: 'greeting',
+        fallbackTemplate: 'Halo Bunda! Boleh tau rumahnya dimana ya bunda?. 😊',
+      });
+
+      expect(result).not.toContain('Selamat Siang, Selamat datang');
+      expect(result).toContain('Selamat datang');
+      expect(result).not.toContain('lokasinya');
+      expect(result).toContain('rumahnya di mana');
+    });
+
+    it('menghormati nilai HUMANIZER_GREETING_CHANGE_PERCENT', async () => {
+      process.env.HUMANIZER_GREETING_CHANGE_PERCENT = '5';
+      await phrasingService.generate({
+        intent: 'greeting',
+        fallbackTemplate: 'Halo Bunda!',
+      });
+
+      const call = callMock.mock.calls[0][0];
+      const systemPrompt = (call.payload as any).messages.find((m: any) => m.role === 'system').content;
+      expect(systemPrompt).toContain('Pertahankan MINIMAL 95%');
+      expect(systemPrompt).toContain('SEKITAR 5%');
+      delete process.env.HUMANIZER_GREETING_CHANGE_PERCENT;
     });
   });
 
