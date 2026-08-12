@@ -5,6 +5,7 @@ import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/l
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
 import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -27,7 +28,6 @@ export class PhrasingService {
     return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   }
   private get model(): string {
-    const { AiModelConfigService } = require('../../config/ai-models.config');
     const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
     return chatConfig.modelName || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
   }
@@ -49,11 +49,30 @@ export class PhrasingService {
         }
 
         const wibInfo = getWibTimeInfo();
+        const isGreetingIntent = req.intent === 'greeting';
+        const timeGreetingSection = isGreetingIntent
+          ? `REKOMENDASI SAPAAN WAKTU: "${wibInfo.greetingRecommendation}"`
+          : `DILARANG SAPAAN WAKTU: Ini BUKAN pesan greeting awal. DILARANG KERAS menyertakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam").`;
+
+        const rule5 = isGreetingIntent
+          ? `5. ATURAN WAKTU HARAM SALAH: Waktu saat ini adalah ${wibInfo.wibTimeString}. Jika menggunakan sapaan waktu (pagi/siang/sore/malam), KAMU WAJIB MENGGUNAKAN "${wibInfo.greetingRecommendation}". DILARANG KERAS bilang "Selamat Pagi" jika waktu menunjukkan malam/sore/siang!`
+          : `5. ATURAN SAPAAN WAKTU (DILARANG): DILARANG KERAS menggunakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam") untuk intent ini (${req.intent}). Sapaan waktu HANYA untuk greeting awal. Gunakan "Halo Bunda" atau langsung jawab tanpa sapaan waktu.`;
+
+        // Khusus intent greeting & ongkir_info: humanizer hanya boleh mengubah sebagian kecil teks
+        // dari template acuan — bukan menulis ulang pesan dari nol atau menambah halusinasi.
+        const greetingChangePercent = parseInt(process.env.HUMANIZER_GREETING_CHANGE_PERCENT || '10', 10);
+        const keepPercent = 100 - greetingChangePercent;
+        const isOngkirIntent = req.intent === 'ongkir_info';
+        const templateConstraint = isGreetingIntent
+          ? `ATURAN KHUSUS GREETING (SANGAT KETAT): Ini pesan GREETING. Pertahankan MINIMAL ${keepPercent}% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. Hanya ubah SEKITAR ${greetingChangePercent}% teks, misalnya ganti sedikit kata sapaan/penghubung/penutup saja. DILARANG menulis ulang pesan dari nol, mengganti struktur kalimat utama, atau mengubah fakta/brand name. Intinya: hasil akhir harus terlihat nyaris sama dengan teks acuan, hanya dengan variasi kecil yang wajar.\n\n`
+          : isOngkirIntent
+          ? `ATURAN KHUSUS ONGKIR INFO (SANGAT KETAT): Ini pesan ONGKIR_INFO. Pertahankan MINIMAL 85% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. DILARANG KERAS menambah pesan/basa-basi penutup baru seperti menyuruh customer sabar di perjalanan, mendoakan perjalanan, atau nasihat di luar konteks. HANYA sampaikan jarak, ongkir, dan penutup ajakan memilih treatment yang ada di teks acuan.\n\n`
+          : '';
 
         const systemPrompt = `${BOT_PERSONA_PROMPT}
 
 WAKTU SEKARANG: ${wibInfo.wibTimeString}
-REKOMENDASI SAPAAN WAKTU: "${wibInfo.greetingRecommendation}"
+${timeGreetingSection}
 
 TUGAS UTAMA:
 Kamu adalah Phrasing & Humanizer Engine. Tugasmu adalah menyampaikan informasi/fakta dari sistem ke customer dengan gaya ngobrol natural, hangat, dan bervariasi dari biasanya, TANPA mengubah fakta numerik maupun menambah klaim baru.
@@ -63,14 +82,15 @@ Fakta/Data dari Sistem: ${factsString}
 ${openerConstraint}
 ATURAN STRICT & ANTI-HALUSINASI (MANDAT UTAMA):
 1. JIKA ADA FAKTA NUMERIK (ongkir, jarak km, harga, discount, jam, tanggal): Kamu WAJIB menyertakan angka tersebut EXACT 100% SAMA SEPERTI DI DATA FAKTA. DILARANG HARAM mengubah, membulatkan, mengarang, atau menghilangkan angka tersebut.
-2. DILARANG menambahkan fakta/informasi baru di luar data fakta yang diberikan.
+2. DILARANG menambahkan fakta/informasi/basa-basi baru di luar data fakta yang diberikan (DILARANG KERAS mengarang cerita seperti mendoakan perjalanan customer, menyuruh sabar di jalan, dll.).
 3. Jawab dengan kalimat pendek, ramah, dan santai-sopan khas Bunda/Bidan (pakai kata "Bunda" / "bund").
 4. ATURAN SAPAAN KETAT: Maksimal 1-2 kali sapaan per paragraf pendek. JANGAN campur "Bunda" dan "Bund" (pilih satu). DILARANG sapaan ganda (misal: "Bunda-bunda"). DILARANG menaruh sapaan di akhir setiap kalimat secara beruntun.
-5. ATURAN WAKTU HARAM SALAH: Waktu saat ini adalah ${wibInfo.wibTimeString}. Jika menggunakan sapaan waktu (pagi/siang/sore/malam), KAMU WAJIB MENGGUNAKAN "${wibInfo.greetingRecommendation}". DILARANG KERAS bilang "Selamat Pagi" jika waktu menunjukkan malam/sore/siang!
+${rule5}
 6. Jangan tambahkan markdown berlebihan, buat agar terlihat alami seperti chat WhatsApp manusia.
 7. FORMAT TEKS (WAJIB): WhatsApp hanya mengenali format SATU tanda. Untuk teks tebal pakai SATU bintang (*teks*), DILARANG memakai dua bintang (**teks**) karena markdown ganda akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan pakai ~teks~.
 
-HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN LAIN.`;
+HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN LAIN.
+${templateConstraint}`;
 
         const tenantId = req.tenantId || DEFAULT_TENANT_ID;
         const startedAt = Date.now();
@@ -161,11 +181,26 @@ HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN L
           }
         }
 
-        if (req.conversationId) {
-          openerTracker.record(req.conversationId, sanitizedContent);
+        // Safety Check 2: Deteksi halusinasi perjalanan/basa-basi ngawur pada ongkir_info
+        if (isOngkirIntent && /\b(sabar\s+dalam\s+perjalanan|kalau\s+sudah\s+sampai|selamat\s+di\s+jalan|hati-hati\s+di\s+jalan|selama\s+perjalanan)\b/i.test(sanitizedContent)) {
+          console.warn(`[PHRASING SERVICE SAFETY TRIGGER] Hallucinated travel advice detected in LLM output: "${sanitizedContent}". Falling back to static template.`);
+          return req.fallbackTemplate;
         }
 
-        return sanitizedContent;
+        // Safety Check 3: Bersihkan double greeting (misal "Selamat Siang, Selamat datang") & larang kata "lokasi/lokasinya"
+        let finalContent = sanitizedContent
+          .replace(/^(Selamat\s+(?:Pagi|Siang|Sore|Malam))\s*,\s*(Selamat\s+datang)/i, '$2')
+          .replace(/\b(dimana|di\s+mana)\s+lokasinya\b/gi, 'rumahnya di mana')
+          .replace(/\bmana\s+lokasinya\b/gi, 'rumahnya di mana')
+          .replace(/\b(tahu|tau)\s+(dimana|di\s+mana)\s+lokasi(nya)?\b/gi, '$1 rumahnya di mana')
+          .replace(/\blokasi\s+Bunda\b/gi, 'rumah Bunda')
+          .replace(/\blokasinya\b/gi, 'rumahnya');
+
+        if (req.conversationId) {
+          openerTracker.record(req.conversationId, finalContent);
+        }
+
+        return finalContent;
       },
       async (req: PhrasingRequest) => {
         return req.fallbackTemplate;

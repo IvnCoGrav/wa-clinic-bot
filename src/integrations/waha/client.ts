@@ -241,32 +241,13 @@ export class WahaClient implements IWahaClient {
   }
 
   private async resolveActiveJid(chatId: string): Promise<string> {
-    // 1. Jika sudah berupa @lid, gunakan langsung (karena ini JID paling presisi dari webhook)
+    if (chatId.includes('@g.us')) return chatId;
     if (chatId.includes('@lid')) {
-      return chatId;
+      return await this.resolvePrimaryJid(chatId);
     }
-
-    if (this.shouldMock) {
-      return chatId;
+    if (!chatId.includes('@c.us')) {
+      return `${chatId}@c.us`;
     }
-
-    // 2. Jika berupa @c.us, tanyakan ke API WAHA /api/{session}/lids/pn/{phoneNumber} untuk mendapatkan LID-nya
-    try {
-      const targetPn = chatId.includes('@c.us') ? chatId : `${chatId}@c.us`;
-      const encodedPn = encodeURIComponent(targetPn);
-      const response = await this.withRetry('resolveActiveJid', () =>
-        axios.get(
-          `${this.baseUrl}/api/${this.session}/lids/pn/${encodedPn}`,
-          { headers: this.headers, timeout: this.timeoutMs }
-        )
-      );
-      if (response.data?.lid) {
-        return response.data.lid;
-      }
-    } catch (err) {
-      // Abaikan error, fallback ke JID asal
-    }
-
     return chatId;
   }
 
@@ -358,6 +339,36 @@ export class WahaClient implements IWahaClient {
       return true;
     } catch (error: any) {
       console.warn('[WAHA API ERROR] sendSeen failed:', error?.response?.data || error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Tandai percakapan sebagai belum dibaca (markUnread).
+   * Digunakan saat eskalasi ke human handling agar titik hijau unread muncul di WA/Dashboard.
+   */
+  public async markUnread(chatId: string): Promise<boolean> {
+    const targetChatId = await this.resolvePrimaryJid(chatId);
+
+    if (this.shouldMock) {
+      console.log(`[MOCK WAHA] markUnread -> chatId: ${targetChatId}`);
+      return true;
+    }
+
+    try {
+      await this.runSerialized(() =>
+        this.withRetry('markUnread', () =>
+          axios.post(
+            `${this.baseUrl}/api/${this.session}/chats/${encodeURIComponent(targetChatId)}/unread`,
+            {},
+            { headers: this.headers, timeout: this.timeoutMs }
+          )
+        )
+      );
+      console.log(`[WAHA UNREAD] Successfully marked chat ${targetChatId} as unread`);
+      return true;
+    } catch (error: any) {
+      console.warn('[WAHA API ERROR] markUnread failed:', error?.response?.data || error.message);
       return false;
     }
   }
@@ -568,7 +579,9 @@ export class WahaClient implements IWahaClient {
             { headers: this.headers, timeout: this.timeoutMs }
           );
           const labels = labelsListResponse.data?.value || labelsListResponse.data || [];
-          let targetLabel = labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
+          let targetLabel = labels.find((l: any) => l.name === labelName) ||
+                            labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase() && l.color !== 1) ||
+                            labels.find((l: any) => l.name.toLowerCase() === labelName.toLowerCase());
 
           // Jika label belum ada di session, kita buat baru
           if (!targetLabel) {
@@ -594,7 +607,10 @@ export class WahaClient implements IWahaClient {
 
           // 3. Gabungkan label target jika belum terpasang
           const alreadyHas = currentLabels.some((l: any) => l.id === targetLabel.id);
-          if (alreadyHas) return true;
+          if (alreadyHas) {
+            console.log(`[WAHA LABEL] Chat ${targetChatId} already has label "${targetLabel.name}" (id: ${targetLabel.id}) in WAHA state`);
+            return true;
+          }
 
           const newLabelsList = [...currentLabels, targetLabel].map((l: any) => ({ id: l.id }));
 
@@ -605,7 +621,13 @@ export class WahaClient implements IWahaClient {
             { headers: this.headers, timeout: this.timeoutMs }
           );
           invalidateCachedLabels(targetChatId);
-          console.log(`[WAHA LABEL] Successfully added label "${labelName}" to ${targetChatId}`);
+          console.log(`[WAHA LABEL] Successfully added label "${targetLabel.name}" (id: ${targetLabel.id}) to ${targetChatId}`);
+          
+          const defaultCooldown = process.env.NODE_ENV === 'test' ? '0' : '2000';
+          const cooldownMs = parseInt(process.env.WAHA_LABEL_COOLDOWN_MS || defaultCooldown, 10);
+          if (cooldownMs > 0) {
+            await this.sleep(cooldownMs);
+          }
           return true;
         })
       )
@@ -658,6 +680,12 @@ export class WahaClient implements IWahaClient {
           );
           invalidateCachedLabels(targetChatId);
           console.log(`[WAHA LABEL] Successfully removed label "${labelName}" from ${targetChatId}`);
+          
+          const defaultCooldown = process.env.NODE_ENV === 'test' ? '0' : '2000';
+          const cooldownMs = parseInt(process.env.WAHA_LABEL_COOLDOWN_MS || defaultCooldown, 10);
+          if (cooldownMs > 0) {
+            await this.sleep(cooldownMs);
+          }
           return true;
         })
       )
@@ -748,6 +776,12 @@ export class WahaClient implements IWahaClient {
           for (const l of toAdd) await this.syncLabelColumn(targetChatId, l, true);
           for (const l of toRemove) await this.syncLabelColumn(targetChatId, l, false);
           console.log(`[WAHA LABEL] batchUpdateLabels OK for ${targetChatId} | add: ${JSON.stringify(toAdd)} | remove: ${JSON.stringify(toRemove)}`);
+          
+          const defaultCooldown = process.env.NODE_ENV === 'test' ? '0' : '2000';
+          const cooldownMs = parseInt(process.env.WAHA_LABEL_COOLDOWN_MS || defaultCooldown, 10);
+          if (cooldownMs > 0) {
+            await this.sleep(cooldownMs);
+          }
           return true;
         })
       )
@@ -940,6 +974,22 @@ export class WahaClient implements IWahaClient {
     }
 
     try {
+      const webhookUrl = process.env.WAHA_WEBHOOK_URL || 'http://host.docker.internal:3000/webhook';
+      const secret = process.env.WAHA_WEBHOOK_SECRET || 'my_webhook_secret_key';
+      const configBody = {
+        config: {
+          noweb: { markOnline: true, store: { enabled: true, fullSync: true } },
+          webhooks: [
+            {
+              url: webhookUrl,
+              events: ['message', 'message.any', 'session.status', 'label.chat.added', 'label.chat.deleted'],
+              customHeaders: [{ name: 'x-webhook-secret', value: secret }]
+            }
+          ]
+        }
+      };
+      await axios.put(`${this.baseUrl}/api/sessions/${sessionName}`, configBody, { headers: this.headers, timeout: this.timeoutMs }).catch(() => {});
+
       await axios.post(
         `${this.baseUrl}/api/sessions/${sessionName}/start`,
         {},

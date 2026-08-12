@@ -107,6 +107,10 @@ services:
       - WAHA_API_KEY=${WAHA_API_KEY:?WAHA_API_KEY must be set in .env}
       - WAHA_CLIENT_DEVICE_NAME=Mac OS
       - WAHA_CLIENT_BROWSER_NAME=Safari
+      - WAHA_NOWEB_STORE_ENABLED=true
+      - WAHA_NOWEB_STORE_FULLSYNC=true
+      - WAHA_NOWEB_STORE_FULL_SYNC=true
+      - WAHA_WEBHOOKS=[{"url":"http://host.docker.internal:3000/webhook","events":["message","message.any","session.status"]}]
     deploy:
       resources:
         limits:
