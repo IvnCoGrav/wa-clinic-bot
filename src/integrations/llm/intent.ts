@@ -126,6 +126,11 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
       }
       cleanContent = cleanContent.trim();
       
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanContent = jsonMatch[0];
+      }
+
       const parsed = JSON.parse(cleanContent);
 
       return {

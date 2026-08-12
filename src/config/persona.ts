@@ -277,11 +277,13 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   askKelurahanRetry: (params: { textLocation: string; currentAttempts: number }) =>
     `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`,
 
-  askKelurahanAmbiguous: (params: { kelurahanName: string; options: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
-    const optionsText = params.options
-      .map(opt => `- ${opt.Kelurahan_Desa}, Kec. ${opt.Kecamatan} (${opt.Kabupaten_Kota})`)
-      .join('\n');
-    return `Kalau boleh tau lebih tepatnya kelurahan/desa ${params.kelurahanName} di kecamatan mana ya bunda? Kami menemukan ada beberapa daerah dengan nama tersebut:\n\n${optionsText}\n\nMohon sebutkan nama kelurahan dan kecamatan Bunda secara lengkap agar kami tidak salah hitung ongkir ya bund! 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`;
+  askKelurahanAmbiguous: (params: { kecamatanName?: string; kelurahanName?: string; options?: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
+    const areaName = params.kecamatanName || params.kelurahanName || 'tersebut';
+    const sampleKelurahans = params.options && params.options.length > 0
+      ? Array.from(new Set(params.options.map(opt => opt.Kelurahan_Desa))).slice(0, 3).join(', ')
+      : '';
+    const exampleText = sampleKelurahans ? ` (seperti Kel. ${sampleKelurahans}, dll.)` : '';
+    return `Untuk area Kecamatan ${areaName} ada beberapa kelurahan nih Bund${exampleText}. Kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
   },
 
   outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>

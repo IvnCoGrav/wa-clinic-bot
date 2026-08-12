@@ -6,6 +6,8 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
 import { phrasingService } from '../../integrations/llm/phrasing.service';
 
+import { sanitizeLocationTextForGeocoding } from '../../utils/location-sanitizer';
+
 /**
  * Handler untuk state INITIAL:
  * Ketika pesan pertama kali masuk dari nomor baru / percakapan baru / setelah reset idle 24 jam.
@@ -36,10 +38,13 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     return match ? match[1].trim() : null;
   })();
 
-  const textForGeocode = nluLocationText || extractedLocationPhrase || userText;
+  const rawLocationText = nluLocationText || extractedLocationPhrase || userText;
+  const textForGeocode = sanitizeLocationTextForGeocoding(rawLocationText);
 
+  const hasOngkirLocationSignal = /\bongkir\b/i.test(userText) && textForGeocode.length >= 3;
   const hasLocationKeyword = !!extractedLocationPhrase ||
-                             /\bongkir\s+(?:ke|di)\s+[a-z]+/i.test(userText.trim()) ||
+                             hasOngkirLocationSignal ||
+                             /\bongkir\s+(?:ke|di)?\s+[a-z]+/i.test(userText.trim()) ||
                              /\b(di|ke|rumah\s*(?:saya|sy)?\s*di|alamat\s*(?:saya|sy)?\s*di)\s+[a-z]+/i.test(userText.trim()) ||
                              /^(saya\s+)?di\s+[a-z]+/i.test(userText.trim()) || 
                              /^kalau\s+di\s+[a-z]+/i.test(userText.trim());
@@ -66,10 +71,11 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   // Prioritas Override Utama: Jika ada input lokasi baru (Pin atau teks lokasi langsung)
   if (isPin || isLocationText) {
     const { handleLocationState } = await import('./location');
-    const result = await handleLocationState({ ...ctx, incomingMessage: nluLocationText ? { 
+    const locationTextToPass = textForGeocode.length >= 3 ? textForGeocode : rawLocationText;
+    const result = await handleLocationState({ ...ctx, incomingMessage: { 
       ...incomingMessage,
-      text: { body: nluLocationText }
-    } as any : incomingMessage });
+      text: { body: locationTextToPass }
+    } as any });
 
     // Perbaikan Poin 3b: Jika customer baru (belum punya kelurahan confirmed)
     const hasConfirmedLocation = !!customer.kelurahan;

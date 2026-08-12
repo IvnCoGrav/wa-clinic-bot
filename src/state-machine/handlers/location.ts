@@ -236,10 +236,10 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     );
 
     if (resolved.ambiguityResults && resolved.ambiguityResults.length > 0) {
-      const kelName = resolved.ambiguityResults[0].Kelurahan_Desa;
+      const kecName = resolved.matchedSpan || resolved.ambiguityResults[0].Kecamatan;
       return {
         nextState: ConversationState.AWAITING_LOCATION,
-        replyText: TEMPLATES.askKelurahanAmbiguous({ kelurahanName: kelName, options: resolved.ambiguityResults }),
+        replyText: TEMPLATES.askKelurahanAmbiguous({ kecamatanName: kecName, options: resolved.ambiguityResults }),
         shouldSendReply: true,
       };
     }
