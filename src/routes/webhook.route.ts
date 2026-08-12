@@ -262,6 +262,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               mimeType,
               caption: imageCaption || null,
             };
+          } else {
+            console.warn(`[WAHA MEDIA WARNING] Gagal mengunduh gambar dari WAHA untuk pesan ${waMessageId} (chat: ${chatId}) — buffer kosong / null.`);
           }
         } catch (mediaErr: any) {
           console.warn('[WAHA MEDIA] Gagal menyimpan media inbound:', mediaErr.message);
