@@ -1,8 +1,11 @@
 import { AiModelConfigService } from '../config/ai-models.config';
 import { getBrandIdentity } from '../config/brand';
+import { checkMedicalKeywords } from '../config/medical-keywords';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { SERVICE_AREAS_ALTERNATION } from '../config/service-areas';
-import { callChatCompletionsWithFallback, getFallbackModel } from '../integrations/llm/model-fallback';
+import { callChatCompletionsWithFallback } from '../integrations/llm/model-fallback';
+import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
+import { parsePositiveInt } from '../utils/env-numeric';
 import { extractBalancedJson, extractJsonContent } from '../utils/json-extract';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 
@@ -20,6 +23,12 @@ export interface NluClassificationResult {
   confidence: number;
   rawText: string;
   isFallback: boolean;
+}
+
+/** Konteks audit opsional agar LLM call NLU tercatat dengan atribusi (conversation_id & nomor customer). */
+export interface NluAuditContext {
+  conversationId?: string | null;
+  customerPhone?: string;
 }
 
 export const VALID_INTENTS = [
@@ -43,12 +52,18 @@ export class NluClassifierService {
    * Circuit breaker untuk NLU LLM: saat SumoPod down, breker tripp -> fallback regex ~instan
    * (mencegah tiap pesan menunggu timeout penuh 15s). Pattern sama seperti generator/phrasing.
    */
-  private static llmBreaker: CircuitBreaker<[string, Array<{ role: 'user' | 'assistant'; content: string }>], NluClassificationResult> | null = null;
+  private static llmBreaker: CircuitBreaker<
+    [string, Array<{ role: 'user' | 'assistant'; content: string }>, NluAuditContext?],
+    NluClassificationResult
+  > | null = null;
 
-  private static getBreaker(): CircuitBreaker<[string, Array<{ role: 'user' | 'assistant'; content: string }>], NluClassificationResult> {
+  private static getBreaker(): CircuitBreaker<
+    [string, Array<{ role: 'user' | 'assistant'; content: string }>, NluAuditContext?],
+    NluClassificationResult
+  > {
     if (!this.llmBreaker) {
       this.llmBreaker = new CircuitBreaker(
-        async (text, history) => this.classifyWithLLM(text, history),
+        async (text, history, auditCtx) => this.classifyWithLLM(text, history, auditCtx),
         async (text) => this.fallbackClassify(text),
         { name: 'LLM NLU Classifier', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
       );
@@ -112,15 +127,10 @@ export class NluClassifierService {
 
     // 3b. Medical Query — keluhan medis / gejala / minta obat (fallback deterministik).
     // Gate konservatif (mirip intent.ts): keyword gejala ADA && ada sinyal pertanyaan/tindakan.
-    const medicalKeywords = [
-      'demam', 'panas', 'kejang', 'paracetamol', 'obat', 'sakit', 'nyeri', 'perih',
-      'sesak', 'grok', 'lendir', 'dahak', 'bengkak', 'batuk', 'diare', 'mencret',
-      'muntah', 'ruam', 'tali pusat', 'tali pusar', 'pusar', 'jahitan', 'ngilu',
-      'payudara', 'mastitis',
-    ];
-    const hasMedicalKeyword = medicalKeywords.some((kw) => text.includes(kw));
+    // Keyword bersumber dari single source config/medical-keywords.ts (checkMedicalKeywords).
+    const medical = checkMedicalKeywords(text);
     const hasMedicalSignal = text.includes('obat') || text.includes('sakit') || text.includes('kasih') || text.includes('bisa') || text.includes('?') || text.includes('normal') || text.includes('wajar') || text.includes('bahaya');
-    if (hasMedicalKeyword && hasMedicalSignal) {
+    if (medical.isMedical && hasMedicalSignal) {
       intents.push('medical_query');
     }
 
@@ -173,12 +183,16 @@ export class NluClassifierService {
   /**
    * Main LLM Structured NLU Classifier
    * Converts natural customer utterances into structured { intents, entities, confidence } JSON.
+   * `auditCtx` (opsional) membawa conversation_id & customer_phone agar LLM call
+   * tercatat di llm_audit_logs bisa diatribusikan ke bubble chat yang sesuai.
    */
   public static async classifyMessage(
     incomingText: string,
-    historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+    historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    auditCtx?: NluAuditContext
   ): Promise<NluClassificationResult> {
-    const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+    const endpointCheck = getLlmEndpointConfig({ modelConfigKey: 'INTENT_CLASSIFICATION' });
+    const apiKey = endpointCheck.apiKey || '';
 
     // Offline / Mock check
     if (!apiKey || apiKey.startsWith('mock') || process.env.NODE_ENV === 'test') {
@@ -193,7 +207,7 @@ export class NluClassifierService {
     }
 
     // Circuit breaker: saat LLM down/tripp, regex fallback dijalankan ~instan (hindari menunggu timeout).
-    return this.getBreaker().execute(incomingText, historyMessages);
+    return this.getBreaker().execute(incomingText, historyMessages, auditCtx);
   }
 
   /**
@@ -202,12 +216,14 @@ export class NluClassifierService {
    */
   private static async classifyWithLLM(
     incomingText: string,
-    historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = []
+    historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    auditCtx?: NluAuditContext
   ): Promise<NluClassificationResult> {
     const config = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION');
     const confidenceThreshold = config.confidenceThreshold || 0.60;
-    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+    const endpoint = getLlmEndpointConfig({ modelConfigKey: 'INTENT_CLASSIFICATION' });
+    const baseUrl = endpoint.baseUrl;
+    const apiKey = endpoint.apiKey;
 
       const systemPrompt = `You are a Structured NLU (Natural Language Understanding) Classifier for ${getBrandIdentity().businessName} WhatsApp Chatbot.
 Your task is to analyze customer messages and return ONLY a JSON object representing the customer's intent(s) and extracted entity data.
@@ -277,8 +293,8 @@ You MUST end your response with this complete JSON block (values may be null/omi
           baseUrl,
           apiKey,
           model: primaryModel,
-          fallbackModel: getFallbackModel(),
-          timeoutMs: Number(process.env.LLM_TIMEOUT_NLU_MS || 120000),
+          fallbackModel: endpoint.fallbackModel,
+          timeoutMs: parsePositiveInt(process.env.LLM_TIMEOUT_NLU_MS, 120000),
           isContentValid: (content) => {
             try {
               JSON.parse(this.sanitizeJson(content));
@@ -297,7 +313,8 @@ You MUST end your response with this complete JSON block (values may be null/omi
       } catch (err: any) {
         const { auditLlmCall } = await import('../utils/llm-audit-buffer');
         auditLlmCall({
-          customer_phone: 'nlu-audit',
+          customer_phone: auditCtx?.customerPhone || 'nlu-audit',
+          conversation_id: auditCtx?.conversationId ?? null,
           task_type: 'NLU_CLASSIFICATION',
           model_name: primaryModel,
           baseUrl,
@@ -313,7 +330,8 @@ You MUST end your response with this complete JSON block (values may be null/omi
       try {
         const { auditLlmCall } = await import('../utils/llm-audit-buffer');
         auditLlmCall({
-          customer_phone: 'nlu-audit',
+          customer_phone: auditCtx?.customerPhone || 'nlu-audit',
+          conversation_id: auditCtx?.conversationId ?? null,
           task_type: 'NLU_CLASSIFICATION',
           model_name: callResult.model,
           baseUrl: callResult.baseUrl,

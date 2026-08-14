@@ -4,11 +4,13 @@ import { KnowledgeChunkResult } from '../../services/knowledge.service';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { llmOutageStorage } from './context';
 import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { getLlmEndpointConfig } from './llm-gateway';
 import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/language-sanitizer';
 import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
 import { measure } from '../../utils/timer';
+import { llmConcurrencyLimiter } from '../../utils/llm-concurrency';
 import dotenv from 'dotenv';
 function isReferentialQuestion(userQuestion: string): boolean {
   if (!userQuestion) return false;
@@ -20,20 +22,15 @@ export interface FAQResponseResult {
   answer: string;
   reasoning: string | null;
   extracted_preferences?: Record<string, any>;
+  /** true jika jawaban bukan dari LLM (fallback darurat / mock-key / error API). */
+  usedFallback?: boolean;
 }
 
 export class LLMResponseGenerator {
-  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?, boolean?], FAQResponseResult>;
-
-  private get apiKey(): string {
-    return process.env.LLM_API_KEY || '';
-  }
-  private get baseUrl(): string {
-    return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  }
+  public llmBreaker: CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?, boolean?, string?], FAQResponseResult>;
 
   constructor() {
-    this.llmBreaker = new CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?, boolean?], FAQResponseResult>(
+    this.llmBreaker = new CircuitBreaker<[string, string, KnowledgeChunkResult[], string?, string?, string?, string?, boolean?, string?], FAQResponseResult>(
       async (
         userQuestion: string,
         contextText: string,
@@ -42,7 +39,8 @@ export class LLMResponseGenerator {
         tenantId?: string,
         treatmentNameForFollowUp?: string,
         customerId?: string,
-        isLocationKnown?: boolean
+        isLocationKnown?: boolean,
+        additionalContextText?: string
       ) => {
         const store = llmOutageStorage.getStore();
         if (store?.simulateOutage) {
@@ -131,12 +129,17 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
           console.log(`[FAQ CACHE] SKIPPED (reason: ${skipCacheReason}) for query: "${userQuestion}"`);
         } else {
           const { faqCacheService } = await import('../../services/faq-cache.service');
-          cacheKey = faqCacheService.generateKey(tenantId || 'default-tenant', userQuestion, contextChunks, contextText);
+          cacheKey = faqCacheService.generateKey(tenantId || 'default-tenant', userQuestion, contextChunks, contextText, {
+            isLocationKnown,
+            additionalContextText,
+          });
           const cachedVal = await faqCacheService.get(cacheKey);
           if (cachedVal) {
             console.log(`[FAQ CACHE] HIT for query: "${userQuestion}"`);
+            const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords } = await import('../../utils/language-sanitizer');
+            let sanitizedCache = sanitizeForbiddenEnglishWords(sanitizeRagLeakage(cachedVal));
             return {
-              answer: cachedVal,
+              answer: sanitizedCache,
               reasoning: '[CACHE HIT] Served from FaqCacheService',
             };
           }
@@ -163,7 +166,20 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
           ? `BATAS KARAKTER (WAJIB): Balasan pada bagian JAWABAN TIDAK BOLEH MELEBIHI ${maxChars} karakter. Ringkas, padat, langsung ke inti jawaban, tetap hangat dan ramah. Jangan menulis jawaban yang panjang bertele-tele.`
           : '';
 
+        // Guard CTA anti hard-selling: nama treatment HANYA boleh disebut di CTA
+        // jika customer memang sedang membahas treatment itu (bukan dipaksa sistem).
+        const antiHardSellNote = `
+ATURAN ANTI HARD-SELLING (WAJIB):
+- JANGAN menyebut / menjual nama treatment tertentu di CTA jika customer tidak sedang membahas treatment tersebut.
+- CTA harus menyatu NATURAL dengan topik yang dibahas customer. Jika sistem belum memberikan nama treatment yang dibahas, jangan menebak — cukup gunakan ajakan yang netral (tanya area/rumah atau ajakan lanjut reservasi yang umum).`;
+
+        ctaInstruction += antiHardSellNote;
+
         const wibInfo = getWibTimeInfo();
+
+        const additionalContextSection = additionalContextText && additionalContextText.trim().length > 0
+          ? `[INFORMASI TAMBAHAN ONGKIR / LOKASI (WAJIB DISAMPAIKAN DALAM BALASAN)]\n${additionalContextText.trim()}\n- Kamu WAJIB menyertakan fakta ongkir/jarak di atas ke dalam jawabanmu secara natural!\n\n`
+          : '';
 
         const systemMessage = {
           role: 'system',
@@ -176,13 +192,13 @@ ${groundTruthSection}
 
 ${conversationContextSection}
 
-TUGAS UTAMA:
+${additionalContextSection}TUGAS UTAMA:
 Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen berikut:
 
 ${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemukan)'}
 
 ATURAN BALASAN:
-1. Lakukan analisis terlebih dahulu terhadap apa yang sedang ditanyakan/dibahas oleh customer berdasarkan pesan terakhir dan riwayat percakapan. Tuliskan analisis ini di bagian "REASONING".
+1. Tuliskan analisis SINGKAT di bagian "REASONING" — MAKSIMAL 1 kalimat / 15 kata. Cukup identifikasi inti pertanyaan & treatment terkait (jika ada). HEMAT TOKEN: prioritas penuh pada kelengkapan bagian "answer", karena "answer" ditulis SETELAH "reasoning" dan berisiko terpotong jika reasoning panjang.
    PENTING: Jika customer menggunakan kata referensial seperti "berapa itu", "berapa yang tadi", "yang itu", "yang baru", dll., WAJIB gunakan info "Treatment yang terakhir dibahas" pada section [KONTEKS PERCAKAPAN] di atas sebagai sumber utama penentuan treatment. Jika section tersebut "Belum ada", baru gunakan konteks dari riwayat percakapan.
 2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "JAWABAN" (gunakan informasi dari referensi dokumen di atas). Jawab layaknya chat WhatsApp biasa yang mengalir natural. DILARANG KERAS menggunakan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:", "Berikut adalah informasi yang diminta", atau sejenisnya. Langsung ke inti jawaban dengan gaya bahasa ngobrol!
    FORMAT TEKS (WAJIB): WhatsApp hanya mengenali format SATU tanda. Untuk teks tebal pakai SATU bintang (*teks*), DILARANG memakai dua bintang (**teks**) karena markdown ganda akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan ~teks~.
@@ -209,7 +225,7 @@ ATURAN ANTI-HALUSINASI (WAJIB):
 
 FORMAT RESPONS (WAJIB JSON, jangan ada teks di luar JSON):
 {
-  "reasoning": "analisis Anda tentang apa yang ditanyakan customer dan konteks percakapannya...",
+  "reasoning": "analisis SINGKAT — MAKSIMAL 1 kalimat / 15 kata. Jangan panjang, hemat token agar answer selalu lengkap.",
   "referenced_treatment": "nama treatment yang sedang dibahas jika ada, atau null",
   "needs_clarification": true | false,
   "answer": "balasan Anda untuk customer",
@@ -244,21 +260,26 @@ ATURAN EKSTRAKSI PREFERENSI:
         });
 
         const startedAt = Date.now();
+        const endpoint = getLlmEndpointConfig({ model: modelConfig.modelName });
         let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
         try {
-          callResult = await callChatCompletionsWithFallback({
-            baseUrl: this.baseUrl,
-            apiKey: this.apiKey,
-            model: modelConfig.modelName,
-            fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 120000),
-            payload: {
-              temperature: modelConfig.temperature,
-              max_tokens: modelConfig.maxTokens,
-              response_format: { type: 'json_object' },
-              messages: apiMessages,
-            },
-          });
+          // Antrean concurrency limiter: mencegah burst request (beban tinggi / stres tes)
+          // memicu 429 rate-limit yang membuat Circuit Breaker ikut terbuka massal.
+          callResult = await llmConcurrencyLimiter.run(() =>
+            callChatCompletionsWithFallback({
+              baseUrl: endpoint.baseUrl,
+              apiKey: endpoint.apiKey,
+              model: modelConfig.modelName,
+              fallbackModel: endpoint.fallbackModel,
+              timeoutMs: endpoint.timeoutMs,
+              payload: {
+                temperature: modelConfig.temperature,
+                max_tokens: modelConfig.maxTokens,
+                response_format: { type: 'json_object' },
+                messages: apiMessages,
+              },
+            })
+          );
         } catch (err: any) {
           try {
             const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
@@ -268,7 +289,7 @@ ATURAN EKSTRAKSI PREFERENSI:
               conversation_id: conversationId,
               task_type: 'CHAT_REPLY',
               model_name: modelConfig.modelName,
-              baseUrl: this.baseUrl,
+              baseUrl: endpoint.baseUrl,
               startedAt,
               error: err,
             });
@@ -297,7 +318,12 @@ ATURAN EKSTRAKSI PREFERENSI:
           // Safe fire-and-forget
         }
 
-        const content = responseData.choices[0].message.content;
+        const content = responseData?.choices?.[0]?.message?.content ?? '';
+        
+        if (!content || content.trim() === '') {
+          console.error('[LLM GENERATOR] Empty content from LLM response, falling back.');
+          throw new Error('Empty content from LLM JSON output');
+        }
         
         let parsed: { reasoning?: string; answer?: string; referenced_treatment?: string | null; needs_clarification?: boolean; extracted_preferences?: Record<string, any> };
         try {
@@ -307,8 +333,20 @@ ATURAN EKSTRAKSI PREFERENSI:
           }
           parsed = JSON.parse(cleanContent);
         } catch (err) {
-          console.warn('[LLM GENERATOR] Failed to parse JSON response, using raw content as soft fallback. Raw content:', content);
-          parsed = { answer: content, reasoning: '[SOFT FALLBACK] JSON parse failed, using raw text' };
+          // Respons JSON terpotong (mis. max_tokens habis). JANGAN men-leak raw text
+          // (berisi sintaks kurung kurawal) ke customer. Coba ekstrak nilai "answer"
+          // via regex; jika tidak ketemu → biarkan kosong agar jatuh ke fallback darurat.
+          console.warn('[LLM GENERATOR] Failed to parse JSON response, extracting "answer" via regex. Raw content (truncated):', content.slice(0, 300));
+          const extractedAnswer = this.extractAnswerFromPartialJson(content);
+          if (extractedAnswer && extractedAnswer.length > 0 && !extractedAnswer.trim().startsWith('{')) {
+            parsed = { answer: extractedAnswer, reasoning: '[SOFT FALLBACK] JSON parse failed, answer extracted via regex' };
+          } else if (content && content.trim().length >= 15 && !content.trim().startsWith('{')) {
+            console.log('[LLM GENERATOR] Plain text response detected (non-JSON model output), using content directly.');
+            parsed = { answer: content.trim(), reasoning: '[PLAIN TEXT FALLBACK] Non-JSON LLM response' };
+          } else {
+            console.error('[LLM GENERATOR] JSON parse failed & no clean "answer" chunk recovered — falling back to emergency response.');
+            parsed = { answer: '', reasoning: '[SOFT FALLBACK] JSON parse failed, no answer chunk' };
+          }
         }
 
         if (!parsed.answer || parsed.answer.trim() === '') {
@@ -321,15 +359,35 @@ ATURAN EKSTRAKSI PREFERENSI:
         // Sanitizer: Bersihkan jika LLM tidak sengaja menghasilkan frasa "tanya ke tim / tidak bisa memastikan harga"
         jawaban = this.sanitizeTeamReferral(jawaban);
 
+        // Sanitizer RAG Leakage & Kata Bahasa Inggris terlarang ("little one", "baby", "mommy", "schedule")
+        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords } = await import('../../utils/language-sanitizer');
+        jawaban = sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban));
+
         // Sanitizer aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
         const sanitizedJawaban = stripNonIndonesianScripts(jawaban);
         if (sanitizedJawaban !== jawaban) {
           console.warn(
             `[LLM GENERATOR] Karakter aksara asing bocor, di-bersihkan: ` +
-              `"${containsForeignScripts(jawaban) ? jawaban : ''}".
-`
+              `"${containsForeignScripts(jawaban) ? jawaban : ''}".`
           );
           jawaban = sanitizedJawaban;
+        }
+
+        // ENFORCE CTA: Jika lokasi/rumah customer BELUM diketahui, pastikan pesan DIUTAMAKAN menutup dengan pertanyaan rumah.
+        if (isLocationKnown === false) {
+          const asksLocation = /\b(rumah|rumahnya|daerah|kelurahan|kecamatan|area)\b/i.test(jawaban);
+          if (!asksLocation) {
+            // Jika LLM lupa menanyakan rumah dan malah menutup dengan "Mau saya bantu jadwalkan?",
+            // ubah atau tambahkan pertanyaan rumah secara otomatis.
+            if (/\bmau\s+saya\s+bantu\s+(?:jadwalkan|pilih|booking).*?\?\s*🙏🏻?😊?/gi.test(jawaban)) {
+              jawaban = jawaban.replace(
+                /\bmau\s+saya\s+bantu\s+(?:jadwalkan|pilih|booking).*?\?\s*🙏🏻?😊?/gi,
+                'Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊'
+              );
+            } else if (!jawaban.includes('rumahnya di mana')) {
+              jawaban = `${jawaban}\n\nKalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊`;
+            }
+          }
         }
 
         console.log(`\n🧠 [AI REASONING] for customer query "${userQuestion}":\n"${parsed.reasoning || 'No reasoning found'}"\n`);
@@ -347,7 +405,6 @@ ATURAN EKSTRAKSI PREFERENSI:
             console.warn('[FAQ CACHE] Failed to set cache:', cacheErr.message);
           }
         }
-
         return {
           answer: finalAnswer,
           reasoning: parsed.reasoning || null,
@@ -372,10 +429,29 @@ ATURAN EKSTRAKSI PREFERENSI:
         return {
           answer: this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp),
           reasoning: '[FALLBACK] LLM error or breaker open',
+          usedFallback: true,
         };
       },
       { name: 'LLM Generator', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
     );
+  }
+
+  /**
+   * Ekstrak nilai field "answer" dari respons JSON yang TERPOTONG (max_tokens habis
+   * di tengah serialisasi). Memakai regex (bukan JSON.parse) agar tahan terhadap
+   * sintaks JSON yang belum selesai. Return '' jika "answer" tidak ditemukan / ikut
+   * terpotong (tidak ada penutup kutip) — pemanggil harus menggunakan fallback darurat.
+   */
+  private extractAnswerFromPartialJson(content: string): string {
+    if (!content) return '';
+    const match = content.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (!match) return '';
+    return match[1]
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .trim();
   }
 
   /**
@@ -428,24 +504,27 @@ ATURAN EKSTRAKSI PREFERENSI:
     tenantId?: string,
     treatmentNameForFollowUp?: string,
     customerId?: string,
-    isLocationKnown?: boolean
+    isLocationKnown?: boolean,
+    additionalContextText?: string
   ): Promise<FAQResponseResult> {
     const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
 
-    if (!this.apiKey || this.apiKey.startsWith('mock')) {
+    const endpoint = getLlmEndpointConfig({ model: undefined });
+    if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) {
       const fallback = this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp);
-      return { answer: fallback, reasoning: '[MOCK_KEY] Using fallback response' };
+      return { answer: fallback, reasoning: '[MOCK_KEY] Using fallback response', usedFallback: true };
     }
 
     try {
       const res = await measure('LLM_GENERATOR_API_CALL', () =>
-        this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId, isLocationKnown)
+        this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId, isLocationKnown, additionalContextText)
       );
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
       return {
         answer: truncateToMaxChars(res.answer, maxChars),
         reasoning: res.reasoning,
         extracted_preferences: res.extracted_preferences,
+        usedFallback: res.usedFallback,
       };
     } catch (error) {
       console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);
@@ -453,6 +532,7 @@ ATURAN EKSTRAKSI PREFERENSI:
       return {
         answer: truncateToMaxChars(this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp), maxChars),
         reasoning: '[ERROR] API call failed',
+        usedFallback: true,
       };
     }
   }
@@ -467,7 +547,8 @@ ATURAN EKSTRAKSI PREFERENSI:
     tenantId?: string,
     treatmentNameForFollowUp?: string,
     customerId?: string,
-    isLocationKnown?: boolean
+    isLocationKnown?: boolean,
+    additionalContextText?: string
   ): Promise<string> {
     const result = await this.generateFaqResponseWithDetails(
       userQuestion,
@@ -475,21 +556,22 @@ ATURAN EKSTRAKSI PREFERENSI:
       conversationId,
       tenantId,
       treatmentNameForFollowUp,
-      customerId
+      customerId,
+      isLocationKnown,
+      additionalContextText
     );
     return result.answer;
   }
 
   private fallbackFaqResponse(userQuestion: string, chunks: KnowledgeChunkResult[], treatmentNameForFollowUp?: string): string {
-    let ctaSuffix = treatmentNameForFollowUp && treatmentNameForFollowUp.trim()
-      ? `\n\nKalau Bunda berminat, mau langsung saya bantu jadwalkan *${treatmentNameForFollowUp.trim()}*? 😊`
-      : `\n\nApakah Bunda tertarik untuk lanjut ke pengisian list reservasi treatment sekarang? 😊`;
-
     if (chunks.length === 0) {
-      return `Kami siap membantu memberikan rekomendasi treatment homecare terbaik untuk Bunda dan si kecil. Ada yang ingin Bunda tanyakan seputar perawatan kami? 😊`;
+      // Tidak ada data → jangan kirim pesan apology/apology antrean. Kembalikan kosong;
+      // pemanggil (interest.ts) akan eskalasi senyap ke antrean human handling.
+      return '';
     }
 
     // Jalur katalog treatment terstruktur: bangun rekomendasi personal dari fakta data.
+    // AMAN — data terstruktur dari DB catalog, bukan echo RAG mentah.
     const firstChunk = chunks[0];
     if (firstChunk.content.includes('[DATA TREATMENT]')) {
       const items = firstChunk.content.split(/\[DATA TREATMENT\]/).filter((s) => s.trim().length > 0);
@@ -518,12 +600,12 @@ ATURAN EKSTRAKSI PREFERENSI:
       }
     }
 
-    // Jalur knowledge base FAQ biasa (non-catalog): ambil Jawaban yang tersimpan verbatim.
-    let text = firstChunk.content;
-    if (text.includes('Jawaban:')) {
-      text = text.split('Jawaban:')[1].trim();
-    }
-    return `${text} 😊${ctaSuffix}`;
+    // Jalur RAG/FAQ mentah (non-catalog) TIDAK lagi di-echo verbatim ke customer.
+    // Chunk yang terambil bisa generic/nyasar (mis. pertanyaan spesifik "usia minimal"
+    // match ke chunk umum "bayi baru lahir sampai beberapa tahun") → berisiko memberi
+    // info medis yang keliru. Saat AI gagal, jangan kirim pesan apology — kembalikan
+    // kosong agar pemanggil mengeskalasi ke antrean human handling.
+    return '';
   }
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { followUpService } from '../../src/services/follow-up.service';
 import { getRollingFollowUpMessage, FOLLOWUP_ROLLING_TEMPLATES } from '../../src/config/followup-templates';
 import { customerService } from '../../src/services/customer.service';
+import { prisma } from '../../src/db/client';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
@@ -59,6 +60,30 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
 
     await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
     // Verified: NEXT_TREATMENT stages 1, 2, 3 scheduled
+  });
+
+  it('4b. createNextTreatmentFollowUps idempotent — pemanggilan kedua tidak membuat duplikat', async () => {
+    const phone = `62893${Date.now()}idem`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Idem', DEFAULT_TENANT_ID);
+    const bookingDate = new Date();
+
+    // Simulasikan DB nyata: setelah pemanggilan pertama, findFirst mengembalikan
+    // row NEXT_TREATMENT PENDING (seperti DB sesungguhnya). Di in-memory fallback
+    // findFirst selalu null, jadi kita mock agar guard idempotency teruji.
+    const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst');
+    findFirstSpy.mockResolvedValueOnce(null as any).mockResolvedValueOnce({ id: 'existing' } as any);
+
+    const createSpy = vi.spyOn(prisma.followUp, 'create');
+    await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
+    const afterFirst = createSpy.mock.calls.filter((c) => c[0].data?.type === 'NEXT_TREATMENT').length;
+
+    await followUpService.createNextTreatmentFollowUps(customer.id, bookingDate, DEFAULT_TENANT_ID);
+    const afterSecond = createSpy.mock.calls.filter((c) => c[0].data?.type === 'NEXT_TREATMENT').length;
+
+    // Pemanggilan pertama membuat 3 stage; pemanggilan kedua TIDAK menambah
+    // (guard idempotency menemukan row existing → skip).
+    expect(afterFirst).toBe(3);
+    expect(afterSecond).toBe(3);
   });
 
   it('5. processDueFollowUps handles empty due queue gracefully', async () => {

@@ -33,6 +33,23 @@ export interface ChatCompletionsWithFallbackCall {
    * utama, helper otomatis mencoba fallbackModel. Default: tidak ada validasi konten.
    */
   isContentValid?: ((content: string) => boolean) | undefined;
+  /**
+   * Konfigurasi retry transient (429/5xx/timeout) sebelum masuk fallback chain.
+   * Default: { maxRetries: 2, baseDelayMs: 400 }.
+   */
+  transientRetry?: { maxRetries?: number; baseDelayMs?: number };
+}
+
+function isTransientError(err: any): boolean {
+  const code = err?.code || '';
+  const msg = String(err?.message || '');
+  const status = err?.response?.status || err?.status || 0;
+  return (
+    code === 'ECONNABORTED' ||
+    /timeout/i.test(msg) ||
+    status === 429 ||
+    status >= 500
+  );
 }
 
 export interface ChatCompletionsWithFallbackResult {
@@ -46,12 +63,17 @@ export interface ChatCompletionsWithFallbackResult {
 export async function callChatCompletionsWithFallback(
   call: ChatCompletionsWithFallbackCall
 ): Promise<ChatCompletionsWithFallbackResult> {
-  const attempt = async (model: string, overrideBaseUrl?: string, overrideApiKey?: string): Promise<any> => {
+  const attempt = async (
+    model: string,
+    overrideBaseUrl?: string,
+    overrideApiKey?: string,
+    payloadOverride?: Record<string, unknown>
+  ): Promise<any> => {
     const finalBaseUrl = overrideBaseUrl || call.baseUrl;
     const finalApiKey = overrideApiKey || call.apiKey;
     const resp = await axios.post(
       `${finalBaseUrl}/chat/completions`,
-      { ...call.payload, model },
+      { ...(payloadOverride ?? call.payload), model },
       {
         headers: { Authorization: `Bearer ${finalApiKey}`, 'Content-Type': 'application/json' },
         timeout: call.timeoutMs,
@@ -66,11 +88,59 @@ export async function callChatCompletionsWithFallback(
     return resp;
   };
 
+  // Beberapa provider OpenAI-compatible MENOLAK argumen `response_format`
+  // (mis. HTTP 400 "Unrecognized request argument supplied: response_format").
+  // Untuk ketahanan: jika request mengandung response_format dan provider
+  // menolaknya, ulangi sekali TANPA response_format. Format JSON tetap dijamin
+  // lewat instruksi sistem prompt (di tempat pemanggil), jadi tidak ada regresi.
+  const hasResponseFormat = Boolean((call.payload as any)?.response_format);
+  const isResponseFormatRejection = (err: any): boolean => {
+    const raw: string = err?.response?.data?.error?.message || err?.message || String(err);
+    return /response_format|response format|unrecognized request argument/i.test(raw);
+  };
+  const attemptWithFormatRetry = async (
+    model: string,
+    overrideBaseUrl?: string,
+    overrideApiKey?: string
+  ): Promise<any> => {
+    try {
+      return await attempt(model, overrideBaseUrl, overrideApiKey);
+    } catch (err: any) {
+      if (hasResponseFormat && isResponseFormatRejection(err)) {
+        console.warn(
+          `[LLM MODEL FALLBACK] Provider menolak response_format (${err?.response?.status || ''} ${err?.response?.data?.error?.message || err?.message || String(err)}). Mencoba ${model} sekali lagi TANPA response_format.`
+        );
+        return await attempt(model, overrideBaseUrl, overrideApiKey, { ...call.payload, response_format: undefined });
+      }
+      throw err;
+    }
+  };
+
   try {
-    return { data: (await attempt(call.model)).data, model: call.model, usedFallback: false, baseUrl: call.baseUrl };
+    return { data: (await attemptWithFormatRetry(call.model)).data, model: call.model, usedFallback: false, baseUrl: call.baseUrl };
   } catch (err: any) {
     const chain = getFallbackChain().filter((m) => m !== call.model);
     let lastErr: any = err;
+
+    // 0) Transient retry: 429/5xx/timeout bisa pulih tanpa ganti model.
+    //    Retry terbatas (maks 2) dengan backoff eksponensial singkat, JANGAN
+    //    menutup circuit breaker (error tetap diteruskan bila tak kunjung pulih).
+    const retryConfig = call.transientRetry ?? { maxRetries: 2, baseDelayMs: 400 };
+    const maxRetries = retryConfig.maxRetries ?? 2;
+    const baseDelayMs = retryConfig.baseDelayMs ?? 400;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      if (!isTransientError(lastErr)) break;
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      console.warn(`[LLM MODEL FALLBACK] Transient error (${lastErr?.message || String(lastErr)}), retry ${attempt + 1}/${maxRetries} in ${delay}ms.`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      try {
+        const resp = await attemptWithFormatRetry(call.model);
+        console.log(`[LLM FALLBACK OK] Retry sukses pada ${call.model} (transient recovery).`);
+        return { data: resp.data, model: call.model, usedFallback: true, baseUrl: call.baseUrl };
+      } catch (e: any) {
+        lastErr = e;
+      }
+    }
 
     // 1) Rantai model cadangan dalam provider yang sama (mis. SumoPod: deepseek → qwen).
     //    Bisa dikosongkan via env AI_MODEL_FALLBACK_CHAIN untuk perilaku lama.
@@ -79,7 +149,7 @@ export async function callChatCompletionsWithFallback(
         console.warn(
           `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${fbModel} via provider yang sama (${lastErr?.message || String(lastErr)})`
         );
-        const resp = await attempt(fbModel);
+        const resp = await attemptWithFormatRetry(fbModel);
         console.log(`[LLM FALLBACK OK] ${fbModel} berhasil via ${call.baseUrl}`);
         return { data: resp.data, model: fbModel, usedFallback: true, baseUrl: call.baseUrl };
       } catch (e: any) {
@@ -96,7 +166,7 @@ export async function callChatCompletionsWithFallback(
         console.warn(
           `[LLM MODEL FALLBACK] ${call.model}${chain.length ? '/' + chain.join(',') : ''} gagal, mencoba last-resort ${call.fallbackModel} via ${externalBaseUrl} (${lastErr?.message || String(lastErr)})`
         );
-        const resp = await attempt(call.fallbackModel, externalBaseUrl, externalApiKey);
+        const resp = await attemptWithFormatRetry(call.fallbackModel, externalBaseUrl, externalApiKey);
         console.log(`[LLM FALLBACK OK] ${call.fallbackModel} berhasil via ${externalBaseUrl}`);
         return { data: resp.data, model: call.fallbackModel, usedFallback: true, baseUrl: externalBaseUrl };
       } catch (e: any) {
@@ -111,7 +181,7 @@ export async function callChatCompletionsWithFallback(
         console.warn(
           `[LLM MODEL FALLBACK] ${call.model} gagal, mencoba ${call.fallbackModel} (${lastErr?.message || String(lastErr)})`
         );
-        const resp = await attempt(call.fallbackModel);
+        const resp = await attemptWithFormatRetry(call.fallbackModel);
         console.log(`[LLM FALLBACK OK] ${call.fallbackModel} berhasil via ${call.baseUrl}`);
         return { data: resp.data, model: call.fallbackModel, usedFallback: true, baseUrl: call.baseUrl };
       } catch (e: any) {
