@@ -45,10 +45,13 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
     cleanup();
   });
 
-  it('primary gagal → chain deepseek-v4-flash via provider SAMA (SumoPod) sukses', async () => {
+  it('primary gagal → transient retry (2×) → chain deepseek-v4-flash via provider SAMA (SumoPod) sukses', async () => {
     setupChainEnv();
     const postSpy = vi.spyOn(axios, 'post');
+    // Transient retry: error timeout di-retry (2× default) sebelum pindah ke chain.
     postSpy
+      .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
+      .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
       .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
       .mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
 
@@ -64,19 +67,61 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
     expect(res.usedFallback).toBe(true);
     expect(res.model).toBe('deepseek-v4-flash');
     expect(res.baseUrl).toBe('https://ai.sumopod.com/v1');
-    expect(postSpy).toHaveBeenCalledTimes(2);
-    const chainCall = postSpy.mock.calls[1];
+    expect(postSpy).toHaveBeenCalledTimes(4);
+    const chainCall = postSpy.mock.calls[3];
     expect(String(chainCall[0])).toBe('https://ai.sumopod.com/v1/chat/completions');
     expect((chainCall[2] as any).headers.Authorization).toBe('Bearer sk-main');
+  });
+
+  it('transient error (429) pulih setelah retry → kembali ke model primary tanpa ganti model', async () => {
+    setupChainEnv();
+    const postSpy = vi.spyOn(axios, 'post');
+    postSpy
+      .mockRejectedValueOnce({ response: { status: 429, data: {} }, message: 'Rate limit exceeded' })
+      .mockResolvedValueOnce(okPayload('MiniMax-M2.7-highspeed'));
+
+    const res = await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-v4-flash',
+      timeoutMs: 12000,
+      payload: { messages: [] },
+    });
+
+    expect(res.model).toBe('MiniMax-M2.7-highspeed');
+    expect(res.usedFallback).toBe(true); // recovery via retry
+    expect(postSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('transientRetry dinonaktifkan ({ maxRetries: 0 }) → langsung masuk chain (perilaku lama)', async () => {
+    setupChainEnv();
+    const postSpy = vi.spyOn(axios, 'post');
+    postSpy
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
+
+    const res = await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-v4-flash',
+      timeoutMs: 12000,
+      transientRetry: { maxRetries: 0 },
+      payload: { messages: [] },
+    });
+
+    expect(res.model).toBe('deepseek-v4-flash');
+    expect(postSpy).toHaveBeenCalledTimes(2);
   });
 
   it('primary + deepseek gagal → qwen3.7-flash sukses (masih provider sama)', async () => {
     setupChainEnv();
     const postSpy = vi.spyOn(axios, 'post');
-    postSpy
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockResolvedValueOnce(okPayload('qwen3.7-flash-2026-07-15'));
+    // primary: 3× (1 + 2 retry transient) + deepseek: 1× + qwen: 1× sukses = 5 calls.
+    for (let i = 0; i < 3; i++) postSpy.mockRejectedValueOnce(new Error('timeout'));
+    postSpy.mockRejectedValueOnce(new Error('timeout')); // deepseek
+    postSpy.mockResolvedValueOnce(okPayload('qwen3.7-flash-2026-07-15'));
 
     const res = await callChatCompletionsWithFallback({
       baseUrl: 'https://ai.sumopod.com/v1',
@@ -89,10 +134,53 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
 
     expect(res.model).toBe('qwen3.7-flash-2026-07-15');
     expect(res.usedFallback).toBe(true);
-    expect(postSpy).toHaveBeenCalledTimes(3);
+    expect(postSpy).toHaveBeenCalledTimes(5);
   });
 
   it('seluruh rantai SumoPod gagal → penyelamat terakhir DeepSeek EKSTERNAL (baseUrl+key beda)', async () => {
+    setupChainEnv();
+    const postSpy = vi.spyOn(axios, 'post');
+    // primary: 3× (1 + 2 retry) + deepseek: 1× + qwen: 1× = 5 gagal → external sukses.
+    for (let i = 0; i < 5; i++) postSpy.mockRejectedValueOnce(new Error('timeout'));
+    postSpy.mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
+
+    const res = await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-v4-flash',
+      timeoutMs: 12000,
+      payload: { messages: [] },
+    });
+
+    expect(res.model).toBe('deepseek-v4-flash');
+    expect(res.baseUrl).toBe('https://api.deepseek.com');
+    expect(postSpy).toHaveBeenCalledTimes(6);
+    const externalCall = postSpy.mock.calls[5];
+    expect(String(externalCall[0])).toBe('https://api.deepseek.com/chat/completions');
+    expect((externalCall[2] as any).headers.Authorization).toBe('Bearer sk-external-test');
+  });
+
+  it('semua lapis gagal → throw (upstream: breaker → regex fallback)', async () => {
+    setupChainEnv();
+    vi.spyOn(axios, 'post').mockRejectedValue(new Error('timeout of 12000ms exceeded'));
+    await expect(
+      callChatCompletionsWithFallback({
+        baseUrl: 'https://ai.sumopod.com/v1',
+        apiKey: 'sk-main',
+        model: 'MiniMax-M2.7-highspeed',
+        fallbackModel: 'deepseek-v4-flash',
+        timeoutMs: 12000,
+        payload: { messages: [] },
+      })
+    ).rejects.toThrow('timeout');
+    // primary (3×: 1 + 2 retry transient) + deepseek (1×) + qwen (1×) + external (1×) = 6.
+    // Transient retry HANYA untuk primary (poin Fase 3.3: 429/5xx/timeout tidak langsung
+    // menggagalkan chain) — model chain tetap 1 percobaan masing-masing.
+    expect(axios.post).toHaveBeenCalledTimes(6);
+  });
+
+  it('transientRetry maxRetries=0 → chain 4-lapis legacy tanpa retry transient', async () => {
     setupChainEnv();
     const postSpy = vi.spyOn(axios, 'post');
     postSpy
@@ -107,30 +195,62 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       model: 'MiniMax-M2.7-highspeed',
       fallbackModel: 'deepseek-v4-flash',
       timeoutMs: 12000,
+      transientRetry: { maxRetries: 0 },
       payload: { messages: [] },
     });
 
     expect(res.model).toBe('deepseek-v4-flash');
     expect(res.baseUrl).toBe('https://api.deepseek.com');
     expect(postSpy).toHaveBeenCalledTimes(4);
-    const externalCall = postSpy.mock.calls[3];
-    expect(String(externalCall[0])).toBe('https://api.deepseek.com/chat/completions');
-    expect((externalCall[2] as any).headers.Authorization).toBe('Bearer sk-external-test');
   });
 
-  it('semua 4 lapis gagal → throw (upstream: breaker → regex fallback)', async () => {
-    setupChainEnv();
-    vi.spyOn(axios, 'post').mockRejectedValue(new Error('timeout of 12000ms exceeded'));
-    await expect(
-      callChatCompletionsWithFallback({
-        baseUrl: 'https://ai.sumopod.com/v1',
-        apiKey: 'sk-main',
-        model: 'MiniMax-M2.7-highspeed',
-        fallbackModel: 'deepseek-v4-flash',
-        timeoutMs: 12000,
-        payload: { messages: [] },
+  it('provider menolak response_format → retry sekali TANPA response_format (bukan gagal total)', async () => {
+    const postSpy = vi.spyOn(axios, 'post');
+    postSpy
+      .mockRejectedValueOnce({
+        response: {
+          status: 400,
+          data: { error: { message: 'Unrecognized request argument supplied: response_format' } },
+        },
+        message: 'Request failed with status code 400',
       })
-    ).rejects.toThrow('timeout');
-    expect(axios.post).toHaveBeenCalledTimes(4);
+      .mockResolvedValueOnce(okPayload('primary-ok'));
+
+    const res = await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-v4-flash',
+      timeoutMs: 12000,
+      payload: { messages: [], response_format: { type: 'json_object' } },
+    });
+
+    expect(res.usedFallback).toBe(false);
+    expect(res.model).toBe('MiniMax-M2.7-highspeed');
+    expect(postSpy).toHaveBeenCalledTimes(2);
+    const retryBody = (postSpy.mock.calls[1][1] as any);
+    expect(retryBody.response_format).toBeUndefined();
+    expect(retryBody.messages).toEqual([]);
+  });
+
+  it('error NON-response_format → tidak ada retry extra (perilaku 4-lapis tetap utuh)', async () => {
+    setupChainEnv();
+    const postSpy = vi.spyOn(axios, 'post');
+    postSpy
+      .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
+      .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
+      .mockRejectedValueOnce(new Error('timeout of 12000ms exceeded'))
+      .mockResolvedValueOnce(okPayload('deepseek-v4-flash'));
+
+    await callChatCompletionsWithFallback({
+      baseUrl: 'https://ai.sumopod.com/v1',
+      apiKey: 'sk-main',
+      model: 'MiniMax-M2.7-highspeed',
+      fallbackModel: 'deepseek-v4-flash',
+      timeoutMs: 12000,
+      payload: { messages: [], response_format: { type: 'json_object' } },
+    });
+
+    expect(postSpy).toHaveBeenCalledTimes(4);
   });
 });

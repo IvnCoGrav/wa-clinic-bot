@@ -12,6 +12,7 @@ interface TrackedEntry {
 const store = new Map<string, TrackedEntry>();
 const MAX_OPENERS = 3;
 const TTL_MS = 2 * 60 * 60 * 1000; // 2 Jam
+const MAX_CONVERSATIONS = 500; // size cap — hindari unbounded growth (mirip faq-cache)
 
 function cleanupExpired() {
   const now = Date.now();
@@ -22,6 +23,20 @@ function cleanupExpired() {
   }
 }
 
+function evictIfOverCapacity() {
+  if (store.size < MAX_CONVERSATIONS) return;
+  // Evict entri paling lama (lastUpdated terkecil) satu per satu sampai di bawah cap.
+  let oldestKey: string | null = null;
+  let oldestTs = Infinity;
+  for (const [key, entry] of store.entries()) {
+    if (entry.lastUpdated < oldestTs) {
+      oldestTs = entry.lastUpdated;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey) store.delete(oldestKey);
+}
+
 export const openerTracker = {
   /**
    * Ekstrak 3-5 kata pertama dari kalimat balasan bot sebagai 'opener'.
@@ -29,6 +44,7 @@ export const openerTracker = {
   record(conversationId: string, replyText: string): void {
     if (!conversationId || !replyText) return;
     cleanupExpired();
+    evictIfOverCapacity();
 
     const cleanText = replyText.trim().replace(/^[*_~`#\s]+/g, '');
     const words = cleanText.split(/\s+/).slice(0, 4).join(' ');

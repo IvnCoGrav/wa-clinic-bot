@@ -4,6 +4,175 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-08-14
+
+### Fixed — Fase 1: Critical Bug Fixes (AI Chatbot Hardening)
+
+- **FAQ cache poisoning lintas customer** (`src/services/faq-cache.service.ts`, `src/integrations/llm/generator.ts`): cache key kini memasukkan `isLocationKnown` + `additionalContextText` — konteks yang mengubah prompt (CTA "tanya lokasi" vs assumptive-close, fakta ongkir). Customer tanpa lokasi tidak lagi menerima jawaban cached milik customer yang sudah tahu lokasi.
+- **Raw JSON leak di Phrasing Service** (`src/integrations/llm/phrasing.service.ts`): saat `JSON.parse` gagal, JSON mentah (`{"message": ...}`) tidak lagi dikirim ke customer — diekstrak via regex, sisanya jatuh ke template statis. Plain text non-JSON tetap dipakai.
+- **Guard akses `choices[0].message.content`** (`generator.ts`, `intent.ts`, `phrasing.service.ts`): optional chaining + guard response kosong → masuk jalur fallback (soft-fallback / rule-based / template), tidak lagi `TypeError`.
+
+### Fixed — Fase 2: Medical Detection Consolidation
+
+- **Satu sumber keyword medis**: array ad-hoc di `src/integrations/llm/intent.ts` & `src/services/nlu-classifier.service.ts` dihapus — semua arah ke `checkMedicalKeywords` (config single source).
+- **Word-boundary matching** (`src/config/medical-keywords.ts`): keyword pendek (≤6 huruf) dipakai dengan boundary + pengecualian frasa ("step by step") — "kaku" tidak match "kakun", "kuning" tidak match "kuningan".
+
+### Added — Fase 3: LLM Gateway Abstraction
+
+- **Helper terpusat** `src/integrations/llm/llm-gateway.ts`: `getLlmEndpointConfig` (resolve apiKey/baseUrl/model/timeout) + `callChatWithRetry` (retry/backoff transient) + re-export `extractJsonContent`. Menghilangkan getter `apiKey`/`baseUrl` duplikat di ai-router, intent, generator, phrasing, nlu-classifier, llm-evaluator.
+- **Transient retry di `model-fallback.ts`**: 429/5xx/timeout pada model primary kini di-retry (default 2×, backoff eksponensial) sebelum masuk fallback chain — tidak lagi sekali gagal = langsung ganti model.
+- **JSON extraction terpusat** di ai-router (`extractJsonContent`) — anti duplikasi fence-strip.
+
+### Fixed — Fase 4: Tenant-Aware Model Registry
+
+- **Registry per-tenant** (`src/config/ai-models.config.ts`): `Map<tenantId, Map<task, config>>` — load tenant B tidak menimpa tenant A; `getModelConfig`/`getAllTaskConfigs`/`updateTaskConfig` menerima `tenantId` (default `DEFAULT_TENANT_ID`).
+- **`globalBotActive` per-tenant** via `isBotActive`/`setBotActive` — disable satu tenant tidak memengaruhi tenant lain (caller: `machine.ts`, `settings.subroute.ts`).
+
+### Fixed — Fase 5: Error Handling Hardening
+
+- **Helper `parsePositiveInt`/`parseNonNegativeNumber`** (`src/utils/env-numeric.ts`): fail-closed untuk env numerik (NaN/negatif/nol → fallback default). Diterapkan ke `llm-context`, `ai-router` (timeout), `llm-gateway`, `nlu-classifier`, `follow-up.service`, `llm-evaluator`.
+- **Opener-tracker size cap** (`src/integrations/llm/opener-tracker.ts`): cap 500 conversation + evict LRU — tidak unbounded growth.
+- **LLM evaluator ikut audit** (`src/services/llm-evaluator.service.ts`): panggilan evaluator kini tercatat di `llm_audit_logs` (task `AI_EVALUATION`), sukses & error.
+
+### Fixed — Fase 6: Router Signal Cleanup
+
+- **Flag eskalasi router di-honor** (`src/state-machine/machine.ts`): selain `UNKNOWN_REPEATED`, kini `MEDICAL_KEYWORD_SUSPECTED` & `SCHEDULE_REQUEST` ikut auto-escalate ke human handling di full mode (shadow mode tetap pasif).
+- **Dead state branches** (`src/integrations/llm/ai-router.ts`): branch state yang tidak ada di enum Prisma (`AWAITING_CONFIRMATION`, `AWAITING_RESERVATION_DETAILS`) diganti state asli (`LOCATION_CONFIRMED`, `RESERVATION_SENT`) dengan alias untuk kompatibilitas caller lama.
+- **`compareRouterDecisions`** kini membandingkan entity lokasi & treatment — kualitas ekstraksi terlihat di metrik shadow.
+- **Bersihkan duplikasi**: duplikat `'baby spa'` dihapus; komentar `RESERVATION_NAME_RE` diperjelas (fallback lowercase sengaja tidak dipakai karena false positive).
+
+### Fixed — Fase 7: Follow-up Engine Fixes
+
+- **Idempotency `createNextTreatmentFollowUps`** (`src/services/follow-up.service.ts`): guard memakai `existing` (status PENDING/QUEUED) — pemanggilan ganda tidak membuat duplikat.
+- **Anti-starvation `processDueFollowUps`**: `orderBy` deterministik (`scheduled_at ASC, created_at ASC`) — subset tidak lagi arbitrer per run.
+
+### Verifikasi
+
+- `npm run build` (tsc) exit 0.
+- Test unit terkait (Fase 1-7) hijau: faq-cache, phrasing, generator safe-fallback, medical-keywords, model-fallback-chain, qa-nlu-fallback-security, ai-models-tenant, env-numeric, ai-router-engine, follow-up-engine, dan lain-lain.
+- Catatan: kegagalan pre-existing di `timer.test.ts`, `waha-label-resilience.test.ts`, `daily-report.test.ts` (timeout) sudah dikonfirmasi identik tanpa perubahan fase ini.
+
+---
+
+## [Unreleased] - 2026-08-13
+
+### Fixed — Sanitasi Teks Meta / Pengantar LLM Phrasing Engine
+- **Masalah**: Pada pesan `ongkir_info` atau phrasing tertentu, model LLM terkadang mengikutsertakan teks pengantar meta (seperti *"Siapp, ini pesan variasi untuk ongkir_info dari fakta yang ada:\n\n---\n\n\"Wah dekat banget...\""*) yang ikut terkirim ke WhatsApp pelanggan.
+- **Perbaikan**:
+  - `src/integrations/llm/phrasing.service.ts`: Menambahkan pembersihan otomatis menggunakan regex untuk membuang teks pengantar meta (`Siapp, ini pesan variasi...`), pemisahr `---`, serta tanda petik pembungkus secara otomatis sebelum balasan dikirimkan.
+
+### Fixed — Resilience LLM Response Generator (Fallback Plain Text Non-JSON)
+- **Masalah**: UI hanya bisa mengekspor 1 tanggal sekaligus; user ingin input rentang tanggal (contoh: analisa mingguan) dalam satu file.
+- **Perbaikan**:
+  - `src/services/chat-export.service.ts`: refactor — `generateDay` + `loadDayData(date)` diekstrak, fungsi baru `generateRange(tenantId, startDate, endDate)` (maks 31 hari, validasi format & urutan tanggal) yang merender SATU file Markdown berisi tabel ringkasan per hari + transkrip blok per hari; `renderConversationBlocks` dipakai bersama oleh `buildDailyChatMarkdown` (output harian identik, unit test tetap hijau).
+  - `src/routes/admin/export.subroute.ts`: `GET /api/admin/export/daily-chats` menerima `startDate` & `endDate` opsional (fallback `date`/hari ini tetap jalan); error validasi → HTTP 400 dengan pesan Bahasa Indonesia.
+  - `src/services/chat-export.service.ts` `listExports()`: mengenali file rentang `daily-chats-YYYY-MM-DD-to-YYYY-MM-DD.md` (field `rangeEnd`).
+
+### Added — Daily Chat Export: Rentang Tanggal (startDate & endDate)
+- **Masalah**: UI hanya bisa mengekspor 1 tanggal sekaligus; user ingin input rentang tanggal (contoh: analisa mingguan) dalam satu file.
+- **Perbaikan**:
+  - `src/services/chat-export.service.ts`: refactor — `generateDay` + `loadDayData(date)` diekstrak, fungsi baru `generateRange(tenantId, startDate, endDate)` (maks 31 hari, validasi format & urutan tanggal) yang merender SATU file Markdown berisi tabel ringkasan per hari + transkrip blok per hari; `renderConversationBlocks` dipakai bersama oleh `buildDailyChatMarkdown` (output harian identik, unit test tetap hijau).
+  - `src/routes/admin/export.subroute.ts`: `GET /api/admin/export/daily-chats` menerima `startDate` & `endDate` opsional (fallback `date`/hari ini tetap jalan); error validasi → HTTP 400 dengan pesan Bahasa Indonesia.
+  - `src/services/chat-export.service.ts` `listExports()`: mengenali file rentang `daily-chats-YYYY-MM-DD-to-YYYY-MM-DD.md` (field `rangeEnd`).
+  - `packages/admin-dashboard/src/pages/tenant/ChatExport.tsx`: input tanggal tunggal diganti dua input **Dari / Sampai** (max = hari ini), validasi urutan & batas 31 hari, file rentang tampil di daftar dengan label `tgl s/d tgl`.
+- **Verifikasi**: `tsc` hijau; dashboard build OK; unit test `chat-export` 18/18 hijau; API live `?startDate=2026-08-10&endDate=2026-08-12` → `daily-chats-2026-08-10-to-2026-08-12.md` (12 percakapan/226 pesan, tabel per hari 4/153, 5/23, 3/50); rentang terbalik (`2026-08-12`→`2026-08-10`) → HTTP 400.
+- **Catatan**: mengikuti pola `saveDayExport` (cron), generate manual tidak menulis file ke disk — daftar "File Ekspor Tersimpan" tetap kosong sampai cron diaktifkan.
+
+### Fixed — Daily Chat Export: Feedback "0 Data" yang Menyesatkan
+- **Masalah**: User generate export dan mendapat file kosong. Akar: (a) UI default ke tanggal hari ini yang memang belum ada percakapan customer asli, (b) mayoritas trafik adalah data QA/sandbox yang sengaja tidak diekspor — tidak ada penjelasan apa pun, file kosong langsung diunduh.
+- **Verifikasi**: Endpoint `/api/admin/export/daily-chats` berfungsi normal — 08-10: 4 percakapan/153 pesan, 08-11: 5/23, 08-12: 3/50; 08-13 (hari ini): 0 percakapan real (valid, belum ada chat asli hari ini).
+- **Perbaikan** (`packages/admin-dashboard/src/pages/tenant/ChatExport.tsx`):
+  - Saat hasil 0 percakapan → toast penjelasan (bukan unduh file kosong): "tidak ada percakapan customer REAL; data QA/sandbox tidak diekspor; coba tanggal lain".
+  - Teks bantuan di bawah input tanggal menyebut eksklusi sandbox (`is_sandbox_test`).
+  - Toast sukses kini menampilkan jumlah percakapan & pesan.
+- **Catatan**: cron harian (`ENABLE_CHAT_EXPORT_CRON=true` di server) belum diaktifkan → daftar "File Ekspor Tersimpan" kosong.
+
+### Fixed — Dual Intent Handling (FAQ + Lokasi dalam 1 Pesan)
+- **Masalah**: Ketika customer mengirimkan pesan yang memuat FAQ medis/treatment SEKALIGUS lokasi rumah (contoh: *"Apakah bisa pijt bapil untk anak usia 2 thn? saya di sawotratap"*), handler `greeting.ts` memotong pesan dan hanya mengirim teks lokasi ke `location.ts`. Selanjutnya `location.ts` mengabaikan FAQ (`skipFaqIntercept = true`) dan hanya fokus menghitung ongkir, sehingga pertanyaan medis customer diabaikan sama sekali.
+- **Perbaikan**:
+  - `src/state-machine/types.ts`: Menambahkan properti `extractedLocationForGeocode` dan `additionalContextText` pada `StateHandlerContext`.
+  - `src/state-machine/handlers/greeting.ts`: Meneruskan `extractedLocationForGeocode` tanpa memotong/mengubah `incomingMessage.text.body` asli.
+  - `src/integrations/llm/generator.ts`: Mengizinkan `LLMResponseGenerator` menerima `additionalContextText` (info ongkir) dan menginjeksinya ke system prompt `[INFORMASI TAMBAHAN ONGKIR / LOKASI]`, sehingga LLM secara otomatis menggabungkan jawaban FAQ medis + info ongkir + penutup CTA dalam 1 balasan natural.
+  - `src/state-machine/handlers/location.ts` & `src/state-machine/handlers/interest.ts`: Menggabungkan alur kalkulasi ongkir dan jawaban FAQ saat `hasFaqIntent` terdeteksi pada pesan lokasi.
+
+### Fixed — Atribusi Audit LLM (conversation_id & customer_phone) + Analisis Biaya per Bubble
+- **Masalah**: 74% call LLM (NLU_ROUTING, NLU_CLASSIFICATION, INTENT_DETECTION — 602/819 baris `llm_audit_logs` 7 hari) tercatat `conversation_id = NULL` dan `customer_phone` palsu (`router-audit`/`nlu-audit`/`intent-audit`), sehingga biaya LLM tidak bisa diatribusikan ke bubble chat — jawaban "1 bubble = berapa call & Rp" tidak bisa dihitung akurat dari log.
+- **Perbaikan** (atribusi opsional, backward-compatible):
+  - `src/services/nlu-classifier.service.ts` — `classifyMessage(text, history, auditCtx?)` + interface `NluAuditContext`; audit NLU_CLASSIFICATION kini mencatat `conversation_id` & `customer_phone` asli.
+  - `src/integrations/llm/ai-router.ts` — `AIRouterInput` + field opsional `conversationId`/`customerPhone`; audit NLU_ROUTING mencatat atribusi.
+  - `src/integrations/llm/intent.ts` — `detectIntent(text, auditCtx?)` + interface `IntentAuditContext`; audit INTENT_DETECTION mencatat atribusi.
+  - `src/state-machine/machine.ts` & `src/state-machine/handlers/interest.ts` — call-site meneruskan `conversation.id` & `customer.phone`.
+- **Script analisis baru** `scripts/bubble-llm-cost-analysis.ts`: attach call LLM ke bubble OUTBOUND (window 120 detik, per-conversation; call tanpa `conversation_id` di-attach approximate global) → rata-rata call/bubble, Rp/bubble (real vs sandbox), top-10 termahal → konsol + `test-results/bubble-llm-cost-<ts>.md`.
+- **Hasil 7 hari (2026-08-06 s/d 13)**: 373 bubble = 713 call (1,91 call/bubble) = Rp 3.344,98 (Rp 8,97/bubble); customer REAL 113 bubble = 54 call = Rp 85,61 (0,48 call/bubble, mayoritas template statis/bypass).
+- **Tests**: build (`tsc`) lolos; 214 test terkait (nlu-classifier, ai-router-engine, qa-nlu-fallback-security, treatment-questions, e2e-chat-to-reservation, model-fallback-chain, phrasing-service, llm-generator-safe-fallback) hijau.
+
+### Fixed — Treatment Context & Greedy Catalog Match
+- **Masalah**: 
+  1. Saat customer menanyakan treatment spesifik (misal Pijat Bayi Pulih Ceria) lalu memberikan lokasi, bot menggunakan template `TEMPLATES.ongkirInfo` yang diakhiri pertanyaan generik *"Jadi mau pilih treatment apa bunda?"*.
+  2. Saat customer bertanya harga (*"Brp kak untk feenya?"*), fungsi `searchCatalogItems` melakukan *greedy match* pada 2 kata awal ("Pijat Bayi"), sehingga `"Pijat Bayi Ceria (Rileksasi)"` menduduki hasil pertama dan harganya keliru dikutip (Rp60.000, bukan Rp70.000 untuk Pulih Ceria).
+- **Perbaikan**:
+  - `src/services/treatment-catalog.service.ts`: Memisahkan pencarian menjadi `exactMatches` (nama cocok utuh) dan `partialMatches` (cocok 2 kata awal). `exactMatches` kini diprioritaskan penuh dan diurutkan dari nama terpanjang/terspesifik.
+  - `src/config/persona.ts`: Menambahkan opsi `candidateTreatmentName` pada `TEMPLATES.ongkirInfo` agar pertanyaan penutup kontekstual (*"Jadi mau pilih treatment apa Bund untuk hari ini? Atau mau lanjut dijadwalkan \*[Nama Treatment]\*-nya? 🤗"*).
+  - `src/state-machine/handlers/location.ts`: Memasukkan `conversation.last_discussed_treatment` ke dalam pembentukan balasan ongkir/lokasi.
+
+### Fixed — Ejaan Desa Sawotratap (Gazetteer)
+- **Masalah**: Desa di Kecamatan Gedangan, Kabupaten Sidoarjo tertulis salah sebagai "Sawotratas" (nama resmi: **Sawotratap**) di data gazetteer, sehingga pencocokan lokasi bisa gagal/mismatch.
+- **Perbaikan**: `docs/gazetteer_excel.tsv:30` dan `src/config/surabaya_sidoarjo_subdistricts.json:201` — "Sawotratas" → "Sawotratap".
+
+### Fixed — Unifikasi Greeting Header (Satu Sumber Kebenaran di `TEMPLATES`)
+- **Masalah**: Ada **3 versi teks pembuka yang tidak sinkron** — (a) string hardcoded di `src/state-machine/handlers/greeting.ts:83` (*"Perkenalkan, saya Bidan Yusi **dari Kala Moms and Baby Spa**. ✨"*, dipakai jalur customer baru kirim lokasi), (b) `TEMPLATES.firstContactGreetingHeader()` di `src/config/persona.ts` dan (c) `TEMPLATES.greeting()` — sehingga balasan terlihat "tidak mematuhi" persona (header di handler vs header di template).
+- **Perbaikan**:
+  - `src/state-machine/handlers/greeting.ts:82` — intro hardcoded diganti `TEMPLATES.firstContactGreetingHeader() + '\n\n'`; import `getBrandIdentity` dihapus (tidak terpakai lagi).
+  - `src/config/persona.ts` — teks header resmi diekstrak ke `buildFirstContactHeader()` (satu sumber kebenaran); `TEMPLATES.greeting()` disusun dari helper tersebut (DRY, output identik).
+  - Hasil: semua jalur (lokasi, FAQ di awal chat, greeting default) memakai Varian persona "Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare)".
+- **Unit Tests**: substring `'Perkenalkan, saya Bidan Yusi'` di `tests/unit/production_edge_cases.test.ts:953` & `tests/integration/control_center_ui.test.ts:221` tetap lolos (Varian B mengandung frase tersebut). Verifikasi 10 sesi `scripts/test-50-same-opener.ts --max=10` (LLM asli).
+
+### Fixed — LLM Generator: Anti Raw-JSON Leak, Fallback Darurat Aman & Anti Hard-Sell CTA (+ Retry Tanpa response_format)
+- **`src/integrations/llm/generator.ts`**:
+  - Soft-fallback JSON parser TIDAK lagi mengembalikan raw text (sintaks kurung kurawal) ke customer saat respons LLM terpotong/max_tokens habis. Kini: ekstrak nilai `"answer"` via regex (`extractAnswerFromPartialJson`) → jika gagal, jatuh ke fallback darurat netral (bukan bocor `{ "reasoning": ... }`).
+  - Prompt dihemat token: instruksi `reasoning` disingkat menjadi maksimal 1 kalimat / 15 kata (sebelumnya bebas panjang sehingga `answer` terpotong).
+  - **Fallback darurat (`fallbackFaqResponse`) tidak lagi meng-echo teks RAG/KB mentah** (chunk generic bisa keliru secara medis, mis. pertanyaan usia minimal match ke chunk "bayi baru lahir sampai beberapa tahun"). Jalur catalog terstruktur (`[DATA TREATMENT]`) tetap dipertahankan (data faktual dari DB).
+  - **⚠️ Skenario apology "mohon maaf sedang antrean chat" DIHAPUS (permintaan owner).** Saat AI gagal menghasilkan jawaban yang aman (LLM error / breaker open / fallback kosong), generator kini mengembalikan **jawaban kosong + `usedFallback:true`**, dan `interest.ts` **mengeskalasi senyap ke antrean human handling** (sama dengan pola "FAQ tidak terjawab") — tanpa mengirim pesan minta-coba-lagi ke customer. Queue lebih panjang diutamakan daripada skenario apology tersebut.
+  - Prompt diperkuat dengan **ATURAN ANTI HARD-SELLING**: nama treatment di CTA hanya boleh disebut jika customer sedang membahasnya.
+  - Panggilan LLM dibungkus **concurrency limiter** (anti 429 saat lonjakan/burst).
+- **`src/integrations/llm/model-fallback.ts`** — **Retry Tanpa `response_format`** (ditemukan saat verifikasi stres): provider OpenAI-compatible tertentu MENOLAK argumen `response_format` (HTTP 400 "Unrecognized request argument supplied: response_format") sehingga SEMUA jalur LLM jatuh ke fallback. Kini bila request memuat `response_format` dan provider menolaknya, `callChatCompletionsWithFallback` mengulang sekali TANPA `response_format` (format JSON tetap dijamin via sistem prompt). Fix terpusat → menguntungkan semua pemanggil (generator, ai-router, intent, nlu-classifier, dll).
+- **`src/utils/llm-concurrency.ts`** (baru): semaphore promise tanpa dependency eksternal, default `LLM_MAX_CONCURRENCY=4` (env `LLM_MAX_CONCURRENCY`).
+- **`src/state-machine/handlers/interest.ts`**: `treatmentNameForFollowUp` hanya diisi jika nama treatment **dieksplisitkan customer** (guard `treatmentExplicitlyMentioned`) — mencegah CTA "Paket Selapan" dipaksakan saat customer hanya tanya FAQ umum. **Selain itu: jika `faqResult.answer` kosong → eskalasi senyap ke HUMAN_HANDLING (`shouldSendReply:false`), pengganti skenario apology "antrean".**
+- **Unit Tests**: `tests/unit/llm-generator-safe-fallback.test.ts` (baru: fallback terpotong aman, regex extraction, limiter), `tests/unit/model-fallback-chain.test.ts` (+2: retry tanpa response_format & tidak ada retry pada error lain), `tests/unit/phrasing-service.test.ts` disesuaikan (fallback non-catalog → jawaban kosong). `tests/unit/treatment-questions.test.ts` & `tests/unit/e2e-chat-to-reservation.test.ts` dikoreksi: mock kini menarget `generateFaqResponseWithDetails` (method yang sebenarnya dipanggil `interest.ts`). `tests/unit/customer-memory.test.ts` & `tests/unit/faq-grounding.test.ts` disesuaikan: fallback tanpa data kini mengembalikan jawaban kosong (sinyal eskalasi). **Hasil verifikasi ulang stres 50 sesi (LLM asli): 0 JSON-leak, 48/50 (96%) jawaban presisi, 0 samar, 0 hard-sell CTA, 0 silent/eskalasi, 48/50 minta lokasi.**
+
+### Added — Harness Uji Variasi Sesi Baru (Pesan Pembuka Sama)
+- **`scripts/test-50-same-opener.ts`** (baru): jalankan **50 sesi percakapan terpisah** (fresh customer + conversation INITIAL + state machine per sesi, `is_sandbox_test=true`), masing-masing dibuka dengan pesan pembuka SAMA (`"Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?"`), lalu capture semua bubble yang benar-benar DITERIMA customer (via `RecordingWahaClient`). Opsi `--max=N`, `--offline` (fallback rule-based tanpa network). Default LLM asli dari `.env`.
+- Output: konsol per-sesi (state, error, eskalasi) + ringkasan agregat + **`test-results/50-same-opener-<timestamp>.json` / `.md`**.
+- Hasil run 50 (LLM asli, 2026-08-13): 0 error/silent/eskalasi; semua berakhir `AWAITING_LOCATION`. Temuan: **9/50 (18%) balasan bocor raw JSON internal LLM ke customer** (soft-fallback `generator.ts` saat respons tidak ter-parse → `{ "reasoning": ... }` terkirim apa adanya); hanya 7/50 jawaban presisi "minimal 2 minggu", 34/50 jawaban samar ("bayi baru lahir sampai beberapa tahun"); pertanyaan lokasi hanya muncul di 16/50 (32%); bubble pembuka 50/50 identik (template kaku).
+
+### Added — Daily Chat Export (Markdown untuk Analisa AI)
+- **`src/services/chat-export.service.ts`** (baru):
+  - `buildDailyChatMarkdown()`: pure function generator Markdown terstruktur — header statistik harian, satu blok per percakapan (phone, nama, lokasi, transisi state, flag human-handling/eskalasi/review, jumlah UNKNOWN beruntun), dan transkrip kronologis dengan penanda peran (`USER` = pelanggan, `BOT` = balasan AI, `HUMAN_AGENT` = staf/manusia via sender_name).
+  - Balasan BOT menyertakan skor LLM-as-judge (`ai_evaluations`) jika ada: `**BOT** (skor AI: 4/5)`.
+  - `generateDay()` tenant-aware (wajib `tenantId`), filter rentang UTC harian, dan **mengecualikan customer QA/sandbox** (`is_sandbox_test=true`) agar analisa tidak tercemar data test.
+  - `saveDayExport()` menulis file `daily-chats-YYYY-MM-DD.md` ke `storage/exports/` (env `CHAT_EXPORT_DIR`); `listExports()` mendaftar file tersimpan.
+  - DB offline → degrade senyap (return `success:false`), tidak mengganggu produksi.
+- **`src/routes/admin/export.subroute.ts`** (baru):
+  - `GET /api/admin/export/daily-chats?date=YYYY-MM-DD&tenantId=` → generate konten Markdown on-the-fly + audit trail `CHAT_EXPORT_GENERATE`.
+  - `GET /api/admin/export/daily-chats/list` → daftar file ekspor tersimpan.
+  - Terdaftar di `src/routes/admin.route.ts` (di balik auth admin dual X-API-KEY/cookie yang sama).
+- **Cron harian** (`src/services/cron.service.ts` `runDailyChatExport()` + gate di `src/app.ts`): `ENABLE_CHAT_EXPORT_CRON=true` (default false), interval `CHAT_EXPORT_INTERVAL_HOURS` (default 6 jam) — setiap siklus me-regenerate file hari berjalan.
+- **Admin Dashboard** (`packages/admin-dashboard`):
+  - Halaman baru `ChatExport.tsx` (route `/admin/chat-export`, nav "Daily Chat Export (AI)"): pilih tanggal → "Generate & Download .md" (Blob client-side, aman untuk auth cookie), tabel file tersimpan, dan contoh prompt analisa AI.
+  - Rebuilt `dist/` (chunk `ChatExport-*.js`).
+- **Unit Tests**: `tests/unit/chat-export.test.ts` (18 test: roleLabel, formatTime, formatLocalDate, parseDateRange, struktur markdown, HUMAN_AGENT labeling, skor AI, flag eskalasi/review, multi-line blockquote, empty day) 100% PASS.
+
+---
+
+## [1.13.0] - 2026-08-13
+
+### Fixed & Enhanced
+- **Forbidden English Words Sanitizer (`src/utils/language-sanitizer.ts` & `src/integrations/llm/generator.ts`)**: Menambahkan fungsi `sanitizeForbiddenEnglishWords` untuk membuang/mengganti kata bahasa Inggris terlarang yang bocor dari LLM (seperti `little one`, `little one-nya` -> `si kecil`, `baby` -> `bayi`, `mommy` -> `Bunda`, `schedule` -> `jadwal`) baik pada generasi LLM baru maupun pada hit FAQ Cache.
+- **Location-Known Customer Field Fix (`src/state-machine/handlers/interest.ts`)**: Memperbaiki bug di mana `isLocationKnown` sebelumnya mengevaluasi `currentState !== INITIAL && currentState !== AWAITING_LOCATION` (yang bisa menghasilkan `true` walau alamat/kelurahan customer masih kosong). Sekarang `isLocationKnown` secara eksplisit memeriksa `Boolean(customer.kelurahan)` sehingga jika alamat rumah belum diisi, AI 100% dijamin selalu meminta alamat rumah (*"Kalau boleh tahu rumahnya di mana ya Bunda?"*).
+- **RAG Leakage & Typo Sanitizer (`src/utils/language-sanitizer.ts` & `src/integrations/llm/generator.ts`)**: Menambahkan fungsi `sanitizeRagLeakage` untuk membuang potongan teks/typo yang bocor dari RAG secara otomatis (seperti `Bun.etails info di sini`, `details info`, atau `berdasarkan referensi dokumen di atas`) sebelum pesan dikirimkan ke pasien.
+- **TypeScript Fix**: Perbaikan properti `ai_feedback` -> `feedback` pada `chat-export.service.ts`.
+- **Unit Tests**: Penambahan pengujian unit `sanitizeRagLeakage` dan `sanitizeForbiddenEnglishWords` pada `tests/unit/language-sanitizer.test.ts` (100% PASS).
+
 ---
 
 ## [1.12.0] - 2026-08-12
@@ -21,8 +190,8 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Anti-Halusinasi Brand**: Melarang AI menerjemahkan nama brand ke bahasa Inggris (misal "Mothers and Baby Spa") serta melarang kata-kata Inggris yang sering bocor ("little one", "baby", "mommy") dengan padanan Indonesia wajib.
 - **Anti-Robot Phrasing**: Melarang penggunaan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:" — AI wajib langsung menjawab ke inti dengan gaya ngobrol WhatsApp natural.
 - **Ongkir CTA Fix**: Melarang AI menanyakan jadwal/waktu setelah info ongkir. AI wajib menutup dengan menanyakan pilihan treatment ("Jadi mau pilih treatment apa bunda?"), bukan jadwal ("kapan siap ditangani").
-- **Location Query Sanitizer**: Penambahan helper `sanitizeLocationTextForGeocoding` untuk membersihkan frasa pertanyaan ongkir (misal *"Food junction tandes sby berapa ongkir bubid"*) menjadi query lokasi bersih (*"Food junction tandes sby"*), sehingga Geocoding API berhasil mendeteksi Kelurahan & Kecamatan secara presisi dan menghitung ongkir secara otomatis.
-- **Robust LLM Intent JSON Extraction**: Memperbaiki parsing JSON pada `LLMIntentService` agar mengekstrak objek `{...}` secara otomatis jika LLM menghasilkan teks tambahan di luar JSON (mencegah error `Unexpected token 'B'`).
+- **Fix Location-Known State Mapping (`greeting.ts`)**: Memperbaiki bug di mana `greeting.ts` sebelumnya memicu `handleInterestState` dengan meng-override `current_state` menjadi `AWAITING_INTEREST`. Hal ini menyebabkan LLM keliru menganggap alamat rumah customer sudah diketahui (`isLocationKnown = true`), sehingga LLM tidak menanyakan alamat rumah di akhir balasan.
+- **Anti-Kata Buntung Persona Guard**: Penambahan aturan tata bahasa di persona prompt untuk mencegah LLM menghasilkan kata cacat/buntung (seperti *"kalau-nya"*, *"si-nya"*) akibat penghapusan kata bahasa Inggris yang dilarang. AI diwajibkan menggunakan struktur kalimat lengkap (*"kalau si kecil"*, *"kalau bayinya"*).
 - **Geocoding Kecamatan Gate & Persona Template Fix (`src/integrations/google-maps/geocoding.ts` & `src/config/persona.ts`)**: Penambahan proteksi gate nama Kecamatan luas yang memiliki nama ganda (seperti *Tandes*, *Karangpilang*, *Rungkut*, *Gubeng*, *Wonokromo*, *Wiyung*, *Sawahan*, dll.) yang membawahi banyak kelurahan. Jika customer mengetik nama kecamatan tanpa kata kunci eksplisit `kelurahan`/`desa`/`kel`, geocoding mengembalikan `isPrecise: false` beserta daftar `ambiguityResults` kelurahan di kecamatan tersebut agar bot meminta detail kelurahan spesifik. Perbaikan template `askKelurahanAmbiguous` di `persona.ts` agar menyebutkan nama Kecamatan target (misal *"Kecamatan Tandes"*) beserta contoh kelurahan secara ramah (maksimal 3 contoh), tanpa menyebutkan nama kelurahan acak di judul atau mencetak seluruh daftar kelurahan secara panjang.
 
 ---

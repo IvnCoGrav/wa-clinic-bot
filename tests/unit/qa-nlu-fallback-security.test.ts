@@ -82,7 +82,10 @@ describe('Kategori 1 — Uji Ketahanan Server (Simulasi API Down / Fallback 3-Ti
     process.env.LLM_FALLBACK_BASE_URL = 'https://api.deepseek.com';
     process.env.LLM_FALLBACK_API_KEY = 'sk-fallback-test';
     const postSpy = vi.spyOn(axios, 'post');
+    // Primary di-retry transient 2× (default) sebelum pindah ke DeepSeek → total 3 calls.
     postSpy
+      .mockRejectedValueOnce(Object.assign(new Error('timeout of 15000ms exceeded'), { code: 'ECONNABORTED' }))
+      .mockRejectedValueOnce(Object.assign(new Error('timeout of 15000ms exceeded'), { code: 'ECONNABORTED' }))
       .mockRejectedValueOnce(Object.assign(new Error('timeout of 15000ms exceeded'), { code: 'ECONNABORTED' }))
       .mockResolvedValueOnce({ data: { choices: [{ message: { content: JSON.stringify(validPayload({ intent: 'ASK_FAQ' })) } }] } });
 
@@ -97,8 +100,8 @@ describe('Kategori 1 — Uji Ketahanan Server (Simulasi API Down / Fallback 3-Ti
 
     expect(res.usedFallback).toBe(true);
     expect(res.model).toBe('deepseek-v4-flash');
-    expect(postSpy).toHaveBeenCalledTimes(2);
-    const fbCall = postSpy.mock.calls[1];
+    expect(postSpy).toHaveBeenCalledTimes(4);
+    const fbCall = postSpy.mock.calls[3];
     expect(String(fbCall[0])).toBe('https://api.deepseek.com/chat/completions');
     expect((fbCall[2] as any).headers.Authorization).toBe('Bearer sk-fallback-test');
     expect((fbCall[1] as any).model).toBe('deepseek-v4-flash');

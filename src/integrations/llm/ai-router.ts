@@ -7,7 +7,8 @@ import { LLM_HISTORY_LIMIT } from '../../config/llm-context';
 import { SERVICE_AREAS_ALTERNATION } from '../../config/service-areas';
 import { AiRouterConfigService } from '../../config/ai-router-config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
-import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { callChatCompletionsWithFallback } from './model-fallback';
+import { getLlmEndpointConfig } from './llm-gateway';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -59,6 +60,10 @@ export interface AIRouterInput {
   currentState: string;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   lastCustomerMessage: string;
+  /** Opsional: atribusi audit LLM (llm_audit_logs.conversation_id). */
+  conversationId?: string | null;
+  /** Opsional: atribusi audit LLM (llm_audit_logs.customer_phone). */
+  customerPhone?: string;
 }
 
 export interface AIRouterDecision {
@@ -173,14 +178,17 @@ const LOCATION_MARKER_RE =
   new RegExp(`(?:di\\s+|dari\\s+)?(?:kelurahan|kecamatan|desa|daerah|dekat|sekitar|wilayah|rumah|alamat)\\b|\\b(${SERVICE_AREAS_ALTERNATION})\\b`, 'i');
 
 const TREATMENT_KEYWORDS = [
-  'pijat bayi', 'baby spa', 'baby spa', 'pijat', 'spa', 'massage', 'laktasi',
+  'pijat bayi', 'baby spa', 'pijat', 'spa', 'massage', 'laktasi',
   'nebulizer', 'tindik', 'cukur', 'moksa', 'prenatal', 'oksitosin',
   'selapan', 'perawatan', 'flu bath', 'pijat hamil', 'pijat kids',
 ];
 
 const INTEREST_RE = /\b(mau dong|gimana cara|caranya booking|cara booking|mau booking|mau reservasi|mau coba|setuju booking|boleh booking|kirim format|kirim list|mau daftar|daftar booking)\b/i;
 
-const RESERVATION_NAME_RE = /\bnama\s+(?:saya|aku)?\s*([A-Z][a-zA-Z]+)\b/;
+// Capital initial — nama orang biasanya kapital; kata sambung lowercase ("nama sama
+// jadwal") tidak tertangkap sebagai nama. Fallback lowercase TIDAK dipakai karena
+// memicu false positive (mis. "nama sama jadwal nanti" → "sama").
+const RESERVATION_NAME_RE = /\bnama\s+(?:saya|aku)?\s*([A-Z][A-Za-z]+)\b/;
 
 const QUESTION_RE = /\b(apakah|siapa|apa|kenapa|mengapa|bagaimana|gimana|berapa|kapan|mana|di mana|dimana|bisa gak|bisa ga|mau gak|mau ga|kok|kena|untuk apa|gak sih|ga sih|gak ya|ga ya|gak kah|ga kah)\b|\?/i;
 
@@ -416,8 +424,10 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
     }
   }
 
-  // 3. STATE PRIORITY: AWAITING_CONFIRMATION
-  if (state === 'AWAITING_CONFIRMATION') {
+  // 3. STATE PRIORITY: LOCATION_CONFIRMED (state asli di enum Prisma). Mantan
+  //    "AWAITING_CONFIRMATION" TIDAK ADA di enum — dipertahankan sebagai alias
+  //    agar caller lama (test / payload eksternal) tidak berubah perilaku.
+  if (state === 'LOCATION_CONFIRMED' || state === 'AWAITING_CONFIRMATION') {
     const signal = detectAffirmationSignal(text);
     // MIXED didahulukan: afirmasi + koreksi/keberatan dalam 1 pesan (mis. "iya bener tapi
     // kok harganya beda") butuh klarifikasi, TIDAK boleh jatuh ke jalur pertanyaan sela.
@@ -471,7 +481,9 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
   // 3b. NAMA SAJA saat mengisi detail reservasi: "Sari" → PROVIDE_RESERVATION_DETAILS
   // Bukan nama asli: istilah konvensi "Bunda {nama} {kecamatan}" & kata sapaan/hari/waktu.
   const BARE_NAME_PROTECTED = ['bunda', 'bund', 'kak', 'ka', 'min', 'mbak', 'mas', 'sis', 'gan', 'admin', 'om', 'tante', 'papa', 'mama', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'pagi', 'siang', 'sore', 'malam', 'ok', 'oke', 'iya', 'gak', 'ga', 'bisa'];
-  if (state === 'AWAITING_RESERVATION_DETAILS') {
+  // State asli di enum: customer mengisi detail reservasi saat state RESERVATION_SENT.
+  // Mantan "AWAITING_RESERVATION_DETAILS" dipertahankan sebagai alias.
+  if (state === 'RESERVATION_SENT' || state === 'AWAITING_RESERVATION_DETAILS') {
     const bareName = lower.match(/^([a-z][a-z]{1,20})$/i)?.[1]?.toLowerCase();
     if (bareName && !BARE_NAME_PROTECTED.includes(bareName)) {
       return {
@@ -685,7 +697,8 @@ export function ruleBasedClassify(input: AIRouterInput): AIRouterResponse {
 // LLM Client — panggil LLM, validasi Zod, retry-once dengan hint.
 // Dibungkus CircuitBreaker (CLOSED → OPEN → HALF_OPEN) reuse util existing.
 // =====================================================================
-const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_ROUTER_MS || 120000);
+import { parsePositiveInt } from '../../utils/env-numeric';
+const LLM_TIMEOUT_MS = parsePositiveInt(process.env.LLM_TIMEOUT_ROUTER_MS, 120000);
 
 export class AIRouterLLMClient {
   private breaker: CircuitBreaker<[AIRouterInput], AIRouterResponse>;
@@ -712,14 +725,6 @@ export class AIRouterLLMClient {
     return this.breaker.wasFallbackUsed();
   }
 
-  private get apiKey(): string {
-    return process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
-  }
-
-  private get baseUrl(): string {
-    return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  }
-
   private get model(): string {
     return process.env.AI_MODEL_ROUTER || process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
   }
@@ -734,17 +739,18 @@ export class AIRouterLLMClient {
       throw new Error('SumoPod connection timeout (500 Internal Server Error)');
     }
 
-    if (!this.apiKey || this.apiKey.startsWith('mock')) {
+    const endpoint = getLlmEndpointConfig({ model: this.model });
+    if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) {
       throw new Error('LLM_API_KEY unavailable — use rule-based fallback');
     }
 
-    const firstAttempt = await this.attemptWithTransientRetry(input, null);
+    const firstAttempt = await this.attemptWithTransientRetry(input, null, endpoint);
     const firstParsed = AIRouterResponseSchema.safeParse(firstAttempt);
     if (firstParsed.success) return firstParsed.data;
 
     // Retry-once dengan error hint ringkas
     const retryUserContent = buildRetryPrompt(input, firstParsed.error);
-    const secondAttempt = await this.attemptWithTransientRetry(input, retryUserContent);
+    const secondAttempt = await this.attemptWithTransientRetry(input, retryUserContent, endpoint);
     const secondParsed = AIRouterResponseSchema.safeParse(secondAttempt);
     if (secondParsed.success) return secondParsed.data;
 
@@ -768,18 +774,26 @@ export class AIRouterLLMClient {
     );
   }
 
-  private async attemptWithTransientRetry(input: AIRouterInput, retryUserContent: string | null): Promise<unknown> {
+  private async attemptWithTransientRetry(
+    input: AIRouterInput,
+    retryUserContent: string | null,
+    endpoint: ReturnType<typeof getLlmEndpointConfig>
+  ): Promise<unknown> {
     try {
-      return await this.attempt(input, retryUserContent);
+      return await this.attempt(input, retryUserContent, endpoint);
     } catch (err: any) {
       if (!this.isTransientError(err)) throw err;
       console.warn(`[AI ROUTER] Transient LLM error detected, retrying once (${err?.message}).`);
       await new Promise((resolve) => setTimeout(resolve, 400));
-      return this.attempt(input, retryUserContent);
+      return this.attempt(input, retryUserContent, endpoint);
     }
   }
 
-  private async attempt(input: AIRouterInput, retryUserContent: string | null): Promise<unknown> {
+  private async attempt(
+    input: AIRouterInput,
+    retryUserContent: string | null,
+    endpoint: ReturnType<typeof getLlmEndpointConfig>
+  ): Promise<unknown> {
     const historyMsgs = (input.conversationHistory || []).slice(-LLM_HISTORY_LIMIT).map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
@@ -795,10 +809,10 @@ export class AIRouterLLMClient {
     let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
     try {
       callResult = await callChatCompletionsWithFallback({
-        baseUrl: this.baseUrl,
-        apiKey: this.apiKey,
+        baseUrl: endpoint.baseUrl,
+        apiKey: endpoint.apiKey,
         model: this.model,
-        fallbackModel: getFallbackModel(),
+        fallbackModel: endpoint.fallbackModel,
         timeoutMs: LLM_TIMEOUT_MS,
         payload: {
           response_format: { type: 'json_object' },
@@ -814,10 +828,11 @@ export class AIRouterLLMClient {
       try {
         const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
         auditLlmCall({
-          customer_phone: 'router-audit',
+          customer_phone: input.customerPhone || 'router-audit',
+          conversation_id: input.conversationId ?? null,
           task_type: 'NLU_ROUTING',
           model_name: this.model,
-          baseUrl: this.baseUrl,
+          baseUrl: endpoint.baseUrl,
           startedAt,
           error: err,
         });
@@ -833,7 +848,8 @@ export class AIRouterLLMClient {
     try {
       const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
       auditLlmCall({
-        customer_phone: 'router-audit',
+        customer_phone: input.customerPhone || 'router-audit',
+        conversation_id: input.conversationId ?? null,
         task_type: 'NLU_ROUTING',
         model_name: usedModel,
         baseUrl: callResult.baseUrl,
@@ -859,6 +875,12 @@ export class AIRouterLLMClient {
 
     if (!rawContent) throw new Error(`Empty response content from LLM. Reasoning was: ${reasoning ? 'Present' : 'Empty'}`);
 
+    // JSON extraction terpusat via json-extract util (anti duplikasi fence-strip ×5).
+    const extracted = extractJsonContent(rawContent);
+    if (extracted) {
+      return JSON.parse(extracted);
+    }
+
     let clean = rawContent.trim();
     if (clean.startsWith('```')) {
       clean = clean.replace(/^```(json)?\n?/i, '');
@@ -876,10 +898,16 @@ export const aiRouterLLMClient = new AIRouterLLMClient();
 // Orchestrator — feature flag AI_ROUTER_ENABLED / AI_ROUTER_SHADOW_MODE.
 // =====================================================================
 export function compareRouterDecisions(a: AIRouterResponse, b: AIRouterResponse): boolean {
+  const entity = (r: AIRouterResponse) => {
+    const d = r.extracted_data || {};
+    // Bandingkan entity lokasi & treatment (kualitas ekstraksi ikut terlihat di metrik shadow).
+    return `${String(d.location_mention || '')}|${String(d.treatment_mention || '')}`;
+  };
   return (
     a.intent === b.intent &&
     a.needs_human_escalation === b.needs_human_escalation &&
-    a.escalation_reason === b.escalation_reason
+    a.escalation_reason === b.escalation_reason &&
+    entity(a) === entity(b)
   );
 }
 

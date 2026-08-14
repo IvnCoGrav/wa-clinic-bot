@@ -1,7 +1,9 @@
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
+import { checkMedicalKeywords } from '../../config/medical-keywords';
 import { llmOutageStorage } from './context';
-import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { callChatCompletionsWithFallback } from './model-fallback';
+import { getLlmEndpointConfig } from './llm-gateway';
 import { measure } from '../../utils/timer';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -13,16 +15,16 @@ export interface IntentDetectionResult {
   confidence: number;
 }
 
+/** Konteks audit opsional agar LLM call tercatat dengan atribusi (conversation_id & nomor customer). */
+export interface IntentAuditContext {
+  conversationId?: string | null;
+  customerPhone?: string;
+}
+
 /**
  * Service untuk deteksi intent respons pengguna berbasis LLM terstruktur JSON (5 Intent).
  */
 export class LLMIntentService {
-  private get apiKey(): string {
-    return process.env.LLM_API_KEY || '';
-  }
-  private get baseUrl(): string {
-    return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  }
   private get model(): string {
     return process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
   }
@@ -37,27 +39,29 @@ export class LLMIntentService {
    * 4. not_interested   : Menolak / batal / tidak berminat
    * 5. other            : Lainnya / tidak spesifik
    */
-  public async detectIntent(userMessageText: string): Promise<IntentDetectionResult> {
+  public async detectIntent(userMessageText: string, auditCtx?: IntentAuditContext): Promise<IntentDetectionResult> {
     const store = llmOutageStorage.getStore();
     if (store?.simulateOutage) {
       throw new Error('SumoPod connection timeout (500 Internal Server Error)');
     }
 
-    if (!this.apiKey || this.apiKey.startsWith('mock')) {
+    const endpointCheck = getLlmEndpointConfig({ model: this.model });
+    if (!endpointCheck.apiKey || endpointCheck.apiKey.startsWith('mock')) {
       return this.ruleBasedFallbackIntent(userMessageText);
     }
 
     try {
       const startedAt = Date.now();
+      const endpoint = getLlmEndpointConfig({ model: this.model });
       let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
       try {
         callResult = await measure('LLM_INTENT_API_CALL', () =>
           callChatCompletionsWithFallback({
-            baseUrl: this.baseUrl,
-            apiKey: this.apiKey,
+            baseUrl: endpoint.baseUrl,
+            apiKey: endpoint.apiKey,
             model: this.model,
-            fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 120000),
+            fallbackModel: endpoint.fallbackModel,
+            timeoutMs: endpoint.timeoutMs,
             payload: {
               response_format: { type: 'json_object' },
               messages: [
@@ -88,10 +92,11 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
         try {
           const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
           auditLlmCall({
-            customer_phone: 'intent-audit',
+            customer_phone: auditCtx?.customerPhone || 'intent-audit',
+            conversation_id: auditCtx?.conversationId ?? null,
             task_type: 'INTENT_DETECTION',
             model_name: this.model,
-            baseUrl: this.baseUrl,
+            baseUrl: endpoint.baseUrl,
             startedAt,
             error: err,
           });
@@ -106,7 +111,8 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
       try {
         const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
         auditLlmCall({
-          customer_phone: 'intent-audit',
+          customer_phone: auditCtx?.customerPhone || 'intent-audit',
+          conversation_id: auditCtx?.conversationId ?? null,
           task_type: 'INTENT_DETECTION',
           model_name: callResult.model,
           baseUrl: callResult.baseUrl,
@@ -117,7 +123,12 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
         // Fire-and-forget
       }
 
-      const content = responseData.choices[0].message.content;
+      const content = responseData?.choices?.[0]?.message?.content ?? '';
+
+      if (!content || content.trim() === '') {
+        console.warn('[LLM INTENT ERROR] Empty content from LLM response, using fallback rule-based classifier.');
+        return this.ruleBasedFallbackIntent(userMessageText);
+      }
       
       let cleanContent = content.trim();
       if (cleanContent.startsWith('```')) {
@@ -152,9 +163,9 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
       return { intent: 'complaint', confidence: 0.9 };
     }
 
-    // 2. Deteksi Keluhan Medis / Kesehatan
-    const medicalKeywords = ['demam', 'panas', 'kejang', 'paracetamol', 'obat', 'sakit', 'nyeri', 'perih', 'sesak', 'grok', 'lendir', 'dahak'];
-    if (medicalKeywords.some((kw) => lower.includes(kw)) && (lower.includes('obat') || lower.includes('sakit') || lower.includes('kasih') || lower.includes('bisa') || lower.includes('?'))) {
+    // 2. Deteksi Keluhan Medis / Kesehatan — single source di config/medical-keywords.ts
+    const medical = checkMedicalKeywords(lower);
+    if (medical.isMedical && (lower.includes('obat') || lower.includes('sakit') || lower.includes('kasih') || lower.includes('bisa') || lower.includes('?'))) {
       return { intent: 'medical_query', confidence: 0.9 };
     }
 
