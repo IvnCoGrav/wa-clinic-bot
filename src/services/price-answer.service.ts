@@ -35,11 +35,12 @@ export function isAskPrice(userText: string, nluIntents?: string[]): boolean {
     return true;
   }
 
-  // Tanpa kata harga eksplisit: hanya andalkan NLU ask_price JIKA bukan jadwal/waktu/buka.
-  // (Fallback NLU menandai 'berapa' sebagai ask_price juga — "jam buka berapa?" bukan harga.)
+  // Tanpa kata harga eksplisit: hanya andalkan NLU ask_price JIKA bukan jadwal/waktu/buka/usia.
+  // (Fallback NLU menandai 'berapa' sebagai ask_price juga — "jam buka berapa?" bukan harga,
+  //  "usia berapa boleh pijat?" pun bukan harga.)
   if (nluIntents?.includes('ask_price')) {
     if (nluIntents.includes('ask_schedule')) return false;
-    if (/\b(jam|buka|jadwal|operasional|waktu|hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu)\b/i.test(lower)) {
+    if (/\b(jam|buka|jadwal|operasional|waktu|hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|usia|umur)\b/i.test(lower)) {
       return false;
     }
     return true;

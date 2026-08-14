@@ -1,0 +1,186 @@
+[
+  {
+    "no": 1,
+    "phone": "628028497001",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Bisa Bunda, pijat bayi minimal di usia *2 minggu* sudah bisa dipijat. Jadi kalau si kecil sudah lewat usia itu, aman kok untuk dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkirnya 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nBisa Bunda, pijat bayi minimal di usia *2 minggu* sudah bisa dipijat. Jadi kalau si kecil sudah lewat usia itu, aman kok untuk dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkirnya 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 28753,
+    "ranAt": "2026-08-13T04:07:37.742Z"
+  },
+  {
+    "no": 2,
+    "phone": "628028497002",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Bisa Bunda, untuk pijat bayi minimal usia 2 minggu sudah bisa dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nBisa Bunda, untuk pijat bayi minimal usia 2 minggu sudah bisa dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 22237,
+    "ranAt": "2026-08-13T04:07:59.980Z"
+  },
+  {
+    "no": 3,
+    "phone": "628028497003",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Pijat bayi, Bunda, minimal usia 2 minggu sudah bisa dipijat. Jadi kalau si kecil sudah lewat 2 minggu, aman dan bisa banget. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nPijat bayi, Bunda, minimal usia 2 minggu sudah bisa dipijat. Jadi kalau si kecil sudah lewat 2 minggu, aman dan bisa banget. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 22842,
+    "ranAt": "2026-08-13T04:08:22.823Z"
+  },
+  {
+    "no": 4,
+    "phone": "628028497004",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Bunda, untuk pijat bayi kami bisa mulai di usia minimal 2 minggu ya. Jadi kalau si kecil sudah menginjak 2 minggu, sudah bisa dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nBunda, untuk pijat bayi kami bisa mulai di usia minimal 2 minggu ya. Jadi kalau si kecil sudah menginjak 2 minggu, sudah bisa dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 25788,
+    "ranAt": "2026-08-13T04:08:48.612Z"
+  },
+  {
+    "no": 5,
+    "phone": "628028497005",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Bunda, untuk pijat bayi minimal usianya 2 minggu sudah bisa kok. Jadi kalau si kecil sudah lewat 2 minggu, sudah aman untuk dipijat. Oh iya, kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nBunda, untuk pijat bayi minimal usianya 2 minggu sudah bisa kok. Jadi kalau si kecil sudah lewat 2 minggu, sudah aman untuk dipijat. Oh iya, kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 25042,
+    "ranAt": "2026-08-13T04:09:13.654Z"
+  },
+  {
+    "no": 6,
+    "phone": "628028497006",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [],
+    "bubbleCount": 0,
+    "replyText": "",
+    "finalState": "HUMAN_HANDLING",
+    "isHumanHandling": true,
+    "hasPricelistImage": false,
+    "asksLocation": false,
+    "exception": null,
+    "durationMs": 29062,
+    "ranAt": "2026-08-13T04:09:42.716Z"
+  },
+  {
+    "no": 7,
+    "phone": "628028497007",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Pijat bayi, minimal usia 2 minggu sudah bisa dipijat ya Bunda. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nPijat bayi, minimal usia 2 minggu sudah bisa dipijat ya Bunda. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 21067,
+    "ranAt": "2026-08-13T04:10:03.783Z"
+  },
+  {
+    "no": 8,
+    "phone": "628028497008",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Pijat bayi, Bunda, minimal usia *2 minggu* sudah bisa dipijat kok. Jadi kalau si kecil sudah lewat usia itu, aman dan bisa banget untuk dipijat relaksasi. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nPijat bayi, Bunda, minimal usia *2 minggu* sudah bisa dipijat kok. Jadi kalau si kecil sudah lewat usia itu, aman dan bisa banget untuk dipijat relaksasi. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 22853,
+    "ranAt": "2026-08-13T04:10:26.636Z"
+  },
+  {
+    "no": 9,
+    "phone": "628028497009",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).",
+      "Bunda, untuk pijat bayi minimal usia 2 minggu sudah bisa dipijat kok. Kami juga melayani dari bayi baru lahir sampai anak beberapa tahun. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya Bidan Yusi, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).\n\nBunda, untuk pijat bayi minimal usia 2 minggu sudah bisa dipijat kok. Kami juga melayani dari bayi baru lahir sampai anak beberapa tahun. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 23821,
+    "ranAt": "2026-08-13T04:10:50.457Z"
+  },
+  {
+    "no": 10,
+    "phone": "628028497010",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [],
+    "bubbleCount": 0,
+    "replyText": "",
+    "finalState": "HUMAN_HANDLING",
+    "isHumanHandling": true,
+    "hasPricelistImage": false,
+    "asksLocation": false,
+    "exception": null,
+    "durationMs": 23515,
+    "ranAt": "2026-08-13T04:11:13.973Z"
+  }
+]

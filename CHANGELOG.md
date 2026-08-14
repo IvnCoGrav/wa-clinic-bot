@@ -6,6 +6,23 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased] - 2026-08-14
 
+### Fixed — Fase 8: Anti Hard-Selling FAQ, Batch Follow-Up & Media Webhook (Phase 1-4 hardening)
+
+- **Guard `treatmentNameForFollowUp` EKSEKUTIF (resolusi docs drift)** (`src/state-machine/handlers/interest.ts`): entri lama di changelog mengklaim guard `treatmentExplicitlyMentioned` sudah ada — ternyata tidak pernah di-implementasi. Kini diimplementasi: nama treatment untuk CTA follow-up HANYA diisi jika pesan customer mengandung **nama full katalog** (exact phrase nama tanpa kurung, lowercase via `getAllServices()`). Match parsial/fuzzy (mis. "pijat bayi" → "Pijat Bayi Ceria") dan entity NLU TIDAK dipakai — pertanyaan edukatif murni ("usia minimal berapa?") tidak lagi memaksa LLM menawarkan paket yang tidak ditanyakan (mis. "Paket Selapan").
+- **Test anti-regresi** `tests/unit/faq-no-treatment-leak.test.ts` (baru, 6 kasus): pesan FAQ usia → arg ke-5 `generateFaqResponseWithDetails` undefined; pesan dengan nama FULL ("pijat bayi ceria...", "nebulizer itu buat apa ya?", "pijat lahap juara...") → nama bersih treatment terkirim.
+- **Tighten deteksi ask_price** (`src/services/nlu-classifier.service.ts`, `src/state-machine/handlers/greeting.ts`, `src/services/price-answer.service.ts`): "usia berapa boleh pijat?"/"minimal berapa bulan?" bukan pertanyaan harga. Aturan: `berapa` hanya ask_price jika TANPA konteks usia (`usia|umur|minimal|berat|tinggi`); harga eksplisit & nominal `rb/ribu` bebas → harga; nominal bare `k` hanya jika ada kata harga. `isAskPrice` ikut mengecualikan `usia|umur`.
+- **Fix regresi dual-intent location** (`src/state-machine/handlers/location.ts`): blok [DUAL INTENT LOCATION+FAQ] kini menghormati `skipFaqIntercept` — query lokasi murni ("Kalau ke wedoro ka ?" — tanda `?` hanya sopan-santun) tidak lagi dibelokkan ke pass kedua `handleInterestState` yang membuang info ongkir ke balasan generik.
+- **Batch anti N+1 `checkAndSetLostCustomers`** (`src/services/follow-up.service.ts`): 1 query `reservation.findMany` dengan `created_at > min(sent_at)` menggantikan loop `findFirst` per follow-up; semantik **persis per follow-up** dipertahankan via filter in-memory `created_at > f.sent_at` (keputusan: bukan `thresholdDate`). Test tambahan: customer dengan reservasi setelah `sent_at` TIDAK di-mark lost.
+- **Media berat async** (`src/routes/webhook.route.ts`, `src/integrations/waha/types.ts`): image tetap sinkron (Live Chat); video/audio/document kini diunduh **background fire-and-forget** (arsip ke storage, tidak dirender Live Chat, webhook tidak diblok). Tipe `videoMessage`/`audioMessage`/`documentMessage` ditambahkan ke `WahaMessagePayload`.
+- **Guard wrapper console** (`src/utils/context.ts`): marker diganti `__contextWrapped` (namespaced) + wrapper mem-chain `.original` yang sudah ada — anti double-wrap/infinite recursion bila dipasang di atas `installLogBuffer` (urutan boot aman di `app.ts`).
+- **Fix typo regex** (`src/state-machine/handlers/greeting.ts`): duplikat `jumat|jumat` di `regexHasAskSchedule` dihapus.
+
+### Verifikasi Fase 8
+
+- `npm run build` (tsc) exit 0.
+- Vitest: 1274/1275 hijau — sisa kegagalan `tests/integration/bot-toggle-messaging-schema.test.ts` (butuh infra, gagal identik di baseline HEAD).
+- Stres 50 sesi `test-50-same-opener.ts` (LLM asli, 2026-08-14): **0 raw JSON leak, 0 harga/promo/Rp di FAQ, 0 hard-sell CTA ("Mau coba..."/"mau treatment"), 0 "Paket Selapan", 0 eskalasi; 49/50 balasan terkirim (98%; 1 silent = pola LLM timeout pra-eksis, sebelumnya 2/10), 49/50 minta lokasi.**
+
 ### Fixed — Fase 1: Critical Bug Fixes (AI Chatbot Hardening)
 
 - **FAQ cache poisoning lintas customer** (`src/services/faq-cache.service.ts`, `src/integrations/llm/generator.ts`): cache key kini memasukkan `isLocationKnown` + `additionalContextText` — konteks yang mengubah prompt (CTA "tanya lokasi" vs assumptive-close, fakta ongkir). Customer tanpa lokasi tidak lagi menerima jawaban cached milik customer yang sudah tahu lokasi.

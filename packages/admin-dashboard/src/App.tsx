@@ -25,6 +25,7 @@ const CustomerService = lazy(() => import('./pages/tenant/CustomerService').then
 const AiEvaluations = lazy(() => import('./pages/tenant/AiEvaluations').then(m => ({ default: m.AiEvaluations })));
 const MetaClickCatcher = lazy(() => import('./pages/tenant/MetaClickCatcher').then(m => ({ default: m.MetaClickCatcher })));
 const MetaCapiQueue = lazy(() => import('./pages/tenant/MetaCapiQueue').then(m => ({ default: m.MetaCapiQueue })));
+const ChatExport = lazy(() => import('./pages/tenant/ChatExport').then(m => ({ default: m.ChatExport })));
 
 export const App: React.FC = () => {
   return (
@@ -164,6 +165,13 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
                 <Layout>
                   <MetaCapiQueue />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/chat-export" element={
+              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+                <Layout>
+                  <ChatExport />
                 </Layout>
               </ProtectedRoute>
             } />

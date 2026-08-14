@@ -274,6 +274,40 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           console.warn('[WAHA MEDIA] Gagal menyimpan media inbound:', mediaErr.message);
         }
       }
+
+      // --- MEDIA BERAT (video/audio/document): unduh BACKGROUND fire-and-forget ---
+      // Keputusan: image tetap sinkron (dipakai Live Chat), media berat TIDAK dirender
+      // di Live Chat tapi tetap diarsipkan ke storage supaya tidak hilang. Webhook tidak
+      // boleh diblok menunggu unduhan besar (latency ke WAHA) — jalankan tanpa await.
+      const heavyMediaType =
+        (payload.message?.videoMessage && 'video') ||
+        (payload.message?.audioMessage && 'audio') ||
+        (payload.message?.documentMessage && 'document') ||
+        (payload.type === 'video' && 'video') ||
+        (payload.type === 'audio' && 'audio') ||
+        (payload.type === 'document' && 'document') ||
+        null;
+      if (heavyMediaType && !isInboundImage) {
+        const heavyMime =
+          payload.message?.videoMessage?.mimetype ||
+          payload.message?.audioMessage?.mimetype ||
+          payload.message?.documentMessage?.mimetype ||
+          `application/${heavyMediaType}`;
+        void (async () => {
+          try {
+            const { mediaService } = await import('../services/media.service');
+            const buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+            if (buffer && buffer.length > 0) {
+              await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType: heavyMime });
+              console.log(`[WAHA MEDIA] ${heavyMediaType} inbound ${waMessageId} arsip tersimpan (background).`);
+            } else {
+              console.warn(`[WAHA MEDIA WARNING] Buffer kosong untuk ${heavyMediaType} ${waMessageId}.`);
+            }
+          } catch (mediaErr: any) {
+            console.warn(`[WAHA MEDIA] Gagal mengarsipkan ${heavyMediaType} inbound ${waMessageId} (background):`, mediaErr.message);
+          }
+        })();
+      }
       const inboundContent = isInboundImage
         ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
         : (payload.body || '[LOCATION/MEDIA]');

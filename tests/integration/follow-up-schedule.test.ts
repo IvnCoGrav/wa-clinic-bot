@@ -153,8 +153,8 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
 
     // Mock findMany untuk mendeteksi followUp sent stage 3 ini
     vi.mocked(prisma.followUp.findMany).mockResolvedValue([mockFollowUp] as any);
-    // Mock reservation.findFirst to return null (no new reservation since sent_at)
-    vi.mocked(prisma.reservation.findFirst).mockResolvedValue(null);
+    // Mock reservation.findMany (batch) to return [] (no new reservation since min(sent_at))
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([]);
 
     const customerUpdateSpy = vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
 
@@ -169,6 +169,43 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
         data: { status: 'lost' }
       })
     );
+  });
+
+  it('Stage 3 sent -> customer dengan reservasi SETELAH sent_at-nya TIDAK di-mark lost (semantik per sent_at)', async () => {
+    const sentAt = new Date();
+    sentAt.setDate(sentAt.getDate() - 3); // 3 hari yang lalu
+
+    const mockFollowUp = {
+      id: 'f-stage3-has-res',
+      customer_id: 'cust-still-active',
+      type: 'NEXT_TREATMENT',
+      stage: 3,
+      status: 'SENT',
+      sent_at: sentAt,
+      tenant_id: DEFAULT_TENANT_ID,
+      customer: {
+        id: 'cust-still-active',
+        name: 'Bunda Booking Baru',
+        phone: '628111222334',
+        status: 'active'
+      }
+    };
+
+    vi.mocked(prisma.followUp.findMany).mockResolvedValue([mockFollowUp] as any);
+    // Batch query mengembalikan 1 reservasi yang dibuat SETELAH sent_at → tidak boleh lost
+    vi.mocked(prisma.reservation.findMany).mockResolvedValue([
+      {
+        customer_id: 'cust-still-active',
+        created_at: new Date(sentAt.getTime() + 60 * 60 * 1000), // 1 jam setelah sent_at
+      },
+    ] as any);
+
+    const customerUpdateSpy = vi.mocked(prisma.customer.update).mockResolvedValue({} as any);
+
+    await followUpService.checkAndSetLostCustomers(DEFAULT_TENANT_ID);
+
+    // Customer dengan booking baru tetap aktif (status TIDAK diganti)
+    expect(customerUpdateSpy).not.toHaveBeenCalled();
   });
 
   it('Reservation cancellation (DELETE route) -> recreates NO_PURCHASE follow-ups if none exist', async () => {

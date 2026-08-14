@@ -73,9 +73,10 @@ describe('FAQ Grounding — jawaban treatment selalu bersumber dari data catalog
     expect(chunk[0].content).not.toMatch(/Rp|Harga|promo|harga normal/i);
   });
 
-  it('tanpa data sama sekali → jawaban jujur "tidak tersedia/arahkan tim", bukan mengarang', async () => {
+  it('tanpa data sama sekali → jawaban kosong (eskalasi senyap ke human), bukan mengarang/apology', async () => {
     const answer = await llmResponseGenerator.generateFaqResponse('treatment untuk apa ya?', []);
-    expect(answer.length).toBeGreaterThan(0);
+    // Kosong = sinyal ke pemanggil untuk eskalasi senyap ke antrean human handling.
+    expect(answer).toBe('');
     expect(answer).not.toMatch(/Rp\d/);
   });
 

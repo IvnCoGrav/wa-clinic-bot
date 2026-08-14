@@ -41,9 +41,10 @@ Jawaban: Kami buka setiap hari 08.00 - 20.00 WIB.`,
 }
 
 function mockGenerator() {
-  return vi.spyOn(llmResponseGenerator, 'generateFaqResponse').mockResolvedValue(
-    'Kami buka setiap hari 08.00 - 20.00 WIB. 😊'
-  );
+  return vi.spyOn(llmResponseGenerator, 'generateFaqResponseWithDetails').mockResolvedValue({
+    answer: 'Kami buka setiap hari 08.00 - 20.00 WIB. 😊',
+    reasoning: '[MOCK]',
+  });
 }
 
 async function newCustomer(prefix: string, name: string) {

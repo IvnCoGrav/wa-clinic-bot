@@ -537,18 +537,40 @@ export class FollowUpService {
         },
       });
 
-      for (const f of sentStage3FollowUps) {
-        // Cek apakah customer membuat reservasi baru setelah sent_at
-        const newReservations = await prisma.reservation.findFirst({
+      // Batch anti-N+1: satu query reservasi dengan batas waktu paling tua dari semua
+      // follow-up terpilih (created_at > min(sent_at)), lalu filter in-memory per customer
+      // (created_at > sent_at follow-up-nya) supaya semantiknya PERSIS seperti per-row query.
+      const minSentAt = sentStage3FollowUps
+        .map((f) => f.sent_at)
+        .filter((d): d is Date => !!d)
+        .sort((a, b) => a.getTime() - b.getTime())[0];
+
+      let recentReservations: Array<{ customer_id: string; created_at: Date }> = [];
+      if (minSentAt) {
+        recentReservations = await prisma.reservation.findMany({
           where: {
-            customer_id: f.customer_id,
-            created_at: { gt: f.sent_at! },
+            customer_id: { in: sentStage3FollowUps.map((f) => f.customer_id) },
+            created_at: { gt: minSentAt },
             tenant_id: tenantId,
           },
+          select: { customer_id: true, created_at: true },
         });
+      }
+
+      const hasReservationAfterSentAt = new Map<string, boolean>();
+      for (const f of sentStage3FollowUps) {
+        const hasReservationAfterSent = recentReservations.some(
+          (r) => r.customer_id === f.customer_id && r.created_at.getTime() > f.sent_at!.getTime()
+        );
+        hasReservationAfterSentAt.set(f.id, hasReservationAfterSent);
+      }
+
+      for (const f of sentStage3FollowUps) {
+        // Cek apakah customer membuat reservasi baru setelah sent_at (semantik per follow-up dipertahankan)
+        const hasNewReservation = hasReservationAfterSentAt.get(f.id) === true;
 
         // Jika tidak ada reservasi baru, ubah status customer ke 'lost'
-        if (!newReservations) {
+        if (!hasNewReservation) {
           await prisma.customer.update({
             where: { id: f.customer_id },
             data: { status: 'lost' },

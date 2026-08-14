@@ -12,6 +12,10 @@ export interface StateHandlerContext {
   routerDecision?: AIRouterDecision;
   /** Riwayat percakapan terbaru (role user/assistant) — dipakai handler untuk resolusi anaphora (mis. "berapa itu?"). */
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** Teks lokasi spesifik yang diekstrak oleh handler sebelumnya untuk geocoding. */
+  extractedLocationForGeocode?: string;
+  /** Teks konteks tambahan (misal info ongkir) yang wajib disampaikan LLM saat merespons FAQ. */
+  additionalContextText?: string;
   /**
    * INTERNAL guard: kedalaman hop antar-handler (intercept FAQ ↔ redirect lokasi).
    * Dipakai mencegah mutual recursion tak terbatas — caller eksternal JANGAN mengisi.
