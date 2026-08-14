@@ -24,11 +24,24 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
   # output harus "-- This is an empty migration." (zero drift)
   ```
-- **Kemungkinan penyebab:** `20260801000000_add_failed_followup_status` mereferensikan enum
-  `FollowUpStatus` sebelum enum dibuat saat replay dari scratch (chain migration tidak idempoten).
-  Perlu audit urutan migrasi antara `20260721070211_init` dan `20260801000000_add_failed_followup_status`.
-- **Fix yang disarankan:** perbaiki migration yang bermasalah (buat enum sebelum referensinya) ATAU
-  squash ke baseline baru; verifikasi `migrate diff --from-migrations` kembali kosong.
+- **Akar masalah (diperbarui 2026-08-14):** BUKAN sekadar urutan enum — **baseline migrasi tidak lengkap**.
+  Audit `prisma/migrations` menunjukkan:
+  - `20260721070211_init` hanya membuat 3 tabel (`customers`, `conversations`, `messages`).
+  - Tidak ada satupun migrasi yang `CREATE TYPE "FollowUpStatus"` maupun `CREATE TABLE "follow_ups"`,
+    `follow_up_templates`, tabel treatment/catalog, dst. — padahal semua ada di `schema.prisma`.
+  - `20260801000000_add_failed_followup_status` hanya `ALTER TYPE "FollowUpStatus" ADD VALUE 'FAILED'`
+    pada enum yang tak pernah dibuat di chain.
+  - Kemungkinan besar proyek memakai `db push` di masa awal (schema jadi sumber kebenaran, bukan
+    migrasi), lalu migrasi dimulai belakangan tanpa baseline penuh.
+- **Mengapa tidak ditambal begitu saja:** menulis migrasi baru yang `CREATE TYPE "FollowUpStatus"`
+  di urutan awal akan sukses di shadow DB, tetapi berisiko **gagal di env existing** yang DB-nya sudah
+  punya enum/tabel tersebut (`type already exists` / `relation already exists`) — pola yang sama dengan
+  masalah `children` (lihat #2). Perbaikan hanya boleh dilakukan dengan shadow DB lokal aktif untuk
+  verifikasi replay penuh, lalu direncanakan migrate resolve per env.
+- **Fix yang disarankan (butuh verifikasi replay):** buat migrasi baseline squash yang merekonstruksi
+  schema penuh, ATAU tambahkan migrasi `CREATE TYPE "FollowUpStatus"` di urutan sebelum referensi
+  pertama, lalu verifikasi `migrate diff --from-migrations` kembali menghasilkan empty migration.
+  Jangan lakukan tanpa Postgres lokal aktif & rencana per-env.
 
 ---
 
