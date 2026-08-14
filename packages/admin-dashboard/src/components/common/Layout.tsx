@@ -27,6 +27,7 @@ import {
   Gauge,
   MousePointerClick,
   BadgeCheck,
+  FileDown,
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -89,6 +90,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'Meta CAPI Queue', path: '/admin/meta-capi-queue', icon: BadgeCheck, badge: capiPendingCount },
     { name: 'Operational Settings', path: '/admin/settings', icon: SettingsIcon },
     { name: 'AI Quality Evaluation', path: '/admin/ai-evaluations', icon: Gauge },
+    { name: 'Daily Chat Export (AI)', path: '/admin/chat-export', icon: FileDown },
     { name: 'System Debug', path: '/admin/debug', icon: Bug },
   ];
 

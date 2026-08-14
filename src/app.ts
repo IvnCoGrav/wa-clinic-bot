@@ -14,7 +14,7 @@ import { installLogBuffer } from './utils/log-buffer';
 dotenv.config();
 // URUTAN PENTING: installLogBuffer HARUS sebelum initializeConsoleWrapper.
 // Keduanya menimpa console.log/warn/error; kalau buffer dipasang di atas wrapper
-// konteks (yang punya marker __wrapped/original), pemanggilan ulang
+// konteks (yang punya marker __contextWrapped/original), pemanggilan ulang
 // initializeConsoleWrapper akan me-re-wrap buffer dan membuat rekursi tak hingga.
 // Urutan benar = buffer paling dalam, context wrapper paling luar.
 installLogBuffer();
@@ -189,6 +189,16 @@ if (require.main === module) {
         setInterval(() => cron.runQualityEvaluation(), intervalHours * 60 * 60 * 1000);
         console.log(`🧪 AI quality evaluation cron started (every ${intervalHours}h)`);
       }).catch(e => console.error('[AI EVAL START ERROR]', e));
+    }
+
+    // Start daily chat export cron (regenerate file markdown harian untuk analisa AI)
+    if (process.env.ENABLE_CHAT_EXPORT_CRON === 'true') {
+      const intervalHours = parseInt(process.env.CHAT_EXPORT_INTERVAL_HOURS || '6', 10);
+      import('./services/cron.service').then(({ CronService }) => {
+        const cron = new CronService();
+        setInterval(() => cron.runDailyChatExport(), intervalHours * 60 * 60 * 1000);
+        console.log(`📤 Daily chat export cron started (every ${intervalHours}h)`);
+      }).catch(e => console.error('[CHAT EXPORT START ERROR]', e));
     }
 
     // Start Daily Ops Report cron (runs interval to check per tenant settings or env fallback)

@@ -1,0 +1,57 @@
+[
+  {
+    "no": 1,
+    "phone": "628846704001",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBisa Bunda, kami melayani dari bayi baru lahir sampai anak usia beberapa tahun. 😊\n\nKalau Bunda berminat, mau langsung saya bantu jadwalkan *Paket Selapan*? 😊"
+    ],
+    "bubbleCount": 1,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBisa Bunda, kami melayani dari bayi baru lahir sampai anak usia beberapa tahun. 😊\n\nKalau Bunda berminat, mau langsung saya bantu jadwalkan *Paket Selapan*? 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": false,
+    "exception": null,
+    "durationMs": 31124,
+    "ranAt": "2026-08-13T01:34:38.185Z"
+  },
+  {
+    "no": 2,
+    "phone": "628846704002",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨",
+      "Bunda, untuk pijat bayi minimal usia 2 minggu sudah bisa dipijat, kok. Jadi aman untuk si kecil yang baru lahir. Nah, kalau nanti Bunda ingin sekalian merawat Bunda dan bayi dengan *Paket Selapan*, kami siap membantu. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ongkirnya untuk treatment Paket Selapan 🙏🏻"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBunda, untuk pijat bayi minimal usia 2 minggu sudah bisa dipijat, kok. Jadi aman untuk si kecil yang baru lahir. Nah, kalau nanti Bunda ingin sekalian merawat Bunda dan bayi dengan *Paket Selapan*, kami siap membantu. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ongkirnya untuk treatment Paket Selapan 🙏🏻",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 23379,
+    "ranAt": "2026-08-13T01:35:01.564Z"
+  },
+  {
+    "no": 3,
+    "phone": "628846704003",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBisa Bunda, kami melayani dari bayi baru lahir sampai anak usia beberapa tahun. 😊\n\nKalau Bunda berminat, mau langsung saya bantu jadwalkan *Paket Selapan*? 😊"
+    ],
+    "bubbleCount": 1,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBisa Bunda, kami melayani dari bayi baru lahir sampai anak usia beberapa tahun. 😊\n\nKalau Bunda berminat, mau langsung saya bantu jadwalkan *Paket Selapan*? 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": false,
+    "exception": null,
+    "durationMs": 25692,
+    "ranAt": "2026-08-13T01:35:27.256Z"
+  }
+]

@@ -66,11 +66,13 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     }
 
     // 5. Jika Dalam Jangkauan
+    const candidateTreatmentName = conversation.last_discussed_treatment || undefined;
     const fallbackOngkirText = TEMPLATES.ongkirInfo({
       distanceKm: delivery.distanceKm,
       normalPrice: delivery.normalPrice,
       promoPrice: delivery.promoPrice,
       freeTierKm: delivery.freeTierKm,
+      candidateTreatmentName,
     });
 
     const replyText = await phrasingService.generate({
@@ -80,6 +82,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
         normalPrice: delivery.normalPrice,
         promoPrice: delivery.promoPrice,
         freeTierKm: delivery.freeTierKm ?? 5,
+        ...(candidateTreatmentName ? { candidateTreatmentName } : {}),
       },
       conversationId: conversation.id,
       tenantId,
@@ -96,7 +99,8 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
   // --- KASUS B: CUSTOMER MENGIRIM TEKS LOKASI ---
   // Use NLU entity if available for cleaner geocoding input
-  const rawTextLocation = (nluConfident && nluLocationText) ? nluLocationText : (incomingMessage.text?.body?.trim() || '');
+  const extractedLocation = (ctx as any).extractedLocationForGeocode;
+  const rawTextLocation = extractedLocation || ((nluConfident && nluLocationText) ? nluLocationText : (incomingMessage.text?.body?.trim() || ''));
 
   if (!rawTextLocation) {
     const askDetailReply = await phrasingService.generate({
@@ -316,11 +320,13 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // 5. Dalam Jangkauan
+  const candidateTreatmentName = conversation.last_discussed_treatment || undefined;
   const fallbackOngkirText = TEMPLATES.ongkirInfo({
     distanceKm: delivery.distanceKm,
     normalPrice: delivery.normalPrice,
     promoPrice: delivery.promoPrice,
     freeTierKm: delivery.freeTierKm,
+    candidateTreatmentName,
   });
 
   const replyText = await phrasingService.generate({
@@ -330,11 +336,34 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
       normalPrice: delivery.normalPrice,
       promoPrice: delivery.promoPrice,
       freeTierKm: delivery.freeTierKm ?? 5,
+      ...(candidateTreatmentName ? { candidateTreatmentName } : {}),
     },
     conversationId: conversation.id,
     tenantId,
     fallbackTemplate: fallbackOngkirText,
   });
+
+  // DUAL INTENT HANDLING: Jika pesan customer mengandung FAQ / pertanyaan medis SELAIN lokasi,
+  // gabungkan balasan FAQ dengan informasi ongkir tersebut via handleInterestState!
+  // Guard: SKIP jika pesannya sendiri query lokasi murni (mis. "Kalau ke wedoro ka ?" — tanda
+  // '?' di sini hanya sopan-santun, bukan pertanyaan FAQ; dual-intent akan membuang ongkirInfo
+  // ke balasan generik unrelated). skipFaqIntercept sudah menangkap isLocationQueryMessage /
+  // entity lokasi / recursion depth.
+  if (hasFaqIntent && !skipFaqIntercept) {
+    console.log(`[DUAL INTENT LOCATION+FAQ] Combining location ongkir info with FAQ answer for customer.`);
+    const { handleInterestState } = await import('./interest');
+    const interestResult = await handleInterestState({
+      ...ctx,
+      additionalContextText: replyText,
+      conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any,
+    });
+    return {
+      ...interestResult,
+      nextState: ConversationState.AWAITING_INTEREST,
+      shouldSendReply: true,
+      sendPricelistImage: true,
+    };
+  }
 
   return {
     nextState: ConversationState.AWAITING_INTEREST,

@@ -21,6 +21,22 @@ export interface WahaMessagePayload {
       mimetype?: string;
       url?: string;
     };
+    videoMessage?: {
+      caption?: string;
+      mimetype?: string;
+      url?: string;
+    };
+    audioMessage?: {
+      mimetype?: string;
+      url?: string;
+      ptt?: boolean;
+    };
+    documentMessage?: {
+      title?: string;
+      mimetype?: string;
+      url?: string;
+      fileName?: string;
+    };
   };
   caption?: string;
   type?: string;

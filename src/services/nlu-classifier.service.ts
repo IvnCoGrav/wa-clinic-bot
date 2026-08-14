@@ -142,7 +142,21 @@ export class NluClassifierService {
     }
 
     // 5. Ask Price
-    if (/(\bberapa\b|\bharga(nya)?\b|\btarif(nya)?\b|\bongkir(nya)?\b|\bbiaya(nya)?\b|\bongkos(nya)?\b|\bpricelists?\b|\bpromos?\b|\b\d+\s*(rb|k|ribu)\b)/i.test(text)) {
+    // HARDENING anti-salah-rute: "berapa" tanpa konteks harga BUKAN pertanyaan harga —
+    // "usia berapa boleh pijat?"/"minimal berapa bulan?" TIDAK menanyakan harga, tapi
+    // "pijat bayi berapa ya?" (treatment + berapa) TETAP harga. Aturan:
+    // (a) kata harga eksplisit → harga; (b) "berapa" murni KECUALI ada kata usia/
+    // umur/minimal/berat di kalimat (menandakan pertanyaan kelayakan usia, bukan harga);
+    // (c) nominal rb/ribu bebas → harga; (d) nominal bare 'k' HANYA jika ada kata harga.
+    const hasPriceWord = /\b(harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|pricelists?|promos?|rp\d)\b/i.test(text);
+    const hasBerapa = /\b(berapa|brp)\b/i.test(text);
+    const hasAgeContext = /\b(usia|umur|umurnya|minimal|minimum|minimalnya|min\b|berat|tinggi)\b/i.test(text);
+    const isAskPriceText =
+      hasPriceWord ||
+      (hasBerapa && !hasAgeContext) ||
+      /\b\d+\s*(rb|ribu)\b/i.test(text) ||
+      (/\b\d+\s*k\b/i.test(text) && hasPriceWord);
+    if (isAskPriceText) {
       intents.push('ask_price');
     }
 

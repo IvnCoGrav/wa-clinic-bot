@@ -39,6 +39,7 @@ export const CustomerService: React.FC = () => {
         setCsName(res.data.csName || 'Cs Yusi');
         setWhatsappNumber(res.data.whatsappNumber || '6287751148065');
         setFormatVisit(res.data.formatVisit || 'Promo[%ID%]');
+        setGreetingsText(res.data.greetingsText || res.data.formatVisit || 'Promo [%ID%]');
         setFormatCheckout(res.data.formatCheckout || 'list untuk reservasi :');
         setFormatPurchase(res.data.formatPurchase || 'Payment');
         setFormatValue(res.data.formatValue || 'Treatment = %VALUE%');
@@ -64,6 +65,7 @@ export const CustomerService: React.FC = () => {
           csName,
           whatsappNumber,
           formatVisit,
+          greetingsText,
           formatCheckout,
           formatPurchase,
           formatValue,
@@ -81,11 +83,11 @@ export const CustomerService: React.FC = () => {
   const generatedCtaLink = React.useMemo(() => {
     const baseUrl = subdomain.replace(/\/$/, '');
     const cleanDivisi = encodeURIComponent(divisi.toLowerCase().replace(/\s+/g, '-'));
-    const encodedMsg = encodeURIComponent(greetingsText);
+    const encodedMsg = encodeURIComponent(greetingsText || formatVisit);
     const cleanPhone = whatsappNumber.replace(/\D/g, '');
 
     return `${baseUrl}/cta?divisi=${cleanDivisi}&phone=${cleanPhone}&msg=${encodedMsg}`;
-  }, [subdomain, divisi, greetingsText, whatsappNumber]);
+  }, [subdomain, divisi, greetingsText, formatVisit, whatsappNumber]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(generatedCtaLink);
@@ -161,6 +163,21 @@ export const CustomerService: React.FC = () => {
             </div>
 
             <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Greetings Text (Pesan Pembuka WA)</label>
+              <textarea
+                rows={3}
+                value={greetingsText}
+                onChange={(e) => setGreetingsText(e.target.value)}
+                placeholder="PROMO [%ID%]"
+                className="w-full bg-slate-900/60 border border-white/10 rounded-xl p-3 text-sm text-slate-200 focus:outline-none focus:border-pink-500 transition"
+              />
+              <p className="text-[11px] text-slate-400 mt-1 flex items-center space-x-1">
+                <Info size={12} />
+                <span>Gunakan <code className="text-pink-400 font-mono">[%ID%]</code> untuk menyisipkan kode unik tracking otomatis.</span>
+              </p>
+            </div>
+
+            <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">Format Checkout (Reservasi Form)</label>
               <textarea
                 rows={2}
@@ -205,7 +222,7 @@ export const CustomerService: React.FC = () => {
         </div>
 
         {/* Panel 2: CTA Link Generator */}
-        <div className="glass-panel p-6 space-y-5 rounded-2xl border border-white/10 flex flex-col justify-between">
+        <div className="glass-panel p-6 space-y-5 rounded-2xl border border-white/10 self-start">
           <div className="space-y-4">
             <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
               <LinkIcon size={18} className="text-violet-400" />
@@ -235,20 +252,6 @@ export const CustomerService: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Greetings Text (Pesan Pembuka WA)</label>
-              <textarea
-                rows={3}
-                value={greetingsText}
-                onChange={(e) => setGreetingsText(e.target.value)}
-                className="w-full bg-slate-900/60 border border-white/10 rounded-xl p-3 text-sm text-slate-200 focus:outline-none focus:border-violet-500 transition"
-              />
-              <p className="text-[11px] text-slate-400 mt-1 flex items-center space-x-1">
-                <Info size={12} />
-                <span>Gunakan <code className="text-pink-400 font-mono">[%ID%]</code> untuk menyisipkan kode unik tracking otomatis.</span>
-              </p>
-            </div>
-
-            <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">Generated CTA Link</label>
               <textarea
                 readOnly
@@ -257,15 +260,15 @@ export const CustomerService: React.FC = () => {
                 className="w-full bg-slate-950/80 border border-violet-500/30 rounded-xl p-3 text-xs font-mono text-violet-300 focus:outline-none resize-none select-all"
               />
             </div>
-          </div>
 
-          <button
-            onClick={handleCopyLink}
-            className="w-full flex items-center justify-center space-x-2 py-3 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 font-bold text-sm text-white rounded-xl shadow-lg transition"
-          >
-            {copied ? <Check size={16} className="text-emerald-300" /> : <Copy size={16} />}
-            <span>{copied ? 'Tersealin!' : 'Copy to Clipboard'}</span>
-          </button>
+            <button
+              onClick={handleCopyLink}
+              className="w-full flex items-center justify-center space-x-2 py-3 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 font-bold text-sm text-white rounded-xl shadow-lg transition"
+            >
+              {copied ? <Check size={16} className="text-emerald-300" /> : <Copy size={16} />}
+              <span>{copied ? 'Tersalin!' : 'Copy to Clipboard'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

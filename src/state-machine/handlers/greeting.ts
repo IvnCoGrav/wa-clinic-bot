@@ -72,10 +72,10 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   if (isPin || isLocationText) {
     const { handleLocationState } = await import('./location');
     const locationTextToPass = textForGeocode.length >= 3 ? textForGeocode : rawLocationText;
-    const result = await handleLocationState({ ...ctx, incomingMessage: { 
-      ...incomingMessage,
-      text: { body: locationTextToPass }
-    } as any });
+    const result = await handleLocationState({
+      ...ctx,
+      extractedLocationForGeocode: locationTextToPass,
+    } as any);
 
     // Perbaikan Poin 3b: Jika customer baru (belum punya kelurahan confirmed)
     const hasConfirmedLocation = !!customer.kelurahan;
@@ -160,7 +160,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   const shouldEscalateSchedule = process.env.ESCALATE_SCHEDULE_IN_INITIAL !== 'false';
   const nluHasAskSchedule = nlu?.intents?.includes('ask_schedule') || false;
   const regexHasAskSchedule = /(\bjadwal\b|\bslot\b|\bbuka\b|\bhari\b|\btanggal\b|\bjam\b)/i.test(lower) &&
-                              /\b(senin|selasa|rabu|kamis|jumat|jumat|sabtu|minggu|besok|lusa|jam\s*\d|pukul\s*\d)\b/i.test(lower);
+                              /\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu|besok|lusa|jam\s*\d|pukul\s*\d)\b/i.test(lower);
   if ((nluHasAskSchedule || regexHasAskSchedule) && shouldEscalateSchedule) {
     const { conversationService } = await import('../../services/conversation.service');
     await conversationService.escalateToHumanHandling(
@@ -183,24 +183,52 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
-  const hasAskPrice = nlu?.intents.includes('ask_price') || /\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|\d+\s*(rb|k|ribu))\b/i.test(lower);
-  const hasFaqQuestion = nlu?.intents.includes('faq_question') || /\b(manfaat|aman|usia|boleh|bayar|bidan)\b/i.test(lower);
+  // HARDENING anti-salah-rute harga: pola sama dgn nlu-classifier — "usia berapa boleh
+  // pijat?"/"minimal berapa bulan?" bukan pertanyaan harga; "pijat bayi berapa ya?" tetap harga.
+  // Bare 'k' (nominal) hanya dianggap harga jika ada kata harga di kalimat.
+  const hasPriceWord = /\b(harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|pricelists?|promos?|rp\d)\b/i.test(lower);
+  const hasAgeContext = /\b(usia|umur|umurnya|minimal|minimum|minimalnya|min\b|berat|tinggi)\b/i.test(lower);
+  const hasAskPrice = nlu?.intents.includes('ask_price') ||
+    (/\b(berapa|brp)\b/i.test(lower) && !hasAgeContext) ||
+    hasPriceWord ||
+    /\b\d+\s*(rb|ribu)\b/i.test(lower) ||
+    (/\b\d+\s*k\b/i.test(lower) && hasPriceWord);
+  const hasFaqQuestion = nlu?.intents.includes('faq_question') || /\b(manfaat|aman|usia|boleh|bayar)\b/i.test(lower);
   const hasProvideLocation = nlu?.intents.includes('provide_location') || hasLocationKeyword || hasValidGeocode;
 
-  const fallbackGreeting = TEMPLATES.greeting({ skipGreeting });
-  const greetingText = await phrasingService.generate({
-    intent: 'greeting',
-    facts: { skipGreeting: skipGreeting ? '1' : '0' },
-    conversationId: conversation.id,
-    tenantId,
-    fallbackTemplate: fallbackGreeting,
-  });
+  // Cek apakah pesan merupakan sapaan pembuka murni vs mengandung pertanyaan/catatan ekstra
+  const { checkLeadGreetingText } = await import('../utils/greeting-checker');
+  const greetingCheck = await checkLeadGreetingText(userText, incomingMessage.text?.body, tenantId);
+
+  // BYPASS TOTAL: Jika murni sapaan pembuka lead (sesuai Greetings Text / template), LANGSUNG kembalikan TEMPLATES.greeting() instan tanpa LLM
+  if (greetingCheck.isPureGreeting) {
+    console.log(`[GREETING BYPASS] Pure lead greeting verified for tenant ${tenantId}. Returning instant template.`);
+    return {
+      nextState: ConversationState.AWAITING_LOCATION,
+      replyText: TEMPLATES.greeting({ skipGreeting }),
+      shouldSendReply: true,
+    };
+  }
+
+  // Jika ada pertanyaan / teks ekstra dari customer di luar greeting text standar, catat ke memori (last_discussed_treatment)
+  if (greetingCheck.hasExtraQuestions && greetingCheck.extraText) {
+    try {
+      const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+      const catalogMatch = treatmentCatalogService.searchCatalogItems(greetingCheck.extraText);
+      if (catalogMatch.length > 0) {
+        const cleanName = catalogMatch[0].name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+        const { conversationService } = await import('../../services/conversation.service');
+        await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, cleanName).catch(() => {});
+        console.log(`[GREETING EXTRA MEMORY] Captured treatment from extra lead text "${greetingCheck.extraText}" -> "${cleanName}"`);
+      }
+    } catch (_) {}
+  }
 
   // Multi-intent: greeting + ask_price/faq + belum ada lokasi → JAWAB pertanyaan customer
   // via interest handler, lalu prepend greeting header wajib di depannya.
   if ((hasAskPrice || hasFaqQuestion) && !hasProvideLocation) {
     const { handleInterestState } = await import('./interest');
-    const interestResult = await handleInterestState({ ...ctx, conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any });
+    const interestResult = await handleInterestState(ctx);
     
     // Prepend greeting header wajib di depan jawaban AI
     if (interestResult.replyText) {
@@ -213,6 +241,18 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // 4. Default Greeting Baru (Belum punya lokasi)
+  // BYPASS LLM: Jika murni sapaan lead (sesuai Greetings Text / template), langsung kirim TEMPLATES.greeting() instan
+  const fallbackGreeting = TEMPLATES.greeting({ skipGreeting });
+  const greetingText = greetingCheck.isPureGreeting
+    ? fallbackGreeting
+    : await phrasingService.generate({
+        intent: 'greeting',
+        facts: { skipGreeting: skipGreeting ? '1' : '0' },
+        conversationId: conversation.id,
+        tenantId,
+        fallbackTemplate: fallbackGreeting,
+      });
+
   return {
     nextState: ConversationState.AWAITING_LOCATION,
     replyText: greetingText,

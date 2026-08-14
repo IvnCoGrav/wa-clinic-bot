@@ -9,22 +9,22 @@
         "apiKey": "sk-8ff19ada8ced4e29-9rq5n2-861940cb"
       },
       "models": {
-        "kr/claude-sonnet-5": {
-          "name": "Claude Sonnet 5 (9router)",
+        "kr/claude-sonnet-4.5": {
+          "name": "Claude Sonnet 4.5 (9router)",
           "limit": {
             "context": 128000,
             "output": 128000
           }
         },
-        "kr/claude-opus-5-thinking": {
-          "name": "Claude Opus 5 Thinking (9router)",
+        "ag/claude-opus-4-6-thinking": {
+          "name": "Claude Opus 4.6 Thinking (9router/AG)",
           "limit": {
             "context": 128000,
             "output": 128000
           }
         },
-        "kr/gpt-5.6-sol": {
-          "name": "GPT 5.6 Sol (9router)",
+        "Sumo/gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol (9router)",
           "limit": {
             "context": 128000,
             "output": 128000
@@ -47,12 +47,12 @@
       }
     }
   },
-  "model": "9router/kr/claude-sonnet-5",
+  "model": "9router/kr/claude-sonnet-4.5",
   "agent": {
     "explorer": {
       "description": "Fast explorer subagent for codebase exploration",
       "mode": "subagent",
-      "model": "9router/kr/claude-sonnet-5"
+      "model": "9router/kr/claude-sonnet-4.5"
     }
   }
 }

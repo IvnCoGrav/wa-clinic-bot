@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   stripNonIndonesianScripts,
   containsForeignScripts,
+  sanitizeRagLeakage,
+  sanitizeForbiddenEnglishWords,
 } from '../../src/utils/language-sanitizer';
 
 describe('language-sanitizer (anti bocor aksara asing)', () => {
@@ -39,5 +41,17 @@ describe('language-sanitizer (anti bocor aksara asing)', () => {
     expect(stripNonIndonesianScripts('')).toBe('');
     expect(stripNonIndonesianScripts(null as any)).toBeNull();
     expect(stripNonIndonesianScripts(undefined as any)).toBeUndefined();
+  });
+
+  it('sanitizeRagLeakage membersihkan frasa bocor RAG', () => {
+    expect(sanitizeRagLeakage('Bun.etails info di sini usia 2 minggu ke atas sudah aman.')).toBe('usia 2 minggu ke atas sudah aman.');
+    expect(sanitizeRagLeakage('Halo Bunda, details info di sini pijat bayi promo.')).toBe('Halo Bunda, pijat bayi promo.');
+    expect(sanitizeRagLeakage('Berdasarkan referensi dokumen di atas, harganya Rp60.000')).toBe('harganya Rp60.000');
+  });
+
+  it('sanitizeForbiddenEnglishWords mengganti kata bahasa Inggris terlarang', () => {
+    expect(sanitizeForbiddenEnglishWords('little one-nya sudah melewati 2 minggu')).toBe('si kecil sudah melewati 2 minggu');
+    expect(sanitizeForbiddenEnglishWords('apabila baby rewel')).toBe('apabila bayi rewel');
+    expect(sanitizeForbiddenEnglishWords('mommy bisa booking schedule')).toBe('Bunda bisa booking jadwal');
   });
 });

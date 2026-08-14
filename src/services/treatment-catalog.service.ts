@@ -32,22 +32,22 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     id: 'baby-massage-ceria',
     name: 'Pijat Bayi Ceria (Rileksasi)',
     category: 'BABY',
-    ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
+    ageTier: { minAgeMonths: 0.5, maxAgeMonths: 24, label: 'Minimal 2 Minggu (0.5 - 24 Bulan)' },
     durationMinutes: 40,
     originalPrice: 80000,
     promoPrice: 60000,
-    description: 'Pijat relaksasi untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks.',
+    description: 'Pijat relaksasi minimal usia 2 minggu untuk membantu bayi tidur lebih nyenyak, mengurangi kelelahan, dan membuat tubuh bayi lebih rileks.',
     isActive: true,
   },
   {
     id: 'baby-massage-pulih-ceria',
     name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)',
     category: 'BABY',
-    ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
+    ageTier: { minAgeMonths: 0.5, maxAgeMonths: 24, label: 'Minimal 2 Minggu (0.5 - 24 Bulan)' },
     durationMinutes: 40,
     originalPrice: 90000,
     promoPrice: 70000,
-    description: 'Pijat terapi khusus bayi flu, batuk, pilek, rewel, susah BAB, kembung atau kolik dengan menggunakan double aromaterapi dan titik pijat khusus.',
+    description: 'Pijat terapi minimal usia 2 minggu khusus bayi flu, batuk, pilek, rewel, susah BAB, kembung atau kolik dengan menggunakan double aromaterapi.',
     isActive: true,
   },
   {
@@ -430,14 +430,34 @@ export class TreatmentCatalogService {
     const q = userText.toLowerCase();
     const services = this.getAllServices();
 
-    // 1. Exact Phrase Match pada Nama Treatment
-    const exactNameMatch = services.find((s) => {
-      const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
-      return q.includes(cleanName) || cleanName.includes(q.replace(/(itu|apa|ya|bund|bunda|berapa|dong|kak|min)\b/gi, '').trim());
-    });
+    // 1. Exact Phrase Match & Bigram Phrase Match pada Nama Treatment
+    // Dipisahkan antara Exact Match (nama cocok utuh) dan Partial Match (2 kata awal cocok)
+    // agar nama spesifik (misal "Pijat Bayi Pulih Ceria") tidak kalah/tercampur dengan nama yang lebih umum ("Pijat Bayi Ceria").
+    const exactMatches: ClinicServiceItem[] = [];
+    const partialMatches: ClinicServiceItem[] = [];
 
-    if (exactNameMatch) {
-      return [exactNameMatch];
+    for (const s of services) {
+      if (!s.isActive) continue;
+      const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+      const nameParts = cleanName.split(/\s+/);
+
+      if (q.includes(cleanName) || cleanName.includes(q.trim())) {
+        exactMatches.push(s);
+      } else if (nameParts.length >= 2) {
+        const twoWordPhrase = `${nameParts[0]} ${nameParts[1]}`;
+        if (twoWordPhrase.length >= 5 && q.includes(twoWordPhrase)) {
+          partialMatches.push(s);
+        }
+      }
+    }
+
+    if (exactMatches.length > 0) {
+      // Prioritaskan exact matches, urutkan berdasarkan panjang nama terpanjang (terspesifik dulu)
+      return exactMatches.sort((a, b) => b.name.length - a.name.length);
+    }
+
+    if (partialMatches.length > 0) {
+      return partialMatches;
     }
 
     // 2. Fallback Keyword Scoring (sama dengan searchCatalog)

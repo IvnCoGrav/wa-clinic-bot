@@ -103,7 +103,8 @@ describe('Customer Memory — Preference Extraction (D2, Tahap 1)', () => {
       undefined,
       customerId
     );
-    expect(res.answer).toBeTruthy();
+    expect(res.answer).toBe('');
+    expect(res.usedFallback).toBe(true);
     expect(res.extracted_preferences).toBeUndefined();
   });
 
