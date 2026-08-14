@@ -515,6 +515,7 @@ model Tenant {
   pricelist_image_url       String?
   cs_name                   String?          @default("Cs Yusi")
   format_visit              String?          @default("Promo[%ID%]")
+  greetings_text            String?          @default("Promo [%ID%]")
   format_checkout           String?          @default("list untuk reservasi :")
   format_purchase           String?          @default("Payment")
   format_value              String?          @default("Treatment = %VALUE%")

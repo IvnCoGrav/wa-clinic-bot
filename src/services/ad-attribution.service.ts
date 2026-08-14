@@ -34,8 +34,8 @@ export async function matchAdClickAndFireContact(
 ): Promise<MatchAdClickResult> {
   const { bodyText, isNewCustomerRecord, customer, tenantId, referral } = params;
 
-  const promoMatch = bodyText ? bodyText.match(/(?:Promo\s*)?\[(\w{2,4})\]/i) : null;
-  const trackingCode = promoMatch ? promoMatch[1] : undefined;
+  const promoMatch = bodyText ? bodyText.match(/(?:Promo\s*)?\[\s*([\w\s]{2,10}?)\s*\]/i) : null;
+  const trackingCode = promoMatch ? promoMatch[1].replace(/\s+/g, '') : undefined;
   const ctwaClid = referral?.ctwaClid;
 
   let matched = false;
@@ -123,7 +123,7 @@ export async function matchAdClickAndFireContact(
   // Calculate stripped text (removes Promo[code] prefix/suffix for AI processing)
   let strippedText = bodyText;
   if (promoMatch && bodyText) {
-    const stripped = bodyText.replace(/(?:Promo\s*)?\[\w{2,4}\]\s*/gi, '').trim();
+    const stripped = bodyText.replace(/(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]\s*/gi, '').trim();
     strippedText = stripped || 'Halo';
   }
 

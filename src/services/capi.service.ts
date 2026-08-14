@@ -101,10 +101,14 @@ export function decryptCapiToken(raw: string): string | null {
 export async function getTenantCapiFormats(tenantId?: string): Promise<{
   formatCheckout: string;
   formatPurchase: string;
+  formatVisit: string;
+  greetingsText: string;
 }> {
   const defaults = {
     formatCheckout: 'list untuk reservasi :',
     formatPurchase: 'Payment',
+    formatVisit: 'Promo[%ID%]',
+    greetingsText: 'Promo [%ID%]',
   };
   if (!tenantId) return defaults;
   try {
@@ -113,6 +117,8 @@ export async function getTenantCapiFormats(tenantId?: string): Promise<{
     return {
       formatCheckout: tenant?.format_checkout?.trim() || defaults.formatCheckout,
       formatPurchase: tenant?.format_purchase?.trim() || defaults.formatPurchase,
+      formatVisit: tenant?.format_visit?.trim() || defaults.formatVisit,
+      greetingsText: (tenant as any)?.greetings_text?.trim() || tenant?.format_visit?.trim() || defaults.greetingsText,
     };
   } catch {
     return defaults;

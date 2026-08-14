@@ -101,6 +101,29 @@ export class CronService {
   }
 
   /**
+   * Daily Chat Export — regenerate file markdown `daily-chats-YYYY-MM-DD.md`
+   * (percakapan hari ini) untuk analisa AI kualitas balasan bot.
+   * Best-effort: DB offline → silent, tidak mengganggu produksi.
+   * Di-trigger dari boot app.ts via setInterval (gated ENABLE_CHAT_EXPORT_CRON).
+   */
+  public async runDailyChatExport(): Promise<void> {
+    try {
+      const { chatExportService, formatLocalDate } = await import('./chat-export.service');
+      const today = formatLocalDate();
+      const result = await chatExportService.saveDayExport(DEFAULT_TENANT_ID, today);
+      if (result.success) {
+        console.log(
+          `[Cron Service] Daily chat export selesai (${today}): ${result.stats.totalConversations} percakapan, ${result.stats.totalMessages} pesan → ${result.fileName}`
+        );
+      } else {
+        console.warn(`[Cron Service] Daily chat export gagal (${today}): ${result.error}`);
+      }
+    } catch (err) {
+      console.error('[Cron Service] Error running daily chat export:', (err as Error).message);
+    }
+  }
+
+  /**
    * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
    */
   private async sendMorningReminders(): Promise<void> {

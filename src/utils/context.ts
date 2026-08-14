@@ -14,11 +14,15 @@ let isInitialized = false;
  * menyertakan Correlation ID ketika berjalan di dalam request context.
  */
 export function initializeConsoleWrapper(): void {
-  if ((console.log as any).__wrapped) return;
+  // GUARD anti double-wrap & infinite recursion: marker namespaced. Jika console.log
+  // sudah di-wrap oleh installer lain (mis. installLogBuffer), wrapper TETAP chain ke
+  // `.original` yang ada — jangan pernah memanggil console.log secara langsung di dalam
+  // wrapper sendiri (itu source of infinite recursion).
+  if ((console.log as any).__contextWrapped) return;
 
-  const originalLog = console.log;
-  const originalWarn = console.warn;
-  const originalError = console.error;
+  const originalLog = (console.log as any).original || console.log;
+  const originalWarn = (console.warn as any).original || console.warn;
+  const originalError = (console.error as any).original || console.error;
 
   console.log = (...args: any[]) => {
     const store = contextStorage.getStore();
@@ -29,7 +33,7 @@ export function initializeConsoleWrapper(): void {
       targetLog(...args);
     }
   };
-  (console.log as any).__wrapped = true;
+  (console.log as any).__contextWrapped = true;
   (console.log as any).original = originalLog;
 
   console.warn = (...args: any[]) => {
@@ -41,7 +45,7 @@ export function initializeConsoleWrapper(): void {
       targetWarn(...args);
     }
   };
-  (console.warn as any).__wrapped = true;
+  (console.warn as any).__contextWrapped = true;
   (console.warn as any).original = originalWarn;
 
   console.error = (...args: any[]) => {
@@ -53,6 +57,6 @@ export function initializeConsoleWrapper(): void {
       targetError(...args);
     }
   };
-  (console.error as any).__wrapped = true;
+  (console.error as any).__contextWrapped = true;
   (console.error as any).original = originalError;
 }

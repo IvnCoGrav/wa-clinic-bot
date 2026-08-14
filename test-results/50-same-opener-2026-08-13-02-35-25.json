@@ -1,0 +1,95 @@
+[
+  {
+    "no": 1,
+    "phone": "628389585001",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nPijat bayi, minimal usianya 2 minggu sudah bisa, Bunda. Jadi kalau si kecil sudah lewat usia itu, aman untuk dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkirnya 😊"
+    ],
+    "bubbleCount": 1,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nPijat bayi, minimal usianya 2 minggu sudah bisa, Bunda. Jadi kalau si kecil sudah lewat usia itu, aman untuk dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkirnya 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 28522,
+    "ranAt": "2026-08-13T02:33:38.520Z"
+  },
+  {
+    "no": 2,
+    "phone": "628389585002",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨",
+      "Bunda, untuk pijat bayi minimal usianya 2 minggu sudah bisa, kok. Jadi kalau si kecil sudah lewat 2 minggu, aman untuk dipijat. 😊 Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda."
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBunda, untuk pijat bayi minimal usianya 2 minggu sudah bisa, kok. Jadi kalau si kecil sudah lewat 2 minggu, aman untuk dipijat. 😊 Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda.",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 28540,
+    "ranAt": "2026-08-13T02:34:07.060Z"
+  },
+  {
+    "no": 3,
+    "phone": "628389585003",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nPijat bayi, Bunda, minimal usianya 2 minggu ya. Jadi kalau si kecil sudah lewat 2 minggu, sudah bisa dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"
+    ],
+    "bubbleCount": 1,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nPijat bayi, Bunda, minimal usianya 2 minggu ya. Jadi kalau si kecil sudah lewat 2 minggu, sudah bisa dipijat. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 25064,
+    "ranAt": "2026-08-13T02:34:32.124Z"
+  },
+  {
+    "no": 4,
+    "phone": "628389585004",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨",
+      "Bunda, untuk pijat bayi minimal usia 2 minggu sudah bisa, kok. Jadi kalau si kecil sudah lewat 2 minggu, aman untuk dipijat 😊 Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda."
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nBunda, untuk pijat bayi minimal usia 2 minggu sudah bisa, kok. Jadi kalau si kecil sudah lewat 2 minggu, aman untuk dipijat 😊 Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda.",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 24943,
+    "ranAt": "2026-08-13T02:34:57.067Z"
+  },
+  {
+    "no": 5,
+    "phone": "628389585005",
+    "mode": "llm",
+    "opener": "Selamat sore. Saya ingin tanya untuk pijat bayi min. di usia brp ya?",
+    "bubbles": [
+      "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨",
+      "Pijat bayi, Bunda, minimal usianya 2 minggu sudah bisa dipijat. Jadi kalau si kecil sudah lewat usia itu, aman dan boleh banget dipijat untuk relaksasi. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkirnya 😊"
+    ],
+    "bubbleCount": 2,
+    "replyText": "Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa. ✨\n\nPijat bayi, Bunda, minimal usianya 2 minggu sudah bisa dipijat. Jadi kalau si kecil sudah lewat usia itu, aman dan boleh banget dipijat untuk relaksasi. Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan dan ongkirnya 😊",
+    "finalState": "AWAITING_LOCATION",
+    "isHumanHandling": false,
+    "hasPricelistImage": false,
+    "asksLocation": true,
+    "exception": null,
+    "durationMs": 28308,
+    "ranAt": "2026-08-13T02:35:25.375Z"
+  }
+]

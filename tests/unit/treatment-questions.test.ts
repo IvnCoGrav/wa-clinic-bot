@@ -29,9 +29,10 @@ Jawaban: Pijat Bayi Ceria membantu bayi tidur lebih nyenyak, mengurangi kelelaha
 }
 
 function mockGenerator() {
-  return vi.spyOn(llmResponseGenerator, 'generateFaqResponse').mockResolvedValue(
-    'Pijat Bayi Ceria membantu bayi tidur lebih nyenyak dan rileks. Promo Rp60.000 selama 40 menit. 😊'
-  );
+  return vi.spyOn(llmResponseGenerator, 'generateFaqResponseWithDetails').mockResolvedValue({
+    answer: 'Pijat Bayi Ceria membantu bayi tidur lebih nyenyak dan rileks. Promo Rp60.000 selama 40 menit. 😊',
+    reasoning: '[MOCK]',
+  });
 }
 
 describe('Treatment Questions — NLU Intent Classification', () => {

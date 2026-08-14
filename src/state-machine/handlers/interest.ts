@@ -248,7 +248,10 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     stageLog('INTENT', `Intent: [${mappedIntent}] (Confidence: ${nlu!.confidence.toFixed(2)})`, customer.phone);
   } else {
     // Fallback to legacy LLM intent service (5-intent classifier)
-    intentResult = await llmIntentService.detectIntent(userText);
+    intentResult = await llmIntentService.detectIntent(userText, {
+      conversationId: conversation.id,
+      customerPhone: customer.phone,
+    });
     console.log(`[INTENT DETECTED] (Legacy LLM) Customer Message: "${userText}" → Intent: ${intentResult.intent}`);
     stageLog('INTENT', `Intent (Legacy): [${intentResult.intent}]`, customer.phone);
   }
@@ -409,33 +412,43 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       }
 
       // 3. Extract nama treatment spesifik untuk follow-up personal (jika ada)
+      //
+      // GUARD ANTI HARD-SELLING (FAQ murni): treatmentNameForFollowUp HANYA diisi jika
+      // customer MENYEBUT NAMA FULL treatment di pesan (exact phrase nama katalog tanpa
+      // kurung, lowercase). Match parsial/fuzzy (mis. "pijat bayi" → 2 kata awal dari
+      // "Pijat Bayi Ceria") TIDAK cukup — memaksanya ke instruksi CTA membuat LLM
+      // hard-selling paket yang tidak ditanyakan (mis. "Paket Selapan") pada pertanyaan
+      // edukatif (usia minimal, jam buka, dll). Entity NLU tidak dipakai di jalur ini.
+      const lowerUserText = userText.toLowerCase();
       let treatmentNameForFollowUp: string | undefined;
-      // Ambil dari NLU entity jika tersedia
-      const nluTreatment = ctx.nluResult?.entities?.treatment_name;
-      if (nluTreatment && typeof nluTreatment === 'string') {
-        treatmentNameForFollowUp = nluTreatment;
-      }
-      // Coba ambil nama RESMI dari catalog match (lebih akurat daripada entity mentah)
       try {
         const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-        const catalogMatch = treatmentCatalogService.searchCatalogItems(userText);
-        if (catalogMatch.length > 0) {
-          const first = catalogMatch[0];
-          // Bersihkan nama: buang suffix kurung (misal "(Add-on)", "(Rileksasi)")
-          const cleanName = first.name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
-          if (cleanName) {
-            treatmentNameForFollowUp = cleanName;
-          }
+        const explicitlyMentioned = treatmentCatalogService.getAllServices().find((s) => {
+          const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)\s*$/, '').trim();
+          return !!cleanName && lowerUserText.includes(cleanName);
+        });
+        if (explicitlyMentioned) {
+          treatmentNameForFollowUp = explicitlyMentioned.name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
         }
-      } catch (_) { /* abaikan, pakai entity NLU */ }
+      } catch (_) { /* abaikan — CTA tetap netral */ }
 
       if (treatmentNameForFollowUp) {
         await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, treatmentNameForFollowUp).catch(() => {});
       }
 
       // 4. Generate balasan FAQ natural berbasis RAG + Persona (CTA menyatu dalam 1 generation call)
-      const isLocationKnown = conversation.current_state !== ConversationState.INITIAL && conversation.current_state !== ConversationState.AWAITING_LOCATION;
-      const faqResult = await llmResponseGenerator.generateFaqResponseWithDetails(userText, chunksToUse, conversation.id, tenantId, treatmentNameForFollowUp, customer.id, isLocationKnown);
+      const additionalContextText = (ctx as any).additionalContextText;
+      const isLocationKnown = Boolean(customer.kelurahan) || Boolean(additionalContextText);
+      const faqResult = await llmResponseGenerator.generateFaqResponseWithDetails(
+        userText,
+        chunksToUse,
+        conversation.id,
+        tenantId,
+        treatmentNameForFollowUp,
+        customer.id,
+        isLocationKnown,
+        additionalContextText
+      );
 
       // 4b. Simpan memori pelanggan jika LLM mengekstrak fakta permanen baru
       if (faqResult.extracted_preferences && Object.keys(faqResult.extracted_preferences).length > 0) {

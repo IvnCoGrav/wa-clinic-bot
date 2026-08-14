@@ -31,3 +31,29 @@ export function containsForeignScripts(text: string): boolean {
   if (!text) return false;
   return FOREIGN_SCRIPT_RE.test(text);
 }
+
+/**
+ * Membersihkan frasa bocor dari RAG Knowledge Base atau typo tokenization
+ * seperti "Bun.etails info di sini", "details info", "info di sini", dll.
+ */
+export function sanitizeRagLeakage(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/(?:Bun\s*[\.,]\s*)?d?\.?etails?\s+info(?:\s+di\s+sini|\s+ini)?\s*/gi, '')
+    .replace(/\binfo\s+di\s+sini\s*/gi, '')
+    .replace(/\bberdasarkan\s+(?:referensi\s+dokumen|referensi|data|dokumen)\s+(?:di\s+atas|kami)\s*,?\s*/gi, '')
+    .trim();
+}
+
+/**
+ * Membersihkan kata-kata bahasa Inggris yang dilarang bocor ke customer
+ * (seperti "little one", "little one-nya", "baby", "mommy", "schedule").
+ */
+export function sanitizeForbiddenEnglishWords(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\blittle\s+one(?:-nya|nya)?\b/gi, 'si kecil')
+    .replace(/\bbaby(?:-nya|nya)?\b/gi, 'bayi')
+    .replace(/\bmommy(?:-nya|nya)?\b/gi, 'Bunda')
+    .replace(/\bschedule\b/gi, 'jadwal');
+}
