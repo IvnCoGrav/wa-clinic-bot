@@ -59,7 +59,13 @@ export class FaqCacheService {
     return parseInt(process.env.FAQ_CACHE_TTL_SECONDS || '21600', 10);
   }
 
-  public generateKey(tenantId: string, userQuestion: string, contextChunks: any[], contextText: string): string {
+  public generateKey(
+    tenantId: string,
+    userQuestion: string,
+    contextChunks: any[],
+    contextText: string,
+    contextOptions?: { isLocationKnown?: boolean; additionalContextText?: string }
+  ): string {
     const normalizedQuestion = userQuestion.toLowerCase().trim().replace(/\s+/g, ' ');
     const chunkIds = (contextChunks || [])
       .map(c => c.id)
@@ -69,8 +75,17 @@ export class FaqCacheService {
     const chunkHashPart = chunkIds.length > 0 
       ? chunkIds 
       : crypto.createHash('sha256').update(contextText || '').digest('hex');
+
+    // Konteks yang mengubah prompt (CTA "ask location" vs assumptive-close, fakta
+    // ongkir/lokasi) WAJIB masuk cache key — jika tidak, customer tanpa lokasi bisa
+    // menerima jawaban cached milik customer yang sudah tahu lokasi (cross-customer
+    // FAQ cache poisoning).
+    const ctxPart = [
+      String(contextOptions?.isLocationKnown ?? ''),
+      (contextOptions?.additionalContextText || '').trim(),
+    ].join('|');
     
-    const combined = `${normalizedQuestion}|${chunkHashPart}`;
+    const combined = `${normalizedQuestion}|${chunkHashPart}|${ctxPart}`;
     const hash = crypto.createHash('sha256').update(combined).digest('hex');
     return `faq:${tenantId}:${hash}`;
   }

@@ -121,8 +121,8 @@ export class ConversationStateMachine {
     }
 
     // In-memory rewriting for Promo[CODE] greeting trigger
-    if (incomingMessage.text?.body && /Promo\s*\[(\w+)\]/i.test(incomingMessage.text.body)) {
-      incomingMessage.text.body = 'Halo';
+    if (incomingMessage.text?.body && /(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]/i.test(incomingMessage.text.body)) {
+      incomingMessage.text.body = incomingMessage.text.body.replace(/(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]\s*/gi, '').trim() || 'Halo';
     }
 
     // --- GATE KELAS 🏥: MEDICAL CONCERN DETECTION ENGINE ---
@@ -229,7 +229,7 @@ export class ConversationStateMachine {
 
     // 3. Routing ke State Handler yang sesuai
     const { AiModelConfigService } = await import('../config/ai-models.config');
-    if (!AiModelConfigService.globalBotActive && !activeConversation.is_human_handling) {
+    if (!AiModelConfigService.isBotActive(tenantId) && !activeConversation.is_human_handling) {
       console.log(`[GLOBAL BOT DEACTIVATED] Bypassing bot responder and routing customer ${customer.phone} directly to human handling.`);
       await conversationService.escalateToHumanHandling(
         activeConversation,
@@ -242,10 +242,22 @@ export class ConversationStateMachine {
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
     }
 
+    // --- BYPASS LLM / NLU UNTUK PESAN GREETING LEAD MURNI ---
+    const { checkLeadGreetingText } = await import('./utils/greeting-checker');
+    const rawMsgBody = (incomingMessage as any)._rawBody || rawInboundText;
+    const greetingCheck = activeConversation.current_state === ConversationState.INITIAL
+      ? await checkLeadGreetingText(incomingText, rawMsgBody, tenantId)
+      : undefined;
+    const isPureGreetingLead = activeConversation.current_state === ConversationState.INITIAL && greetingCheck?.isPureGreeting;
+
+    if (isPureGreetingLead) {
+      console.log(`[GREETING BYPASS] Pure lead greeting matched for customer ${customer.phone}. Bypassing NLU & LLM router.`);
+    }
+
     // --- GATE 2 🧠: STRUCTURED NLU INTENT & ENTITY CLASSIFICATION ---
     let nluResult = undefined;
     let historyFormatted: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-    if (!activeConversation.is_human_handling && incomingText) {
+    if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead) {
       try {
         const { NluClassifierService } = await import('../services/nlu-classifier.service');
         const { messageService } = await import('../services/message.service');
@@ -254,7 +266,10 @@ export class ConversationStateMachine {
           role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
           content: m.content || '',
         }));
-        nluResult = await NluClassifierService.classifyMessage(incomingText, historyFormatted);
+        nluResult = await NluClassifierService.classifyMessage(incomingText, historyFormatted, {
+          conversationId: activeConversation.id,
+          customerPhone: customer.phone,
+        });
       } catch (err: any) {
         console.error('[NLU CLASSIFICATION ERROR IN MACHINE]:', err.message);
       }
@@ -302,36 +317,45 @@ export class ConversationStateMachine {
     // hanya saat shadow mode dimatikan lewat dashboard (setelah gate akurasi lolos).
     let routerDecision = undefined;
     const routerStateSnapshot = activeConversation.current_state;
-    if (!activeConversation.is_human_handling && incomingText && AiRouterConfigService.isEnabled(tenantId)) {
+    if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead && AiRouterConfigService.isEnabled(tenantId)) {
       try {
         const { aiRouterService } = await import('../integrations/llm/ai-router');
         routerDecision = await aiRouterService.classify({
           currentState: activeConversation.current_state,
           conversationHistory: historyFormatted,
           lastCustomerMessage: incomingText,
+          conversationId: activeConversation.id,
+          customerPhone: customer.phone,
         }, tenantId);
       } catch (err: any) {
         console.error('[AI ROUTER ERROR IN MACHINE]:', err.message);
       }
 
-      // UNKNOWN berulang → eskalasi human otomatis (HANYA mode konsumsi penuh).
+      // Eskalasi human otomatis berdasarkan flag router (HANYA mode konsumsi penuh).
       // Shadow mode TIDAK boleh mengubah keputusan produksi sama sekali.
+      // Di-honor: UNKNOWN_REPEATED (berulang), MEDICAL_KEYWORD_SUSPECTED (safety),
+      // SCHEDULE_REQUEST (butuh pengecekan slot manusia).
       if (routerDecision?.response && !AiRouterConfigService.isShadowMode(tenantId)) {
         try {
           const { handleRouterResult } = await import('../services/ai-router-evaluation.service');
           const processed = await handleRouterResult(activeConversation, routerDecision.response, tenantId);
-          if (processed.needs_human_escalation && processed.escalation_reason === 'UNKNOWN_REPEATED') {
-            console.warn(`[UNKNOWN REPEATED ESCALATION] Customer ${customer.phone} auto-escalated. ${processed.reasoning_note}`);
+          const escalateReasons: Record<string, string> = {
+            UNKNOWN_REPEATED: 'unknown_repeated',
+            MEDICAL_KEYWORD_SUSPECTED: 'medical_concern',
+            SCHEDULE_REQUEST: 'schedule_request',
+          };
+          if (processed.needs_human_escalation && escalateReasons[processed.escalation_reason]) {
+            console.warn(`[ROUTER ESCALATION] Customer ${customer.phone} auto-escalated (${processed.escalation_reason}). ${processed.reasoning_note || ''}`);
             await conversationService.escalateToHumanHandling(
               activeConversation,
               customer.phone,
-              processed.reasoning_note || 'UNKNOWN berulang dalam thread ini',
+              processed.reasoning_note || `Router flag ${processed.escalation_reason}`,
               tenantId,
-              'unknown_repeated'
+              escalateReasons[processed.escalation_reason]
             );
           }
         } catch (err: any) {
-          console.error('[AI ROUTER UNKNOWN ESCALATION ERROR]:', err.message);
+          console.error('[AI ROUTER ESCALATION ERROR]:', err.message);
         }
       }
     }

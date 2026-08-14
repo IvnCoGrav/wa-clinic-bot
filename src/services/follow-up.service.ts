@@ -5,11 +5,12 @@ import { typingService } from './typing.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { wabaTemplateService } from './waba-template.service';
 import { wabaConsentService } from './waba-consent.service';
+import { parsePositiveInt } from '../utils/env-numeric';
 
 // Parameter batch/throttle follow-up — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
-const FOLLOWUP_BATCH_LIMIT = parseInt(process.env.FOLLOWUP_BATCH_LIMIT || '20', 10);
-const FOLLOWUP_THROTTLE_BASE_MS = parseInt(process.env.FOLLOWUP_THROTTLE_BASE_MS || '1500', 10);
-const LOST_CUSTOMER_GRACE_DAYS = parseInt(process.env.LOST_CUSTOMER_GRACE_DAYS || '3', 10);
+const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
+const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE_BASE_MS, 1500);
+const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
 
 export class FollowUpService {
   /**
@@ -170,15 +171,21 @@ export class FollowUpService {
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-      // Cek dulu apakah sudah pernah dibuat untuk booking date ini (idempotensi)
+      // Idempotensi: jika sudah ada row NEXT_TREATMENT aktif (belum terkirim) untuk
+      // customer ini, jangan buat duplikat (pemanggilan ganda / retry cron).
       const existing = await prisma.followUp.findFirst({
         where: {
           customer_id: customerId,
           type: 'NEXT_TREATMENT',
           tenant_id: tenantId,
-          // Menggunakan scheduled_at sebagai indikasi
-        }
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
       });
+
+      if (existing) {
+        console.log(`[FollowUp Service] NEXT_TREATMENT follow-ups already exist for customer: ${customerId}. Skipping (idempotent).`);
+        return;
+      }
 
       // Buat 3 stage follow-up (+1, +2, +3 bulan)
       const stages = [1, 2, 3];
@@ -229,6 +236,10 @@ export class FollowUpService {
             },
           },
         },
+        // Order deterministik (anti-starvation): paling lama jatuh tempo diproses
+        // lebih dulu; tanpa orderBy, subset arbitrer tiap run bisa membuat customer
+        // tertentu kelaparan selamanya.
+        orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
         take: FOLLOWUP_BATCH_LIMIT, // Batch limit per execution (env FOLLOWUP_BATCH_LIMIT)
       });
 

@@ -177,4 +177,26 @@ describe('FAQ Cache Service & Security Skip Rules', () => {
     const afterInvalidate = await faqCacheService.get(key);
     expect(afterInvalidate).toBeNull();
   });
+
+  it('7. Cache key berbeda untuk konteks isLocationKnown / additionalContextText yang berbeda (anti cross-customer poisoning)', () => {
+    const chunks: any[] = [{ id: 'chunk-a' }];
+    const base = 'Jam berapa operasional klinik?';
+
+    // Skenario A: customer tanpa lokasi (CTA tanya rumah) vs dengan lokasi (assumptive-close).
+    const keyLocUnknown = faqCacheService.generateKey('tenant-ctx-1', base, chunks, 'ctx-text', { isLocationKnown: false });
+    const keyLocKnown = faqCacheService.generateKey('tenant-ctx-1', base, chunks, 'ctx-text', { isLocationKnown: true });
+    expect(keyLocKnown).not.toBe(keyLocUnknown);
+
+    // Skenario B: additionalContextText (fakta ongkir/lokasi) berbeda → key berbeda.
+    const keyNoOngkir = faqCacheService.generateKey('tenant-ctx-1', base, chunks, 'ctx-text', { isLocationKnown: true, additionalContextText: '' });
+    const keyWithOngkir = faqCacheService.generateKey('tenant-ctx-1', base, chunks, 'ctx-text', {
+      isLocationKnown: true,
+      additionalContextText: 'Ongkir dari klinik ke rumah Bunda Rp20.000',
+    });
+    expect(keyWithOngkir).not.toBe(keyNoOngkir);
+
+    // Konteks yang sama → key SAMA (masih memanfaatkan cache antar-customer aman).
+    const keyRepeat = faqCacheService.generateKey('tenant-ctx-1', base, chunks, 'ctx-text', { isLocationKnown: false });
+    expect(keyRepeat).toBe(keyLocUnknown);
+  });
 });

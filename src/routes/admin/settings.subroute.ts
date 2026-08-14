@@ -289,6 +289,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         csName: tenant?.cs_name || 'Cs Yusi',
         whatsappNumber: tenant?.whatsapp_number || '6287751148065',
         formatVisit: tenant?.format_visit || 'Promo[%ID%]',
+        greetingsText: (tenant as any)?.greetings_text || tenant?.format_visit || 'Promo [%ID%]',
         formatCheckout: tenant?.format_checkout || 'list untuk reservasi :',
         formatPurchase: tenant?.format_purchase || 'Payment',
         formatValue: tenant?.format_value || 'Treatment = %VALUE%',
@@ -304,6 +305,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       csName?: string;
       whatsappNumber?: string;
       formatVisit?: string;
+      greetingsText?: string;
       formatCheckout?: string;
       formatPurchase?: string;
       formatValue?: string;
@@ -324,6 +326,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         ...(body.csName !== undefined ? { cs_name: body.csName } : {}),
         ...(body.whatsappNumber !== undefined ? { whatsapp_number: body.whatsappNumber } : {}),
         ...(body.formatVisit !== undefined ? { format_visit: body.formatVisit } : {}),
+        ...(body.greetingsText !== undefined ? { greetings_text: body.greetingsText } : {}),
         ...(body.formatCheckout !== undefined ? { format_checkout: body.formatCheckout } : {}),
         ...(body.formatPurchase !== undefined ? { format_purchase: body.formatPurchase } : {}),
         ...(body.formatValue !== undefined ? { format_value: body.formatValue } : {}),
@@ -415,7 +418,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     const { AiModelConfigService } = await import('../../config/ai-models.config');
     return reply.status(200).send({
       success: true,
-      globalBotActive: AiModelConfigService.globalBotActive,
+      globalBotActive: AiModelConfigService.isBotActive(DEFAULT_TENANT_ID),
     });
   });
 
@@ -436,8 +439,8 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
 
       const { AiModelConfigService } = await import('../../config/ai-models.config');
-      const oldVal = AiModelConfigService.globalBotActive;
-      AiModelConfigService.globalBotActive = globalBotActive;
+      const oldVal = AiModelConfigService.isBotActive(DEFAULT_TENANT_ID);
+      AiModelConfigService.setBotActive(DEFAULT_TENANT_ID, globalBotActive);
 
       // Jika bot di-ON-kan kembali, otomatis release percakapan yang sempat di-escalate karena 'Global bot disabled'
       if (globalBotActive) {

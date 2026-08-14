@@ -139,6 +139,65 @@ describe('Phrasing Service & Humanizer Layer Tests', () => {
       expect(result).toBe('Template Ongkir Statis 20.000');
     });
 
+    it('malformed JSON TIDAK pernah bocor ke customer — dipakai regex, atau fallback template statis', async () => {
+      // JSON terpotong dengan field "message" lengkap → diekstrak via regex.
+      callMock.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: '{"message": "Ongkirnya 20.000 ya bund, terima kasih"}' } }] },
+      });
+      const resultWithMsg = await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { normalPrice: 20000 },
+        fallbackTemplate: 'Template Ongkir Statis 20.000',
+      });
+      expect(resultWithMsg).toContain('Ongkirnya 20.000');
+      expect(resultWithMsg).not.toMatch(/^\s*\{/);
+      expect(resultWithMsg).not.toContain('"message"');
+
+      // JSON terpotong TANPA field "message" yang bisa diekstrak → fallback template statis.
+      callMock.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: '{"reasoning": "ongkir", "message": "Ongkirnya 20.000 ya bund' } }] },
+      });
+      const resultNoMsg = await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { normalPrice: 20000 },
+        fallbackTemplate: 'Template Ongkir Statis 20.000',
+      });
+      expect(resultNoMsg).toBe('Template Ongkir Statis 20.000');
+      expect(resultNoMsg).not.toMatch(/^\s*\{/);
+      expect(resultNoMsg).not.toContain('"message"');
+    });
+
+    it('JSON valid tapi tanpa field message → tidak mengirim JSON mentah (fallback template statis)', async () => {
+      callMock.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: '{"intent": "ongkir_info"}' } }] },
+      });
+      const result = await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { normalPrice: 20000 },
+        fallbackTemplate: 'Template Ongkir Statis 20.000',
+      });
+      expect(result).toBe('Template Ongkir Statis 20.000');
+      expect(result).not.toMatch(/^\s*\{/);
+    });
+
+    it('response body kosong/anomali tidak throw — jatuh ke fallback template statis', async () => {
+      callMock.mockResolvedValueOnce({ data: {} } as any);
+      const result = await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { normalPrice: 20000 },
+        fallbackTemplate: 'Template Ongkir Statis 20.000',
+      });
+      expect(result).toBe('Template Ongkir Statis 20.000');
+
+      callMock.mockResolvedValueOnce({ data: { choices: [] } } as any);
+      const result2 = await phrasingService.generate({
+        intent: 'ongkir_info',
+        facts: { normalPrice: 20000 },
+        fallbackTemplate: 'Template Ongkir Statis 20.000',
+      });
+      expect(result2).toBe('Template Ongkir Statis 20.000');
+    });
+
     it('membersihkan double greeting dan mengganti kata lokasi menjadi rumahnya pada output LLM', async () => {
       callMock.mockResolvedValueOnce({
         data: { choices: [{ message: { content: 'Selamat Siang, Selamat datang, Bunda! ✨ Boleh tahu dimana lokasinya ya, Bunda? 🙏🏻' } }] },
@@ -219,8 +278,8 @@ describe('Phrasing Service & Humanizer Layer Tests', () => {
     });
   });
 
-  describe('4. Unified Single-Voice CTA in generateFaqResponse', () => {
-    it('produces integrated CTA without separate generic double voice in fallback mode', async () => {
+  describe('4. Safe Emergency Fallback in generateFaqResponse (non-catalog chunk)', () => {
+    it('fallback darurat TIDAK meng-echo teks RAG/KB mentah & TIDAK memaksa CTA treatment', async () => {
       const answer = await llmResponseGenerator.generateFaqResponse(
         'Sinar moksa itu apa',
         [{
@@ -236,10 +295,17 @@ describe('Phrasing Service & Humanizer Layer Tests', () => {
         'Sinar Moksa'
       );
 
-      expect(answer).toContain('Sinar moksa adalah terapi inframerah hangat.');
-      expect(answer).toContain('Sinar Moksa');
-      expect(answer).not.toContain('%\n\n%'); // no unformatted gaps
-      expect(answer.length).toBeGreaterThan(30);
+      // Tidak ada echo RAG mentah (dokumen KB) yang berpotensi keliru/misleading.
+      expect(answer).not.toContain('Sinar moksa adalah terapi inframerah hangat.');
+      // Tidak ada hard-sell nama treatment pada pesan darurat.
+      expect(answer).not.toContain('Sinar Moksa');
+      // Tidak ada bocor JSON/internal.
+      expect(answer).not.toMatch(/\{[^{}]*"/);
+      expect(answer).not.toContain('reasoning');
+      // Jawaban KOSONG = sinyal eskalasi senyap ke antrean human handling
+      // (bukan skenario apology "mohon maaf antrean").
+      expect(answer).toBe('');
+      expect(answer).not.toMatch(/mohon maaf|antrean|belum bisa/i);
     });
   });
 });

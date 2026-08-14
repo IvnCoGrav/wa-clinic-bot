@@ -4,7 +4,8 @@ import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/language-sanitizer';
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
-import { callChatCompletionsWithFallback, getFallbackModel } from './model-fallback';
+import { getLlmEndpointConfig } from './llm-gateway';
+import { callChatCompletionsWithFallback } from './model-fallback';
 import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import dotenv from 'dotenv';
@@ -21,15 +22,13 @@ export interface PhrasingRequest {
 export class PhrasingService {
   public phrasingBreaker: CircuitBreaker<[PhrasingRequest], string>;
 
-  private get apiKey(): string {
-    return process.env.LLM_API_KEY || '';
-  }
-  private get baseUrl(): string {
-    return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  }
   private get model(): string {
-    const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
-    return chatConfig.modelName || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
+    try {
+      const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
+      return chatConfig?.modelName || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
+    } catch {
+      return process.env.OPENAI_MODEL || 'deepseek-v4-flash';
+    }
   }
 
   constructor() {
@@ -89,20 +88,23 @@ ${rule5}
 6. Jangan tambahkan markdown berlebihan, buat agar terlihat alami seperti chat WhatsApp manusia.
 7. FORMAT TEKS (WAJIB): WhatsApp hanya mengenali format SATU tanda. Untuk teks tebal pakai SATU bintang (*teks*), DILARANG memakai dua bintang (**teks**) karena markdown ganda akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan pakai ~teks~.
 
-HANYA BERIKAN TEKS BALASAN UNTUK CUSTOMER TANPA AWALAN/AKHIRAN TEKS PENJELASAN LAIN.
+9. FORMAT WAJIB (JSON): Keluarkan output HANYA dalam format JSON dengan struktur: { "message": "teks balasan untuk customer" }
+Tanpa markdown di luar JSON!
 ${templateConstraint}`;
 
         const tenantId = req.tenantId || DEFAULT_TENANT_ID;
+        const endpoint = getLlmEndpointConfig({ model: this.model });
         const startedAt = Date.now();
         let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
         try {
           callResult = await callChatCompletionsWithFallback({
-            baseUrl: this.baseUrl,
-            apiKey: this.apiKey,
+            baseUrl: endpoint.baseUrl,
+            apiKey: endpoint.apiKey,
             model: this.model,
-            fallbackModel: getFallbackModel(),
-            timeoutMs: Number(process.env.LLM_TIMEOUT_CHAT_MS || 120000),
+            fallbackModel: endpoint.fallbackModel,
+            timeoutMs: endpoint.timeoutMs,
             payload: {
+              response_format: { type: 'json_object' },
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `Tolong sampaikan pesan ${req.intent} ini dengan variasi natural berdasarkan fakta tersebut. Contoh acuan pesan standar: "${req.fallbackTemplate}"` },
@@ -118,7 +120,7 @@ ${templateConstraint}`;
               conversation_id: req.conversationId,
               task_type: 'PHRASING',
               model_name: this.model,
-              baseUrl: this.baseUrl,
+              baseUrl: endpoint.baseUrl,
               startedAt,
               error: err,
             });
@@ -145,8 +147,42 @@ ${templateConstraint}`;
         } catch (logErr) {
           // Fire-and-forget
         }
+        let content = responseData?.choices?.[0]?.message?.content?.trim() ?? '';
+        
+        // Strip markdown code blocks if the LLM wrapped the JSON
+        let cleanJsonContent = content;
+        if (cleanJsonContent.startsWith('```')) {
+          cleanJsonContent = cleanJsonContent.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+        }
 
-        const content = responseData.choices[0].message.content.trim();
+        // Parse JSON output
+        try {
+          const parsed = JSON.parse(cleanJsonContent);
+          if (parsed && typeof parsed.message === 'string') {
+            content = parsed.message.trim();
+          } else {
+            // JSON valid tapi tanpa field "message" → jangan kirim JSON mentah,
+            // pakai teks mentah hanya jika bukan berbentuk objek JSON.
+            content = /^\{[\s\S]*\}$/.test(cleanJsonContent.trim())
+              ? ''
+              : cleanJsonContent;
+          }
+        } catch (jsonErr) {
+          // JSON malformed. DILARANG mengirim JSON mentah (sintaks kurung kurawal)
+          // ke customer — ekstrak nilai "message" via regex; jika tidak ketemu,
+          // biarkan kosong agar jatuh ke fallback template statis. Plain text
+          // non-JSON tetap aman dipakai (bukan leak sintaks).
+          const trimmedContent = cleanJsonContent.trim();
+          if (trimmedContent.startsWith('{') || trimmedContent.startsWith('[')) {
+            console.warn(`[PHRASING SERVICE] Gagal parse JSON (fallback ke regex):`, cleanJsonContent);
+            const messageMatch = trimmedContent.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            content = messageMatch
+              ? messageMatch[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim()
+              : '';
+          } else {
+            content = cleanJsonContent;
+          }
+        }
 
         // Sanitasi aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
         // seperti DeepSeek — lihat dokumentasi language-sanitizer.ts
@@ -187,8 +223,18 @@ ${templateConstraint}`;
           return req.fallbackTemplate;
         }
 
+        // Clean preamble meta-text (e.g. "Siapp, ini pesan variasi...", "Berikut variasi...") and surrounding quotes
+        let cleanedMeta = sanitizedContent
+          .replace(/^(?:Siapp|Tentu|Baik|Berikut|Ini)[^\n]*variasi[^\n]*:\s*/gi, '')
+          .replace(/^(?:---|\*\*\*)\s*/g, '')
+          .trim();
+
+        if (cleanedMeta.startsWith('"') && cleanedMeta.endsWith('"') && cleanedMeta.length > 2) {
+          cleanedMeta = cleanedMeta.slice(1, -1).trim();
+        }
+
         // Safety Check 3: Bersihkan double greeting (misal "Selamat Siang, Selamat datang") & larang kata "lokasi/lokasinya"
-        let finalContent = sanitizedContent
+        let finalContent = cleanedMeta
           .replace(/^(Selamat\s+(?:Pagi|Siang|Sore|Malam))\s*,\s*(Selamat\s+datang)/i, '$2')
           .replace(/\b(dimana|di\s+mana)\s+lokasinya\b/gi, 'rumahnya di mana')
           .replace(/\bmana\s+lokasinya\b/gi, 'rumahnya di mana')
@@ -211,7 +257,11 @@ ${templateConstraint}`;
 
   public async generate(req: PhrasingRequest): Promise<string> {
     const isHumanizerEnabled = process.env.HUMANIZER_ENABLED !== 'false';
-    if (!isHumanizerEnabled || !this.apiKey || this.apiKey.startsWith('mock')) {
+    if (!isHumanizerEnabled) {
+      return req.fallbackTemplate;
+    }
+    const endpoint = getLlmEndpointConfig({ model: this.model });
+    if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) {
       return req.fallbackTemplate;
     }
 

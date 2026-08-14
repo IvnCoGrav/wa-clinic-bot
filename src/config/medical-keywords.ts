@@ -4,8 +4,7 @@
  */
 
 // HIGH Severity Symptoms & Urgent Medical Emergencies (Directs to IGD / Ambulance 119)
-export const HIGH_SEVERITY_MEDICAL_KEYWORDS: string[] = [
-  // Qualitative & Quantitative Fever / Heat
+export const HIGH_SEVERITY_MEDICAL_KEYWORDS: string[] = [  // Qualitative & Quantitative Fever / Heat
   'demam tinggi',
   'demam tinggi banget',
   'panas tinggi',
@@ -127,9 +126,30 @@ export function checkMedicalKeywords(text: string): {
   const detectedHigh: string[] = [];
   const detectedMedium: string[] = [];
 
+  // Frasa yang TIDAK boleh dianggap gejala medis meski mengandung keyword pendek.
+  // Contoh: "step by step" = tahap demi tahap (bukan kejang), "kuningan" = nama daerah.
+  const NON_MEDICAL_PHRASES: RegExp[] = [
+    /\bstep\s+by\s+step\b/i,
+  ];
+
+  // Keyword pendek (≤6 huruf) dipakai dengan word boundary agar "kaku" tidak match
+  // "kakun", "kuning" tidak match "kuningan", "step" tidak match "step by step".
+  // Kata yang lebih panjang & multi-kata (mis. "demam tinggi", "tali pusat") cukup
+  // substring match karena false positive-nya jauh lebih kecil.
+  const matchesKeyword = (keyword: string): boolean => {
+    const kw = keyword.toLowerCase();
+    if (NON_MEDICAL_PHRASES.some((re) => re.test(normalizedText))) {
+      return false;
+    }
+    if (kw.length <= 6 && !/\s/.test(kw)) {
+      return new RegExp(`(^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i').test(normalizedText);
+    }
+    return normalizedText.includes(kw);
+  };
+
   // 1. Check High Severity Keywords
   for (const keyword of HIGH_SEVERITY_MEDICAL_KEYWORDS) {
-    if (normalizedText.includes(keyword)) {
+    if (matchesKeyword(keyword)) {
       detectedHigh.push(keyword);
     }
   }
@@ -150,7 +170,7 @@ export function checkMedicalKeywords(text: string): {
 
   // 2. Check Medium Severity Keywords
   for (const keyword of MEDIUM_SEVERITY_MEDICAL_KEYWORDS) {
-    if (normalizedText.includes(keyword)) {
+    if (matchesKeyword(keyword)) {
       detectedMedium.push(keyword);
     }
   }

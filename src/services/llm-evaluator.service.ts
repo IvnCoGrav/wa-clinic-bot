@@ -1,8 +1,9 @@
-import axios from 'axios';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { BOT_PERSONA_PROMPT } from '../config/persona';
+import { getLlmEndpointConfig, callChatWithRetry } from '../integrations/llm/llm-gateway';
+import { parsePositiveInt } from '../utils/env-numeric';
 
 /**
  * LLM-as-Judge — Evaluasi kualitas balasan bot secara otomatis.
@@ -35,12 +36,10 @@ export interface EvalResult {
 }
 
 export class LlmEvaluatorService {
-  private get apiKey(): string {
-    return process.env.LLM_API_KEY || '';
-  }
-  private get baseUrl(): string {
-    return (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  }
+  /**
+   * Konfigurasi LLM disentralisasi lewat gateway (getLlmEndpointConfig),
+   * bukan getter apiKey/baseUrl duplikat.
+   */
 
   /**
    * Ambil pesan OUTBOUND terbaru yang memiliki aiReasoning (balasan LLM),
@@ -95,7 +94,8 @@ export class LlmEvaluatorService {
    * Return { score, feedback } atau null bila LLM gagal/tidak tersedia.
    */
   private async evaluateOne(sample: EvaluatedSample): Promise<{ score: number; feedback: string } | null> {
-    if (!this.apiKey || this.apiKey.startsWith('mock')) return null;
+    const endpoint = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', timeoutMs: parsePositiveInt(process.env.AI_EVAL_TIMEOUT_MS, 30000) });
+    if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) return null;
 
     const config = AiModelConfigService.getModelConfig('CHAT_REPLY');
 
@@ -114,25 +114,65 @@ FORMAT WAJIB JSON:
     const userContent = `REASONING AI: ${sample.aiReasoning || '(tidak ada)'}\nJAWABAN BOT: ${sample.messageText}`;
 
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/chat/completions`,
-        {
-          model: config.modelName,
-          temperature: 0.2,
-          max_tokens: config.maxTokens,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent },
-          ],
-        },
-        {
-          headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-          timeout: parseInt(process.env.AI_EVAL_TIMEOUT_MS || '30000', 10),
+      const startedAt = Date.now();
+      let callResult;
+      try {
+        callResult = await callChatWithRetry({
+          baseUrl: endpoint.baseUrl,
+          apiKey: endpoint.apiKey,
+          model: endpoint.model,
+          fallbackModel: endpoint.fallbackModel,
+          timeoutMs: endpoint.timeoutMs,
+          maxRetries: 1,
+          retryDelayMs: 500,
+          payload: {
+            model: endpoint.model,
+            temperature: 0.2,
+            max_tokens: config.maxTokens,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userContent },
+            ],
+          },
+        });
+      } catch (err: any) {
+        try {
+          const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+          auditLlmCall({
+            tenant_id: sample.tenantId,
+            customer_phone: sample.customerPhone || 'eval-audit',
+            conversation_id: sample.conversationId ?? null,
+            task_type: 'AI_EVALUATION',
+            model_name: endpoint.model,
+            baseUrl: endpoint.baseUrl,
+            startedAt,
+            error: err,
+          });
+        } catch {
+          // Fire-and-forget
         }
-      );
+        throw err;
+      }
 
-      const raw = response.data?.choices?.[0]?.message?.content?.trim();
+      // Audit sukses (Fase 5.3 — evaluator kini ikut tercatat di llm_audit_logs).
+      try {
+        const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+        auditLlmCall({
+          tenant_id: sample.tenantId,
+          customer_phone: sample.customerPhone || 'eval-audit',
+          conversation_id: sample.conversationId ?? null,
+          task_type: 'AI_EVALUATION',
+          model_name: callResult.model,
+          baseUrl: callResult.baseUrl,
+          startedAt,
+          usage: callResult.data?.usage,
+        });
+      } catch {
+        // Fire-and-forget
+      }
+
+      const raw = callResult.data?.choices?.[0]?.message?.content?.trim();
       if (!raw) return null;
 
       const parsed = JSON.parse(raw.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '').trim());

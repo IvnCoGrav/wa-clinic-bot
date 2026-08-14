@@ -2,7 +2,11 @@
  * Centralized AI Model Config Registry
  * Manages task-to-model mappings dynamically so models can be changed
  * without hunting through codebase, and exposed for UI management.
+ *
+ * Tenant-aware (SaaS): registry disimpan per-tenant (`Map<tenantId, Map<task, config>>`)
+ * agar konfigurasi tenant A tidak tertimpa saat tenant B di-load dari DB.
  */
+import { DEFAULT_TENANT_ID } from './tenant';
 
 export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION';
 
@@ -17,6 +21,7 @@ export interface AiTaskModelConfig {
 }
 
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
+// Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
 const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   [
     'HARVESTING',
@@ -89,8 +94,31 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
 
 export const SUPPORTED_PROVIDERS = ['MiniMax', 'OpenAI', 'DeepSeek', 'Groq', 'Anthropic'];
 
+// Registry per-tenant: Map<tenantId, Map<AiTaskType, AiTaskModelConfig>>.
+// Default tenant di-seed dari env pada saat modul dimuat.
+const tenantRegistries: Map<string, Map<AiTaskType, AiTaskModelConfig>> = new Map();
+
+function getOrCreateTenantRegistry(tenantId: string): Map<AiTaskType, AiTaskModelConfig> {
+  let reg = tenantRegistries.get(tenantId);
+  if (!reg) {
+    // Clone default registry (env-driven) sebagai basis tiap tenant.
+    reg = new Map(Array.from(defaultTaskModelRegistry.entries()).map(([task, cfg]) => [task, { ...cfg }]));
+    tenantRegistries.set(tenantId, reg);
+  }
+  return reg;
+}
+
 export class AiModelConfigService {
-  static globalBotActive = true;
+  /** Status bot aktif per-tenant (disable satu tenant tidak memengaruhi tenant lain). */
+  static globalBotActive = new Map<string, boolean>();
+
+  static isBotActive(tenantId: string = DEFAULT_TENANT_ID): boolean {
+    return this.globalBotActive.get(tenantId) ?? true;
+  }
+
+  static setBotActive(tenantId: string, active: boolean): void {
+    this.globalBotActive.set(tenantId, active);
+  }
 
   /**
    * Sync seluruh task model config ke database per tenant (SaaS-ready).
@@ -103,11 +131,12 @@ export class AiModelConfigService {
         where: { tenant_id: tenantId },
       });
 
+      const reg = getOrCreateTenantRegistry(tenantId);
       if (dbConfigs.length > 0) {
         for (const cfg of dbConfigs) {
           const task = cfg.task as AiTaskType;
           if (!defaultTaskModelRegistry.has(task)) continue;
-          defaultTaskModelRegistry.set(task, {
+          reg.set(task, {
             task,
             provider: cfg.provider,
             modelName: cfg.model_name,
@@ -134,7 +163,7 @@ export class AiModelConfigService {
     try {
       const { prisma } = await import('../db/client');
       await prisma.tenantAiConfig.deleteMany({ where: { tenant_id: tenantId } });
-      const entries = Array.from(defaultTaskModelRegistry.entries())
+      const entries = Array.from(getOrCreateTenantRegistry(tenantId).entries())
         .filter(([task]) => task !== 'MEDICAL_CHECK') // locked
         .map(([task, cfg]) => ({
           tenant_id: tenantId,
@@ -156,11 +185,11 @@ export class AiModelConfigService {
   }
 
   /**
-   * Mengambil konfigurasi AI Model untuk task tertentu
+   * Mengambil konfigurasi AI Model untuk task tertentu (per-tenant).
    */
-  static getModelConfig(task: AiTaskType): AiTaskModelConfig {
-
-    const config = defaultTaskModelRegistry.get(task);
+  static getModelConfig(task: AiTaskType, tenantId: string = DEFAULT_TENANT_ID): AiTaskModelConfig {
+    const reg = getOrCreateTenantRegistry(tenantId);
+    const config = reg.get(task);
     if (!config) {
       return {
         task,
@@ -185,10 +214,10 @@ export class AiModelConfigService {
   }
 
   /**
-   * Mengambil seluruh daftar task dan model yang terdaftar (untuk UI Admin)
+   * Mengambil seluruh daftar task dan model yang terdaftar (untuk UI Admin).
    */
-  static getAllTaskConfigs(): AiTaskModelConfig[] {
-    return Array.from(defaultTaskModelRegistry.values()).map(cfg => {
+  static getAllTaskConfigs(tenantId: string = DEFAULT_TENANT_ID): AiTaskModelConfig[] {
+    return Array.from(getOrCreateTenantRegistry(tenantId).values()).map(cfg => {
       if (cfg.task === 'MEDICAL_CHECK') {
         return {
           ...cfg,
@@ -202,9 +231,10 @@ export class AiModelConfigService {
   }
 
   /**
-   * Memperbarui konfigurasi AI Model untuk task tertentu (dinamis via Admin API / UI)
+   * Memperbarui konfigurasi AI Model untuk task tertentu (dinamis via Admin API / UI).
+   * Tenant-aware: tenantId diteruskan (bukan hardcode 'default-tenant').
    */
-  static updateTaskConfig(task: AiTaskType, updates: Partial<AiTaskModelConfig>): AiTaskModelConfig {
+  static updateTaskConfig(task: AiTaskType, updates: Partial<AiTaskModelConfig>, tenantId: string = DEFAULT_TENANT_ID): AiTaskModelConfig {
     if (task === 'MEDICAL_CHECK') {
       throw new Error('MEDICAL_CHECK_LOCKED: Deteksi medis bersifat deterministik (Regex/Keywords) dan tidak dapat diubah ke model AI dinamis.');
     }
@@ -217,16 +247,16 @@ export class AiModelConfigService {
       throw new Error('INVALID_MODEL_NAME: Nama model AI tidak boleh kosong.');
     }
 
-    const existing = this.getModelConfig(task);
+    const existing = this.getModelConfig(task, tenantId);
     const updated = {
       ...existing,
       ...updates,
       task, // Ensure task ID remains unchanged
     };
-    defaultTaskModelRegistry.set(task, updated);
-    console.log(`[AI MODEL CONFIG UPDATED] Task '${task}' is now mapped to provider '${updated.provider}' with model '${updated.modelName}'`);
-    // Fire-and-forget sinkronisasi ke DB (SaaS-ready)
-    this.saveConfigsToDb('default-tenant').catch((e) =>
+    getOrCreateTenantRegistry(tenantId).set(task, updated);
+    console.log(`[AI MODEL CONFIG UPDATED] Tenant '${tenantId}' Task '${task}' is now mapped to provider '${updated.provider}' with model '${updated.modelName}'`);
+    // Fire-and-forget sinkronisasi ke DB (SaaS-ready) — pakai tenantId asli.
+    this.saveConfigsToDb(tenantId).catch((e) =>
       console.warn('[AI MODEL CONFIG] update DB sync failed:', (e as Error).message)
     );
     return updated;
