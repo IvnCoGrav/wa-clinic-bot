@@ -26,21 +26,31 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   ```
 - **Akar masalah (diperbarui 2026-08-14):** BUKAN sekadar urutan enum — **baseline migrasi tidak lengkap**.
   Audit `prisma/migrations` menunjukkan:
-  - `20260721070211_init` hanya membuat 3 tabel (`customers`, `conversations`, `messages`).
-  - Tidak ada satupun migrasi yang `CREATE TYPE "FollowUpStatus"` maupun `CREATE TABLE "follow_ups"`,
-    `follow_up_templates`, tabel treatment/catalog, dst. — padahal semua ada di `schema.prisma`.
-  - `20260801000000_add_failed_followup_status` hanya `ALTER TYPE "FollowUpStatus" ADD VALUE 'FAILED'`
-    pada enum yang tak pernah dibuat di chain.
-  - Kemungkinan besar proyek memakai `db push` di masa awal (schema jadi sumber kebenaran, bukan
-    migrasi), lalu migrasi dimulai belakangan tanpa baseline penuh.
-- **Mengapa tidak ditambal begitu saja:** menulis migrasi baru yang `CREATE TYPE "FollowUpStatus"`
-  di urutan awal akan sukses di shadow DB, tetapi berisiko **gagal di env existing** yang DB-nya sudah
-  punya enum/tabel tersebut (`type already exists` / `relation already exists`) — pola yang sama dengan
-  masalah `children` (lihat #2). Perbaikan hanya boleh dilakukan dengan shadow DB lokal aktif untuk
-  verifikasi replay penuh, lalu direncanakan migrate resolve per env.
-- **Fix yang disarankan (butuh verifikasi replay):** buat migrasi baseline squash yang merekonstruksi
-  schema penuh, ATAU tambahkan migrasi `CREATE TYPE "FollowUpStatus"` di urutan sebelum referensi
-  pertama, lalu verifikasi `migrate diff --from-migrations` kembali menghasilkan empty migration.
+  - `20260721070211_init` hanya membuat 3 tabel (`customers`, `conversations`, `messages`) + 2 enum.
+  - Sebagian tabel SUDAH dibuat migrasi existing (knowledge_chunks, reservations, follow_up_templates,
+    delivery_tiers, clinic_services, tenant_persona, tenant_ai_config, children, ai_router_evaluations,
+    waba_templates, landing_pages, ai_evaluations, daily_report_logs) — tapi sejumlah tabel & enum inti
+    TIDAK pernah dibuat di migrasi mana pun: `follow_ups` (+ enum `FollowUpType`/`FollowUpStatus`),
+    `tenants`, `audit_logs`, `ad_clicks`, `legacy_staging`, `medical_faq_staging`, `general_faq_staging`,
+    `llm_audit_logs`, dan enum `StagingStatus`/`LandingType`/`StagingReviewStatus`.
+  - Lebih lanjut: banyak migrasi menengah melakukan `ALTER TABLE ... ADD COLUMN` pada tabel yang
+    TIDAK pernah dibuat di chain (mis. `add_waba_provider` menambah kolom ke `tenants`), karena
+    proyek memakai `db push` di masa awal lalu migrasi dimulai belakangan tanpa baseline penuh.
+  - Diverifikasi 2026-08-14 (Postgres lokal via Docker): replay `--from-migrations` gagal di
+    `20260801000000` ("FollowUpStatus does not exist"); setelah enum ditambal, gagal beruntun di
+    `add_waba_provider` ("WhatsappProvider already exists") dan seterusnya — konfirmasi masalah
+    sistemik, bukan satu migrasi.
+- **Mengapa tidak ditambal begitu saja:** membuat baseline/squash migrasi yang aman memerlukan
+  modifikasi banyak migrasi existing menjadi idempotent (CREATE TYPE/ADD COLUMN dengan guard) ATAU
+  squash total — keduanya mengubah checksum & berisiko pada `migrate deploy` di environment yang
+  sudah punya semua tabel (pola `already exists`, sama seperti masalah `children` di #2). Perbaikan
+  hanya layak dilakukan sebagai proyek terpisah dengan rencana per-env (migrate resolve / db push)
+  dan pengujian replay di staging.
+- **Workaround tetap:** diff terhadap DB asli (`--from-url`), bukan replay migration.
+- **Fix yang disarankan (proyek terpisah):** (a) squash seluruh schema menjadi satu baseline baru
+  + tandai semua migrasi lama sebagai applied di tiap env, ATAU (b) jadikan setiap migrasi existing
+  idempotent (CREATE TYPE via DO block, CREATE TABLE/ADD COLUMN/INDEX dengan IF NOT EXISTS) lalu
+  verifikasi `migrate diff --from-migrations` menghasilkan empty migration di shadow DB.
   Jangan lakukan tanpa Postgres lokal aktif & rencana per-env.
 
 ---
