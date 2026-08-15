@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Enforce Role THERAPIST untuk Portal Terapis (Akses Tidak Bisa Bocor ke Role Lain)
+
+- **Akar masalah**: portal staff (`/api/staff/*`) tidak pernah memeriksa role — akun non-THERAPIST (mis. ADMIN_CS) yang sudah punya sesi tetap bisa mengakses data & chat terapis, dan "Role & Hak Akses" yang dihapus di dashboard hanya tersimpan di localStorage browser (klien-only, tidak menyentuh server).
+- **Gate THERAPIST di login & validasi sesi** (`staff-auth.service.ts`): `login` kini memfilter `role: 'THERAPIST'` di query; `validateSession` menolak sesi milik staff non-THERAPIST → sesi lama role lain **langsung invalid** di semua pintu (portal staff, restore, admin API via staff cookie).
+- **Revoke sesi saat role diubah** (`staff-management.subroute.ts`): `PATCH /api/admin/staff/:id` kini mencabut seluruh sesi aktif bila `role` diubah (sebelumnya hanya saat `active=false` atau ganti password) → terapis yang diganti rolenya langsung keluar.
+- **Role asli di respons auth staff**: `login`/`me`/`restore` kini mengembalikan role sebenarnya (lowercase, mis. `therapist`) menggantikan hardcode `'staff'` — sekaligus memperbaiki preload chunk PWA (role terapis tersimpan benar).
+- Test: gate query login (THERAPIST vs ADMIN_CS) & validasi sesi non-THERAPIST → null.
+
 ### Added & Improved — Perombakan UI & UX Portal Terapis (StaffToday & StaffSchedule)
 
 - **Header Minimalis & Titik Status Koneksi (`StaffToday.tsx`, `StaffSchedule.tsx`)**:
