@@ -939,7 +939,7 @@ export const StaffToday: React.FC = () => {
         const newMapsUrl = newLat && newLng ? `https://maps.google.com/?q=${newLat},${newLng}` : null;
         const newNavUrl =
           newLat && newLng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${newLat},${newLng}&travelmode=bicycling`
+            ? `https://www.google.com/maps/dir/?api=1&destination=${newLat},${newLng}&travelmode=two-wheeler`
             : null;
 
         const updateTaskObj = (t: StaffTask) => {
