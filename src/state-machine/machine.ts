@@ -499,6 +499,7 @@ export class ConversationStateMachine {
         // (mis. saat customer minta pricelist lagi karena hilang / tidak terkirim).
         // Sumber gambar dibaca per-tenant (tenants.pricelist_image_url → env → aset default)
         // dan dikirim via gateway tenant (WAHA path/URL, WABA URL publik).
+        // Gambar dikirim HD asli (tanpa kompresi server-side).
         if (result.sendPricelistImage) {
           let sendOk = false;
           try {
@@ -509,9 +510,9 @@ export class ConversationStateMachine {
             const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
 
             if (!alreadySent || result.forcePricelistResend) {
-              const { resolvePricelistSendTarget } = await import('../services/pricelist-config.service');
+              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
               const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistSendTarget(tenantId, gateway.providerType);
+              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
               const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
 
               if (!pricelistTarget) {
@@ -539,9 +540,9 @@ export class ConversationStateMachine {
             console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
             // Best-effort tetap kirim walaupun DB offline (tidak membalikkan transaksi).
             if (!sendOk) {
-              const { resolvePricelistSendTarget } = await import('../services/pricelist-config.service');
+              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
               const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistSendTarget(tenantId, gateway.providerType);
+              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
               const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
               if (pricelistTarget) {
                 if (customer.is_sandbox_test) {

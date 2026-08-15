@@ -4,7 +4,6 @@ import { PricelistImagePanel } from './PricelistImagePanel';
 
 interface Props {
   initialPricelistUrl: string | null;
-  initialPricelistThumbUrl?: string | null;
   onPricelistSaved?: () => void;
   mqlThresholdBubbles: number;
   setMqlThresholdBubbles: (val: number) => void;
@@ -21,7 +20,6 @@ interface Props {
 
 export const MqlSettingsPanel: React.FC<Props> = ({
   initialPricelistUrl,
-  initialPricelistThumbUrl,
   onPricelistSaved,
   mqlThresholdBubbles,
   setMqlThresholdBubbles,
@@ -40,7 +38,6 @@ export const MqlSettingsPanel: React.FC<Props> = ({
       {/* Gambar Pricelist WhatsApp */}
       <PricelistImagePanel
         initialImageUrl={initialPricelistUrl}
-        initialThumbUrl={initialPricelistThumbUrl}
         onSaved={onPricelistSaved}
       />
 

@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import fs from 'fs';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
@@ -137,19 +136,10 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         select: { pricelist_image_url: true },
       });
       const storedUrl = tenant?.pricelist_image_url ?? null;
-      let pricelistThumbUrl: string | null = null;
-      if (storedUrl && storedUrl.startsWith('/media/outbound/')) {
-        // Dashboard memakai blur thumb ringan (bukan file HD asli).
-        const { mediaService } = await import('../../services/media.service');
-        const thumbUrl = storedUrl.replace(/\.([a-zA-Z0-9]+)$/, '_thumb.$1');
-        const abs = mediaService.filePathFromRelativeUrl(thumbUrl);
-        if (abs && fs.existsSync(abs)) pricelistThumbUrl = thumbUrl;
-      }
       return reply.status(200).send({
         success: true,
         data: {
           pricelistImageUrl: storedUrl,
-          pricelistThumbUrl,
           effectiveUrl: await getPricelistImageUrl(DEFAULT_TENANT_ID),
           envFallbackUrl: process.env.CLINIC_PRICELIST_IMAGE_URL || null,
           defaultUrl: DEFAULT_PRICELIST_IMAGE,
@@ -181,10 +171,8 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       let storedUrl: string | null = null;
       try {
         if (imageB64) {
-          // Upload gambar baru → simpan HD asli (kualitas penuh untuk
-          // pengiriman ke WhatsApp; resolvePricelistSendTarget yang
-          // mengompres 1/3 saat kirim). Dashboard memakai blur thumb ringan
-          // (pricelistThumbUrl). Inline MQL (kuota) & retensi media karena
+          // Upload gambar baru → simpan HD asli (kualitas penuh); dikirim ke
+          // customer tanpa kompresi. Inline MQL (kuota) & retensi media karena
           // lewat saveOutboundMedia.
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
@@ -207,14 +195,6 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         const { setPricelistImageUrl } = await import('../../services/pricelist-config.service');
         const result = await setPricelistImageUrl(DEFAULT_TENANT_ID, storedUrl);
 
-        let savedThumbUrl: string | null = null;
-        if (storedUrl && storedUrl.startsWith('/media/outbound/')) {
-          const { mediaService } = await import('../../services/media.service');
-          const thumbUrl = storedUrl.replace(/\.([a-zA-Z0-9]+)$/, '_thumb.$1');
-          const abs = mediaService.filePathFromRelativeUrl(thumbUrl);
-          if (abs && fs.existsSync(abs)) savedThumbUrl = thumbUrl;
-        }
-
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -227,7 +207,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({
           success: true,
           message: 'Gambar pricelist berhasil diperbarui.',
-          data: { pricelistImageUrl: result.url, pricelistThumbUrl: savedThumbUrl },
+          data: { pricelistImageUrl: result.url },
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });

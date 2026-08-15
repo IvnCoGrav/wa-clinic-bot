@@ -1,6 +1,5 @@
 import { prisma } from '../db/client';
 import { mediaService } from './media.service';
-import fs from 'fs';
 
 /**
  * pricelist-config.service.ts — Konfigurasi gambar pricelist per-tenant.
@@ -63,47 +62,4 @@ export async function setPricelistImageUrl(tenantId: string, url: string | null)
     select: { pricelist_image_url: true },
   });
   return { success: true, url: updated.pricelist_image_url };
-}
-
-/**
- * Menghasilkan versi ringan (1/3 dimensi) gambar pricelist untuk dikirim via
- * gateway. Gambar di-resize server-side (sharp), lalu disimpan ke media
- * outbound tenant sehingga terintegrasi dengan kuota media (MQL) & retensi
- * media chat (pembersihan otomatis), dan bisa dikirim WAHA (path lokal) maupun
- * WABA (URL publik). Mengembalikan null jika sumber tak bisa dibaca.
- */
-export async function resolvePricelistSendTarget(
-  tenantId: string,
-  provider: 'WAHA' | 'WABA'
-): Promise<string | null> {
-  try {
-    const raw = await getPricelistImageUrl(tenantId);
-
-    let buffer: Buffer;
-    if (/^https?:\/\//i.test(raw)) {
-      const res = await fetch(raw);
-      if (!res.ok) return null;
-      buffer = Buffer.from(await res.arrayBuffer());
-    } else if (raw.startsWith('/media/outbound/')) {
-      const abs = mediaService.filePathFromRelativeUrl(raw);
-      if (!abs) return null;
-      buffer = fs.readFileSync(abs);
-    } else {
-      buffer = fs.readFileSync(raw); // path file lokal
-    }
-
-    // 1/3 dimensi (minimal 120px agar tetap terbaca) + inline MQL & retensi.
-    const resized = await mediaService.resizeImageToFraction(buffer, 3);
-
-    const saved = await mediaService.saveOutboundMedia({
-      tenantId,
-      imageB64: resized.toString('base64'),
-      mimeType: 'image/jpeg',
-      fileName: `pricelist-${Date.now()}.jpg`,
-    });
-    return mediaService.resolveOutboundForProvider(saved.hdUrl, provider);
-  } catch (err: any) {
-    console.error('[PRICELIST] Gagal membuat versi kecil pricelist:', err?.message || err);
-    return null;
-  }
 }

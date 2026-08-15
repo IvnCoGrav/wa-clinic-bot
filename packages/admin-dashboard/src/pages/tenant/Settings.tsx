@@ -123,7 +123,6 @@ export const Settings: React.FC = () => {
 
   // Gambar Pricelist (per-tenant)
   const [pricelistImageUrl, setPricelistImageUrl] = useState<string>('');
-  const [pricelistThumbUrl, setPricelistThumbUrl] = useState<string>('');
 
   const loadMediaRetention = async () => {
     try {
@@ -170,9 +169,6 @@ export const Settings: React.FC = () => {
       const d = res?.data;
       if (d && d.pricelistImageUrl) {
         setPricelistImageUrl(d.pricelistImageUrl);
-      }
-      if (d && d.pricelistThumbUrl) {
-        setPricelistThumbUrl(d.pricelistThumbUrl);
       }
     } catch (e) {
       console.warn('Failed to load pricelist image settings:', e);
@@ -743,7 +739,6 @@ export const Settings: React.FC = () => {
       {/* Pricelist, MQL Automation & Media Retention Settings */}
       <MqlSettingsPanel
         initialPricelistUrl={pricelistImageUrl}
-        initialPricelistThumbUrl={pricelistThumbUrl}
         onPricelistSaved={loadPricelistImage}
         mqlThresholdBubbles={mqlThresholdBubbles}
         setMqlThresholdBubbles={setMqlThresholdBubbles}
