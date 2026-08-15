@@ -74,7 +74,7 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     expect(res.headers['set-cookie']).toContain('staff_session=valid_staff_token_xyz');
   });
 
-  it('authenticates Admin CS and redirects to /admin/overview with admin_cs role', async () => {
+  it('blocks Staf Admin (ADMIN_CS) from phone login with 403 notification', async () => {
     vi.spyOn(prisma.staff, 'findFirst').mockResolvedValue({
       id: 'staff-cs-1',
       tenant_id: 'default-tenant',
@@ -88,16 +88,6 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     } as any);
 
     vi.spyOn(bcryptUtil, 'verifyPassword').mockResolvedValue(true);
-    vi.spyOn(StaffAuthService, 'login').mockResolvedValue({
-      token: 'valid_cs_token_123',
-      staff: {
-        id: 'staff-cs-1',
-        name: 'CS Sarah',
-        phone: '081299998888',
-        role: 'ADMIN_CS',
-      } as any,
-      expiresAt: new Date(Date.now() + 43200000),
-    });
 
     const res = await app.inject({
       method: 'POST',
@@ -108,15 +98,13 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
       },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
     const body = JSON.parse(res.body);
-    expect(body.success).toBe(true);
-    expect(body.role).toBe('admin_cs');
-    expect(body.redirectTo).toBe('/admin/overview');
-    expect(body.user.name).toBe('CS Sarah');
+    expect(body.error).toContain('Staf Admin');
+    expect(body.error).toContain('nomor HP');
   });
 
-  it('authenticates Advertiser and redirects to /admin/overview with advertiser role', async () => {
+  it('blocks Advertiser from phone login with 403 notification', async () => {
     vi.spyOn(prisma.staff, 'findFirst').mockResolvedValue({
       id: 'staff-adv-1',
       tenant_id: 'default-tenant',
@@ -130,16 +118,6 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     } as any);
 
     vi.spyOn(bcryptUtil, 'verifyPassword').mockResolvedValue(true);
-    vi.spyOn(StaffAuthService, 'login').mockResolvedValue({
-      token: 'valid_adv_token_123',
-      staff: {
-        id: 'staff-adv-1',
-        name: 'Media Buyer Anton',
-        phone: '081277776666',
-        role: 'ADVERTISER',
-      } as any,
-      expiresAt: new Date(Date.now() + 43200000),
-    });
 
     const res = await app.inject({
       method: 'POST',
@@ -150,11 +128,10 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
       },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
     const body = JSON.parse(res.body);
-    expect(body.success).toBe(true);
-    expect(body.role).toBe('advertiser');
-    expect(body.redirectTo).toBe('/admin/overview');
+    expect(body.error).toContain('Staf Admin');
+    expect(body.error).toContain('nomor HP');
   });
 
   it('returns 401 when neither super admin key nor staff credentials match', async () => {

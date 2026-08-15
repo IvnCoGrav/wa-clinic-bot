@@ -27,6 +27,34 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       expect(body.error).toContain('wajib diisi');
     });
 
+    it('POST /api/staff/auth/login returns 403 guidance for non-THERAPIST staff', async () => {
+      vi.spyOn(StaffAuthService, 'login').mockResolvedValue(null);
+      const { hashPassword } = await import('../../src/utils/bcrypt');
+      const hash = await hashPassword('secret123');
+      vi.spyOn(prisma.staff, 'findFirst').mockResolvedValue({
+        id: 'staff-admin-1',
+        tenant_id: 'default-tenant',
+        name: 'Staf Admin',
+        phone: '088235780990',
+        password_hash: hash,
+        role: 'ADMIN_CS',
+        active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/login',
+        payload: { phone: '088235780990', password: 'secret123' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      const body = JSON.parse(res.body);
+      expect(body.error).toContain('Staf Admin');
+      expect(body.error).toContain('nomor HP');
+    });
+
     it('POST /api/staff/auth/login returns 401 for invalid credentials', async () => {
       vi.spyOn(StaffAuthService, 'login').mockResolvedValue(null);
 
