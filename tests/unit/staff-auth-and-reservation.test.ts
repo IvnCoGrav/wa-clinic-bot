@@ -169,7 +169,7 @@ describe('Staff Auth & Reservation Services', () => {
       expect(tasks[0].treatmentDetail).toBe('Pijat Bayi Ceria (60 min)');
       expect(tasks[0].conversationId).toBe('conv-123');
       expect(tasks[0].mapsUrl).toContain('https://maps.google.com/?q=-7.2575,112.7521');
-      expect(tasks[0].navigationUrl).toContain('https://www.google.com/maps/dir/?api=1&destination=-7.2575,112.7521&travelmode=driving');
+      expect(tasks[0].navigationUrl).toContain('https://www.google.com/maps/dir/?api=1&destination=-7.2575,112.7521&travelmode=bicycling');
       expect(tasks[0].address.kelurahan).toBe('Gayungan');
       expect(tasks[0].address.distanceKm).toBe(2.5);
       expect(tasks[0].address.fullText).toContain('Gayungan');
