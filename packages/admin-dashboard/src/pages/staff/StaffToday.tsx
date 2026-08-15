@@ -46,6 +46,7 @@ interface StaffTaskAddress {
   kecamatan: string | null;
   kota: string | null;
   distanceKm: number | null;
+  estimatedMinutes?: number | null;
   distanceSource?: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
   originName?: string | null;
   fullText: string;
@@ -843,6 +844,11 @@ export const StaffToday: React.FC = () => {
                                   {task.address.distanceSource === 'PREVIOUS_PATIENT' && task.address.originName
                                     ? `Jarak: ${task.address.distanceKm.toFixed(1)} km dari ${task.address.originName}`
                                     : `Jarak: ${task.address.distanceKm.toFixed(1)} km dari klinik`}
+                                  {task.address.estimatedMinutes != null && (
+                                    <span className="text-[#54656f] font-normal ml-1">
+                                      (±{task.address.estimatedMinutes} mnt perjalanan)
+                                    </span>
+                                  )}
                                 </span>
                               </p>
                             )}
@@ -1329,6 +1335,11 @@ export const StaffToday: React.FC = () => {
                                   {item.address.distanceSource === 'PREVIOUS_PATIENT' && item.address.originName
                                     ? `Jarak: ${item.address.distanceKm.toFixed(1)} km dari ${item.address.originName}`
                                     : `Jarak: ${item.address.distanceKm.toFixed(1)} km dari klinik`}
+                                  {item.address.estimatedMinutes != null && (
+                                    <span className="text-[#54656f] font-normal ml-1">
+                                      (±{item.address.estimatedMinutes} mnt perjalanan)
+                                    </span>
+                                  )}
                                 </span>
                               </p>
                             )}

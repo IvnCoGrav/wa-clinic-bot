@@ -14,6 +14,7 @@ export interface StaffTaskAddress {
   kecamatan: string | null;
   kota: string | null;
   distanceKm: number | null;
+  estimatedMinutes?: number | null;
   fullText: string;
   distanceSource?: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
   originName?: string | null;
@@ -53,6 +54,15 @@ function buildAddressText(c: {
   if (c.kecamatan) parts.push(`Kec. ${c.kecamatan}`);
   if (c.kota) parts.push(c.kota);
   return parts.join(', ') || 'Alamat belum tercatat lengkap';
+}
+
+/**
+ * Menghitung estimasi durasi tempuh perjalanan sepeda motor (dalam menit).
+ * Dikalibrasi dari benchmark rute nyata Google Maps: ~2.05 menit/km + buffer lampu merah/gang 2 menit.
+ */
+export function estimateTravelDurationMinutes(distanceKm: number | null): number | null {
+  if (distanceKm == null || distanceKm <= 0) return null;
+  return Math.max(3, Math.round(distanceKm * 2.05 + 2));
 }
 
 function buildShareText(
@@ -230,6 +240,7 @@ export class StaffReservationService {
             kecamatan: cust?.kecamatan || null,
             kota: cust?.kota || null,
             distanceKm,
+            estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource,
             originName,
             fullText: addressText,
@@ -409,6 +420,7 @@ export class StaffReservationService {
             kecamatan: cust?.kecamatan || null,
             kota: cust?.kota || null,
             distanceKm,
+            estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource,
             originName,
             fullText: addressText,
