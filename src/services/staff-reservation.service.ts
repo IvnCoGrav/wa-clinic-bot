@@ -535,17 +535,18 @@ export class StaffReservationService {
       const totalPaid = amount ?? reservation.purchase_value ?? 0;
       const now = new Date();
 
-      // Simpan bukti foto transfer/QRIS jika ada (disimpan dalam format web-res ringan)
+      // Simpan bukti foto transfer/QRIS jika ada (dikompres max 800px agar
+      // ringan & hemat kuota MQL, tetap terbaca jelas)
       let proofUrl: string | null = null;
       if (proofImageB64 && proofImageB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
         const matches = proofImageB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        const mimeType = matches ? matches[1] : 'image/jpeg';
         const rawB64 = matches ? matches[2] : proofImageB64;
+        const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
         const saved = await mediaService.saveOutboundMedia({
           tenantId,
-          imageB64: rawB64,
-          mimeType,
+          imageB64: resized.toString('base64'),
+          mimeType: 'image/jpeg',
           fileName: `proof-${reservationId}.jpg`,
         });
         proofUrl = saved.hdUrl;

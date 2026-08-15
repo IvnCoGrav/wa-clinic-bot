@@ -51,8 +51,14 @@ export const InstallAppPanel: React.FC = () => {
 
       {/* PWA Install Guide Modal */}
       {showInstallModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 space-y-5 shadow-2xl relative">
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          onClick={() => setShowInstallModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 space-y-5 shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setShowInstallModal(false)}
               className="absolute top-4 right-4 text-[#8696a0] hover:text-[#111b21]"

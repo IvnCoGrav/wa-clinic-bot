@@ -243,8 +243,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-5 sm:p-6 shadow-2xl relative my-8 max-h-[92vh] flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-5 sm:p-6 shadow-2xl relative my-8 max-h-[92vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Close button */}
         <button
           onClick={onClose}

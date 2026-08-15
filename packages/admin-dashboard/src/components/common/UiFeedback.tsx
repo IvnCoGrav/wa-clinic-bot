@@ -107,8 +107,14 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       {/* Confirm Dialog Modal (Modern WhatsApp Emerald & Light Theme) */}
       {confirmState && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => handleConfirmAnswer(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
               {confirmState.danger ? (
                 <AlertTriangle className="text-rose-500 flex-shrink-0" size={20} />

@@ -508,8 +508,14 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Modal 1: Chat History Modal */}
       {activeHistoryCustomer && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setActiveHistoryCustomer(null)}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
               <div>
@@ -588,8 +594,14 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Modal 2: Send Meta Event Modal */}
       {activeEventCustomer && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setActiveEventCustomer(null)}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <form onSubmit={handleSendMetaEvent}>
               {/* Modal Header */}
               <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">

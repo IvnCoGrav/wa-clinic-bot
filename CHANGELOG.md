@@ -4,6 +4,20 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Changed — Kalender Pure, Auto-Scroll Mingguan, Ikon Mata Bukti Bayar, Upload Bukti di Manage, Modal Klik-Luar Tutup, Kompresi Gambar Server-Side
+
+- **Kalender jadi pure calendar** (`Reservations.tsx`): sidebar (spotlight, filter kategori/terapis/status) & tombol "Filter" mobile dihapus; halaman kini hanya search + grid kalender/tabel. File `CalendarSidebar.tsx`, `UpcomingSpotlightCard.tsx`, `MiniMonthCalendar.tsx` dihapus (tidak terpakai lagi).
+- **Tampilan Minggu auto-scroll** (`WeekScheduleGrid.tsx`): saat tab Minggu dibuka, langsung scroll ke **treatment terdekat dari sekarang** (kolom hari + baris jam-nya); bila tidak ada jadwal tersisa, scroll ke **kolom hari ini + jam sekarang**. Ikut re-scroll saat pindah minggu.
+- **Bukti bayar → ikon mata saja** (`Reservations.tsx`): tombol teks "Cek Bukti Bayar" di tabel desktop & kartu mobile diganti **ikon mata (Eye)**; klik membuka modal bukti bayar.
+- **Manage modal: upload bukti bayar + ikon mata** (`Reservations.tsx` + `reservations.subroute.ts`): section "Bukti Bayar" baru di modal Detail Reservasi — preview + ikon mata (lihat detail) + tombol hapus, atau area **unggah gambar** bila belum ada. Endpoint baru `PUT /api/admin/reservation/:id/proof` (upload/`remove:true`) dengan audit log `ADMIN_UPLOAD_PROOF`/`ADMIN_REMOVE_PROOF`.
+- **Gambar dikompres server-side saat upload** (bukan HD, ringan untuk server & MQL):
+  - Helper baru di `media.service.ts`: `resizeImageToMax(buffer, maxDim)` & `resizeImageToFraction(buffer, divisor)` (sharp, JPEG q80, tanpa perbesar).
+  - **Bukti bayar** (catat bayar terapis `recordPayment` & upload di Manage): **max 800px** — foto HP 4000px turun ~80-95% berat.
+  - **Pricelist** (upload di Settings): **1/3 dimensi** — konsisten dengan versi yang dikirim ke WhatsApp; tersimpan via `saveOutboundMedia` sehingga **inline MQL & retensi media** (sebelumnya upload pricelist & bukti tersimpan HD asli).
+  - `resolvePricelistSendTarget` (pricelist-config.service.ts) di-refactor memakai helper yang sama.
+- **Semua modal: klik di luar (backdrop) = tutup** — 21 modal (dashboard admin + portal terapis + komponen bersama): `UiFeedback` confirm dialog, InstallAppPanel, StaffManagement (role/add/edit staff), FollowUpQueue (reschedule/confirm), CustomerDatabase (chat history/CAPI), LandingPage, Reservations (Manage & bukti — proof sudah sebelumnya), ClinicServices, StaffSchedule (profil/detail), StaffToday (profil/detail/catat bayar), CreateReservationModal, ExternalIntegrationModal. Pola: overlay `onClick={close}` + panel dalam `stopPropagation`. Klik luar kini setara tombol X & "Batal".
+- Test: 151 files / 1381 tests pass; build dashboard & backend hijau.
+
 ### Added & Changed — Paket Perbaikan Dashboard: Kalender Reservasi, Chat Terapis Kirim Gambar, Bot Diam Saat Staf Balas, Pricelist Kecil, PWA & Ongkir
 
 - **Kalender Reservasi dirapikan** (`Reservations.tsx`, `CalendarSidebar.tsx`, `MonthScheduleGrid.tsx`):
