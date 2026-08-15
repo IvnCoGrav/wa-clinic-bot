@@ -27,7 +27,6 @@ import {
   Upload,
   Image as ImageIcon,
   X,
-  MessageSquareOff,
   Trash2,
   UserCheck,
   Info,
@@ -212,6 +211,12 @@ export const StaffToday: React.FC = () => {
     } catch {
       return isoString;
     }
+  };
+
+  // Tombol OTW hanya bisa ditekan maksimal 2 jam sebelum jadwal treatment
+  const isOtwAllowed = (task: StaffTask) => {
+    if (!task.bookingDate) return false;
+    return Date.now() >= new Date(task.bookingDate).getTime() - 2 * 60 * 60 * 1000;
   };
 
   // Format full date in Indonesian locale (e.g. "Sabtu, 15 Agustus 2026")
@@ -765,47 +770,6 @@ export const StaffToday: React.FC = () => {
         </div>
       </header>
 
-      {/* 2-Tab Navigation Switcher Subheader */}
-      <div className="bg-white border-b border-[#e9edef] px-4 py-2 flex items-center justify-between z-20">
-        <div className="flex items-center space-x-2">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('today');
-              setMobileView('list');
-            }}
-            className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-xs ${
-              activeTab === 'today'
-                ? 'bg-[#008069] text-white border border-[#008069]'
-                : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] border border-transparent'
-            }`}
-          >
-            <MessageSquare size={14} />
-            <span>Tugas & Chat Hari Ini ({tasks.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('upcoming')}
-            className={`flex items-center space-x-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-xs ${
-              activeTab === 'upcoming'
-                ? 'bg-[#008069] text-white border border-[#008069]'
-                : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] border border-transparent'
-            }`}
-          >
-            <Calendar size={14} />
-            <span>Jadwal Mendatang ({upcomingTasks.length})</span>
-          </button>
-        </div>
-
-        {activeTab === 'upcoming' && (
-          <div className="hidden md:flex items-center space-x-1.5 text-xs text-[#667781]">
-            <MessageSquareOff size={13} className="text-[#008069]" />
-            <span>Chat otomatis aktif saat hari H treatment</span>
-          </div>
-        )}
-      </div>
-
       {/* Error notification banner */}
       {errorMessage && (
         <div className="bg-rose-50 border-b border-rose-200 px-4 py-2 text-rose-700 text-xs flex items-center justify-between z-20">
@@ -886,7 +850,7 @@ export const StaffToday: React.FC = () => {
                     </p>
                   </div>
                 ) : (
-                  filteredTasks.map((task) => {
+                  filteredTasks.map((task, idx) => {
                     const isSelected = selectedTask?.reservationId === task.reservationId;
                     const isSendingOtw = sendingOtwId === task.reservationId;
                     const isLunas = task.pricing.paymentStatus === 'LUNAS';
@@ -899,7 +863,7 @@ export const StaffToday: React.FC = () => {
                         className={`p-3.5 cursor-pointer transition-all text-left relative ${catInfo.borderAccent} ${
                           isSelected
                             ? 'bg-[#f0f2f5] border-l-4 border-l-[#008069]'
-                            : 'hover:bg-[#f5f6f6] border-l-4'
+                            : `hover:bg-[#f5f6f6] border-l-4 ${idx % 2 === 1 ? 'bg-[#eceef1]' : 'bg-white'}`
                         }`}
                       >
                         {/* Header: Customer Icon & Name & Time */}
@@ -1026,10 +990,14 @@ export const StaffToday: React.FC = () => {
 
                           <button
                             type="button"
-                            disabled={isSendingOtw}
+                            disabled={isSendingOtw || !isOtwAllowed(task)}
                             onClick={(e) => handleSendOtw(task, e)}
-                            className="flex items-center justify-center space-x-1 py-1.5 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 shadow-xs disabled:opacity-50"
-                            title="Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi"
+                            className="flex items-center justify-center space-x-1 py-1.5 px-2 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#cbf7c3] rounded-lg transition-all active:scale-95 border border-[#00a884]/30 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={
+                              isOtwAllowed(task)
+                                ? 'Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi'
+                                : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(task.bookingDate)})`
+                            }
                           >
                             {isSendingOtw ? (
                               <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
@@ -1084,47 +1052,54 @@ export const StaffToday: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Header Actions: Navigasi, Bayar, Infokan OTW */}
+                    {/* Header Actions: Navigasi, Bayar, Infokan OTW (icon-only) */}
                     <div className="flex items-center space-x-1.5 flex-shrink-0">
                       {(selectedTask.navigationUrl || selectedTask.mapsUrl) && (
                         <a
                           href={selectedTask.navigationUrl || selectedTask.mapsUrl || '#'}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold shadow-xs transition-all active:scale-95"
+                          className="h-9 w-9 flex items-center justify-center rounded-lg bg-[#008069] hover:bg-[#00a884] text-white shadow-xs transition-all active:scale-95"
                           title="Buka Peta Navigasi Google Maps"
                         >
-                          <Navigation size={12} />
-                          <span className="hidden sm:inline">Navigasi</span>
+                          <Navigation size={16} />
                         </a>
                       )}
 
                       <button
                         onClick={() => setPaymentModalTask(selectedTask)}
-                        className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs active:scale-95 ${
+                        className={`h-9 w-9 flex items-center justify-center rounded-lg text-xs font-semibold transition-all shadow-xs active:scale-95 ${
                           selectedTask.pricing.paymentStatus === 'LUNAS'
                             ? 'bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30'
                             : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
                         }`}
-                        title="Catat Status Pembayaran Transaksi"
+                        title={
+                          selectedTask.pricing.paymentStatus === 'LUNAS'
+                            ? 'Pembayaran sudah lunas'
+                            : 'Catat Status Pembayaran Transaksi'
+                        }
                       >
-                        <CreditCard size={12} />
-                        <span>{selectedTask.pricing.paymentStatus === 'LUNAS' ? 'Lunas' : 'Catat Bayar'}</span>
+                        <CreditCard size={16} />
                       </button>
 
                       <button
                         onClick={() => handleSendOtw(selectedTask)}
-                        disabled={sendingOtwId === selectedTask.reservationId}
-                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-[#d9fdd3] hover:bg-[#cbf7c3] text-[#008069] text-xs font-semibold transition-all border border-[#00a884]/30 active:scale-95 shadow-xs disabled:opacity-50"
-                        title="Kirim pesan cepat ke WhatsApp pasien bahwa Anda sedang menuju lokasi"
+                        disabled={sendingOtwId === selectedTask.reservationId || !isOtwAllowed(selectedTask)}
+                        className={`h-9 w-9 flex items-center justify-center rounded-lg text-[#008069] transition-all border shadow-xs active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                          isOtwAllowed(selectedTask)
+                            ? 'bg-[#d9fdd3] hover:bg-[#cbf7c3] border-[#00a884]/30'
+                            : 'bg-[#f0f2f5] border-[#e9edef]'
+                        }`}
+                        title={
+                          isOtwAllowed(selectedTask)
+                            ? 'Kirim info menuju lokasi (OTW) ke WhatsApp pasien'
+                            : `OTW baru bisa dikirim maks. 2 jam sebelum jadwal (${formatTime(selectedTask.bookingDate)})`
+                        }
                       >
                         {sendingOtwId === selectedTask.reservationId ? (
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
                         ) : (
-                          <>
-                            <Navigation2 size={12} />
-                            <span>Infokan OTW</span>
-                          </>
+                          <Navigation2 size={16} />
                         )}
                       </button>
                     </div>

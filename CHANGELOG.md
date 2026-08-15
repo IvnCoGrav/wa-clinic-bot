@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Changed — Portal Terapis: Gate OTW 2 Jam, Pemisah Visual Treatment, Header Chat Icon-Only, Tab Menu Dihilangkan
+
+- **Tombol "Infokan OTW" dikunci sampai H-2 jam sebelum jadwal treatment** (`StaffToday.tsx`): tombol di kartu tugas & di header chat kini `disabled` dengan visual redup + tooltip penjelas bila masih lebih dari 2 jam sebelum jam treatment. OTW hanya bisa dikirim pada rentang 2 jam sebelum hingga saat treatment.
+- **Pemisah visual antar treatment**: kartu treatment ke-2 (dan genap berikutnya) di daftar tugas kini diberi **background abu-abu lebih pekat** (`bg-[#eceef1]`) dibanding kartu putih di sekitarnya — memudahkan membedakan treatment 1, 2, 3 secara berurutan.
+- **Header chat WhatsApp dirapikan**: tombol "Navigasi", "Catat Bayar/Lunas", dan "Infokan OTW" diubah menjadi **ikon-only** (tombol persegi 36px) agar header tidak penuh; teks dipindah ke tooltip (title).
+- **Menu tab "Tugas & Chat Hari Ini" / "Jadwal Mendatang" dihilangkan**: subheader 2-tab tidak lagi ditampilkan — portal terapis langsung menampilkan tugas hari ini + chat tanpa switcher tab.
+
 ### Added & Changed — Notifikasi Login Staf Admin & Penyederhanaan Tabel Staff Management
 
 - **Pesan error spesifik untuk login staf non-Terapis** (`admin/auth.subroute.ts` TAHAP B & `staff/auth.subroute.ts`): jika nomor HP + password benar tetapi role akun bukan `THERAPIST` (mis. ADMIN_CS), server kini membalas **403** dengan notifikasi jelas — *"Akun ... adalah Staf Admin dan tidak boleh login memakai nomor HP. Gunakan email super admin, atau minta pengelola mengubah peran akun menjadi Terapis."* — menggantikan pesan generik "Email / Nomor WhatsApp atau password salah." yang membingungkan. Akun dengan kredensial salah tetap mendapat 401 generik (tidak membocorkan keberadaan akun).
