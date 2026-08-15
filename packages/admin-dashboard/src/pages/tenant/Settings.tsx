@@ -6,7 +6,6 @@ import { WhatsAppProviderPanel } from '../../components/settings/WhatsAppProvide
 import { AiRouterPanel } from '../../components/settings/AiRouterPanel';
 import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
 import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
-import { PricelistImagePanel } from '../../components/settings/PricelistImagePanel';
 import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
 import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 
@@ -124,6 +123,7 @@ export const Settings: React.FC = () => {
 
   // Gambar Pricelist (per-tenant)
   const [pricelistImageUrl, setPricelistImageUrl] = useState<string>('');
+  const [pricelistThumbUrl, setPricelistThumbUrl] = useState<string>('');
 
   const loadMediaRetention = async () => {
     try {
@@ -170,6 +170,9 @@ export const Settings: React.FC = () => {
       const d = res?.data;
       if (d && d.pricelistImageUrl) {
         setPricelistImageUrl(d.pricelistImageUrl);
+      }
+      if (d && d.pricelistThumbUrl) {
+        setPricelistThumbUrl(d.pricelistThumbUrl);
       }
     } catch (e) {
       console.warn('Failed to load pricelist image settings:', e);
@@ -737,11 +740,11 @@ export const Settings: React.FC = () => {
         handleTogglePurchaseModeration={handleSavePurchaseModeration}
       />
 
-      {/* Gambar Pricelist WhatsApp */}
-      <PricelistImagePanel initialImageUrl={pricelistImageUrl} onSaved={loadPricelistImage} />
-
-      {/* MQL Automation & Media Retention Settings */}
+      {/* Pricelist, MQL Automation & Media Retention Settings */}
       <MqlSettingsPanel
+        initialPricelistUrl={pricelistImageUrl}
+        initialPricelistThumbUrl={pricelistThumbUrl}
+        onPricelistSaved={loadPricelistImage}
         mqlThresholdBubbles={mqlThresholdBubbles}
         setMqlThresholdBubbles={setMqlThresholdBubbles}
         mqlAutoLeadEnabled={mqlAutoLeadEnabled}
