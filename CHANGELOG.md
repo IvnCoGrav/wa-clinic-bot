@@ -19,10 +19,14 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
     2. **📷 Buka Kamera & Foto Rumah Pasien**: Mengambil foto tampak depan rumah/pagar/nomor rumah via kamera perangkat (`capture="environment"`), dengan kompresi server-side (max 800px) via `mediaService.resizeImageToMax`.
     3. **Catatan Patokan / Ancer-ancer**: Input teks panduan lokasi (contoh: *"Pagar hitam gerbang kayu, seberang masjid"*).
   - Endpoint baru `POST /api/staff/update-location` yang otomatis menghitung ulang jarak dari klinik (`calculateHaversineDistance`), memperbarui database customer, dan mencatat audit log staf.
+- **Fitur Edit Panduan Lokasi & Upload Foto Rumah dari Sisi Admin (`Reservations.tsx`, `src/routes/admin/customers.subroute.ts`)**:
+  - Menyediakan tombol `[ ✏️ Edit ]` / `[ + Tambah Foto Rumah & Patokan ]` langsung di dalam modal **Detail Reservasi** pada Admin Dashboard.
+  - Membuka modal khusus Admin untuk mengunggah/mengganti foto rumah pasien (dari file komputer/galeri dengan kompresi otomatis), mengedit catatan patokan, serta mengatur koordinat GPS Latitude & Longitude secara manual.
+  - Endpoint baru `PUT /api/admin/customers/:id/location` dengan fallback in-memory store yang otomatis memperbarui preferensi customer dan menghitung ulang jarak Haversine.
 - **Kamera Langsung pada Pengiriman Gambar Live Chat Terapis (`StaffToday.tsx`)**:
   - Tombol lampirkan gambar pada input live chat terapis kini langsung membuka viewfinder kamera belakang perangkat (`<input type="file" accept="image/*" capture="environment" />`) dengan ikon kamera `<Camera />` bukan galeri.
 - **Test & Verifikasi**:
-  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (17/17 PASS).
+  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (17/17 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS).
   - Build dashboard admin (`npm run build`) dan typecheck backend (`tsc --noEmit`) 100% PASS.
 
 ### Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapis
