@@ -39,8 +39,11 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Interaksi Satu Baris Header Kartu Tugas untuk Detail Pasien (`StaffToday.tsx`)**:
   - Menjadikan seluruh baris atas kartu tugas (Avatar Icon Kategori, Nama Pasien, Judul Layanan, dan Jam Reservasi) sebagai area klik pembuka **Modal Detail Pasien** (`setDetailModalTask`).
   - Area bawah kartu tugas (Alamat, Foto Rumah, Patokan, dan Tombol OTW/Chat) tetap fokus untuk membuka chat WhatsApp atau navigasi peta, sehingga terapis di perangkat mobile tidak perlu membidik icon kecil.
+- **Mode Navigasi Sepeda Motor / Roda Dua (`travelmode=two-wheeler`) (`staff-reservation.service.ts`, `StaffToday.tsx`)**:
+  - Memperbarui parameter URL navigasi Google Maps (`navigationUrl`) dari `bicycling` menjadi `two-wheeler` (`https://www.google.com/maps/dir/?api=1&destination=lat,lng&travelmode=two-wheeler`).
+  - Memastikan saat terapis menekan tombol `[ Navigasi ]` di HP, aplikasi Google Maps langsung membuka tab rute **Sepeda Motor** (menghindari jalur tol mobil dan memilih rute motor yang efisien).
 - **Test & Verifikasi**:
-  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (19/19 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS) — total 31/31 test PASS.
+  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (20/20 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS) — total 31/31 test PASS.
   - Build dashboard admin (`npm run build`) dan typecheck backend (`tsc --noEmit`) 100% PASS.
 
 ### Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapis
