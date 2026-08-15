@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Changed — Card Pricelist Inline dengan MQL & Retensi; Sumber HD Tersimpan, Dashboard Pakai Thumb
+
+- **Upload pricelist kembali disimpan HD asli** (`settings.subroute.ts`): kompresi 1/3 saat upload **dibatalkan** — file sumber berkualitas penuh tersimpan via `saveOutboundMedia` (tetap **inline MQL & retensi media**). Kompresi hanya terjadi saat **kirim ke WhatsApp** (`resolvePricelistSendTarget`, 1/3 dimensi).
+- **Dashboard menampilkan versi ringan**: endpoint `GET/PUT /api/admin/settings/pricelist-image` kini mengembalikan `pricelistThumbUrl` (blur thumb `_thumb.jpg` ~6KB yang otomatis dibuat `saveOutboundMedia`; fallback `null` bila tidak ada). `PricelistImagePanel` memakai thumb untuk pratinjau — browser tidak lagi mengunduh file HD (contoh live: 2.6MB → ~6KB per buka Settings).
+- **Card pricelist inline dengan MQL & Retensi** (`MqlSettingsPanel.tsx`, `Settings.tsx`): panel "Gambar Pricelist WhatsApp" tidak lagi standalone — kini **satu grid 3 kolom sebaris**: Pricelist | MQL Automation | Retensi Media Live Chat.
+- Test: 151 files / 1381 tests pass; build dashboard & backend hijau.
+
 ### Added & Changed — Kalender Pure, Auto-Scroll Mingguan, Ikon Mata Bukti Bayar, Upload Bukti di Manage, Modal Klik-Luar Tutup, Kompresi Gambar Server-Side
 
 - **Kalender jadi pure calendar** (`Reservations.tsx`): sidebar (spotlight, filter kategori/terapis/status) & tombol "Filter" mobile dihapus; halaman kini hanya search + grid kalender/tabel. File `CalendarSidebar.tsx`, `UpcomingSpotlightCard.tsx`, `MiniMonthCalendar.tsx` dihapus (tidak terpakai lagi).

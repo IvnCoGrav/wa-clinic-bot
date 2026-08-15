@@ -1,7 +1,11 @@
 import React from 'react';
 import { Volume2, ImageIcon, Save } from 'lucide-react';
+import { PricelistImagePanel } from './PricelistImagePanel';
 
 interface Props {
+  initialPricelistUrl: string | null;
+  initialPricelistThumbUrl?: string | null;
+  onPricelistSaved?: () => void;
   mqlThresholdBubbles: number;
   setMqlThresholdBubbles: (val: number) => void;
   mqlAutoLeadEnabled: boolean;
@@ -16,6 +20,9 @@ interface Props {
 }
 
 export const MqlSettingsPanel: React.FC<Props> = ({
+  initialPricelistUrl,
+  initialPricelistThumbUrl,
+  onPricelistSaved,
   mqlThresholdBubbles,
   setMqlThresholdBubbles,
   mqlAutoLeadEnabled,
@@ -29,7 +36,14 @@ export const MqlSettingsPanel: React.FC<Props> = ({
   handleSaveMediaRetention,
 }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Gambar Pricelist WhatsApp */}
+      <PricelistImagePanel
+        initialImageUrl={initialPricelistUrl}
+        initialThumbUrl={initialPricelistThumbUrl}
+        onSaved={onPricelistSaved}
+      />
+
       {/* MQL Automation Settings */}
       <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
         <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">

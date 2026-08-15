@@ -5,22 +5,23 @@ import { useUiFeedback } from '../../components/common/UiFeedback';
 
 interface Props {
   initialImageUrl: string | null;
+  initialThumbUrl?: string | null;
   onSaved?: () => void;
 }
 
-export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved }) => {
+export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, initialThumbUrl, onSaved }) => {
   const { toast } = useUiFeedback();
   const [urlMode, setUrlMode] = useState<boolean>(true);
   const [urlValue, setUrlValue] = useState<string>(initialImageUrl || '');
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>(initialImageUrl || '');
+  const [previewUrl, setPreviewUrl] = useState<string>(initialThumbUrl || initialImageUrl || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     setUrlValue(initialImageUrl || '');
-    setPreviewUrl(initialImageUrl || '');
-  }, [initialImageUrl]);
+    setPreviewUrl(initialThumbUrl || initialImageUrl || '');
+  }, [initialImageUrl, initialThumbUrl]);
 
   const fileToDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -71,7 +72,7 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
         toast(res.message || 'Gambar pricelist berhasil disimpan.', 'success');
 setSelectedImage(null);
         setUrlValue(res.data?.pricelistImageUrl || '');
-        setPreviewUrl(res.data?.pricelistImageUrl || '');
+        setPreviewUrl(res.data?.pricelistThumbUrl || res.data?.pricelistImageUrl || '');
         onSaved?.();
       }
     } catch (err: any) {
@@ -115,7 +116,7 @@ setSelectedImage(null);
         <span>Gambar Pricelist WhatsApp</span>
       </h3>
       <p className="text-xs text-[#667781] leading-relaxed">
-        Gambar pricelist yang otomatis dikirim ke customer saat meminta daftar harga layanan. Disimpan per-tenant di database.
+        Gambar pricelist yang otomatis dikirim ke customer saat meminta daftar harga layanan. File HD asli disimpan di server; pratinjau dashboard memakai versi ringan.
       </p>
 
       {effectivePreview && (
