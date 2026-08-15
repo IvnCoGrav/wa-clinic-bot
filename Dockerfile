@@ -29,9 +29,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Prisma query engine butuh OpenSSL (node:20-slim tidak menyertakannya)
+# Prisma query engine butuh OpenSSL; sharp butuh font standard utk render teks watermark SVG
 RUN apt-get update -y \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates fonts-dejavu-core fontconfig \
+  && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
