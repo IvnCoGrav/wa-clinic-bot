@@ -67,6 +67,46 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       data: {
         expiresAt: result.expiresAt,
       },
+      token: result.token,
+    });
+  });
+
+  /**
+   * POST /api/staff/auth/restore
+   * Mengembalikan cookie staff_session dari token yang disimpan di localStorage (fallback PWA).
+   * Dipakai saat browser kehilangan cookie (mis. PWA Android ditutup) tapi sesi server masih valid.
+   */
+  fastify.post('/api/staff/auth/restore', async (request, reply) => {
+    const body = (request.body || {}) as { token?: string };
+    const token = (body.token || '').trim();
+    if (!token) {
+      return reply.status(400).send({ error: 'Token wajib diisi.' });
+    }
+
+    const session = await StaffAuthService.validateSession(token);
+    if (!session) {
+      return reply.status(401).send({ error: 'Sesi tidak valid atau telah kadaluarsa.' });
+    }
+
+    const isSecureRequest =
+      request.protocol === 'https' ||
+      String(request.headers['x-forwarded-proto'] || '')
+        .split(',')[0]
+        .trim() === 'https';
+
+    const cookieValue = `staff_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
+      isSecureRequest ? '; Secure' : ''
+    }`;
+    reply.header('Set-Cookie', cookieValue);
+
+    return reply.status(200).send({
+      success: true,
+      message: 'Sesi staff dipulihkan.',
+      staff: {
+        id: session.staff.id,
+        name: session.staff.name,
+        role: 'staff',
+      },
     });
   });
 

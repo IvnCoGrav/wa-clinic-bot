@@ -4,6 +4,42 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Sesi Survive PWA Android (Tidak Logout Saat Tutup Aplikasi)
+
+- **Akar masalah**: Cookie `staff_session`/`admin_session` bisa hilang dari browser saat aplikasi PWA Android ditutup/di-swipe dari Recents (perilaku browser — cookie dianggap session-scoped di standalone window), padahal sesi di server masih valid 30 hari.
+- **Backend — Endpoint Restore Cookie**:
+  - `POST /api/admin/auth/restore` (`src/routes/admin/auth.subroute.ts`): menerima token dari localStorage → validasi sesi admin/staff → me-issue ulang cookie (`admin_session` / `staff_session`, SameSite=Lax, Max-Age 30 hari).
+  - `POST /api/staff/auth/restore` (`src/routes/staff/auth.subroute.ts`): validasi token staff → me-issue ulang cookie `staff_session`.
+  - Respons login (admin & staff) kini menyertakan field `token` agar frontend bisa menyimpan token cadangan.
+  - `admin.route.ts` / `staff.route.ts`: endpoint restore dibolehkan diakses tanpa sesi (bypass preHandler).
+- **Frontend — Token Cadangan di localStorage**:
+  - `StaffAuthContext.tsx` / `AuthContext.tsx`: token login disimpan di `localStorage`; saat `checkAuth` mendapat 401 (cookie hilang) → otomatis panggil `/restore` → cookie di-issue ulang → sesi pulih tanpa login ulang. Error jaringan saat restore tidak menghapus token (retry).
+  - Token dihapus saat logout. *Catatan keamanan: token di localStorage rentan XSS (standar trade-off untuk fallback PWA); cookie HttpOnly tetap jalur utama.*
+- **PWA Entry Fix** (`App.tsx`): route `/admin` (start_url manifest) kini me-redirect terapis ke `/admin/staff/today` sesuai role, bukan halaman Unauthorized.
+- Test: `tests/integration/control_center_ui.test.ts` (restore admin + token di body login), `tests/integration/staff-routes.test.ts` (restore staff 200/401).
+
+### Added & Improved — Mobile UX Overhaul & Touch Ergonomics Dashboard Admin
+
+- **Pola Master-Detail Toggle Mobile di Live Chat Monitor (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`)**:
+  - Mereplikasi pola `mobileView: 'list' | 'chat'` dari `StaffToday.tsx` ke `LiveChatMonitor.tsx` — di mobile, daftar percakapan dan jendela chat tidak lagi ditumpuk vertikal (nested scroll hilang).
+  - Menambahkan tombol kembali (`ChevronLeft`) di header mobile dan chat inspector saat chat aktif untuk kembali ke daftar percakapan dengan mudah.
+  - Menyesuaikan tinggi panel chat menjadi adaptif layar penuh mobile (`h-[calc(100dvh-170px)] lg:h-[650px]`).
+- **Card-View Responsif di Database Customer (`packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx`)**:
+  - Mengganti tabel lebar 6-kolom dengan tumpukan kartu rapi di mobile (`md:hidden`), sementara tabel tetap aktif di desktop (`hidden md:block`).
+  - Kartu menampilkan nama, nomor HP, status MQL, label WhatsApp (Admin/Hold toggle), LTV, dan tombol aksi berukuran sentuh nyaman.
+- **Optimasi Kalender & View Switcher Mobile (`packages/admin-dashboard/src/pages/tenant/Reservations.tsx`)**:
+  - Default tampilan otomatis menjadi **Hari (Day View)** saat terdeteksi layar mobile (`< 768px`).
+  - Menyembunyikan tab *Bulan* dan *Minggu* di layar kecil agar terhindar dari grid horizontal 1050px yang tidak ergonomis di HP.
+  - Menambahkan tombol toggle filter & spotlight mobile (`+ Filter & Kalender`) untuk membuka/menutup widget mini-kalender sesuai kebutuhan.
+- **Pengelompokan Menu Sidebar & Status Popover (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Mengelompokkan 19 menu navigasi flat menjadi 5 kategori terstruktur (*Operasional & Jadwal*, *Staff & Layanan*, *Marketing & Ads*, *AI Engine & Konten*, *Pengaturan & Sistem*) dengan heading sub-seksi yang rapi.
+  - Mengganti tooltip status `title="..."` pada indikator WAHA/Redis dengan **popover interaktif tap-to-reveal** untuk pengguna smartphone & layar sentuh.
+- **Standar Tipografi & Touch Target Global (`packages/admin-dashboard/src/index.css`, `packages/admin-dashboard/index.html`)**:
+  - Menaikkan baseline teks body di mobile dari 12px (`text-xs`) ke 13px–14px yang nyaman dibaca tanpa perlu pinch-zoom.
+  - Membatasi teks micro badge minimal 11px agar tetap terbaca jelas.
+  - Menetapkan batas tinggi sentuh minimal tombol aksi (touch target standard >= 36px) di layar mobile.
+  - Memangkas pemuatan Google Fonts eksternal menjadi hanya 1 font family (*Plus Jakarta Sans* 400, 500, 600, 700) untuk mempercepat initial load dan menghemat kuota koneksi seluler.
+
 ### Fixed — Portal Terapis Sering Ter-logout saat Server Restart / Jaringan Gangguan
 
 - **`packages/admin-dashboard/src/services/api.ts`**: Error yang dilempar `apiRequest` kini membawa properti `status` (HTTP status code), sehingga caller bisa membedakan error otorisasi asli (401/403) vs error jaringan/timeout/server.

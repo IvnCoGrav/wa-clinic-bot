@@ -18,9 +18,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Token cadangan untuk fallback PWA (cookie bisa hilang saat aplikasi Android ditutup,
+// sesi server tetap valid — token ini dipakai untuk me-issue ulang cookie via /restore).
+const TOKEN_STORAGE_KEY = 'admin_session_token';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) return 'invalid';
+    try {
+      const res = await apiRequest('/api/admin/auth/restore', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      });
+      return res && res.success ? 'ok' : 'invalid';
+    } catch (err: any) {
+      const status = (err as any)?.status;
+      if (status === 401 || status === 403) return 'invalid';
+      return 'network';
+    }
+  }
 
   // Check auth session on mount
   useEffect(() => {
@@ -48,7 +68,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (cancelled) return;
         const status = (err as any)?.status;
         if (status === 401 || status === 403) {
-          // Sesi benar-benar tidak valid/kadaluarsa — arahkan ke login
+          // Cookie hilang/tidak valid — coba pulihkan dari token cadangan (PWA fallback)
+          const restoreResult = await restoreSession();
+          if (cancelled) return;
+          if (restoreResult === 'ok') {
+            retryTimer = setTimeout(checkAuth, 500);
+            return;
+          }
+          if (restoreResult === 'network') {
+            retryTimer = setTimeout(checkAuth, 5000);
+            return;
+          }
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
           setUser(null);
           setLoading(false);
           return;
@@ -80,6 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ identifier, password }),
       });
       if (data.success && data.user) {
+        if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
         setUser({
           id: data.user.id,
           email: data.user.email || '',
@@ -103,6 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     setLoading(true);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     try {
       await apiRequest('/api/admin/auth/logout', { method: 'POST' });
     } catch (err) {
