@@ -25,6 +25,10 @@ import {
   Receipt,
   Upload,
   Trash2,
+  Maximize2,
+  Navigation,
+  Compass,
+  Camera,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
@@ -39,6 +43,7 @@ export const Reservations: React.FC = () => {
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
   const [proofModal, setProofModal] = useState<Reservation | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
+  const [housePhotoModal, setHousePhotoModal] = useState<string | null>(null);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
 
   // Calendar View State
@@ -829,7 +834,7 @@ export const Reservations: React.FC = () => {
                   )}
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
                   <span className="text-[11px] text-[#667781] font-bold block uppercase">Lokasi & Pengiriman</span>
                   <div className="flex justify-between text-xs">
                     <span className="text-[#667781]">Jarak dari Cabang</span>
@@ -844,9 +849,87 @@ export const Reservations: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex justify-between text-xs text-[#008069]">
-                    <span>Haversine Multiplier</span>
-                    <span className="font-bold">Active (1.25x)</span>
+                    <span>Status Jarak</span>
+                    <span className="font-bold">Haversine 1.6x Terkalibrasi</span>
                   </div>
+
+                  {/* Foto Depan Rumah & Landmark Patokan */}
+                  {(() => {
+                    const prefs = selectedRes.customer?.preferences as any;
+                    const housePhoto = prefs?.house_photo_url;
+                    const landmark = prefs?.landmark;
+                    const lat = selectedRes.customer?.lat;
+                    const lng = selectedRes.customer?.lng;
+                    const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
+
+                    if (!housePhoto && !landmark && !mapsUrl) return null;
+
+                    return (
+                      <div className="mt-2 pt-2 border-t border-[#e9edef] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
+                            Panduan Lokasi & Foto Rumah
+                          </span>
+                          {mapsUrl && (
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
+                            >
+                              <Navigation size={11} />
+                              <span>Buka Maps</span>
+                            </a>
+                          )}
+                        </div>
+
+                        {housePhoto && (
+                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-[#e9edef]">
+                            <div
+                              onClick={() => setHousePhotoModal(housePhoto)}
+                              className="h-14 w-14 rounded-xl bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                              title="Klik untuk memperbesar foto rumah"
+                            >
+                              <img
+                                src={housePhoto}
+                                alt="Foto Depan Rumah"
+                                className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                <Maximize2 size={14} />
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                🏠 Foto Tampak Depan Rumah
+                              </span>
+                              {landmark ? (
+                                <p className="text-xs text-[#111b21] font-semibold mt-0.5 leading-snug">
+                                  Patokan: {landmark}
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-[#667781]">Foto panduan tersimpan</p>
+                              )}
+                              {prefs?.location_updated_by_staff_name && (
+                                <p className="text-[10px] text-[#8696a0] mt-0.5">
+                                  Diperbarui oleh: {prefs.location_updated_by_staff_name}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {!housePhoto && landmark && (
+                          <div className="p-2 rounded-xl bg-white border border-[#e9edef] text-xs">
+                            <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                              📍 Patokan Rumah
+                            </span>
+                            <p className="text-xs text-[#111b21] font-semibold mt-0.5">{landmark}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Bukti Bayar (upload + lihat) */}
@@ -1072,6 +1155,49 @@ export const Reservations: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition shadow-xs"
               >
                 Buka Gambar Penuh
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* House Front Photo Lightbox Modal */}
+      {housePhotoModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setHousePhotoModal(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-[#e9edef] relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
+              <div className="flex items-center space-x-2 text-[#008069]">
+                <Camera size={18} />
+                <h3 className="font-bold text-sm text-[#111b21]">Foto Tampak Depan Rumah Pasien</h3>
+              </div>
+              <button
+                onClick={() => setHousePhotoModal(null)}
+                className="p-1 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <img
+              src={housePhotoModal}
+              alt="Foto depan rumah pasien"
+              className="w-full max-h-[70vh] object-contain rounded-2xl border border-[#e9edef] bg-[#f8fafc]"
+            />
+
+            <div className="flex justify-center">
+              <a
+                href={housePhotoModal}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition shadow-xs"
+              >
+                Buka Gambar Asli HD
               </a>
             </div>
           </div>
