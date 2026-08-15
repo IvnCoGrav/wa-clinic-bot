@@ -400,9 +400,16 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = housePhotoB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+          const targetLat = lat ?? customer.lat;
+          const targetLng = lng ?? customer.lng;
+          const watermarked = await mediaService.overlayGpsBadge(resized, {
+            lat: targetLat,
+            lng: targetLng,
+            landmark,
+          });
           const saved = await mediaService.saveOutboundMedia({
             tenantId: DEFAULT_TENANT_ID,
-            imageB64: resized.toString('base64'),
+            imageB64: watermarked.toString('base64'),
             mimeType: 'image/jpeg',
             fileName: `house-${customer.id}.jpg`,
           });

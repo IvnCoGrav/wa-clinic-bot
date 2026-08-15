@@ -879,15 +879,22 @@ export class StaffReservationService {
 
       let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
-      // Kompres dan simpan foto tampak depan rumah jika ada
+      // Kompres, beri watermark GPS, dan simpan foto tampak depan rumah jika ada
       if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
         const matches = housePhotoB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         const rawB64 = matches ? matches[2] : housePhotoB64;
         const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+        const targetLat = lat ?? customer.lat;
+        const targetLng = lng ?? customer.lng;
+        const watermarked = await mediaService.overlayGpsBadge(resized, {
+          lat: targetLat,
+          lng: targetLng,
+          landmark,
+        });
         const saved = await mediaService.saveOutboundMedia({
           tenantId,
-          imageB64: resized.toString('base64'),
+          imageB64: watermarked.toString('base64'),
           mimeType: 'image/jpeg',
           fileName: `house-${customer.id}.jpg`,
         });
