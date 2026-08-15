@@ -96,7 +96,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       {/* Toast Notification (Clean Floating Light Card) */}
       {toastState && (
-        <div className={`fixed bottom-6 right-6 z-[110] px-4 py-3 rounded-xl bg-white border border-[#e9edef] text-xs font-semibold shadow-xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] max-w-sm ${toastBorder(toastState.type)}`}>
+        <div className={`fixed bottom-6 right-6 z-[210] px-4 py-3 rounded-xl bg-white border border-[#e9edef] text-xs font-semibold shadow-xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] max-w-sm ${toastBorder(toastState.type)}`}>
           {toastIcon(toastState.type)}
           <span className="flex-1 leading-snug">{toastState.text}</span>
           <button onClick={() => setToastState(null)} className="ml-1 text-[#667781] hover:text-[#111b21] p-0.5 rounded-full hover:bg-[#f0f2f5]">
@@ -108,7 +108,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       {/* Confirm Dialog Modal (Modern WhatsApp Emerald & Light Theme) */}
       {confirmState && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
           onClick={() => handleConfirmAnswer(false)}
         >
           <div

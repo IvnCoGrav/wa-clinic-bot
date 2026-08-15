@@ -267,19 +267,23 @@ export class MediaService {
 
       const latStr = Number(info.lat).toFixed(6);
       const lngStr = Number(info.lng).toFixed(6);
+      const cleanLandmark = (info.landmark || '').replace(/[<>&'"]/g, '');
       const latLngText = `GPS: ${latStr}, ${lngStr}`;
-      const landmarkText = info.landmark ? `Patokan: ${info.landmark.replace(/[<>&"]/g, '')}` : '';
-      const subText = landmarkText ? `${landmarkText} · ${timeStr}` : timeStr;
+      const subText = cleanLandmark ? `Patokan: ${cleanLandmark.slice(0, 45)} · ${timeStr}` : timeStr;
 
-      const bannerHeight = 54;
+      const bannerHeight = 56;
       const bannerY = height - bannerHeight;
 
       const svgOverlay = Buffer.from(`
-        <svg width="${width}" height="${height}">
-          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="black" fill-opacity="0.65"/>
-          <circle cx="20" cy="${bannerY + 18}" r="5" fill="#00e676" />
-          <text x="32" y="${bannerY + 22}" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="bold" fill="#ffffff">${latLngText}</text>
-          <text x="32" y="${bannerY + 41}" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#e0e0e0">${subText}</text>
+        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+          <style>
+            .title { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 14px; font-weight: bold; fill: #ffffff; }
+            .sub { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; fill: #e2e8f0; }
+          </style>
+          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="#0f172a" fill-opacity="0.8"/>
+          <circle cx="20" cy="${bannerY + 18}" r="5" fill="#22c55e" />
+          <text x="32" y="${bannerY + 23}" class="title">${latLngText}</text>
+          <text x="32" y="${bannerY + 43}" class="sub">${subText}</text>
         </svg>
       `);
 
