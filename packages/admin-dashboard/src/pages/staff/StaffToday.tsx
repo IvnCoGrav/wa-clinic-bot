@@ -30,6 +30,7 @@ import {
   Trash2,
   UserCheck,
   Info,
+  Menu,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { emitBootPhase } from '../../lib/bootProgress';
@@ -119,12 +120,14 @@ export const StaffToday: React.FC = () => {
   const { staff, logout } = useStaffAuth();
   const { toast, confirm } = useUiFeedback();
   
-  // Navigation Tabs: 'today' (Hari Ini & Live Chat) vs 'upcoming' (Jadwal Mendatang)
-  const [activeTab, setActiveTab] = useState<'today' | 'upcoming'>('today');
+  // Navigation Tabs: 'today' (Hari Ini & Live Chat) vs 'upcoming' (Jadwal Mendatang) vs 'completed' (Treatment Selesai)
+  const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>('today');
 
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<StaffTask[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<StaffTask[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<StaffTask[]>([]);
+  const [showMenuDrawer, setShowMenuDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTask, setSelectedTask] = useState<StaffTask | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -249,13 +252,14 @@ export const StaffToday: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  // Fetch today tasks and upcoming schedule
+  // Fetch today tasks, upcoming schedule, and completed tasks
   const fetchTasks = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
     try {
-      const [todayRes, upcomingRes] = await Promise.all([
+      const [todayRes, upcomingRes, completedRes] = await Promise.all([
         apiRequest('/api/staff/today-tasks'),
         apiRequest('/api/staff/upcoming-schedule'),
+        apiRequest('/api/staff/completed-tasks'),
       ]);
 
       if (todayRes.success && Array.isArray(todayRes.data)) {
@@ -270,6 +274,10 @@ export const StaffToday: React.FC = () => {
 
       if (upcomingRes.success && Array.isArray(upcomingRes.data)) {
         setUpcomingTasks(upcomingRes.data);
+      }
+
+      if (completedRes?.success && Array.isArray(completedRes.data)) {
+        setCompletedTasks(completedRes.data);
       }
     } catch (err: any) {
       if (!isPolling) setErrorMessage(err.message || 'Gagal memuat jadwal tugas.');
@@ -754,7 +762,13 @@ export const StaffToday: React.FC = () => {
   };
 
   // Filter list
-  const activeList = activeTab === 'today' ? tasks : upcomingTasks;
+  const activeList =
+    activeTab === 'today'
+      ? tasks
+      : activeTab === 'upcoming'
+      ? upcomingTasks
+      : completedTasks;
+
   const filteredTasks = activeList.filter((t) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -765,73 +779,170 @@ export const StaffToday: React.FC = () => {
   });
 
   // Group upcoming tasks by date
-  const groupedUpcoming = filteredTasks.reduce<Record<string, StaffTask[]>>((acc, item) => {
+  const groupedUpcoming = (activeTab === 'upcoming' ? filteredTasks : upcomingTasks).reduce<Record<string, StaffTask[]>>((acc, item) => {
     const key = formatDateGroup(item.bookingDate);
     if (!acc[key]) acc[key] = [];
     acc[key].push(item);
     return acc;
   }, {});
 
+  // Group completed tasks by date
+  const groupedCompleted = (activeTab === 'completed' ? filteredTasks : completedTasks).reduce<Record<string, StaffTask[]>>((acc, item) => {
+    const key = formatDateGroup(item.bookingDate);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+
+  const totalRevenueCompleted = completedTasks.reduce((sum, t) => sum + (t.pricing?.totalFee || 0), 0);
+
   return (
     <div className="min-h-[100dvh] bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none overflow-hidden antialiased">
       {/* WhatsApp Web Minimalist Clean Top Bar */}
-      <header className="h-14 bg-[#f0f2f5] border-b border-[#e9edef] px-4 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-        <div className="flex items-center space-x-2.5 min-w-0">
-          {mobileView === 'chat' && activeTab === 'today' && (
+      <header className="bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
+          <div className="flex items-center space-x-2.5 min-w-0">
+            {mobileView === 'chat' && activeTab === 'today' && (
+              <button
+                onClick={handleBackToList}
+                className="md:hidden p-2 rounded-full bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition-all active:scale-95 border border-[#e9edef] flex-shrink-0"
+                title="Kembali ke daftar kunjungan"
+                aria-label="Kembali"
+              >
+                <ChevronLeft size={18} />
+              </button>
+            )}
+
+            {/* Interactive Staff Profile Avatar Icon (Tap/Click to open drawer) */}
             <button
-              onClick={handleBackToList}
-              className="md:hidden p-2 rounded-full bg-white hover:bg-[#e9edef] text-[#54656f] transition-all active:scale-95 border border-[#e9edef] flex-shrink-0"
-              title="Kembali ke daftar kunjungan"
-              aria-label="Kembali"
+              type="button"
+              onClick={() => setShowStaffProfileModal(true)}
+              className="h-9 w-9 rounded-full bg-[#008069] text-white hover:bg-[#00a884] flex items-center justify-center shadow-xs transition-all active:scale-95 flex-shrink-0"
+              title="Buka profil staff & logout"
             >
-              <ChevronLeft size={18} />
+              <UserCheck size={18} />
             </button>
+
+            <div className="min-w-0">
+              <h1 className="font-bold text-sm sm:text-base text-[#111b21] tracking-tight truncate">
+                {staff?.name || 'Terapis'}
+              </h1>
+              <p className="text-[11px] text-[#667781] truncate">
+                {tasks.length} Hari Ini • {upcomingTasks.length} Mendatang
+              </p>
+            </div>
+          </div>
+
+          {/* Navigation Tab Switcher (Hari Ini vs Jadwal Mendatang vs Selesai) */}
+          {!(mobileView === 'chat' && activeTab === 'today') && (
+            <div className="hidden sm:flex items-center bg-[#f0f2f5] p-1 rounded-xl border border-[#e9edef]">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('today');
+                  setMobileView('list');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'today'
+                    ? 'bg-white text-[#008069] shadow-xs'
+                    : 'text-[#54656f] hover:text-[#111b21]'
+                }`}
+              >
+                <Calendar size={13} className={activeTab === 'today' ? 'text-[#008069]' : 'text-[#667781]'} />
+                <span>Hari Ini</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'today' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
+                  }`}
+                >
+                  {tasks.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('upcoming');
+                  setMobileView('list');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'upcoming'
+                    ? 'bg-white text-[#008069] shadow-xs'
+                    : 'text-[#54656f] hover:text-[#111b21]'
+                }`}
+              >
+                <Clock size={13} className={activeTab === 'upcoming' ? 'text-[#008069]' : 'text-[#667781]'} />
+                <span>Jadwal Mendatang</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'upcoming' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
+                  }`}
+                >
+                  {upcomingTasks.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('completed');
+                  setMobileView('list');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'completed'
+                    ? 'bg-white text-[#008069] shadow-xs'
+                    : 'text-[#54656f] hover:text-[#111b21]'
+                }`}
+              >
+                <CheckCircle2 size={13} className={activeTab === 'completed' ? 'text-[#008069]' : 'text-[#667781]'} />
+                <span>Selesai</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'completed' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
+                  }`}
+                >
+                  {completedTasks.length}
+                </span>
+              </button>
+            </div>
           )}
 
-          {/* Interactive Staff Profile Avatar Icon (Tap/Click to open drawer) */}
-          <button
-            type="button"
-            onClick={() => setShowStaffProfileModal(true)}
-            className="h-9 w-9 rounded-full bg-[#008069] text-white hover:bg-[#00a884] flex items-center justify-center shadow-xs transition-all active:scale-95 flex-shrink-0"
-            title="Buka profil staff & logout"
-          >
-            <UserCheck size={18} />
-          </button>
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            {/* Minimalist Connection Dot (Green = Connected, Red = Disconnected/Reconnecting) */}
+            <div
+              className="flex items-center justify-center p-1.5"
+              title={sseConnected ? 'Realtime Online' : 'Koneksi terputus, mencoba menghubungkan ulang...'}
+            >
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  sseConnected
+                    ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                    : 'bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]'
+                }`}
+              />
+            </div>
 
-          <div className="min-w-0">
-            <h1 className="font-bold text-sm sm:text-base text-[#111b21] tracking-tight truncate">
-              {staff?.name || 'Terapis'}
-            </h1>
-            <p className="text-[11px] text-[#667781] truncate">
-              {tasks.length} Kunjungan Hari Ini
-            </p>
+            {/* Refresh Tasks Button */}
+            <button
+              onClick={() => fetchTasks(false)}
+              disabled={loading}
+              className="p-2 rounded-full bg-white hover:bg-[#e9edef] text-[#54656f] hover:text-[#111b21] transition-all disabled:opacity-50 active:scale-95 border border-[#e9edef] shadow-xs"
+              title="Muat Ulang Data"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            </button>
+
+            {/* Hamburger Button (Garis Tiga untuk buka Sidebar Menu Kanan) */}
+            <button
+              type="button"
+              onClick={() => setShowMenuDrawer(true)}
+              className="p-2 rounded-full bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] hover:text-[#008069] transition-all active:scale-95 border border-[#e9edef] shadow-xs flex items-center justify-center"
+              title="Buka Menu Navigasi"
+              aria-label="Menu"
+            >
+              <Menu size={16} />
+            </button>
           </div>
-        </div>
-
-        <div className="flex items-center space-x-2.5 flex-shrink-0">
-          {/* Minimalist Connection Dot (Green = Connected, Red = Disconnected/Reconnecting) */}
-          <div
-            className="flex items-center justify-center p-1.5"
-            title={sseConnected ? 'Realtime Online' : 'Koneksi terputus, mencoba menghubungkan ulang...'}
-          >
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                sseConnected
-                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
-                  : 'bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]'
-              }`}
-            />
-          </div>
-
-          {/* Refresh Tasks Button */}
-          <button
-            onClick={() => fetchTasks(false)}
-            disabled={loading}
-            className="p-2 rounded-full bg-white hover:bg-[#e9edef] text-[#54656f] hover:text-[#111b21] transition-all disabled:opacity-50 active:scale-95 border border-[#e9edef] shadow-xs"
-            title="Muat Ulang Data"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
-          </button>
         </div>
       </header>
 
@@ -859,14 +970,14 @@ export const StaffToday: React.FC = () => {
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-white overflow-hidden flex-shrink-0`}
+              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0`}
             >
               {/* Panel Search & Header */}
               <div className="p-3 bg-white border-b border-[#e9edef] space-y-2.5">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center space-x-2">
                     <Calendar size={16} className="text-[#008069]" />
-                    <h2 className="font-bold text-sm text-[#111b21]">Jadwal Hari Ini</h2>
+                    <h2 className="font-bold text-sm text-[#111b21]">Jadwal Kunjungan Hari Ini</h2>
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30">
                     {tasks.length} Pasien
@@ -895,15 +1006,15 @@ export const StaffToday: React.FC = () => {
                 </div>
               </div>
 
-              {/* Task cards scroll area */}
-              <div className="flex-1 overflow-y-auto divide-y divide-[#e9edef]">
+              {/* Task cards scroll area with proper background & space-y-3 spacing between cards */}
+              <div className="flex-1 overflow-y-auto p-3 bg-[#f0f2f5] space-y-3">
                 {loading ? (
                   <div className="flex flex-col justify-center items-center h-48 space-y-3 text-[#667781]">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
                     <span className="text-xs font-medium">Memuat daftar tugas...</span>
                   </div>
                 ) : filteredTasks.length === 0 ? (
-                  <div className="text-center py-16 px-4 text-[#667781] space-y-2 bg-[#f0f2f5]/30">
+                  <div className="text-center py-16 px-4 text-[#667781] space-y-2 bg-white rounded-2xl border border-[#e9edef] shadow-xs">
                     <CheckCircle2 size={40} className="mx-auto text-[#008069]/40 mb-2" />
                     <p className="text-sm font-semibold text-[#111b21]">
                       {searchQuery ? 'Tidak ada jadwal yang cocok' : 'Belum ada jadwal tugas hari ini'}
@@ -925,11 +1036,11 @@ export const StaffToday: React.FC = () => {
                       <div
                         key={task.reservationId}
                         onClick={() => handleOpenChat(task)}
-                        className={`p-3.5 cursor-pointer transition-all text-left relative ${catInfo.borderAccent} ${
+                        className={`p-3.5 rounded-2xl cursor-pointer transition-all text-left relative bg-white shadow-xs border ${
                           isSelected
-                            ? 'bg-[#f0f2f5] border-l-4 border-l-[#008069]'
-                            : `hover:bg-[#f5f6f6] border-l-4 ${idx % 2 === 1 ? 'bg-[#eceef1]' : 'bg-white'}`
-                        }`}
+                            ? 'border-[#008069] ring-2 ring-[#008069]/25 shadow-md'
+                            : 'border-[#e9edef] hover:border-[#008069]/40 hover:shadow-sm'
+                        } ${catInfo.borderAccent} border-l-4`}
                       >
                         {/* Header: Customer Icon & Name & Time */}
                         <div className="flex items-start justify-between gap-2 mb-1">
@@ -1097,6 +1208,16 @@ export const StaffToday: React.FC = () => {
                   {/* WhatsApp Web Chat Header */}
                   <div className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 py-2.5 flex items-center justify-between gap-3 shadow-xs z-10">
                     <div className="flex items-center space-x-2.5 min-w-0">
+                      {/* Mobile Back to List Button */}
+                      <button
+                        onClick={handleBackToList}
+                        className="md:hidden p-2 rounded-full bg-white hover:bg-[#e9edef] text-[#54656f] transition-all active:scale-95 border border-[#e9edef] flex-shrink-0"
+                        title="Kembali ke daftar kunjungan"
+                        aria-label="Kembali"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+
                       {/* Customer Service Category Icon - Click for detail */}
                       <button
                         type="button"
@@ -1396,7 +1517,7 @@ export const StaffToday: React.FC = () => {
               )}
             </div>
           </>
-        ) : (
+        ) : activeTab === 'upcoming' ? (
           /* ========================================================================= */
           /* TAB 2: JADWAL MENDATANG (READ-ONLY, NO CHAT) */
           /* ========================================================================= */
@@ -1563,8 +1684,386 @@ export const StaffToday: React.FC = () => {
               ))
             )}
           </div>
+        ) : (
+          /* ========================================================================= */
+          /* TAB 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI) */
+          /* ========================================================================= */
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+            {/* Header / Summary Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
+                <div className="h-11 w-11 rounded-2xl bg-[#d9fdd3] text-[#008069] flex items-center justify-center flex-shrink-0 border border-[#00a884]/30">
+                  <CheckCircle2 size={22} />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Selesai</div>
+                  <div className="text-lg font-extrabold text-[#111b21]">
+                    {completedTasks.length} <span className="text-xs font-semibold text-[#667781]">Treatment</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
+                <div className="h-11 w-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0 border border-amber-200">
+                  <CreditCard size={22} />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Nilai Treatment</div>
+                  <div className="text-lg font-extrabold text-[#111b21]">
+                    {formatRupiah(totalRevenueCompleted)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
+                <Search size={16} />
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari riwayat treatment yang sudah selesai (nama, kelurahan, treatment)..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-[#e9edef] focus:border-[#008069] text-sm text-[#111b21] placeholder-[#667781] focus:outline-none transition-all shadow-xs"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#667781] hover:text-[#111b21] text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="flex flex-col justify-center items-center h-64 space-y-3 text-[#667781]">
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                <span className="text-xs font-medium">Memuat riwayat treatment selesai...</span>
+              </div>
+            ) : Object.keys(groupedCompleted).length === 0 ? (
+              <div className="text-center py-20 px-4 text-[#667781] space-y-3 bg-white rounded-2xl border border-[#e9edef] shadow-xs">
+                <CheckCircle2 size={48} className="mx-auto text-[#008069]/40" />
+                <div className="space-y-1 max-w-sm mx-auto">
+                  <h3 className="text-base font-bold text-[#111b21]">
+                    {searchQuery ? 'Tidak Ada Riwayat yang Cocok' : 'Belum Ada Treatment Selesai'}
+                  </h3>
+                  <p className="text-xs text-[#667781] leading-relaxed">
+                    {searchQuery
+                      ? 'Coba gunakan kata kunci pencarian yang lain.'
+                      : 'Riwayat tugas treatment yang telah Anda selesaikan atau dibayar akan otomatis tercatat di sini.'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              Object.entries(groupedCompleted).map(([dateLabel, items]) => (
+                <div key={dateLabel} className="space-y-3">
+                  {/* Date Header Pill */}
+                  <div className="flex items-center space-x-2 pt-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
+                    <h2 className="font-bold text-sm text-[#111b21]">{dateLabel}</h2>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white text-[#54656f] border border-[#e9edef]">
+                      {items.length} Selesai
+                    </span>
+                  </div>
+
+                  {/* Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {items.map((item) => {
+                      const catInfo = getCategoryIcon(item.treatmentCategory);
+                      return (
+                        <div
+                          key={item.reservationId}
+                          className={`bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs hover:border-emerald-500/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
+                        >
+                          {/* Header: Name & Completed Badge */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center space-x-2.5 min-w-0">
+                              {/* Service Category Icon - Click to view detail */}
+                              <button
+                                type="button"
+                                onClick={() => setDetailModalTask(item)}
+                                className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all active:scale-95 ${catInfo.bg}`}
+                                title="Lihat detail lengkap pasien"
+                              >
+                                {catInfo.icon}
+                              </button>
+                              <div className="min-w-0">
+                                <h3 className="font-bold text-sm text-[#111b21] truncate">
+                                  {item.customerName || 'Customer'}
+                                </h3>
+                                <p className="text-xs text-[#008069] font-medium truncate">
+                                  {item.treatmentDetail || 'Treatment Layanan Spa'}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg whitespace-nowrap border border-emerald-200 flex-shrink-0">
+                              <CheckCheck size={13} className="text-emerald-600" />
+                              <span>Selesai</span>
+                            </div>
+                          </div>
+
+                          {/* Alamat & Jarak dari Klinik */}
+                          <div className="text-xs text-[#54656f] flex items-start gap-1.5 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef]">
+                            <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                              {item.address.distanceKm != null && (
+                                <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
+                                  <Compass size={11} />
+                                  <span>Jarak: {item.address.distanceKm.toFixed(1)} km dari klinik</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Data Pasien Bayi / Anak */}
+                          {item.children && item.children.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.children.map((child, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#e7f8e8] text-[#008069] text-xs font-medium border border-[#00a884]/20"
+                                >
+                                  <Baby size={12} />
+                                  <span>{child.name}</span>
+                                  {child.rawAgeText && (
+                                    <span className="text-[#667781]">({child.rawAgeText})</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Status Pembayaran & Detail Button */}
+                          <div className="flex items-center justify-between pt-2 border-t border-[#f0f2f5]">
+                            <div className="flex items-center gap-1 text-xs text-[#667781]">
+                              <CreditCard size={13} className="text-emerald-600" />
+                              <strong className="text-emerald-700 font-bold ml-0.5">
+                                {formatRupiah(item.pricing.totalFee)}
+                              </strong>
+                              <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-semibold ml-1">
+                                {item.pricing.paymentStatusLabel}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setDetailModalTask(item)}
+                              className="flex items-center space-x-1 py-1.5 px-3 text-xs font-semibold text-[#008069] bg-[#d9fdd3] hover:bg-[#c2e7e0] rounded-lg transition-all active:scale-95 border border-[#00a884]/30"
+                              title="Lihat Detail Lengkap Pasien"
+                            >
+                              <Info size={12} />
+                              <span>Detail</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* RIGHT SIDEBAR SLIDE-OVER DRAWER (MENU GARIS TIGA) */}
+      {/* ========================================================================= */}
+      {showMenuDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop Overlay */}
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+            onClick={() => setShowMenuDrawer(false)}
+          />
+
+          {/* Drawer Body */}
+          <div className="relative w-[320px] sm:w-[380px] max-w-[85vw] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-in-out">
+            {/* Drawer Header */}
+            <div className="p-4 bg-[#008069] text-white flex items-center justify-between shadow-xs">
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-white border border-white/30 flex-shrink-0">
+                  <UserCheck size={20} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm truncate">{staff?.name || 'Terapis'}</h3>
+                  <p className="text-[11px] text-white/80 truncate">Terapis Homecare Klinik</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowMenuDrawer(false)}
+                className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95"
+                title="Tutup Menu"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Navigation Menu List */}
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-2">
+              <div className="px-2 py-1 text-[11px] font-bold text-[#667781] uppercase tracking-wider">
+                Menu Jadwal & Treatment
+              </div>
+
+              {/* Menu 1: Treatment Hari Ini */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('today');
+                  setMobileView('list');
+                  setShowMenuDrawer(false);
+                }}
+                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
+                  activeTab === 'today'
+                    ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
+                    : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                }`}
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
+                    }`}
+                  >
+                    <Calendar size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">Treatment Hari Ini</div>
+                    <div className="text-[11px] text-[#667781] font-normal truncate">
+                      Kunjungan & chat pasien aktif
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                    activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
+                  }`}
+                >
+                  {tasks.length}
+                </span>
+              </button>
+
+              {/* Menu 2: Jadwal Mendatang */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('upcoming');
+                  setMobileView('list');
+                  setShowMenuDrawer(false);
+                }}
+                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
+                  activeTab === 'upcoming'
+                    ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
+                    : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                }`}
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
+                    }`}
+                  >
+                    <Clock size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">Jadwal Mendatang</div>
+                    <div className="text-[11px] text-[#667781] font-normal truncate">
+                      Reservasi hari esok & seterusnya
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                    activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
+                  }`}
+                >
+                  {upcomingTasks.length}
+                </span>
+              </button>
+
+              {/* Menu 3: Treatment yang Sudah Dilakukan */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('completed');
+                  setMobileView('list');
+                  setShowMenuDrawer(false);
+                }}
+                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
+                  activeTab === 'completed'
+                    ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
+                    : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                }`}
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
+                    }`}
+                  >
+                    <CheckCircle2 size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">Treatment Selesai</div>
+                    <div className="text-[11px] text-[#667781] font-normal truncate">
+                      Riwayat yang sudah dilakukan
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                    activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
+                  }`}
+                >
+                  {completedTasks.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="p-4 border-t border-[#e9edef] bg-[#f0f2f5] space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMenuDrawer(false);
+                  setShowStaffProfileModal(true);
+                }}
+                className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-white hover:bg-[#e9edef] text-xs font-semibold text-[#111b21] border border-[#e9edef] shadow-xs transition-all active:scale-95"
+              >
+                <Info size={14} className="text-[#008069]" />
+                <span>Informasi Profil & Akun</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowMenuDrawer(false);
+                  const ok = await confirm({
+                    title: 'Keluar dari Portal?',
+                    message: 'Apakah Anda yakin ingin keluar dari akun terapis ini?',
+                    confirmText: 'Ya, Keluar',
+                    danger: true,
+                  });
+                  if (ok) {
+                    logout();
+                  }
+                }}
+                className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 text-xs font-semibold text-rose-600 border border-rose-200 shadow-xs transition-all active:scale-95"
+              >
+                <LogOut size={14} />
+                <span>Keluar dari Akun</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL / DRAWER PROFIL STAFF & LOGOUT */}

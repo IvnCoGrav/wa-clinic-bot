@@ -15,6 +15,7 @@
  */
 import { treatmentCatalogService } from './treatment-catalog.service';
 import { TEMPLATES } from '../config/persona';
+import { isMultiChildTransportQuestion } from '../state-machine/utils/transport-policy-checker';
 
 export interface PriceAnswerResult {
   replyText: string;
@@ -25,6 +26,11 @@ export interface PriceAnswerResult {
 /** Deteksi intent tanya harga (NLU intent ask_price atau kata kunci harga). */
 export function isAskPrice(userText: string, nluIntents?: string[]): boolean {
   const lower = (userText || '').toLowerCase();
+
+  // Pertanyaan kebijakan transport untuk multi-anak/multi-treatment bukan tanya harga katalog
+  if (isMultiChildTransportQuestion(userText)) {
+    return false;
+  }
 
   // Kata harga EKSPLISIT → kuat, langsung harga.
   if (
