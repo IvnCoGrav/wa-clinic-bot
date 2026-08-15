@@ -173,8 +173,9 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
-        // Jika akun dinonaktifkan atau password direset, putuskan seluruh sesi aktif staff seketika
-        if (active === false || updateData.password_hash) {
+        // Jika role diubah, akun dinonaktifkan, atau password direset,
+        // putuskan seluruh sesi aktif staff seketika (role lain tidak boleh akses portal terapis)
+        if (role !== undefined || active === false || updateData.password_hash) {
           await StaffAuthService.revokeAllSessions(id);
         }
 
