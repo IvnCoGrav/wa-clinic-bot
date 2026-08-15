@@ -215,6 +215,54 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/staff/update-location
+   * Memperbarui koordinat GPS lokasi, foto tampak depan rumah, dan catatan patokan
+   * milik customer dari lapangan oleh terapis.
+   */
+  fastify.post(
+    '/api/staff/update-location',
+    { bodyLimit: 12 * 1024 * 1024 },
+    async (
+      request: FastifyRequest<{
+        Body: {
+          reservationId: string;
+          lat?: number;
+          lng?: number;
+          housePhotoB64?: string;
+          landmark?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const { reservationId, lat, lng, housePhotoB64, landmark } = request.body || {};
+
+      if (!reservationId) {
+        return reply.status(400).send({ success: false, error: 'reservationId wajib disertakan.' });
+      }
+
+      const result = await StaffReservationService.updateCustomerLocation({
+        reservationId,
+        staffId,
+        staffName,
+        tenantId,
+        lat,
+        lng,
+        housePhotoB64,
+        landmark,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({ success: true, data: result.data });
+    }
+  );
+
+  /**
    * GET /api/staff/gateway-capability
    * Mengambil kapabilitas gateway WhatsApp tenant aktif (apakah mendukung revoke pesan / WAHA vs WABA).
    */

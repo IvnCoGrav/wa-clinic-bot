@@ -13,11 +13,15 @@ export interface StaffTaskAddress {
   kelurahan: string | null;
   kecamatan: string | null;
   kota: string | null;
+  lat?: number | null;
+  lng?: number | null;
   distanceKm: number | null;
   estimatedMinutes?: number | null;
   fullText: string;
   distanceSource?: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
   originName?: string | null;
+  housePhotoUrl?: string | null;
+  landmark?: string | null;
 }
 
 export interface StaffTaskPricing {
@@ -123,6 +127,7 @@ export class StaffReservationService {
               kota: true,
               distance_km: true,
               ongkir: true,
+              preferences: true,
               children: {
                 select: {
                   name: true,
@@ -239,11 +244,15 @@ export class StaffReservationService {
             kelurahan: cust?.kelurahan || null,
             kecamatan: cust?.kecamatan || null,
             kota: cust?.kota || null,
+            lat: cust?.lat ?? null,
+            lng: cust?.lng ?? null,
             distanceKm,
             estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource,
             originName,
             fullText: addressText,
+            housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
+            landmark: (cust?.preferences as any)?.landmark || null,
           },
           children: childrenList,
           pricing,
@@ -306,6 +315,7 @@ export class StaffReservationService {
               kota: true,
               distance_km: true,
               ongkir: true,
+              preferences: true,
               children: {
                 select: {
                   name: true,
@@ -419,11 +429,15 @@ export class StaffReservationService {
             kelurahan: cust?.kelurahan || null,
             kecamatan: cust?.kecamatan || null,
             kota: cust?.kota || null,
+            lat: cust?.lat ?? null,
+            lng: cust?.lng ?? null,
             distanceKm,
             estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource,
             originName,
             fullText: addressText,
+            housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
+            landmark: (cust?.preferences as any)?.landmark || null,
           },
           children: childrenList,
           pricing,
@@ -490,6 +504,7 @@ export class StaffReservationService {
               kota: true,
               distance_km: true,
               ongkir: true,
+              preferences: true,
               children: {
                 select: {
                   name: true,
@@ -566,11 +581,15 @@ export class StaffReservationService {
             kelurahan: cust?.kelurahan || null,
             kecamatan: cust?.kecamatan || null,
             kota: cust?.kota || null,
+            lat: cust?.lat ?? null,
+            lng: cust?.lng ?? null,
             distanceKm,
             estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
             distanceSource: 'CLINIC',
             originName: 'Klinik',
             fullText: addressText,
+            housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
+            landmark: (cust?.preferences as any)?.landmark || null,
           },
           children: childrenList,
           pricing,
@@ -804,6 +823,140 @@ export class StaffReservationService {
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error asserting conversation ownership:', err.message);
       return false;
+    }
+  }
+
+  /**
+   * Memperbarui titik koordinat lokasi GPS, foto tampak depan rumah, dan catatan patokan
+   * milik customer dari lapangan oleh terapis.
+   * Otomatis mengompresi foto (max 800px) dan menghitung ulang jarak dari klinik.
+   */
+  static async updateCustomerLocation(params: {
+    reservationId: string;
+    staffId: string;
+    staffName: string;
+    tenantId?: string;
+    lat?: number | null;
+    lng?: number | null;
+    housePhotoB64?: string | null;
+    landmark?: string | null;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    const {
+      reservationId,
+      staffId,
+      staffName,
+      tenantId = DEFAULT_TENANT_ID,
+      lat,
+      lng,
+      housePhotoB64,
+      landmark,
+    } = params;
+
+    if (!reservationId || !staffId) {
+      return { success: false, error: 'reservationId dan staffId wajib disertakan.' };
+    }
+
+    try {
+      const reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: {
+          customer: true,
+        },
+      });
+
+      if (!reservation) {
+        return { success: false, error: 'Reservasi tidak ditemukan.' };
+      }
+
+      if (reservation.tenant_id !== tenantId || reservation.assigned_staff_id !== staffId) {
+        return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
+      }
+
+      const customer = reservation.customer;
+      if (!customer) {
+        return { success: false, error: 'Data customer tidak ditemukan.' };
+      }
+
+      let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
+
+      // Kompres dan simpan foto tampak depan rumah jika ada
+      if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
+        const { mediaService } = await import('./media.service');
+        const matches = housePhotoB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        const rawB64 = matches ? matches[2] : housePhotoB64;
+        const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+        const saved = await mediaService.saveOutboundMedia({
+          tenantId,
+          imageB64: resized.toString('base64'),
+          mimeType: 'image/jpeg',
+          fileName: `house-${customer.id}.jpg`,
+        });
+        housePhotoUrl = saved.hdUrl;
+      }
+
+      const currentPrefs = (customer.preferences as any) || {};
+      const updatedPrefs = {
+        ...currentPrefs,
+        ...(housePhotoUrl ? { house_photo_url: housePhotoUrl } : {}),
+        ...(landmark !== undefined ? { landmark: landmark?.trim() || null } : {}),
+        location_updated_at: new Date().toISOString(),
+        location_updated_by_staff_id: staffId,
+        location_updated_by_staff_name: staffName,
+      };
+
+      // Hitung ulang jarak dari klinik jika koordinat baru diberikan
+      let distanceKm = customer.distance_km;
+      const targetLat = lat ?? customer.lat;
+      const targetLng = lng ?? customer.lng;
+
+      if (targetLat != null && targetLng != null) {
+        const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
+        distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
+      }
+
+      const updatedCustomer = await prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          ...(lat != null ? { lat } : {}),
+          ...(lng != null ? { lng } : {}),
+          ...(distanceKm != null ? { distance_km: distanceKm } : {}),
+          preferences: updatedPrefs,
+        },
+      });
+
+      // Audit log
+      const { auditService } = await import('./audit.service');
+      await auditService.logAdminAction({
+        apiKey: 'STAFF_SESSION',
+        adminIdentity: staffName,
+        action: 'STAFF_UPDATE_CUSTOMER_LOCATION',
+        targetId: customer.id,
+        payload: {
+          reservationId,
+          lat: updatedCustomer.lat,
+          lng: updatedCustomer.lng,
+          distanceKm: updatedCustomer.distance_km,
+          housePhotoUrl,
+          landmark,
+        },
+        tenantId,
+      });
+
+      return {
+        success: true,
+        data: {
+          customerId: updatedCustomer.id,
+          lat: updatedCustomer.lat,
+          lng: updatedCustomer.lng,
+          distanceKm: updatedCustomer.distance_km,
+          estimatedMinutes: estimateTravelDurationMinutes(updatedCustomer.distance_km),
+          housePhotoUrl,
+          landmark: updatedPrefs.landmark || null,
+        },
+      };
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error updating customer location:', err.message);
+      return { success: false, error: `Gagal memperbarui lokasi: ${err.message}` };
     }
   }
 }

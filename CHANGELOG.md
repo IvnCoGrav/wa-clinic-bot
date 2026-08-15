@@ -4,6 +4,25 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Foto Depan Rumah, Tombol Update Titik Lokasi GPS & Patokan, serta Kamera Langsung pada Chat Terapis
+
+- **Panduan Visual Foto Depan Rumah & Catatan Patokan (`StaffToday.tsx`, `src/services/staff-reservation.service.ts`)**:
+  - Menyimpan `house_photo_url`, `landmark`, `location_updated_at`, `location_updated_by_staff_id`, dan `location_updated_by_staff_name` pada `Customer.preferences` (aman tanpa migrasi schema DB dan siap multi-tenant).
+  - Menampilkan thumbnail foto tampak depan rumah pasien pada setiap kartu tugas (Treatment Hari Ini, Jadwal Mendatang, Riwayat Selesai, dan Modal Detail Pasien) sebagai panduan visual tim terapis/bidan saat bergantian shift ke lokasi pasien.
+  - Menambahkan modal zoom lightbox untuk melihat foto tampak depan rumah dalam ukuran besar/HD saat diklik.
+- **Tombol & Modal "Update Titik Lokasi & Foto Rumah" (`StaffToday.tsx`, `src/routes/staff/today.subroute.ts`)**:
+  - Menambahkan tombol `[ 📍 Update Titik Lokasi & Foto Rumah ]` pada setiap kartu tugas dan modal detail.
+  - Membuka modal interaktif yang menyediakan:
+    1. **📍 Gunakan Titik GPS HP Saya Sekarang**: Mengunci titik koordinat GPS aktual perangkat di lapangan (`navigator.geolocation.getCurrentPosition`) dengan indikator akurasi (misal: `±8 meter`) untuk mengoreksi share-loc yang kurang presisi.
+    2. **📷 Buka Kamera & Foto Rumah Pasien**: Mengambil foto tampak depan rumah/pagar/nomor rumah via kamera perangkat (`capture="environment"`), dengan kompresi server-side (max 800px) via `mediaService.resizeImageToMax`.
+    3. **Catatan Patokan / Ancer-ancer**: Input teks panduan lokasi (contoh: *"Pagar hitam gerbang kayu, seberang masjid"*).
+  - Endpoint baru `POST /api/staff/update-location` yang otomatis menghitung ulang jarak dari klinik (`calculateHaversineDistance`), memperbarui database customer, dan mencatat audit log staf.
+- **Kamera Langsung pada Pengiriman Gambar Live Chat Terapis (`StaffToday.tsx`)**:
+  - Tombol lampirkan gambar pada input live chat terapis kini langsung membuka viewfinder kamera belakang perangkat (`<input type="file" accept="image/*" capture="environment" />`) dengan ikon kamera `<Camera />` bukan galeri.
+- **Test & Verifikasi**:
+  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (17/17 PASS).
+  - Build dashboard admin (`npm run build`) dan typecheck backend (`tsc --noEmit`) 100% PASS.
+
 ### Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapis
 
 - **Right Sidebar Slide-over Drawer (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:

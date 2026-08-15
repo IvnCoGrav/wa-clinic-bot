@@ -31,6 +31,10 @@ import {
   UserCheck,
   Info,
   Menu,
+  Camera,
+  Maximize2,
+  Crosshair,
+  PenLine,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { emitBootPhase } from '../../lib/bootProgress';
@@ -45,11 +49,15 @@ interface StaffTaskAddress {
   kelurahan: string | null;
   kecamatan: string | null;
   kota: string | null;
+  lat?: number | null;
+  lng?: number | null;
   distanceKm: number | null;
   estimatedMinutes?: number | null;
   distanceSource?: 'CLINIC' | 'PREVIOUS_PATIENT' | null;
   originName?: string | null;
   fullText: string;
+  housePhotoUrl?: string | null;
+  landmark?: string | null;
 }
 
 interface StaffTaskPricing {
@@ -151,6 +159,16 @@ export const StaffToday: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER' | 'QRIS'>('CASH');
   const [proofImageB64, setProofImageB64] = useState<string | null>(null);
   const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  // Update Location & House Photo Modal State
+  const [updateLocationModalTask, setUpdateLocationModalTask] = useState<StaffTask | null>(null);
+  const [locCoords, setLocCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
+  const [locHousePhotoB64, setLocHousePhotoB64] = useState<string | null>(null);
+  const [locLandmark, setLocLandmark] = useState<string>('');
+  const [locGettingGps, setLocGettingGps] = useState(false);
+  const [submittingLoc, setSubmittingLoc] = useState(false);
+  const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
+  const locHouseFileInputRef = useRef<HTMLInputElement>(null);
 
   // Gateway capability (WAHA supportsRevoke=true vs WABA supportsRevoke=false)
   const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean } | null>(null);
@@ -761,6 +779,129 @@ export const StaffToday: React.FC = () => {
     }
   };
 
+  // Open Location Update Modal
+  const handleOpenUpdateLocationModal = (task: StaffTask) => {
+    setUpdateLocationModalTask(task);
+    if (task.address.lat != null && task.address.lng != null) {
+      setLocCoords({ lat: task.address.lat, lng: task.address.lng });
+    } else {
+      setLocCoords(null);
+    }
+    setLocHousePhotoB64(task.address.housePhotoUrl || null);
+    setLocLandmark(task.address.landmark || '');
+  };
+
+  // Get GPS directly from mobile device
+  const handleGetCurrentGps = () => {
+    if (!('geolocation' in navigator)) {
+      toast('Perangkat Anda tidak mendukung fitur Geolocation GPS.', 'error');
+      return;
+    }
+
+    setLocGettingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocCoords({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: Math.round(position.coords.accuracy),
+        });
+        setLocGettingGps(false);
+        toast(`📍 Koordinat GPS berhasil diambil (akurasi ±${Math.round(position.coords.accuracy)}m)`, 'success');
+      },
+      (error) => {
+        setLocGettingGps(false);
+        toast(`Gagal mengambil GPS: ${error.message}. Pastikan izin lokasi browser aktif.`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Pick / Capture House Photo from camera
+  const handlePickHousePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result as string;
+      setLocHousePhotoB64(b64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Submit Location & House Photo Update
+  const handleSaveLocation = async () => {
+    if (!updateLocationModalTask) return;
+
+    setSubmittingLoc(true);
+    try {
+      const res = await apiRequest('/api/staff/update-location', {
+        method: 'POST',
+        body: JSON.stringify({
+          reservationId: updateLocationModalTask.reservationId,
+          lat: locCoords?.lat,
+          lng: locCoords?.lng,
+          housePhotoB64: locHousePhotoB64 && locHousePhotoB64.startsWith('data:image/') ? locHousePhotoB64 : undefined,
+          landmark: locLandmark,
+        }),
+      });
+
+      if (res.success && res.data) {
+        toast('✅ Titik lokasi & panduan rumah berhasil diperbarui!', 'success');
+        const targetResId = updateLocationModalTask.reservationId;
+        const newHouseUrl = res.data.housePhotoUrl || updateLocationModalTask.address.housePhotoUrl;
+        const newLandmark = res.data.landmark !== undefined ? res.data.landmark : locLandmark;
+        const newLat = res.data.lat ?? locCoords?.lat;
+        const newLng = res.data.lng ?? locCoords?.lng;
+        const newDistKm = res.data.distanceKm ?? updateLocationModalTask.address.distanceKm;
+        const newEstMin = res.data.estimatedMinutes ?? updateLocationModalTask.address.estimatedMinutes;
+        const newMapsUrl = newLat && newLng ? `https://maps.google.com/?q=${newLat},${newLng}` : null;
+        const newNavUrl =
+          newLat && newLng
+            ? `https://www.google.com/maps/dir/?api=1&destination=${newLat},${newLng}&travelmode=bicycling`
+            : null;
+
+        const updateTaskObj = (t: StaffTask) => {
+          if (t.reservationId !== targetResId) return t;
+          return {
+            ...t,
+            mapsUrl: newMapsUrl,
+            navigationUrl: newNavUrl,
+            address: {
+              ...t.address,
+              lat: newLat,
+              lng: newLng,
+              distanceKm: newDistKm,
+              estimatedMinutes: newEstMin,
+              housePhotoUrl: newHouseUrl,
+              landmark: newLandmark,
+            },
+          };
+        };
+
+        setTasks((prev) => prev.map(updateTaskObj));
+        setUpcomingTasks((prev) => prev.map(updateTaskObj));
+        setCompletedTasks((prev) => prev.map(updateTaskObj));
+
+        if (selectedTask?.reservationId === targetResId) {
+          setSelectedTask((prev) => (prev ? updateTaskObj(prev) : null));
+        }
+        if (detailModalTask?.reservationId === targetResId) {
+          setDetailModalTask((prev) => (prev ? updateTaskObj(prev) : null));
+        }
+
+        setUpdateLocationModalTask(null);
+      } else {
+        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat memperbarui lokasi'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal: ${err.message || 'Terjadi kesalahan jaringan'}`, 'error');
+    } finally {
+      setSubmittingLoc(false);
+    }
+  };
+
   // Filter list
   const activeList =
     activeTab === 'today'
@@ -1074,26 +1215,86 @@ export const StaffToday: React.FC = () => {
                         </div>
 
                         {/* Alamat & Jarak dari Klinik */}
-                        <div className="text-xs text-[#54656f] flex items-start gap-1.5 mb-2 mt-2 bg-[#f0f2f5] p-2 rounded-lg border border-[#e9edef]">
-                          <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
-                            {task.address.distanceKm != null && (
-                              <p className="text-[10px] font-semibold text-[#008069] mt-0.5 flex items-center gap-1">
-                                <Compass size={10} />
-                                <span>
-                                  {task.address.distanceSource === 'PREVIOUS_PATIENT' && task.address.originName
-                                    ? `Jarak: ${task.address.distanceKm.toFixed(1)} km dari ${task.address.originName}`
-                                    : `Jarak: ${task.address.distanceKm.toFixed(1)} km dari klinik`}
-                                  {task.address.estimatedMinutes != null && (
-                                    <span className="text-[#54656f] font-normal ml-1">
-                                      (±{task.address.estimatedMinutes} mnt perjalanan)
-                                    </span>
-                                  )}
-                                </span>
-                              </p>
-                            )}
+                        <div className="text-xs text-[#54656f] mb-2 mt-2 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                          <div className="flex items-start gap-1.5">
+                            <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
+                              {task.address.distanceKm != null && (
+                                <p className="text-[10px] font-semibold text-[#008069] mt-0.5 flex items-center gap-1">
+                                  <Compass size={10} />
+                                  <span>
+                                    {task.address.distanceSource === 'PREVIOUS_PATIENT' && task.address.originName
+                                      ? `Jarak: ${task.address.distanceKm.toFixed(1)} km dari ${task.address.originName}`
+                                      : `Jarak: ${task.address.distanceKm.toFixed(1)} km dari klinik`}
+                                    {task.address.estimatedMinutes != null && (
+                                      <span className="text-[#54656f] font-normal ml-1">
+                                        (±{task.address.estimatedMinutes} mnt perjalanan)
+                                      </span>
+                                    )}
+                                  </span>
+                                </p>
+                              )}
+                            </div>
                           </div>
+
+                          {/* Foto Depan Rumah & Patokan Landmark */}
+                          {task.address.housePhotoUrl ? (
+                            <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-[#e9edef]">
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setZoomImageUrl(task.address.housePhotoUrl || null);
+                                }}
+                                className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                                title="Klik untuk memperbesar foto rumah"
+                              >
+                                <img
+                                  src={task.address.housePhotoUrl}
+                                  alt="Foto Depan Rumah"
+                                  className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                                />
+                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                  <Maximize2 size={12} />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                  🏠 Foto Depan Rumah
+                                </span>
+                                {task.address.landmark ? (
+                                  <p className="text-[11px] text-[#111b21] truncate font-medium">
+                                    Patokan: {task.address.landmark}
+                                  </p>
+                                ) : (
+                                  <p className="text-[10px] text-[#667781] truncate">Panduan visual tersimpan</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenUpdateLocationModal(task);
+                                }}
+                                className="p-1.5 text-xs text-[#008069] hover:bg-[#e8f5f2] rounded-lg transition-all border border-[#e9edef] flex-shrink-0"
+                                title="Perbarui titik lokasi / foto rumah"
+                              >
+                                <PenLine size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenUpdateLocationModal(task);
+                              }}
+                              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white hover:bg-[#e8f5f2] text-[#008069] text-[11px] font-semibold border border-dashed border-[#00a884]/40 transition-all active:scale-95"
+                            >
+                              <Camera size={12} />
+                              <span>+ Update Titik Lokasi & Foto Rumah</span>
+                            </button>
+                          )}
                         </div>
 
                         {/* Data Pasien Bayi / Anak */}
@@ -1454,6 +1655,7 @@ export const StaffToday: React.FC = () => {
                       <input
                         type="file"
                         accept="image/*"
+                        capture="environment"
                         ref={chatFileInputRef}
                         onChange={handlePickImage}
                         className="hidden"
@@ -1463,9 +1665,10 @@ export const StaffToday: React.FC = () => {
                         onClick={() => chatFileInputRef.current?.click()}
                         disabled={sending}
                         className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40"
-                        title="Lampirkan Gambar"
+                        title="Buka Kamera & Ambil Foto"
+                        aria-label="Kamera"
                       >
-                        <ImageIcon size={16} />
+                        <Camera size={18} />
                       </button>
                       <div className="flex-1 relative">
                         <input
@@ -1613,26 +1816,86 @@ export const StaffToday: React.FC = () => {
                           </div>
 
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] flex items-start gap-1.5 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef]">
-                            <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
-                              {item.address.distanceKm != null && (
-                                <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
-                                  <Compass size={11} />
-                                  <span>
-                                    {item.address.distanceSource === 'PREVIOUS_PATIENT' && item.address.originName
-                                      ? `Jarak: ${item.address.distanceKm.toFixed(1)} km dari ${item.address.originName}`
-                                      : `Jarak: ${item.address.distanceKm.toFixed(1)} km dari klinik`}
-                                    {item.address.estimatedMinutes != null && (
-                                      <span className="text-[#54656f] font-normal ml-1">
-                                        (±{item.address.estimatedMinutes} mnt perjalanan)
-                                      </span>
-                                    )}
-                                  </span>
-                                </p>
-                              )}
+                          <div className="text-xs text-[#54656f] bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                            <div className="flex items-start gap-1.5">
+                              <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                                {item.address.distanceKm != null && (
+                                  <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
+                                    <Compass size={11} />
+                                    <span>
+                                      {item.address.distanceSource === 'PREVIOUS_PATIENT' && item.address.originName
+                                        ? `Jarak: ${item.address.distanceKm.toFixed(1)} km dari ${item.address.originName}`
+                                        : `Jarak: ${item.address.distanceKm.toFixed(1)} km dari klinik`}
+                                      {item.address.estimatedMinutes != null && (
+                                        <span className="text-[#54656f] font-normal ml-1">
+                                          (±{item.address.estimatedMinutes} mnt perjalanan)
+                                        </span>
+                                      )}
+                                    </span>
+                                  </p>
+                                )}
+                              </div>
                             </div>
+
+                            {/* Foto Depan Rumah & Patokan Landmark */}
+                            {item.address.housePhotoUrl ? (
+                              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-[#e9edef]">
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setZoomImageUrl(item.address.housePhotoUrl || null);
+                                  }}
+                                  className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                                  title="Klik untuk memperbesar foto rumah"
+                                >
+                                  <img
+                                    src={item.address.housePhotoUrl}
+                                    alt="Foto Depan Rumah"
+                                    className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                    <Maximize2 size={12} />
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                    🏠 Foto Depan Rumah
+                                  </span>
+                                  {item.address.landmark ? (
+                                    <p className="text-[11px] text-[#111b21] truncate font-medium">
+                                      Patokan: {item.address.landmark}
+                                    </p>
+                                  ) : (
+                                    <p className="text-[10px] text-[#667781] truncate">Panduan visual tersimpan</p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenUpdateLocationModal(item);
+                                  }}
+                                  className="p-1.5 text-xs text-[#008069] hover:bg-[#e8f5f2] rounded-lg transition-all border border-[#e9edef] flex-shrink-0"
+                                  title="Perbarui titik lokasi / foto rumah"
+                                >
+                                  <PenLine size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenUpdateLocationModal(item);
+                                }}
+                                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white hover:bg-[#e8f5f2] text-[#008069] text-[11px] font-semibold border border-dashed border-[#00a884]/40 transition-all active:scale-95"
+                              >
+                                <Camera size={12} />
+                                <span>+ Update Titik Lokasi & Foto Rumah</span>
+                              </button>
+                            )}
                           </div>
 
                           {/* Data Pasien Bayi / Anak */}
@@ -1807,17 +2070,54 @@ export const StaffToday: React.FC = () => {
                           </div>
 
                           {/* Alamat & Jarak dari Klinik */}
-                          <div className="text-xs text-[#54656f] flex items-start gap-1.5 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef]">
-                            <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
-                              {item.address.distanceKm != null && (
-                                <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
-                                  <Compass size={11} />
-                                  <span>Jarak: {item.address.distanceKm.toFixed(1)} km dari klinik</span>
-                                </p>
-                              )}
+                          <div className="text-xs text-[#54656f] bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                            <div className="flex items-start gap-1.5">
+                              <MapPin size={14} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-[#111b21] leading-snug">{item.address.fullText}</p>
+                                {item.address.distanceKm != null && (
+                                  <p className="text-[10px] font-semibold text-[#008069] mt-1 flex items-center gap-1">
+                                    <Compass size={11} />
+                                    <span>Jarak: {item.address.distanceKm.toFixed(1)} km dari klinik</span>
+                                  </p>
+                                )}
+                              </div>
                             </div>
+
+                            {/* Foto Depan Rumah & Patokan Landmark */}
+                            {item.address.housePhotoUrl && (
+                              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-white border border-[#e9edef]">
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setZoomImageUrl(item.address.housePhotoUrl || null);
+                                  }}
+                                  className="h-11 w-11 rounded-lg bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                                  title="Klik untuk memperbesar foto rumah"
+                                >
+                                  <img
+                                    src={item.address.housePhotoUrl}
+                                    alt="Foto Depan Rumah"
+                                    className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                                  />
+                                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                    <Maximize2 size={12} />
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                                    🏠 Foto Depan Rumah
+                                  </span>
+                                  {item.address.landmark ? (
+                                    <p className="text-[11px] text-[#111b21] truncate font-medium">
+                                      Patokan: {item.address.landmark}
+                                    </p>
+                                  ) : (
+                                    <p className="text-[10px] text-[#667781] truncate">Panduan visual tersimpan</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
 
                           {/* Data Pasien Bayi / Anak */}
@@ -2177,13 +2477,28 @@ export const StaffToday: React.FC = () => {
             </div>
 
             {/* Alamat & Jarak */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                Alamat Lokasi Kunjungan
-              </span>
+            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                  Alamat Lokasi Kunjungan
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = detailModalTask;
+                    setDetailModalTask(null);
+                    handleOpenUpdateLocationModal(t);
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#008069] hover:underline"
+                >
+                  <PenLine size={11} />
+                  <span>Update Titik & Foto</span>
+                </button>
+              </div>
+
               <div className="flex items-start space-x-2 text-xs text-[#111b21]">
                 <MapPin size={15} className="text-[#008069] mt-0.5 flex-shrink-0" />
-                <div className="leading-relaxed">
+                <div className="leading-relaxed flex-1 min-w-0">
                   <p className="font-medium">{detailModalTask.address.fullText}</p>
                   {detailModalTask.address.distanceKm != null && (
                     <p className="text-[11px] font-semibold text-[#008069] mt-1 flex items-center space-x-1">
@@ -2202,6 +2517,54 @@ export const StaffToday: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* Foto Depan Rumah & Patokan Landmark */}
+              {detailModalTask.address.housePhotoUrl ? (
+                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-[#e9edef] mt-1">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setZoomImageUrl(detailModalTask.address.housePhotoUrl || null);
+                    }}
+                    className="h-14 w-14 rounded-xl bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
+                    title="Klik untuk memperbesar foto rumah"
+                  >
+                    <img
+                      src={detailModalTask.address.housePhotoUrl}
+                      alt="Foto Depan Rumah"
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                      <Maximize2 size={14} />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                      🏠 Foto Tampak Depan Rumah
+                    </span>
+                    {detailModalTask.address.landmark ? (
+                      <p className="text-xs text-[#111b21] font-semibold mt-0.5">
+                        Patokan: {detailModalTask.address.landmark}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-[#667781]">Panduan visual tersimpan</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = detailModalTask;
+                    setDetailModalTask(null);
+                    handleOpenUpdateLocationModal(t);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white hover:bg-[#e8f5f2] text-[#008069] text-xs font-semibold border border-dashed border-[#00a884]/40 transition-all active:scale-95"
+                >
+                  <Camera size={13} />
+                  <span>+ Tambah Foto Depan Rumah & Update GPS</span>
+                </button>
+              )}
             </div>
 
             {/* Data Anak */}
@@ -2425,6 +2788,235 @@ export const StaffToday: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL UPDATE TITIK LOKASI & FOTO RUMAH */}
+      {/* ========================================================================= */}
+      {updateLocationModalTask && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setUpdateLocationModalTask(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#111b21]">Update Lokasi & Foto Rumah</h3>
+                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                    {updateLocationModalTask.customerName || 'Customer'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setUpdateLocationModalTask(null)}
+                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Info Alamat Pasien */}
+            <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
+              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                Alamat Tercatat:
+              </span>
+              <p className="text-xs text-[#111b21] font-medium leading-snug">
+                {updateLocationModalTask.address.fullText}
+              </p>
+            </div>
+
+            {/* Bagian 1: Koordinat GPS Otomatis */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#111b21]">
+                1. Titik Koordinat GPS Rumah Pasien:
+              </label>
+
+              <button
+                type="button"
+                onClick={handleGetCurrentGps}
+                disabled={locGettingGps}
+                className="w-full py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
+              >
+                {locGettingGps ? (
+                  <>
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    <span>Mendeteksi Satelit GPS...</span>
+                  </>
+                ) : (
+                  <>
+                    <Crosshair size={14} />
+                    <span>📍 Gunakan Titik GPS HP Saya Sekarang</span>
+                  </>
+                )}
+              </button>
+
+              {locCoords ? (
+                <div className="p-2.5 rounded-xl bg-[#d9fdd3]/70 border border-[#00a884]/30 text-xs text-[#008069] flex items-center justify-between">
+                  <div>
+                    <div className="font-bold flex items-center gap-1">
+                      <CheckCircle2 size={13} />
+                      <span>Koordinat Presisi Terkunci</span>
+                    </div>
+                    <div className="font-mono text-[11px] text-[#54656f] mt-0.5">
+                      {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}
+                      {locCoords.accuracy ? ` (Akurasi: ±${locCoords.accuracy}m)` : ''}
+                    </div>
+                  </div>
+                  <a
+                    href={`https://maps.google.com/?q=${locCoords.lat},${locCoords.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg bg-white text-[#008069] border border-[#00a884]/30 hover:bg-[#e8f5f2] text-xs font-semibold flex items-center gap-1 shadow-xs"
+                    title="Cek di Google Maps"
+                  >
+                    <Navigation size={12} />
+                    <span>Cek</span>
+                  </a>
+                </div>
+              ) : (
+                <p className="text-[11px] text-[#8696a0] italic">
+                  * Berdirilah di depan pagar rumah pasien lalu tekan tombol GPS di atas.
+                </p>
+              )}
+            </div>
+
+            {/* Bagian 2: Foto Tampak Depan Rumah */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#111b21]">
+                2. Foto Tampak Depan Rumah (Kamera):
+              </label>
+
+              <input
+                type="file"
+                ref={locHouseFileInputRef}
+                accept="image/*"
+                capture="environment"
+                onChange={handlePickHousePhoto}
+                className="hidden"
+              />
+
+              {locHousePhotoB64 ? (
+                <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                  <img
+                    src={locHousePhotoB64}
+                    alt="Tampak Depan Rumah"
+                    className="object-contain max-h-48 w-auto rounded-xl"
+                  />
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => locHouseFileInputRef.current?.click()}
+                      className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition"
+                      title="Foto ulang"
+                    >
+                      <Camera size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLocHousePhotoB64(null)}
+                      className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition"
+                      title="Hapus foto"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => locHouseFileInputRef.current?.click()}
+                  className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc]"
+                >
+                  <Camera size={22} className="mb-1 text-[#008069]" />
+                  <span className="font-semibold text-[#111b21]">Buka Kamera & Foto Rumah Pasien</span>
+                  <span className="text-[10px] text-[#8696a0]">Foto pagar, nomor rumah, atau tampak depan</span>
+                </button>
+              )}
+            </div>
+
+            {/* Bagian 3: Patokan Landmark */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[#111b21]">
+                3. Catatan Patokan / Ancer-ancer Rumah:
+              </label>
+              <input
+                type="text"
+                value={locLandmark}
+                onChange={(e) => setLocLandmark(e.target.value)}
+                placeholder="Contoh: Pagar hitam, samping toko berkah, seberang masjid"
+                className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs"
+              />
+            </div>
+
+            {/* Tombol Simpan */}
+            <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+              <button
+                type="button"
+                onClick={() => setUpdateLocationModalTask(null)}
+                disabled={submittingLoc}
+                className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLocation}
+                disabled={submittingLoc}
+                className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+              >
+                {submittingLoc ? (
+                  <>
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={14} />
+                    <span>Simpan Pembaruan Lokasi</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL ZOOM LIGHTBOX FOTO RUMAH */}
+      {/* ========================================================================= */}
+      {zoomImageUrl && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setZoomImageUrl(null)}
+        >
+          <div className="relative max-w-2xl w-full max-h-[90vh] flex flex-col items-center">
+            <button
+              onClick={() => setZoomImageUrl(null)}
+              className="absolute -top-10 right-0 p-2 text-white/80 hover:text-white transition"
+              title="Tutup Foto"
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={zoomImageUrl}
+              alt="Foto Depan Rumah"
+              className="max-h-[80vh] w-auto rounded-2xl shadow-2xl object-contain border border-white/20"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="mt-2 text-xs text-white/80 font-medium">
+              🏠 Foto Panduan Tampak Depan Rumah Pasien
+            </div>
           </div>
         </div>
       )}
