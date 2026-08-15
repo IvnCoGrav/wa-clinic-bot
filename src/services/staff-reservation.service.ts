@@ -437,6 +437,153 @@ export class StaffReservationService {
   }
 
   /**
+   * Mengambil riwayat jadwal & treatment yang sudah selesai dilakukan oleh staff.
+   * (Status COMPLETED atau pembayaran lunas atau tanggal sebelum hari ini).
+   */
+  static async getCompletedTasks(
+    staffId: string,
+    tenantId = DEFAULT_TENANT_ID,
+    daysPast = 60
+  ): Promise<StaffTaskItem[]> {
+    if (!staffId) return [];
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const minDate = new Date();
+    minDate.setDate(minDate.getDate() - daysPast);
+    minDate.setHours(0, 0, 0, 0);
+
+    try {
+      const rows = await prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          assigned_staff_id: staffId,
+          OR: [
+            { status: { in: ['completed', 'COMPLETED', 'selesai', 'SELESAI'] } },
+            { purchase_occurred_at: { not: null } },
+            {
+              booking_date: {
+                lt: startOfDay,
+                gte: minDate,
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          treatment_detail: true,
+          treatment_category: true,
+          booking_date: true,
+          status: true,
+          purchase_value: true,
+          purchase_occurred_at: true,
+          payment_method: true,
+          proof_url: true,
+          customer: {
+            select: {
+              name: true,
+              lat: true,
+              lng: true,
+              kelurahan: true,
+              kecamatan: true,
+              kota: true,
+              distance_km: true,
+              ongkir: true,
+              children: {
+                select: {
+                  name: true,
+                  raw_age_text: true,
+                  birth_date: true,
+                },
+              },
+            },
+          },
+          children: {
+            select: {
+              name: true,
+              raw_age_text: true,
+              birth_date: true,
+            },
+          },
+        },
+        orderBy: { booking_date: 'desc' },
+      });
+
+      return rows.map((r) => {
+        const cust = r.customer;
+        const addressText = buildAddressText(cust || {});
+        const mapsUrl =
+          cust?.lat != null && cust?.lng != null
+            ? `https://www.google.com/maps/search/?api=1&query=${cust.lat},${cust.lng}`
+            : null;
+        const navigationUrl =
+          cust?.lat != null && cust?.lng != null
+            ? `https://www.google.com/maps/dir/?api=1&destination=${cust.lat},${cust.lng}`
+            : null;
+
+        const distanceKm = cust?.distance_km ?? null;
+
+        const combinedChildren = [...(r.children || []), ...(cust?.children || [])];
+        const uniqueChildrenMap = new Map<string, StaffTaskChild>();
+        for (const ch of combinedChildren) {
+          if (ch?.name && !uniqueChildrenMap.has(ch.name)) {
+            uniqueChildrenMap.set(ch.name, {
+              name: ch.name,
+              rawAgeText: ch.raw_age_text || null,
+              birthDate: ch.birth_date ? ch.birth_date.toISOString() : null,
+            });
+          }
+        }
+        const childrenList = Array.from(uniqueChildrenMap.values());
+
+        const treatmentFee = r.purchase_value || 0;
+        const deliveryFee = cust?.ongkir || 0;
+        const totalFee = treatmentFee + deliveryFee;
+        const isLunas = !!r.purchase_occurred_at || r.status === 'completed' || r.status === 'COMPLETED';
+        const paymentStatus: 'LUNAS' | 'TAGIH_DI_TEMPAT' = isLunas ? 'LUNAS' : 'TAGIH_DI_TEMPAT';
+        const paymentStatusLabel = isLunas ? 'Lunas (Selesai)' : 'Belum Lunas';
+
+        const pricing: StaffTaskPricing = {
+          treatmentFee,
+          deliveryFee,
+          totalFee,
+          paymentStatus,
+          paymentStatusLabel,
+        };
+
+        return {
+          reservationId: r.id,
+          customerName: cust?.name || null,
+          treatmentDetail: r.treatment_detail,
+          treatmentCategory: r.treatment_category || null,
+          bookingDate: r.booking_date,
+          status: r.status,
+          conversationId: null,
+          mapsUrl,
+          navigationUrl,
+          address: {
+            kelurahan: cust?.kelurahan || null,
+            kecamatan: cust?.kecamatan || null,
+            kota: cust?.kota || null,
+            distanceKm,
+            estimatedMinutes: estimateTravelDurationMinutes(distanceKm),
+            distanceSource: 'CLINIC',
+            originName: 'Klinik',
+            fullText: addressText,
+          },
+          children: childrenList,
+          pricing,
+          shareLocationText: null,
+        };
+      });
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error fetching completed tasks:', err.message);
+      return [];
+    }
+  }
+
+  /**
    * Mengambil dan merender template pesan OTW (Menuju Lokasi) khusus tenant.
    * Mendukung kustomisasi dari Super Admin (`FollowUpTemplate` tipe `STAFF_OTW`).
    */

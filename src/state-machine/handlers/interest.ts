@@ -14,6 +14,7 @@ import { buildPriceAnswer, isAskPrice, isPricelistLostRequest } from '../../serv
 import { isLocationQueryMessage } from '../utils/location-query';
 import { isNeedTimeOrDiscussionMessage } from '../utils/need-time-checker';
 import { isAskingClinicLocation } from '../utils/clinic-location-checker';
+import { isMultiChildTransportQuestion } from '../utils/transport-policy-checker';
 import { stageLog } from '../../utils/stage-logger';
 import { parseAgeTextToBirthDate, parseAgeTextToMonths, monthsBetween } from '../../utils/age-calculator';
 import { checkMedicalKeywords } from '../../config/medical-keywords';
@@ -328,6 +329,17 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       };
 
     case 'faq_question': {
+      // --- PERTANYAAN ONGKIR / TRANSPORT MULTI-ANAK ATAU MULTI-TREATMENT ---
+      if (isMultiChildTransportQuestion(userText)) {
+        console.log(`[TRANSPORT POLICY] Multi-child / visit transport question detected in "${userText}". Returning policy reply.`);
+        stageLog('GENERATE', `Transport Policy: Multi-child visit transport fee answered (1x charge)`, customer.phone);
+        return {
+          nextState: ConversationState.AWAITING_INTEREST,
+          replyText: TEMPLATES.multiChildTransportPolicy(),
+          shouldSendReply: true,
+        };
+      }
+
       // --- JAWABAN HARGA: jika customer bertanya harga → beri tahu harga (deterministik,
       //     anti-halusinasi harga). CTA yes-yes jika lokasi sudah ada; minta lokasi jika belum.
       if (isAskPrice(userText, nlu?.intents)) {

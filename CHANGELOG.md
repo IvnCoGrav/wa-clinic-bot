@@ -4,6 +4,29 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapis
+
+- **Right Sidebar Slide-over Drawer (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - **Tombol Garis Tiga (Hamburger Menu)**: Menambahkan tombol menu di kanan atas header untuk membuka slide-over drawer dari sisi kanan layar.
+  - **Menu Navigasi Lengkap**:
+    1. 📋 **Treatment Hari Ini**: Menampilkan tugas aktif hari ini dan split view WhatsApp live chat.
+    2. 📅 **Jadwal Mendatang**: Menampilkan jadwal reservasi mendatang dikelompokkan per tanggal.
+    3. ✅ **Treatment yang Sudah Dilakukan**: Menampilkan riwayat treatment yang telah selesai/lunas lengkap dengan rincian total omset, pembayaran (Tunai/Transfer/QRIS), dan detail pasien.
+  - **Profil Staf & Logout**: Akses cepat ke modal info akun terapis dan tombol keluar dengan konfirmasi aman (`useUiFeedback`).
+- **Backend Endpoint Riwayat Selesai (`src/services/staff-reservation.service.ts`, `src/routes/staff/today.subroute.ts`)**:
+  - Menambahkan method `StaffReservationService.getCompletedTasks` dan endpoint `GET /api/staff/completed-tasks`.
+  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (16/16 PASS).
+
+### Fixed — Multi-Child / Multi-Treatment Transport Policy Inquiry ("Untuk 2 anak transportnya 1 kan")
+
+- **Deteksi Pertanyaan Kebijakan Ongkir Multi-Anak / Per Kunjungan (`src/state-machine/utils/transport-policy-checker.ts`, `interest.ts`, `persona.ts`)**:
+  - Memperbaiki bug di mana customer yang menanyakan kebijakan transport untuk 2 anak / per kunjungan (*"Untuk 2 anak transportnya 1 kan"*) keliru di-hijack oleh lookup harga treatment dan dijawab dengan harga *Pijat Kids Ceria*.
+  - Menambahkan detector `isMultiChildTransportQuestion` untuk mengenali pertanyaan kebijakan transport (misal 2 anak, multi-treatment, per kedatangan, per alamat).
+  - Mengisolasi `isAskPrice` (`src/services/price-answer.service.ts`) agar tidak membajak pertanyaan kebijakan ongkir sebagai pertanyaan harga katalog treatment.
+  - Menambahkan respon deterministik ramah: *"Iya betul Bunda, untuk biaya transport/ongkir homecare kami dihitung per kedatangan/kunjungan (per alamat) ya Bunda, jadi meskipun untuk 2 anak atau lebih (atau Bunda + si kecil), ongkirnya tetap dihitung 1 kali saja yaa 🤗 Mau ambil treatment apa saja untuk si kecil/Bunda?"*
+  - Menambahkan prompt Rule 10 pada AI Generator (`src/integrations/llm/generator.ts`).
+  - Penambahan unit test `tests/unit/multi-child-transport-policy.test.ts` (3/3 PASS).
+
 ### Changed — Pricelist HD Dikirim Asli; Dashboard Tanpa Preview (Hanya Tombol Lihat); Mode Upload Saja
 
 - **Pricelist dikirim ke customer dalam ukuran asli (HD, tanpa kompresi)** (`pricelist-config.service.ts`, `machine.ts`): fungsi `resolvePricelistSendTarget` (yang me-resize 1/3 & membuat file duplikat tiap kirim) **dihapus**; `machine.ts` kembali memakai `resolvePricelistImageTarget` — sumber `/media/outbound/...` dikirim langsung (WAHA: path file lokal; WABA: URL publik), sumber URL eksternal dikirim langsung. Bonus: tidak ada lagi file duplikat per kiriman → hemat storage & kuota MQL.

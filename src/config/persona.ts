@@ -351,6 +351,8 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
   interestUnrelatedFollowUp: () => `Apakah Bunda tertarik untuk lanjut mengisi list reservasi treatment homecare kami? 😊\n\nAtau jika ada hal yang ingin ditanyakan terlebih dahulu, silakan kabari kami ya, Bunda. Saya dengan senang hati siap membantu! 🤗`,
 
+  multiChildTransportPolicy: () => `Iya betul Bunda, untuk biaya transport/ongkir homecare kami dihitung per kedatangan/kunjungan (per alamat) ya Bunda, jadi meskipun untuk 2 anak atau lebih (atau Bunda + si kecil), ongkirnya tetap dihitung 1 kali saja yaa 🤗\n\nMau ambil treatment apa saja untuk si kecil/Bunda?`,
+
   notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
   reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string; formatCheckout?: string }) => {

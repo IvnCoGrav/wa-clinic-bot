@@ -334,6 +334,81 @@ describe('Staff Auth & Reservation Services', () => {
       expect(tasks[1].address.estimatedMinutes).toBeGreaterThan(0);
     });
 
+    it('should fetch upcoming schedule without conversationId', async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        {
+          id: 'res-up-1',
+          treatment_detail: 'Pijat Batuk Pilek',
+          treatment_category: 'BABY',
+          booking_date: tomorrow,
+          status: 'confirmed',
+          purchase_value: 130000,
+          purchase_occurred_at: null,
+          customer: {
+            name: 'Bunda Maya',
+            lat: -7.3,
+            lng: 112.7,
+            kelurahan: 'Menur',
+            kecamatan: 'Sukolilo',
+            kota: 'Surabaya',
+            distance_km: 5.0,
+            ongkir: 20000,
+            children: [{ name: 'Adik Rafa', raw_age_text: '7 bulan', birth_date: null }],
+          },
+          children: [],
+        },
+      ]);
+
+      const upcoming = await StaffReservationService.getUpcomingSchedule('staff-1', 'default-tenant');
+      expect(upcoming).toHaveLength(1);
+      expect(upcoming[0].customerName).toBe('Bunda Maya');
+      expect(upcoming[0].conversationId).toBeNull();
+      expect(upcoming[0].pricing.totalFee).toBe(150000);
+      expect(upcoming[0].children).toHaveLength(1);
+    });
+
+    it('should fetch completed tasks with correct pricing and status', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      (prisma.reservation.findMany as any).mockResolvedValue([
+        {
+          id: 'res-done-1',
+          treatment_detail: 'Pijat Bayi Ceria & Kolik',
+          treatment_category: 'BABY',
+          booking_date: yesterday,
+          status: 'completed',
+          purchase_value: 140000,
+          purchase_occurred_at: yesterday,
+          payment_method: 'CASH',
+          customer: {
+            name: 'Bunda Ririn',
+            lat: -7.31,
+            lng: 112.72,
+            kelurahan: 'Gayungan',
+            kecamatan: 'Gayungan',
+            kota: 'Surabaya',
+            distance_km: 3.2,
+            ongkir: 15000,
+            children: [{ name: 'Baby Kenzo', raw_age_text: '5 bulan', birth_date: null }],
+          },
+          children: [],
+        },
+      ]);
+
+      const completed = await StaffReservationService.getCompletedTasks('staff-1', 'default-tenant');
+      expect(completed).toHaveLength(1);
+      expect(completed[0].customerName).toBe('Bunda Ririn');
+      expect(completed[0].status).toBe('completed');
+      expect(completed[0].pricing.paymentStatus).toBe('LUNAS');
+      expect(completed[0].pricing.paymentStatusLabel).toContain('Lunas');
+      expect(completed[0].pricing.totalFee).toBe(155000);
+      expect(completed[0].conversationId).toBeNull();
+    });
+
     it('should assert conversation ownership based on active task today', async () => {
       (prisma.conversation.findUnique as any).mockResolvedValue({
         customer_id: 'cust-1',

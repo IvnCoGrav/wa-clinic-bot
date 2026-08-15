@@ -32,6 +32,18 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/staff/completed-tasks
+   * Mengambil riwayat treatment yang sudah selesai dilakukan oleh staff.
+   */
+  fastify.get('/api/staff/completed-tasks', async (request: FastifyRequest, reply: FastifyReply) => {
+    const staffId = (request as any).staffId;
+    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+
+    const completed = await StaffReservationService.getCompletedTasks(staffId, tenantId);
+    return reply.status(200).send({ success: true, data: completed });
+  });
+
+  /**
    * GET /api/staff/conversations/:id/messages
    * Mengambil riwayat pesan percakapan khusus customer yang tugasnya aktif hari ini.
    * Dibatasi maksimal 10 bubble chat terakhir saja untuk menjaga fokus dan privasi.
