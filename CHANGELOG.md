@@ -23,10 +23,18 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - Menyediakan tombol `[ ✏️ Edit ]` / `[ + Tambah Foto Rumah & Patokan ]` langsung di dalam modal **Detail Reservasi** pada Admin Dashboard.
   - Membuka modal khusus Admin untuk mengunggah/mengganti foto rumah pasien (dari file komputer/galeri dengan kompresi otomatis), mengedit catatan patokan, serta mengatur koordinat GPS Latitude & Longitude secara manual.
   - Endpoint baru `PUT /api/admin/customers/:id/location` dengan fallback in-memory store yang otomatis memperbarui preferensi customer dan menghitung ulang jarak Haversine.
+- **Stempel / Watermark Koordinat GPS Otomatis pada Foto Rumah (`media.service.ts`, `staff-reservation.service.ts`, `customers.subroute.ts`)**:
+  - Menambahkan method `mediaService.overlayGpsBadge(buffer, info)` menggunakan `sharp` (SVG composite).
+  - Setiap foto tampak depan rumah yang diambil oleh terapis atau admin otomatis dicetak banner/badge semi-transparan di bagian bawah foto bertuliskan:
+    - 🟢 `GPS: -7.348812, 112.751623` (koordinat presisi)
+    - 📅 `Patokan / Waktu: 15 Agu 2026, 14:30 WIB`
+- **Auto-GPS 1-Langkah & Notifikasi Konfirmasi Titik Lokasi Terapis (`StaffToday.tsx`)**:
+  - Saat terapis mengambil foto kamera tampak depan rumah, browser HP langsung otomatis mengunci koordinat GPS di latar belakang (tanpa terapis harus klik 2x).
+  - Saat menekan tombol Simpan, sistem memunculkan dialog konfirmasi: *"Apakah Anda yakin saat ini sedang berada di depan/lokasi rumah pasien (Nama)? Titik koordinat GPS ini akan disimpan sebagai panduan tetap untuk kunjungan berikutnya."* untuk mencegah kesalahan titik lokasi.
 - **Kamera Langsung pada Pengiriman Gambar Live Chat Terapis (`StaffToday.tsx`)**:
   - Tombol lampirkan gambar pada input live chat terapis kini langsung membuka viewfinder kamera belakang perangkat (`<input type="file" accept="image/*" capture="environment" />`) dengan ikon kamera `<Camera />` bukan galeri.
 - **Test & Verifikasi**:
-  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (17/17 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS).
+  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (17/17 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS) — total 28/28 test PASS.
   - Build dashboard admin (`npm run build`) dan typecheck backend (`tsc --noEmit`) 100% PASS.
 
 ### Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapis

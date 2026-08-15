@@ -828,11 +828,43 @@ export const StaffToday: React.FC = () => {
       setLocHousePhotoB64(b64);
     };
     reader.readAsDataURL(file);
+
+    // Auto-fetch GPS if not yet fetched so therapist captures photo & GPS in 1 step
+    if (!locCoords && 'geolocation' in navigator && !locGettingGps) {
+      setLocGettingGps(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: Math.round(position.coords.accuracy),
+          });
+          setLocGettingGps(false);
+          toast(`📍 GPS otomatis terkunci bersama foto (akurasi ±${Math.round(position.coords.accuracy)}m)`, 'success');
+        },
+        (error) => {
+          setLocGettingGps(false);
+          console.warn('[GPS] Auto GPS failed:', error.message);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    }
   };
 
   // Submit Location & House Photo Update
   const handleSaveLocation = async () => {
     if (!updateLocationModalTask) return;
+
+    // Konfirmasi titik lokasi GPS sebelum menyimpan
+    if (locCoords) {
+      const ok = await confirm({
+        title: 'Konfirmasi Titik Lokasi Rumah Pasien',
+        message: `Apakah Anda yakin saat ini sedang berada di depan/lokasi rumah pasien (${updateLocationModalTask.customerName || 'Bunda'})? Titik koordinat GPS ini akan disimpan sebagai panduan tetap untuk kunjungan berikutnya.`,
+        confirmText: 'Ya, Saya di Lokasi Pasien',
+        cancelText: 'Batal / Cek Lagi',
+      });
+      if (!ok) return;
+    }
 
     setSubmittingLoc(true);
     try {

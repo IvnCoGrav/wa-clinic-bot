@@ -238,6 +238,63 @@ export class MediaService {
   }
 
   /**
+   * Menuliskan badge / watermark semi-transparan berisi koordinat GPS,
+   * timestamp waktu, dan catatan patokan di atas foto rumah pasien.
+   */
+  public async overlayGpsBadge(
+    buffer: Buffer,
+    info: { lat?: number | null; lng?: number | null; landmark?: string | null; timestamp?: string }
+  ): Promise<Buffer> {
+    if (info.lat == null || info.lng == null) return buffer;
+
+    try {
+      const sharp = (await import('sharp')).default;
+      const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+      const width = meta.width || 800;
+      const height = meta.height || 600;
+
+      const dateObj = new Date();
+      const timeStr =
+        info.timestamp ||
+        dateObj.toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Asia/Jakarta',
+        }) + ' WIB';
+
+      const latStr = Number(info.lat).toFixed(6);
+      const lngStr = Number(info.lng).toFixed(6);
+      const latLngText = `GPS: ${latStr}, ${lngStr}`;
+      const landmarkText = info.landmark ? `Patokan: ${info.landmark.replace(/[<>&"]/g, '')}` : '';
+      const subText = landmarkText ? `${landmarkText} · ${timeStr}` : timeStr;
+
+      const bannerHeight = 54;
+      const bannerY = height - bannerHeight;
+
+      const svgOverlay = Buffer.from(`
+        <svg width="${width}" height="${height}">
+          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="black" fill-opacity="0.65"/>
+          <circle cx="20" cy="${bannerY + 18}" r="5" fill="#00e676" />
+          <text x="32" y="${bannerY + 22}" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="bold" fill="#ffffff">${latLngText}</text>
+          <text x="32" y="${bannerY + 41}" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#e0e0e0">${subText}</text>
+        </svg>
+      `);
+
+      return await sharp(buffer, { failOn: 'none' })
+        .rotate()
+        .composite([{ input: svgOverlay, top: 0, left: 0 }])
+        .jpeg({ quality: 85 })
+        .toBuffer();
+    } catch (err: any) {
+      console.warn('[MEDIA] Gagal overlay GPS badge (tetap gunakan gambar asli):', err?.message || err);
+      return buffer;
+    }
+  }
+
+  /**
    * Mengonversi relative URL /media/... menjadi:
    * - path absolut lokal   → untuk pengiriman via WAHA (client membaca file langsung)
    * - URL publik penuh     → untuk pengiriman via WABA (Meta fetch link)
