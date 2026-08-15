@@ -95,6 +95,11 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
         });
 
         if (staff && (await verifyPassword(inputKey, staff.password_hash))) {
+          if (staff.role !== 'THERAPIST') {
+            return reply.status(403).send({
+              error: `Akun "${staff.name}" adalah Staf Admin (${staff.role}) dan tidak boleh login memakai nomor HP. Gunakan email super admin, atau minta pengelola mengubah peran akun menjadi Terapis.`,
+            });
+          }
           loginAttemptsMap.delete(ip);
 
           const result = await StaffAuthService.login(staff.phone, inputKey, DEFAULT_TENANT_ID);
@@ -104,7 +109,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
             }`;
             reply.header('Set-Cookie', cookieValue);
 
-            const staffRole = staff.role; // 'THERAPIST' | 'ADMIN_CS' | 'ADVERTISER' | Custom
+            const staffRole: string = staff.role; // 'THERAPIST' | 'ADMIN_CS' | 'ADVERTISER' | Custom
             const redirectTo = staffRole === 'THERAPIST' ? '/admin/staff/today' : '/admin/overview';
             const frontendRole =
               staffRole === 'THERAPIST'
