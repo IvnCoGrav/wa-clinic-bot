@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -7,6 +7,8 @@ import { UiFeedbackProvider } from './components/common/UiFeedback';
 import { StaffAuthProvider } from './contexts/StaffAuthContext';
 import { StaffProtectedRoute } from './components/staff/StaffProtectedRoute';
 import { Login } from './pages/auth/Login';
+import { BootProgress } from './components/common/BootProgress';
+import { emitBootPhase } from './lib/bootProgress';
 
 // Lazy load pages for fast initial bundle sizes (code-splitting rationale)
 const Overview = lazy(() => import('./pages/tenant/Overview').then(m => ({ default: m.Overview })));
@@ -36,6 +38,9 @@ const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then
 /** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. */
 const IndexRedirect: React.FC = () => {
   const { user, loading } = useAuth();
+  useEffect(() => {
+    if (!loading && !user) emitBootPhase('done');
+  }, [loading, user]);
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
@@ -51,6 +56,7 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <AuthProvider>
         <UiFeedbackProvider>
+        <BootProgress />
         <Suspense fallback={
           <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>

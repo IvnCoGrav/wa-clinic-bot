@@ -4,6 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Boot Progress Bar & Retry Lebih Responsif (Mobile)
+
+- **`BootProgress`** (`packages/admin-dashboard/src/components/common/BootProgress.tsx` + `lib/bootProgress.ts`): bar progress 0-100% tipis ala YouTube + teks status ("Memeriksa sesi…", "Memuat halaman…", dst). Bukan fake murni — fase digerakkan event nyata (`auth`/`chunk`/`mount`/`data`) + creep anti-beku (cap 92%) supaya tidak pernah tampak macet. Hanya muncul saat boot pertama PWA; navigasi antar halaman tetap pakai spinner lama.
+- **Retry backoff adaptif** (AuthContext & StaffAuthContext): ganti `setTimeout 5s` datar → `[1s, 2.5s, 5s, 8s]`; skip percobaan saat `navigator.onLine=false` (tunggu event `online`, fallback timer); guard `inFlight` mencegah checkAuth ganda saat open (mount + visibilitychange). Setelah 3 kegagalan, teks bar jadi "Koneksi bermasalah — mencoba lagi…". Dampak: worst-case 3 percobaan turun dari ~15s → ~8.5s; kasus gagal-1x dari ~10s → ~4-5s.
+- **Preload chunk paralel**: role terakhir disimpan di localStorage saat login; saat boot, chunk halaman tujuan (`StaffToday` untuk terapis / `Overview` lainnya) di-preload **paralel** dengan cek sesi → hemat 1 RTT + download di bukaan pertama.
+
 ### Added & Improved — Sesi Survive PWA Android (Tidak Logout Saat Tutup Aplikasi)
 
 - **Akar masalah**: Cookie `staff_session`/`admin_session` bisa hilang dari browser saat aplikasi PWA Android ditutup/di-swipe dari Recents (perilaku browser — cookie dianggap session-scoped di standalone window), padahal sesi di server masih valid 30 hari.

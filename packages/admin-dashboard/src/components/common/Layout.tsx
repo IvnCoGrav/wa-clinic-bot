@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
+import { emitBootPhase } from '../../lib/bootProgress';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
@@ -40,6 +41,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [wahaStatus, setWahaStatus] = useState<string>('UNKNOWN');
   const [redisQueueFallback, setRedisQueueFallback] = useState<boolean>(false);
   const [capiPendingCount, setCapiPendingCount] = useState<number>(0);
+
+  useEffect(() => {
+    emitBootPhase('mount');
+  }, []);
 
   useEffect(() => {
     async function fetchSystemHealth() {
