@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Changed — Notifikasi Login Staf Admin & Penyederhanaan Tabel Staff Management
+
+- **Pesan error spesifik untuk login staf non-Terapis** (`admin/auth.subroute.ts` TAHAP B & `staff/auth.subroute.ts`): jika nomor HP + password benar tetapi role akun bukan `THERAPIST` (mis. ADMIN_CS), server kini membalas **403** dengan notifikasi jelas — *"Akun ... adalah Staf Admin dan tidak boleh login memakai nomor HP. Gunakan email super admin, atau minta pengelola mengubah peran akun menjadi Terapis."* — menggantikan pesan generik "Email / Nomor WhatsApp atau password salah." yang membingungkan. Akun dengan kredensial salah tetap mendapat 401 generik (tidak membocorkan keberadaan akun).
+- **Tabel Staff Management disederhanakan** (`StaffManagement.tsx`):
+  - Kolom **Tugas Reservasi** dihapus.
+  - **Icon/avatar di samping nama** dihapus; status akun kini ditandai **dot hijau** di kiri nama saat aktif (dot abu-abu saat nonaktif) — kolom "Status Akun" dihapus.
+  - Aksi **Reset Password** & **Nonaktifkan/Aktifkan Akun** tidak lagi ada di tabel — fungsinya tersedia di **modal Edit** (kolom Password Baru & dropdown Status Akun yang sudah ada). Tabel kini hanya berisi Edit & Hapus. Modal Reset Password terpisah dihapus.
+- Test: `unified-login.test.ts` (ADMIN_CS & ADVERTISER → 403 notifikasi), `staff-routes.test.ts` (403 untuk staff non-THERAPIST dengan password valid).
+
 ### Fixed — Enforce Role THERAPIST untuk Portal Terapis (Akses Tidak Bisa Bocor ke Role Lain)
 
 - **Akar masalah**: portal staff (`/api/staff/*`) tidak pernah memeriksa role — akun non-THERAPIST (mis. ADMIN_CS) yang sudah punya sesi tetap bisa mengakses data & chat terapis, dan "Role & Hak Akses" yang dihapus di dashboard hanya tersimpan di localStorage browser (klien-only, tidak menyentuh server).

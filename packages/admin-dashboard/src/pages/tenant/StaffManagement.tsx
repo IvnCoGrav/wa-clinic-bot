@@ -6,14 +6,9 @@ import {
   UserPlus,
   Phone,
   Lock,
-  CheckCircle2,
-  XCircle,
-  KeyRound,
   Sparkles,
-  Calendar,
   Pencil,
   Trash2,
-  Power,
   Shield,
   ShieldCheck,
   UserCheck,
@@ -77,11 +72,6 @@ export const StaffManagement: React.FC = () => {
   const [editPassword, setEditPassword] = useState('');
   const [editActive, setEditActive] = useState(true);
   const [savingEdit, setSavingEdit] = useState(false);
-
-  // Modal Reset Password State
-  const [selectedStaffForPassword, setSelectedStaffForPassword] = useState<StaffItem | null>(null);
-  const [newPassword, setNewPassword] = useState('');
-  const [resettingPassword, setResettingPassword] = useState(false);
 
   // Modal Create / Edit Role State
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -264,60 +254,6 @@ export const StaffManagement: React.FC = () => {
       }
     } catch (err: any) {
       toast(`Gagal menghapus staff: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    }
-  };
-
-  const handleToggleActive = async (staff: StaffItem) => {
-    const nextStatus = !staff.active;
-    const actionLabel = nextStatus ? 'Mengaktifkan' : 'Menonaktifkan';
-
-    const confirmed = await confirm({
-      title: `${actionLabel} Akun Staff`,
-      message: nextStatus
-        ? `Apakah Anda yakin ingin mengaktifkan kembali akun "${staff.name}"? Staff akan dapat login ke portal.`
-        : `Apakah Anda yakin ingin menonaktifkan akun "${staff.name}"? Seluruh sesi aktif staff akan dicabut seketika dan staff tidak dapat login lagi.`,
-      confirmText: nextStatus ? 'Aktifkan' : 'Nonaktifkan',
-      cancelText: 'Batal',
-      danger: !nextStatus,
-    });
-
-    if (!confirmed) return;
-
-    try {
-      const res = await apiRequest(`/api/admin/staff/${staff.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: nextStatus }),
-      });
-
-      if (res.success) {
-        toast(`Akun "${staff.name}" berhasil di${nextStatus ? 'aktifkan' : 'nonaktifkan'}.`, 'success');
-        fetchStaff();
-      }
-    } catch (err: any) {
-      toast(`Gagal mengubah status staff: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStaffForPassword || !newPassword.trim()) return;
-
-    setResettingPassword(true);
-    try {
-      const res = await apiRequest(`/api/admin/staff/${selectedStaffForPassword.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ password: newPassword.trim() }),
-      });
-
-      if (res.success) {
-        toast(`Password untuk "${selectedStaffForPassword.name}" berhasil diubah dan sesi aktif telah dicabut.`, 'success');
-        setSelectedStaffForPassword(null);
-        setNewPassword('');
-      }
-    } catch (err: any) {
-      toast(`Gagal mereset password: ${err.message || 'Terjadi kesalahan'}`, 'error');
-    } finally {
-      setResettingPassword(false);
     }
   };
 
@@ -661,22 +597,20 @@ export const StaffManagement: React.FC = () => {
                     <th className="px-5 py-3.5">Nama Staff</th>
                     <th className="px-5 py-3.5">Nomor WhatsApp</th>
                     <th className="px-5 py-3.5">Peran / Hak Akses</th>
-                    <th className="px-5 py-3.5">Tugas Reservasi</th>
-                    <th className="px-5 py-3.5">Status Akun</th>
                     <th className="px-5 py-3.5 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e9edef]">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={4} className="px-5 py-12 text-center text-[#667781]">
                         <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
                         <p className="text-xs">Memuat data staff...</p>
                       </td>
                     </tr>
                   ) : filteredStaffList.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={4} className="px-5 py-12 text-center text-[#667781]">
                         <Users size={36} className="mx-auto text-[#8696a0] mb-2" />
                         <p className="font-bold text-[#111b21]">Tidak ada akun staff yang cocok</p>
                         <p className="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau filter peran.</p>
@@ -688,9 +622,12 @@ export const StaffManagement: React.FC = () => {
                         {/* Name */}
                         <td className="px-5 py-3.5 font-bold text-[#111b21]">
                           <div className="flex items-center space-x-2.5">
-                            <div className="h-8 w-8 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] flex items-center justify-center font-bold text-xs">
-                              {staff.name.charAt(0).toUpperCase()}
-                            </div>
+                            <span
+                              className={`h-2 w-2 rounded-full shrink-0 ${
+                                staff.active ? 'bg-emerald-500' : 'bg-[#d1d7db]'
+                              }`}
+                              title={staff.active ? 'Akun aktif' : 'Akun nonaktif'}
+                            />
                             <span>{staff.name}</span>
                           </div>
                         </td>
@@ -705,29 +642,6 @@ export const StaffManagement: React.FC = () => {
                           {getRoleBadge(staff.role)}
                         </td>
 
-                        {/* Assigned Reservations */}
-                        <td className="px-5 py-3.5 text-xs text-[#54656f]">
-                          <div className="flex items-center space-x-1.5">
-                            <Calendar size={13} className="text-[#8696a0]" />
-                            <span>{staff._count?.reservations || 0} Reservasi</span>
-                          </div>
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-5 py-3.5">
-                          {staff.active ? (
-                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              <CheckCircle2 size={12} />
-                              <span>Aktif</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">
-                              <XCircle size={12} />
-                              <span>Nonaktif</span>
-                            </span>
-                          )}
-                        </td>
-
                         {/* Actions */}
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end space-x-1">
@@ -738,31 +652,6 @@ export const StaffManagement: React.FC = () => {
                               title="Edit Data Staff"
                             >
                               <Pencil size={13} />
-                            </button>
-
-                            {/* Reset password button */}
-                            <button
-                              onClick={() => {
-                                setSelectedStaffForPassword(staff);
-                                setNewPassword('');
-                              }}
-                              className="p-1.5 rounded-xl bg-white hover:bg-amber-50 text-[#54656f] hover:text-amber-700 transition-colors border border-[#d1d7db] shadow-xs"
-                              title="Reset Password"
-                            >
-                              <KeyRound size={13} />
-                            </button>
-
-                            {/* Toggle active button */}
-                            <button
-                              onClick={() => handleToggleActive(staff)}
-                              className={`p-1.5 rounded-xl transition-colors border shadow-xs ${
-                                staff.active
-                                  ? 'bg-white hover:bg-rose-50 text-[#54656f] hover:text-rose-600 border-[#d1d7db]'
-                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-                              }`}
-                              title={staff.active ? 'Nonaktifkan Akun' : 'Aktifkan Akun'}
-                            >
-                              <Power size={13} />
                             </button>
 
                             {/* Delete button */}
@@ -1418,68 +1307,6 @@ export const StaffManagement: React.FC = () => {
                   className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-bold text-xs shadow-xs disabled:opacity-50 transition-all active:scale-95"
                 >
                   {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL: RESET PASSWORD */}
-      {/* ========================================================================= */}
-      {selectedStaffForPassword && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
-                <KeyRound className="text-amber-600" size={18} />
-                <span>Reset Password Staff</span>
-              </h3>
-              <button
-                onClick={() => setSelectedStaffForPassword(null)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-[#54656f]">
-              Ubah kata sandi untuk akun <strong className="text-[#111b21]">{selectedStaffForPassword.name}</strong> ({selectedStaffForPassword.phone}). Sesi aktif staff akan langsung dicabut setelah password diganti.
-            </p>
-
-            <form onSubmit={handleResetPassword} className="space-y-3.5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Password Baru</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
-                    <Lock size={14} />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimal 6 karakter"
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-[#e9edef] flex items-center justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedStaffForPassword(null)}
-                  className="px-4 py-2 rounded-xl text-[#54656f] hover:bg-[#f0f2f5] text-xs font-semibold transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={resettingPassword}
-                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-bold text-xs shadow-xs disabled:opacity-50 transition-all active:scale-95"
-                >
-                  {resettingPassword ? 'Menyimpan...' : 'Ganti Password'}
                 </button>
               </div>
             </form>
