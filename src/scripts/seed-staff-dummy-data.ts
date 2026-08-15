@@ -74,60 +74,9 @@ async function main() {
   };
 
   const dummyPatients = [
-    // --- HARI INI ---
+    // --- HARI INI (2 data dummy, nama ditandai TEST, ditugaskan ke Bidan Yusi) ---
     {
-      name: 'Bunda Aurel',
-      phone: '085711110001',
-      kelurahan: 'Gayungan',
-      kecamatan: 'Gayungan',
-      kota: 'Surabaya',
-      lat: -7.3275,
-      lng: 112.7292,
-      distance: 2.5,
-      ongkir: 15000,
-      purchaseValue: 185000,
-      isLunas: true,
-      childName: 'Kenzo',
-      childAge: '6 bulan',
-      category: 'BABY' as const,
-      treatment: 'Pijat Bayi Ceria + Kolam Renang Bayi',
-      time: getTodayAtHour(9, 0),
-      rawChat: 'Halo bidan, mau booking pijat bayi ceria untuk adek Kenzo 6 bulan jam 9 pagi ya.',
-      chatHistory: [
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Halo Bidan, mau tanya treatment pijat untuk bayi 6 bulan ada apa saja ya?' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Halo Bunda Aurel! Untuk adik Kenzo usia 6 bulan, kami sangat merekomendasikan paket Pijat Bayi Ceria untuk relaksasi dan stimulasi motorik. Ada juga kolam renang bayi (baby swim) bun 😊' },
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Wah mau ambil Pijat Bayi Ceria + Kolam Renang Bayi ya bund, jadwal jam 09.00 pagi ini bisa?' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Bisa Bunda! Reservasi jam 09:00 WIB sudah kami catat dan terapis Bidan Dewi yang akan berkunjung ke rumah Bunda di Gayungan ya 🥰' },
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Siap bu bidan, ditunggu ya, sudah saya share lokasi google maps nya.' },
-      ],
-    },
-    {
-      name: 'Bunda Nisa',
-      phone: '085711110002',
-      kelurahan: 'Tropodo',
-      kecamatan: 'Waru',
-      kota: 'Sidoarjo',
-      lat: -7.3614,
-      lng: 112.7592,
-      distance: 3.8,
-      ongkir: 20000,
-      purchaseValue: 165000,
-      isLunas: false,
-      childName: 'Arka',
-      childAge: '10 bulan',
-      category: 'BABY' as const,
-      treatment: 'Pijat Lahap Juara (Terapi Nafsu Makan & Susah Makan)',
-      time: getTodayAtHour(11, 0),
-      rawChat: 'Bunda mau ambil paket Pijat Lahap Juara untuk adik Arka 10 bulan jam 11 siang di Tropodo.',
-      chatHistory: [
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Siang bu bidan, anak saya Arka lagi GTM parah susah makan. Ada pijat khusus nafsu makan?' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Siang Bunda Nisa! Ada Bunda, paket Pijat Lahap Juara dengan teknik akupresur pencernaan untuk merangsang nafsu makan dan melancarkan metabolisme si kecil.' },
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Boleh booked jam 11.00 siang ini ya bund di Tropodo Waru.' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Baik Bunda Nisa, jadwal jam 11:00 WIB sudah dikonfirmasi. Tim Bidan Dewi siap meluncur ke lokasi Bunda 🤗' },
-      ],
-    },
-    {
-      name: 'Bunda Clara',
+      name: 'TEST Bunda Alika',
       phone: '085711110003',
       kelurahan: 'Rungkut Menanggal',
       kecamatan: 'Gunung Anyar',
@@ -146,13 +95,13 @@ async function main() {
       rawChat: 'Mau reservasi terapi bapil + nebulizer untuk bayi Alika 4 bulan jam 13.30.',
       chatHistory: [
         { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Bidan, adek Alika nafasnya grok-grok dan pilek dari kemarin, bisa dibantu terapi uap?' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Waalaikumsalam Bunda Clara. Bisa sekali bun, kami ada paket Terapi Bapil (Pijat Dada/Punggung + Nebulizer Steril + Sinar Infra Red) untuk mengencerkan lendir dan melegakan nafas si kecil.' },
+        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Waalaikumsalam Bunda Alika. Bisa sekali bun, kami ada paket Terapi Bapil (Pijat Dada/Punggung + Nebulizer Steril + Sinar Infra Red) untuk mengencerkan lendir dan melegakan nafas si kecil.' },
         { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Tolong booked jam 13.30 ya bidan, kasian adek rewel terus.' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Siap Bunda Clara! Jadwal jam 13:30 WIB telah kami jadwalkan bersama Bidan Dewi.' },
+        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Siap Bunda Alika! Jadwal jam 13:30 WIB telah kami jadwalkan bersama Bidan Yusi.' },
       ],
     },
     {
-      name: 'Bunda Dinda',
+      name: 'TEST Bunda Dinda',
       phone: '085711110004',
       kelurahan: 'Sedati Agung',
       kecamatan: 'Sedati',
@@ -173,95 +122,8 @@ async function main() {
         { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Sore Bu Bidan, perut adik Rayyan keras kembung dan belum BAB 2 hari.' },
         { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Sore Bunda Dinda. Gejala kembung & kolik bisa dibantu dengan Pijat Pulih Ceria (teknik I Love You massage & gowes kaki) dengan minyak herbal telon khusus.' },
         { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Oke bund ambil jam 15.30 sore ya di Sedati Agung Sidoarjo.' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Jadwal jam 15:30 WIB terkonfirmasi ya Bunda Dinda. Nanti Bidan Dewi yang akan berkunjung.' },
+        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Jadwal jam 15:30 WIB terkonfirmasi ya Bunda Dinda. Nanti Bidan Yusi yang akan berkunjung.' },
       ],
-    },
-    {
-      name: 'Bunda Maya',
-      phone: '085711110005',
-      kelurahan: 'Ketintang',
-      kecamatan: 'Gayungan',
-      kota: 'Surabaya',
-      lat: -7.3115,
-      lng: 112.7275,
-      distance: 3.1,
-      ongkir: 18000,
-      purchaseValue: 265000,
-      isLunas: true,
-      childName: 'Zio',
-      childAge: '12 bulan',
-      category: 'BOTH' as const,
-      treatment: 'Paket Bundling: Pijat Relaksasi Bunda & Pijat Bayi Ceria',
-      time: getTodayAtHour(17, 0),
-      rawChat: 'Paket combo pijat bunda dan pijat anak Zio jam 17.00 di Ketintang.',
-      chatHistory: [
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Halo kak, ada paket combo pijat buat bunda sekaligus anak?' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Ada Bunda Maya! Paket Bundling Mom & Baby: Bunda dapat relaksasi full body massage / totok wajah, dan si kecil Zio dapat Pijat Bayi Ceria.' },
-        { direction: 'INBOUND' as const, sender_type: 'CUSTOMER', content: 'Mau yang paket combo ya bund untuk jam 17.00 sore nanti di Ketintang.' },
-        { direction: 'OUTBOUND' as const, sender_type: 'BOT', sender_name: 'Klinik Bot', content: 'Baik Bunda Maya! Reservasi jam 17:00 WIB sudah siap dan ditugaskan ke Bidan Dewi. Sampai jumpa sore nanti ya Bunda!' },
-      ],
-    },
-
-    // --- JADWAL MENDATANG (BESOK & LUSA) ---
-    {
-      name: 'Bunda Riska',
-      phone: '085711110006',
-      kelurahan: 'Sawunggaling',
-      kecamatan: 'Wonokromo',
-      kota: 'Surabaya',
-      lat: -7.2985,
-      lng: 112.7312,
-      distance: 4.8,
-      ongkir: 25000,
-      purchaseValue: 195000,
-      isLunas: true,
-      childName: 'Fabian',
-      childAge: '8 bulan',
-      category: 'BABY' as const,
-      treatment: 'Terapi Batuk Pilek + Inhalasi Nebulizer',
-      time: getFutureDateAtHour(1, 9, 30), // Besok 09:30
-      rawChat: 'Booking untuk besok pagi jam 09.30 terapi bapil anak Fabian ya.',
-      chatHistory: [],
-    },
-    {
-      name: 'Bunda Putri',
-      phone: '085711110007',
-      kelurahan: 'Kepuhkiriman',
-      kecamatan: 'Waru',
-      kota: 'Sidoarjo',
-      lat: -7.3521,
-      lng: 112.7482,
-      distance: 3.5,
-      ongkir: 20000,
-      purchaseValue: 180000,
-      isLunas: false,
-      childName: 'Mikael',
-      childAge: '5 bulan',
-      category: 'BABY' as const,
-      treatment: 'Pijat Bayi Ceria + Baby Gym Stimulasi Motorik',
-      time: getFutureDateAtHour(1, 14, 0), // Besok 14:00
-      rawChat: 'Mau pesan pijat bayi besok siang jam 2 ya bidan.',
-      chatHistory: [],
-    },
-    {
-      name: 'Bunda Sarah',
-      phone: '085711110008',
-      kelurahan: 'Penjaringan Sari',
-      kecamatan: 'Rungkut',
-      kota: 'Surabaya',
-      lat: -7.3198,
-      lng: 112.7845,
-      distance: 5.6,
-      ongkir: 30000,
-      purchaseValue: 220000,
-      isLunas: false,
-      childName: 'Noah',
-      childAge: '9 bulan',
-      category: 'BABY' as const,
-      treatment: 'Pijat Stimulasi Duduk & Merangkak Aktif',
-      time: getFutureDateAtHour(2, 10, 0), // Lusa 10:00
-      rawChat: 'Reservasi lusa jam 10 pagi stimulasi merangkak.',
-      chatHistory: [],
     },
   ];
 
@@ -357,7 +219,7 @@ async function main() {
       }
     }
 
-    // 6. Create Reservation assigned to Bidan Dewi
+    // 6. Create Reservation assigned to Bidan Yusi
     await prisma.reservation.deleteMany({
       where: { customer_id: customer.id },
     });
@@ -371,7 +233,7 @@ async function main() {
         booking_date: item.time,
         raw_text: item.rawChat,
         status: 'confirmed',
-        assigned_staff_id: staffDewi.id,
+        assigned_staff_id: staffYusi.id,
         purchase_value: item.purchaseValue,
         purchase_occurred_at: item.isLunas ? new Date(Date.now() - 3600000) : null,
       },
@@ -384,7 +246,7 @@ async function main() {
       } ${item.time.toLocaleTimeString('id-ID', {
         hour: '2-digit',
         minute: '2-digit',
-      })} WIB | GPS: ${item.lat}, ${item.lng} -> Assigned to ${staffDewi.name}`
+      })} WIB | GPS: ${item.lat}, ${item.lng} -> Assigned to ${staffYusi.name}`
     );
   }
 

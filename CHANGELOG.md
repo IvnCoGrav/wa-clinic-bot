@@ -4,14 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Added — Sequential Homecare Distance Calculation for Therapist Itinerary (Haversine 0-API)
+### Added — Manajemen Role & Setup Hak Akses Modul Dashboard (RBAC) Terpadu
 
-- **Kalkulasi Jarak Sekuensial Berantai (`src/services/staff-reservation.service.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+- **Fitur Setup Role & Hak Akses di Manajemen Staff (`packages/admin-dashboard/src/pages/tenant/StaffManagement.tsx`, `packages/admin-dashboard/src/config/rolePermissions.ts`)**:
+  - **Tombol & Tab Setup Hak Akses**: Menambahkan tombol `+ Setup Role & Hak Akses` di header serta dual-tab switcher `[ Daftar Akun Pengguna | Setup Hak Akses & Role (RBAC) ]`.
+  - **Kartu Ringkasan Role Dinamis**: Menampilkan kartu ringkasan untuk seluruh role bawaan (`Super Admin`, `Admin Utama`, `Admin CS & Reservasi`, `Advertiser`, `Staff Terapis`) maupun custom role, lengkap dengan counter anggota aktif dan perbandingan modul yang diizinkan.
+  - **Matriks Izin Modul Interaktif (Interactive Permission Matrix)**:
+    - Menyusun 19 modul dashboard ke dalam 5 kelompok logis (*Dashboard & Pelanggan*, *Operasional & Jadwal*, *CRM & Komunikasi*, *Marketing & Ads*, *AI Engine & Sistem*).
+    - Checkbox interaktif per modul dan tombol toggle instan *Pilih Semua / Batal Semua* per kategori dengan live synchronization.
+  - **Modal Tambah & Edit Role Kustom**: Memungkinkan admin klinik membuat peran baru (misal: *Supervisor*, *Finance*, *Admin Gudang*) dengan checklist izin modul dan halaman redirect kustom.
+  - **Dynamic Role Selector**: Dropdown pemilihan peran pada modal Buat Staff Baru dan Edit Staff otomatis membaca seluruh peran kustom yang aktif secara dinamis.
+
+### Added — Sequential Homecare Distance & Travel Duration Calculation for Therapist Itinerary (Haversine 0-API)
+
+- **Kalkulasi Jarak Sekuensial Berantai & Estimasi Waktu Tempuh Motor (`src/services/staff-reservation.service.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
   - Mengubah logika perhitungan jarak pada kartu tugas terapis (*Staff Today & Jadwal Mendatang*) agar mengikuti rute nyata terapis di lapangan:
     - **Pasien #1**: Menghitung jarak dari **Klinik / Basecamp** ke rumah Pasien 1 (`📍 Jarak: X km dari klinik`).
-    - **Pasien #2, #3, dst**: Menghitung jarak dari **titik lokasi pasien sebelumnya** ke rumah pasien saat ini (`🛵 Jarak: X km dari pasien sebelumnya (Bunda Aurel)`).
+    - **Pasien #2, #3, dst**: Menghitung jarak dari **titik lokasi pasien sebelumnya** ke rumah pasien saat ini (`🛵 Jarak: X km dari Bunda [Nama Pasien Sebelumnya]`).
   - Menggunakan formula **Haversine lokal murni (0 API Call / 0 Biaya Kuota)** yang dikalikan dengan faktor kelokan rute perkotaan (`HAVERSINE_CIRCUITY_FACTOR = 1.60x`).
-  - Menyertakan *fallback cerdas*: Jika pasien sebelumnya belum memiliki koordinat GPS, sistem otomatis menghitung ulang jarak dari titik klinik.
+  - **Estimasi Waktu Tempuh Motor Terkalibrasi**:
+    - Dikalibrasi langsung dari benchmark Google Maps motor perkotaan (`~2.05 menit/km + 2 menit buffer lampu merah/gang`).
+    - Menampilkan durasi perjalanan langsung di kartu tugas (misal: `Jarak: 11.0 km dari klinik (±25 mnt perjalanan)`).
+  - Menyertakan *fallback cerdas*: Jika pasien sebelumnya belum memiliki koordinat GPS, sistem otomatis menghitung ulang jarak & durasi dari titik klinik.
   - Memperbarui antarmuka kartu tugas dan jadwal mendatang di portal terapis dengan visual badge yang informatif.
 
 ### Added — UI Kalender Modern (Week/Day/Month/Table) & Modal Buat Jadwal Baru Terpadu dengan Searchable Service Catalog

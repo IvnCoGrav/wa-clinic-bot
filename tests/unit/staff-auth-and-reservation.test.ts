@@ -278,12 +278,13 @@ describe('Staff Auth & Reservation Services', () => {
       expect(tasks[0].address.distanceSource).toBe('CLINIC');
       expect(tasks[0].address.originName).toBe('Kala Moms and Baby Spa');
       expect(tasks[0].address.distanceKm).toBe(2.5);
+      expect(tasks[0].address.estimatedMinutes).toBe(7); // 2.5 * 2.05 + 2 = 7.125 -> 7 min
 
       // Patient 2: From Patient 1 (Bunda Aurel)
       expect(tasks[1].address.distanceSource).toBe('PREVIOUS_PATIENT');
       expect(tasks[1].address.originName).toBe('Bunda Aurel');
       expect(tasks[1].address.distanceKm).toBeGreaterThan(0);
-      expect(tasks[1].address.distanceKm).toBeLessThan(tasks[1].address.distanceKm! + 5);
+      expect(tasks[1].address.estimatedMinutes).toBeGreaterThan(0);
     });
 
     it('should assert conversation ownership based on active task today', async () => {
