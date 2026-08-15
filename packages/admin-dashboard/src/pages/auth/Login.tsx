@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Lock, User, AlertTriangle } from 'lucide-react';
 import { BRAND } from '../../config/brand';
+import { emitBootPhase } from '../../lib/bootProgress';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
@@ -11,6 +12,10 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    emitBootPhase('done');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

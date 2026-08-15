@@ -34,6 +34,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { emitBootPhase } from '../../lib/bootProgress';
 
 interface StaffTaskChild {
   name: string;
@@ -153,6 +154,11 @@ export const StaffToday: React.FC = () => {
 
   selectedTaskRef.current = selectedTask;
 
+  // Tandai boot progress: halaman portal staff sudah tampil
+  useEffect(() => {
+    emitBootPhase('mount');
+  }, []);
+
   // Format booking time
   const formatTime = (isoString: string | null) => {
     if (!isoString) return '-';
@@ -217,7 +223,10 @@ export const StaffToday: React.FC = () => {
     } catch (err: any) {
       if (!isPolling) setErrorMessage(err.message || 'Gagal memuat jadwal tugas.');
     } finally {
-      if (!isPolling) setLoading(false);
+      if (!isPolling) {
+        setLoading(false);
+        emitBootPhase('data');
+      }
     }
   }, []);
 
