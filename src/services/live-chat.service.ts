@@ -158,8 +158,15 @@ export class LiveChatService {
     tenantId: string;
     adminName?: string;
     acknowledgeOutsideWindow?: boolean;
+    /**
+     * Paksa eskalasi ke HUMAN_HANDLING (bot diam) walaupun
+     * tenant.manual_reply_escalates nonaktif. Dipakai saat balasan
+     * berasal dari Staff/Bidan (bukan admin bot) — balasan terapis WAJIB
+     * menonaktifkan bot agar tidak membalas menyela percakapan.
+     */
+    forceEscalate?: boolean;
   }): Promise<AdminReplyResult> {
-    const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow } = params;
+    const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate } = params;
 
     const hasText = !!text && !!text.trim();
     const hasImage = !!imageB64;
@@ -274,11 +281,13 @@ export class LiveChatService {
       payloadRaw: mediaMeta ? { media: mediaMeta } : undefined,
     });
 
-    // Auto-escalation: balasan admin menandakan percakapan ditangani manusia
+    // Auto-escalation: balasan admin menandakan percakapan ditangani manusia.
+    // forceEscalate=true (balasan Staff/Bidan) selalu mengaktifkan mode human,
+    // sehingga bot tidak ikut membalas di tengah percakapan terapis.
     let updated: any = conversation;
     if (conversation.is_human_handling) {
       updated = await conversationService.resetHumanHandlingTimer(conversationId, tenantId);
-    } else if (await this.getManualReplyEscalates(tenantId)) {
+    } else if (forceEscalate || (await this.getManualReplyEscalates(tenantId))) {
       updated = await conversationService.escalateToHumanHandling(
         conversation,
         customer.phone,

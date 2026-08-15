@@ -758,14 +758,14 @@ export const Settings: React.FC = () => {
       {/* Daily Ops Report Settings Panel */}
       <DailyReportPanel />
 
-      {/* Install App (PWA) */}
-      <InstallAppPanel />
-
       {/* Remaining panels: Global Toggle + Branch Picker + Delivery Tiers + Broadcast */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Left column: Global Bot Toggle + Branch picker */}
+        {/* Left column: Install App + Global Bot Toggle + Branch picker */}
         <div className="space-y-6">
+
+          {/* Install App (PWA) — setengah lebar, di atas Global Chatbot Toggle */}
+          <InstallAppPanel />
 
           {/* Bot ON/OFF Toggle */}
           <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
@@ -886,7 +886,7 @@ export const Settings: React.FC = () => {
 
             <div className="space-y-2.5">
               {ongkirTiers.map((tier, idx) => (
-                <div key={tier.id} className="grid grid-cols-4 gap-2 items-end">
+                <div key={tier.id} className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
                   <div className="space-y-1">
                     <label className="text-[10px] text-[#667781] block uppercase font-bold">Max Dist (km)</label>
                     <input
@@ -926,10 +926,26 @@ export const Settings: React.FC = () => {
                       className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-[#667781] block uppercase font-bold">Ongkir Jadi (Rp)</label>
+                    <div
+                      className={`w-full p-2 rounded-lg text-xs font-bold text-center shadow-xs ${
+                        (tier.fee || 0) - (tier.promoDiscount || 0) <= 0
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                          : 'bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069]'
+                      }`}
+                    >
+                      {Math.max(0, (tier.fee || 0) - (tier.promoDiscount || 0)) === 0
+                        ? 'GRATIS'
+                        : (tier.fee || 0) - (tier.promoDiscount || 0) >= 1000000
+                        ? `Rp ${((tier.fee || 0) - (tier.promoDiscount || 0)) / 1000000}jt`
+                        : `Rp ${Math.max(0, (tier.fee || 0) - (tier.promoDiscount || 0))}`}
+                    </div>
+                  </div>
+                  <div className="flex space-x-2 items-end pb-1">
                     <button
                       onClick={() => { setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id)); }}
-                      className="p-2 w-full rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex justify-center items-center shadow-xs"
+                      className="p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex justify-center items-center shadow-xs"
                       title="Hapus Tier"
                     >
                       <Trash size={12} />

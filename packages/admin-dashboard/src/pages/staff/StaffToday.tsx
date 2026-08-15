@@ -130,6 +130,7 @@ export const StaffToday: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -155,6 +156,7 @@ export const StaffToday: React.FC = () => {
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
 
   selectedTaskRef.current = selectedTask;
 
@@ -445,13 +447,64 @@ export const StaffToday: React.FC = () => {
   }, []);
 
   // Send reply message
+  const fileToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+      reader.readAsDataURL(file);
+    });
+
+  const makeThumbnail = (dataUrl: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 480;
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('no ctx');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Gagal memproses gambar.'));
+      img.src = dataUrl;
+    });
+
+  const handlePickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Hanya file gambar yang didukung.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMessage('Gambar maksimal 8 MB.');
+      return;
+    }
+    setSelectedImage({ file, preview: URL.createObjectURL(file) });
+    if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+  };
+
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyText.trim() || !selectedTask?.conversationId || sending) return;
+    const image = selectedImage;
+    if ((!replyText.trim() && !image) || !selectedTask?.conversationId || sending) return;
 
     const textToSend = replyText.trim();
     const signature = `~ ${staff?.name || 'Bidan Terapis'}`;
-    const optimisticContent = textToSend.endsWith(signature) ? textToSend : `${textToSend}\n\n${signature}`;
+    const hasText = !!textToSend;
+    const optimisticContent = hasText
+      ? textToSend.endsWith(signature) ? textToSend : `${textToSend}\n\n${signature}`
+      : '[Image]';
 
     setSending(true);
     setErrorMessage(null);
@@ -461,6 +514,7 @@ export const StaffToday: React.FC = () => {
       id: tempId,
       direction: 'OUTBOUND',
       content: optimisticContent,
+      media: image ? { url: image.preview, hdUrl: image.preview } : undefined,
       sender_type: 'STAFF',
       sender_name: staff?.name || 'Staff',
       created_at: new Date().toISOString(),
@@ -468,11 +522,21 @@ export const StaffToday: React.FC = () => {
 
     setMessages((prev) => [...prev, optimisticMsg].slice(-10));
     setReplyText('');
+    setSelectedImage(null);
 
     try {
+      const body: Record<string, any> = { text: hasText ? textToSend : '' };
+      if (image) {
+        const imageB64 = await fileToDataUrl(image.file);
+        const thumbB64 = await makeThumbnail(imageB64);
+        body.imageB64 = imageB64;
+        body.thumbB64 = thumbB64;
+        body.mimeType = image.file.type || 'image/jpeg';
+        body.fileName = image.file.name;
+      }
       const res = await apiRequest(`/api/staff/conversations/${selectedTask.conversationId}/reply`, {
         method: 'POST',
-        body: JSON.stringify({ text: textToSend }),
+        body: JSON.stringify(body),
       });
 
       if (res.success && res.data) {
@@ -482,6 +546,7 @@ export const StaffToday: React.FC = () => {
       setErrorMessage(err.message || 'Gagal mengirim pesan balasan.');
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setReplyText(textToSend);
+      setSelectedImage(image);
     } finally {
       setSending(false);
     }
@@ -946,6 +1011,11 @@ export const StaffToday: React.FC = () => {
                             <span className="text-[#111b21] font-bold">
                               {formatRupiah(task.pricing.totalFee)}
                             </span>
+                            {task.pricing.deliveryFee > 0 && (
+                              <span className="text-[10px] text-[#667781] font-medium ml-1">
+                                (ongkir {formatRupiah(task.pricing.deliveryFee)})
+                              </span>
+                            )}
                           </div>
 
                           {isLunas ? (
@@ -1237,31 +1307,69 @@ export const StaffToday: React.FC = () => {
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form
                     onSubmit={handleSendReply}
-                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-3 flex items-center space-x-2 z-10"
+                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-3 z-10"
                   >
-                    <div className="flex-1 relative">
+                    {selectedImage && (
+                      <div className="flex items-center space-x-2 mb-2 bg-white border border-[#e9edef] rounded-xl p-2">
+                        <img
+                          src={selectedImage.preview}
+                          alt="Lampiran"
+                          className="h-12 w-12 object-cover rounded-lg border border-[#e9edef]"
+                        />
+                        <span className="flex-1 text-xs text-[#54656f] truncate">
+                          {selectedImage.file.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedImage(null)}
+                          className="p-1.5 rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100 transition"
+                          title="Hapus lampiran"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-2">
                       <input
-                        type="text"
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Ketik pesan balasan..."
-                        disabled={sending}
-                        className="w-full bg-white border border-[#e9edef] focus:border-[#008069] text-[#111b21] rounded-xl px-4 py-2.5 text-xs sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs"
+                        type="file"
+                        accept="image/*"
+                        ref={chatFileInputRef}
+                        onChange={handlePickImage}
+                        className="hidden"
                       />
-                    </div>
+                      <button
+                        type="button"
+                        onClick={() => chatFileInputRef.current?.click()}
+                        disabled={sending}
+                        className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40"
+                        title="Lampirkan Gambar"
+                      >
+                        <ImageIcon size={16} />
+                      </button>
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Ketik pesan balasan..."
+                          disabled={sending}
+                          className="w-full bg-white border border-[#e9edef] focus:border-[#008069] text-[#111b21] rounded-xl px-4 py-2.5 text-xs sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs"
+                        />
+                      </div>
 
-                    <button
-                      type="submit"
-                      disabled={!replyText.trim() || sending}
-                      className="h-10 w-10 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-semibold shadow-xs flex items-center justify-center transition-all disabled:opacity-40 disabled:hover:bg-[#008069] flex-shrink-0 active:scale-95"
-                      title="Kirim Pesan"
-                    >
-                      {sending ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      ) : (
-                        <Send size={15} className="ml-0.5 text-white" />
-                      )}
-                    </button>
+                      <button
+                        type="submit"
+                        disabled={(!replyText.trim() && !selectedImage) || sending}
+                        className="h-10 w-10 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-semibold shadow-xs flex items-center justify-center transition-all disabled:opacity-40 disabled:hover:bg-[#008069] flex-shrink-0 active:scale-95"
+                        title="Kirim Pesan"
+                      >
+                        {sending ? (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        ) : (
+                          <Send size={15} className="ml-0.5 text-white" />
+                        )}
+                      </button>
+                    </div>
                   </form>
 
                   {/* Sender Identity Signature Badge */}

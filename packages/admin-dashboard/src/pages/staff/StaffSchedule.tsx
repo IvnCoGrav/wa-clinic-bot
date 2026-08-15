@@ -379,6 +379,11 @@ export const StaffSchedule: React.FC = () => {
                           <CreditCard size={13} className="text-[#008069]" />
                           <span>Biaya:</span>
                           <strong className="text-[#111b21] ml-0.5">{formatRupiah(item.pricing.totalFee)}</strong>
+                          {item.pricing.deliveryFee > 0 && (
+                            <span className="text-[10px] text-[#667781] font-medium ml-0.5">
+                              (ongkir {formatRupiah(item.pricing.deliveryFee)})
+                            </span>
+                          )}
                         </div>
 
                         {item.navigationUrl || item.mapsUrl ? (

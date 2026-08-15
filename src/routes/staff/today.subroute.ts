@@ -105,6 +105,9 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         fileName,
         tenantId,
         adminName: staffName,
+        // Balasan terapis selalu mengaktifkan mode human-handling agar bot
+        // tidak menyela percakapan di tengah penanganan oleh staf.
+        forceEscalate: true,
       });
 
       if (!result.success) {
