@@ -170,13 +170,20 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       let storedUrl: string | null = null;
       try {
         if (imageB64) {
-          // Upload gambar baru → simpan sebagai media outbound tenant, lalu
+          // Upload gambar baru → kompres 1/3 (versi ringan, konsisten dengan
+          // kiriman ke WhatsApp), simpan sebagai media outbound tenant, lalu
           // simpan relative URL-nya (resolve otomatis per provider saat kirim).
+          // Inline MQL (kuota) & retensi media karena lewat saveOutboundMedia.
           const { mediaService } = await import('../../services/media.service');
+          const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const resized = await mediaService.resizeImageToFraction(
+            Buffer.from(rawB64, 'base64'),
+            3
+          );
           const saved = await mediaService.saveOutboundMedia({
             tenantId: DEFAULT_TENANT_ID,
-            imageB64,
-            mimeType,
+            imageB64: resized.toString('base64'),
+            mimeType: 'image/jpeg',
             fileName,
           });
           storedUrl = saved.hdUrl;

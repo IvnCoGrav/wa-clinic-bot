@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Reservation } from '../../types';
 import { Plus, User, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { QuickSlotTarget } from './types';
@@ -14,6 +14,12 @@ interface WeekScheduleGridProps {
 // Hours to display (6 am to 9 pm / 06:00 to 21:00)
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
 
+// Ukuran layout untuk kalkulasi auto-scroll (harus sinkron dengan class Tailwind).
+const TIME_GUTTER = 70; // kolom label jam
+const DAY_COL_WIDTH = 140; // minmax(140px,1fr) pada kolom hari
+const HOUR_ROW_HEIGHT = 90; // min-h-[90px] tiap baris jam
+const HEADER_HEIGHT = 60; // sticky header hari (kira-kira)
+
 export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   selectedDate,
   onSelectDate,
@@ -21,6 +27,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   onSelectReservation,
   onQuickAdd,
 }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
   // Compute the 7 days of the current week (Senin s.d. Minggu)
   const curr = new Date(selectedDate);
   const dayOfWeek = curr.getDay(); // 0 is Sunday, 1 is Monday...
@@ -76,10 +83,52 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
   };
 
+  // Auto-scroll saat minggu dibuka: ke treatment terdekat dari sekarang;
+  // bila tidak ada, ke kolom hari ini + jam sekarang.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const now = new Date();
+    const upcoming = reservations
+      .filter((r) => r.booking_date && new Date(r.booking_date).getTime() >= now.getTime())
+      .sort(
+        (a, b) =>
+          new Date(a.booking_date!).getTime() - new Date(b.booking_date!).getTime()
+      );
+    const target = upcoming[0] ? new Date(upcoming[0].booking_date!) : null;
+
+    let targetDay: Date;
+    let targetHour: number;
+    if (target) {
+      targetDay = target;
+      targetHour = target.getHours();
+    } else {
+      targetDay = new Date();
+      targetHour = now.getHours();
+    }
+    if (targetHour < 6) targetHour = 6;
+    if (targetHour > 21) targetHour = 21;
+
+    // Kolom target dalam minggu (0=Senin..6=Minggu)
+    const tIdx = weekDays.findIndex((d) => isSameDay(d, targetDay));
+    if (tIdx === -1) return;
+
+    const dayStart = TIME_GUTTER + tIdx * DAY_COL_WIDTH;
+    const viewportW = el.clientWidth;
+    const targetLeft = Math.max(0, dayStart - (viewportW - DAY_COL_WIDTH) / 2);
+    const maxLeft = el.scrollWidth - viewportW;
+    el.scrollLeft = Math.min(targetLeft, Math.max(0, maxLeft));
+
+    const targetTop = Math.max(0, (targetHour - 6) * HOUR_ROW_HEIGHT - HEADER_HEIGHT / 2);
+    const maxTop = el.scrollHeight - el.clientHeight;
+    el.scrollTop = Math.min(targetTop, Math.max(0, maxTop));
+  }, [reservations, selectedDate]);
+
   return (
     <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col">
       {/* Scrollable Container with sticky header for continuous vertical line alignment */}
-      <div className="overflow-x-auto overflow-y-auto max-h-[720px] divide-y divide-[#e9edef]">
+      <div ref={scrollRef} className="overflow-x-auto overflow-y-auto max-h-[720px] divide-y divide-[#e9edef]">
         {/* Week Header Days Bar */}
         <div className="sticky top-0 z-20 grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] border-b border-[#e9edef] bg-[#fafafa] shadow-xs">
           {/* Empty top-left time cell */}

@@ -106,8 +106,14 @@ export const ExternalIntegrationModal: React.FC<ExternalIntegrationModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-3xl overflow-hidden flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
           <div>
             <h3 className="font-bold text-[#111b21] text-sm flex items-center gap-2">

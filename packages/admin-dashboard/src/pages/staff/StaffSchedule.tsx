@@ -412,8 +412,14 @@ export const StaffSchedule: React.FC = () => {
 
       {/* Staff Profile Modal */}
       {showProfileModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setShowProfileModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setShowProfileModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
@@ -463,8 +469,14 @@ export const StaffSchedule: React.FC = () => {
 
       {/* Customer Detail Modal (Privacy Safe - No Phone Leak) */}
       {detailModalItem && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setDetailModalItem(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
               <div className="flex items-center space-x-3">
                 <div className={`h-11 w-11 rounded-2xl flex items-center justify-center border shadow-xs ${getCategoryIcon(detailModalItem.treatmentCategory).bg}`}>

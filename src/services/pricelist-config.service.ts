@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { mediaService } from './media.service';
+import fs from 'fs';
 
 /**
  * pricelist-config.service.ts — Konfigurasi gambar pricelist per-tenant.
@@ -78,31 +79,21 @@ export async function resolvePricelistSendTarget(
   try {
     const raw = await getPricelistImageUrl(tenantId);
 
-    let input: string | Buffer;
+    let buffer: Buffer;
     if (/^https?:\/\//i.test(raw)) {
       const res = await fetch(raw);
       if (!res.ok) return null;
-      input = Buffer.from(await res.arrayBuffer());
+      buffer = Buffer.from(await res.arrayBuffer());
     } else if (raw.startsWith('/media/outbound/')) {
       const abs = mediaService.filePathFromRelativeUrl(raw);
       if (!abs) return null;
-      input = abs;
+      buffer = fs.readFileSync(abs);
     } else {
-      input = raw; // path file lokal
+      buffer = fs.readFileSync(raw); // path file lokal
     }
 
-    const sharp = (await import('sharp')).default;
-    const meta = await sharp(input, { failOn: 'none' }).metadata();
-    if (!meta.width || !meta.height) return null;
-
-    // 1/3 dari dimensi terpanjang (minimal 120px agar tetap terbaca).
-    const maxDim = Math.max(meta.width, meta.height);
-    const targetDim = Math.max(120, Math.round(maxDim / 3));
-    const resized = await sharp(input, { failOn: 'none' })
-      .rotate()
-      .resize({ width: targetDim, height: targetDim, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 80 })
-      .toBuffer();
+    // 1/3 dimensi (minimal 120px agar tetap terbaca) + inline MQL & retensi.
+    const resized = await mediaService.resizeImageToFraction(buffer, 3);
 
     const saved = await mediaService.saveOutboundMedia({
       tenantId,
