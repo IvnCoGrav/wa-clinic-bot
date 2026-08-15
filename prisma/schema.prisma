@@ -246,6 +246,8 @@ model Reservation {
   purchase_occurred_at     DateTime?
   purchase_value           Int?
   purchase_review_status   String            @default("pending")
+  payment_method           String?
+  proof_url                String?
   is_repeat_order          Boolean           @default(false)
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
