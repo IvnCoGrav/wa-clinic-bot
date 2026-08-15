@@ -11,13 +11,14 @@ export function hashToken(token: string): string {
 export class StaffAuthService {
   /**
    * Login: verifikasi nomor HP + password staff, buat sesi baru di database.
+   * Hanya role THERAPIST yang boleh mengakses portal staff (terapis lapangan).
    */
   static async login(phone: string, password: string, tenantId: string) {
     if (!phone || !password) return null;
 
     try {
       const staff = await prisma.staff.findFirst({
-        where: { phone, tenant_id: tenantId, active: true },
+        where: { phone, tenant_id: tenantId, active: true, role: 'THERAPIST' },
       });
       if (!staff) return null;
 
@@ -45,7 +46,8 @@ export class StaffAuthService {
 
   /**
    * Validasi token sesi dari cookie.
-   * Return null jika token tidak ada, sesi tidak ditemukan, expired, direvoke, atau akun staff dinonaktifkan.
+   * Return null jika token tidak ada, sesi tidak ditemukan, expired, direvoke,
+   * akun staff dinonaktifkan, atau role staff bukan THERAPIST.
    */
   static async validateSession(token: string) {
     if (!token || typeof token !== 'string') return null;
@@ -59,6 +61,7 @@ export class StaffAuthService {
       if (!session || session.revoked_at) return null;
       if (session.expires_at < new Date()) return null;
       if (!session.staff || !session.staff.active) return null;
+      if (session.staff.role !== 'THERAPIST') return null;
 
       return session;
     } catch (err: any) {

@@ -62,7 +62,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       staff: {
         id: result.staff.id,
         name: result.staff.name,
-        role: 'staff',
+        role: (result.staff.role || 'THERAPIST').toLowerCase(),
       },
       data: {
         expiresAt: result.expiresAt,
@@ -105,7 +105,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       staff: {
         id: session.staff.id,
         name: session.staff.name,
-        role: 'staff',
+        role: (session.staff.role || 'THERAPIST').toLowerCase(),
       },
     });
   });
@@ -142,7 +142,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       staff: {
         id: session.staff.id,
         name: session.staff.name,
-        role: 'staff',
+        role: (session.staff.role || 'THERAPIST').toLowerCase(),
       },
     });
   });
