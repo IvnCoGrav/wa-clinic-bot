@@ -4,6 +4,7 @@ import {
   containsForeignScripts,
   sanitizeRagLeakage,
   sanitizeForbiddenEnglishWords,
+  sanitizeHallucinatedTerms,
 } from '../../src/utils/language-sanitizer';
 
 describe('language-sanitizer (anti bocor aksara asing)', () => {
@@ -53,5 +54,10 @@ describe('language-sanitizer (anti bocor aksara asing)', () => {
     expect(sanitizeForbiddenEnglishWords('little one-nya sudah melewati 2 minggu')).toBe('si kecil sudah melewati 2 minggu');
     expect(sanitizeForbiddenEnglishWords('apabila baby rewel')).toBe('apabila bayi rewel');
     expect(sanitizeForbiddenEnglishWords('mommy bisa booking schedule')).toBe('Bunda bisa booking jadwal');
+  });
+
+  it('sanitizeHallucinatedTerms membersihkan istilah aneh seperti antimeminjamkannya', () => {
+    expect(sanitizeHallucinatedTerms('Supaya bisa kami hitung biaya antimeminjamkannya, boleh tahu kira-kira rumahnya di mana?')).toBe('Supaya bisa kami hitung ongkirnya, boleh tahu kira-kira rumahnya di mana?');
+    expect(sanitizeHallucinatedTerms('untuk biaya peminjamannya')).toBe('untuk ongkos kirimnya');
   });
 });

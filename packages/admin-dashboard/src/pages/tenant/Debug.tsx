@@ -38,12 +38,12 @@ const pct = (v: number | null) => (v === null ? 'N/A' : `${v.toFixed(2)}%`);
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: string }) {
   const toneCls =
-    tone === 'ok' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : tone === 'err' ? 'text-rose-400' : 'text-slate-100';
+    tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : tone === 'err' ? 'text-rose-600' : 'text-[#111b21]';
   return (
-    <div className="glass-panel rounded-2xl p-4 flex flex-col gap-1">
-      <p className="text-[11px] uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`text-2xl font-bold ${toneCls}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-500 truncate">{sub}</p>}
+    <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
+      <p className="text-[11px] uppercase font-bold text-[#667781] tracking-wider">{label}</p>
+      <p className={`text-2xl font-extrabold ${toneCls}`}>{value}</p>
+      {sub && <p className="text-xs text-[#8696a0] truncate">{sub}</p>}
     </div>
   );
 }
@@ -51,16 +51,16 @@ function StatCard({ label, value, tone = 'default', sub }: { label: string; valu
 function SectionHeader({ title, onRefresh, loading, auto }: { title: string; onRefresh: () => void; loading: boolean; auto?: boolean }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">{title}</h3>
+      <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">{title}</h3>
       <div className="flex items-center gap-3">
-        {auto && <span className="text-[11px] text-slate-500">auto-refresh 5s</span>}
+        {auto && <span className="text-xs text-[#8696a0]">auto-refresh 5s</span>}
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="p-2 rounded-lg bg-white/5 hover:bg-pink-500/10 text-slate-300 hover:text-pink-400 transition-colors disabled:opacity-50"
+          className="p-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] transition shadow-xs disabled:opacity-50"
           title="Refresh"
         >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
         </button>
       </div>
     </div>
@@ -70,8 +70,8 @@ function SectionHeader({ title, onRefresh, loading, auto }: { title: string; onR
 function ErrNote({ note }: { note?: string }) {
   if (!note) return null;
   return (
-    <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 mb-3">
-      <AlertTriangle size={14} />
+    <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2 mb-3 shadow-xs">
+      <AlertTriangle size={14} className="text-amber-600 shrink-0" />
       <span>{note}</span>
     </div>
   );
@@ -80,11 +80,11 @@ function ErrNote({ note }: { note?: string }) {
 function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-        ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+        ok ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
       }`}
     >
-      {ok ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
+      {ok ? <CheckCircle2 size={11} className="text-emerald-600" /> : <XCircle size={11} className="text-rose-600" />}
       {label}
     </span>
   );
@@ -151,42 +151,42 @@ function SystemSection() {
         <StatCard label="AI Router Evaluations" value={data?.counts.aiRouterEvaluations ?? '-'} />
       </div>
 
-      <div className="glass-panel rounded-2xl p-5 space-y-4">
-        <h4 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-          <Cpu size={15} className="text-pink-400" /> AI Router & Feature Flags
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+        <h4 className="text-xs font-bold text-[#111b21] flex items-center gap-2">
+          <Cpu size={15} className="text-[#008069]" /> <span>AI Router &amp; Feature Flags</span>
         </h4>
         <div className="flex flex-wrap gap-2">
           <Badge ok={!!data?.aiRouter.enabled} label={`AI_ROUTER_ENABLED=${data?.aiRouter.enabled ? 'ON' : 'OFF'}`} />
           <Badge ok={!!data?.aiRouter.shadowMode} label={`SHADOW_MODE=${data?.aiRouter.shadowMode ? 'ON' : 'OFF'}`} />
           <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
               circuit === 'CLOSED'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                 : circuit === 'HALF_OPEN'
-                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                ? 'bg-amber-100 text-amber-800 border-amber-200'
+                : 'bg-rose-100 text-rose-800 border-rose-200'
             }`}
           >
             <Activity size={11} /> Circuit: {circuit}
           </span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500 border-b border-white/5">
-                <th className="py-2 pr-4">Flag</th>
-                <th className="py-2 pr-4">Fungsi</th>
-                <th className="py-2">Nilai</th>
+              <tr className="text-left text-[11px] uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+                <th className="py-2.5 px-3">Flag</th>
+                <th className="py-2.5 px-3">Fungsi</th>
+                <th className="py-2.5 px-3">Nilai</th>
               </tr>
             </thead>
             <tbody>
               {data?.featureFlags.map((f) => (
-                <tr key={f.key} className="border-b border-white/5 last:border-0">
-                  <td className="py-2 pr-4 font-mono text-xs text-slate-300">{f.key}</td>
-                  <td className="py-2 pr-4 text-xs text-slate-400">{f.label}</td>
-                  <td className="py-2">
+                <tr key={f.key} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
+                  <td className="py-2.5 px-3 font-mono text-xs text-[#111b21] font-semibold">{f.key}</td>
+                  <td className="py-2.5 px-3 text-xs text-[#667781]">{f.label}</td>
+                  <td className="py-2.5 px-3">
                     {f.value === 'unset' ? (
-                      <span className="text-slate-600 text-xs">unset</span>
+                      <span className="text-[#8696a0] text-xs">unset</span>
                     ) : (
                       <Badge ok={f.value === true} label={String(f.value)} />
                     )}
@@ -197,12 +197,12 @@ function SystemSection() {
           </table>
         </div>
         {data && data.secretKeysPresent.length > 0 && (
-          <p className="text-[11px] text-slate-500">
-            <ShieldAlert size={11} className="inline mr-1" />
+          <p className="text-xs text-[#8696a0]">
+            <ShieldAlert size={12} className="inline mr-1 text-amber-600" />
             Secret keys terpasang tapi disembunyikan: {data.secretKeysPresent.join(', ')}
           </p>
         )}
-        <p className="text-[11px] text-slate-500">
+        <p className="text-xs text-[#8696a0]">
           Log buffer: {data?.logBuffer.installed ? 'aktif' : 'tidak terpasang'} · log={data?.logBuffer.stats.log ?? 0} warn={data?.logBuffer.stats.warn ?? 0} error={data?.logBuffer.stats.error ?? 0}
         </p>
       </div>
@@ -268,13 +268,13 @@ function RouterSection() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 bg-white border border-[#e9edef] rounded-xl p-1 shadow-xs">
           {[1, 3, 7, 30].map((d) => (
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                days === d ? 'bg-pink-500 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10'
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                days === d ? 'bg-[#008069] text-white shadow-xs' : 'text-[#667781] hover:text-[#111b21]'
               }`}
             >
               {d}d
@@ -299,22 +299,22 @@ function RouterSection() {
         <Badge ok={unmappedOk} label={`Gate 3: UNMAPPED < 5% (${unmappedOk ? 'PASS' : 'FAIL'})`} />
       </div>
 
-      <div className={`glass-panel rounded-2xl p-5 ${medOk ? '' : 'border border-rose-500/40'}`}>
-        <h4 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-3">
-          <AlertTriangle size={15} className={medOk ? 'text-emerald-400' : 'text-rose-400'} />
-          Mismatch MEDICAL_CONCERN (wajib 0 sebelum matikan shadow mode)
+      <div className={`bg-white border rounded-2xl p-5 shadow-xs ${medOk ? 'border-[#e9edef]' : 'border-rose-300 bg-rose-50/40'}`}>
+        <h4 className="text-xs font-bold text-[#111b21] flex items-center gap-2 mb-3">
+          <AlertTriangle size={15} className={medOk ? 'text-[#008069]' : 'text-rose-600'} />
+          <span>Mismatch MEDICAL_CONCERN (wajib 0 sebelum matikan shadow mode)</span>
         </h4>
         {medOk ? (
-          <p className="text-xs text-emerald-400">Tidak ada mismatch terkait MEDICAL_CONCERN — aman.</p>
+          <p className="text-xs text-emerald-700 font-medium">Tidak ada mismatch terkait MEDICAL_CONCERN — aman.</p>
         ) : (
           <div className="space-y-2">
             {data?.medicalMismatches.map((m, i) => (
-              <div key={i} className="flex items-start gap-3 bg-rose-500/5 border border-rose-500/20 rounded-xl px-3 py-2 text-xs">
-                <XCircle size={14} className="text-rose-400 mt-0.5 shrink-0" />
+              <div key={i} className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs shadow-xs">
+                <XCircle size={14} className="text-rose-600 mt-0.5 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-slate-200 truncate">{m.message_text}</p>
-                  <p className="text-slate-500">
-                    LLM: <span className="text-rose-300">{m.llm_intent ?? 'N/A'}</span> · Legacy: <span className="text-rose-300">{m.legacy_intent}</span> · {fmtTime(m.created_at)}
+                  <p className="text-[#111b21] font-semibold truncate">{m.message_text}</p>
+                  <p className="text-[#667781] text-[11px] mt-0.5">
+                    LLM: <span className="text-rose-700 font-bold">{m.llm_intent ?? 'N/A'}</span> · Legacy: <span className="text-rose-700 font-bold">{m.legacy_intent}</span> · {fmtTime(m.created_at)}
                   </p>
                 </div>
               </div>
@@ -323,40 +323,40 @@ function RouterSection() {
         )}
       </div>
 
-      <div className="glass-panel rounded-2xl p-5">
-        <h4 className="text-sm font-bold text-slate-200 mb-3">Evaluasi Terbaru</h4>
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+        <h4 className="text-xs font-bold text-[#111b21] mb-3">Evaluasi Terbaru</h4>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left uppercase tracking-wider text-slate-500 border-b border-white/5">
-                <th className="py-2 pr-3">Waktu</th>
-                <th className="py-2 pr-3">State</th>
-                <th className="py-2 pr-3">Pesan</th>
-                <th className="py-2 pr-3">LLM</th>
-                <th className="py-2 pr-3">Legacy</th>
-                <th className="py-2 pr-3">Intent ✓</th>
-                <th className="py-2 pr-3">Esc ✓</th>
-                <th className="py-2 pr-3">Fallback</th>
-                <th className="py-2">ms</th>
+              <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+                <th className="py-2.5 px-3">Waktu</th>
+                <th className="py-2.5 px-3">State</th>
+                <th className="py-2.5 px-3">Pesan</th>
+                <th className="py-2.5 px-3">LLM</th>
+                <th className="py-2.5 px-3">Legacy</th>
+                <th className="py-2.5 px-3">Intent ✓</th>
+                <th className="py-2.5 px-3">Esc ✓</th>
+                <th className="py-2.5 px-3">Fallback</th>
+                <th className="py-2.5 px-3">ms</th>
               </tr>
             </thead>
             <tbody>
               {(data?.recentEvaluations ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-4 text-center text-slate-500">Belum ada data evaluasi.</td>
+                  <td colSpan={9} className="py-4 text-center text-[#8696a0]">Belum ada data evaluasi.</td>
                 </tr>
               )}
               {data?.recentEvaluations.map((e) => (
-                <tr key={e.id} className="border-b border-white/5 last:border-0">
-                  <td className="py-2 pr-3 whitespace-nowrap text-slate-400">{fmtTime(e.created_at)}</td>
-                  <td className="py-2 pr-3 text-slate-400">{e.current_state}</td>
-                  <td className="py-2 pr-3 text-slate-300 max-w-[200px] truncate" title={e.message_text}>{e.message_text}</td>
-                  <td className="py-2 pr-3">{e.llm_intent ?? <span className="text-slate-600">N/A</span>}</td>
-                  <td className="py-2 pr-3">{e.legacy_intent}</td>
-                  <td className="py-2 pr-3">{e.intent_match ? <CheckCircle2 size={14} className="text-emerald-400" /> : <XCircle size={14} className="text-rose-400" />}</td>
-                  <td className="py-2 pr-3">{e.escalation_match ? <CheckCircle2 size={14} className="text-emerald-400" /> : <XCircle size={14} className="text-rose-400" />}</td>
-                  <td className="py-2 pr-3">{e.llm_used_fallback ? <span className="text-amber-400">yes</span> : <span className="text-slate-500">no</span>}</td>
-                  <td className="py-2 text-slate-400">{e.response_time_ms ?? '-'}</td>
+                <tr key={e.id} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
+                  <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(e.created_at)}</td>
+                  <td className="py-2.5 px-3 text-[#111b21] font-mono">{e.current_state}</td>
+                  <td className="py-2.5 px-3 text-[#111b21] max-w-[200px] truncate" title={e.message_text}>{e.message_text}</td>
+                  <td className="py-2.5 px-3 font-semibold">{e.llm_intent ?? <span className="text-[#8696a0]">N/A</span>}</td>
+                  <td className="py-2.5 px-3 text-[#667781]">{e.legacy_intent}</td>
+                  <td className="py-2.5 px-3">{e.intent_match ? <CheckCircle2 size={14} className="text-emerald-600" /> : <XCircle size={14} className="text-rose-600" />}</td>
+                  <td className="py-2.5 px-3">{e.escalation_match ? <CheckCircle2 size={14} className="text-emerald-600" /> : <XCircle size={14} className="text-rose-600" />}</td>
+                  <td className="py-2.5 px-3">{e.llm_used_fallback ? <span className="text-amber-700 font-bold">yes</span> : <span className="text-[#8696a0]">no</span>}</td>
+                  <td className="py-2.5 px-3 text-[#667781]">{e.response_time_ms ?? '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -401,32 +401,32 @@ function LogsSection() {
   }, [load]);
 
   const levelColor = (l: string) =>
-    l === 'error' ? 'text-rose-400' : l === 'warn' ? 'text-amber-400' : l === 'info' ? 'text-sky-400' : 'text-slate-400';
+    l === 'error' ? 'text-rose-700 font-bold' : l === 'warn' ? 'text-amber-700 font-bold' : l === 'info' ? 'text-[#008069] font-bold' : 'text-[#667781]';
 
   return (
     <div className="space-y-4">
       <SectionHeader title="Log Buffer (in-memory)" onRefresh={load} loading={loading} auto />
       {!installed && <ErrNote note="Log buffer belum terpasang — restart server agar console log tertangkap." />}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 bg-white border border-[#e9edef] rounded-xl p-1 w-fit shadow-xs">
         {(['all', 'error', 'warn', 'info', 'log'] as const).map((l) => (
           <button
             key={l}
             onClick={() => setLevel(l)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              level === l ? 'bg-pink-500 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10'
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+              level === l ? 'bg-[#008069] text-white shadow-xs' : 'text-[#667781] hover:text-[#111b21]'
             }`}
           >
             {l.toUpperCase()} {l !== 'all' && <span className="opacity-70">({stats[l] ?? 0})</span>}
           </button>
         ))}
       </div>
-      <div className="glass-panel rounded-2xl p-4 max-h-[70vh] overflow-y-auto font-mono text-xs">
-        {entries.length === 0 && <p className="text-slate-500">Belum ada log.</p>}
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 max-h-[70vh] overflow-y-auto font-mono text-xs shadow-xs space-y-1">
+        {entries.length === 0 && <p className="text-[#8696a0]">Belum ada log.</p>}
         {entries.map((e) => (
-          <div key={e.id} className="flex gap-3 border-b border-white/5 py-1.5 last:border-0">
-            <span className="text-slate-600 whitespace-nowrap">{new Date(e.ts).toLocaleTimeString('id-ID')}</span>
+          <div key={e.id} className="flex gap-3 border-b border-[#e9edef] py-1.5 last:border-0">
+            <span className="text-[#8696a0] whitespace-nowrap">{new Date(e.ts).toLocaleTimeString('id-ID')}</span>
             <span className={`w-12 shrink-0 uppercase ${levelColor(e.level)}`}>{e.level}</span>
-            <span className="text-slate-300 whitespace-pre-wrap break-all">{e.msg}</span>
+            <span className="text-[#111b21] whitespace-pre-wrap break-all">{e.msg}</span>
           </div>
         ))}
       </div>
@@ -469,39 +469,39 @@ function MessagesSection() {
     <div className="space-y-4">
       <SectionHeader title="Message Trace (terbaru)" onRefresh={load} loading={loading} />
       {data.dbNote && <ErrNote note={data.dbNote} />}
-      <div className="glass-panel rounded-2xl p-4 overflow-x-auto">
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 overflow-x-auto shadow-xs">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left uppercase tracking-wider text-slate-500 border-b border-white/5">
-              <th className="py-2 pr-3">Waktu</th>
-              <th className="py-2 pr-3">Arah</th>
-              <th className="py-2 pr-3">Customer</th>
-              <th className="py-2 pr-3">WA Msg ID</th>
-              <th className="py-2">Konten</th>
+            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+              <th className="py-2.5 px-3">Waktu</th>
+              <th className="py-2.5 px-3">Arah</th>
+              <th className="py-2.5 px-3">Customer</th>
+              <th className="py-2.5 px-3">WA Msg ID</th>
+              <th className="py-2.5 px-3">Konten</th>
             </tr>
           </thead>
           <tbody>
             {data.entries.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-4 text-center text-slate-500">Belum ada pesan.</td>
+                <td colSpan={5} className="py-4 text-center text-[#8696a0]">Belum ada pesan.</td>
               </tr>
             )}
             {data.entries.map((m) => (
-              <tr key={m.id} className="border-b border-white/5 last:border-0 align-top">
-                <td className="py-2 pr-3 whitespace-nowrap text-slate-400">{fmtTime(m.created_at)}</td>
-                <td className="py-2 pr-3">
+              <tr key={m.id} className="border-b border-[#e9edef] last:border-0 align-top hover:bg-[#f8fafc] transition-colors">
+                <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(m.created_at)}</td>
+                <td className="py-2.5 px-3">
                   {m.direction === 'INBOUND' ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-400"><Activity size={11} /> IN</span>
+                    <span className="inline-flex items-center gap-1 text-[#008069] font-bold"><Activity size={11} /> IN</span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-sky-400"><MessageSquare size={11} /> OUT</span>
+                    <span className="inline-flex items-center gap-1 text-sky-700 font-bold"><MessageSquare size={11} /> OUT</span>
                   )}
                 </td>
-                <td className="py-2 pr-3 text-slate-300">
+                <td className="py-2.5 px-3 text-[#111b21] font-semibold">
                   {m.customerName || '?'}
-                  <span className="block text-slate-500">{m.customerPhone}</span>
+                  <span className="block text-[#667781] font-mono text-[11px] font-normal">{m.customerPhone}</span>
                 </td>
-                <td className="py-2 pr-3 font-mono text-[10px] text-slate-500 max-w-[100px] truncate" title={m.wa_message_id ?? ''}>{m.wa_message_id ?? '-'}</td>
-                <td className="py-2 text-slate-300 whitespace-pre-wrap break-all max-w-[420px]">{m.content}</td>
+                <td className="py-2.5 px-3 font-mono text-[10px] text-[#8696a0] max-w-[100px] truncate" title={m.wa_message_id ?? ''}>{m.wa_message_id ?? '-'}</td>
+                <td className="py-2.5 px-3 text-[#111b21] whitespace-pre-wrap break-all max-w-[420px]">{m.content}</td>
               </tr>
             ))}
           </tbody>
@@ -562,11 +562,11 @@ function ConversationsSection() {
       <SectionHeader title="Conversation State Trace (terbaru)" onRefresh={load} loading={loading} />
       {data.dbNote && <ErrNote note={data.dbNote} />}
       <div className="flex items-center gap-2">
-        <label className="text-[10px] uppercase tracking-wider text-slate-500">Filter Eskalasi</label>
+        <label className="text-[11px] uppercase font-bold text-[#667781]">Filter Eskalasi</label>
         <select
           value={escFilter}
           onChange={(e) => setEscFilter(e.target.value)}
-          className="px-2 py-1 bg-slate-950 border border-white/10 rounded-lg text-xs text-white"
+          className="px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
         >
           <option value="all">Semua</option>
           <option value="none">Tanpa eskalasi</option>
@@ -576,47 +576,47 @@ function ConversationsSection() {
             </option>
           ))}
         </select>
-        <span className="text-[10px] text-slate-600">{filteredEntries.length} / {data.entries.length} baris</span>
+        <span className="text-xs text-[#8696a0]">{filteredEntries.length} / {data.entries.length} baris</span>
       </div>
-      <div className="glass-panel rounded-2xl p-4 overflow-x-auto">
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 overflow-x-auto shadow-xs">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left uppercase tracking-wider text-slate-500 border-b border-white/5">
-              <th className="py-2 pr-3">Customer</th>
-              <th className="py-2 pr-3">State</th>
-              <th className="py-2 pr-3">Human Handling</th>
-              <th className="py-2 pr-3">Eskalasi</th>
-              <th className="py-2 pr-3">UNKNOWN×</th>
-              <th className="py-2 pr-3">Lokasi Gagal</th>
-              <th className="py-2">Aktivitas Terakhir</th>
+            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+              <th className="py-2.5 px-3">Customer</th>
+              <th className="py-2.5 px-3">State</th>
+              <th className="py-2.5 px-3">Human Handling</th>
+              <th className="py-2.5 px-3">Eskalasi</th>
+              <th className="py-2.5 px-3">UNKNOWN×</th>
+              <th className="py-2.5 px-3">Lokasi Gagal</th>
+              <th className="py-2.5 px-3">Aktivitas Terakhir</th>
             </tr>
           </thead>
           <tbody>
             {filteredEntries.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-4 text-center text-slate-500">Belum ada conversation.</td>
+                <td colSpan={7} className="py-4 text-center text-[#8696a0]">Belum ada conversation.</td>
               </tr>
             )}
             {filteredEntries.map((c) => (
-              <tr key={c.id} className="border-b border-white/5 last:border-0">
-                <td className="py-2 pr-3 text-slate-300">
+              <tr key={c.id} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors">
+                <td className="py-2.5 px-3 text-[#111b21] font-semibold">
                   {c.customerName || '?'}
-                  <span className="block text-slate-500">{c.customerPhone}</span>
+                  <span className="block text-[#667781] font-mono text-[11px] font-normal">{c.customerPhone}</span>
                 </td>
-                <td className="py-2 pr-3">
-                  <span className="px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10 text-[10px]">{c.current_state}</span>
+                <td className="py-2.5 px-3">
+                  <span className="px-2 py-0.5 rounded-full bg-[#f8fafc] text-[#111b21] border border-[#d1d7db] text-[10px] font-mono font-medium">{c.current_state}</span>
                 </td>
-                <td className="py-2 pr-3">{c.is_human_handling ? <Badge ok label="HUMAN" /> : <span className="text-slate-600">bot</span>}</td>
-                <td className="py-2 pr-3 text-slate-400">{c.escalation_reason || '-'}</td>
-                <td className="py-2 pr-3">
+                <td className="py-2.5 px-3">{c.is_human_handling ? <Badge ok label="HUMAN" /> : <span className="text-[#8696a0]">bot</span>}</td>
+                <td className="py-2.5 px-3 text-[#667781]">{c.escalation_reason || '-'}</td>
+                <td className="py-2.5 px-3">
                   {c.consecutive_unknown_count > 0 ? (
-                    <span className="text-amber-400 font-bold">{c.consecutive_unknown_count}</span>
+                    <span className="text-amber-700 font-bold">{c.consecutive_unknown_count}</span>
                   ) : (
-                    <span className="text-slate-600">0</span>
+                    <span className="text-[#8696a0]">0</span>
                   )}
                 </td>
-                <td className="py-2 pr-3 text-slate-400">{c.location_attempts}</td>
-                <td className="py-2 text-slate-400 whitespace-nowrap">{fmtTime(c.last_message_at)}</td>
+                <td className="py-2.5 px-3 text-[#667781]">{c.location_attempts}</td>
+                <td className="py-2.5 px-3 text-[#667781] whitespace-nowrap">{fmtTime(c.last_message_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -632,16 +632,16 @@ export const Debug: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
         <div>
-          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-            <Bug size={20} className="text-pink-400" /> System Debug
+          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+            <Bug size={22} className="text-[#008069]" /> <span>System Debug</span>
           </h2>
-          <p className="text-sm text-slate-500">Observability, tracing & maintenance — semua read-only.</p>
+          <p className="text-xs text-[#667781] mt-0.5">Observability, tracing &amp; maintenance — semua read-only.</p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-white/5 pb-3">
+      <div className="flex flex-wrap gap-1.5 border-b border-[#e9edef] pb-3">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -649,12 +649,14 @@ export const Debug: React.FC = () => {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                active ? 'bg-gradient-to-r from-pink-500/20 to-violet-500/10 border-l-4 border-pink-500 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition ${
+                active
+                  ? 'bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold shadow-xs'
+                  : 'text-[#667781] hover:bg-white hover:text-[#111b21]'
               }`}
             >
-              <Icon size={16} className={active ? 'text-pink-400' : 'text-slate-400'} />
-              {t.label}
+              <Icon size={15} className={active ? 'text-[#008069]' : 'text-[#8696a0]'} />
+              <span>{t.label}</span>
             </button>
           );
         })}
@@ -666,7 +668,7 @@ export const Debug: React.FC = () => {
       {tab === 'messages' && <MessagesSection />}
       {tab === 'conversations' && <ConversationsSection />}
 
-      <p className="text-[11px] text-slate-600">
+      <p className="text-xs text-[#8696a0]">
         <Clock size={11} className="inline mr-1" />
         Debug page data diambil langsung dari server via /api/admin/debug/* — read-only, tidak ada mutasi.
       </p>

@@ -180,7 +180,7 @@ export const AiSandbox: React.FC = () => {
       const data = await apiRequest('/api/admin/sandbox/chat', {
         method: 'POST',
         body: JSON.stringify({ text: userText, simulateOutage: sumoPodOutage, sandboxPhone }),
-        timeoutMs: 45000,
+        timeoutMs: 120000,
       });
 
       const endTime = Date.now();
@@ -212,89 +212,89 @@ export const AiSandbox: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center space-x-3">
-            <Terminal className="text-pink-400" />
+          <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
+            <Terminal className="text-[#008069]" size={22} />
             <span>AI Sandbox Simulator</span>
           </h2>
-          <p className="text-slate-400">Test AI response, inspect vector retrieval, and simulate server failure conditions</p>
+          <p className="text-xs text-[#667781] mt-0.5">Test respons AI WhatsApp, inspeksi hasil vector retrieval FAQ, dan simulasi kondisi error</p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleNewCleanSession}
-            className="px-3.5 py-2 bg-pink-500/10 hover:bg-pink-500 text-pink-400 hover:text-white border border-pink-500/20 rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
-            title="Start new isolated sandbox customer session"
+            className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#008069] border border-[#c2e7e0] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+            title="Mulai sesi simulator customer baru yang bersih"
           >
-            <Sparkles size={14} />
-            <span>Mulai Sesi Bersih Baru</span>
+            <Sparkles size={13} />
+            <span>Sesi Bersih Baru</span>
           </button>
 
           {/* SumoPod Outage Toggle */}
-          <div className="flex items-center space-x-3 bg-slate-900/60 border border-white/5 px-4 py-2 rounded-xl">
-            <span className="text-xs font-semibold text-slate-300">Simulate SumoPod Outage</span>
+          <div className="flex items-center space-x-2.5 bg-white border border-[#e9edef] px-3.5 py-1.5 rounded-xl shadow-xs">
+            <span className="text-xs font-semibold text-[#54656f]">Simulasi Outage LLM</span>
             <button
               onClick={() => setSumoPodOutage(!sumoPodOutage)}
-              className={`w-11 h-6 rounded-full transition-all relative ${sumoPodOutage ? 'bg-rose-500' : 'bg-slate-700'}`}
+              className={`w-9 h-5 rounded-full transition-all relative ${sumoPodOutage ? 'bg-rose-500' : 'bg-[#d1d7db]'}`}
             >
-              <div className={`absolute top-1 left-1 bg-white h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-5' : ''}`}></div>
+              <div className={`absolute top-0.5 left-0.5 bg-white h-4 w-4 rounded-full transition-all ${sumoPodOutage ? 'translate-x-4' : ''}`}></div>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Chat Simulator panel */}
-        <div className="glass-panel border border-white/5 rounded-2xl p-6 flex flex-col h-[520px] justify-between">
-          <div className="flex items-center justify-between pb-3 border-b border-white/5 mb-4">
-            <span className="text-sm font-bold text-white flex items-center space-x-1.5">
-              <Sparkles size={16} className="text-pink-400" />
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 flex flex-col h-[560px] justify-between shadow-xs">
+          <div className="flex items-center justify-between pb-3 border-b border-[#e9edef] mb-3">
+            <span className="text-xs font-bold text-[#111b21] uppercase flex items-center space-x-1.5">
+              <Sparkles size={14} className="text-[#008069]" />
               <span>Simulated WhatsApp Chat</span>
             </span>
 
             {sumoPodOutage ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-bold animate-pulse flex items-center space-x-1">
+              <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold animate-pulse flex items-center space-x-1">
                 <AlertOctagon size={10} />
                 <span>LLM API OUTAGE</span>
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
                 AI Agent Active
               </span>
             )}
           </div>
 
-          {/* Messages list */}
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 mb-4">
+          {/* Messages list with WhatsApp light wallpaper */}
+          <div className="flex-1 overflow-y-auto space-y-3 p-3 mb-3 bg-[#efeae2] rounded-xl border border-[#e9edef] shadow-inner" style={{ backgroundImage: 'radial-gradient(#d1d7db 0.75px, transparent 0.75px)', backgroundSize: '16px 16px' }}>
             {messages.map((msg, idx) => (
               <div 
                 key={idx} 
                 className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`max-w-[80%] rounded-2xl p-4 text-xs leading-relaxed ${
+                <div className={`max-w-[85%] rounded-xl p-3 text-xs leading-relaxed shadow-xs ${
                   msg.sender === 'user' 
-                    ? 'bg-pink-500 text-white rounded-tr-none'
+                    ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
                     : msg.isError 
-                      ? 'bg-rose-500/10 border border-rose-500/25 text-rose-400 rounded-tl-none font-medium'
-                      : 'bg-slate-800 text-slate-100 rounded-tl-none border border-white/5'
+                      ? 'bg-rose-50 border border-rose-200 text-rose-800 rounded-tl-none font-medium'
+                      : 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
                 }`}>
                   <div className="whitespace-pre-wrap break-words font-sans">{msg.content}</div>
-                  <span className="block text-[8px] text-slate-500 mt-2 text-right">
-                    {msg.timestamp.toLocaleTimeString()}
+                  <span className="block text-[9px] text-[#667781] mt-1 text-right">
+                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               </div>
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="bg-slate-800/80 border border-white/5 rounded-2xl rounded-tl-none p-4 text-xs flex items-center space-x-2 text-slate-400">
-                  <div className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce"></div>
-                  <div className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                  <div className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                <div className="bg-white border border-black/5 rounded-xl rounded-tl-none p-3 text-xs flex items-center space-x-1.5 text-[#667781] shadow-xs">
+                  <div className="h-1.5 w-1.5 bg-[#008069] rounded-full animate-bounce"></div>
+                  <div className="h-1.5 w-1.5 bg-[#008069] rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="h-1.5 w-1.5 bg-[#008069] rounded-full animate-bounce [animation-delay:0.4s]"></div>
                 </div>
               </div>
             )}
@@ -302,7 +302,7 @@ export const AiSandbox: React.FC = () => {
           </div>
 
           {/* Form input — WhatsApp-like style */}
-          <form onSubmit={handleSend} className="bg-slate-900/60 border border-white/5 rounded-2xl p-3 space-y-2">
+          <form onSubmit={handleSend} className="bg-[#f0f2f5] border border-[#e9edef] rounded-xl p-2.5 space-y-2 shadow-xs">
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -312,20 +312,20 @@ export const AiSandbox: React.FC = () => {
                   (e.target as HTMLTextAreaElement).form?.requestSubmit();
                 }
               }}
-              placeholder="Ketik pesan... (Enter untuk kirim)"
+              placeholder="Ketik pesan simulasi... (Enter untuk kirim)"
               rows={2}
-              className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none resize-none"
+              className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
             />
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-slate-500">
+              <span className="text-[10px] text-[#667781]">
                 {inputText.length > 0 ? `${inputText.length} karakter` : 'Tekan Enter atau klik Kirim'}
               </span>
               <button
                 type="submit"
                 disabled={loading || !inputText.trim()}
-                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20"
+                className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
               >
-                {loading ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                {loading ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
                 <span>Kirim</span>
               </button>
             </div>
@@ -333,101 +333,100 @@ export const AiSandbox: React.FC = () => {
         </div>
 
         {/* RAG Inspector Panel */}
-        <div className="glass-panel border border-white/5 rounded-2xl p-6 h-[520px] overflow-y-auto space-y-6">
-          <div className="flex items-center space-x-2 pb-3 border-b border-white/5">
-            <Eye className="text-pink-400" />
-            <h3 className="text-base font-bold text-white">RAG Chunks & Prompt Inspector</h3>
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 h-[560px] overflow-y-auto space-y-5 shadow-xs">
+          <div className="flex items-center space-x-2 pb-3 border-b border-[#e9edef]">
+            <Eye className="text-[#008069]" size={16} />
+            <h3 className="text-xs font-bold text-[#111b21] uppercase">RAG Chunks & Prompt Inspector</h3>
           </div>
 
           {inspectorData.query ? (
-            <div className="space-y-5">
+            <div className="space-y-4">
               
               {/* Query & Latency metrics */}
-              <div className="flex justify-between items-center text-xs">
-                <div className="flex items-center space-x-1.5">
-                  <Search size={14} className="text-slate-400" />
-                  <span className="text-slate-400">Search Query:</span>
-                  <span className="font-semibold text-white truncate max-w-xs">"{inspectorData.query}"</span>
+              <div className="flex justify-between items-center text-xs p-2.5 bg-[#f8fafc] border border-[#e9edef] rounded-xl">
+                <div className="flex items-center space-x-1.5 truncate">
+                  <Search size={13} className="text-[#667781]" />
+                  <span className="text-[#667781]">Query:</span>
+                  <span className="font-semibold text-[#111b21] truncate">"{inspectorData.query}"</span>
                 </div>
-                <div className="flex items-center space-x-1 text-slate-500">
-                  <Activity size={14} />
+                <div className="flex items-center space-x-1 text-[#667781] flex-shrink-0 ml-2 font-mono text-[11px]">
+                  <Activity size={13} />
                   <span>{inspectorData.latencyMs} ms</span>
                 </div>
               </div>
 
               {/* Error log if outage */}
               {inspectorData.error && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-mono">
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-mono">
                   <span className="font-bold">Error:</span> {inspectorData.error}
                 </div>
               )}
 
               {/* Reference Chunks section */}
               <div className="space-y-2">
-                <span className="text-xs font-semibold text-slate-400 block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0})</span>
-                <div className="space-y-3">
+                <span className="text-[11px] font-bold text-[#667781] block uppercase">Vector Chunks Retrieved ({inspectorData.chunks?.length || 0})</span>
+                <div className="space-y-2.5">
                   {inspectorData.chunks?.map((chunk: any, i: number) => {
                     const chunkId = chunk.id || chunk.title;
                     const isEditing = editingChunkId === chunkId;
                     return (
-                      <div key={i} className="p-4 rounded-xl bg-slate-950 border border-white/5 space-y-3">
+                      <div key={i} className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
                         {isEditing ? (
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             <div className="space-y-1">
-                              <label className="text-[10px] text-slate-500 font-semibold">Chunk Title</label>
+                              <label className="text-[10px] text-[#667781] font-semibold">Judul Chunk</label>
                               <input
                                 type="text"
                                 value={editingTitle}
                                 onChange={(e) => setEditingTitle(e.target.value)}
-                                className="w-full p-2 rounded-lg bg-slate-900 border border-white/10 text-xs text-white focus:outline-none focus:border-pink-500"
+                                className="w-full p-2 rounded-lg bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                               />
                             </div>
                             <div className="space-y-1">
-                              <label className="text-[10px] text-slate-500 font-semibold">Chunk Content</label>
+                              <label className="text-[10px] text-[#667781] font-semibold">Konten Chunk</label>
                               <textarea
                                 rows={4}
                                 value={editingContent}
                                 onChange={(e) => setEditingContent(e.target.value)}
-                                className="w-full p-2 rounded-lg bg-slate-900 border border-white/10 text-xs text-white focus:outline-none focus:border-pink-500 leading-relaxed font-sans"
+                                className="w-full p-2 rounded-lg bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] leading-relaxed resize-none shadow-xs"
                               />
                             </div>
                             <div className="flex space-x-2 justify-end pt-1">
                               <button
                                 type="button"
                                 onClick={handleCancelEdit}
-                                className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-[10px] font-bold transition flex items-center space-x-1"
+                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-xs font-semibold"
                               >
-                                <X size={12} />
-                                <span>Cancel</span>
+                                Batal
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleSaveEdit(chunkId)}
                                 disabled={editLoading}
-                                className="px-2.5 py-1.5 rounded-lg bg-pink-500 hover:bg-pink-600 text-white text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50"
+                                className="px-3 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
                               >
                                 <Save size={12} />
-                                <span>{editLoading ? 'Saving...' : 'Save'}</span>
+                                <span>{editLoading ? 'Menyimpan...' : 'Simpan'}</span>
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div className="space-y-2">
+                          <div className="space-y-1.5">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-pink-400">{chunk.title}</span>
-                              <div className="flex items-center space-x-3">
-                                <span className="text-[10px] text-slate-600 font-mono">Similarity: {(chunk.score || 0.85).toFixed(2)}</span>
+                              <span className="text-xs font-bold text-[#008069]">{chunk.title}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-[10px] text-[#8696a0] font-mono">Similarity: {(chunk.score || 0.85).toFixed(2)}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleStartEdit(chunk)}
-                                  className="p-1 rounded bg-white/5 hover:bg-pink-500/10 text-slate-400 hover:text-pink-400 transition"
+                                  className="p-1 rounded-md bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] transition shadow-xs"
                                   title="Edit Chunk"
                                 >
                                   <Edit3 size={11} />
                                 </button>
                               </div>
                             </div>
-                            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                            <p className="text-xs text-[#54656f] leading-relaxed">
                               {chunk.content}
                             </p>
                           </div>
@@ -436,8 +435,8 @@ export const AiSandbox: React.FC = () => {
                     );
                   })}
                   {(!inspectorData.chunks || inspectorData.chunks.length === 0) && (
-                    <div className="text-xs text-slate-600 py-2">
-                      No vector chunks retrieved for current query.
+                    <div className="text-xs text-[#8696a0] py-2 italic">
+                      Tidak ada vector chunks yang relevan untuk pertanyaan ini.
                     </div>
                   )}
                 </div>
@@ -446,7 +445,7 @@ export const AiSandbox: React.FC = () => {
               {/* System Persona prompt */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-400 block uppercase flex items-center space-x-1">
+                  <span className="text-[11px] font-bold text-[#667781] block uppercase flex items-center space-x-1">
                     <Cpu size={12} />
                     <span>Active System Persona Prompt</span>
                   </span>
@@ -454,32 +453,31 @@ export const AiSandbox: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setEditingPersona(true)}
-                      className="px-2 py-1 rounded bg-white/5 hover:bg-pink-500/10 text-slate-400 hover:text-pink-400 text-[10px] font-bold transition flex items-center space-x-1"
+                      className="px-2 py-0.5 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-[10px] font-bold transition flex items-center space-x-1 shadow-xs"
                     >
                       <Edit3 size={10} />
                       <span>Edit Persona</span>
                     </button>
                   ) : (
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-1.5">
                       <button
                         type="button"
                         onClick={() => {
                           setEditingPersona(false);
                           setPersonaText(inspectorData.systemPrompt || '');
                         }}
-                        className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[10px] font-bold transition flex items-center space-x-1"
+                        className="px-2 py-0.5 rounded-lg bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-[10px] font-semibold"
                       >
-                        <X size={10} />
-                        <span>Cancel</span>
+                        Batal
                       </button>
                       <button
                         type="button"
                         onClick={handleSavePersona}
                         disabled={personaLoading}
-                        className="px-2 py-1 rounded bg-pink-500 hover:bg-pink-600 text-white text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50"
+                        className="px-2.5 py-0.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[10px] font-bold transition flex items-center space-x-1 disabled:opacity-50 shadow-xs"
                       >
                         <Save size={10} />
-                        <span>{personaLoading ? 'Saving...' : 'Save'}</span>
+                        <span>{personaLoading ? 'Menyimpan...' : 'Simpan'}</span>
                       </button>
                     </div>
                   )}
@@ -487,13 +485,13 @@ export const AiSandbox: React.FC = () => {
 
                 {editingPersona ? (
                   <textarea
-                    rows={12}
+                    rows={10}
                     value={personaText}
                     onChange={(e) => setPersonaText(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-slate-950 border border-white/10 text-[10px] text-white focus:outline-none focus:border-pink-500 leading-relaxed font-mono"
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] leading-relaxed font-mono resize-none shadow-xs"
                   />
                 ) : (
-                  <pre className="p-3 bg-slate-950 border border-white/5 rounded-xl text-[10px] text-slate-500 font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
+                  <pre className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-[10px] text-[#54656f] font-mono overflow-auto max-h-40 whitespace-pre-wrap leading-relaxed">
                     {inspectorData.systemPrompt}
                   </pre>
                 )}
@@ -501,9 +499,9 @@ export const AiSandbox: React.FC = () => {
 
             </div>
           ) : (
-            <div className="h-full flex flex-col justify-center items-center text-center text-slate-600 text-xs py-20">
-              <Eye size={36} className="mb-3 text-slate-700" />
-              <p>Type and send a message in the chat simulator to inspect live retrieval variables here.</p>
+            <div className="h-full flex flex-col justify-center items-center text-center text-[#8696a0] text-xs py-20">
+              <Eye size={32} className="mb-2 text-[#8696a0]" />
+              <p>Ketik dan kirim pesan di simulator chat untuk menginspeksi variabel RAG secara real-time.</p>
             </div>
           )}
         </div>

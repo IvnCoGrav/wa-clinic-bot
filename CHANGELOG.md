@@ -4,10 +4,273 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-08-14
+### Added — Sequential Homecare Distance Calculation for Therapist Itinerary (Haversine 0-API)
+
+- **Kalkulasi Jarak Sekuensial Berantai (`src/services/staff-reservation.service.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengubah logika perhitungan jarak pada kartu tugas terapis (*Staff Today & Jadwal Mendatang*) agar mengikuti rute nyata terapis di lapangan:
+    - **Pasien #1**: Menghitung jarak dari **Klinik / Basecamp** ke rumah Pasien 1 (`📍 Jarak: X km dari klinik`).
+    - **Pasien #2, #3, dst**: Menghitung jarak dari **titik lokasi pasien sebelumnya** ke rumah pasien saat ini (`🛵 Jarak: X km dari pasien sebelumnya (Bunda Aurel)`).
+  - Menggunakan formula **Haversine lokal murni (0 API Call / 0 Biaya Kuota)** yang dikalikan dengan faktor kelokan rute perkotaan (`HAVERSINE_CIRCUITY_FACTOR = 1.60x`).
+  - Menyertakan *fallback cerdas*: Jika pasien sebelumnya belum memiliki koordinat GPS, sistem otomatis menghitung ulang jarak dari titik klinik.
+  - Memperbarui antarmuka kartu tugas dan jadwal mendatang di portal terapis dengan visual badge yang informatif.
+
+### Added — UI Kalender Modern (Week/Day/Month/Table) & Modal Buat Jadwal Baru Terpadu dengan Searchable Service Catalog
+
+- **Antarmuka Kalender Modern Dual-Pane (`packages/admin-dashboard/src/pages/tenant/Reservations.tsx`, `packages/admin-dashboard/src/components/calendar/*`)**:
+  - **Sidebar Widget Kiri (`CalendarSidebar.tsx`)**:
+    - **`MiniMonthCalendar.tsx`**: Widget mini kalender bulanan bernuansa dark modern (`#111b21`) dengan navigasi bulan, penanda titik tanggal yang memiliki jadwal reservasi, dan seleksi tanggal aktif yang sinkron dengan tampilan kalender utama.
+    - **`UpcomingSpotlightCard.tsx`**: Kartu sorotan jadwal terdekat dengan waktu kunjungan (`12:00 - 13:30`), nama pasien, jenis layanan, tombol aksi cepat *Lihat Detail*, dan direct link WhatsApp pasien.
+    - **Filter Kategori & Terapis**: Filter visual berbasis warna kategori (Baby: Sky Blue, Moms: Purple, Kids/Both: Emerald, Bundles: Amber) lengkap dengan counter jumlah janji temu aktif, filter terapis/staf, dan status.
+  - **Main Calendar Canvas & View Switcher (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`, `MonthScheduleGrid.tsx`)**:
+    - Header dinamis menampilkan Nama Bulan & Tahun (misal: *Agustus 2026*), tombol navigasi `<` (Sebelumnya), `Hari Ini` (Today), dan `>` (Berikutnya).
+    - Switcher tampilan 4 mode fleksibel: **[ Bulan | Minggu | Hari | Tabel ]**.
+    - **Week Schedule Grid (06:00 s.d. 21:00)**: Header 7 kolom hari diawali dari **Senin s.d. Minggu** dengan angka tanggal besar (hari ini / hari aktif disorot dengan badge kontras tinggi), kartu event pastel yang rapi dengan info pasien, treatment, rentang waktu, badge terapis, dan status pembayaran.
+    - **Interactive Hover Slot Add (`+`)**: Mengklik slot jam kosong pada kalender mingguan atau harian akan langsung membuka modal *Buat Jadwal Baru* dengan tanggal & jam mulai yang otomatis terisi.
+    - **Day Schedule Grid**: Tampilan detail jam per jam untuk 1 hari fokus dengan info kontak, alamat lengkap, dan jarak/ongkir.
+    - **Month Schedule Grid**: Grid kalender 35/42 hari dengan tag janji temu per tanggal.
+  - **Penyederhanaan Navigasi Sidebar (`Layout.tsx`)**: Menghapus item menu `Delivery Fee` dari sidebar utama karena pengaturan tarif ongkir sudah terintegrasi pada halaman operasional terkait.
+- **Searchable Service Catalog Dropdown & Form Buat Jadwal Baru Lengkap (`packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx`)**:
+  - **Searchable Service Dropdown (Dropdown Layanan Terpadu)**:
+    - Terintegrasi secara live dengan katalog layanan klinik (`/api/admin/services`).
+    - Input pencarian cepat dengan filter nama layanan, kategori, atau keyword.
+    - Menampilkan nama paket, badge kategori, durasi (menit), dan harga paket.
+    - Memilih layanan akan **otomatis mengisi kategori perawatan, nama treatment, dan mengkalkulasi estimasi jam selesai** berdasarkan durasi layanan (misal: booking jam 09:00 + durasi 60m → jam selesai 10:00).
+    - Opsi toggle input kustom / manual jika layanan belum ada di katalog.
+  - **Pencarian Customer & Quick Child Selector Chips**:
+    - Pencarian customer live dari database (`/api/admin/customers`).
+    - Menampilkan data alamat, jarak km, dan daftar anak/bayi yang sudah terdaftar sebagai chips yang bisa dipilih dalam 1-klik, serta opsi input bayi/anak baru.
+  - **Penugasan Terapis, Status & Catatan Khusus**:
+    - Dropdown pemilihan bidan terapis aktif (`/api/admin/staff`).
+    - Pemilihan status (*Pending / Confirmed*) dan kolom catatan keluhan/permintaan khusus pasien.
+- **Backend API & Test Enhancements (`src/routes/admin/reservations.subroute.ts`, `tests/unit/admin-create-reservation.test.ts`)**:
+  - Endpoint `POST /api/admin/reservation` diperkaya untuk mendukung field `assignedStaffId`, `status`, `notes`, serta pemetaan kategori `KIDS` ke `BABY` dan `BUNDLE` ke `BOTH` pada enum Prisma.
+  - Unit test `tests/unit/admin-create-reservation.test.ts` diperbarui dan berhasil lolos 100%.
+
+### Fixed — Route Mappings & Canonical Path Alignment in Admin Dashboard
+
+- **Penyelarasan Path Rute Frontend (`packages/admin-dashboard/src/App.tsx`)**:
+  - Memperbaiki ketidaksesuaian path rute antara `Layout.tsx`, `rolePermissions.ts`, dan `App.tsx`:
+    - `/admin/customer-service` (Customer Service & CTA)
+    - `/admin/staff-management` (Staff & Terapis)
+    - `/admin/delivery` (Delivery Fee / Tiers)
+    - `/admin/follow-up-templates` (Follow-Up Templates)
+    - `/admin/knowledge-base` (Knowledge Base)
+    - `/admin/ai-evaluations` (AI Quality Evaluation)
+    - `/admin/meta-click-catcher` (Meta Click Catcher)
+    - `/admin/meta-capi-queue` (Meta CAPI Queue)
+  - Menghapus duplikasi path `/admin/staff` yang sebelumnya menabrak rute staff today.
+  - Menambahkan dukungan alias URL pendek (`/admin/cs`, `/admin/staff`, `/admin/tiers`, `/admin/knowledge`, `/admin/evaluations`, `/admin/meta-clicks`, `/admin/meta-capi`, `/admin/followup-templates`) yang otomatis mengarah ke rute kanonikal masing-masing secara mulus.
+
+### Added — Full Admin Dashboard UI Overhaul to WhatsApp Web Light & Clean Emerald Aesthetic
+
+- **Design System & Global CSS Tokens Migration (`packages/admin-dashboard/src/index.css`, `packages/admin-dashboard/src/components/common/Layout.tsx`, `packages/admin-dashboard/src/App.tsx`)**:
+  - Merombak total seluruh desain antarmuka Super Admin & Tenant Dashboard dari nuansa gelap-pink (`slate-950`, `pink-500`, `glass-card`) menjadi desain elegan, bersih, dan berstandar **WhatsApp Web Light / Clean Emerald**:
+    - Background Canvas: `#f0f2f5` (WhatsApp Web light gray canvas).
+    - Surface & Cards: Putih bersih `#ffffff` dengan border halus `#e9edef`, bayangan natural `shadow-xs`, dan sudut membulat `rounded-2xl`.
+    - Typography: Teks dengan kontras tinggi `#111b21`, teks sekunder/label `#667781` / `#54656f`, dan font sistem modern.
+    - Brand Primary Color: `#008069` (Official WhatsApp Emerald) dengan hover state `#00a884` dan active state `#006d59`.
+    - Sidebar Navigation: Background putih bersih dengan border kanan `#e9edef`, item aktif dengan latar emerald lembut `bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold`, serta header profil tenant yang bersih.
+    - Feedback & Utilities: Pagination, alert banners, toasts, and confirm dialogs migrated to crisp light components.
+- **Halaman Operasional, Manajemen, AI & Marketing Dimigrasikan**:
+  - `Login.tsx` & `StaffLogin.tsx`: Login card putih bersih dengan input ber-border `#d1d7db` dan tombol login emerald `#008069`.
+  - `Overview.tsx`: Stat KPI cards, charts container, quick action buttons, dan reservasi harian dengan visual WhatsApp Web light.
+  - `CustomerDatabase.tsx`: Tabel data pelanggan, badge VIP/MQL/Lead, filter pencarian, pagination, dan modal detail/edit pelanggan.
+  - `Reservations.tsx`: Kalender/tabel janji temu, modal buat janji baru, badge status perawatan, dan kalkulator rincian biaya.
+  - `StaffManagement.tsx`: Grid kartu staf & bidan terapis, badge role, modal tambah/edit staf, dan pengaturan jadwal kerja.
+  - `ClinicServices.tsx`: Katalog layanan perawatan moms & baby, editor paket, harga, durasi, dan toggle aktif/nonaktif.
+  - `DeliveryTiers.tsx`: Editor tabel tarif ongkir per radius kilometer dan potongan promo.
+  - `FollowUpQueue.tsx`: Antrean pesan follow-up otomatis, badge status pengiriman, dan tombol trigger manual.
+  - `FollowUpTemplates.tsx`: Editor template pesan follow-up dan template perjalanan terapis (`STAFF_OTW`).
+  - `KnowledgeBase.tsx`: Manajemen artikel FAQ klinis & prosedur, editor teks, dan status embedding AI.
+  - `AiPersona.tsx`: Konfigurasi nama bot, brand klinik, tone of voice, dan instruksi sistem bot AI.
+  - `AiSandbox.tsx`: Simulator percakapan AI interaktif berlatar wallpaper chat WhatsApp `#efeae2` dengan bubble chat dua arah.
+  - `AiEvaluations.tsx`: Tabel audit evaluasi respons AI router, skor akurasi, dan perbandingan intent.
+  - `Settings.tsx` & Semua Sub-Panel (`WhatsAppProviderPanel.tsx`, `AiRouterPanel.tsx`, `MetaCapiPanel.tsx`, `PricelistImagePanel.tsx`, `MqlSettingsPanel.tsx`, `DailyReportPanel.tsx`, `InstallAppPanel.tsx`):
+    - Tampilan pairing QR code WhatsApp, kredensial WAHA/WABA, AI Router switchboard, Meta CAPI token inputs, Telegram Daily Report, dan petunjuk install PWA.
+  - `CustomerService.tsx`: Form pengaturan kontak WhatsApp CS dan generator CTA Link tracking.
+  - `LandingPage.tsx` & `ExternalIntegrationModal.tsx`: Editor landing page kustom/template bawaan dan panduan embed script pelacakan.
+  - `MetaClickCatcher.tsx` & `MetaCapiQueue.tsx`: Monitoring klik iklan Meta, atribusi konversi chat WhatsApp, dan antrean event Purchase CAPI.
+  - `ChatExport.tsx` & `Debug.tsx`: Alat ekspor transkrip chat untuk evaluasi AI serta observability log & circuit breaker.
+
+### Added — Tarik & Hapus Pesan WhatsApp untuk Semua Orang (Delete for Everyone / Revoke) & WABA Compatibility Guard
+
+- **Gateway Abstraction Revoke Support (`src/integrations/whatsapp/gateway.types.ts`, `src/integrations/whatsapp/waha.driver.ts`, `src/integrations/whatsapp/waba.driver.ts`, `src/integrations/waha/client.ts`)**:
+  - Menambahkan properti `supportsRevoke: boolean` dan method `deleteMessage(chatId, messageId, everyone = true)` pada interface `WhatsAppGateway`.
+  - **WAHA Gateway (`WahaGatewayDriver`)**: Mengeset `supportsRevoke = true` dan mengimplementasikan penghapusan pesan via endpoint WAHA `DELETE /api/{session}/chats/{chatId}/messages/{messageId}?everyone=true` serta fallback `POST /api/messages/delete`.
+  - **WABA Gateway (`WabaGatewayDriver`)**: Mengeset `supportsRevoke = false` karena Meta Cloud API tidak mengizinkan penarikan pesan dari perangkat customer setelah terkirim.
+- **Backend Service & Real-Time Sync (`src/services/message.service.ts`, `src/services/live-chat.service.ts`, `src/services/live-chat-hub.service.ts`)**:
+  - `messageService.markMessageDeleted(messageId, tenantId)`: Memperbarui konten pesan di database/memory menjadi `🚫 Pesan ini telah ditarik`, menandai `payload_raw.is_revoked = true`, dan mem-publish event `message.updated` ke hub SSE.
+  - `liveChatService.revokeMessage({ conversationId, messageId, tenantId, adminName })`: Memvalidasi kepemilikan pesan outbound, memeriksa kapabilitas gateway tenant, menarik pesan di WhatsApp via driver, dan mencatat audit log `REVOKE_MESSAGE`.
+  - `liveChatService.getGatewayCapability(tenantId)`: Endpoint untuk mendeteksi kapabilitas gateway tenant aktif (`provider` & `supportsRevoke`).
+- **REST Endpoints (`src/routes/admin/livechat.subroute.ts`, `src/routes/staff/today.subroute.ts`)**:
+  - `GET /api/admin/gateway-capability` & `GET /api/staff/gateway-capability`: Mengembalikan kapabilitas gateway aktif.
+  - `DELETE /api/admin/conversations/:id/messages/:messageId`: Tarik pesan untuk panel Admin Live Chat.
+  - `DELETE /api/staff/conversations/:id/messages/:messageId`: Tarik pesan untuk portal Terapis (dengan proteksi `assertConversationOwnedByStaffToday`).
+- **Frontend UI & Conditional Guard (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - **Live Chat Monitor (Admin)** & **Staff Today Portal (Terapis)**:
+    - Menampilkan ikon tombol hapus/tarik pesan (`Trash2`) pada bubble chat outbound hanya jika `gatewayCapability.supportsRevoke === true`.
+    - **WABA Compatibility Guard**: Jika gateway tenant adalah WABA Meta Cloud API (`supportsRevoke === false`), tombol hapus **TIDAK dirender sama sekali** di UI agar tidak membingungkan pengguna.
+    - Integrasi modal konfirmasi elegan via `useUiFeedback` sebelum menarik pesan.
+    - Sinkronisasi real-time via SSE: jika pesan ditarik, bubble langsung terupdate dengan teks miring `🚫 Pesan ini telah ditarik`.
+
+### Added — WhatsApp Aesthetic Overhaul for Therapist Portal & Staff Management Actions
+
+- **Desain & UI WhatsApp Web Light Official Tokens (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`, `design.md`)**:
+  - Redesign antarmuka portal chat terapis persis dengan tampilan WhatsApp Web Light resmi:
+    - App Header & Bar: `#f0f2f5` dengan teks `#111b21`.
+    - Canvas Wallpaper Chat: `#efeae2` (warm beige wallpaper dengan pola micro-dot).
+    - Bubble Chat Inbound (Customer): `#ffffff` putih bersih dengan teks `#111b21` dan rounded-tl-none.
+    - Bubble Chat Outbound (Terapis/Staff): `#d9fdd3` (WhatsApp soft mint green) dengan centang ganda biru (`#53bdeb`).
+    - Bubble Chat Bot AI: `#ffffff` dengan aksen border hijau `#008069`.
+    - Input Bar WhatsApp: Input teks `#ffffff` dengan tombol emoji, lampiran, dan tombol kirim `#008069`.
+    - Quick Template Chips di atas input chat: `"📍 Sudah sampai di depan"` dan `"❤️ Ucapan selesai perawatan"`.
+  - Menghapus label tagih/lunas yang menumpuk agar antarmuka kartu tugas lebih bersih dan fokus.
+  - Mengganti tombol "Salin Info" menjadi tombol aksi cepat **"Infokan OTW"** (`Navigation2`) yang otomatis mengirimkan pesan konfirmasi perjalanan ke WhatsApp pasien dalam 1 klik.
+  - Menghilangkan seluruh karakter em-dash (`—`) pada UI sesuai pedoman anti-slop `design.md`.
+  - Menggunakan viewport stability `min-h-[100dvh]` untuk kenyamanan akses di browser mobile dan desktop.
+- **Automatic Therapist Identity Signature (`src/routes/staff/today.subroute.ts`, `src/services/staff-reservation.service.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menyisipkan tanda tangan identitas nama bidan terapis secara otomatis di baris paling bawah setiap pesan balasan lapangan (`\n\n~ [Nama Bidan]`).
+  - Menghindari duplikasi jika pesan sudah mengandung tanda tangan.
+  - Menampilkan badge indikator identitas pengirim di bawah kotak input chat portal terapis agar terapis mengetahui format pesan keluar.
+- **Customizable OTW Template & Super Admin Editor (`src/config/followup-templates.ts`, `src/services/staff-reservation.service.ts`, `packages/admin-dashboard/src/pages/tenant/FollowUpTemplates.tsx`)**:
+  - Menambahkan tipe template `STAFF_OTW` ke daftar template follow-up yang dapat diedit langsung oleh Super Admin.
+  - Mendukung variabel dinamis `{patientName}`, `{therapistName}`, dan `{clinicName}` dengan fallback teks default bawaan.
+  - Endpoint `GET /api/staff/otw-template` untuk merender template aktif sesuai pasien & staf yang bertugas.
+- **Modern UI Feedback Modal Kit (`packages/admin-dashboard/src/components/common/UiFeedback.tsx`)**:
+  - Merombak total tampilan modal konfirmasi dialog dan toast notifikasi:
+  - Menghilangkan nuansa gelap/pink (`slate-950` / `pink-500`) dan menggantinya dengan tema elegan WhatsApp Light / Clean Emerald (`bg-white`, teks `#111b21`, aksen hijau `#008069`, dan backdrop bersih).
+- **Mekanisme Pembayaran Lapangan & Upload Bukti Transaksi Ringan (`src/routes/staff/today.subroute.ts`, `src/services/staff-reservation.service.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan tombol **"Catat Bayar"** dan modal pembayaran interaktif untuk terapis:
+    - Pilihan metode: **Tunai (Cash)** vs **Non-Tunai (Transfer / QRIS)**.
+    - Upload foto bukti transfer/QRIS dengan kompresi otomatis di sisi browser (HTML5 Canvas maks 800px, JPEG 0.65, ~50 KB bukan HD untuk menghemat kapasitas storage server).
+    - Endpoint `POST /api/staff/reservations/:id/payment` yang memperbarui status transaksi menjadi lunas, mencatat bukti pembayaran, dan mengirimkan pesan konfirmasi/struk resmi ke chat customer secara otomatis.
+- **Penyatuan Portal Terapis Menjadi 2 Tab Interaktif (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menggabungkan tampilan **Tugas & Chat Hari Ini** dan **Jadwal Mendatang** dalam 2 Tab di halaman yang sama (`/admin/staff/today`).
+  - Memungkinkan terapis beralih antara memproses kunjungan hari ini dan mengecek jadwal besok/lusa secara cepat tanpa reload halaman.
+
+### Added — Unified Login & Role-Based Access Control (RBAC) Multirole
+
+- **Database Model & Migrations (`prisma/schema.prisma`, `prisma/migrations/20260831000000_add_rbac_roles`)**:
+  - Memperluas enum `StaffRole` dengan role baru: `ADMIN_CS` dan `ADVERTISER` (selain `THERAPIST`).
+- **Backend Unified Login 2-Tahap (`src/routes/admin/auth.subroute.ts`, `src/routes/admin.route.ts`)**:
+  - `POST /api/admin/auth/login`: Satu pintu login untuk semua peran. Menerima `identifier` (Email atau No. WhatsApp) + `password`.
+  - Tahap A: Jika password cocok dengan `ADMIN_API_KEY`, terbitkan `admin_session` cookie dan kembalikan role `super_admin` dengan auto-redirect `/admin/overview`.
+  - Tahap B: Jika identifier cocok dengan nomor telepon di tabel `staff` (terapis, admin CS, atau advertiser) dan lolos verifikasi bcrypt password, terbitkan `staff_session` cookie dan kembalikan role serta auto-redirect yang sesuai (`/admin/staff/today` untuk `therapist`, `/admin/overview` untuk `admin_cs` dan `advertiser`).
+  - `GET /api/admin/auth/me`: Menyelesaikan sesi aktif baik dari cookie `admin_session` maupun `staff_session`.
+  - `POST /api/admin/auth/logout`: Membersihkan sesi dan cookie `admin_session` serta `staff_session` secara bersamaan.
+  - Middleware `admin.route.ts` preHandler: Mengizinkan cookie `staff_session` untuk peran `ADMIN_CS` dan `ADVERTISER` mengakses endpoint manajemen admin.
+- **Frontend Single Source of Truth RBAC Config (`packages/admin-dashboard/src/config/rolePermissions.ts`)**:
+  - Definisi peran `AppRole` (`super_admin`, `tenant_admin`, `admin_cs`, `advertiser`, `therapist`).
+  - Matriks akses menu `ROLE_MENU_ACCESS` dan helper `hasAccess(role, path)` serta `getDefaultRedirect(role)`.
+- **Frontend Unified UI & Dynamic Navigation (`packages/admin-dashboard`)**:
+  - `Login.tsx`: Form login universal menerima Email Admin atau No. WhatsApp Staff, melakukan auto-redirect dinamis berdasarkan role yang dikembalikan server.
+  - `Layout.tsx`: Menyaring menu sidebar admin secara dinamis sesuai role pengguna yang login, menampilkan nama & role badge di footer sidebar.
+  - `ProtectedRoute.tsx`: Route guard memeriksa izin akses path per-role berdasarkan matriks RBAC dan redirect ke `/admin/unauthorized` jika tidak diizinkan.
+  - `App.tsx`: Mengalihkan rute lama `/admin/staff/login` ke `/admin/login`, menambahkan alias rute `/staff`, `/terapis`, dan `/chat` ke portal terapis.
+  - `StaffManagement.tsx`: Menambahkan opsi pemilihan peran (`THERAPIST`, `ADMIN_CS`, `ADVERTISER`) saat membuat akun staff baru.
+
+### Added — Enriched Therapist Portal (Alamat Lengkap, Anak, Harga, & Navigasi Turn-by-Turn)
+
+- **Backend Enriched Task Query (`src/services/staff-reservation.service.ts`)**:
+  - Memperkaya interface `StaffTaskItem` dengan:
+    - `address`: Kelurahan, Kecamatan, Kota, Jarak dari klinik dalam km, dan `fullText`.
+    - `children`: Daftar nama anak/bayi dan usia saat ini (`rawAgeText`).
+    - `pricing`: Rincian biaya treatment, ongkir, `totalFee`, dan status pembayaran (`LUNAS` jika ada `purchase_occurred_at`, atau `TAGIH_DI_TEMPAT`).
+    - `navigationUrl`: Link navigasi turn-by-turn Google Maps (`https://www.google.com/maps/dir/?api=1&destination=lat,lng&travelmode=driving`).
+    - `shareLocationText`: Teks format ringkas informasi kunjungan siap salin/share ke WhatsApp.
+- **Frontend Mobile-First Task Card & Header (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menampilkan alamat lengkap dan badge jarak (mis. *2.5 km* dari klinik) pada setiap kartu tugas.
+  - Menampilkan badge nama & usia anak (mis. *👶 Kenzo (6 bulan)*).
+  - Menampilkan kotak breakdown biaya: Biaya Treatment + Ongkir = **Total Tagihan** serta badge status pembayaran (Lunas vs Tagih di Tempat).
+  - Tombol aksi cepat: **Navigasi** (membuka navigasi rute Google Maps langsung) dan **Salin Info** (menyalin ringkasan tugas ke clipboard dengan feedback visual).
+  - Integrasi preview media/gambar pada thread chat live dengan prop `MediaImage` yang aman.
+- **Unit & Integration Tests (`tests/unit/unified-login.test.ts`, `tests/unit/role-permissions.test.ts`, `tests/unit/staff-auth-and-reservation.test.ts`)**:
+  - 41/41 unit & integration test untuk seluruh flow auth, staff, RBAC, dan reservation query lulus 100%.
+
+- **Database Model & Migrations (`prisma/schema.prisma`, `prisma/migrations/20260830000000_add_staff_access`)**:
+  - Menambahkan enum `StaffRole { THERAPIST }`.
+  - Menambahkan model `Staff` (`id`, `tenant_id`, `name`, `phone`, `password_hash`, `role`, `active`, `created_at`, `updated_at`) dengan index `[tenant_id, phone]`.
+  - Menambahkan model `StaffSession` (`id`, `staff_id`, `token_hash`, `expires_at`, `created_at`) dengan TTL 12 jam dan index `[token_hash]`, `[staff_id]`, `[expires_at]`.
+  - Menambahkan field relasi `assigned_staff_id` dan `assigned_staff Staff?` pada model `Reservation` dengan index `[assigned_staff_id]`.
+- **Backend Service Layer (`src/utils/bcrypt.ts`, `src/services/staff-auth.service.ts`, `src/services/staff-reservation.service.ts`)**:
+  - `bcrypt.ts`: wrapper hashing password dengan bcrypt salt rounds 12.
+  - `StaffAuthService`: login dengan rate limit dan database-backed session token SHA-256, validasi sesi, logout, dan pencabutan sesi massal (`revokeAllSessions`).
+  - `StaffReservationService`: query jadwal tugas harian terapis (`getTodayTasks`) dengan privasi masking nomor telepon pelanggan di level DB query, serta guard validasi kepemilikan percakapan (`assertConversationOwnedByStaffToday`).
+  - Unit tests: `tests/unit/staff-auth-and-reservation.test.ts` (10/10 PASS).
+- **Backend Routes & SSE Stream (`src/routes/staff.route.ts`, `src/routes/staff/auth.subroute.ts`, `src/routes/staff/today.subroute.ts`)**:
+  - Endpoint auth staff: `POST /api/staff/auth/login` (rate limit 5 req/min), `POST /api/staff/auth/logout`, `GET /api/staff/auth/me`.
+  - Endpoint portal staff: `GET /api/staff/today-tasks`, `GET /api/staff/conversations/:id/messages` (ownership-guarded), `POST /api/staff/conversations/:id/reply` (mengirim via gateway bot official tenant dengan audit logging identitas staff).
+  - Endpoint SSE real-time: `GET /api/staff/live-chat/events` dengan filter server-side agar terapis hanya menerima event dari customer yang ditugaskan hari ini.
+  - Integration tests: `tests/integration/staff-routes.test.ts` (11/11 PASS).
+- **Admin Staff Management & Reservation Assignment API (`src/routes/admin/staff-management.subroute.ts`, `src/routes/admin/reservations.subroute.ts`)**:
+  - CRUD Akun Staff: `GET /api/admin/staff`, `POST /api/admin/staff` (auto bcrypt), `PATCH /api/admin/staff/:id` (toggle status aktif / reset password dengan auto revocation sesi).
+  - Penugasan Reservasi: `PATCH /api/admin/reservation/:id/assign-staff` dengan audit logging admin.
+  - Integration tests: `tests/integration/admin-staff-management.test.ts` (6/6 PASS).
+- **Frontend Staff Portal & Auth UI (`packages/admin-dashboard`)**:
+  - `StaffAuthContext.tsx`: React Context terisolasi untuk autentikasi staff (cookie `staff_session`).
+  - `StaffProtectedRoute.tsx`: Route guard untuk mengarahkan pengguna yang belum login ke portal staff.
+  - `StaffLogin.tsx`: Halaman login mobile-first terapis bertema teal modern.
+  - `StaffToday.tsx`: Portal tugas lapangan & Live Chat terapis dengan:
+    - Ringkasan tugas harian (nama pasien, jam, jenis treatment).
+    - Tombol petunjuk arah "Google Maps" langsung (`mapsUrl`).
+    - Live Chat real-time via SSE `/api/staff/live-chat/events` dengan notifikasi audio beep Web Audio API & native browser notification.
+    - Pengiriman balasan aman via gateway bot klinik dengan touch target ramah mobile (>= 44x44px).
+- **Frontend Admin UI Staff Management & Assignment (`packages/admin-dashboard`)**:
+  - `StaffManagement.tsx`: Halaman admin untuk mengelola staff, modal tambah staff, reset password, dan toggle nonaktif akun dengan modal konfirmasi `useUiFeedback`.
+  - `Reservations.tsx`: Dropdown penugasan terapis di modal detail reservasi dan badge nama terapis di tabel list & card mobile.
+  - `App.tsx`: Rute `/admin/staff/login`, `/admin/staff/today`, `/admin/staff-management`.
+  - `Layout.tsx`: Menu navigasi "Staff & Terapis" di sidebar admin.
 
 ### Fixed — Fase 8: Anti Hard-Selling FAQ, Batch Follow-Up & Media Webhook (Phase 1-4 hardening)
 
+- **Add Surabaya & Sidoarjo Major Apartments & Landmarks Geocoding Map & Set Haversine Circuity Factor to 1.60x (`src/config/landmarks.ts`, `src/integrations/google-maps/geocoding.ts`, `src/services/delivery.service.ts`, `.env`)**:
+  - Menambahkan kamus pemetaan cepat untuk 30+ apartemen, mall, dan landmark besar di Surabaya & Sidoarjo (*CitraLand Vittorio, Gunawangsa Tidar/Manyar/MERR, Anderson Tower / Benson / Orchard / Tanglin / Pakuwon Mall, Klaska Residence, Grand Sungkono Lagoon, Grand Dharmahusada Lagoon, The Rosebay Graha Famili, Grand Shamaya, Apartemen Taman Melati, Kyo Society, One Icon Residence, Waterplace / Ascott, Taman Beverly, The Galaxy Residences, Metropolis Apartemen, Pavilion Permata, Puri Darmo, Puncak Kertajaya/Marina/Permai, CITO, Banjarmukti, Safira Garden, CitraGarden, Kahuripan Nirwana, Prospero, dll.*).
+  - Mengupdate formula fallback pengali kelokan jarak *Haversine* (`HAVERSINE_CIRCUITY_FACTOR`) menjadi **1.60x** agar estimasi jarak tempuh perkotaan selaras dan akurat dengan rute jalan nyata berkendara (*OpenRouteService / Google Maps*).
+  - Penambahan unit test `tests/unit/surabaya-apartments-geocoding.test.ts` (20/20 PASS).
+- **Add Religious Neutrality & Mandatory Waalaikumsalam Response Prefix (`src/state-machine/utils/islamic-greeting-helper.ts`, `machine.ts`, `greeting.ts`, `persona.ts`)**:
+  - Menghilangkan/mengurangi kata keagamaan seperti *"Alhamdulillah"* dari percakapan normal demi netralitas agama pelanggan yang majemuk.
+  - Menambahkan deteksi sapaan Islami (`hasIslamicGreeting`, mis. *"assalamualaikum"*, *"assalamu'alaikum wr wb"*, *"ass"*, *"aslm"*, *"mikum"*).
+  - Mengimplementasikan aturan **WAJIB menjawab "Waalaikumsalam Bunda"** di awal respon sebelum melanjutkan pesan / jawaban apa pun jika customer menyapa dengan Assalamualaikum.
+  - Penambahan unit test `tests/unit/islamic-greeting-response.test.ts` (5/5 PASS).
+- **Fix General Age Treatment Recommendation ("Untuk anak umur 17 bulan yg mana yaa") (`src/services/treatment-catalog.service.ts`, `src/state-machine/handlers/interest.ts`, `src/integrations/llm/generator.ts`)**:
+  - Memperbaiki perilaku di mana customer yang hanya menanyakan rekomendasi treatment berdasarkan usia secara umum (tanpa keluhan sakit) keliru ditawari paket terapi penyakit (seperti *Pijat Pulih Ceria*, *Nebulizer*, *Sinar Moksa*).
+  - Menambahkan filter `onlyGeneral` pada `getServicesByAge` jika pesan tidak mengandung keluhan medis / gejala sakit (`checkMedicalKeywords`), menyaring hanya treatment relaksasi & kebugaran standar (*Pijat Bayi Ceria*, *Pijat Kids Ceria*, *Pijat Lahap Juara*).
+  - Menambahkan aturan prompt rule 9 pada AI Generator untuk mengarahkan pertanyaan usia umum ke treatment relaksasi/wellness dan melarang penawaran terapi sakit/nebulizer tanpa adanya keluhan dari customer.
+  - Penambahan unit test `tests/unit/general-age-treatment-recommendation.test.ts` (3/3 PASS).
+- **Upgrade POI & Housing Complex Geocoding Intelligence ("Banjarmukti Residence Sidoarjo") (`src/integrations/google-maps/geocoding.ts`)**:
+  - Memperbaiki kelemahan di mana nama perumahan/POI spesifik (seperti *"banjarmukti Residence"*, *"safira garden"*, *"citragarden"*, *"puri surya jaya"*) yang dikirim bersama nama kota *"sidoarjo"* keliru dibajak oleh gate kecamatan sebagai input "hanya kecamatan", sehingga bot keliru menanyakan daftar kelurahan di Kecamatan Sidoarjo (Suko, Pekauman, Sidoklumpuk).
+  - Menambahkan deteksi token perumahan/kompleks (`residence`, `regency`, `cluster`, `villa`, `apartemen`, `townhouse`, `mansion`, `estate`, `griya`, `graha`, dll.) dan token nama tempat bermakna (mis. `banjarmukti`). Sistem sekarang meneruskan nama perumahan ke pipeline Geocoding / LLM resolver sehingga berhasil dipetakan ke kelurahan presisi (**Kelurahan Banjarkemantren, Kec. Buduran, Sidoarjo**).
+  - Penambahan unit test `tests/unit/poi-housing-geocoding.test.ts` (2/2 PASS) dan update few-shot prompt LLM geocoder.
+- **Fix Clinic Location / Midwife Origin Inquiry ("Kalo boleh tau kakaknya darimana kak?") (`src/state-machine/utils/clinic-location-checker.ts`, `interest.ts`, `location.ts`, `generator.ts`, `nlu-classifier.service.ts`)**:
+  - Memperbaiki bug di mana customer yang menanyakan lokasi klinik/asal bidan (e.g. *"Saya dari surabaya timur kak. Kalo boleh tau kakaknya darimana kak?"*) keliru dibalas dengan template penutup reservasi (*"Apakah Bunda tertarik untuk lanjut mengisi list reservasi..."*) alih-alih menjawab lokasi klinik.
+  - Menambahkan detector `isAskingClinicLocation`, menyelaraskan intent `faq_question` pada NLU & question override guard di `interest.ts` & `location.ts`, serta menginjeksi FAQ lokasi fisik resmi: *"Kami berlokasi di daerah Waru (perbatasan Sidoarjo - Surabaya). Kami melayani sistem Homecare (panggilan langsung ke rumah), jadi tim bidan kami yang datang langsung ke rumah Bunda di area Surabaya & Sidoarjo"*.
+  - Penambahan unit test `tests/unit/clinic-location-question.test.ts` (2/2 PASS) dan update integration suite `tests/integration/all-reported-user-scenarios.test.ts` (7/7 PASS).
+- **Add Hold & Family Discussion Intent Handler ("Oke sbntr sy coba tnykan ya") (`src/state-machine/utils/need-time-checker.ts`, `location.ts`, `interest.ts`, `location-confirmation.ts`, `phrasing.service.ts`)**:
+  - Menambahkan deteksi intensi jeda waktu dan diskusi keluarga (*need time / hold discussion*, e.g. *"Oke sbntr sy coba tnykan ya"*, *"tanya suami dulu ya"*, *"rembukan dulu"*, *"nanti saya kabari lagi"*, *"pikir2 dulu ya"*).
+  - Ketika customer meminta waktu untuk berdiskusi, bot tidak lagi mendesak atau menagih ulang pertanyaan lokasi/ongkir/harga, melainkan membalas dengan hangat dan sabar: *"Baik Bunda, kami tunggu kabarnya ya bund 🤗 Santai saja yaa, nanti kalau sudah siap atau ada yang ingin ditanyakan lagi, langsung kabari kami kembali ya Bunda 😊🙏🏻"*.
+  - Penambahan unit test `tests/unit/need-time-discussion.test.ts` (2/2 PASS) dan update integration suite `tests/integration/all-reported-user-scenarios.test.ts` (6/6 PASS).
+- **Fix LLM Phrasing Translation Hallucination ("antimeminjamkannya") (`src/utils/language-sanitizer.ts` & `src/integrations/llm/phrasing.service.ts`)**:
+  - Memperbaiki bug di mana Phrasing LLM saat memvariasikan template tanya kelurahan/lokasi menghalusinasikan kata *"ongkir"* menjadi istilah terjemahan aneh: *"biaya antimeminjamkannya"*.
+  - Menambahkan fungsi `sanitizeHallucinatedTerms` pada `language-sanitizer.ts` dan constraint ketat pada `PhrasingService` untuk intent `ask_kelurahan_detail` & `ask_location` agar selalu mempertahankan istilah resmi (*"ongkir"* / *"ongkos kirim"*), serta otomatis membersihkan istilah terjemahan janggal.
+- **Activate AI Router (Shadow Mode OFF) (`.env` & `src/config/ai-router-config.ts`)**:
+  - Mengubah konfigurasi AI Router dari mode pengamat (*shadow mode*) menjadi mode aktif penuh (`AI_ROUTER_ENABLED=true`, `AI_ROUTER_SHADOW_MODE=false`).
+  - Penambahan comprehensive integration test `tests/integration/all-reported-user-scenarios.test.ts` (5/5 PASS) untuk memvalidasi seluruh skenario percakapan nyata.
+- **Fix Symptom & Consultation Inquiries Blocked by Mixed-Signal Regex (`src/state-machine/handlers/interest.ts`)**:
+  - Memperbaiki bug di mana customer yang menceritakan kondisi/keluhan bayi dengan kata sambung dan negasi (seperti *"Iya bu bid nafasnya agak grok2 tapi tidak kayak pilek"*) diblokir keliru oleh regex `MIXED-SIGNAL DETECTION` dan dibalas pesan aneh: *"Maaf Bunda, sepertinya ada yang kurang tepat. Bunda ingin mengubah lokasi..."*.
+  - Menghapus blok regex `MIXED-SIGNAL DETECTION` yang salah tempat di handler `interest.ts` agar pesan konsultasi medis, gejala si kecil, dan pertanyaan treatment diteruskan secara alami ke RAG & AI Response Generator (Bidan Yusi) dengan empati dan rekomendasi treatment yang tepat (seperti terapi nebulizer / pijat flu-batuk).
+- **Increase AI Sandbox Simulator Timeout (`packages/admin-dashboard/src/pages/tenant/AiSandbox.tsx`)**:
+  - Memperbaiki error `Error calling AI Generator: Koneksi server/database lambat (Timeout 45s)` pada AI Sandbox Simulator di Admin Dashboard.
+  - Batas waktu tunggu HTTP fetch pada simulator ditingkatkan dari 45 detik (`45000ms`) menjadi 120 detik (`120000ms`) agar pipeline multi-stage LLM (NLU Classifier + AI Router + Geocoder reasoning + Response Generator) tidak dibatalkan prematur oleh frontend saat provider LLM sedang mengalami antrean lambat.
+- **Fix Location Confirmation False Affirmation & Override Detection (`src/state-machine/handlers/location-confirmation.ts`)**:
+  - Memperbaiki bug kritis di mana pesan koreksi alamat (seperti *"alamatnya Rumdis TNI AL Wonosari A132"*) keliru diklasifikasikan sebagai `affirmation` oleh NLU saat bot sedang menanyakan konfirmasi lokasi lama. Akibatnya, sistem sebelumnya keliru mempromosikan lokasi lama (*Pabean, Sedati 3.66 km*) alih-alih memproses alamat baru.
+  - Menambahkan guard `isProvidingNewLocation`: jika pesan mengandung intensi atau entitas alamat baru, pesan tersebut **TIDAK AKAN PERNAH** dianggap sebagai afirmasi lokasi lama, melainkan langsung dialihkan (*override redirect*) ke `handleLocationState` untuk resolusi alamat baru.
+- **Fix Geocoding Substring Hijacking & Action Prefix Stripping (`src/integrations/google-maps/geocoding.ts` & `src/state-machine/handlers/location.ts`)**: 
+  - Memperbaiki bug di mana setiap alamat yang menyertakan nama kota/kabupaten di belakangnya (seperti *"Bungurasih tengah sidoarjo"*, *"Tropodo sidoarjo"*, *"Kutisari surabaya"*) dibajak keliru oleh gate kecamatan karena kata *"sidoarjo"* / *"surabaya"* mencocoki entri *Kecamatan Sidoarjo / Kecamatan Surabaya*. Kini gate memeriksa `hasAnyKelurahanInText` dan `isExactKecamatanName` sehingga jika teks memuat nama kelurahan riil (seperti *Bungurasih* di *Kec. Waru*), sistem langsung meresolusi kelurahan tersebut tanpa membajak ke Kecamatan Sidoarjo kota.
+  - Memperbaiki bug di mana kata aksi percakapan di awal kalimat (seperti *"ganti ke..."*, *"ubah ke..."*, *"pindah ke..."*) sebelumnya diteruskan ke fuzzy gazetteer matcher, menyebabkan kata *"ganti"* keliru dicocokkan sebagai typo dari *Kelurahan Ganting (Kec. Gedangan)*. Kini `findBestGazetteerMatch` menggunakan `cleanText` yang telah membersihkan kata aksi percakapan.
+  - Memperbaiki gate pencocokan kecamatan yang sebelumnya menggunakan `kecKey.includes(cleanNorm)`, yang menyebabkan nama kelurahan presisi (seperti *"Pabean"* di *Kecamatan Sedati, Sidoarjo*) dibajak keliru menjadi kecamatan luas yang namanya mengandung substring tersebut (*"Kecamatan Pabean Cantian, Surabaya"*).
+  - Menambahkan normalisasi spasi pada `crossCheckGazetteer` agar variasi ejaan (seperti *"Bulak Banteng"* vs *"Bulakbanteng"*) dapat langsung terhubung ke koordinat presisi.
+  - Memperbaiki `llmResolveLocation` dengan timeout 120s dan integrasi `callChatCompletionsWithFallback` serta penambahan contoh komplek landmark (seperti *"Rumdis TNI AL Wonosari"* -> *Bulakbanteng, Kenjeran*).
+  - Penambahan unit test `tests/unit/sedati-pabean-geocoding.test.ts` (5/5 PASS).
 - **Guard `treatmentNameForFollowUp` EKSEKUTIF (resolusi docs drift)** (`src/state-machine/handlers/interest.ts`): entri lama di changelog mengklaim guard `treatmentExplicitlyMentioned` sudah ada — ternyata tidak pernah di-implementasi. Kini diimplementasi: nama treatment untuk CTA follow-up HANYA diisi jika pesan customer mengandung **nama full katalog** (exact phrase nama tanpa kurung, lowercase via `getAllServices()`). Match parsial/fuzzy (mis. "pijat bayi" → "Pijat Bayi Ceria") dan entity NLU TIDAK dipakai — pertanyaan edukatif murni ("usia minimal berapa?") tidak lagi memaksa LLM menawarkan paket yang tidak ditanyakan (mis. "Paket Selapan").
 - **Test anti-regresi** `tests/unit/faq-no-treatment-leak.test.ts` (baru, 6 kasus): pesan FAQ usia → arg ke-5 `generateFaqResponseWithDetails` undefined; pesan dengan nama FULL ("pijat bayi ceria...", "nebulizer itu buat apa ya?", "pijat lahap juara...") → nama bersih treatment terkirim.
 - **Tighten deteksi ask_price** (`src/services/nlu-classifier.service.ts`, `src/state-machine/handlers/greeting.ts`, `src/services/price-answer.service.ts`): "usia berapa boleh pijat?"/"minimal berapa bulan?" bukan pertanyaan harga. Aturan: `berapa` hanya ask_price jika TANPA konteks usia (`usia|umur|minimal|berat|tinggi`); harga eksplisit & nominal `rb/ribu` bebas → harga; nominal bare `k` hanya jika ada kata harga. `isAskPrice` ikut mengecualikan `usia|umur`.

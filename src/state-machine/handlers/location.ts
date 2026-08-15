@@ -8,6 +8,8 @@ import { phrasingService } from '../../integrations/llm/phrasing.service';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isLocationQueryMessage } from '../utils/location-query';
+import { isNeedTimeOrDiscussionMessage } from '../utils/need-time-checker';
+import { isAskingClinicLocation } from '../utils/clinic-location-checker';
 
 /**
  * Handler untuk state AWAITING_LOCATION:
@@ -126,17 +128,34 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
+  // --- JEDA WAKTU / DISKUSI KELUARGA (Hold / Need Time): kalau customer minta waktu untuk tanya suami/keluarga
+  if (isNeedTimeOrDiscussionMessage(cleanLower)) {
+    const needTimeReply = await phrasingService.generate({
+      intent: 'need_time_acknowledgment',
+      conversationId: conversation.id,
+      tenantId,
+      facts: { customer_message: rawTextLocation },
+      fallbackTemplate: `Baik Bunda, kami tunggu kabarnya ya bund 🤗 Santai saja yaa, nanti kalau sudah siap atau ada info lokasinya, langsung kabari kami kembali ya Bunda 😊🙏🏻`,
+    });
+    return {
+      nextState: ConversationState.AWAITING_LOCATION,
+      replyText: needTimeReply,
+      shouldSendReply: true,
+    };
+  }
+
   // --- INTERSEPSI FAQ / PRICE: kalau customer tanya hal lain (bukan lokasi) saat state lokasi,
   // jawab via interest handler (knowledge base / katalog treatment), TANPA mengganggu state lokasi.
   // Prinsip: STATE PUNYA PRIORITAS — jawab sela, lalu tetap tanya lokasi.
   const nlu = ctx.nluResult;
   const hasNluPriceOrFaq = nlu && (nlu.intents.includes('faq_question') || nlu.intents.includes('ask_price') || nlu.intents.includes('chitchat') || nlu.intents.includes('ask_schedule'));
   const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|cukur|gundul|potong|pijat|massage|spa|nanya|tanya|bisa|apakah|gimana|bagaimana|apa|persyaratan|syarat|paket|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
-  const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex;
+  const isAskingClinic = isAskingClinicLocation(cleanLower);
+  const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex || isAskingClinic;
   const interceptDepth = ctx._interceptDepth || 0;
   const rawBodyText = incomingMessage.text?.body?.trim() || '';
   const hasNluLocationEntity = Boolean(nluConfident && nluLocationText);
-  const skipFaqIntercept = isLocationQueryMessage(incomingMessage, rawBodyText) || hasNluLocationEntity || interceptDepth > 0;
+  const skipFaqIntercept = (!isAskingClinic && (isLocationQueryMessage(incomingMessage, rawBodyText) || hasNluLocationEntity)) || interceptDepth > 0;
   if (hasFaqIntent && !skipFaqIntercept) {
     console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
     const { handleInterestState } = await import('./interest');
@@ -174,7 +193,17 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     .trim();
 
   // 1. Geocode teks lokasi via Google Maps API
-  const resolved = await geocodingService.geocodeText(textLocation);
+  let resolved = await geocodingService.geocodeText(textLocation);
+
+  // Jika teks awal belum presisi, tapi ada pending_kecamatan dari prompt sebelumnya (misal customer menjawab pilihan kelurahan),
+  // coba kombinasikan teks dengan pending_kecamatan untuk resolusi kontekstual.
+  if (!resolved.isPrecise && customer.pending_kecamatan && !textLocation.includes(customer.pending_kecamatan.toLowerCase())) {
+    const contextualText = `${textLocation}, ${customer.pending_kecamatan}`;
+    const contextualResolved = await geocodingService.geocodeText(contextualText);
+    if (contextualResolved.isPrecise || contextualResolved.isFuzzyMatch) {
+      resolved = contextualResolved;
+    }
+  }
 
   // --- KASUS C: FUZZY MATCH TUNGGAL (LOCATION_CONFIRMED) ---
   if (resolved.isFuzzyMatch && resolved.lat && resolved.lng) {
@@ -241,6 +270,17 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
     if (resolved.ambiguityResults && resolved.ambiguityResults.length > 0) {
       const kecName = resolved.matchedSpan || resolved.ambiguityResults[0].Kecamatan;
+      const kotaName = resolved.ambiguityResults[0].Kabupaten_Kota || resolved.kota || null;
+      // Simpan konteks pending kecamatan agar balasan kelurahan berikutnya langsung terhubung ke kecamatan ini
+      await customerService.updateCustomerPendingLocation(
+        customer.id,
+        {
+          kecamatan: kecName,
+          kota: kotaName,
+        },
+        tenantId
+      ).catch(() => {});
+
       return {
         nextState: ConversationState.AWAITING_LOCATION,
         replyText: TEMPLATES.askKelurahanAmbiguous({ kecamatanName: kecName, options: resolved.ambiguityResults }),

@@ -1,14 +1,14 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
-import { CheckCircle, AlertCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 /**
- * UI Feedback Kit — pengganti window.confirm() / window.alert()
- * yang diblokir di iframe / embedded admin panel.
+ * UI Feedback Kit — Pengganti window.confirm() / window.alert()
+ * dengan tema WhatsApp Light Mode / Clean Modern Emerald.
  *
  * Cara pakai:
  *   const { toast, confirm } = useUiFeedback();
  *   toast('Berhasil disimpan!', 'success');
- *   const ok = await confirm('Yakin hapus?', { danger: true, confirmText: 'Ya, Hapus' });
+ *   const ok = await confirm({ title: 'Konfirmasi', message: 'Yakin hapus?', danger: true, confirmText: 'Ya, Hapus' });
  */
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -61,7 +61,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setConfirmState({
         title: opts.title || 'Konfirmasi',
         message: opts.message,
-        confirmText: opts.confirmText || 'Ya',
+        confirmText: opts.confirmText || 'Lanjutkan',
         cancelText: opts.cancelText || 'Batal',
         danger: opts.danger || false,
         resolve,
@@ -76,17 +76,17 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const toastIcon = (type: ToastType) => {
     switch (type) {
-      case 'success': return <CheckCircle size={16} />;
-      case 'error': return <AlertCircle size={16} />;
-      default: return <AlertTriangle size={16} />;
+      case 'success': return <CheckCircle size={17} className="text-[#008069] flex-shrink-0" />;
+      case 'error': return <AlertCircle size={17} className="text-rose-500 flex-shrink-0" />;
+      default: return <AlertTriangle size={17} className="text-[#008069] flex-shrink-0" />;
     }
   };
 
-  const toastColor = (type: ToastType) => {
+  const toastBorder = (type: ToastType) => {
     switch (type) {
-      case 'success': return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
-      case 'error': return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
-      default: return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
+      case 'success': return 'border-l-4 border-l-[#008069]';
+      case 'error': return 'border-l-4 border-l-rose-500';
+      default: return 'border-l-4 border-l-blue-500';
     }
   };
 
@@ -94,41 +94,49 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <UiFeedbackContext.Provider value={{ toast, confirm }}>
       {children}
 
-      {/* Toast */}
+      {/* Toast Notification (Clean Floating Light Card) */}
       {toastState && (
-        <div className={`fixed bottom-6 right-6 z-[80] px-4 py-3 rounded-xl border text-xs font-bold shadow-xl flex items-center space-x-2 animate-fadeIn ${toastColor(toastState.type)}`}>
+        <div className={`fixed bottom-6 right-6 z-[110] px-4 py-3 rounded-xl bg-white border border-[#e9edef] text-xs font-semibold shadow-xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] max-w-sm ${toastBorder(toastState.type)}`}>
           {toastIcon(toastState.type)}
-          <span>{toastState.text}</span>
-          <button onClick={() => setToastState(null)} className="ml-2 text-slate-500 hover:text-white">
-            <XCircle size={14} />
+          <span className="flex-1 leading-snug">{toastState.text}</span>
+          <button onClick={() => setToastState(null)} className="ml-1 text-[#667781] hover:text-[#111b21] p-0.5 rounded-full hover:bg-[#f0f2f5]">
+            <XCircle size={15} />
           </button>
         </div>
       )}
 
-      {/* Confirm Dialog */}
+      {/* Confirm Dialog Modal (Modern WhatsApp Emerald & Light Theme) */}
       {confirmState && (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left">
+            <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
               {confirmState.danger ? (
-                <AlertTriangle className="text-rose-400" size={18} />
+                <AlertTriangle className="text-rose-500 flex-shrink-0" size={20} />
               ) : (
-                <AlertCircle className="text-pink-400" size={18} />
+                <CheckCircle2 className="text-[#008069] flex-shrink-0" size={20} />
               )}
               <span>{confirmState.title}</span>
             </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">{confirmState.message}</p>
+
+            <p className="text-xs sm:text-sm text-[#54656f] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] p-3.5 rounded-xl border border-[#e9edef]">
+              {confirmState.message}
+            </p>
+
             <div className="flex justify-end space-x-2 pt-2">
               <button
+                type="button"
                 onClick={() => handleConfirmAnswer(false)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-bold transition"
+                className="px-4 py-2.5 bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] hover:text-[#111b21] rounded-xl text-xs font-bold transition active:scale-95"
               >
                 {confirmState.cancelText}
               </button>
               <button
+                type="button"
                 onClick={() => handleConfirmAnswer(true)}
-                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition ${
-                  confirmState.danger ? 'bg-rose-500 hover:bg-rose-600' : 'bg-pink-500 hover:bg-pink-600'
+                className={`px-4 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 ${
+                  confirmState.danger
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-[#008069] hover:bg-[#00a884]'
                 }`}
               >
                 {confirmState.confirmText}

@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { apiRequest } from '../services/api';
+import { getDefaultRedirect } from '../config/rolePermissions';
+
+interface LoginResult {
+  success: boolean;
+  role: string;
+  redirectTo: string;
+}
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
 }
 
@@ -23,8 +30,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.authenticated && data.user) {
           setUser({
             id: data.user.id,
-            email: data.user.email,
-            role: data.user.role,
+            email: data.user.email || '',
+            name: data.user.name,
+            phone: data.user.phone,
+            role: data.user.role || 'super_admin',
             tenantId: data.user.tenantId || 'default-tenant',
           });
         }
@@ -37,21 +46,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string): Promise<LoginResult> => {
     setLoading(true);
     try {
       const data = await apiRequest('/api/admin/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
       if (data.success && data.user) {
         setUser({
           id: data.user.id,
-          email: data.user.email,
+          email: data.user.email || '',
+          name: data.user.name,
+          phone: data.user.phone,
           role: data.user.role,
           tenantId: data.user.tenantId || 'default-tenant',
         });
+        const role = data.role || data.user.role;
+        const redirectTo = data.redirectTo || getDefaultRedirect(role);
+        return { success: true, role, redirectTo };
       }
+      return { success: false, role: 'super_admin', redirectTo: '/admin/overview' };
     } catch (err) {
       setUser(null);
       throw err;

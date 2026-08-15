@@ -4,95 +4,96 @@
 
 @layer base {
   :root {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
+    --background: 210 20% 98%;
+    --foreground: 200 30% 10%;
 
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 205 15% 42%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 213 31% 91%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 30% 10%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 210 16% 92%;
+    --input: 210 16% 88%;
 
-    --card: 224 71% 4%;
-    --card-foreground: 213 31% 91%;
+    --card: 0 0% 100%;
+    --card-foreground: 200 30% 10%;
 
-    --primary: 322 81% 65%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 169 100% 25%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 222.2 47.4% 11.2%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 165 40% 95%;
+    --secondary-foreground: 169 100% 25%;
 
-    --accent: 216 34% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 165 40% 95%;
+    --accent-foreground: 169 100% 25%;
 
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --ring: 216 34% 17%;
+    --ring: 169 100% 25%;
 
     --radius: 0.75rem;
   }
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
-  background-color: #020617;
-  color: #f1f5f9;
+  font-family: 'Plus Jakarta Sans', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f0f2f5;
+  color: #111b21;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Glassmorphism custom components */
+/* WhatsApp Clean Panel Components */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #ffffff;
+  border: 1px solid #e9edef;
+  box-shadow: 0 1px 3px 0 rgba(11, 20, 26, 0.04);
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #ffffff;
+  border: 1px solid #e9edef;
+  box-shadow: 0 1px 3px 0 rgba(11, 20, 26, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
-  border-color: rgba(236, 72, 153, 0.25);
-  box-shadow: 0 10px 30px -10px rgba(236, 72, 153, 0.15);
-  transform: translateY(-2px);
+  border-color: #c2e7e0;
+  box-shadow: 0 4px 12px -2px rgba(0, 128, 105, 0.08);
+  transform: translateY(-1px);
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #f472b6 0%, #db2777 50%, #c084fc 100%);
+  background: linear-gradient(135deg, #008069 0%, #00a884 50%, #059669 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .gradient-btn {
-  background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+  background: #008069;
+  color: #ffffff;
   transition: all 0.2s ease-in-out;
 }
 
 .gradient-btn:hover {
-  opacity: 0.92;
-  box-shadow: 0 0 20px rgba(236, 72, 153, 0.3);
+  background: #00a884;
+  box-shadow: 0 4px 12px rgba(0, 128, 105, 0.2);
 }
 
-/* Custom scrollbars */
+/* Custom Clean Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #d1d7db;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #8696a0;
 }

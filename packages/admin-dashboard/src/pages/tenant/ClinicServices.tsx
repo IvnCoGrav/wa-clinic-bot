@@ -182,19 +182,19 @@ export const ClinicServices: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center space-x-2">
-            <Activity className="text-pink-500" />
+          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+            <Activity className="text-[#008069]" size={22} />
             <span>Katalog Layanan Treatment</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-[#667781] mt-0.5">
             Kelola data paket treatment, durasi pengerjaan, harga normal/promo, dan kriteria usia untuk respon otomatis bot WhatsApp.
           </p>
         </div>
         <button
           onClick={openAddModal}
-          className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-lg shadow-pink-500/10"
+          className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
         >
           <Plus size={14} />
           <span>Tambah Layanan</span>
@@ -203,93 +203,95 @@ export const ClinicServices: React.FC = () => {
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
-          <Loader className="animate-spin text-pink-500" size={36} />
+          <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : (
-        <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left text-xs text-[#111b21]">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-900/40">
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Layanan</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Kategori</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Usia</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Durasi</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500 text-right">Harga Normal</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500 text-right">Harga Promo</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500 text-right">Aksi</th>
+                <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px]">
+                  <th className="px-4 py-3.5">Layanan</th>
+                  <th className="px-4 py-3.5">Kategori</th>
+                  <th className="px-4 py-3.5">Usia</th>
+                  <th className="px-4 py-3.5">Durasi</th>
+                  <th className="px-4 py-3.5 text-right">Harga Normal</th>
+                  <th className="px-4 py-3.5 text-right">Harga Promo</th>
+                  <th className="px-4 py-3.5">Status</th>
+                  <th className="px-4 py-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#e9edef]">
                 {services.map(srv => (
                   <tr
                     key={srv.id}
-                    className={`border-b border-white/5 hover:bg-white/[0.03] transition-colors ${!srv.isActive ? 'opacity-50' : ''}`}
+                    className={`hover:bg-[#f8fafc] transition-colors ${!srv.isActive ? 'opacity-50' : ''}`}
                   >
-                    <td className="px-4 py-3">
-                      <div className="font-bold text-white text-xs">{srv.name}</div>
-                      <div className="text-[9px] text-slate-500 font-mono">ID: {srv.id}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{srv.description}</div>
+                    <td className="px-4 py-3.5">
+                      <div className="font-bold text-[#111b21] text-xs">{srv.name}</div>
+                      <div className="text-[10px] text-[#8696a0] font-mono">ID: {srv.id}</div>
+                      <div className="text-[11px] text-[#54656f] mt-0.5 line-clamp-1">{srv.description}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                    <td className="px-4 py-3.5">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                         srv.category === 'BABY' 
-                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
+                          ? 'bg-sky-100 text-sky-800 border border-sky-200' 
                           : srv.category === 'KIDS'
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
                             : srv.category === 'MOMS'
-                              ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
                               : srv.category === 'BUNDLE'
-                                ? 'bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20'
-                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                       }`}>
                         {srv.category}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-300">{srv.ageTier.label}</td>
-                    <td className="px-4 py-3 text-xs text-slate-300 flex items-center space-x-1">
-                      <Clock size={10} className="text-slate-500" />
-                      <span>{srv.durationMinutes} mnt</span>
+                    <td className="px-4 py-3.5 text-xs text-[#54656f]">{srv.ageTier.label}</td>
+                    <td className="px-4 py-3.5 text-xs text-[#54656f]">
+                      <div className="flex items-center space-x-1">
+                        <Clock size={12} className="text-[#8696a0]" />
+                        <span>{srv.durationMinutes} mnt</span>
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-400 text-right line-through">Rp {srv.originalPrice.toLocaleString('id-ID')}</td>
-                    <td className="px-4 py-3 text-xs font-extrabold text-white text-right">
-                      <span className="flex items-center justify-end space-x-0.5 text-pink-400">
-                        <Sparkles size={8} />
+                    <td className="px-4 py-3.5 text-xs text-[#8696a0] text-right line-through">Rp {srv.originalPrice.toLocaleString('id-ID')}</td>
+                    <td className="px-4 py-3.5 text-xs font-bold text-[#008069] text-right">
+                      <span className="flex items-center justify-end space-x-0.5 text-[#008069]">
+                        <Sparkles size={11} />
                         <span>Rp {srv.promoPrice.toLocaleString('id-ID')}</span>
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <button
                         onClick={() => handleToggleActive(srv)}
-                        className="flex items-center space-x-1.5 text-[10px] font-bold"
+                        className="flex items-center space-x-1.5 text-xs font-bold"
                         title={srv.isActive ? "Nonaktifkan Layanan" : "Aktifkan Layanan"}
                       >
                         {srv.isActive ? (
                           <>
-                            <ToggleRight className="text-pink-500" size={18} />
-                            <span className="text-emerald-400">Aktif</span>
+                            <ToggleRight className="text-[#008069]" size={20} />
+                            <span className="text-emerald-700">Aktif</span>
                           </>
                         ) : (
                           <>
-                            <ToggleLeft size={18} />
-                            <span className="text-slate-500">Nonaktif</span>
+                            <ToggleLeft className="text-[#8696a0]" size={20} />
+                            <span className="text-[#8696a0]">Nonaktif</span>
                           </>
                         )}
                       </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3.5">
                       <div className="flex items-center justify-end space-x-1">
                         <button
                           onClick={() => openEditModal(srv)}
-                          className="p-1.5 rounded bg-white/5 hover:bg-pink-500/10 text-slate-400 hover:text-pink-400 transition"
+                          className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition border border-[#d1d7db] shadow-xs"
                           title="Edit Layanan"
                         >
                           <Edit3 size={12} />
                         </button>
                         <button
                           onClick={() => handleDelete(srv.id)}
-                          className="p-1.5 rounded bg-white/5 hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition"
+                          className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition border border-[#d1d7db] shadow-xs"
                           title="Hapus Layanan"
                         >
                           <Trash2 size={12} />
@@ -300,7 +302,7 @@ export const ClinicServices: React.FC = () => {
                 ))}
                 {services.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-xs text-slate-500">
+                    <td colSpan={8} className="px-4 py-12 text-center text-xs text-[#667781]">
                       Belum ada layanan. Klik "Tambah Layanan" untuk mulai.
                     </td>
                   </tr>
@@ -313,57 +315,57 @@ export const ClinicServices: React.FC = () => {
 
       {/* Modal Form */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-          <div className="glass-panel border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-lg overflow-hidden flex flex-col shadow-xl">
             
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
-              <h3 className="font-bold text-white text-sm">
+            <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
+              <h3 className="font-bold text-[#111b21] text-sm">
                 {editingService ? `Edit Layanan: ${editingService.name}` : 'Tambah Layanan Baru'}
               </h3>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[500px] overflow-y-auto">
+            <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[500px] overflow-y-auto text-xs">
               
               {!editingService && (
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">ID Layanan (Unik)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">ID Layanan (Unik)</label>
                   <input
                     type="text"
                     value={formId}
                     onChange={(e) => setFormId(e.target.value)}
                     placeholder="Contoh: baby-massage-ceria (kosongkan untuk generate otomatis)"
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               )}
 
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 uppercase font-bold block">Nama Layanan / Treatment</label>
+                <label className="text-[10px] text-[#667781] uppercase font-bold block">Nama Layanan / Treatment</label>
                 <input
                   type="text"
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Contoh: Pijat Bayi Ceria"
-                  className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                  className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Kategori</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Kategori</label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as any)}
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   >
                     <option value="BABY">BABY</option>
                     <option value="KIDS">KIDS</option>
@@ -374,114 +376,114 @@ export const ClinicServices: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Durasi (Menit)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Durasi (Menit)</label>
                   <input
                     type="number"
                     required
                     value={formDuration}
                     onChange={(e) => setFormDuration(Number(e.target.value))}
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Min Usia (Bulan)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Min Usia (Bulan)</label>
                   <input
                     type="number"
                     required
                     value={formMinAge}
                     onChange={(e) => setFormMinAge(Number(e.target.value))}
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Max Usia (Bulan)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Max Usia (Bulan)</label>
                   <input
                     type="number"
                     value={formMaxAge}
                     onChange={(e) => setFormMaxAge(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="Infinity"
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Label Usia (UI)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Label Usia (UI)</label>
                   <input
                     type="text"
                     required
                     value={formAgeLabel}
                     onChange={(e) => setFormAgeLabel(e.target.value)}
                     placeholder="0 - 24 Bulan"
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Harga Normal (Rp)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Harga Normal (Rp)</label>
                   <input
                     type="number"
                     required
                     value={formOriginalPrice}
                     onChange={(e) => setFormOriginalPrice(Number(e.target.value))}
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-400 uppercase font-bold block">Harga Promo (Rp)</label>
+                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Harga Promo (Rp)</label>
                   <input
                     type="number"
                     required
                     value={formPromoPrice}
                     onChange={(e) => setFormPromoPrice(Number(e.target.value))}
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 uppercase font-bold block">Deskripsi & Manfaat</label>
+                <label className="text-[10px] text-[#667781] uppercase font-bold block">Deskripsi & Manfaat</label>
                 <textarea
                   rows={3}
                   required
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   placeholder="Deskripsikan secara lengkap manfaat treatment ini..."
-                  className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white leading-relaxed font-sans"
+                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] leading-relaxed resize-none focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
-              <div className="flex items-center space-x-2 pt-2">
+              <div className="flex items-center space-x-2 pt-1">
                 <input
                   type="checkbox"
                   id="formIsActive"
                   checked={formIsActive}
                   onChange={(e) => setFormIsActive(e.target.checked)}
-                  className="rounded bg-slate-950 border-white/10 text-pink-500 focus:ring-pink-500/20"
+                  className="rounded border-[#d1d7db] text-[#008069] focus:ring-[#008069]"
                 />
-                <label htmlFor="formIsActive" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                <label htmlFor="formIsActive" className="text-xs text-[#111b21] font-semibold cursor-pointer">
                   Aktifkan layanan ini di katalog WhatsApp AI Bot
                 </label>
               </div>
 
               {/* Modal Actions */}
-              <div className="flex justify-end space-x-2 pt-4 border-t border-white/5">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-bold transition flex items-center space-x-1"
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                 >
-                  <X size={14} />
+                  <X size={13} />
                   <span>Batal</span>
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-black transition flex items-center space-x-1"
+                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs"
                 >
-                  <Check size={14} />
+                  <Check size={13} />
                   <span>Simpan Layanan</span>
                 </button>
               </div>

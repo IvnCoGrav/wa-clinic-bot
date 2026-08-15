@@ -27,7 +27,8 @@ export type FollowUpTemplateType =
   | 'MILESTONE_3M'
   | 'MILESTONE_6M'
   | 'MILESTONE_9M'
-  | 'MILESTONE_12M';
+  | 'MILESTONE_12M'
+  | 'STAFF_OTW';
 
 export const FOLLOWUP_ROLLING_TEMPLATES: Record<
   FollowUpTemplateType,
@@ -161,6 +162,16 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Selamat ulang tahun utk si kecil, Bunda ${name}! 🎂 Di usia 12 bulan anak mulai berjalan lancar. Kami siap dampingi pijat stimulasi & tumbuh kembang bareng Bidan. Yuk booking! ✨`,
     ({ name }) =>
       `Pagi Bunda ${name}! 🥳 Si kecil sudah 1 tahun — usia emas eksplorasi & berjalan. Pijat rutin tetap bantu jaga kelenturan & kualitas tidurnya. Mau Bidan jadwalkan bulan ini? 😊`,
+  ],
+
+  // 14. Pesan Terapis Menuju Lokasi Pasien (OTW)
+  STAFF_OTW: [
+    ({ name, therapistName, clinicName }: any) =>
+      `Halo Bunda ${name || '{name}'}, saya ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah bersiap dan sedang dalam perjalanan menuju ke lokasi Bunda ya. Mohon ditunggu ya Bunda 🙏🛵`,
+    ({ name, therapistName, clinicName }: any) =>
+      `Selamat pagi/siang Bunda ${name || '{name}'}! 🛵 ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sedang menuju ke rumah Bunda untuk jadwal treatment hari ini ya. Sampai jumpa sebentar lagi Bunda! 🥰`,
+    ({ name, therapistName, clinicName }: any) =>
+      `Halo Bunda ${name || '{name}'}! ✨ ${therapistName || '{therapistName}'} dari ${clinicName || '{clinicName}'} sudah OTW ke lokasi Bunda. Mohon disiapkan tempat yang nyaman untuk perawatan ya Bunda. Terimakasih! 🙏`,
   ],
 };
 

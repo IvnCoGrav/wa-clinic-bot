@@ -1,7 +1,7 @@
 import { getWibTimeInfo } from '../../utils/time-wib';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
-import { stripNonIndonesianScripts, containsForeignScripts } from '../../utils/language-sanitizer';
+import { stripNonIndonesianScripts, containsForeignScripts, sanitizeHallucinatedTerms } from '../../utils/language-sanitizer';
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
 import { getLlmEndpointConfig } from './llm-gateway';
@@ -57,15 +57,21 @@ export class PhrasingService {
           ? `5. ATURAN WAKTU HARAM SALAH: Waktu saat ini adalah ${wibInfo.wibTimeString}. Jika menggunakan sapaan waktu (pagi/siang/sore/malam), KAMU WAJIB MENGGUNAKAN "${wibInfo.greetingRecommendation}". DILARANG KERAS bilang "Selamat Pagi" jika waktu menunjukkan malam/sore/siang!`
           : `5. ATURAN SAPAAN WAKTU (DILARANG): DILARANG KERAS menggunakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam") untuk intent ini (${req.intent}). Sapaan waktu HANYA untuk greeting awal. Gunakan "Halo Bunda" atau langsung jawab tanpa sapaan waktu.`;
 
-        // Khusus intent greeting & ongkir_info: humanizer hanya boleh mengubah sebagian kecil teks
+        // Khusus intent greeting, ongkir_info, & tanya lokasi: humanizer hanya boleh mengubah sebagian kecil teks
         // dari template acuan — bukan menulis ulang pesan dari nol atau menambah halusinasi.
         const greetingChangePercent = parseInt(process.env.HUMANIZER_GREETING_CHANGE_PERCENT || '10', 10);
         const keepPercent = 100 - greetingChangePercent;
         const isOngkirIntent = req.intent === 'ongkir_info';
+        const isAskLocationIntent = req.intent === 'ask_kelurahan_detail' || req.intent === 'ask_location';
+        const isNeedTimeIntent = req.intent === 'need_time_acknowledgment';
         const templateConstraint = isGreetingIntent
           ? `ATURAN KHUSUS GREETING (SANGAT KETAT): Ini pesan GREETING. Pertahankan MINIMAL ${keepPercent}% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. Hanya ubah SEKITAR ${greetingChangePercent}% teks, misalnya ganti sedikit kata sapaan/penghubung/penutup saja. DILARANG menulis ulang pesan dari nol, mengganti struktur kalimat utama, atau mengubah fakta/brand name. Intinya: hasil akhir harus terlihat nyaris sama dengan teks acuan, hanya dengan variasi kecil yang wajar.\n\n`
           : isOngkirIntent
           ? `ATURAN KHUSUS ONGKIR INFO (SANGAT KETAT): Ini pesan ONGKIR_INFO. Pertahankan MINIMAL 85% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. DILARANG KERAS menambah pesan/basa-basi penutup baru. DILARANG KERAS menanyakan ketersediaan waktu/jadwal (contoh terlarang: "kapan siap ditangani", "kapan mau dijadwalkan"). HARUS SELALU diakhiri persis dengan menanyakan pilihan treatment seperti di teks acuan (contoh: "Jadi mau pilih treatment apa bunda?").\n\n`
+          : isAskLocationIntent
+          ? `ATURAN KHUSUS TANYA LOKASI / KELURAHAN (SANGAT KETAT): Ini pesan ${req.intent}. Gunakan istilah standar "ongkir" atau "ongkos kirim". DILARANG KERAS mengganti kata "ongkir" dengan istilah halusinasi asing seperti "antimeminjamkan", "biaya pinjam", "biaya antar jemput", dll. Pertahankan MINIMAL 80% teks acuan tetap sama.\n\n`
+          : isNeedTimeIntent
+          ? `ATURAN KHUSUS JEDA / TUNGGU KABAR (SANGAT KETAT): Customer meminta waktu untuk berdiskusi/menanyakan ke keluarga/berpikir. Berikan respon hangat, santun, sabar, dan penuh pengertian (contoh: "Baik Bunda, kami tunggu kabarnya yaa bund 🤗"). DILARANG KERAS mendesak, menodong, atau menanyakan ulang pertanyaan lokasi/jadwal/harga. Cukup sampaikan bahwa kita siap menunggu dan siap membantu kapan pun Bunda sudah siap.\n\n`
           : '';
 
         const systemPrompt = `${BOT_PERSONA_PROMPT}
@@ -233,14 +239,16 @@ ${templateConstraint}`;
           cleanedMeta = cleanedMeta.slice(1, -1).trim();
         }
 
-        // Safety Check 3: Bersihkan double greeting (misal "Selamat Siang, Selamat datang") & larang kata "lokasi/lokasinya"
-        let finalContent = cleanedMeta
-          .replace(/^(Selamat\s+(?:Pagi|Siang|Sore|Malam))\s*,\s*(Selamat\s+datang)/i, '$2')
-          .replace(/\b(dimana|di\s+mana)\s+lokasinya\b/gi, 'rumahnya di mana')
-          .replace(/\bmana\s+lokasinya\b/gi, 'rumahnya di mana')
-          .replace(/\b(tahu|tau)\s+(dimana|di\s+mana)\s+lokasi(nya)?\b/gi, '$1 rumahnya di mana')
-          .replace(/\blokasi\s+Bunda\b/gi, 'rumah Bunda')
-          .replace(/\blokasinya\b/gi, 'rumahnya');
+        // Safety Check 3: Bersihkan double greeting, kata terlarang & halusinasi istilah
+        let finalContent = sanitizeHallucinatedTerms(
+          cleanedMeta
+            .replace(/^(Selamat\s+(?:Pagi|Siang|Sore|Malam))\s*,\s*(Selamat\s+datang)/i, '$2')
+            .replace(/\b(dimana|di\s+mana)\s+lokasinya\b/gi, 'rumahnya di mana')
+            .replace(/\bmana\s+lokasinya\b/gi, 'rumahnya di mana')
+            .replace(/\b(tahu|tau)\s+(dimana|di\s+mana)\s+lokasi(nya)?\b/gi, '$1 rumahnya di mana')
+            .replace(/\blokasi\s+Bunda\b/gi, 'rumah Bunda')
+            .replace(/\blokasinya\b/gi, 'rumahnya')
+        );
 
         if (req.conversationId) {
           openerTracker.record(req.conversationId, finalContent);

@@ -257,6 +257,88 @@ export class MessageService {
       .slice(0, limit);
   }
 
+  /**
+   * Menandai pesan telah ditarik / dihapus untuk semua orang.
+   * Memperbarui konten pesan menjadi teks penanda ditarik dan mem-broadcast update via SSE.
+   */
+  public async markMessageDeleted(messageId: string, tenantId: string): Promise<boolean> {
+    const revokedContent = '🚫 Pesan ini telah ditarik';
+    let conversationId: string | null = null;
+
+    try {
+      const msg = await prisma.message.findFirst({
+        where: {
+          id: messageId,
+          tenant_id: tenantId,
+        },
+      });
+
+      if (!msg) {
+        // Cek via wa_message_id
+        const msgWa = await prisma.message.findFirst({
+          where: { wa_message_id: messageId, tenant_id: tenantId },
+        });
+        if (msgWa) {
+          conversationId = msgWa.conversation_id;
+          await prisma.message.update({
+            where: { id: msgWa.id },
+            data: {
+              content: revokedContent,
+              payload_raw: {
+                ...(typeof msgWa.payload_raw === 'object' && msgWa.payload_raw ? msgWa.payload_raw : {}),
+                is_revoked: true,
+                revoked_at: new Date().toISOString(),
+              },
+            },
+          });
+        }
+      } else {
+        conversationId = msg.conversation_id;
+        await prisma.message.update({
+          where: { id: msg.id },
+          data: {
+            content: revokedContent,
+            payload_raw: {
+              ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? msg.payload_raw : {}),
+              is_revoked: true,
+              revoked_at: new Date().toISOString(),
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.warn('DB markMessageDeleted error (using memory fallback):', (error as Error).message);
+      // Fallback in-memory
+      const inMem = memoryMessages.find(
+        (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
+      );
+      if (inMem) {
+        inMem.content = revokedContent;
+        inMem.payload_raw = { ...inMem.payload_raw, is_revoked: true };
+        conversationId = inMem.conversation_id;
+      }
+    }
+
+    // Broadcast update via LiveChatHub
+    try {
+      const hub = getLiveChatHub();
+      await hub.publish({
+        type: 'message.updated',
+        tenantId,
+        payload: {
+          conversationId,
+          messageId,
+          content: revokedContent,
+          isRevoked: true,
+        },
+      });
+    } catch (hubErr: any) {
+      console.warn('[HUB] Failed to publish message.updated event:', hubErr.message);
+    }
+
+    return true;
+  }
+
   public getMemoryMessages(): any[] {
     return memoryMessages;
   }

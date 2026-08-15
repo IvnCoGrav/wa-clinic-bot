@@ -47,9 +47,9 @@ interface AiAuditSummaryResponse {
 }
 
 const scoreColor = (s: number) => {
-  if (s >= 4) return 'text-emerald-400';
-  if (s >= 3) return 'text-amber-400';
-  return 'text-rose-400';
+  if (s >= 4) return 'text-emerald-600';
+  if (s >= 3) return 'text-amber-600';
+  return 'text-rose-600';
 };
 
 const getModelProvider = (log: LlmAuditLogEntry) => {
@@ -89,27 +89,27 @@ export const AiEvaluations: React.FC = () => {
   }, [days]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-white flex items-center gap-2">
-            <Cpu className="text-pink-400" size={24} />
+          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+            <Cpu className="text-[#008069]" size={22} />
             <span>AI Monitoring &amp; Usage Dashboard</span>
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-xs text-[#667781] mt-0.5">
             Pantau pemakaian token, estimasi biaya (Rupiah), dan kualitas balasan AI secara real-time.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-xl bg-slate-900/80 border border-white/10 p-1">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-xl bg-white border border-[#d1d7db] p-1 shadow-xs">
             {[7, 30, 90].map((d) => (
               <button
                 key={d}
                 onClick={() => setDays(d)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  days === d ? 'bg-pink-500 text-white shadow' : 'text-slate-400 hover:text-white'
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  days === d ? 'bg-[#008069] text-white shadow-xs' : 'text-[#54656f] hover:text-[#111b21]'
                 }`}
               >
                 {d} Hari
@@ -118,36 +118,36 @@ export const AiEvaluations: React.FC = () => {
           </div>
           <button
             onClick={loadData}
-            className="flex items-center gap-2 px-4 py-2 bg-pink-500 hover:bg-pink-600 rounded-xl text-xs font-bold text-white transition shadow shadow-pink-500/20"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-2 border-b border-white/10 pb-2">
+      <div className="flex space-x-2 border-b border-[#e9edef] pb-2">
         <button
           onClick={() => setActiveTab('usage')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
             activeTab === 'usage'
-              ? 'bg-pink-500/10 border border-pink-500/30 text-pink-400'
-              : 'text-slate-400 hover:text-white'
+              ? 'bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069]'
+              : 'text-[#54656f] hover:text-[#111b21]'
           }`}
         >
-          <DollarSign size={16} />
+          <DollarSign size={15} />
           <span>Real-Time AI Usage &amp; Biaya (Rp)</span>
         </button>
         <button
           onClick={() => setActiveTab('quality')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
             activeTab === 'quality'
-              ? 'bg-pink-500/10 border border-pink-500/30 text-pink-400'
-              : 'text-slate-400 hover:text-white'
+              ? 'bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069]'
+              : 'text-[#54656f] hover:text-[#111b21]'
           }`}
         >
-          <Star size={16} />
+          <Star size={15} />
           <span>Kualitas Balasan (LLM-as-Judge)</span>
         </button>
       </div>
@@ -157,119 +157,119 @@ export const AiEvaluations: React.FC = () => {
         <div className="space-y-6">
           {/* Stat Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="rounded-2xl bg-emerald-500/5 border border-emerald-500/20 p-5">
-              <p className="text-xs uppercase tracking-wider text-emerald-400 font-bold flex items-center gap-1.5">
-                <DollarSign size={14} /> Total Est. Biaya (Rp)
+            <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+              <p className="text-[11px] uppercase tracking-wider text-[#008069] font-bold flex items-center gap-1.5">
+                <DollarSign size={13} /> Total Est. Biaya (Rp)
               </p>
-              <p className="text-3xl font-extrabold text-white mt-2">
+              <p className="text-2xl font-bold text-[#111b21] mt-1.5">
                 {formatRupiah(auditSummary?.totalCostIdr || 0)}
               </p>
-              <p className="text-xs text-slate-400 mt-1">Estimasi biaya {days} hari terakhir</p>
+              <p className="text-[11px] text-[#8696a0] mt-0.5">Estimasi biaya {days} hari terakhir</p>
             </div>
 
-            <div className="rounded-2xl bg-pink-500/5 border border-pink-500/20 p-5">
-              <p className="text-xs uppercase tracking-wider text-pink-400 font-bold flex items-center gap-1.5">
-                <Zap size={14} /> Total Tokens
+            <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+              <p className="text-[11px] uppercase tracking-wider text-sky-700 font-bold flex items-center gap-1.5">
+                <Zap size={13} /> Total Tokens
               </p>
-              <p className="text-3xl font-extrabold text-white mt-2">
+              <p className="text-2xl font-bold text-[#111b21] mt-1.5">
                 {(auditSummary?.totalTokens || 0).toLocaleString('id-ID')}
               </p>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-[11px] text-[#8696a0] mt-0.5">
                 In: {(auditSummary?.totalPromptTokens || 0).toLocaleString('id-ID')} | Out:{' '}
                 {(auditSummary?.totalCompletionTokens || 0).toLocaleString('id-ID')}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-indigo-500/5 border border-indigo-500/20 p-5">
-              <p className="text-xs uppercase tracking-wider text-indigo-400 font-bold flex items-center gap-1.5">
-                <Activity size={14} /> Total Panggilan AI
+            <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+              <p className="text-[11px] uppercase tracking-wider text-purple-700 font-bold flex items-center gap-1.5">
+                <Activity size={13} /> Total Panggilan AI
               </p>
-              <p className="text-3xl font-extrabold text-white mt-2">
+              <p className="text-2xl font-bold text-[#111b21] mt-1.5">
                 {(auditSummary?.totalLogs || 0).toLocaleString('id-ID')}
               </p>
-              <p className="text-xs text-slate-400 mt-1">Transaksi NLU, Routing &amp; Chat</p>
+              <p className="text-[11px] text-[#8696a0] mt-0.5">Transaksi NLU, Routing &amp; Chat</p>
             </div>
 
-            <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-5">
-              <p className="text-xs uppercase tracking-wider text-slate-400 font-bold">Rata-rata per Call</p>
-              <p className="text-3xl font-extrabold text-white mt-2">
+            <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+              <p className="text-[11px] uppercase tracking-wider text-[#54656f] font-bold">Rata-rata per Call</p>
+              <p className="text-2xl font-bold text-[#111b21] mt-1.5">
                 {auditSummary?.totalLogs
                   ? formatRupiah(auditSummary.totalCostIdr / auditSummary.totalLogs)
                   : 'Rp 0'}
               </p>
-              <p className="text-xs text-slate-500 mt-1">Biaya per eksekusi AI</p>
+              <p className="text-[11px] text-[#8696a0] mt-0.5">Biaya per eksekusi AI</p>
             </div>
           </div>
 
           {/* Audit Logs Table */}
-          <div className="rounded-2xl bg-slate-900/60 border border-white/10 overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/10 text-sm font-bold text-white flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Activity size={16} className="text-pink-400" /> Audit Log Transaksi AI Terbaru ({auditSummary?.recent?.length || 0})
+          <div className="rounded-2xl bg-white border border-[#e9edef] overflow-hidden shadow-xs">
+            <div className="px-5 py-3.5 border-b border-[#e9edef] text-xs font-bold text-[#111b21] uppercase flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Activity size={14} className="text-[#008069]" /> Audit Log Transaksi AI Terbaru ({auditSummary?.recent?.length || 0})
               </span>
-              <span className="text-xs text-slate-500">Log tersimpan di tabel llm_audit_logs</span>
+              <span className="text-[10px] text-[#8696a0]">Log tersimpan di tabel llm_audit_logs</span>
             </div>
 
             {!auditSummary || (auditSummary.recent || []).length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">
+              <div className="p-8 text-center text-xs text-[#8696a0]">
                 Belum ada log transaksi AI tercatat dalam {days} hari terakhir.
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-white/10 bg-slate-950/40">
-                      <th className="px-5 py-3 font-bold">Waktu</th>
-                      <th className="px-5 py-3 font-bold">Tugas / Task</th>
-                      <th className="px-5 py-3 font-bold">Model AI</th>
-                      <th className="px-5 py-3 font-bold">Customer Phone</th>
-                      <th className="px-5 py-3 font-bold text-right">Tokens (In / Out)</th>
-                      <th className="px-5 py-3 font-bold text-right">Biaya (Rp)</th>
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+                      <th className="px-4 py-2.5 font-bold">Waktu</th>
+                      <th className="px-4 py-2.5 font-bold">Tugas / Task</th>
+                      <th className="px-4 py-2.5 font-bold">Model AI</th>
+                      <th className="px-4 py-2.5 font-bold">Customer Phone</th>
+                      <th className="px-4 py-2.5 font-bold text-right">Tokens (In / Out)</th>
+                      <th className="px-4 py-2.5 font-bold text-right">Biaya (Rp)</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-[#e9edef]">
                     {auditSummary.recent.map((log) => (
-                      <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-5 py-3 text-xs text-slate-400 whitespace-nowrap">
+                      <tr key={log.id} className="hover:bg-[#f8fafc] transition-colors">
+                        <td className="px-4 py-2.5 text-[#667781] whitespace-nowrap">
                           {new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}
                         </td>
-                        <td className="px-5 py-3">
-                          <span className="px-2 py-0.5 rounded bg-pink-500/10 border border-pink-500/20 text-pink-400 text-xs font-mono font-bold">
+                        <td className="px-4 py-2.5">
+                          <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] text-[10px] font-mono font-bold">
                             {log.task_type}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-xs text-slate-200 font-mono font-medium">
-                          <span className="text-[10px] text-pink-400 font-sans block font-semibold">
+                        <td className="px-4 py-2.5 font-mono text-[#111b21]">
+                          <span className="text-[10px] text-[#667781] font-sans block font-semibold">
                             {getModelProvider(log)}
                           </span>
                           <span>{log.model_name}</span>
                         </td>
-                        <td className="px-5 py-3 text-xs text-slate-400 font-mono">
+                        <td className="px-4 py-2.5 text-[#667781] font-mono">
                           {log.customer_phone}
                         </td>
-                        <td className="px-5 py-3 text-right text-xs font-mono text-slate-300">
+                        <td className="px-4 py-2.5 text-right font-mono text-[#54656f]">
                           <div className="flex items-center justify-end gap-1.5">
                             {log.cached_prompt_tokens && log.cached_prompt_tokens > 0 ? (
                               <span
-                                className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full"
+                                className="flex items-center gap-1 text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"
                                 title={`Cache Hit (${log.cached_prompt_tokens} tokens)`}
                               >
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                                 <span>Hit</span>
                               </span>
                             ) : (
                               <span
-                                className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full"
+                                className="flex items-center gap-1 text-[10px] text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-full"
                                 title="Cache Miss"
                               >
-                                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
                                 <span>Miss</span>
                               </span>
                             )}
                             <span>{log.prompt_tokens} in / {log.completion_tokens} out</span>
                           </div>
                         </td>
-                        <td className="px-5 py-3 text-right font-bold text-emerald-400 text-xs">
+                        <td className="px-4 py-2.5 text-right font-bold text-[#008069]">
                           {formatRupiah(log.cost_idr)}
                         </td>
                       </tr>
@@ -288,82 +288,82 @@ export const AiEvaluations: React.FC = () => {
           {!summary ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-pulse">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-20 bg-white/5 border border-white/10 rounded-2xl" />
+                <div key={i} className="h-20 bg-white border border-[#e9edef] rounded-2xl" />
               ))}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-                <p className="text-xs uppercase tracking-wider text-slate-400 font-bold">Total Evaluated</p>
-                <p className={`text-3xl font-extrabold mt-1 ${scoreColor(summary.avgScore)}`}>{summary.total}</p>
-                <p className="text-xs text-slate-500 mt-1">Pesan yang dinilai dalam rentang ini</p>
+              <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+                <p className="text-[11px] uppercase tracking-wider text-[#667781] font-bold">Total Evaluated</p>
+                <p className={`text-2xl font-bold mt-1 ${scoreColor(summary.avgScore)}`}>{summary.total}</p>
+                <p className="text-[11px] text-[#8696a0] mt-0.5">Pesan yang dinilai dalam rentang ini</p>
               </div>
 
-              <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-                <p className="text-xs uppercase tracking-wider text-slate-400 font-bold">Skor Rata-rata</p>
-                <p className={`text-3xl font-extrabold mt-1 ${scoreColor(summary.avgScore)}`}>
+              <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+                <p className="text-[11px] uppercase tracking-wider text-[#667781] font-bold">Skor Rata-rata</p>
+                <p className={`text-2xl font-bold mt-1 ${scoreColor(summary.avgScore)}`}>
                   {summary.avgScore.toFixed(1)}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Skor 0-5 (&gt;3 = cukup baik)</p>
+                <p className="text-[11px] text-[#8696a0] mt-0.5">Skor 0-5 (&gt;3 = cukup baik)</p>
               </div>
 
-              <div className="rounded-2xl bg-white/5 border border-white/10 p-5">
-                <p className="text-xs uppercase tracking-wider text-slate-400 font-bold">Rentang Skor</p>
-                <p className={`text-3xl font-extrabold mt-1 ${scoreColor(summary.avgScore)}`}>
+              <div className="rounded-2xl bg-white border border-[#e9edef] p-4 shadow-xs">
+                <p className="text-[11px] uppercase tracking-wider text-[#667781] font-bold">Rentang Skor</p>
+                <p className={`text-2xl font-bold mt-1 ${scoreColor(summary.avgScore)}`}>
                   {summary.minScore.toFixed(0)} – {summary.maxScore.toFixed(0)}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">Skor terendah - tertinggi</p>
+                <p className="text-[11px] text-[#8696a0] mt-0.5">Skor terendah - tertinggi</p>
               </div>
             </div>
           )}
 
-          <div className="rounded-2xl bg-slate-900/60 border border-white/10 overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/10 text-sm font-bold text-white flex items-center gap-2">
-              <MessageSquare size={16} className="text-pink-400" /> Evaluasi Terbaru ({days} hari terakhir)
+          <div className="rounded-2xl bg-white border border-[#e9edef] overflow-hidden shadow-xs">
+            <div className="px-5 py-3.5 border-b border-[#e9edef] text-xs font-bold text-[#111b21] uppercase flex items-center gap-1.5">
+              <MessageSquare size={14} className="text-[#008069]" /> Evaluasi Terbaru ({days} hari terakhir)
             </div>
             {!summary || (summary.recent || []).length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">
-                Belum ada evaluasi. Aktifkan <code className="text-slate-300">ENABLE_AI_EVAL_CRON=true</code> atau jalankan sample evaluation.
+              <div className="p-8 text-center text-xs text-[#8696a0]">
+                Belum ada evaluasi. Aktifkan <code className="text-[#111b21] bg-[#f0f2f5] px-1 py-0.5 rounded">ENABLE_AI_EVAL_CRON=true</code> atau jalankan sample evaluation.
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-white/10 bg-slate-950/40">
-                      <th className="px-5 py-3 font-bold">Skor</th>
-                      <th className="px-5 py-3 font-bold">Pesan (jawaban bot)</th>
-                      <th className="px-5 py-3 font-bold">Alasan / Feedback</th>
-                      <th className="px-5 py-3 font-bold text-right">Waktu</th>
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+                      <th className="px-4 py-2.5 font-bold">Skor</th>
+                      <th className="px-4 py-2.5 font-bold">Pesan (jawaban bot)</th>
+                      <th className="px-4 py-2.5 font-bold">Alasan / Feedback</th>
+                      <th className="px-4 py-2.5 font-bold text-right">Waktu</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-[#e9edef]">
                     {(summary.recent || []).map((e) => (
-                      <tr key={e.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-1">
+                      <tr key={e.id} className="hover:bg-[#f8fafc] transition-colors">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-0.5">
                             {[1, 2, 3, 4, 5].map((n) => (
                               <Star
                                 key={n}
-                                size={14}
+                                size={13}
                                 fill={n <= e.score ? 'currentColor' : 'none'}
-                                className={n <= e.score ? scoreColor(e.score) : 'text-slate-700'}
+                                className={n <= e.score ? scoreColor(e.score) : 'text-[#d1d7db]'}
                               />
                             ))}
                           </div>
                         </td>
-                        <td className="px-5 py-3 max-w-xs">
-                          <p className="text-slate-200 line-clamp-2">{e.message_text}</p>
-                          {e.customer_phone && <p className="text-xs text-slate-500 mt-1">{e.customer_phone}</p>}
+                        <td className="px-4 py-2.5 max-w-xs">
+                          <p className="text-[#111b21] line-clamp-2">{e.message_text}</p>
+                          {e.customer_phone && <p className="text-[10px] text-[#8696a0] mt-0.5">{e.customer_phone}</p>}
                         </td>
-                        <td className="px-5 py-3 max-w-sm">
-                          {e.feedback && <p className="text-xs text-slate-300 line-clamp-3">{e.feedback}</p>}
+                        <td className="px-4 py-2.5 max-w-sm">
+                          {e.feedback && <p className="text-[#54656f] line-clamp-3">{e.feedback}</p>}
                           {e.ai_reasoning && (
-                            <p className="text-xs text-slate-500 mt-1 italic line-clamp-2">
+                            <p className="text-[10px] text-[#8696a0] mt-0.5 italic line-clamp-2">
                               reasoning: {e.ai_reasoning}
                             </p>
                           )}
                         </td>
-                        <td className="px-5 py-3 text-right text-xs text-slate-500 whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-right text-[#8696a0] whitespace-nowrap">
                           {new Date(e.created_at).toLocaleString('id-ID')}
                         </td>
                       </tr>

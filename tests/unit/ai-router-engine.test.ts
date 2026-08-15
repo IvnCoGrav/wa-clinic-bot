@@ -341,12 +341,12 @@ describe('AI Router Engine — Feature Flags & Shadow Mode', () => {
     vi.restoreAllMocks();
   });
 
-  it('enabled (default) + shadow (default) → decision dipakai sebagai shadow (tidak override legacy)', async () => {
+  it('enabled (default) + shadow (default OFF) → decision aktif penuh (override legacy)', async () => {
     process.env.LLM_API_KEY = 'mock_key'; // paksa fallback offline (tanpa network)
     const svc = new AIRouterService();
     const decision = await svc.classify(input('IDLE', 'halo'));
     expect(decision.enabled).toBe(true);
-    expect(decision.shadowMode).toBe(true);
+    expect(decision.shadowMode).toBe(false);
     expect(decision.response).toBeTruthy();
     expect(decision.source).not.toBe('disabled');
   });

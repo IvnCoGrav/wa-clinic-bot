@@ -57,3 +57,16 @@ export function sanitizeForbiddenEnglishWords(text: string): string {
     .replace(/\bmommy(?:-nya|nya)?\b/gi, 'Bunda')
     .replace(/\bschedule\b/gi, 'jadwal');
 }
+
+/**
+ * Membersihkan istilah halusinasi penerjemahan LLM yang aneh
+ * (seperti "antimeminjamkan", "biaya pinjam" alih-alih "ongkir").
+ */
+export function sanitizeHallucinatedTerms(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\b(?:biaya\s+)?antimeminjamkan(?:nya)?\b/gi, 'ongkirnya')
+    .replace(/\banti\s*meminjamkan(?:nya)?\b/gi, 'ongkirnya')
+    .replace(/\bbiaya\s+peminjaman(?:nya)?\b/gi, 'ongkos kirimnya');
+}
+

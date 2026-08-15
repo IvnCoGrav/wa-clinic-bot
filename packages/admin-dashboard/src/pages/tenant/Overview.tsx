@@ -79,181 +79,181 @@ export const Overview: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Overview</h2>
-          <p className="text-slate-400">Real-time statistics & operational liveness metrics</p>
+          <h2 className="text-xl font-bold tracking-tight text-[#111b21]">Overview</h2>
+          <p className="text-xs text-[#667781]">Real-time statistics & operational liveness metrics</p>
         </div>
         <button 
           onClick={() => { setLoading(true); fetchStatus(); }}
-          className="flex items-center space-x-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
+          className="flex items-center space-x-2 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] shadow-xs transition-colors"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
           <span>Refresh Metrics</span>
         </button>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Chat Masuk */}
-        <div className="glass-card rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chat Masuk</span>
-              <p className="text-3xl font-extrabold text-white">{stats.incomingChats}</p>
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+          <div className="flex justify-between items-start mb-3">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Chat Masuk</span>
+              <p className="text-2xl font-black text-[#111b21]">{stats.incomingChats}</p>
             </div>
-            <div className="p-3 rounded-xl bg-pink-500/10 text-pink-400">
-              <MessageSquare size={20} />
+            <div className="p-2.5 rounded-xl bg-[#e8f5f2] text-[#008069]">
+              <MessageSquare size={18} />
             </div>
           </div>
-          <div className="flex items-center text-xs text-emerald-400">
-            <TrendingUp size={14} className="mr-1" />
+          <div className="flex items-center text-xs text-emerald-700 font-semibold">
+            <TrendingUp size={13} className="mr-1" />
             <span>+14.2% dari kemarin</span>
           </div>
         </div>
 
         {/* Reservasi */}
-        <div className="glass-card rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reservasi</span>
-              <p className="text-3xl font-extrabold text-white">{stats.reservations}</p>
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+          <div className="flex justify-between items-start mb-3">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Reservasi</span>
+              <p className="text-2xl font-black text-[#111b21]">{stats.reservations}</p>
             </div>
-            <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400">
-              <Calendar size={20} />
+            <div className="p-2.5 rounded-xl bg-purple-50 text-purple-700">
+              <Calendar size={18} />
             </div>
           </div>
-          <div className="flex items-center text-xs text-emerald-400">
-            <TrendingUp size={14} className="mr-1" />
+          <div className="flex items-center text-xs text-emerald-700 font-semibold">
+            <TrendingUp size={13} className="mr-1" />
             <span>Reservasi masuk hari ini</span>
           </div>
         </div>
 
         {/* Est. Omset */}
-        <div className="glass-card rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Est. Omset</span>
-              <p className="text-2xl font-extrabold text-white truncate">{formatRevenue(stats.revenue)}</p>
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+          <div className="flex justify-between items-start mb-3">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Est. Omset</span>
+              <p className="text-2xl font-black text-[#111b21] truncate">{formatRevenue(stats.revenue)}</p>
             </div>
-            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <DollarSign size={20} />
+            <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
+              <DollarSign size={18} />
             </div>
           </div>
-          <div className="flex items-center text-xs text-emerald-400">
-            <TrendingUp size={14} className="mr-1" />
+          <div className="flex items-center text-xs text-emerald-700 font-semibold">
+            <TrendingUp size={13} className="mr-1" />
             <span>+8% dibanding minggu lalu</span>
           </div>
         </div>
 
         {/* Conversion Rate */}
-        <div className="glass-card rounded-2xl p-6 relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conversion Rate</span>
-              <p className="text-3xl font-extrabold text-white">{stats.conversionRate}%</p>
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+          <div className="flex justify-between items-start mb-3">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Conversion Rate</span>
+              <p className="text-2xl font-black text-[#111b21]">{stats.conversionRate}%</p>
             </div>
-            <div className="p-3 rounded-xl bg-blue-500/10 text-blue-400">
-              <TrendingUp size={20} />
+            <div className="p-2.5 rounded-xl bg-sky-50 text-sky-700">
+              <TrendingUp size={18} />
             </div>
           </div>
-          <div className="flex items-center text-xs text-slate-400">
+          <div className="flex items-center text-xs text-[#667781]">
             <span>Rasio leads menjadi reservasi</span>
           </div>
         </div>
       </div>
 
       {/* Analytics Chart Block */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Area Chart */}
-        <div className="glass-panel rounded-2xl p-6 border border-white/5 lg:col-span-2 space-y-4">
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 lg:col-span-2 space-y-4 shadow-xs">
           <div>
-            <h3 className="text-base font-bold text-white">Lalu Lintas Pesan & Konversi</h3>
-            <p className="text-xs text-slate-400">Perbandingan pesan masuk dan reservasi hari ini</p>
+            <h3 className="text-sm font-bold text-[#111b21]">Lalu Lintas Pesan & Konversi</h3>
+            <p className="text-xs text-[#667781]">Perbandingan pesan masuk dan reservasi hari ini</p>
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorChats" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ec4899" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#008069" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#008069" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorRes" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#a855f7" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#0284c7" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#0284c7" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
-                <Area type="monotone" dataKey="chats" name="Chat Masuk" stroke="#ec4899" strokeWidth={2} fillOpacity={1} fill="url(#colorChats)" />
-                <Area type="monotone" dataKey="reservations" name="Reservasi" stroke="#a855f7" strokeWidth={2} fillOpacity={1} fill="url(#colorRes)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e9edef" />
+                <XAxis dataKey="name" stroke="#8696a0" fontSize={11} />
+                <YAxis stroke="#8696a0" fontSize={11} />
+                <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e9edef', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', color: '#111b21' }} />
+                <Area type="monotone" dataKey="chats" name="Chat Masuk" stroke="#008069" strokeWidth={2.5} fillOpacity={1} fill="url(#colorChats)" />
+                <Area type="monotone" dataKey="reservations" name="Reservasi" stroke="#0284c7" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRes)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* BullMQ & Queue System Monitor */}
-        <div className="glass-panel rounded-2xl p-6 border border-white/5 flex flex-col justify-between">
+        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 flex flex-col justify-between shadow-xs">
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <Layers size={18} className="text-pink-400" />
-              <h3 className="text-base font-bold text-white">Status Antrean System</h3>
+              <Layers size={18} className="text-[#008069]" />
+              <h3 className="text-sm font-bold text-[#111b21]">Status Antrean System</h3>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[#667781]">
               Pemantauan engine antrean BullMQ dan liveness engine WhatsApp
             </p>
 
-            <div className="space-y-4 mt-6">
+            <div className="space-y-3 mt-4">
               {/* Queue Mode indicator */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
                 <div className="flex items-center space-x-3">
-                  <Server size={16} className="text-slate-400" />
+                  <Server size={16} className="text-[#8696a0]" />
                   <div>
-                    <p className="text-xs text-slate-400">Database Queue Mode</p>
-                    <p className="text-sm font-semibold text-slate-200">
+                    <p className="text-[11px] text-[#667781]">Database Queue Mode</p>
+                    <p className="text-xs font-bold text-[#111b21]">
                       {healthData?.redisQueue === 'BULLMQ_ACTIVE' ? 'BullMQ (Active Redis)' : 'In-Memory Fallback'}
                     </p>
                   </div>
                 </div>
-                <div className={`h-2.5 w-2.5 rounded-full ${healthData?.redisQueue === 'BULLMQ_ACTIVE' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'}`}></div>
+                <div className={`h-2.5 w-2.5 rounded-full ${healthData?.redisQueue === 'BULLMQ_ACTIVE' ? 'bg-emerald-500 shadow-xs' : 'bg-amber-500 shadow-xs'}`}></div>
               </div>
 
               {/* WAHA Engine Status */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
                 <div className="flex items-center space-x-3">
-                  <Activity size={16} className="text-slate-400" />
+                  <Activity size={16} className="text-[#8696a0]" />
                   <div>
-                    <p className="text-xs text-slate-400">WhatsApp Engine (WAHA)</p>
-                    <p className="text-sm font-semibold text-slate-200">
+                    <p className="text-[11px] text-[#667781]">WhatsApp Engine (WAHA)</p>
+                    <p className="text-xs font-bold text-[#111b21]">
                       {healthData?.wahaStatus || 'OFFLINE'}
                     </p>
                   </div>
                 </div>
-                <div className={`h-2.5 w-2.5 rounded-full ${healthData?.wahaStatus === 'WORKING' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : healthData?.wahaStatus === 'SCAN_QR_CODE' ? 'bg-amber-500 shadow-[0_0_8px_#f59e0b]' : 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'}`}></div>
+                <div className={`h-2.5 w-2.5 rounded-full ${healthData?.wahaStatus === 'WORKING' ? 'bg-emerald-500 shadow-xs' : healthData?.wahaStatus === 'SCAN_QR_CODE' ? 'bg-amber-500 shadow-xs' : 'bg-rose-500 shadow-xs'}`}></div>
               </div>
 
               {/* Haversine distance engine */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
                 <div className="flex items-center space-x-3">
-                  <Server size={16} className="text-slate-400" />
+                  <Server size={16} className="text-[#8696a0]" />
                   <div>
-                    <p className="text-xs text-slate-400">Location Engine</p>
-                    <p className="text-sm font-semibold text-slate-200">
+                    <p className="text-[11px] text-[#667781]">Location Engine</p>
+                    <p className="text-xs font-bold text-[#111b21]">
                       Haversine (Fallback Active)
                     </p>
                   </div>
                 </div>
-                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
+                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-xs"></div>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-white/5 text-[10px] text-slate-500 flex justify-between">
+          <div className="pt-3.5 border-t border-[#e9edef] text-[11px] text-[#667781] flex justify-between">
             <span>Uptime: {healthData ? `${(healthData.systemUptimeSeconds / 3600).toFixed(2)} hours` : 'loading...'}</span>
             <span>OS: Windows</span>
           </div>

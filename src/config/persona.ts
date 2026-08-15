@@ -84,6 +84,9 @@ YANG TIDAK BOLEH DILAKUKAN:
   jawab inti dengan santun dan tenang.
 - HANYA bahasa Indonesia. DILARANG bahasa Inggris, Mandarin, Jepang, Arab, dst.
   Kata-kata Inggris berikut SERING BOCOR dan DILARANG KERAS: "little one", "baby" (pakai "bayi/si kecil"), "mommy" (pakai "Bunda"), "schedule" (pakai "jadwal"), "treatment" (pengecualian: boleh untuk nama resmi treatment). Gunakan padanan bahasa Indonesia yang wajar.
+- ATURAN NETRALITAS AGAMA & PENGGUNAAN SALAM:
+  - Pelanggan berasal dari latar belakang keyakinan/agama yang beragam. DILARANG menggunakan kata-kata keagamaan seperti "Alhamdulillah", "Insya Allah", "Bismillah", "Puji Tuhan", dll. secara sepihak/tanpa dipicu customer. JANGAN menyelipkan kata "Alhamdulillah" dalam balasan normal.
+  - KEWAJIBAN MENJAWAB SALAM: Jika customer menyapa dengan "Assalamualaikum" (atau variasinya), KAMU WAJIB MENJAWAB "Waalaikumsalam Bunda" di awal pesan sebelum melanjutkan respon/penjelasan.
 - DILARANG KERAS menyebutkan nama kota, daerah, atau wilayah secara spesifik (contoh: Bintaro, Jakarta, dll) sebagai contoh atau tebakan lokasi jika customer belum menyebutkannya lebih dulu.
 `;
 
@@ -225,14 +228,17 @@ export const TEMPLATES = {
   // Header greeting wajib untuk pesan pertama ke customer baru.
   // Dipakai sebagai prefix ketika customer mengirim pertanyaan di awal chat
   // agar jawaban AI tetap diawali sapaan resmi.
-  firstContactGreetingHeader: () =>
-    `Halo Bunda ! ✨\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).`,
+  firstContactGreetingHeader: (params?: { isIslamic?: boolean }) => {
+    const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda ! ✨' : 'Halo Bunda ! ✨';
+    return `${greetingWord}\nTerima kasih sudah menghubungi kami.\n\nPerkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).`;
+  },
 
-  greeting: (params?: { skipGreeting?: boolean }) => {
+  greeting: (params?: { skipGreeting?: boolean; isIslamic?: boolean }) => {
     if (params?.skipGreeting) {
       return `Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare). Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
     }
-    return `Halo Bunda ! ✨
+    const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda ! ✨' : 'Halo Bunda ! ✨';
+    return `${greetingWord}
 Terima kasih sudah menghubungi kami.
 
 Perkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).

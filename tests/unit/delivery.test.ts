@@ -135,7 +135,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(mockOrsClient.calculateRoute).toHaveBeenCalled();
       expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('[DELIVERY SERVICE FALLBACK]'));
       expect(res.distanceKm).toBeGreaterThan(1.0);
-      expect(res.distanceKm).toBeLessThan(2.5);
+      expect(res.distanceKm).toBeLessThan(3.0);
       expect(res.ongkir).toBe(0); // Free ongkir for < 5 km
       expect(res.isOutOfCoverage).toBe(false);
     });

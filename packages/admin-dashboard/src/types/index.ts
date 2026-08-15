@@ -1,7 +1,9 @@
 export interface User {
   id: string;
   email: string;
-  role: 'tenant_admin' | 'super_admin';
+  name?: string;
+  phone?: string;
+  role: 'super_admin' | 'tenant_admin' | 'admin_cs' | 'advertiser' | 'therapist';
   tenantId: string;
 }
 
@@ -43,6 +45,12 @@ export interface Reservation {
   purchase_occurred_at?: string | null;
   purchase_review_status?: 'pending' | 'approved' | 'ignored_outlier' | string;
   baby_details?: BabyDetail[];
+  assigned_staff_id?: string | null;
+  assigned_staff?: {
+    id: string;
+    name: string;
+    phone?: string;
+  } | null;
   created_at: string;
 }
 
