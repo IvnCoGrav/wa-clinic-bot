@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
@@ -7,27 +7,58 @@ import {
   Search, 
   Calendar as CalendarIcon, 
   User, 
-  Baby,
+  Baby, 
   MapPin, 
   Check, 
   X, 
   Info, 
+  FileText, 
+  AlertTriangle, 
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
   CalendarDays,
-  FileText,
-  AlertTriangle,
-  RefreshCw
+  LayoutGrid,
+  ListFilter,
+  Columns
 } from 'lucide-react';
+import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
+import { CalendarSidebar } from '../../components/calendar/CalendarSidebar';
+import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
+import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
+import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
+import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 
 export const Reservations: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const [loading, setLoading] = useState(true);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'table' | 'calendar'>('table');
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // Calendar View State
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
+  const [filterState, setFilterState] = useState<CalendarFilterState>({
+    searchQuery: '',
+    category: 'all',
+    staffId: 'all',
+    status: 'all',
+  });
+
   const [googleCalendarMockActive, setGoogleCalendarMockActive] = useState(true);
   const [editDate, setEditDate] = useState('');
+  const [staffList, setStaffList] = useState<StaffOption[]>([]);
+  const [assigningStaff, setAssigningStaff] = useState(false);
+
+  // Create Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [quickSlotTarget, setQuickSlotTarget] = useState<QuickSlotTarget | null>(null);
+
+  // Table pagination state
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalReservations, setTotalReservations] = useState(0);
+  const PAGE_SIZE = 100;
 
   useEffect(() => {
     if (selectedRes?.booking_date) {
@@ -39,29 +70,25 @@ export const Reservations: React.FC = () => {
       setEditDate('');
     }
   }, [selectedRes]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    customerId: '',
-    customerSearch: '',
-    treatmentCategory: 'BABY' as 'BABY' | 'MOMS' | 'BOTH',
-    treatmentDetail: '',
-    bookingDate: '',
-    babies: [] as Array<{ name: string; ageText: string }>,
-  });
-  const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
-  const [searchingCustomers, setSearchingCustomers] = useState(false);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalReservations, setTotalReservations] = useState(0);
 
-  const PAGE_SIZE = 100;
+  useEffect(() => {
+    async function loadStaff() {
+      try {
+        const res = await apiRequest('/api/admin/staff');
+        if (res.success && Array.isArray(res.data)) {
+          setStaffList(res.data);
+        }
+      } catch (_) {}
+    }
+    loadStaff();
+  }, []);
 
   const loadReservations = async (targetPage = 1, append = false) => {
     try {
       setLoading(true);
       const res = await apiRequest(`/api/admin/reservations?page=${targetPage}&pageSize=${PAGE_SIZE}`);
-      const data = Array.isArray(res) ? res : (res?.data || []);
-      setReservations(prev => append ? [...prev, ...data] : data);
+      const data = Array.isArray(res) ? res : res?.data || [];
+      setReservations((prev) => (append ? [...prev, ...data] : data));
       if (!Array.isArray(res)) {
         setTotalPages(res?.totalPages || 1);
         setTotalReservations(res?.total ?? data.length);
@@ -93,11 +120,46 @@ export const Reservations: React.FC = () => {
     return `${dayMonth} ${time}`;
   };
 
+  // Date Navigation Handlers
+  const handlePrevDate = () => {
+    const next = new Date(selectedDate);
+    if (viewMode === 'day') {
+      next.setDate(next.getDate() - 1);
+    } else if (viewMode === 'week') {
+      next.setDate(next.getDate() - 7);
+    } else if (viewMode === 'month') {
+      next.setMonth(next.getMonth() - 1);
+    }
+    setSelectedDate(next);
+  };
+
+  const handleNextDate = () => {
+    const next = new Date(selectedDate);
+    if (viewMode === 'day') {
+      next.setDate(next.getDate() + 1);
+    } else if (viewMode === 'week') {
+      next.setDate(next.getDate() + 7);
+    } else if (viewMode === 'month') {
+      next.setMonth(next.getMonth() + 1);
+    }
+    setSelectedDate(next);
+  };
+
+  const handleToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  const handleQuickAdd = (target: QuickSlotTarget) => {
+    setQuickSlotTarget(target);
+    setShowCreateModal(true);
+  };
+
+  // Confirm Reservation
   const handleConfirm = async (id: string) => {
     try {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${id}/confirm`, {
-        method: 'PATCH'
+        method: 'PATCH',
       });
       toast('Reservasi ditandai lunas & disinkronkan ke Google Calendar', 'success');
       setSelectedRes(null);
@@ -108,15 +170,16 @@ export const Reservations: React.FC = () => {
     }
   };
 
+  // Update Reservation Date
   const handleSetDate = async (id: string) => {
     if (!editDate) return;
     try {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${id}/set-date`, {
         method: 'PATCH',
-        body: JSON.stringify({ bookingDate: new Date(editDate).toISOString() })
+        body: JSON.stringify({ bookingDate: new Date(editDate).toISOString() }),
       });
-      toast('Reservation schedule updated successfully!', 'success');
+      toast('Jadwal kunjungan berhasil diperbarui!', 'success');
       setSelectedRes(null);
       setEditDate('');
       loadReservations();
@@ -126,10 +189,11 @@ export const Reservations: React.FC = () => {
     }
   };
 
+  // Delete Reservation
   const handleDelete = async (id: string) => {
     const isConfirmed = await confirm({
       title: 'Hapus Reservasi?',
-      message: 'Are you sure you want to cancel and delete this reservation?',
+      message: 'Apakah Anda yakin ingin membatalkan dan menghapus jadwal reservasi ini?',
       confirmText: 'Ya, Hapus',
       danger: true,
     });
@@ -137,9 +201,9 @@ export const Reservations: React.FC = () => {
     try {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
-      toast('Reservation deleted/cancelled.', 'success');
+      toast('Reservasi berhasil dibatalkan.', 'success');
       setSelectedRes(null);
       loadReservations();
     } catch (err: any) {
@@ -148,53 +212,38 @@ export const Reservations: React.FC = () => {
     }
   };
 
-  // --- Task 9: Buat Jadwal Baru (customer search + structured form) ---
-  const searchCustomers = async (query: string) => {
-    if (!query || query.length < 2) { setCustomerSearchResults([]); return; }
-    setSearchingCustomers(true);
+  // Assign Staff
+  const handleAssignStaff = async (reservationId: string, staffId: string | null) => {
+    setAssigningStaff(true);
     try {
-      const params = new URLSearchParams({ search: query, pageSize: '10' });
-      const res = await apiRequest(`/api/admin/customers?${params.toString()}`);
-      setCustomerSearchResults(res.customers || []);
-    } catch {
-      setCustomerSearchResults([]);
-    } finally {
-      setSearchingCustomers(false);
-    }
-  };
-
-  const handleCreateReservation = async () => {
-    if (!createForm.customerId || !createForm.treatmentDetail) {
-      toast('Pilih customer dan isi detail treatment', 'error'); return;
-    }
-    try {
-      await apiRequest('/api/admin/reservation', {
-        method: 'POST',
-        body: JSON.stringify({
-          customerId: createForm.customerId,
-          treatmentCategory: createForm.treatmentCategory,
-          treatmentDetail: createForm.treatmentDetail,
-          bookingDate: createForm.bookingDate || undefined,
-          babies: createForm.babies.length > 0 ? createForm.babies : undefined,
-        }),
+      const res = await apiRequest(`/api/admin/reservation/${reservationId}/assign-staff`, {
+        method: 'PATCH',
+        body: JSON.stringify({ assigned_staff_id: staffId || null }),
       });
-      toast('Reservasi baru berhasil dibuat!', 'success');
-      setShowCreateModal(false);
-      setCreateForm({ customerId: '', customerSearch: '', treatmentCategory: 'BABY', treatmentDetail: '', bookingDate: '', babies: [] });
-      setCustomerSearchResults([]);
-      loadReservations();
+
+      if (res.success) {
+        toast(staffId ? 'Staff berhasil ditugaskan ke reservasi.' : 'Penugasan staff telah dilepas.', 'success');
+        setReservations((prev) =>
+          prev.map((r) =>
+            r.id === reservationId
+              ? { ...r, assigned_staff_id: staffId, assigned_staff: res.data?.assigned_staff }
+              : r
+          )
+        );
+        if (selectedRes && selectedRes.id === reservationId) {
+          setSelectedRes((prev) =>
+            prev ? { ...prev, assigned_staff_id: staffId, assigned_staff: res.data?.assigned_staff } : null
+          );
+        }
+      }
     } catch (err: any) {
-      toast(`Gagal membuat reservasi: ${err.message}`, 'error');
+      toast(`Gagal menugaskan staff: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setAssigningStaff(false);
     }
   };
 
-  const updateBaby = (index: number, field: 'name' | 'ageText', value: string) => {
-    const next = [...createForm.babies];
-    next[index] = { ...next[index], [field]: value };
-    setCreateForm((prev) => ({ ...prev, babies: next }));
-  };
-
-  // Resolve info bayi/anak: prioritas children DB (usia real-time) → baby_details API → parse raw_text client
+  // Baby info resolver
   const getBabyRows = (res: Reservation | null): Array<{ name: string; age: string; regAge?: string }> => {
     if (!res) return [];
     const children = res.customer?.children;
@@ -210,356 +259,453 @@ export const Reservations: React.FC = () => {
     return extractBabiesFromRawText(res.raw_text, res.treatment_detail).map((b) => ({ name: b.name, age: b.age }));
   };
 
-  // Filter reservations
-  const filtered = reservations.filter(res => {
-    const statusMatch = filterStatus === 'all' || res.status === filterStatus;
-    const customerPhone = res.customer?.phone || '';
-    const customerName = res.customer?.name || '';
-    const textBody = res.treatment_detail || '';
-    const query = searchQuery.toLowerCase();
-    
-    const searchMatch = !searchQuery || 
-      customerPhone.toLowerCase().includes(query) ||
-      customerName.toLowerCase().includes(query) ||
-      textBody.toLowerCase().includes(query);
-
-    return statusMatch && searchMatch;
-  });
+  // Filtered reservations based on global sidebar & search filter
+  const filteredReservations = useMemo(() => {
+    return reservations.filter((res) => {
+      // Status filter
+      if (filterState.status !== 'all' && res.status !== filterState.status) {
+        return false;
+      }
+      // Category filter
+      if (filterState.category !== 'all' && res.treatment_category !== filterState.category) {
+        return false;
+      }
+      // Staff filter
+      if (filterState.staffId !== 'all' && res.assigned_staff_id !== filterState.staffId) {
+        return false;
+      }
+      // Search query
+      if (filterState.searchQuery.trim()) {
+        const q = filterState.searchQuery.toLowerCase();
+        const cPhone = (res.customer?.phone || '').toLowerCase();
+        const cName = (res.customer?.name || '').toLowerCase();
+        const detail = (res.treatment_detail || '').toLowerCase();
+        if (!cPhone.includes(q) && !cName.includes(q) && !detail.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [reservations, filterState]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'confirmed':
-        return <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">Confirmed</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">Confirmed</span>;
       case 'completed':
-        return <span className="px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">Completed</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-sky-100 border border-sky-200 text-sky-800 text-xs font-semibold">Completed</span>;
       case 'cancelled':
-        return <span className="px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">Cancelled</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">Cancelled</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">Pending</span>;
+        return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">Pending</span>;
     }
   };
 
+  // Header month/year display
+  const headerDateTitle = selectedDate.toLocaleDateString('id-ID', {
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Reservations</h2>
-          <p className="text-slate-400">View schedule, confirm bookings, and manage clinic calendars</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-pink-500 hover:bg-pink-600 rounded-xl text-xs font-semibold text-white transition-colors shadow shadow-pink-500/20"
-          >
-            <CalendarIcon size={14} />
-            <span>+ Buat Jadwal Baru</span>
-          </button>
-          <button 
-            onClick={() => { setLoading(true); loadReservations(); }}
-            className="flex items-center space-x-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-semibold text-slate-300 transition-colors"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            <span>Reload</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs Menu */}
-      <div className="flex space-x-2 p-1 bg-slate-900/60 border border-white/5 rounded-xl max-w-xs">
-        <button 
-          onClick={() => setActiveTab('table')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'table' ? 'bg-pink-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-        >
-          Table List
-        </button>
-        <button 
-          onClick={() => setActiveTab('calendar')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${activeTab === 'calendar' ? 'bg-pink-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-        >
-          Calendar View
-        </button>
-      </div>
-
-      {/* Main reservation content */}
-      {activeTab === 'table' ? (
-        <div className="space-y-4">
-          
-          {/* Filters Row */}
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative w-full md:max-w-xs">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-                <Search size={16} />
-              </span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search phone, name, or detail..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-900/60 border border-white/5 rounded-xl text-sm focus:outline-none focus:border-pink-500/40"
-              />
-            </div>
-
-            <div className="flex space-x-2 overflow-x-auto w-full md:w-auto">
-              {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                    filterStatus === status 
-                      ? 'bg-pink-500/10 border-pink-500 text-pink-400' 
-                      : 'border-white/5 text-slate-400 hover:text-white bg-slate-900/35'
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
-            </div>
+    <div className="space-y-5">
+      {/* Top Header Bar */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs">
+        {/* Title & Month Navigation */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-[#111b21] capitalize">
+              {headerDateTitle}
+            </h2>
+            <p className="text-xs text-[#667781] mt-0.5">
+              Jadwal reservasi & kunjungan terapis klinik
+            </p>
           </div>
 
-          {/* Table & Mobile list */}
-          {/* Mobile Card List (block md:hidden) */}
-          <div className="block md:hidden space-y-3.5">
-            {filtered.length === 0 ? (
-              <div className="glass-panel border border-white/5 rounded-2xl p-8 text-center text-slate-500 text-xs">
-                No reservations found matching current criteria.
-              </div>
-            ) : (
-              filtered.map((res) => (
-                <div key={res.id} className="glass-card rounded-2xl p-4 border border-white/10 shadow-lg bg-slate-900/80 space-y-3 relative">
-                  <div className="flex justify-between items-start">
-                    <div className="pr-2">
-                      <h4 className="font-bold text-white text-sm">{res.customer?.name || 'Bunda'}</h4>
-                      <p className="text-xs text-slate-400 font-mono mt-0.5">{res.customer?.phone}</p>
-                    </div>
-                    <div className="flex-shrink-0">{getStatusBadge(res.status)}</div>
-                  </div>
+          {/* Date Navigation group */}
+          <div className="flex items-center space-x-1.5 ml-0 sm:ml-4 bg-[#f0f2f5] p-1 rounded-xl">
+            <button
+              onClick={handlePrevDate}
+              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-[#111b21] shadow-xs transition-colors"
+              title="Sebelumnya"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={handleToday}
+              className="px-3 py-1 rounded-lg bg-white hover:bg-gray-100 text-xs font-bold text-[#111b21] shadow-xs transition-colors"
+            >
+              Hari Ini
+            </button>
+            <button
+              onClick={handleNextDate}
+              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-[#111b21] shadow-xs transition-colors"
+              title="Berikutnya"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
 
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5">
-                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
-                      {res.treatment_category}
-                    </span>
-                    <span className="font-bold text-pink-300 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/20">
-                      {res.booking_date ? (
-                        formatBookingDate(res.booking_date)
-                      ) : (
-                        <span className="text-slate-500 font-normal">Belum ada jadwal</span>
+        {/* View mode switcher & Actions */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-end">
+          {/* View Switcher Tabs */}
+          <div className="flex space-x-1 p-1 bg-[#f0f2f5] rounded-xl shadow-inner text-xs">
+            <button
+              onClick={() => setViewMode('month')}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'month'
+                  ? 'bg-white text-[#111b21] shadow-xs'
+                  : 'text-[#54656f] hover:text-[#111b21]'
+              }`}
+            >
+              <CalendarDays size={13} />
+              <span>Bulan</span>
+            </button>
+            <button
+              onClick={() => setViewMode('week')}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'week'
+                  ? 'bg-white text-[#111b21] shadow-xs'
+                  : 'text-[#54656f] hover:text-[#111b21]'
+              }`}
+            >
+              <Columns size={13} />
+              <span>Minggu</span>
+            </button>
+            <button
+              onClick={() => setViewMode('day')}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'day'
+                  ? 'bg-white text-[#111b21] shadow-xs'
+                  : 'text-[#54656f] hover:text-[#111b21]'
+              }`}
+            >
+              <LayoutGrid size={13} />
+              <span>Hari</span>
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'table'
+                  ? 'bg-white text-[#111b21] shadow-xs'
+                  : 'text-[#54656f] hover:text-[#111b21]'
+              }`}
+            >
+              <ListFilter size={13} />
+              <span>Tabel</span>
+            </button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => {
+                setQuickSlotTarget(null);
+                setShowCreateModal(true);
+              }}
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] rounded-xl text-xs font-semibold text-white transition-colors shadow-xs"
+            >
+              <CalendarIcon size={14} />
+              <span>+ Buat Jadwal Baru</span>
+            </button>
+            <button
+              onClick={() => {
+                setLoading(true);
+                loadReservations();
+              }}
+              className="p-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-[#111b21] transition-colors shadow-xs"
+              title="Reload Data"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Dual-Pane Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5 items-start">
+        {/* Left Column: Sidebar Widgets */}
+        <CalendarSidebar
+          selectedDate={selectedDate}
+          onSelectDate={(d) => setSelectedDate(d)}
+          reservations={reservations}
+          filterState={filterState}
+          onFilterChange={setFilterState}
+          staffList={staffList}
+          onSelectReservation={(r) => setSelectedRes(r)}
+        />
+
+        {/* Right Column: Calendar / Schedule Views */}
+        <div className="space-y-4 min-w-0">
+          {/* Search bar inside view */}
+          <div className="relative">
+            <input
+              type="text"
+              value={filterState.searchQuery}
+              onChange={(e) =>
+                setFilterState((prev) => ({ ...prev, searchQuery: e.target.value }))
+              }
+              placeholder="Cari pasien, nomor telepon, atau jenis treatment..."
+              className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            />
+            <Search size={14} className="absolute left-3 top-3 text-[#8696a0]" />
+            {filterState.searchQuery && (
+              <button
+                onClick={() => setFilterState((prev) => ({ ...prev, searchQuery: '' }))}
+                className="absolute right-3 top-3 text-[#8696a0] hover:text-[#111b21]"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* View rendering */}
+          {viewMode === 'week' && (
+            <WeekScheduleGrid
+              selectedDate={selectedDate}
+              onSelectDate={(d) => setSelectedDate(d)}
+              reservations={filteredReservations}
+              onSelectReservation={(r) => setSelectedRes(r)}
+              onQuickAdd={handleQuickAdd}
+            />
+          )}
+
+          {viewMode === 'day' && (
+            <DayScheduleGrid
+              selectedDate={selectedDate}
+              reservations={filteredReservations}
+              onSelectReservation={(r) => setSelectedRes(r)}
+              onQuickAdd={handleQuickAdd}
+            />
+          )}
+
+          {viewMode === 'month' && (
+            <MonthScheduleGrid
+              selectedDate={selectedDate}
+              onSelectDate={(d) => setSelectedDate(d)}
+              reservations={filteredReservations}
+              onSelectReservation={(r) => setSelectedRes(r)}
+              onQuickAdd={handleQuickAdd}
+            />
+          )}
+
+          {viewMode === 'table' && (
+            <div className="space-y-4">
+              {/* Mobile Card List */}
+              <div className="block md:hidden space-y-3">
+                {filteredReservations.length === 0 ? (
+                  <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-[#667781] text-xs shadow-xs">
+                    Tidak ada data reservasi yang sesuai.
+                  </div>
+                ) : (
+                  filteredReservations.map((res) => (
+                    <div key={res.id} className="bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-[#111b21] text-sm">{res.customer?.name || 'Bunda'}</h4>
+                          <p className="text-xs text-[#667781] font-mono mt-0.5">{res.customer?.phone}</p>
+                        </div>
+                        <div>{getStatusBadge(res.status)}</div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-[#e9edef]">
+                        <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[#54656f] font-semibold text-[10px]">
+                          {res.treatment_category}
+                        </span>
+                        <span className="font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded border border-[#c2e7e0] text-xs">
+                          {res.booking_date ? formatBookingDate(res.booking_date) : 'Belum ada jadwal'}
+                        </span>
+                      </div>
+
+                      {res.treatment_detail && (
+                        <p className="text-xs text-[#54656f] bg-[#f8fafc] p-2.5 rounded-xl border border-[#e9edef] line-clamp-2">
+                          {res.treatment_detail}
+                        </p>
                       )}
-                    </span>
-                  </div>
 
-                  {res.treatment_detail && (
-                    <p className="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-xl border border-white/5 line-clamp-2 leading-relaxed">
-                      {res.treatment_detail}
-                    </p>
-                  )}
+                      {res.assigned_staff && (
+                        <div className="text-xs text-[#008069] font-semibold flex items-center space-x-1">
+                          <span>Terapis: {res.assigned_staff.name}</span>
+                        </div>
+                      )}
 
-                  <div className="pt-2 flex justify-between items-center text-xs">
-                    {!res.booking_date ? (
-                      <button
-                        onClick={() => setSelectedRes(res)}
-                        className="px-2.5 py-1.5 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/20 font-semibold text-[11px] transition-all"
-                      >
-                        + Tambah Jadwal
-                      </button>
-                    ) : <span />}
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => setSelectedRes(res)}
+                          className="px-3 py-1.5 bg-[#f0f2f5] hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl transition-all font-semibold text-xs"
+                        >
+                          Manage
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-xs uppercase tracking-wider font-bold">
+                        <th className="py-3.5 px-5">Customer</th>
+                        <th className="py-3.5 px-5">Kategori</th>
+                        <th className="py-3.5 px-5">Detail Layanan</th>
+                        <th className="py-3.5 px-5">Jadwal Kunjungan</th>
+                        <th className="py-3.5 px-5">Terapis</th>
+                        <th className="py-3.5 px-5">Status</th>
+                        <th className="py-3.5 px-5">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e9edef] text-xs text-[#111b21]">
+                      {filteredReservations.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-[#667781] text-xs">
+                            Tidak ada data reservasi yang sesuai.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredReservations.map((res) => (
+                          <tr key={res.id} className="hover:bg-[#f8fafc] transition-all">
+                            <td className="py-3.5 px-5 font-medium">
+                              <p className="font-bold text-[#111b21]">{res.customer?.name || 'Bunda'}</p>
+                              <p className="text-xs text-[#667781] font-mono">{res.customer?.phone}</p>
+                            </td>
+                            <td className="py-3.5 px-5">
+                              <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
+                                {res.treatment_category}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 max-w-xs truncate text-[#54656f]" title={res.treatment_detail}>
+                              {res.treatment_detail}
+                            </td>
+                            <td className="py-3.5 px-5 font-semibold text-[#008069] whitespace-nowrap">
+                              {res.booking_date ? (
+                                formatBookingDate(res.booking_date)
+                              ) : (
+                                <button
+                                  onClick={() => setSelectedRes(res)}
+                                  className="px-2 py-1 rounded-lg bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold transition-all"
+                                >
+                                  + Atur Jadwal
+                                </button>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-5">
+                              {res.assigned_staff ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                                  {res.assigned_staff.name}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-[#8696a0] italic">Belum ditugaskan</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-5">{getStatusBadge(res.status)}</td>
+                            <td className="py-3.5 px-5">
+                              <button
+                                onClick={() => setSelectedRes(res)}
+                                className="px-3 py-1.5 bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl text-xs transition-all font-semibold shadow-xs"
+                              >
+                                Manage
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Pagination Footer */}
+              {totalPages > 1 && (
+                <div className="p-4 border-t border-[#e9edef] flex items-center justify-between text-xs text-[#667781] bg-white rounded-xl shadow-xs">
+                  <span>
+                    Menampilkan {reservations.length} dari total <span className="text-[#111b21] font-bold">{totalReservations}</span> reservasi
+                  </span>
+                  <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => setSelectedRes(res)}
-                      className="px-3.5 py-1.5 bg-white/5 hover:bg-pink-500/10 text-slate-200 hover:text-pink-400 border border-white/10 hover:border-pink-500/20 rounded-xl transition-all font-semibold"
+                      onClick={() => {
+                        setReservations([]);
+                        loadReservations(1);
+                      }}
+                      disabled={page === 1 || loading}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] disabled:opacity-40 transition font-semibold"
                     >
-                      Manage
+                      Awal
+                    </button>
+                    <button
+                      onClick={loadMore}
+                      disabled={page >= totalPages || loading}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] disabled:opacity-40 transition font-semibold"
+                    >
+                      {loading ? 'Memuat...' : `Muat Halaman ${page + 1} / ${totalPages}`}
                     </button>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-
-          {/* Desktop Table View (hidden md:block) */}
-          <div className="hidden md:block glass-panel border border-white/5 rounded-2xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/5 bg-slate-900/40 text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                    <th className="py-4 px-6">Customer</th>
-                    <th className="py-4 px-6">Treatment Category</th>
-                    <th className="py-4 px-6">Detail</th>
-                    <th className="py-4 px-6">Date & Time</th>
-                    <th className="py-4 px-6">Status</th>
-                    <th className="py-4 px-6">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 text-sm text-slate-300">
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
-                        No reservations found matching current criteria.
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((res) => (
-                      <tr key={res.id} className="hover:bg-white/5 transition-all">
-                        <td className="py-4 px-6 font-medium text-white">
-                          <p>{res.customer?.name || 'Bunda'}</p>
-                          <p className="text-xs text-slate-500 font-mono">{res.customer?.phone}</p>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-xs text-slate-300 font-medium">
-                            {res.treatment_category}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 max-w-xs truncate" title={res.treatment_detail}>
-                          {res.treatment_detail}
-                        </td>
-                        <td className="py-4 px-6 font-semibold text-pink-300 whitespace-nowrap">
-                          {res.booking_date
-                            ? formatBookingDate(res.booking_date)
-                            : (
-                              <button
-                                onClick={() => setSelectedRes(res)}
-                                className="px-2 py-1 rounded-lg bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/20 text-xs font-semibold transition-all"
-                              >
-                                + Tambahkan Jadwal Kunjungan
-                              </button>
-                            )
-                          }
-                        </td>
-                        <td className="py-4 px-6">
-                          {getStatusBadge(res.status)}
-                        </td>
-                        <td className="py-4 px-6">
-                          <button
-                            onClick={() => setSelectedRes(res)}
-                            className="px-3 py-1 bg-white/5 hover:bg-pink-500/10 text-slate-300 hover:text-pink-400 border border-white/5 hover:border-pink-500/20 rounded-lg text-xs transition-all font-semibold"
-                          >
-                            Manage
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Pagination Footer */}
-          {totalPages > 1 && (
-            <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
-              <span>
-                Menampilkan {reservations.length} dari total <span className="text-white font-bold">{totalReservations}</span> reservasi
-              </span>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => { setReservations([]); loadReservations(1); }}
-                  disabled={page === 1 || loading}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition font-semibold"
-                >
-                  Awal
-                </button>
-                <button
-                  onClick={loadMore}
-                  disabled={page >= totalPages || loading}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition font-semibold"
-                >
-                  {loading ? 'Memuat...' : `Muat Halaman ${page + 1} / ${totalPages}`}
-                </button>
-              </div>
+              )}
             </div>
           )}
-
         </div>
-      ) : (
-        /* Simple Calendar View layout */
-        <div className="glass-panel border border-white/5 rounded-2xl p-6 shadow-xl space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <CalendarDays className="text-pink-400" />
-              <span>Agenda Reservasi</span>
-            </h3>
-            <span className="text-xs text-slate-500">Upcoming schedules</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {reservations.filter(r => r.status === 'confirmed' && r.booking_date).map((res) => (
-              <div key={res.id} className="p-4 rounded-xl bg-slate-900/60 border border-white/5 flex flex-col justify-between space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className="text-xs font-semibold text-pink-400">
-                      {res.treatment_category}
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      {new Date(res.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-slate-200">{res.customer?.name || 'Bunda'}</h4>
-                  <p className="text-xs text-slate-400 line-clamp-2">{res.treatment_detail}</p>
-                </div>
-                <div className="pt-3 border-t border-white/5 flex items-center justify-between text-xs text-slate-300 font-semibold">
-                  <span>{res.booking_date ? formatBookingDate(res.booking_date) : ''}</span>
-                  <button onClick={() => setSelectedRes(res)} className="text-pink-400 hover:underline">Edit</button>
-                </div>
-              </div>
-            ))}
-            {reservations.filter(r => r.status === 'confirmed' && r.booking_date).length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-500 text-xs">
-                No confirmed reservations scheduled yet.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Reservation Details & Management Modal */}
       {selectedRes && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button 
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl relative max-h-[90vh] overflow-y-auto">
+            <button
               onClick={() => setSelectedRes(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
 
             {/* Modal Header */}
             <div>
-              <h3 className="text-lg sm:text-xl font-bold text-white flex items-center space-x-2 pr-6">
-                <Info size={20} className="text-pink-400 flex-shrink-0" />
-                <span>Reservation Details</span>
+              <h3 className="text-base sm:text-lg font-bold text-[#111b21] flex items-center space-x-2 pr-6">
+                <Info size={18} className="text-[#008069] flex-shrink-0" />
+                <span>Detail Reservasi</span>
               </h3>
-              <p className="text-xs text-slate-400 mt-1">Manage state variables & manual integrations</p>
+              <p className="text-xs text-[#667781] mt-0.5">
+                Kelola penugasan terapis, tanggal jadwal, dan status pembayaran
+              </p>
             </div>
 
             {/* Info contents split layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 text-sm">
-              <div className="space-y-4">
-                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950 border border-white/5 space-y-2">
-                  <span className="text-xs text-slate-500 font-semibold block uppercase">Patient Details</span>
-                  <div className="flex items-center space-x-2 text-slate-200">
-                    <User size={16} className="text-slate-500 flex-shrink-0" />
-                    <span className="break-all">{selectedRes.customer?.name || 'Bunda'} ({selectedRes.customer?.phone})</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 text-xs">
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Data Pasien</span>
+                  <div className="flex items-center space-x-2 text-[#111b21]">
+                    <User size={15} className="text-[#8696a0] flex-shrink-0" />
+                    <span className="font-semibold break-all">
+                      {selectedRes.customer?.name || 'Bunda'} ({selectedRes.customer?.phone})
+                    </span>
                   </div>
                   {selectedRes.customer?.kelurahan && (
-                    <div className="flex items-center space-x-2 text-slate-400 text-xs">
-                      <MapPin size={14} className="text-slate-500 flex-shrink-0" />
-                      <span className="break-words">{selectedRes.customer?.kelurahan}, {selectedRes.customer?.kecamatan}, {selectedRes.customer?.kota}</span>
+                    <div className="flex items-center space-x-2 text-[#54656f] text-[11px]">
+                      <MapPin size={13} className="text-[#8696a0] flex-shrink-0" />
+                      <span className="break-words">
+                        {selectedRes.customer?.kelurahan}, {selectedRes.customer?.kecamatan}, {selectedRes.customer?.kota}
+                      </span>
                     </div>
                   )}
 
                   {/* Baby / Anak info */}
                   {getBabyRows(selectedRes).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-white/5 space-y-1.5">
-                      <span className="text-[11px] text-pink-400 font-bold uppercase tracking-wider block">
+                    <div className="mt-2 pt-2 border-t border-[#e9edef] space-y-1.5">
+                      <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
                         Bayi / Anak ({getBabyRows(selectedRes).length})
                       </span>
                       {getBabyRows(selectedRes).map((baby, i) => (
-                        <div key={i} className="flex items-center space-x-2 text-slate-200">
-                          <Baby size={14} className="text-pink-500/70 flex-shrink-0" />
+                        <div key={i} className="flex items-center space-x-2 text-[#111b21]">
+                          <Baby size={14} className="text-[#008069] flex-shrink-0" />
                           <span className="break-words">
                             <span className="font-semibold">{baby.name || '-'}</span>
-                            <span className="text-slate-300 text-xs"> · {baby.age || '?'}</span>
+                            <span className="text-[#54656f] text-xs"> · {baby.age || '?'}</span>
                             {baby.regAge && baby.regAge !== baby.age && (
-                              <span className="text-slate-500 text-[11px] ml-1">
+                              <span className="text-[#8696a0] text-[11px] ml-1">
                                 (saat booking: {baby.regAge})
                               </span>
                             )}
@@ -570,51 +716,78 @@ export const Reservations: React.FC = () => {
                   )}
                 </div>
 
-                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950 border border-white/5 space-y-2">
-                  <span className="text-xs text-slate-500 font-semibold block uppercase">Location & Logistics</span>
+                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Lokasi & Pengiriman</span>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Distance from Branch</span>
-                    <span className="text-slate-200 font-bold">{selectedRes.customer?.distance_km?.toFixed(2) || '0.0'} km</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Delivery Fee (Ongkir)</span>
-                    <span className="text-slate-200 font-bold">
-                      {selectedRes.customer?.ongkir ? `Rp ${selectedRes.customer.ongkir.toLocaleString()}` : 'Free/Not calculated'}
+                    <span className="text-[#667781]">Jarak dari Cabang</span>
+                    <span className="text-[#111b21] font-bold">
+                      {selectedRes.customer?.distance_km?.toFixed(2) || '0.0'} km
                     </span>
                   </div>
-                  <div className="flex justify-between text-xs text-emerald-400">
-                    <span>Haversine Fallback Multiplier</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[#667781]">Ongkir</span>
+                    <span className="text-[#111b21] font-bold">
+                      {selectedRes.customer?.ongkir ? `Rp ${selectedRes.customer.ongkir.toLocaleString()}` : 'Gratis / Belum dihitung'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-[#008069]">
+                    <span>Haversine Multiplier</span>
                     <span className="font-bold">Active (1.25x)</span>
                   </div>
                 </div>
               </div>
 
               {/* Edit Schedule section */}
-              <div className="space-y-4">
-                <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950 border border-white/5 space-y-3">
-                  <span className="text-xs text-slate-500 font-semibold block uppercase">Set booking schedule</span>
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
+                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Atur Jadwal Kunjungan</span>
                   <input
                     type="datetime-local"
                     value={editDate}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                   <button
                     onClick={() => handleSetDate(selectedRes.id)}
-                    className="w-full py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-xs font-semibold transition"
+                    className="w-full py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-semibold transition shadow-xs"
                   >
-                    Tambahkan Jadwal Kunjungan
+                    Simpan Jadwal Kunjungan
                   </button>
+                </div>
+
+                {/* Staff Assignment */}
+                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Penugasan Staff / Terapis</span>
+                  <select
+                    value={selectedRes.assigned_staff_id || ''}
+                    onChange={(e) => handleAssignStaff(selectedRes.id, e.target.value || null)}
+                    disabled={assigningStaff}
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  >
+                    <option value="">-- Belum Ditugaskan --</option>
+                    {staffList
+                      .filter((s) => s.active !== false || s.id === selectedRes.assigned_staff_id)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {s.active === false ? '(Nonaktif)' : ''}
+                        </option>
+                      ))}
+                  </select>
+                  {selectedRes.assigned_staff && (
+                    <p className="text-xs text-[#008069] font-bold">
+                      Ditugaskan ke: {selectedRes.assigned_staff.name}
+                    </p>
+                  )}
                 </div>
 
                 {/* Google Calendar sync notifier */}
                 {googleCalendarMockActive && (
-                  <div className="p-3.5 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-3 text-xs">
-                    <AlertTriangle className="flex-shrink-0 mt-0.5" size={16} />
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2.5 text-xs">
+                    <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={15} />
                     <div>
-                      <p className="font-bold">Google Calendar integration is in Mock Mode</p>
-                      <p className="mt-0.5 text-[10px] text-amber-500/80">
-                        OAuth credentials are missing in backend `.env`. Operations will fall back to local mock triggers.
+                      <p className="font-bold">Google Calendar: Mode Mock Aktif</p>
+                      <p className="mt-0.5 text-[10px] text-amber-700">
+                        Sinkronisasi berjalan dalam simulasi lokal.
                       </p>
                     </div>
                   </div>
@@ -623,40 +796,42 @@ export const Reservations: React.FC = () => {
             </div>
 
             {/* Raw Text Log */}
-            <div className="space-y-2">
-              <span className="text-xs text-slate-500 font-semibold block uppercase flex items-center space-x-1">
+            <div className="space-y-1.5">
+              <span className="text-[11px] text-[#667781] font-bold block uppercase flex items-center space-x-1">
                 <FileText size={12} />
-                <span>Raw Chat Submission text</span>
+                <span>Format Teks Chat Asli / Detail</span>
               </span>
-              <pre className="p-3 bg-slate-950 border border-white/5 rounded-xl text-[11px] text-slate-400 font-mono overflow-auto max-h-32 whitespace-pre-wrap break-all">
+              <pre className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-[11px] text-[#54656f] font-mono overflow-auto max-h-28 whitespace-pre-wrap break-all">
                 {selectedRes.raw_text}
               </pre>
             </div>
 
             {/* Actions button footer */}
-            <div className="pt-4 border-t border-white/5 flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-0 justify-between">
+            <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 justify-between">
               <button
                 onClick={() => handleDelete(selectedRes.id)}
-                className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition text-xs font-semibold flex items-center space-x-1.5"
+                className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition text-xs font-semibold flex items-center space-x-1.5"
               >
                 <X size={14} />
-                <span>Delete & Cancel</span>
+                <span>Batalkan Reservasi</span>
               </button>
 
               {selectedRes.status === 'pending' && (() => {
                 const purchaseSentAt = selectedRes.purchase_event_sent_at ? new Date(selectedRes.purchase_event_sent_at) : null;
-                const purchaseWindowOpen = purchaseSentAt && (Date.now() - purchaseSentAt.getTime()) < 7 * 24 * 60 * 60 * 1000;
+                const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
                 return (
                   <button
                     onClick={() => handleConfirm(selectedRes.id)}
                     disabled={!!purchaseWindowOpen}
-                    title={purchaseWindowOpen
-                      ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count / potensi repeat order.`
-                      : undefined}
+                    title={
+                      purchaseWindowOpen
+                        ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count.`
+                        : undefined
+                    }
                     className={`w-full sm:w-auto justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
                       purchaseWindowOpen
-                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow shadow-emerald-500/20'
+                        ? 'bg-[#e9edef] text-[#8696a0] cursor-not-allowed'
+                        : 'bg-[#008069] text-white hover:bg-[#00a884] shadow-xs'
                     }`}
                   >
                     <Check size={14} />
@@ -669,172 +844,19 @@ export const Reservations: React.FC = () => {
         </div>
       )}
 
-      {/* Buat Jadwal Baru Modal (Task 9) */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
-            >
-              <X size={20} />
-            </button>
-
-            <div>
-              <h3 className="text-lg sm:text-xl font-bold text-white flex items-center space-x-2 pr-6">
-                <CalendarIcon size={20} className="text-pink-400 flex-shrink-0" />
-                <span>Buat Jadwal Baru</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-1">Buat reservasi manual tanpa raw text — input terstruktur</p>
-            </div>
-
-            {/* Customer Search Picker */}
-            <div className="space-y-2">
-              <span className="text-xs text-slate-500 font-semibold block uppercase">Customer</span>
-              <input
-                type="text"
-                value={createForm.customerSearch}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setCreateForm((prev) => ({ ...prev, customerSearch: v, customerId: '' }));
-                  searchCustomers(v);
-                }}
-                placeholder="Cari nama / nomor HP customer..."
-                className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
-              />
-              {searchingCustomers && <p className="text-[11px] text-slate-500">Mencari...</p>}
-              {customerSearchResults.length > 0 && !createForm.customerId && (
-                <div className="border border-white/10 rounded-lg bg-slate-950 max-h-48 overflow-y-auto divide-y divide-white/5">
-                  {customerSearchResults.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setCreateForm((prev) => ({
-                        ...prev,
-                        customerId: c.id,
-                        customerSearch: `${c.name || 'Bunda'} (${c.phone})`,
-                      }))}
-                      className="w-full text-left px-3 py-2 hover:bg-white/5 text-xs text-slate-200"
-                    >
-                      <span className="font-semibold">{c.name || 'Bunda'}</span>
-                      <span className="text-slate-500 ml-2">{c.phone}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {createForm.customerId && (
-                <div className="flex items-center justify-between px-3 py-2 bg-pink-500/10 border border-pink-500/20 rounded-lg text-xs text-pink-300">
-                  <span className="break-all">{createForm.customerSearch}</span>
-                  <button
-                    onClick={() => setCreateForm((prev) => ({ ...prev, customerId: '', customerSearch: '' }))}
-                    className="text-slate-400 hover:text-white flex-shrink-0 ml-2"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Treatment Category */}
-            <div className="space-y-2">
-              <span className="text-xs text-slate-500 font-semibold block uppercase">Kategori Treatment</span>
-              <div className="flex space-x-2">
-                {(['BABY', 'MOMS', 'BOTH'] as const).map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setCreateForm((prev) => ({ ...prev, treatmentCategory: cat }))}
-                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                      createForm.treatmentCategory === cat
-                        ? 'bg-pink-500/10 border-pink-500 text-pink-400'
-                        : 'border-white/5 text-slate-400 hover:text-white bg-slate-900/35'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Treatment Detail */}
-            <div className="space-y-2">
-              <span className="text-xs text-slate-500 font-semibold block uppercase">Detail Treatment</span>
-              <textarea
-                value={createForm.treatmentDetail}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, treatmentDetail: e.target.value }))}
-                placeholder="Contoh: Pijat Bayi Ceria (Bayi: Zayn, Usia: 6 bulan)"
-                rows={3}
-                className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white resize-none"
-              />
-            </div>
-
-            {/* Booking Date (optional) */}
-            <div className="space-y-2">
-              <span className="text-xs text-slate-500 font-semibold block uppercase">Tanggal Booking (opsional)</span>
-              <input
-                type="datetime-local"
-                value={createForm.bookingDate}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, bookingDate: e.target.value }))}
-                className="w-full p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
-              />
-            </div>
-
-            {/* Dynamic Baby Inputs (BABY / BOTH) */}
-            {createForm.treatmentCategory !== 'MOMS' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500 font-semibold block uppercase">Bayi / Anak</span>
-                  <button
-                    onClick={() => setCreateForm((prev) => ({ ...prev, babies: [...prev.babies, { name: '', ageText: '' }] }))}
-                    className="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 hover:bg-pink-500/10 hover:text-pink-400 transition-all"
-                  >
-                    + Tambah Bayi
-                  </button>
-                </div>
-                {createForm.babies.length === 0 && (
-                  <p className="text-[11px] text-slate-600">Belum ada bayi ditambahkan.</p>
-                )}
-                {createForm.babies.map((baby, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <input
-                      type="text"
-                      value={baby.name}
-                      onChange={(e) => updateBaby(i, 'name', e.target.value)}
-                      placeholder="Nama bayi"
-                      className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
-                    />
-                    <div className="flex items-center space-x-2 flex-1">
-                      <input
-                        type="text"
-                        value={baby.ageText}
-                        onChange={(e) => updateBaby(i, 'ageText', e.target.value)}
-                        placeholder="Usia (mis. 6 bulan)"
-                        className="flex-1 p-2 bg-slate-900 border border-white/10 rounded-lg text-xs text-white"
-                      />
-                      <button
-                        onClick={() => setCreateForm((prev) => ({ ...prev, babies: prev.babies.filter((_, idx) => idx !== i) }))}
-                        className="p-2 text-slate-500 hover:text-rose-400 flex-shrink-0"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="pt-4 border-t border-white/5 flex justify-end">
-              <button
-                onClick={handleCreateReservation}
-                className="w-full sm:w-auto justify-center px-5 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white transition text-xs font-semibold flex items-center space-x-1.5 shadow shadow-pink-500/20"
-              >
-                <CalendarIcon size={14} />
-                <span>Simpan Reservasi</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Comprehensive Create Reservation Modal */}
+      <CreateReservationModal
+        isOpen={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false);
+          setQuickSlotTarget(null);
+        }}
+        onSuccess={() => {
+          loadReservations();
+        }}
+        staffList={staffList}
+        initialSlotTarget={quickSlotTarget}
+      />
     </div>
   );
 };

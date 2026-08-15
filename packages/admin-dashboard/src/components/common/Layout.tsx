@@ -18,7 +18,6 @@ import {
   MessageSquare,
   MessageSquareText,
   Volume2,
-  Truck,
   Clock,
   Bug,
   Globe,
@@ -28,7 +27,10 @@ import {
   MousePointerClick,
   BadgeCheck,
   FileDown,
+  UserCheck,
 } from 'lucide-react';
+
+import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
@@ -37,16 +39,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [wahaStatus, setWahaStatus] = useState<string>('UNKNOWN');
   const [redisQueueFallback, setRedisQueueFallback] = useState<boolean>(false);
-  const [capiPendingCount, setCapiPendingCount] = useState(0);
+  const [capiPendingCount, setCapiPendingCount] = useState<number>(0);
 
   useEffect(() => {
     async function fetchSystemHealth() {
       try {
         const data = await apiRequest('/api/admin/health');
-        setWahaStatus(data.wahaStatus || 'UNKNOWN');
-        setRedisQueueFallback(data.redisQueue === 'IN_MEMORY_FALLBACK_ACTIVE');
+        if (data && data.wahaStatus) {
+          setWahaStatus(data.wahaStatus);
+        }
+        if (data && data.redisQueue === 'IN_MEMORY_FALLBACK_ACTIVE') {
+          setRedisQueueFallback(true);
+        } else {
+          setRedisQueueFallback(false);
+        }
       } catch (err) {
-        console.warn('Failed to fetch system health status:', err);
+        setWahaStatus('DISCONNECTED');
       }
     }
     fetchSystemHealth();
@@ -58,27 +66,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     async function fetchCapiPending() {
       try {
         const data = await apiRequest('/api/admin/capi-queue');
-        const pending = Number(data?.pending) || 0;
-        setCapiPendingCount(pending);
-      } catch (err) {
-        console.warn('Failed to fetch capi queue count:', err);
+        if (data && typeof data.pending === 'number') {
+          setCapiPendingCount(data.pending);
+        }
+      } catch {
+        // Silently ignore
       }
     }
     fetchCapiPending();
-  }, []);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/admin/login');
   };
 
-  const navItems: { name: string; path: string; icon: any; badge?: number }[] = [
+  const allNavItems: { name: string; path: string; icon: any; badge?: number }[] = [
     { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
     { name: 'Customer Database', path: '/admin/customers', icon: Users },
     { name: 'Customer Service & CTA', path: '/admin/customer-service', icon: Headphones },
     { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
+    { name: 'Staff & Terapis', path: '/admin/staff-management', icon: UserCheck },
     { name: 'Clinic Services', path: '/admin/services', icon: Activity },
-    { name: 'Delivery Fee', path: '/admin/delivery', icon: Truck },
     { name: 'Follow-Up Queue', path: '/admin/follow-ups', icon: Clock },
     { name: 'Follow-Up Templates', path: '/admin/follow-up-templates', icon: MessageSquareText },
     { name: 'Knowledge Base', path: '/admin/knowledge-base', icon: BookOpen },
@@ -94,25 +103,31 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: 'System Debug', path: '/admin/debug', icon: Bug },
   ];
 
+  const currentRole = user?.role || 'super_admin';
+  const visibleNavItems = allNavItems.filter((item) => hasAccess(currentRole, item.path));
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row">
       
       {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 glass-panel flex flex-col transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-[#e9edef] flex flex-col transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out shadow-xs`}>
         {/* Brand/Header */}
-        <div className="h-20 border-b border-white/5 flex items-center justify-between px-6">
-          <div className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-pink-500 flex items-center justify-center font-bold text-white shadow-md">K</div>
-            <span className="font-extrabold text-lg tracking-wider bg-gradient-to-r from-pink-400 to-violet-400 bg-clip-text text-transparent">KALA SPA</span>
+        <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
+          <div className="flex items-center space-x-2.5">
+            <div className="h-8 w-8 rounded-lg bg-[#008069] flex items-center justify-center font-black text-white shadow-xs text-sm tracking-wider">K</div>
+            <div className="flex flex-col">
+              <span className="font-extrabold text-sm tracking-wider text-[#111b21] uppercase">KALA SPA</span>
+              <span className="text-[10px] text-[#667781] font-medium leading-none">Management Bot</span>
+            </div>
           </div>
-          <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white">
-            <X size={20} />
+          <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-lg hover:bg-[#f0f2f5]">
+            <X size={18} />
           </button>
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => {
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
@@ -120,18 +135,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 key={item.path}
                 to={item.path}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
                   isActive 
-                    ? 'bg-gradient-to-r from-pink-500/20 to-violet-500/10 border-l-4 border-pink-500 text-white font-medium shadow-sm'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
+                    ? 'bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold shadow-xs'
+                    : 'text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] font-medium'
                 }`}
               >
-                <Icon size={18} className={isActive ? 'text-pink-400' : 'text-slate-400'} />
-                <span className="flex-1">{item.name}</span>
+                <Icon size={17} className={isActive ? 'text-[#008069]' : 'text-[#8696a0]'} />
+                <span className="flex-1 truncate">{item.name}</span>
                 {!!item.badge && (
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      isActive ? 'bg-pink-500 text-white' : 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                      isActive ? 'bg-[#008069] text-white' : 'bg-amber-100 text-amber-700 border border-amber-200'
                     }`}
                   >
                     {item.badge}
@@ -143,18 +158,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </nav>
 
         {/* User profile / Logout */}
-        <div className="p-4 border-t border-white/5 bg-slate-900/40 space-y-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="p-3.5 border-t border-[#e9edef] bg-[#f8fafc] space-y-2">
+          <div className="flex items-center justify-between">
             <div className="truncate pr-2">
-              <p className="text-xs text-slate-400 truncate">Logged in as</p>
-              <p className="text-sm font-semibold text-slate-200 truncate">{user?.email}</p>
+              <p className="text-xs font-bold text-[#111b21] truncate">
+                {user?.name || user?.email || 'Admin'}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                  {ROLE_LABELS[currentRole as keyof typeof ROLE_LABELS] || currentRole}
+                </span>
+              </div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2 rounded-lg bg-white/5 hover:bg-pink-500/10 text-slate-400 hover:text-pink-400 transition-colors"
+              className="p-2 rounded-xl bg-white hover:bg-rose-50 text-[#8696a0] hover:text-rose-600 border border-[#e9edef] transition-colors shadow-xs"
               title="Logout"
             >
-              <LogOut size={16} />
+              <LogOut size={15} />
             </button>
           </div>
         </div>
@@ -164,27 +185,27 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
         
         {/* Top Header */}
-        <header className="h-20 border-b border-white/5 px-6 flex items-center justify-between glass-panel sticky top-0 z-40">
-          <div className="flex items-center space-x-4">
+        <header className="h-16 border-b border-[#e9edef] px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs">
+          <div className="flex items-center space-x-3.5">
             <button 
               onClick={() => setMobileMenuOpen(true)} 
-              className="md:hidden p-2 rounded-lg bg-white/5 text-slate-400 hover:text-white"
+              className="md:hidden p-2 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef]"
             >
-              <Menu size={20} />
+              <Menu size={18} />
             </button>
-            <h1 className="text-lg font-bold tracking-tight md:text-xl text-slate-100">
+            <h1 className="text-sm font-bold md:text-base text-[#111b21]">
               {BRAND.panelName}
             </h1>
           </div>
 
           {/* System Liveness Alerts */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
 
             {/* Redis Queue Status — ikon saja + tooltip hover */}
             {redisQueueFallback && (
               <button
-                title="Redis Fallback Mode: antrian pesan sementara disimpan di memori (DB/Redis tidak tersedia). Pesan tetap diproses, namun berisiko hilang saat server restart."
-                className="p-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition"
+                title="Redis Fallback Mode: antrian pesan sementara disimpan di memori (DB/Redis tidak tersedia)."
+                className="p-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition"
               >
                 <AlertCircle size={14} />
               </button>
@@ -194,30 +215,33 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {wahaStatus === 'WORKING' ? (
               <button
                 title="WhatsApp Connected — session WAHA aktif dan siap menerima/mengirim pesan."
-                className="p-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition"
+                className="p-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition flex items-center gap-1.5 px-2.5 text-xs font-semibold"
               >
-                <CheckCircle size={14} />
+                <CheckCircle size={13} />
+                <span className="text-[11px]">Online</span>
               </button>
             ) : wahaStatus === 'SCAN_QR_CODE' ? (
               <button
                 title="WA Scan QR diperlukan — perlu pindai QR untuk menghubungkan session WhatsApp. Buka Operational Settings."
-                className="p-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition"
+                className="p-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-2.5 text-xs font-semibold"
               >
-                <Activity size={14} />
+                <Activity size={13} />
+                <span className="text-[11px]">Scan QR</span>
               </button>
             ) : (
               <button
                 title="WA Session Disconnected — koneksi WhatsApp terputus. Buka Operational Settings untuk menghubungkan ulang."
-                className="p-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition animate-pulse"
+                className="p-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition animate-pulse flex items-center gap-1.5 px-2.5 text-xs font-semibold"
               >
-                <AlertCircle size={14} />
+                <AlertCircle size={13} />
+                <span className="text-[11px]">Offline</span>
               </button>
             )}
           </div>
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 p-6 md:p-8 space-y-8 overflow-y-auto">
+        <main className="flex-1 p-5 md:p-7 space-y-6 overflow-y-auto bg-[#f0f2f5]">
           {children}
         </main>
       </div>

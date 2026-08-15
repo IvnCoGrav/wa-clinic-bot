@@ -8,6 +8,7 @@ import {
 
 export class WahaGatewayDriver implements WhatsAppGateway {
   readonly providerType = 'WAHA' as const;
+  readonly supportsRevoke = true;
   private client: IWahaClient;
 
   constructor(client?: IWahaClient) {
@@ -25,6 +26,16 @@ export class WahaGatewayDriver implements WhatsAppGateway {
         provider: 'WAHA',
         error: { code: 'WAHA_SEND_TEXT', message: err?.message || 'sendText failed' },
       };
+    }
+  }
+
+  async deleteMessage(chatId: string, messageId: string, everyone = true): Promise<{ success: boolean; error?: string }> {
+    const targetChatId = this.toChatId(chatId);
+    try {
+      const ok = await this.client.deleteMessage(targetChatId, messageId, everyone);
+      return { success: ok };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Gagal menghapus pesan' };
     }
   }
 

@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "StaffRole" ADD VALUE 'ADMIN_CS';
+ALTER TYPE "StaffRole" ADD VALUE 'ADVERTISER';

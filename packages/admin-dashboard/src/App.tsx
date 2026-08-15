@@ -4,6 +4,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Layout } from './components/common/Layout';
 import { UiFeedbackProvider } from './components/common/UiFeedback';
+import { StaffAuthProvider } from './contexts/StaffAuthContext';
+import { StaffProtectedRoute } from './components/staff/StaffProtectedRoute';
 import { Login } from './pages/auth/Login';
 
 // Lazy load pages for fast initial bundle sizes (code-splitting rationale)
@@ -26,6 +28,10 @@ const AiEvaluations = lazy(() => import('./pages/tenant/AiEvaluations').then(m =
 const MetaClickCatcher = lazy(() => import('./pages/tenant/MetaClickCatcher').then(m => ({ default: m.MetaClickCatcher })));
 const MetaCapiQueue = lazy(() => import('./pages/tenant/MetaCapiQueue').then(m => ({ default: m.MetaCapiQueue })));
 const ChatExport = lazy(() => import('./pages/tenant/ChatExport').then(m => ({ default: m.ChatExport })));
+const StaffLogin = lazy(() => import('./pages/staff/StaffLogin').then(m => ({ default: m.StaffLogin })));
+const StaffToday = lazy(() => import('./pages/staff/StaffToday').then(m => ({ default: m.StaffToday })));
+const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m => ({ default: m.StaffSchedule })));
+const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
 
 export const App: React.FC = () => {
   return (
@@ -33,8 +39,8 @@ export const App: React.FC = () => {
       <AuthProvider>
         <UiFeedbackProvider>
         <Suspense fallback={
-          <div className="flex h-screen items-center justify-center bg-slate-950">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-pink-500 border-t-transparent"></div>
+          <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
           </div>
         }>
           <Routes>
@@ -43,154 +49,201 @@ export const App: React.FC = () => {
             
             {/* Protected tenant admin dashboard routes */}
             <Route path="/admin/overview" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <Overview />
                 </Layout>
               </ProtectedRoute>
             } />
             <Route path="/admin/customers" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <CustomerDatabase />
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/customer-service" element={
+              <ProtectedRoute>
+                <Layout>
+                  <CustomerService />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/cs" element={<Navigate to="/admin/customer-service" replace />} />
+
             <Route path="/admin/reservations" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <Reservations />
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/knowledge-base" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+            <Route path="/admin/staff-management" element={
+              <ProtectedRoute>
                 <Layout>
-                  <KnowledgeBase />
+                  <StaffManagement />
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/sandbox" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
-                <Layout>
-                  <AiSandbox />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/live-chat" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
-                <Layout>
-                  <LiveChatMonitor />
-                </Layout>
-              </ProtectedRoute>
-            } />
+            <Route path="/admin/staff" element={<Navigate to="/admin/staff-management" replace />} />
+
             <Route path="/admin/services" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <ClinicServices />
                 </Layout>
               </ProtectedRoute>
             } />
             <Route path="/admin/delivery" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <DeliveryTiers />
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/tiers" element={<Navigate to="/admin/delivery" replace />} />
+
             <Route path="/admin/follow-ups" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <FollowUpQueue />
                 </Layout>
               </ProtectedRoute>
             } />
             <Route path="/admin/follow-up-templates" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <FollowUpTemplates />
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/followup-templates" element={<Navigate to="/admin/follow-up-templates" replace />} />
+
+            <Route path="/admin/knowledge-base" element={
+              <ProtectedRoute>
+                <Layout>
+                  <KnowledgeBase />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/knowledge" element={<Navigate to="/admin/knowledge-base" replace />} />
+
+            <Route path="/admin/sandbox" element={
+              <ProtectedRoute>
+                <Layout>
+                  <AiSandbox />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/live-chat" element={
+              <ProtectedRoute>
+                <Layout>
+                  <LiveChatMonitor />
+                </Layout>
+              </ProtectedRoute>
+            } />
             <Route path="/admin/persona" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <AiPersona />
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/debug" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
-                <Layout>
-                  <Debug />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/settings" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
-                <Layout>
-                  <Settings />
-                </Layout>
-              </ProtectedRoute>
-            } />
             <Route path="/admin/landing" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <LandingPage />
                 </Layout>
               </ProtectedRoute>
             } />
-            <Route path="/admin/customer-service" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
-                <Layout>
-                  <CustomerService />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/ai-evaluations" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
-                <Layout>
-                  <AiEvaluations />
-                </Layout>
-              </ProtectedRoute>
-            } />
             <Route path="/admin/meta-click-catcher" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <MetaClickCatcher />
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/meta-clicks" element={<Navigate to="/admin/meta-click-catcher" replace />} />
+
             <Route path="/admin/meta-capi-queue" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <MetaCapiQueue />
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/meta-capi" element={<Navigate to="/admin/meta-capi-queue" replace />} />
+
+            <Route path="/admin/settings" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Settings />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/ai-evaluations" element={
+              <ProtectedRoute>
+                <Layout>
+                  <AiEvaluations />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/evaluations" element={<Navigate to="/admin/ai-evaluations" replace />} />
+
             <Route path="/admin/chat-export" element={
-              <ProtectedRoute allowedRoles={['tenant_admin', 'super_admin']}>
+              <ProtectedRoute>
                 <Layout>
                   <ChatExport />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/debug" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Debug />
                 </Layout>
               </ProtectedRoute>
             } />
 
             {/* Unauthorized view */}
             <Route path="/admin/unauthorized" element={
-              <div className="flex h-screen flex-col items-center justify-center bg-slate-950 text-slate-100 text-center p-6 space-y-4">
-                <h3 className="text-xl font-bold text-rose-500">Access Unauthorized</h3>
-                <p className="text-sm text-slate-400 max-w-sm">
-                  You do not have permission to access this page or the selected tenant resource.
-                </p>
-                <button
-                  onClick={() => window.location.href = '/admin/login'}
-                  className="px-4 py-2 bg-pink-500 hover:bg-pink-600 rounded-xl text-xs font-bold text-white transition"
-                >
-                  Return to Login
-                </button>
+              <div className="flex h-screen flex-col items-center justify-center bg-[#f0f2f5] text-[#111b21] text-center p-6 space-y-4">
+                <div className="bg-white border border-[#e9edef] rounded-2xl p-8 shadow-xs max-w-sm flex flex-col items-center space-y-3">
+                  <h3 className="text-lg font-bold text-rose-600">Access Unauthorized</h3>
+                  <p className="text-xs text-[#667781]">
+                    Anda tidak memiliki hak akses untuk membuka halaman ini.
+                  </p>
+                  <button
+                    onClick={() => window.location.href = '/admin/login'}
+                    className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] rounded-xl text-xs font-semibold text-white transition shadow-xs"
+                  >
+                    Kembali ke Halaman Login
+                  </button>
+                </div>
               </div>
             } />
+
+            {/* Staff portal routes */}
+            <Route path="/admin/staff/login" element={<Navigate to="/admin/login" replace />} />
+            <Route path="/admin/staff/today" element={
+              <StaffAuthProvider>
+                <StaffProtectedRoute>
+                  <StaffToday />
+                </StaffProtectedRoute>
+              </StaffAuthProvider>
+            } />
+            <Route path="/admin/staff/schedule" element={
+              <StaffAuthProvider>
+                <StaffProtectedRoute>
+                  <StaffSchedule />
+                </StaffProtectedRoute>
+              </StaffAuthProvider>
+            } />
+            <Route path="/staff" element={<Navigate to="/admin/staff/today" replace />} />
+            <Route path="/terapis" element={<Navigate to="/admin/staff/today" replace />} />
+            <Route path="/chat" element={<Navigate to="/admin/staff/today" replace />} />
+            <Route path="/schedule" element={<Navigate to="/admin/staff/schedule" replace />} />
+            <Route path="/jadwal" element={<Navigate to="/admin/staff/schedule" replace />} />
 
             {/* Fallbacks */}
             <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />

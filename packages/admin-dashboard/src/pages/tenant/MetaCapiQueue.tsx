@@ -53,19 +53,19 @@ const statusBadge = (s: string | null | undefined) => {
   switch (s) {
     case 'approved':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold whitespace-nowrap" title="Event Purchase terkirim ke Meta CAPI">
+        <span className="px-2.5 py-1 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold whitespace-nowrap" title="Event Purchase terkirim ke Meta CAPI">
           🟢 Terkirim ke Meta
         </span>
       );
     case 'ignored_outlier':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
+        <span className="px-2.5 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
           🔴 Outlier (Abaikan)
         </span>
       );
     default:
       return (
-        <span className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold whitespace-nowrap" title="Menunggu keputusan admin">
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
           🟡 Pending Review
         </span>
       );
@@ -74,11 +74,11 @@ const statusBadge = (s: string | null | undefined) => {
 
 const attributionBadge = (isPaid: boolean) =>
   isPaid ? (
-    <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold whitespace-nowrap" title="Pelanggan datang dari iklan (ad_click terpasang)">
+    <span className="px-2 py-0.5 rounded bg-purple-100 border border-purple-200 text-purple-800 text-[10px] font-bold whitespace-nowrap" title="Pelanggan datang dari iklan (ad_click terpasang)">
       PAID
     </span>
   ) : (
-    <span className="px-2 py-0.5 rounded bg-slate-700/60 border border-white/10 text-slate-400 text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
+    <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
       ORGANIC
     </span>
   );
@@ -196,71 +196,79 @@ export const MetaCapiQueue: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center space-x-3">
-            <ShieldAlert className="text-pink-400" size={28} />
+          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+            <ShieldAlert className="text-[#008069]" size={22} />
             <span>Meta CAPI Queue</span>
           </h2>
-          <p className="text-slate-400 mt-1">
-            Meja kerja advertiser — review &amp; kirim event Purchase ke Meta CAPI sebelum kedaluwarsa (7 hari).
+          <p className="text-xs text-[#667781] mt-0.5">
+            Review &amp; kirim event Purchase ke Meta CAPI sebelum kedaluwarsa (7 hari).
           </p>
         </div>
         <button
           onClick={loadQueue}
-          className="flex items-center space-x-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-semibold text-slate-300 transition-colors self-start md:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs self-start sm:self-auto"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
           <span>Reload</span>
         </button>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="glass-panel p-4 rounded-2xl border border-white/5">
-          <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total Event</div>
-          <div className="text-2xl font-extrabold text-white mt-1">{counts.total}</div>
+        <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs">
+          <div className="text-[11px] text-[#667781] font-bold uppercase tracking-wider">Total Event</div>
+          <div className="text-2xl font-extrabold text-[#111b21] mt-1">{counts.total}</div>
         </div>
-        <div className="glass-panel p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-          <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider">Pending Review</div>
-          <div className="text-2xl font-extrabold text-amber-400 mt-1">{counts.pending}</div>
+        <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
+          <div className="text-[11px] text-amber-800 font-bold uppercase tracking-wider">Pending Review</div>
+          <div className="text-2xl font-extrabold text-amber-700 mt-1">{counts.pending}</div>
         </div>
-        <div className="glass-panel p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
-          <div className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">Terkirim</div>
-          <div className="text-2xl font-extrabold text-emerald-400 mt-1">{counts.approved}</div>
+        <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
+          <div className="text-[11px] text-emerald-800 font-bold uppercase tracking-wider">Terkirim</div>
+          <div className="text-2xl font-extrabold text-[#008069] mt-1">{counts.approved}</div>
         </div>
-        <div className="glass-panel p-4 rounded-2xl border border-rose-500/20 bg-rose-500/5">
-          <div className="text-[11px] text-rose-400 font-bold uppercase tracking-wider">Outlier</div>
-          <div className="text-2xl font-extrabold text-rose-400 mt-1">{counts.outlier}</div>
+        <div className="bg-rose-50/60 p-4 rounded-2xl border border-rose-200 shadow-xs">
+          <div className="text-[11px] text-rose-800 font-bold uppercase tracking-wider">Outlier</div>
+          <div className="text-2xl font-extrabold text-rose-600 mt-1">{counts.outlier}</div>
         </div>
-        <div className="glass-panel p-4 rounded-2xl border border-pink-500/20 bg-pink-500/5">
-          <div className="text-[11px] text-pink-400 font-bold uppercase tracking-wider">Risiko Drop</div>
-          <div className="text-2xl font-extrabold text-pink-400 mt-1">{counts.risk}</div>
+        <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-200 shadow-xs">
+          <div className="text-[11px] text-purple-800 font-bold uppercase tracking-wider">Risiko Drop</div>
+          <div className="text-2xl font-extrabold text-purple-700 mt-1">{counts.risk}</div>
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="flex space-x-2 p-1 bg-slate-900/60 border border-white/5 rounded-xl w-fit">
+        <div className="flex space-x-1.5 p-1 bg-white border border-[#e9edef] rounded-xl w-fit shadow-xs">
           <button
             onClick={() => setMode('pending')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'pending' ? 'bg-amber-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
+              mode === 'pending'
+                ? 'bg-amber-500 text-white'
+                : 'text-[#667781] hover:text-[#111b21]'
+            }`}
           >
             Pending Review ({counts.pending})
           </button>
           <button
             onClick={() => setMode('all')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'all' ? 'bg-pink-500 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
+              mode === 'all'
+                ? 'bg-[#008069] text-white'
+                : 'text-[#667781] hover:text-[#111b21]'
+            }`}
           >
             Semua Event
           </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+        <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
           <div className="relative w-full sm:w-64">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#8696a0]">
               <Search size={14} />
             </span>
             <input
@@ -268,13 +276,13 @@ export const MetaCapiQueue: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari nama, phone, treatment, UTM..."
-              className="w-full bg-slate-900/60 border border-white/5 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-pink-500/40"
+              className="w-full bg-white border border-[#d1d7db] rounded-xl pl-9 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-slate-900/60 border border-white/5 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-pink-500/40"
+            className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="all">Semua Status</option>
             <option value="pending">Pending Review</option>
@@ -285,17 +293,17 @@ export const MetaCapiQueue: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden shadow-xs">
         {loading && items.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-            <RefreshCw size={18} className="animate-spin mr-2" />
+          <div className="flex items-center justify-center py-16 text-[#667781] text-xs">
+            <RefreshCw size={18} className="animate-spin mr-2 text-[#008069]" />
             Memuat queue...
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-500 text-sm space-y-2">
-            <Target size={28} className="text-slate-600" />
-            <span>Tidak ada event purchase yang cocok.</span>
-            <span className="text-xs text-slate-600">
+          <div className="flex flex-col items-center justify-center py-16 text-[#8696a0] text-xs space-y-2">
+            <Target size={28} className="text-[#8696a0]" />
+            <span className="font-semibold text-[#111b21]">Tidak ada event purchase yang cocok.</span>
+            <span>
               Event Purchase yang ditahan untuk review akan muncul di sini.
             </span>
           </div>
@@ -303,83 +311,83 @@ export const MetaCapiQueue: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-500">
-                  <th className="py-3 px-5 font-bold">Pelanggan</th>
-                  <th className="py-3 px-5 font-bold">Treatment</th>
-                  <th className="py-3 px-5 font-bold">UTM</th>
-                  <th className="py-3 px-5 font-bold">Waktu Transaksi</th>
-                  <th className="py-3 px-5 font-bold text-right">Nilai</th>
-                  <th className="py-3 px-5 font-bold">Umur Event</th>
-                  <th className="py-3 px-5 font-bold">Status</th>
-                  <th className="py-3 px-5 font-bold">Aksi</th>
+                <tr className="border-b border-[#e9edef] text-[11px] uppercase font-bold text-[#667781] bg-[#f8fafc]">
+                  <th className="py-3 px-4">Pelanggan</th>
+                  <th className="py-3 px-4">Treatment</th>
+                  <th className="py-3 px-4">UTM</th>
+                  <th className="py-3 px-4">Waktu Transaksi</th>
+                  <th className="py-3 px-4 text-right">Nilai</th>
+                  <th className="py-3 px-4">Umur Event</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((item) => (
-                  <tr key={item.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                    <td className="py-4 px-5">
+                  <tr key={item.id} className="border-b border-[#e9edef] hover:bg-[#f8fafc] transition-colors">
+                    <td className="py-3.5 px-4">
                       <div className="flex items-center space-x-2">
                         <div className="min-w-0">
-                          <div className="font-bold text-white text-sm truncate max-w-[180px]">
+                          <div className="font-bold text-[#111b21] text-xs truncate max-w-[180px]">
                             {item.customer.name}
                           </div>
-                          <div className="text-xs text-slate-400 font-mono">{item.customer.phone}</div>
+                          <div className="text-xs text-[#667781] font-mono">{item.customer.phone}</div>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-1.5 mt-1.5">
+                      <div className="flex items-center space-x-1.5 mt-1">
                         {attributionBadge(item.attribution.isPaid)}
                         {item.attribution.trackingCode && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono">
+                          <span className="px-1.5 py-0.5 rounded bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] text-[10px] font-mono font-bold">
                             {item.attribution.trackingCode}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-4 px-5">
-                      <div className="text-xs font-semibold text-slate-200">{item.treatment_detail || '—'}</div>
+                    <td className="py-3.5 px-4">
+                      <div className="text-xs font-semibold text-[#111b21]">{item.treatment_detail || '—'}</div>
                       {item.raw_text && (
-                        <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[220px]">
+                        <div className="text-[11px] text-[#8696a0] mt-0.5 truncate max-w-[220px]">
                           {item.raw_text}
                         </div>
                       )}
                     </td>
-                    <td className="py-4 px-5">
-                      <div className="text-xs text-slate-300 max-w-[160px] truncate">{utmText(item.utm)}</div>
+                    <td className="py-3.5 px-4">
+                      <div className="text-xs text-[#111b21] max-w-[160px] truncate">{utmText(item.utm)}</div>
                       {item.attribution.isPaid && !utmText(item.utm).includes('—') && (
-                        <div className="text-[11px] text-slate-500 mt-0.5">
+                        <div className="text-[11px] text-[#8696a0] mt-0.5">
                           {item.attribution.landingUrl || '—'}
                         </div>
                       )}
                     </td>
-                    <td className="py-4 px-5">
-                      <div className="text-xs text-slate-300">{formatDateTime(item.purchase_occurred_at)}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
+                    <td className="py-3.5 px-4">
+                      <div className="text-xs text-[#111b21]">{formatDateTime(item.purchase_occurred_at)}</div>
+                      <div className="text-[11px] text-[#8696a0] mt-0.5">
                         {item.ageHours < 1 ? 'baru saja' : item.ageHours < 24 ? `${item.ageHours} jam lalu` : `${item.daysOld} hari lalu`}
                       </div>
                     </td>
-                    <td className="py-4 px-5 text-right">
-                      <span className="text-sm font-extrabold text-emerald-400">{formatRupiah(item.value)}</span>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="text-xs font-extrabold text-[#008069]">{formatRupiah(item.value)}</span>
                     </td>
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">
                       {item.metaDropRisk ? (
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-400 text-xs font-bold whitespace-nowrap" title="Meta umumnya hanya menerima event &lt; 7 hari">
-                          <AlertTriangle size={12} />
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-purple-100 border border-purple-200 text-purple-800 text-xs font-bold whitespace-nowrap" title="Meta umumnya hanya menerima event < 7 hari">
+                          <AlertTriangle size={11} />
                           <span>Drop risk ({item.daysOld}d)</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 text-xs whitespace-nowrap">
-                          <Clock size={12} />
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs whitespace-nowrap">
+                          <Clock size={11} className="text-slate-500" />
                           <span>{item.expiresInDays} hari tersisa</span>
                         </span>
                       )}
                     </td>
-                    <td className="py-4 px-5">{statusBadge(item.purchase_review_status)}</td>
-                    <td className="py-4 px-5">
+                    <td className="py-3.5 px-4">{statusBadge(item.purchase_review_status)}</td>
+                    <td className="py-3.5 px-4">
                       {item.purchase_review_status === 'pending' ? (
                         <div className="flex flex-col gap-1.5">
                           <button
                             onClick={() => handleApprove(item)}
-                            className="flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition shadow shadow-emerald-500/20 whitespace-nowrap"
+                            className="flex items-center justify-center space-x-1 px-2.5 py-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition shadow-xs whitespace-nowrap"
                             title="Kirim event Purchase ke Meta CAPI dengan event_time saat pembayaran"
                           >
                             <Check size={12} />
@@ -387,7 +395,7 @@ export const MetaCapiQueue: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleReject(item)}
-                            className="flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-semibold transition whitespace-nowrap"
+                            className="flex items-center justify-center space-x-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-rose-50 border border-[#d1d7db] hover:border-rose-200 text-[#54656f] hover:text-rose-600 text-xs font-semibold transition shadow-xs whitespace-nowrap"
                             title="Tandai sebagai outlier — event TIDAK dikirim ke Meta"
                           >
                             <X size={12} />
@@ -395,8 +403,8 @@ export const MetaCapiQueue: React.FC = () => {
                           </button>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-600 flex items-center space-x-1">
-                          <Zap size={12} />
+                        <span className="text-xs text-[#8696a0] flex items-center space-x-1">
+                          <Zap size={12} className="text-[#008069]" />
                           <span>Selesai</span>
                         </span>
                       )}
@@ -409,7 +417,7 @@ export const MetaCapiQueue: React.FC = () => {
         )}
       </div>
 
-      <p className="text-xs text-slate-600">
+      <p className="text-xs text-[#8696a0]">
         Catatan: event Purchase hanya dapat dikirim ke Meta dalam jendela ±7 hari sejak pembayaran. Event yang
         di-approve di luar jendela berisiko di-drop Meta — keputusan tetap tercatat di database.
       </p>

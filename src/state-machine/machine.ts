@@ -14,6 +14,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { AiRouterConfigService } from '../config/ai-router-config';
+import { formatIslamicReply } from './utils/islamic-greeting-helper';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -460,13 +461,16 @@ export class ConversationStateMachine {
 
     // 5. Kirim Balasan Otomatis via Typing Simulation Service jika required
     if (result.shouldSendReply && result.replyText) {
+      const incomingBody = incomingMessage.text?.body || '';
+      result.replyText = formatIslamicReply(result.replyText, incomingBody);
+
       // Selalu gunakan nomor HP asli customer (customer.phone@c.us) sebagai target chatId
       // agar pesan tidak terkirim ke JID palsu (mis. LID number@c.us) jika resolusi LID WAHA gagal.
       const chatId = `${customer.phone}@c.us`;
       const resultHuman = await this.typingSvc.simulateHumanReply({
         chatId,
         incomingMessageId: incomingMessage.id,
-        incomingText: incomingMessage.text?.body || '',
+        incomingText: incomingBody,
         replyText: result.replyText,
       });
 

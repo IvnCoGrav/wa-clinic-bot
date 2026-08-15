@@ -6,11 +6,12 @@ import { customerService } from '../../services/customer.service';
 import { phrasingService } from '../../integrations/llm/phrasing.service';
 import { TEMPLATES } from '../../config/persona';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { isNeedTimeOrDiscussionMessage } from '../utils/need-time-checker';
 
 /**
  * Handler untuk state LOCATION_CONFIRMED:
  * Menanyakan konfirmasi lokasi hasil fuzzy-match tunggal kepada customer.
- * Mengimplementasikan aturan preseden ketat: Override > Mixed-Signal > Affirmative > Negative > Fallback.
+ * Mengimplementasikan aturan preseden ketat: Need-Time > Override > Mixed-Signal > Affirmative > Negative > Fallback.
  */
 export async function handleLocationConfirmationState(ctx: StateHandlerContext): Promise<StateHandlerResult> {
   const { incomingMessage, customer, conversation } = ctx;
@@ -18,26 +19,20 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
   const userText = incomingMessage.text?.body || '';
   const lower = userText.toLowerCase().trim();
 
-  // 1. OVERRIDE DETECTION (Prioritas Utama)
-  // Pengecekan apakah customer langsung mengirim pin lokasi GPS atau mengetik alamat baru
-  const isPin = incomingMessage.type === 'location' && incomingMessage.location;
-  
-  let geocodeRes = null;
-  if (!isPin && userText) {
-    geocodeRes = await geocodingService.geocodeText(userText);
-  }
-
-  const isOverride = isPin || (geocodeRes && (
-    geocodeRes.isPrecise || 
-    geocodeRes.isFuzzyMatch || 
-    (geocodeRes.ambiguityResults && geocodeRes.ambiguityResults.length > 0) || 
-    geocodeRes.kota
-  ));
-
-  if (isOverride) {
-    console.log(`[LOCATION CONFIRMATION OVERRIDE] Customer sent new location input. Redirecting to handleLocationState.`);
-    const { handleLocationState } = await import('./location');
-    return handleLocationState(ctx);
+  // 0. JEDA WAKTU / DISKUSI KELUARGA (Hold / Need Time): kalau customer minta waktu untuk tanya suami/keluarga
+  if (isNeedTimeOrDiscussionMessage(lower)) {
+    const needTimeReply = await phrasingService.generate({
+      intent: 'need_time_acknowledgment',
+      conversationId: conversation.id,
+      tenantId,
+      facts: { customer_message: userText },
+      fallbackTemplate: `Baik Bunda, kami tunggu kabarnya ya bund 🤗 Santai saja yaa, nanti kalau sudah siap, langsung kabari kami kembali ya Bunda 😊🙏🏻`,
+    });
+    return {
+      nextState: ConversationState.LOCATION_CONFIRMED,
+      replyText: needTimeReply,
+      shouldSendReply: true,
+    };
   }
 
   // NLU Enhancement: augment regex detection with NLU intent classification
@@ -52,12 +47,38 @@ export async function handleLocationConfirmationState(ctx: StateHandlerContext):
   const isNegative = nluNegate ||
                      /\b(bukan|ga|gak|tidak|no|salah|enggak)\b/i.test(lower) || lower.includes('👎') || lower.includes('❌');
 
+  // 1. MIXED-SIGNAL DETECTION: "iya bener tapi bukan itu" → minta klarifikasi
   if (isAffirmative && isNegative) {
     return {
       nextState: ConversationState.LOCATION_CONFIRMED,
       replyText: TEMPLATES.askClarifyMixedSignal(),
       shouldSendReply: true,
     };
+  }
+
+  // 2. OVERRIDE DETECTION: customer mengirim pin lokasi GPS atau mengetik alamat baru
+  const isPin = incomingMessage.type === 'location' && incomingMessage.location;
+  
+  let geocodeRes = null;
+  if (!isPin && userText) {
+    geocodeRes = await geocodingService.geocodeText(userText);
+  }
+
+  const hasProvideLocationIntent = ctx.nluResult?.intents?.includes('provide_location') || Boolean(ctx.nluResult?.entities?.location_text);
+  const hasLocationKeywords = /\b(alamat|alamatnya|rumah|rumahnya|jalan|jl|jln|gang|gg|perum|perumahan|komplek|blok|ganti\s+ke|pindah\s+ke|rumdis|asrama)\b/i.test(lower);
+  const isProvidingNewLocation = isPin || hasProvideLocationIntent || hasLocationKeywords;
+
+  const isOverride = isPin || (geocodeRes && (
+    geocodeRes.isPrecise || 
+    geocodeRes.isFuzzyMatch || 
+    (geocodeRes.ambiguityResults && geocodeRes.ambiguityResults.length > 0) || 
+    geocodeRes.kota
+  )) || (isProvidingNewLocation && !isAffirmative);
+
+  if (isOverride) {
+    console.log(`[LOCATION CONFIRMATION OVERRIDE] Customer sent new location input ("${userText}"). Redirecting to handleLocationState.`);
+    const { handleLocationState } = await import('./location');
+    return handleLocationState(ctx);
   }
 
   // 3. AFFIRMATIVE CHECK -> Alur Promosi (Atomic Transaction)

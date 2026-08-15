@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { webhookRoutes } from './routes/webhook.route';
 import { wabaWebhookRoutes } from './routes/waba-webhook.route';
 import { adminRoutes } from './routes/admin.route';
+import { staffRoutes } from './routes/staff.route';
 import { healthRoutes } from './routes/health.route';
 import { trackingRoutes } from './routes/tracking.route';
 import { landingRoutes } from './routes/landing.route';
@@ -96,6 +97,7 @@ export function buildApp() {
   app.register(webhookRoutes);
   app.register(wabaWebhookRoutes);
   app.register(adminRoutes);
+  app.register(staffRoutes);
   app.register(healthRoutes);
   app.register(trackingRoutes);
   app.register(landingRoutes);

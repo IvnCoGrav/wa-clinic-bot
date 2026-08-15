@@ -138,4 +138,46 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
     expect(lifecycleSpy).toHaveBeenCalledTimes(1);
     expect(lifecycleSpy.mock.calls[0][0].reservationId).toBe(reservation.id);
   });
+
+  it('Mendukung assignedStaffId, status confirmed, notes, dan mapping kategori KIDS/BUNDLE', async () => {
+    const customer = {
+      id: 'cust-kids', tenant_id: DEFAULT_TENANT_ID, phone: `6289912${Date.now()}`, name: 'Bunda Kids',
+    };
+    const reservation = {
+      id: `res_kids_${Date.now()}`, tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id,
+      treatment_category: 'BABY', treatment_detail: 'Kids Spa & Massage', booking_date: new Date('2026-08-20T10:00:00Z'),
+      assigned_staff_id: 'staff-123',
+      raw_text: '[Admin Manual] KIDS: Kids Spa & Massage\nCatatan: Pasien request terapis ramah',
+      status: 'confirmed', created_at: new Date(), updated_at: new Date(),
+    };
+    vi.spyOn(customerService, 'getCustomerById').mockResolvedValue(customer as any);
+    const createSpy = vi.mocked(prisma.reservation.create).mockResolvedValueOnce(reservation as any);
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+    vi.spyOn(reservationLifecycleService, 'onReservationCreated').mockResolvedValue(undefined);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: customer.id,
+        treatmentCategory: 'KIDS',
+        treatmentDetail: 'Kids Spa & Massage',
+        bookingDate: '2026-08-20T10:00:00Z',
+        assignedStaffId: 'staff-123',
+        status: 'confirmed',
+        notes: 'Pasien request terapis ramah',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        treatment_category: 'BABY',
+        assigned_staff_id: 'staff-123',
+        status: 'confirmed',
+      }),
+    }));
+  });
 });

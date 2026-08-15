@@ -165,8 +165,9 @@ export class NluClassifierService {
       intents.push('ask_schedule');
     }
 
-    // 7. FAQ Question (Inquiry / Questions)
-    const isQuestion = /(\bapakah\b|\bsiapa\b|\bapa\b|\bkenapa\b|\bbagaimana\b|\bmanfaat\b|\baman\b|\busia\b|\bboleh\b|\bbayar\b|\bbidan\b|\bperawat\b|\?)/i.test(text);
+    // 7. FAQ Question (Inquiry / Questions / Clinic Location)
+    const isQuestion = /(\bapakah\b|\bsiapa\b|\bapa\b|\bkenapa\b|\bbagaimana\b|\bmanfaat\b|\baman\b|\busia\b|\bboleh\b|\bbayar\b|\bbidan\b|\bperawat\b|\bdarimana\b|\bdimana\b|\bdi\s+mana\b|\bdari\s+mana\b|\bmana\b|\?)/i.test(text) ||
+      /\b(kakak|kakaknya|mbak|mbaknya|bidan|bubid|klinik)\s+(dari\s*mana|darimana|dimana|di\s+mana)\b/i.test(text);
     if (isQuestion) {
       intents.push('faq_question');
     }

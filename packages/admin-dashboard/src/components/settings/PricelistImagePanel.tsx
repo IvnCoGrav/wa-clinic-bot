@@ -109,34 +109,34 @@ setSelectedImage(null);
   const effectivePreview = selectedImage?.preview || previewUrl;
 
   return (
-    <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-      <h3 className="text-base font-bold text-white flex items-center space-x-2">
-        <ImageIcon className="text-pink-400" />
+    <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+      <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+        <ImageIcon className="text-[#008069]" size={16} />
         <span>Gambar Pricelist WhatsApp</span>
       </h3>
-      <p className="text-xs text-slate-400 leading-relaxed">
-        Gambar pricelist yang otomatis dikirim ke customer saat meminta daftar harga. Disimpan per-tenant di database.
+      <p className="text-xs text-[#667781] leading-relaxed">
+        Gambar pricelist yang otomatis dikirim ke customer saat meminta daftar harga layanan. Disimpan per-tenant di database.
       </p>
 
       {effectivePreview && (
-        <div className="rounded-xl overflow-hidden border border-white/10 bg-slate-950 max-h-64 flex items-center justify-center">
-          <img src={effectivePreview} alt="Pratinjau pricelist" className="max-h-64 object-contain" />
+        <div className="rounded-xl overflow-hidden border border-[#e9edef] bg-[#f8fafc] max-h-64 flex items-center justify-center p-2 shadow-xs">
+          <img src={effectivePreview} alt="Pratinjau pricelist" className="max-h-60 object-contain rounded-lg" />
         </div>
       )}
 
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1.5">
         <button
           onClick={() => setUrlMode(true)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-            urlMode ? 'bg-pink-500 text-white' : 'bg-slate-900 text-slate-400 border border-white/10'
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
+            urlMode ? 'bg-[#008069] text-white' : 'bg-white text-[#54656f] border border-[#d1d7db] hover:bg-[#f0f2f5]'
           }`}
         >
           Pakai URL
         </button>
         <button
           onClick={() => setUrlMode(false)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-            !urlMode ? 'bg-pink-500 text-white' : 'bg-slate-900 text-slate-400 border border-white/10'
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
+            !urlMode ? 'bg-[#008069] text-white' : 'bg-white text-[#54656f] border border-[#d1d7db] hover:bg-[#f0f2f5]'
           }`}
         >
           Upload Gambar
@@ -144,8 +144,8 @@ setSelectedImage(null);
       </div>
 
       {urlMode ? (
-        <div>
-          <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">URL Gambar Pricelist</label>
+        <div className="space-y-1">
+          <label className="text-[11px] font-bold text-[#111b21] block">URL Gambar Pricelist</label>
           <input
             type="text"
             value={urlValue}
@@ -154,12 +154,12 @@ setSelectedImage(null);
               setSelectedImage(null);
             }}
             placeholder="https://... atau /media/outbound/{tenant}/{file}"
-            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500"
+            className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
           />
         </div>
       ) : (
         <div
-          className="border-2 border-dashed border-white/15 rounded-xl p-6 text-center cursor-pointer hover:border-pink-500/50 transition"
+          className="border-2 border-dashed border-[#d1d7db] rounded-xl p-6 text-center cursor-pointer hover:border-[#008069] hover:bg-[#e8f5f2]/20 transition"
           onClick={() => fileInputRef.current?.click()}
         >
           <input
@@ -169,10 +169,11 @@ setSelectedImage(null);
             className="hidden"
             onChange={handlePickImage}
           />
-          <Upload className="mx-auto text-slate-500 mb-2" size={20} />
-          <p className="text-xs text-slate-400">
+          <Upload className="mx-auto text-[#008069] mb-2" size={22} />
+          <p className="text-xs text-[#111b21] font-semibold">
             {selectedImage ? selectedImage.file.name : 'Klik untuk pilih gambar pricelist (maks 8 MB)'}
           </p>
+          <p className="text-[10px] text-[#8696a0] mt-0.5">Format JPG, PNG, atau WEBP</p>
         </div>
       )}
 
@@ -181,7 +182,7 @@ setSelectedImage(null);
           <button
             onClick={handleRemove}
             disabled={saving}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 rounded-xl text-xs font-bold transition flex items-center space-x-2 disabled:opacity-50"
+            className="px-3.5 py-2 bg-white hover:bg-rose-50 border border-[#d1d7db] hover:border-rose-200 text-[#54656f] hover:text-rose-700 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
           >
             <Trash2 size={12} />
             <span>Reset ke Default</span>
@@ -190,7 +191,7 @@ setSelectedImage(null);
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-2 disabled:opacity-50"
+          className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
         >
           <Save size={12} />
           <span>{saving ? 'Menyimpan...' : 'Simpan Gambar Pricelist'}</span>

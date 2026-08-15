@@ -41,6 +41,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               customer: {
                 include: { children: true },
               },
+              assigned_staff: {
+                select: { id: true, name: true, phone: true },
+              },
             },
             orderBy: {
               created_at: 'desc',
@@ -199,21 +202,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       request: FastifyRequest<{
         Body: {
           customerId: string;
-          treatmentCategory: 'BABY' | 'MOMS' | 'BOTH';
+          treatmentCategory: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE';
           treatmentDetail: string;
           bookingDate?: string;
+          assignedStaffId?: string;
+          status?: 'pending' | 'confirmed';
+          notes?: string;
           babies?: Array<{ name: string; ageText?: string }>;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { customerId, treatmentCategory, treatmentDetail, bookingDate, babies } = request.body || {};
+      const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies } = request.body || {};
 
       if (!customerId || !treatmentCategory || !treatmentDetail) {
         return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
       }
-      if (!['BABY', 'MOMS', 'BOTH'].includes(treatmentCategory)) {
-        return reply.status(400).send({ error: 'treatmentCategory harus BABY, MOMS, atau BOTH.' });
+      if (!['BABY', 'MOMS', 'BOTH', 'KIDS', 'BUNDLE'].includes(treatmentCategory)) {
+        return reply.status(400).send({ error: 'treatmentCategory tidak valid.' });
       }
 
       const customer = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
@@ -226,16 +232,29 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Format bookingDate tidak valid.' });
       }
 
+      const dbCategory: 'BABY' | 'MOMS' | 'BOTH' = 
+        treatmentCategory === 'KIDS' ? 'BABY' : 
+        treatmentCategory === 'BUNDLE' ? 'BOTH' : 
+        (treatmentCategory as 'BABY' | 'MOMS' | 'BOTH');
+
+      const reservationStatus = status === 'confirmed' ? 'confirmed' : 'pending';
+      const rawNotes = notes ? `\nCatatan: ${notes}` : '';
+
       try {
         const reservation = await prisma.reservation.create({
           data: {
             tenant_id: DEFAULT_TENANT_ID,
             customer_id: customerId,
-            treatment_category: treatmentCategory,
+            treatment_category: dbCategory,
             treatment_detail: treatmentDetail,
             booking_date: parsedDate,
-            raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}`,
-            status: 'pending',
+            assigned_staff_id: assignedStaffId || null,
+            raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
+            status: reservationStatus,
+          },
+          include: {
+            customer: { include: { children: true } },
+            assigned_staff: { select: { id: true, name: true, phone: true } },
           },
         });
 
@@ -253,7 +272,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION_MANUAL',
           targetId: reservation.id,
-          payload: { customerId, treatmentCategory, source: 'admin_panel' },
+          payload: { customerId, treatmentCategory, assignedStaffId, status: reservationStatus, source: 'admin_panel' },
           ipAddress: request.ip,
         });
 
@@ -263,11 +282,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           id: `res_${Date.now()}_${Math.random().toString(36).substring(7)}`,
           tenant_id: DEFAULT_TENANT_ID,
           customer_id: customerId,
-          treatment_category: treatmentCategory,
+          treatment_category: dbCategory,
           treatment_detail: treatmentDetail,
           booking_date: parsedDate,
-          raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}`,
-          status: 'pending',
+          assigned_staff_id: assignedStaffId || null,
+          raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
+          status: reservationStatus,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -473,6 +493,68 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
         }
         return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation/:id/assign-staff
+   * Menugaskan atau mengubah penugasan staff (terapis) pada reservasi.
+   */
+  fastify.patch(
+    '/api/admin/reservation/:id/assign-staff',
+    async (
+      request: FastifyRequest<{ Params: { id: string }; Body: { assigned_staff_id?: string | null } }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { assigned_staff_id } = request.body || {};
+
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          include: { customer: true },
+        });
+        if (!existing) {
+          return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+        }
+
+        let staffName: string | null = null;
+        if (assigned_staff_id) {
+          const staff = await prisma.staff.findFirst({
+            where: { id: assigned_staff_id, tenant_id: DEFAULT_TENANT_ID },
+            select: { id: true, name: true },
+          });
+          if (!staff) {
+            return reply.status(400).send({ success: false, error: 'Staff yang dipilih tidak valid.' });
+          }
+          staffName = staff.name;
+        }
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: { assigned_staff_id: assigned_staff_id || null },
+          include: {
+            assigned_staff: {
+              select: { id: true, name: true, phone: true },
+            },
+          },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'ASSIGN_RESERVATION_STAFF',
+          targetId: id,
+          payload: { assigned_staff_id, staffName },
+          ipAddress: request.ip,
+          tenantId: DEFAULT_TENANT_ID,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation });
+      } catch (error: any) {
+        console.error('[Admin API] Failed to assign staff to reservation:', error.message);
+        return reply.status(500).send({ success: false, error: 'Gagal menugaskan staff ke reservasi.' });
       }
     }
   );

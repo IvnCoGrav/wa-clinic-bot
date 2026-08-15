@@ -165,42 +165,43 @@ export const FollowUpQueue: React.FC = () => {
         return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20 flex items-center space-x-1"><XCircle size={10} /><span>CANCELLED</span></span>;
       case 'FAILED':
         return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center space-x-1"><AlertCircle size={10} /><span>FAILED</span></span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-600 border border-rose-200 flex w-fit items-center space-x-1"><AlertCircle size={10} /><span>FAILED</span></span>;
       default:
-        return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/10 text-slate-400">{status}</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-50 text-slate-600">{status}</span>;
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center space-x-3">
-            <Clock className="text-pink-400" />
+          <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
+            <Clock className="text-[#008069]" size={22} />
             <span>Follow-Up & Reminder Queue</span>
           </h2>
-          <p className="text-slate-400 mt-1">
+          <p className="text-xs text-[#667781] mt-0.5">
             Antrian otomatis follow-up belum purchase, treatment lanjutan, dan reminder jadwal
           </p>
         </div>
         <button
           onClick={loadFollowUps}
-          className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white transition flex items-center space-x-1.5"
+          className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition flex items-center space-x-1.5 shadow-xs"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          <span className="text-xs font-bold">Refresh</span>
+          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
+          <span className="text-xs font-semibold">Refresh</span>
         </button>
       </div>
 
       {/* Filters & Search Bar */}
-      <div className="glass-panel border border-white/5 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center space-x-3 w-full md:w-auto">
-          <Filter size={16} className="text-pink-400 flex-shrink-0" />
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <Filter size={15} className="text-[#008069] flex-shrink-0" />
           
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="p-2 bg-slate-950 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+            className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="">Semua Status</option>
             <option value="PENDING">PENDING (Jadwal Mendatang)</option>
@@ -212,7 +213,7 @@ export const FollowUpQueue: React.FC = () => {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="p-2 bg-slate-950 border border-white/10 rounded-xl text-xs text-white focus:outline-none"
+            className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="">Semua Tipe</option>
             <option value="NO_PURCHASE">Belum Purchase (+3, +7, +14 Hari)</option>
@@ -222,18 +223,18 @@ export const FollowUpQueue: React.FC = () => {
 
         <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full md:w-auto">
           <div className="relative w-full md:w-64">
-            <Search size={14} className="absolute left-3 top-3 text-slate-500" />
+            <Search size={14} className="absolute left-3 top-2.5 text-[#8696a0]" />
             <input
               type="text"
               placeholder="Cari nama / HP / kelurahan..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+              className="w-full pl-9 pr-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
           <button
             type="submit"
-            className="px-3 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition"
+            className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition shadow-xs"
           >
             Cari
           </button>
@@ -241,31 +242,31 @@ export const FollowUpQueue: React.FC = () => {
       </div>
 
       {/* Main Table */}
-      <div className="glass-panel border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left text-xs text-[#111b21]">
             <thead>
-              <tr className="border-b border-white/5 bg-slate-900/40">
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Tanggal Kirim (`date_send`)</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Jam (`time_send`)</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Tipe & Stage</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Customer & No. HP</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Rotasi Template</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500">Status</th>
-                <th className="px-4 py-3 text-[9px] uppercase font-black text-slate-500 text-right">Aksi</th>
+              <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px]">
+                <th className="px-4 py-3.5">Tanggal Kirim (`date_send`)</th>
+                <th className="px-4 py-3.5">Jam (`time_send`)</th>
+                <th className="px-4 py-3.5">Tipe & Stage</th>
+                <th className="px-4 py-3.5">Customer & No. HP</th>
+                <th className="px-4 py-3.5">Rotasi Template</th>
+                <th className="px-4 py-3.5">Status</th>
+                <th className="px-4 py-3.5 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[#e9edef]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-slate-500">
-                    <RefreshCw className="animate-spin mx-auto text-pink-400 mb-2" size={24} />
+                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-[#667781]">
+                    <RefreshCw className="animate-spin mx-auto text-[#008069] mb-2" size={24} />
                     <span>Memuat antrian follow-up...</span>
                   </td>
                 </tr>
               ) : followUps.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-slate-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-[#667781]">
                     Tidak ada antrian follow-up yang sesuai filter.
                   </td>
                 </tr>
@@ -276,72 +277,76 @@ export const FollowUpQueue: React.FC = () => {
                   const c = fu.customer;
 
                   return (
-                    <tr key={fu.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                    <tr key={fu.id} className="hover:bg-[#f8fafc] transition-colors">
                       {/* Date */}
-                      <td className="px-4 py-3 text-xs font-bold text-white flex items-center space-x-1.5">
-                        <Calendar size={12} className="text-pink-400 flex-shrink-0" />
-                        <span>{date}</span>
+                      <td className="px-4 py-3.5 font-bold text-[#111b21]">
+                        <div className="flex items-center space-x-1.5">
+                          <Calendar size={13} className="text-[#008069] flex-shrink-0" />
+                          <span>{date}</span>
+                        </div>
                       </td>
 
                       {/* Time */}
-                      <td className="px-4 py-3 text-xs font-mono text-slate-300">
+                      <td className="px-4 py-3.5 font-mono text-xs text-[#54656f]">
                         {time}
                       </td>
 
                       {/* Type & Stage */}
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${typeInfo.color}`}>
+                      <td className="px-4 py-3.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${typeInfo.color}`}>
                           {typeInfo.label}
                         </span>
                       </td>
 
                       {/* Customer */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center space-x-1.5">
-                          <User size={12} className="text-slate-500 flex-shrink-0" />
-                          <span className="text-xs font-bold text-white">{c?.name || 'Bunda'}</span>
+                          <User size={13} className="text-[#8696a0] flex-shrink-0" />
+                          <span className="font-bold text-[#111b21]">{c?.name || 'Bunda'}</span>
                         </div>
-                        <div className="text-[10px] text-slate-500 font-mono ml-4">{c?.phone}</div>
+                        <div className="text-[10px] text-[#667781] font-mono ml-4">{c?.phone}</div>
                       </td>
 
                       {/* Template Rolling */}
-                      <td className="px-4 py-3 text-[10px] text-slate-400 flex items-center space-x-1">
-                        <Sparkles size={10} className="text-amber-400 flex-shrink-0" />
-                        <span>Varian #{((fu.stage - 1) % 3) + 1} (Auto)</span>
+                      <td className="px-4 py-3.5 text-xs text-[#54656f]">
+                        <div className="flex items-center space-x-1">
+                          <Sparkles size={11} className="text-amber-500 flex-shrink-0" />
+                          <span>Varian #{((fu.stage - 1) % 3) + 1} (Auto)</span>
+                        </div>
                       </td>
 
                       {/* Status */}
-                      <td className="px-4 py-3">{getStatusBadge(fu.status)}</td>
+                      <td className="px-4 py-3.5">{getStatusBadge(fu.status)}</td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end space-x-1">
                           {fu.status === 'PENDING' && (
                             <>
                               <button
                                 onClick={() => setConfirmAction({ type: 'send', id: fu.id })}
                                 disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 text-[10px] font-bold flex items-center space-x-1 transition"
+                                className="p-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] text-[#008069] text-xs font-semibold flex items-center space-x-1 transition shadow-xs"
                                 title="Kirim Sekarang"
                               >
-                                <Send size={11} />
+                                <Send size={12} />
                                 <span className="hidden md:inline">Kirim</span>
                               </button>
                               <button
                                 onClick={() => setRescheduleModal({ open: true, item: fu, newDate: fu.scheduled_at.slice(0, 16) })}
                                 disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded bg-white/5 hover:bg-white/10 text-slate-400 text-[10px] font-bold flex items-center space-x-1 transition"
+                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition shadow-xs"
                                 title="Ubah Jadwal"
                               >
-                                <Edit2 size={11} />
+                                <Edit2 size={12} />
                               </button>
                               <button
                                 onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
                                 disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px] font-bold flex items-center space-x-1 transition"
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold transition shadow-xs"
                                 title="Batalkan"
                               >
-                                <XCircle size={11} />
+                                <XCircle size={12} />
                               </button>
                             </>
                           )}
@@ -367,38 +372,38 @@ export const FollowUpQueue: React.FC = () => {
 
       {/* Reschedule Modal */}
       {rescheduleModal.open && rescheduleModal.item && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel border border-white/10 rounded-2xl p-6 w-full max-w-md space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <Calendar className="text-pink-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-md space-y-4 shadow-xl">
+            <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+              <Calendar className="text-[#008069]" size={18} />
               <span>Ubah Jadwal Kirim Follow-Up</span>
             </h3>
 
-            <div className="text-xs text-slate-400 space-y-1">
-              <p><strong className="text-white">Customer:</strong> {rescheduleModal.item.customer?.name} ({rescheduleModal.item.customer?.phone})</p>
-              <p><strong className="text-white">Tipe:</strong> {rescheduleModal.item.type} Stage {rescheduleModal.item.stage}</p>
+            <div className="text-xs text-[#54656f] space-y-1 bg-[#f8fafc] p-3 rounded-xl border border-[#e9edef]">
+              <p><strong className="text-[#111b21]">Customer:</strong> {rescheduleModal.item.customer?.name} ({rescheduleModal.item.customer?.phone})</p>
+              <p><strong className="text-[#111b21]">Tipe:</strong> {rescheduleModal.item.type} Stage {rescheduleModal.item.stage}</p>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs text-slate-400">Jadwal Kirim Baru</label>
+              <label className="text-xs font-bold text-[#111b21]">Jadwal Kirim Baru</label>
               <input
                 type="datetime-local"
                 value={rescheduleModal.newDate}
                 onChange={(e) => setRescheduleModal({ ...rescheduleModal, newDate: e.target.value })}
-                className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-xs text-white"
+                className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
               />
             </div>
 
-            <div className="flex justify-end space-x-2 pt-2">
+            <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
               <button
                 onClick={() => setRescheduleModal({ open: false })}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-bold transition"
+                className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
               >
                 Batal
               </button>
               <button
                 onClick={handleRescheduleSave}
-                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition"
+                className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition shadow-xs"
               >
                 Simpan Jadwal Baru
               </button>
@@ -407,25 +412,25 @@ export const FollowUpQueue: React.FC = () => {
         </div>
       )}
 
-      {/* Confirm Modal untuk Send Now / Cancel (tanpa window.confirm) */}
+      {/* Confirm Modal untuk Send Now / Cancel */}
       {confirmAction && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-panel border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+            <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
               {confirmAction.type === 'cancel'
-                ? <><XCircle className="text-rose-400" /><span>Batalkan Follow-Up?</span></>
-                : <><Send className="text-pink-400" /><span>Kirim Sekarang?</span></>
+                ? <><XCircle className="text-rose-600" size={18} /><span>Batalkan Follow-Up?</span></>
+                : <><Send className="text-[#008069]" size={18} /><span>Kirim Sekarang?</span></>
               }
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[#54656f]">
               {confirmAction.type === 'cancel'
                 ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim otomatis.'
                 : 'Pesan akan langsung dikirim sekarang tanpa menunggu jadwal cron.'}
             </p>
-            <div className="flex justify-end space-x-2 pt-2">
+            <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
               <button
                 onClick={() => setConfirmAction(null)}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-bold transition"
+                className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
               >
                 Batal
               </button>
@@ -437,10 +442,10 @@ export const FollowUpQueue: React.FC = () => {
                   else handleSendNow(id);
                 }}
                 disabled={actionLoading === confirmAction.id}
-                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition ${
+                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs ${
                   confirmAction.type === 'cancel'
-                    ? 'bg-rose-500 hover:bg-rose-600'
-                    : 'bg-pink-500 hover:bg-pink-600'
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-[#008069] hover:bg-[#00a884]'
                 }`}
               >
                 {actionLoading === confirmAction.id ? 'Memproses...' : (confirmAction.type === 'cancel' ? 'Ya, Batalkan' : 'Ya, Kirim')}
@@ -454,13 +459,13 @@ export const FollowUpQueue: React.FC = () => {
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-[70] px-4 py-3 rounded-xl border text-xs font-bold shadow-xl flex items-center space-x-2 ${
           toastMsg.type === 'success'
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            : 'bg-rose-50 border-rose-200 text-rose-800'
         }`}>
-          {toastMsg.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+          {toastMsg.type === 'success' ? <CheckCircle size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-rose-600" />}
           <span>{toastMsg.text}</span>
-          <button onClick={() => setToastMsg(null)} className="ml-2 text-slate-500 hover:text-white">
-            <XCircle size={12} />
+          <button onClick={() => setToastMsg(null)} className="ml-2 text-[#8696a0] hover:text-[#111b21]">
+            <XCircle size={13} />
           </button>
         </div>
       )}

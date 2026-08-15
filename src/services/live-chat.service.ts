@@ -323,6 +323,103 @@ export class LiveChatService {
     };
   }
 
+  /**
+   * Mengambil kapabilitas gateway WhatsApp tenant aktif (misal: kemampuan tarik pesan / revoke).
+   */
+  public async getGatewayCapability(tenantId: string): Promise<{
+    provider: string;
+    supportsRevoke: boolean;
+  }> {
+    const gateway = await resolveGatewayForTenant(tenantId);
+    return {
+      provider: gateway.providerType,
+      supportsRevoke: !!gateway.supportsRevoke,
+    };
+  }
+
+  /**
+   * Menarik / menghapus pesan WhatsApp untuk semua orang (Revoke / Delete for Everyone).
+   * Hanya diizinkan untuk pesan OUTBOUND dan jika provider gateway mendukung revoke (WAHA).
+   */
+  public async revokeMessage(params: {
+    conversationId: string;
+    messageId: string;
+    tenantId: string;
+    adminName?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const { conversationId, messageId, tenantId, adminName = 'Admin' } = params;
+
+    const gateway = await resolveGatewayForTenant(tenantId);
+    if (!gateway.supportsRevoke) {
+      return {
+        success: false,
+        error: `Provider WhatsApp tenant (${gateway.providerType}) tidak mendukung fitur tarik pesan untuk semua orang (Delete for Everyone).`,
+      };
+    }
+
+    const conversation = await conversationService.getConversationById(conversationId, tenantId);
+    if (!conversation) {
+      return { success: false, error: 'Percakapan tidak ditemukan.' };
+    }
+
+    const customer = await customerService.getCustomerById(conversation.customer_id, tenantId);
+    if (!customer?.phone) {
+      return { success: false, error: 'Data nomor WhatsApp customer tidak ditemukan.' };
+    }
+
+    // Cari pesan di DB / memory
+    let msg: any = null;
+    try {
+      msg = await prisma.message.findFirst({
+        where: { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+      });
+    } catch {
+      msg = null;
+    }
+    if (!msg) {
+      const memoryMsgs = messageService.getMemoryMessages();
+      msg = memoryMsgs.find(
+        (m) => (m.id === messageId || m.wa_message_id === messageId) && m.conversation_id === conversationId
+      );
+    }
+
+    if (!msg) {
+      return { success: false, error: 'Pesan tidak ditemukan.' };
+    }
+
+    if (msg.direction !== Direction.OUTBOUND && msg.direction !== 'OUTBOUND') {
+      return { success: false, error: 'Hanya pesan keluar (outbound) yang dapat ditarik.' };
+    }
+
+    // Panggil gateway deleteMessage
+    const targetWaId = msg.wa_message_id || msg.id;
+    const deleteResult = await gateway.deleteMessage(customer.phone, targetWaId, true);
+    if (!deleteResult.success) {
+      return { success: false, error: deleteResult.error || 'Gagal menarik pesan dari WhatsApp.' };
+    }
+
+    // Update pesan di DB & broadcast SSE
+    await messageService.markMessageDeleted(msg.id, tenantId);
+
+    // Audit log
+    const { auditService } = await import('./audit.service');
+    await auditService.logAdminAction({
+      apiKey: 'LIVE_CHAT',
+      adminIdentity: adminName,
+      action: 'REVOKE_MESSAGE',
+      targetId: msg.id,
+      payload: {
+        conversationId,
+        messageId: msg.id,
+        waMessageId: msg.wa_message_id,
+        customerPhone: customer.phone,
+      },
+      tenantId,
+    });
+
+    return { success: true };
+  }
+
   private serialize(c: any, stats?: { purchaseCount: number; ltv: number }): LiveChatConversationItem {
     return {
       conversationId: c.id,

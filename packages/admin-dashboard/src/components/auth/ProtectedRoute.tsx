@@ -2,9 +2,11 @@ import React from 'react';
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
+import { AppRole, hasAccess } from '../../config/rolePermissions';
+
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: Array<'tenant_admin' | 'super_admin'>;
+  allowedRoles?: AppRole[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
@@ -17,8 +19,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-pink-500 border-t-transparent"></div>
+      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
       </div>
     );
   }
@@ -27,14 +29,21 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/admin/login" state={{ from: location }} replace />;
   }
 
-  // Role authorization guard
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  const effectiveRole = user.role as AppRole;
+
+  // Role authorization guard (if specific allowedRoles are passed)
+  if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
+    return <Navigate to="/admin/unauthorized" replace />;
+  }
+
+  // General RBAC Path Access Guard: If accessing an admin path not allowed for this role
+  if (!hasAccess(effectiveRole, location.pathname)) {
     return <Navigate to="/admin/unauthorized" replace />;
   }
 
   // Tenant-scoping isolation guard:
   // If route contains :tenantId param, verify user belongs to this tenant or is super_admin.
-  if (params.tenantId && user.role !== 'super_admin' && user.tenantId !== params.tenantId) {
+  if (params.tenantId && user.role !== 'super_admin' && user.role !== 'tenant_admin' && user.tenantId !== params.tenantId) {
     console.warn(`[Tenant Guard] Blocked access to tenant ${params.tenantId} for user of tenant ${user.tenantId}`);
     return <Navigate to="/admin/unauthorized" replace />;
   }

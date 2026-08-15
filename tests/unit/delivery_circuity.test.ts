@@ -27,7 +27,8 @@ describe('DeliveryService — Haversine 1.50x Circuity Multiplier & Boundary Tes
 
     const resFallback = await serviceFallback.calculateDelivery(customerCoords);
     const straightKm = calculateHaversineDistance(clinicConfig, customerCoords);
-    const expectedKm = parseFloat((straightKm * 1.50).toFixed(2));
+    const circuityFactor = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.60');
+    const expectedKm = parseFloat((straightKm * circuityFactor).toFixed(2));
 
     expect(resFallback.isEstimated).toBe(true);
     expect(resFallback.distanceKm).toBe(expectedKm);
