@@ -577,6 +577,9 @@ export class StaffReservationService {
             text: receiptText,
             tenantId,
             adminName: staffName,
+            // Konfirmasi pembayaran oleh terapis juga menandakan percakapan
+            // ditangani manusia → bot tidak membalas lagi setelahnya.
+            forceEscalate: true,
           });
         } catch (chatErr: any) {
           console.error('[STAFF RESERVATION] Error sending receipt chat message:', chatErr.message);

@@ -63,3 +63,56 @@ export async function setPricelistImageUrl(tenantId: string, url: string | null)
   });
   return { success: true, url: updated.pricelist_image_url };
 }
+
+/**
+ * Menghasilkan versi ringan (1/3 dimensi) gambar pricelist untuk dikirim via
+ * gateway. Gambar di-resize server-side (sharp), lalu disimpan ke media
+ * outbound tenant sehingga terintegrasi dengan kuota media (MQL) & retensi
+ * media chat (pembersihan otomatis), dan bisa dikirim WAHA (path lokal) maupun
+ * WABA (URL publik). Mengembalikan null jika sumber tak bisa dibaca.
+ */
+export async function resolvePricelistSendTarget(
+  tenantId: string,
+  provider: 'WAHA' | 'WABA'
+): Promise<string | null> {
+  try {
+    const raw = await getPricelistImageUrl(tenantId);
+
+    let input: string | Buffer;
+    if (/^https?:\/\//i.test(raw)) {
+      const res = await fetch(raw);
+      if (!res.ok) return null;
+      input = Buffer.from(await res.arrayBuffer());
+    } else if (raw.startsWith('/media/outbound/')) {
+      const abs = mediaService.filePathFromRelativeUrl(raw);
+      if (!abs) return null;
+      input = abs;
+    } else {
+      input = raw; // path file lokal
+    }
+
+    const sharp = (await import('sharp')).default;
+    const meta = await sharp(input, { failOn: 'none' }).metadata();
+    if (!meta.width || !meta.height) return null;
+
+    // 1/3 dari dimensi terpanjang (minimal 120px agar tetap terbaca).
+    const maxDim = Math.max(meta.width, meta.height);
+    const targetDim = Math.max(120, Math.round(maxDim / 3));
+    const resized = await sharp(input, { failOn: 'none' })
+      .rotate()
+      .resize({ width: targetDim, height: targetDim, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    const saved = await mediaService.saveOutboundMedia({
+      tenantId,
+      imageB64: resized.toString('base64'),
+      mimeType: 'image/jpeg',
+      fileName: `pricelist-${Date.now()}.jpg`,
+    });
+    return mediaService.resolveOutboundForProvider(saved.hdUrl, provider);
+  } catch (err: any) {
+    console.error('[PRICELIST] Gagal membuat versi kecil pricelist:', err?.message || err);
+    return null;
+  }
+}

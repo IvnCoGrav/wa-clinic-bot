@@ -69,11 +69,17 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
   const isToday = (d: Date) => isSameDay(d, new Date());
 
   const getEventsForDay = (date: Date) => {
-    return reservations.filter((r) => {
-      if (!r.booking_date) return false;
-      const bDate = new Date(r.booking_date);
-      return isSameDay(bDate, date);
-    });
+    return reservations
+      .filter((r) => {
+        if (!r.booking_date) return false;
+        const bDate = new Date(r.booking_date);
+        return isSameDay(bDate, date);
+      })
+      .sort((a, b) => {
+        const ta = a.booking_date ? new Date(a.booking_date).getTime() : 0;
+        const tb = b.booking_date ? new Date(b.booking_date).getTime() : 0;
+        return ta - tb;
+      });
   };
 
   const dayLabels = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];

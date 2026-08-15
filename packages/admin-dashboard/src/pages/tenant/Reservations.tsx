@@ -333,7 +333,8 @@ export const Reservations: React.FC = () => {
             </p>
           </div>
 
-          {/* Date Navigation group */}
+          {/* Date Navigation group (hanya untuk mode kalender; tabel menampilkan semua data) */}
+          {viewMode !== 'table' && (
           <div className="flex items-center space-x-1.5 ml-0 sm:ml-4 bg-[#f0f2f5] p-1 rounded-xl">
             <button
               onClick={handlePrevDate}
@@ -356,6 +357,7 @@ export const Reservations: React.FC = () => {
               <ChevronRight size={16} />
             </button>
           </div>
+          )}
         </div>
 
         {/* View mode switcher & Actions */}
@@ -363,26 +365,15 @@ export const Reservations: React.FC = () => {
           {/* View Switcher Tabs */}
           <div className="flex space-x-1 p-1 bg-[#f0f2f5] rounded-xl shadow-inner text-xs">
             <button
-              onClick={() => setViewMode('month')}
-              className={`hidden md:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
-                viewMode === 'month'
+              onClick={() => setViewMode('table')}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'table'
                   ? 'bg-white text-[#111b21] shadow-xs'
                   : 'text-[#54656f] hover:text-[#111b21]'
               }`}
             >
-              <CalendarDays size={13} />
-              <span>Bulan</span>
-            </button>
-            <button
-              onClick={() => setViewMode('week')}
-              className={`hidden sm:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
-                viewMode === 'week'
-                  ? 'bg-white text-[#111b21] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21]'
-              }`}
-            >
-              <Columns size={13} />
-              <span>Minggu</span>
+              <ListFilter size={13} />
+              <span>Tabel</span>
             </button>
             <button
               onClick={() => setViewMode('day')}
@@ -396,15 +387,26 @@ export const Reservations: React.FC = () => {
               <span>Hari</span>
             </button>
             <button
-              onClick={() => setViewMode('table')}
-              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
-                viewMode === 'table'
+              onClick={() => setViewMode('week')}
+              className={`hidden sm:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'week'
                   ? 'bg-white text-[#111b21] shadow-xs'
                   : 'text-[#54656f] hover:text-[#111b21]'
               }`}
             >
-              <ListFilter size={13} />
-              <span>Tabel</span>
+              <Columns size={13} />
+              <span>Minggu</span>
+            </button>
+            <button
+              onClick={() => setViewMode('month')}
+              className={`hidden md:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+                viewMode === 'month'
+                  ? 'bg-white text-[#111b21] shadow-xs'
+                  : 'text-[#54656f] hover:text-[#111b21]'
+              }`}
+            >
+              <CalendarDays size={13} />
+              <span>Bulan</span>
             </button>
           </div>
 
@@ -421,7 +423,7 @@ export const Reservations: React.FC = () => {
               title="Toggle Filter & Spotlight"
             >
               <Filter size={14} />
-              <span>{showMobileSidebar ? 'Tutup Filter' : 'Filter & Kalender'}</span>
+              <span>{showMobileSidebar ? 'Tutup Filter' : 'Filter'}</span>
             </button>
 
             <button
@@ -453,11 +455,6 @@ export const Reservations: React.FC = () => {
         {/* Left Column: Sidebar Widgets (Collapsible on mobile) */}
         <div className={`${showMobileSidebar ? 'block' : 'hidden'} lg:block w-full`}>
           <CalendarSidebar
-            selectedDate={selectedDate}
-            onSelectDate={(d) => {
-              setSelectedDate(d);
-              if (window.innerWidth < 1024) setShowMobileSidebar(false);
-            }}
             reservations={reservations}
             filterState={filterState}
             onFilterChange={setFilterState}
