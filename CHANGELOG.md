@@ -32,10 +32,13 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
     - Koordinat revisi lapangan otomatis dicatat dan ditambahkan ke catatan **patokan / ancer-ancer** (contoh: `[📍 GPS Lapangan: -7.348812, 112.751623 (+1.4km)]`) serta disimpan dalam preferensi customer (`field_gps_lat`, `field_gps_lng`, `field_gps_diverged`).
     - Mencatat audit log `STAFF_UPDATE_CUSTOMER_LOCATION_DIVERGED` untuk kemudahan pelacakan CS/Admin.
   - Jika selisih **≤ 1 km** (koreksi presisi pagar/pintu rumah): koordinat utama diperbarui dan jarak dihitung ulang secara normal.
-- **Kunci Akurasi GPS HP Target Maksimal 10 Meter (`StaffToday.tsx`)**:
-  - Tombol *"Gunakan Titik GPS HP Saya Sekarang"* dan auto-GPS kamera kini melacak sinyal satelit dengan high accuracy.
-  - Menampilkan badge status real-time: `🟢 GPS Sangat Akurat (≤10m)` bila akurasi ≤ 10 meter, atau `🟡 Akurasi Cukup (±Xm)` bila sinyal masih lemah lengkap dengan tombol refresh/ulang.
-  - Menampilkan dialog konfirmasi khusus jika terapis menyimpan dengan akurasi > 10 meter untuk memastikan lokasi tetap presisi.
+- **Kunci Akurasi GPS HP Otomatis Polling s/d 5 Percobaan (Target Akurasi ≤ 10 Meter) (`StaffToday.tsx`)**:
+  - Tombol *"📍 Gunakan Titik GPS HP Saya Sekarang"* dan auto-GPS foto kini otomatis melakukan looping polling satelit hingga **5 kali percobaan**:
+    - Langsung berhenti seketika saat akurasi mencapai target **≤ 10 meter** (`🟢 GPS presisi tinggi terkunci (±Xm)`).
+    - Jika akurasi awal masih di atas 10 meter, sistem menampilkan progres percobaan real-time di tombol (`Mencari satelit GPS (Percobaan X/5)...`) dan secara otomatis memilih titik dengan akurasi terbaik dari 5 percobaan tersebut.
+- **Interaksi Satu Baris Header Kartu Tugas untuk Detail Pasien (`StaffToday.tsx`)**:
+  - Menjadikan seluruh baris atas kartu tugas (Avatar Icon Kategori, Nama Pasien, Judul Layanan, dan Jam Reservasi) sebagai area klik pembuka **Modal Detail Pasien** (`setDetailModalTask`).
+  - Area bawah kartu tugas (Alamat, Foto Rumah, Patokan, dan Tombol OTW/Chat) tetap fokus untuk membuka chat WhatsApp atau navigasi peta, sehingga terapis di perangkat mobile tidak perlu membidik icon kecil.
 - **Test & Verifikasi**:
   - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (19/19 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS) — total 31/31 test PASS.
   - Build dashboard admin (`npm run build`) dan typecheck backend (`tsc --noEmit`) 100% PASS.

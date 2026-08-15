@@ -166,6 +166,7 @@ export const StaffToday: React.FC = () => {
   const [locHousePhotoB64, setLocHousePhotoB64] = useState<string | null>(null);
   const [locLandmark, setLocLandmark] = useState<string>('');
   const [locGettingGps, setLocGettingGps] = useState(false);
+  const [gpsAttemptInfo, setGpsAttemptInfo] = useState<string | null>(null);
   const [submittingLoc, setSubmittingLoc] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const locHouseFileInputRef = useRef<HTMLInputElement>(null);
@@ -791,36 +792,87 @@ export const StaffToday: React.FC = () => {
     setLocLandmark(task.address.landmark || '');
   };
 
-  // Get GPS directly from mobile device
-  // Ambil titik GPS aktual dari HP terapis (Target akurasi ≤ 10m)
-  const handleGetCurrentGps = () => {
+  // Auto-retry polling GPS hingga 5 kali percobaan atau hingga akurasi ≤ 10m
+  const acquireBestGps = async (isPhotoAutoTrigger: boolean = false) => {
     if (!('geolocation' in navigator)) {
       toast('Perangkat Anda tidak mendukung fitur Geolocation GPS.', 'error');
       return;
     }
 
     setLocGettingGps(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const acc = Math.round(position.coords.accuracy);
-        setLocCoords({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: acc,
+    setGpsAttemptInfo('Mencari satelit GPS (1/5)...');
+
+    let bestPos: { lat: number; lng: number; accuracy: number } | null = null;
+    const MAX_ATTEMPTS = 5;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      setGpsAttemptInfo(`Mengunci satelit GPS (Percobaan ${attempt}/${MAX_ATTEMPTS})...`);
+
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 6000,
+            maximumAge: 0,
+          });
         });
-        setLocGettingGps(false);
-        if (acc <= 10) {
-          toast(`🟢 GPS presisi tinggi terkunci (akurasi ±${acc}m)`, 'success');
-        } else {
-          toast(`📍 GPS diambil (akurasi ±${acc}m). Disarankan berdiri di luar ruangan agar ≤ 10m.`, 'info');
+
+        const acc = Math.round(pos.coords.accuracy);
+        const currentCoord = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: acc,
+        };
+
+        if (!bestPos || acc < bestPos.accuracy) {
+          bestPos = currentCoord;
+          setLocCoords(currentCoord);
         }
-      },
-      (error) => {
-        setLocGettingGps(false);
-        toast(`Gagal mengambil GPS: ${error.message}. Pastikan izin lokasi browser aktif.`, 'error');
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+
+        // Jika sudah mencapai target presisi tinggi (≤ 10 meter), langsung stop & selesai!
+        if (acc <= 10) {
+          setGpsAttemptInfo(null);
+          setLocGettingGps(false);
+          toast(`🟢 GPS presisi tinggi terkunci (±${acc}m pada percobaan ke-${attempt})!`, 'success');
+          return;
+        }
+
+        // Jika belum ≤ 10m dan masih ada sisa percobaan, tunggu sebentar lalu coba lagi
+        if (attempt < MAX_ATTEMPTS) {
+          setGpsAttemptInfo(`Akurasi ±${acc}m. Mencari sinyal lebih kuat (${attempt + 1}/${MAX_ATTEMPTS})...`);
+          await new Promise((r) => setTimeout(r, 800));
+        }
+      } catch (err: any) {
+        console.warn(`[GPS] Percobaan ${attempt} gagal:`, err?.message);
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 800));
+        }
+      }
+    }
+
+    setLocGettingGps(false);
+    setGpsAttemptInfo(null);
+
+    if (bestPos) {
+      setLocCoords(bestPos);
+      if (bestPos.accuracy <= 10) {
+        toast(`🟢 GPS presisi tinggi terkunci (±${bestPos.accuracy}m)`, 'success');
+      } else {
+        toast(
+          isPhotoAutoTrigger
+            ? `📍 GPS terkunci (akurasi ±${bestPos.accuracy}m)`
+            : `📍 GPS terkunci dengan akurasi terbaik ±${bestPos.accuracy}m (5 percobaan).`,
+          'info'
+        );
+      }
+    } else {
+      toast('Gagal mengunci sinyal GPS. Pastikan izin lokasi browser aktif dan berada di luar ruangan.', 'error');
+    }
+  };
+
+  // Get GPS directly from mobile device
+  const handleGetCurrentGps = () => {
+    acquireBestGps(false);
   };
 
   // Pick / Capture House Photo from camera
@@ -837,28 +889,7 @@ export const StaffToday: React.FC = () => {
 
     // Auto-fetch GPS if not yet fetched so therapist captures photo & GPS in 1 step
     if (!locCoords && 'geolocation' in navigator && !locGettingGps) {
-      setLocGettingGps(true);
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const acc = Math.round(position.coords.accuracy);
-          setLocCoords({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: acc,
-          });
-          setLocGettingGps(false);
-          if (acc <= 10) {
-            toast(`🟢 GPS presisi tinggi terkunci bersama foto (akurasi ±${acc}m)`, 'success');
-          } else {
-            toast(`📍 GPS otomatis diambil (akurasi ±${acc}m)`, 'info');
-          }
-        },
-        (error) => {
-          setLocGettingGps(false);
-          console.warn('[GPS] Auto GPS failed:', error.message);
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
+      acquireBestGps(true);
     }
   };
 
@@ -1225,30 +1256,30 @@ export const StaffToday: React.FC = () => {
                     return (
                       <div
                         key={task.reservationId}
-                        onClick={() => handleOpenChat(task)}
-                        className={`p-3.5 rounded-2xl cursor-pointer transition-all text-left relative bg-white shadow-xs border ${
+                        className={`p-3.5 rounded-2xl transition-all text-left relative bg-white shadow-xs border ${
                           isSelected
                             ? 'border-[#008069] ring-2 ring-[#008069]/25 shadow-md'
                             : 'border-[#e9edef] hover:border-[#008069]/40 hover:shadow-sm'
                         } ${catInfo.borderAccent} border-l-4`}
                       >
-                        {/* Header: Customer Icon & Name & Time */}
-                        <div className="flex items-start justify-between gap-2 mb-1">
+                        {/* Header: Customer Icon & Name & Time (KLIK BARIS INI = DETAIL CUSTOMER) */}
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDetailModalTask(task);
+                          }}
+                          className="flex items-start justify-between gap-2 mb-1 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] transition cursor-pointer group"
+                          title="Klik untuk melihat detail lengkap pasien"
+                        >
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            {/* Service Category Avatar Icon - Click to view detail */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDetailModalTask(task);
-                              }}
-                              className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all active:scale-95 ${catInfo.bg}`}
-                              title="Lihat detail lengkap pasien"
+                            {/* Service Category Avatar Icon */}
+                            <div
+                              className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
                             >
                               {catInfo.icon}
-                            </button>
+                            </div>
                             <div className="min-w-0">
-                              <h3 className="font-semibold text-sm text-[#111b21] truncate">
+                              <h3 className="font-semibold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                 {task.customerName || 'Customer'}
                               </h3>
                               <p className="text-[11px] text-[#008069] font-medium truncate">
@@ -1263,12 +1294,14 @@ export const StaffToday: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Alamat & Jarak dari Klinik */}
-                        <div className="text-xs text-[#54656f] mb-2 mt-2 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
-                          <div className="flex items-start gap-1.5">
-                            <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
+                        {/* Area Bawah: Alamat, Foto Rumah, & Tombol Chat (KLIK KE BAWAH = CHAT / AKSI) */}
+                        <div onClick={() => handleOpenChat(task)} className="cursor-pointer">
+                          {/* Alamat & Jarak dari Klinik */}
+                          <div className="text-xs text-[#54656f] mb-2 mt-2 bg-[#f0f2f5] p-2.5 rounded-xl border border-[#e9edef] space-y-2">
+                            <div className="flex items-start gap-1.5">
+                              <MapPin size={13} className="text-[#008069] mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-[#111b21] leading-snug">{task.address.fullText}</p>
                               {task.address.distanceKm != null && (
                                 <p className="text-[10px] font-semibold text-[#008069] mt-0.5 flex items-center gap-1">
                                   <Compass size={10} />
@@ -1441,7 +1474,8 @@ export const StaffToday: React.FC = () => {
                           </button>
                         </div>
                       </div>
-                    );
+                    </div>
+                  );
                   })
                 )}
               </div>
@@ -1468,28 +1502,32 @@ export const StaffToday: React.FC = () => {
                         <ChevronLeft size={18} />
                       </button>
 
-                      {/* Customer Service Category Icon - Click for detail */}
-                      <button
-                        type="button"
+                      {/* Customer Info Header - Klik untuk melihat Detail Pasien */}
+                      <div
                         onClick={() => setDetailModalTask(selectedTask)}
-                        className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all active:scale-95 ${getCategoryIcon(selectedTask.treatmentCategory).bg}`}
-                        title="Lihat detail lengkap pasien"
+                        className="flex items-center space-x-2.5 min-w-0 p-1 -m-1 rounded-xl hover:bg-[#e9edef] transition cursor-pointer group"
+                        title="Klik untuk melihat detail lengkap pasien"
                       >
-                        {getCategoryIcon(selectedTask.treatmentCategory).icon}
-                      </button>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <h2 className="font-semibold text-[#111b21] text-sm truncate">
-                            {selectedTask.customerName || 'Customer'}
-                          </h2>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d9fdd3] text-[#008069] font-bold border border-[#00a884]/30 whitespace-nowrap">
-                            {formatTime(selectedTask.bookingDate)}
-                          </span>
+                        {/* Customer Service Category Icon */}
+                        <div
+                          className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${getCategoryIcon(selectedTask.treatmentCategory).bg}`}
+                        >
+                          {getCategoryIcon(selectedTask.treatmentCategory).icon}
                         </div>
-                        <p className="text-[11px] text-[#667781] truncate mt-0.5">
-                          {selectedTask.treatmentDetail || 'Treatment'} • {selectedTask.address.fullText}
-                        </p>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <h2 className="font-semibold text-[#111b21] text-sm truncate group-hover:text-[#008069] transition">
+                              {selectedTask.customerName || 'Customer'}
+                            </h2>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#d9fdd3] text-[#008069] font-bold border border-[#00a884]/30 whitespace-nowrap">
+                              {formatTime(selectedTask.bookingDate)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#667781] truncate mt-0.5">
+                            {selectedTask.treatmentDetail || 'Treatment'} • {selectedTask.address.fullText}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
@@ -1836,20 +1874,21 @@ export const StaffToday: React.FC = () => {
                           key={item.reservationId}
                           className={`bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs hover:border-[#008069]/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
                         >
-                          {/* Header: Name & Time */}
-                          <div className="flex items-start justify-between gap-2">
+                          {/* Header: Name & Time (KLIK BARIS INI = DETAIL PASIEN) */}
+                          <div
+                            onClick={() => setDetailModalTask(item)}
+                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] transition cursor-pointer group"
+                            title="Klik untuk melihat detail lengkap pasien"
+                          >
                             <div className="flex items-center space-x-2.5 min-w-0">
-                              {/* Service Category Icon - Click to view detail */}
-                              <button
-                                type="button"
-                                onClick={() => setDetailModalTask(item)}
-                                className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all active:scale-95 ${catInfo.bg}`}
-                                title="Lihat detail lengkap pasien"
+                              {/* Service Category Icon */}
+                              <div
+                                className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
                               >
                                 {catInfo.icon}
-                              </button>
+                              </div>
                               <div className="min-w-0">
-                                <h3 className="font-bold text-sm text-[#111b21] truncate">
+                                <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                   {item.customerName || 'Customer'}
                                 </h3>
                                 <p className="text-xs text-[#008069] font-medium truncate">
@@ -2090,20 +2129,21 @@ export const StaffToday: React.FC = () => {
                           key={item.reservationId}
                           className={`bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs hover:border-emerald-500/40 transition-all space-y-3 text-left ${catInfo.borderAccent} border-l-4`}
                         >
-                          {/* Header: Name & Completed Badge */}
-                          <div className="flex items-start justify-between gap-2">
+                          {/* Header: Name & Completed Badge (KLIK BARIS INI = DETAIL PASIEN) */}
+                          <div
+                            onClick={() => setDetailModalTask(item)}
+                            className="flex items-start justify-between gap-2 p-1 -m-1 rounded-xl hover:bg-[#f0f2f5] transition cursor-pointer group"
+                            title="Klik untuk melihat detail lengkap pasien"
+                          >
                             <div className="flex items-center space-x-2.5 min-w-0">
-                              {/* Service Category Icon - Click to view detail */}
-                              <button
-                                type="button"
-                                onClick={() => setDetailModalTask(item)}
-                                className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all active:scale-95 ${catInfo.bg}`}
-                                title="Lihat detail lengkap pasien"
+                              {/* Service Category Icon */}
+                              <div
+                                className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
                               >
                                 {catInfo.icon}
-                              </button>
+                              </div>
                               <div className="min-w-0">
-                                <h3 className="font-bold text-sm text-[#111b21] truncate">
+                                <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                   {item.customerName || 'Customer'}
                                 </h3>
                                 <p className="text-xs text-[#008069] font-medium truncate">
@@ -2900,7 +2940,7 @@ export const StaffToday: React.FC = () => {
                 {locGettingGps ? (
                   <>
                     <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>Mendeteksi Satelit GPS...</span>
+                    <span>{gpsAttemptInfo || 'Mendeteksi Satelit GPS (Target ≤ 10m)...'}</span>
                   </>
                 ) : (
                   <>
