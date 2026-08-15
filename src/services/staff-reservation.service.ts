@@ -166,7 +166,7 @@ export class StaffReservationService {
         const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
         const navigationUrl =
           lat && lng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=bicycling`
+            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
             : null;
         const addressText = buildAddressText(cust || {});
 
@@ -349,7 +349,7 @@ export class StaffReservationService {
         const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
         const navigationUrl =
           lat && lng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=bicycling`
+            ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=two-wheeler`
             : null;
         const addressText = buildAddressText(cust || {});
 
@@ -534,7 +534,7 @@ export class StaffReservationService {
             : null;
         const navigationUrl =
           cust?.lat != null && cust?.lng != null
-            ? `https://www.google.com/maps/dir/?api=1&destination=${cust.lat},${cust.lng}`
+            ? `https://www.google.com/maps/dir/?api=1&destination=${cust.lat},${cust.lng}&travelmode=two-wheeler`
             : null;
 
         const distanceKm = cust?.distance_km ?? null;
