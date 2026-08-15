@@ -22,6 +22,7 @@ import {
   ListFilter,
   Columns,
   Filter,
+  Receipt,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { CalendarSidebar } from '../../components/calendar/CalendarSidebar';
@@ -35,12 +36,11 @@ export const Reservations: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
+  const [proofModal, setProofModal] = useState<Reservation | null>(null);
 
   // Calendar View State
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [viewMode, setViewMode] = useState<CalendarViewMode>(() =>
-    typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week'
-  );
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('table');
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [filterState, setFilterState] = useState<CalendarFilterState>({
     searchQuery: '',
@@ -305,6 +305,13 @@ export const Reservations: React.FC = () => {
     }
   };
 
+  const getPaymentMethodLabel = (m?: string | null) => {
+    if (m === 'CASH') return 'Tunai';
+    if (m === 'TRANSFER') return 'Transfer';
+    if (m === 'QRIS') return 'QRIS';
+    return '-';
+  };
+
   // Header month/year display
   const headerDateTitle = selectedDate.toLocaleDateString('id-ID', {
     month: 'long',
@@ -553,7 +560,16 @@ export const Reservations: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="pt-2 flex justify-end">
+                      <div className="pt-2 flex justify-end space-x-2">
+                        {res.status === 'completed' && res.proof_url && (
+                          <button
+                            onClick={() => setProofModal(res)}
+                            className="px-3 py-1.5 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all font-semibold text-xs flex items-center space-x-1"
+                          >
+                            <Receipt size={12} />
+                            <span>Cek Bukti Bayar</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => setSelectedRes(res)}
                           className="px-3 py-1.5 bg-[#f0f2f5] hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl transition-all font-semibold text-xs"
@@ -578,13 +594,14 @@ export const Reservations: React.FC = () => {
                         <th className="py-3.5 px-5">Jadwal Kunjungan</th>
                         <th className="py-3.5 px-5">Terapis</th>
                         <th className="py-3.5 px-5">Status</th>
+                        <th className="py-3.5 px-5">Bukti Bayar</th>
                         <th className="py-3.5 px-5">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e9edef] text-xs text-[#111b21]">
                       {filteredReservations.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="py-8 text-center text-[#667781] text-xs">
+                          <td colSpan={8} className="py-8 text-center text-[#667781] text-xs">
                             Tidak ada data reservasi yang sesuai.
                           </td>
                         </tr>
@@ -625,6 +642,24 @@ export const Reservations: React.FC = () => {
                               )}
                             </td>
                             <td className="py-3.5 px-5">{getStatusBadge(res.status)}</td>
+                            <td className="py-3.5 px-5 whitespace-nowrap">
+                              {res.status === 'completed' && res.proof_url ? (
+                                <button
+                                  onClick={() => setProofModal(res)}
+                                  className="px-2.5 py-1.5 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl text-xs font-semibold transition-all flex items-center space-x-1"
+                                  title={`Metode: ${getPaymentMethodLabel(res.payment_method)}`}
+                                >
+                                  <Receipt size={12} />
+                                  <span>Cek Bukti Bayar</span>
+                                </button>
+                              ) : res.payment_method ? (
+                                <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
+                                  {getPaymentMethodLabel(res.payment_method)}
+                                </span>
+                              ) : (
+                                <span className="text-[#8696a0] text-xs">-</span>
+                              )}
+                            </td>
                             <td className="py-3.5 px-5">
                               <button
                                 onClick={() => setSelectedRes(res)}
@@ -862,6 +897,72 @@ export const Reservations: React.FC = () => {
                   </button>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Proof Viewer Modal */}
+      {proofModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-[60] flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setProofModal(null)}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                <Receipt size={16} className="text-[#008069] flex-shrink-0" />
+                <span>Bukti Pembayaran</span>
+              </h3>
+              <button
+                onClick={() => setProofModal(null)}
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-xl p-3.5">
+              <div className="flex justify-between">
+                <span className="text-[#667781]">Pasien</span>
+                <span className="font-bold text-[#111b21]">
+                  {proofModal.customer?.name || 'Bunda'} ({proofModal.customer?.phone})
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#667781]">Metode</span>
+                <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(proofModal.payment_method)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#667781]">Nilai</span>
+                <span className="font-bold text-[#111b21]">
+                  {proofModal.purchase_value ? `Rp ${proofModal.purchase_value.toLocaleString('id-ID')}` : '-'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[#667781]">Status</span>
+                {getStatusBadge(proofModal.status)}
+              </div>
+            </div>
+
+            <img
+              src={proofModal.proof_url!}
+              alt="Bukti pembayaran"
+              className="w-full rounded-xl border border-[#e9edef] bg-[#f8fafc]"
+            />
+
+            <div className="flex justify-center">
+              <a
+                href={proofModal.proof_url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition shadow-xs"
+              >
+                Buka Gambar Penuh
+              </a>
             </div>
           </div>
         </div>

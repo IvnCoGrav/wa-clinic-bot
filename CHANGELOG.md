@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Tab Reservasi: Tombol "Cek Bukti Bayar" (TF/QRIS) + Default Tampilan Daftar (Tabel)
+
+- **Backend**: kolom baru `payment_method` & `proof_url` pada tabel `reservations` (migration `20260833000000_add_payment_proof`); `recordPayment` (`staff-reservation.service.ts`) kini menyimpan metode bayar & URL media bukti ke record reservasi — sebelumnya hanya tersimpan di audit log (`STAFF_RECORD_PAYMENT`).
+- **Frontend Reservations** (`Reservations.tsx`):
+  - **Default tampilan = Tabel (daftar)**, bukan kalender — berlaku juga di mobile (sebelumnya default responsif `day`/`week`). Ini sekaligus mengatasi tampilan kalender yang berantakan/error di HP.
+  - **Kolom "Bukti Bayar"** baru di tabel desktop & **tombol "Cek Bukti Bayar"** di kartu mobile — tampil untuk reservasi **selesai** (status `completed`) yang memiliki bukti → membuka **modal preview gambar** berisi metode bayar (Tunai/Transfer/QRIS), nilai, status, dan tombol "Buka Gambar Penuh".
+  - Reservasi lama (dicatat sebelum fitur ini) tidak memiliki `proof_url` — buktinya tetap tersedia di audit log `STAFF_RECORD_PAYMENT`.
+- Test: 151 files / 1381 tests pass; build dashboard & backend hijau.
+
 ### Changed — Portal Terapis: Gate OTW 2 Jam, Pemisah Visual Treatment, Header Chat Icon-Only, Tab Menu Dihilangkan
 
 - **Tombol "Infokan OTW" dikunci sampai H-2 jam sebelum jadwal treatment** (`StaffToday.tsx`): tombol di kartu tugas & di header chat kini `disabled` dengan visual redup + tooltip penjelas bila masih lebih dari 2 jam sebelum jam treatment. OTW hanya bisa dikirim pada rentang 2 jam sebelum hingga saat treatment.

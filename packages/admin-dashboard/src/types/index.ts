@@ -44,6 +44,9 @@ export interface Reservation {
   purchase_event_sent_at?: string | null;
   purchase_occurred_at?: string | null;
   purchase_review_status?: 'pending' | 'approved' | 'ignored_outlier' | string;
+  purchase_value?: number | null;
+  payment_method?: 'CASH' | 'TRANSFER' | 'QRIS' | string | null;
+  proof_url?: string | null;
   baby_details?: BabyDetail[];
   assigned_staff_id?: string | null;
   assigned_staff?: {
