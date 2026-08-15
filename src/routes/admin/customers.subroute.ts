@@ -361,4 +361,128 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * PUT /api/admin/customers/:id/location
+   * Admin memperbarui foto rumah, catatan patokan, dan/atau titik koordinat GPS customer.
+   */
+  fastify.put(
+    '/api/admin/customers/:id/location',
+    { bodyLimit: 12 * 1024 * 1024 },
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          housePhotoB64?: string | null;
+          landmark?: string | null;
+          lat?: number | null;
+          lng?: number | null;
+          removePhoto?: boolean;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { housePhotoB64, landmark, lat, lng, removePhoto } = request.body || {};
+
+      try {
+        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+
+        if (!customer) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        }
+
+        let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
+
+        if (removePhoto) {
+          housePhotoUrl = null;
+        } else if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
+          const { mediaService } = await import('../../services/media.service');
+          const rawB64 = housePhotoB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId: DEFAULT_TENANT_ID,
+            imageB64: resized.toString('base64'),
+            mimeType: 'image/jpeg',
+            fileName: `house-${customer.id}.jpg`,
+          });
+          housePhotoUrl = saved.hdUrl;
+        }
+
+        const currentPrefs = (customer.preferences as any) || {};
+        const updatedPrefs = {
+          ...currentPrefs,
+          house_photo_url: housePhotoUrl,
+          ...(landmark !== undefined ? { landmark: landmark?.trim() || null } : {}),
+          location_updated_at: new Date().toISOString(),
+          location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
+        };
+
+        let distanceKm = customer.distance_km;
+        const targetLat = lat ?? customer.lat;
+        const targetLng = lng ?? customer.lng;
+
+        if (targetLat != null && targetLng != null) {
+          const { clinicConfig } = await import('../../config/clinic');
+          const { calculateHaversineDistance } = await import('../../utils/haversine');
+          const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
+          distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
+        }
+
+        let updatedCustomer: any = null;
+        try {
+          updatedCustomer = await prisma.customer.update({
+            where: { id: customer.id },
+            data: {
+              ...(lat !== undefined ? { lat } : {}),
+              ...(lng !== undefined ? { lng } : {}),
+              ...(distanceKm !== undefined ? { distance_km: distanceKm } : {}),
+              preferences: updatedPrefs,
+            },
+          });
+        } catch (dbErr: any) {
+          // In-memory fallback
+          customer.lat = lat !== undefined ? lat : customer.lat;
+          customer.lng = lng !== undefined ? lng : customer.lng;
+          customer.distance_km = distanceKm;
+          customer.preferences = updatedPrefs;
+          customer.updated_at = new Date();
+          const mem = customerService.getMemoryCustomers();
+          mem.set(customer.phone, customer);
+          updatedCustomer = customer;
+        }
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'ADMIN_UPDATE_CUSTOMER_LOCATION',
+          targetId: id,
+          payload: {
+            lat: updatedCustomer.lat,
+            lng: updatedCustomer.lng,
+            distanceKm: updatedCustomer.distance_km,
+            housePhotoUrl,
+            landmark,
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          data: {
+            id: updatedCustomer.id,
+            lat: updatedCustomer.lat,
+            lng: updatedCustomer.lng,
+            distance_km: updatedCustomer.distance_km,
+            house_photo_url: housePhotoUrl,
+            landmark: updatedPrefs.landmark || null,
+            preferences: updatedPrefs,
+          },
+        });
+      } catch (err: any) {
+        console.error('[ADMIN CUSTOMER] Error updating location:', err.message);
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
 }

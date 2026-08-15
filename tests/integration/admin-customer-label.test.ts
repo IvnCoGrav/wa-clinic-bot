@@ -192,5 +192,24 @@ describe('Admin Customer Label (DB-column) API', () => {
     const refreshed = await customerService.getCustomerById(customerId, DEFAULT_TENANT_ID);
     expect(refreshed.is_hold_labeled).toBe(true);
   });
+
+  it('PUT /api/admin/customers/:id/location → Admin dapat mengupdate patokan dan koordinat customer', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/customers/${customerId}/location`,
+      headers: ADMIN_HEADERS,
+      payload: {
+        landmark: 'Pagar abu-abu, seberang minimarket',
+        lat: -7.3488,
+        lng: 112.7516,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.landmark).toBe('Pagar abu-abu, seberang minimarket');
+    expect(body.data.lat).toBe(-7.3488);
+    expect(body.data.lng).toBe(112.7516);
+  });
 });
 

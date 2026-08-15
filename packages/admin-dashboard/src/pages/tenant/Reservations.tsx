@@ -29,6 +29,7 @@ import {
   Navigation,
   Compass,
   Camera,
+  PenLine,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
@@ -45,6 +46,16 @@ export const Reservations: React.FC = () => {
   const [proofUploading, setProofUploading] = useState(false);
   const [housePhotoModal, setHousePhotoModal] = useState<string | null>(null);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit Location & House Photo Modal (Admin CS)
+  const [editLocationModal, setEditLocationModal] = useState<Reservation | null>(null);
+  const [editHousePhotoB64, setEditHousePhotoB64] = useState<string | null>(null);
+  const [editLandmark, setEditLandmark] = useState<string>('');
+  const [editLat, setEditLat] = useState<string>('');
+  const [editLng, setEditLng] = useState<string>('');
+  const [editRemovePhoto, setEditRemovePhoto] = useState(false);
+  const [submittingLocation, setSubmittingLocation] = useState(false);
+  const adminHouseFileInputRef = useRef<HTMLInputElement>(null);
 
   // Calendar View State
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -395,6 +406,102 @@ export const Reservations: React.FC = () => {
       toast(`Gagal menghapus bukti bayar: ${err.message}`, 'error');
     } finally {
       setProofUploading(false);
+    }
+  };
+
+  const handleOpenEditLocation = (res: Reservation) => {
+    setEditLocationModal(res);
+    const prefs = res.customer?.preferences as any;
+    setEditHousePhotoB64(prefs?.house_photo_url || null);
+    setEditLandmark(prefs?.landmark || '');
+    setEditLat(res.customer?.lat != null ? String(res.customer.lat) : '');
+    setEditLng(res.customer?.lng != null ? String(res.customer.lng) : '');
+    setEditRemovePhoto(false);
+  };
+
+  const handlePickAdminHousePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 12 * 1024 * 1024) {
+      toast('Ukuran file maksimal 12 MB', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEditHousePhotoB64(reader.result as string);
+      setEditRemovePhoto(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveEditLocation = async () => {
+    if (!editLocationModal || !editLocationModal.customer_id) {
+      toast('Data customer tidak ditemukan', 'error');
+      return;
+    }
+
+    setSubmittingLocation(true);
+    try {
+      const parsedLat = editLat.trim() ? parseFloat(editLat) : null;
+      const parsedLng = editLng.trim() ? parseFloat(editLng) : null;
+
+      const res = await apiRequest(`/api/admin/customers/${editLocationModal.customer_id}/location`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          housePhotoB64: editHousePhotoB64 && editHousePhotoB64.startsWith('data:image/') ? editHousePhotoB64 : undefined,
+          landmark: editLandmark,
+          lat: parsedLat,
+          lng: parsedLng,
+          removePhoto: editRemovePhoto,
+        }),
+      });
+
+      if (res && res.success && res.data) {
+        toast('✅ Panduan lokasi & foto rumah berhasil disimpan!', 'success');
+        const updatedCust = res.data;
+
+        // Update selectedRes if active
+        setSelectedRes((prev) => {
+          if (!prev || prev.customer_id !== editLocationModal.customer_id) return prev;
+          return {
+            ...prev,
+            customer: {
+              ...(prev.customer as any),
+              lat: updatedCust.lat,
+              lng: updatedCust.lng,
+              distance_km: updatedCust.distance_km,
+              preferences: updatedCust.preferences,
+            },
+          };
+        });
+
+        // Update list
+        setReservations((prev) =>
+          prev.map((r) => {
+            if (r.customer_id !== editLocationModal.customer_id) return r;
+            return {
+              ...r,
+              customer: {
+                ...(r.customer as any),
+                lat: updatedCust.lat,
+                lng: updatedCust.lng,
+                distance_km: updatedCust.distance_km,
+                preferences: updatedCust.preferences,
+              },
+            };
+          })
+        );
+
+        setEditLocationModal(null);
+      } else {
+        toast(`Gagal: ${res?.error || 'Terjadi kesalahan saat menyimpan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal: ${err.message || 'Terjadi kesalahan jaringan'}`, 'error');
+    } finally {
+      setSubmittingLocation(false);
     }
   };
 
@@ -862,7 +969,20 @@ export const Reservations: React.FC = () => {
                     const lng = selectedRes.customer?.lng;
                     const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
 
-                    if (!housePhoto && !landmark && !mapsUrl) return null;
+                    if (!housePhoto && !landmark && !mapsUrl) {
+                      return (
+                        <div className="mt-2 pt-2 border-t border-[#e9edef]">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditLocation(selectedRes)}
+                            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white hover:bg-[#e8f5f2] text-[#008069] text-xs font-semibold border border-dashed border-[#00a884]/40 transition shadow-xs"
+                          >
+                            <Camera size={13} />
+                            <span>+ Tambah Foto Rumah & Patokan</span>
+                          </button>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div className="mt-2 pt-2 border-t border-[#e9edef] space-y-2">
@@ -870,17 +990,28 @@ export const Reservations: React.FC = () => {
                           <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
                             Panduan Lokasi & Foto Rumah
                           </span>
-                          {mapsUrl && (
-                            <a
-                              href={mapsUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                          <div className="flex items-center space-x-2">
+                            {mapsUrl && (
+                              <a
+                                href={mapsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
+                              >
+                                <Navigation size={11} />
+                                <span>Maps</span>
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditLocation(selectedRes)}
                               className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
+                              title="Edit foto rumah / patokan / titik koordinat"
                             >
-                              <Navigation size={11} />
-                              <span>Buka Maps</span>
-                            </a>
-                          )}
+                              <PenLine size={11} />
+                              <span>Edit</span>
+                            </button>
+                          </div>
                         </div>
 
                         {housePhoto && (
@@ -1199,6 +1330,175 @@ export const Reservations: React.FC = () => {
               >
                 Buka Gambar Asli HD
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Edit Panduan Lokasi & Foto Rumah Modal */}
+      {editLocationModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setEditLocationModal(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl border border-[#e9edef] relative max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#111b21]">Edit Panduan Lokasi & Foto Rumah</h3>
+                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                    {editLocationModal.customer?.name || 'Bunda'} ({editLocationModal.customer?.phone})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditLocationModal(null)}
+                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Info Alamat Pasien */}
+            <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
+              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                Alamat Pasien:
+              </span>
+              <p className="text-xs text-[#111b21] font-medium leading-snug">
+                {editLocationModal.customer?.kelurahan
+                  ? `${editLocationModal.customer.kelurahan}, ${editLocationModal.customer.kecamatan}, ${editLocationModal.customer.kota}`
+                  : 'Alamat belum tercatat lengkap'}
+              </p>
+            </div>
+
+            {/* Bagian 1: Foto Depan Rumah */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#111b21]">
+                1. Foto Tampak Depan Rumah:
+              </label>
+
+              <input
+                type="file"
+                ref={adminHouseFileInputRef}
+                accept="image/*"
+                onChange={handlePickAdminHousePhoto}
+                className="hidden"
+              />
+
+              {editHousePhotoB64 && !editRemovePhoto ? (
+                <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                  <img
+                    src={editHousePhotoB64}
+                    alt="Tampak Depan Rumah"
+                    className="object-contain max-h-48 w-auto rounded-xl"
+                  />
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => adminHouseFileInputRef.current?.click()}
+                      className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition shadow-xs"
+                      title="Ganti foto"
+                    >
+                      <Camera size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditRemovePhoto(true);
+                        setEditHousePhotoB64(null);
+                      }}
+                      className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-xs"
+                      title="Hapus foto"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => adminHouseFileInputRef.current?.click()}
+                  className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc]"
+                >
+                  <Upload size={20} className="mb-1 text-[#008069]" />
+                  <span className="font-semibold text-[#111b21]">Unggah Foto Depan Rumah</span>
+                  <span className="text-[10px] text-[#8696a0]">Pilih gambar dari komputer / galeri (maks 12 MB)</span>
+                </button>
+              )}
+            </div>
+
+            {/* Bagian 2: Catatan Patokan */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[#111b21]">
+                2. Catatan Patokan / Ancer-ancer Rumah:
+              </label>
+              <textarea
+                rows={2}
+                value={editLandmark}
+                onChange={(e) => setEditLandmark(e.target.value)}
+                placeholder="Contoh: Pagar hitam gerbang kayu, seberang masjid, samping toko berkah"
+                className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs resize-none"
+              />
+            </div>
+
+            {/* Bagian 3: Koordinat GPS (Opsional) */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[#111b21]">
+                3. Koordinat GPS (Latitude, Longitude - Opsional):
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={editLat}
+                  onChange={(e) => setEditLat(e.target.value)}
+                  placeholder="Latitude (misal: -7.3488)"
+                  className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                />
+                <input
+                  type="text"
+                  value={editLng}
+                  onChange={(e) => setEditLng(e.target.value)}
+                  placeholder="Longitude (misal: 112.7516)"
+                  className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                />
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+              <button
+                type="button"
+                onClick={() => setEditLocationModal(null)}
+                disabled={submittingLocation}
+                className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditLocation}
+                disabled={submittingLocation}
+                className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+              >
+                {submittingLocation ? (
+                  <>
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    <span>Simpan Panduan Rumah</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
