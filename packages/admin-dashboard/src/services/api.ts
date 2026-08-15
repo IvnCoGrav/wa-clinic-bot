@@ -90,7 +90,9 @@ export async function apiRequest<T = any>(
         const errorData = await response.json();
         errorMsg = errorData.message || errorData.error || errorMsg;
       } catch (_) {}
-      throw new Error(errorMsg);
+      const error = new Error(errorMsg) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
 
     return response.json();

@@ -24,9 +24,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check auth session on mount
   useEffect(() => {
+    let cancelled = false;
+    let retryTimer: any = null;
+
     async function checkAuth() {
       try {
         const data = await apiRequest('/api/admin/auth/me');
+        if (cancelled) return;
         if (data.authenticated && data.user) {
           setUser({
             id: data.user.id,
@@ -36,14 +40,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role: data.user.role || 'super_admin',
             tenantId: data.user.tenantId || 'default-tenant',
           });
+        } else {
+          setUser(null);
         }
-      } catch (err) {
-        console.warn('Session check failed or unauthenticated:', err);
-      } finally {
         setLoading(false);
+      } catch (err: any) {
+        if (cancelled) return;
+        const status = (err as any)?.status;
+        if (status === 401 || status === 403) {
+          // Sesi benar-benar tidak valid/kadaluarsa — arahkan ke login
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        // Error jaringan/timeout/server: jangan kick user (app mungkin sedang restart/deploy).
+        retryTimer = setTimeout(checkAuth, 5000);
       }
     }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') checkAuth();
+    };
+    window.addEventListener('visibilitychange', onVisibility);
+
     checkAuth();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const login = async (identifier: string, password: string): Promise<LoginResult> => {
