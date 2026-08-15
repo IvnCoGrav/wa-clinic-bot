@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Changed — Pricelist HD Dikirim Asli; Dashboard Tanpa Preview (Hanya Tombol Lihat); Mode Upload Saja
+
+- **Pricelist dikirim ke customer dalam ukuran asli (HD, tanpa kompresi)** (`pricelist-config.service.ts`, `machine.ts`): fungsi `resolvePricelistSendTarget` (yang me-resize 1/3 & membuat file duplikat tiap kirim) **dihapus**; `machine.ts` kembali memakai `resolvePricelistImageTarget` — sumber `/media/outbound/...` dikirim langsung (WAHA: path file lokal; WABA: URL publik), sumber URL eksternal dikirim langsung. Bonus: tidak ada lagi file duplikat per kiriman → hemat storage & kuota MQL.
+- **Dashboard tidak lagi menampilkan pratinjau gambar** (`PricelistImagePanel.tsx`): blok preview dihapus — diganti **tombol "Lihat Gambar Pricelist"** (ikon mata) yang membuka modal lihat gambar HD asli (klik luar = tutup).
+- **Mode "Pakai URL" dihapus** (`PricelistImagePanel.tsx`): hanya mode **upload gambar**; tombol "Reset ke Default" tetap (satu-satunya cara hapus gambar custom). Response `pricelistThumbUrl` di `GET/PUT /api/admin/settings/pricelist-image` dihapus (tidak terpakai lagi) beserta import `fs`.
+- **Sumber pricelist HD asli tetap inline MQL & retensi media** (via `saveOutboundMedia`) — tidak berubah dari versi sebelumnya.
+- Test: 151 files / 1381 tests pass; build dashboard & backend hijau.
+
 ### Changed — Card Pricelist Inline dengan MQL & Retensi; Sumber HD Tersimpan, Dashboard Pakai Thumb
 
 - **Upload pricelist kembali disimpan HD asli** (`settings.subroute.ts`): kompresi 1/3 saat upload **dibatalkan** — file sumber berkualitas penuh tersimpan via `saveOutboundMedia` (tetap **inline MQL & retensi media**). Kompresi hanya terjadi saat **kirim ke WhatsApp** (`resolvePricelistSendTarget`, 1/3 dimensi).
