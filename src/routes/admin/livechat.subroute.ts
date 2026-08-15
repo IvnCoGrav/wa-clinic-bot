@@ -189,6 +189,47 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/gateway-capability
+   * Mengambil informasi provider gateway WhatsApp aktif dan kapabilitasnya (seperti kemampuan revoke/hapus pesan).
+   */
+  fastify.get('/api/admin/gateway-capability', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const capability = await liveChatService.getGatewayCapability(tenantId);
+    return reply.status(200).send({ success: true, data: capability });
+  });
+
+  /**
+   * DELETE /api/admin/conversations/:id/messages/:messageId
+   * Menarik / menghapus pesan WhatsApp untuk semua orang (Delete for Everyone / Revoke).
+   */
+  fastify.delete(
+    '/api/admin/conversations/:id/messages/:messageId',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string; messageId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id, messageId } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const adminName = (request as any).adminIdentity || 'Admin';
+
+      const result = await liveChatService.revokeMessage({
+        conversationId: id,
+        messageId,
+        tenantId,
+        adminName,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({ success: true, message: 'Pesan berhasil ditarik dari WhatsApp.' });
+    }
+  );
+
+  /**
    * GET /api/admin/live-chat/events
    * Server-Sent Events: stream real-time Live Chat (message.created & conversation.updated).
    */

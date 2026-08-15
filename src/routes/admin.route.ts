@@ -26,6 +26,7 @@ import { migrationAdminRoutes } from './admin/migration.subroute';
 import { evaluationsAdminRoutes } from './admin/evaluations.subroute';
 import { metaAttributionAdminRoutes } from './admin/meta-attribution.subroute';
 import { exportAdminRoutes } from './admin/export.subroute';
+import { staffManagementAdminRoutes } from './admin/staff-management.subroute';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
@@ -47,8 +48,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'Not Found' });
     }
 
-    // 2. Allow unauthenticated access to /api/admin/auth/login and static HTML pages
-    if (request.url.startsWith('/admin/') || (request.url === '/api/admin/auth/login' && request.method === 'POST')) {
+    // 2. Allow unauthenticated access to auth endpoints and static HTML pages
+    if (
+      request.url.startsWith('/admin/') ||
+      request.url === '/api/admin/auth/login' ||
+      request.url === '/api/admin/auth/logout' ||
+      request.url === '/api/admin/auth/me'
+    ) {
       return;
     }
 
@@ -57,10 +63,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(401).send({ error: 'Unauthorized: Admin API Key is not configured on the server.' });
     }
 
-    // 3. Dual Auth Verification: Check X-API-KEY header OR admin_session cookie
+    // 3. Multi-Auth Verification: Check X-API-KEY header, admin_session cookie, or staff_session cookie
     const clientKey = request.headers['x-api-key'] as string;
     const cookieHeader = request.headers['cookie'] || '';
     const sessionCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
+    const staffCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
 
     let isAuthenticated = false;
     let identity = 'Admin User';
@@ -74,12 +81,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
         isAuthenticated = true;
         identity = validSession.adminIdentity;
       }
+    } else if (staffCookie) {
+      const { StaffAuthService } = await import('../services/staff-auth.service');
+      const staffSession = await StaffAuthService.validateSession(staffCookie);
+      if (staffSession && (staffSession.staff.role === 'ADMIN_CS' || staffSession.staff.role === 'ADVERTISER')) {
+        isAuthenticated = true;
+        identity = staffSession.staff.name;
+        (request as any).staffRole = staffSession.staff.role;
+        (request as any).staffId = staffSession.staff.id;
+      }
     }
 
     if (!isAuthenticated) {
       return reply
         .status(401)
-        .send({ error: 'Unauthorized: Invalid or missing authentication credentials (X-API-KEY or admin_session cookie).' });
+        .send({ error: 'Unauthorized: Invalid or missing authentication credentials (X-API-KEY, admin_session, or staff_session cookie).' });
     }
 
     (request as any).adminKeyUsed = clientKey || 'COOKIE_SESSION';
@@ -99,6 +115,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(evaluationsAdminRoutes);
   fastify.register(metaAttributionAdminRoutes);
   fastify.register(exportAdminRoutes);
+  fastify.register(staffManagementAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');

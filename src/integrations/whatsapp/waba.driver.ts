@@ -18,6 +18,7 @@ export interface WabaGatewayDriverConfig {
 
 export class WabaGatewayDriver implements WhatsAppGateway {
   readonly providerType = 'WABA' as const;
+  readonly supportsRevoke = false;
   private phoneNumberId: string;
   private accessToken: string;
   private baseUrl: string;
@@ -27,6 +28,13 @@ export class WabaGatewayDriver implements WhatsAppGateway {
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
     this.baseUrl = config.baseUrl || GRAPH_API_BASE_URL;
+  }
+
+  async deleteMessage(): Promise<{ success: boolean; error?: string }> {
+    return {
+      success: false,
+      error: 'Meta Cloud API (WABA) tidak mendukung penghapusan pesan yang sudah terkirim (Revoke/Delete for Everyone).',
+    };
   }
 
   private get messagesUrl(): string {

@@ -25,6 +25,7 @@ import {
   ShoppingBag,
   FlaskConical,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 
@@ -85,6 +86,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
+  const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean } | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -101,6 +104,15 @@ export const LiveChatMonitor: React.FC = () => {
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  // Load gateway capability on mount
+  useEffect(() => {
+    apiRequest('/api/admin/gateway-capability')
+      .then((res) => {
+        if (res?.success && res.data) setGatewayCapability(res.data);
+      })
+      .catch(() => {});
+  }, []);
 
   // Ganti filter label → reset daftar ke halaman pertama.
   useEffect(() => {
@@ -271,6 +283,15 @@ export const LiveChatMonitor: React.FC = () => {
           );
           setChats(updated);
           chatsRef.current = updated;
+        } else if (type === 'message.updated' && payload?.messageId) {
+          const { messageId, content, isRevoked } = payload;
+          if (selectedIdRef.current === payload.conversationId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
+              )
+            );
+          }
         }
       },
     });
@@ -278,6 +299,43 @@ export const LiveChatMonitor: React.FC = () => {
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleRevokeMessage = async (msg: ChatMessage) => {
+    if (!selectedChat?.conversationId || revokingId) return;
+
+    const confirmed = await confirm({
+      title: 'Tarik Pesan WhatsApp',
+      message: `Tarik / Hapus pesan ini untuk semua orang di WhatsApp?\n\n"${msg.content}"`,
+      confirmText: 'Tarik Pesan',
+      cancelText: 'Batal',
+      danger: true,
+    });
+
+    if (!confirmed) return;
+
+    setRevokingId(msg.id);
+    try {
+      const res = await apiRequest(
+        `/api/admin/conversations/${selectedChat.conversationId}/messages/${msg.id}`,
+        { method: 'DELETE' }
+      );
+
+      if (res?.success) {
+        toast('Pesan berhasil ditarik dari WhatsApp!', 'success');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msg.id ? { ...m, content: '🚫 Pesan ini telah ditarik', is_revoked: true } : m
+          )
+        );
+      } else {
+        toast(`Gagal menarik pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal menarik pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   const handleRelease = async (chat: LiveChatItem) => {
     const isMedical = chat.escalationReason === 'medical_concern';
@@ -439,82 +497,78 @@ export const LiveChatMonitor: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center space-x-2">
-            <MessageSquare className="text-pink-500" />
+          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+            <MessageSquare className="text-[#008069]" size={22} />
             <span>Live Chat Monitor</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-[#667781] mt-0.5">
             Pantau percakapan dan balas langsung dari dashboard secara real-time.
           </p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2.5">
           <button
             onClick={() => handleSyncHistory(syncNextOffset ?? 0)}
             disabled={syncingHistory}
-            className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
-              syncNextOffset !== null
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
-                : 'bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30'
-            }`}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] shadow-xs transition flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             title={syncNextOffset !== null ? 'Lanjutkan sinkronisasi batch berikutnya' : 'Backfill history chat dari WAHA ke Live Chat (batch 50)'}
           >
-            {syncingHistory ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            {syncingHistory ? <Loader size={12} className="animate-spin text-[#008069]" /> : <RefreshCw size={12} />}
             <span>{syncingHistory ? 'Menyinkronkan...' : syncNextOffset !== null ? `Load More Sync (${syncNextOffset})` : 'Sync WAHA History'}</span>
           </button>
-          <div className="flex items-center space-x-2">
-          {sseConnected ? (
-            <>
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center space-x-1">
-                <Wifi size={12} />
-                <span>SSE Real-time</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center space-x-1">
-                <WifiOff size={12} />
-                <span>Menyambung ulang...</span>
-              </span>
-            </>
-          )}
-        </div>
+          <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-white border border-[#e9edef] rounded-xl shadow-xs">
+            {sseConnected ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-[11px] text-emerald-700 font-semibold flex items-center space-x-1">
+                  <Wifi size={11} />
+                  <span>Real-time</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span className="text-[11px] text-amber-700 font-semibold flex items-center space-x-1">
+                  <WifiOff size={11} />
+                  <span>Menyambung...</span>
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {syncProgress && (
-        <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25 text-sky-300 text-xs font-medium flex items-center space-x-2">
-          <RefreshCw size={14} />
+        <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium flex items-center space-x-2">
+          <RefreshCw size={14} className="text-sky-600" />
           <span>{syncProgress}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-rose-400 text-xs font-medium flex items-center space-x-2">
-          <AlertTriangle size={16} />
+        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center space-x-2">
+          <AlertTriangle size={15} className="text-rose-600" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center items-center py-20">
-          <Loader className="animate-spin text-pink-500" size={36} />
+          <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Conversations List */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className="lg:col-span-5 space-y-3">
             <div className="flex justify-between items-center">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+              <h3 className="text-xs font-bold text-[#667781] uppercase tracking-wider block">
                 Daftar Percakapan
               </h3>
               <select
                 value={labelFilter}
                 onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
-                className="px-2.5 py-1.5 bg-slate-900 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 focus:outline-none focus:border-pink-500 cursor-pointer"
+                className="px-2.5 py-1 bg-white border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-xs"
               >
                 <option value="all">Semua (Normal + Label)</option>
                 <option value="human_request">Human Request</option>
@@ -524,7 +578,7 @@ export const LiveChatMonitor: React.FC = () => {
             </div>
 
             {/* Filter sumber percakapan: WhatsApp asli vs sandbox/test */}
-            <div className="flex items-center space-x-1 p-1 bg-slate-900/80 border border-white/10 rounded-xl w-fit">
+            <div className="flex items-center space-x-1 p-1 bg-white border border-[#e9edef] rounded-xl w-fit shadow-xs">
               {(
                 [
                   { value: 'all', label: 'Semua' },
@@ -535,37 +589,37 @@ export const LiveChatMonitor: React.FC = () => {
                 <button
                   key={opt.value}
                   onClick={() => setSourceFilter(opt.value)}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
                     sourceFilter === opt.value
                       ? opt.value === 'sandbox'
-                        ? 'bg-purple-500/30 text-purple-300 border border-purple-500/40'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-xs'
                         : opt.value === 'real'
-                          ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
-                          : 'bg-white/10 text-white border border-white/20'
-                      : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                          ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-xs'
+                          : 'bg-[#111b21] text-white shadow-xs'
+                      : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
                   }`}
                 >
-                  {opt.value === 'sandbox' && <FlaskConical size={10} />}
-                  {opt.value === 'real' && <CheckCircle size={10} />}
+                  {opt.value === 'sandbox' && <FlaskConical size={11} />}
+                  {opt.value === 'real' && <CheckCircle size={11} />}
                   <span>{opt.label}</span>
                 </button>
               ))}
             </div>
 
             {filteredChats.length === 0 ? (
-              <div className="glass-panel border border-white/5 rounded-2xl p-12 text-center text-slate-500 text-xs">
-                <CheckCircle className="mx-auto text-emerald-500/80 mb-3" size={36} />
-                <p className="font-bold text-slate-400">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-10 text-center text-[#667781] text-xs shadow-xs">
+                <CheckCircle className="mx-auto text-[#008069] mb-2" size={32} />
+                <p className="font-bold text-[#111b21]">
                   {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan sesuai filter'}
                 </p>
-                <p className="text-slate-600 mt-1">
+                <p className="text-[#667781] mt-1">
                   {chats.length === 0
                     ? 'Percakapan baru akan muncul di sini secara real-time.'
                     : 'Coba ganti filter label atau pilih "Semua Label".'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
                 {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
@@ -578,20 +632,20 @@ export const LiveChatMonitor: React.FC = () => {
                     <div
                       key={chat.conversationId}
                       onClick={() => handleSelect(chat.conversationId)}
-                      className={`glass-card rounded-2xl p-4 border transition cursor-pointer text-left flex flex-col justify-between space-y-3 ${
+                      className={`bg-white rounded-xl p-3.5 border transition cursor-pointer text-left flex flex-col justify-between space-y-2.5 shadow-xs ${
                         isSelected
-                          ? 'border-pink-500 bg-pink-500/10 ring-2 ring-pink-500/40 shadow-lg shadow-pink-500/10 hover:!border-pink-400 hover:bg-pink-500/20'
+                          ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
-                            ? 'border-rose-500/20 bg-rose-500/5 hover:!border-rose-500/50 hover:bg-rose-500/15'
-                            : 'border-white/5 hover:!border-white/25 hover:bg-slate-800/60 hover:!shadow-none'
+                            ? 'border-rose-300 bg-rose-50/40 hover:bg-rose-50/70'
+                            : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc]'
                       }`}
                     >
                       <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <h4 className="font-bold text-white text-xs flex items-center space-x-1.5">
-                            <User size={12} className="text-slate-400" />
+                        <div className="space-y-0.5">
+                          <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5">
+                            <User size={13} className="text-[#8696a0]" />
                             <span>{chatName}</span>
-                            <span className="text-[10px] text-slate-500 font-normal">({chat.customerPhone || 'Unknown'})</span>
+                            <span className="text-[11px] text-[#667781] font-normal">({chat.customerPhone || 'Unknown'})</span>
                           </h4>
                         </div>
                         {chat.isHumanHandling ? (
@@ -601,33 +655,33 @@ export const LiveChatMonitor: React.FC = () => {
                               handleRelease(chat);
                             }}
                             disabled={releasingId === chat.conversationId}
-                            className={`px-2 py-1 rounded-lg text-[9px] font-black transition flex items-center space-x-1 uppercase disabled:opacity-50 ${
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition flex items-center space-x-1 uppercase disabled:opacity-50 ${
                               isMedical
-                                ? 'bg-rose-500 hover:bg-rose-600 text-white'
-                                : 'bg-pink-500 hover:bg-pink-600 text-white'
+                                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                                : 'bg-[#008069] hover:bg-[#00a884] text-white'
                             }`}
                           >
-                            <Play size={10} fill="currentColor" />
+                            <Play size={9} fill="currentColor" />
                             <span>{releasingId === chat.conversationId ? 'Releasing...' : 'Release'}</span>
                           </button>
                         ) : (
                           <span
                             title="Ditangani bot"
-                            className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-white/5 text-slate-500 border border-white/10"
+                            className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#f0f2f5] text-[#667781] border border-[#e9edef]"
                           >
-                            <Bot size={13} />
+                            <Bot size={12} />
                           </span>
                         )}
                       </div>
 
-                      <p className="text-[11px] text-slate-400 line-clamp-1 italic font-sans leading-relaxed">
+                      <p className="text-xs text-[#54656f] line-clamp-1 italic leading-relaxed">
                         "{preview || 'Tidak ada pesan'}"
                       </p>
 
-                      <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-white/5">
+                      <div className="flex justify-between items-center text-[10px] text-[#667781] pt-1.5 border-t border-[#e9edef]">
                           <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                             <span className="flex items-center space-x-1" title={chat.isHumanHandling ? 'Ditangani admin' : 'Ditangani bot'}>
-                              <Clock size={10} />
+                              <Clock size={11} />
                               <span>
                                 {chat.isHumanHandling
                                   ? getElapsedTime(chat.humanHandlingSince) || 'Ditangani admin'
@@ -637,57 +691,45 @@ export const LiveChatMonitor: React.FC = () => {
                             {isMedical && (
                               <span
                                 title="Medical Emergency"
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-rose-500/25 text-rose-300 border border-rose-500/30"
+                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
                               >
-                                <AlertTriangle size={9} />
+                                <AlertTriangle size={9} className="mr-0.5" />
+                                Medis
                               </span>
                             )}
                             {!isMedical && chat.escalationReason === 'unresolved_faq' && (
                               <span
                                 title="Unresolved FAQ"
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25"
+                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200"
                               >
-                                <Info size={9} />
-                              </span>
-                            )}
-                            {!isMedical && chat.escalationReason !== 'unresolved_faq' && chat.isHumanHandling && (
-                              <span
-                                title="Human Request"
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-blue-500/15 text-blue-400 border border-blue-500/25"
-                              >
-                                <User size={9} />
+                                <Info size={9} className="mr-0.5" />
+                                FAQ
                               </span>
                             )}
                             {chat.isMql && (
                               <span
                                 title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
                               >
-                                <Zap size={9} />
+                                <Zap size={9} className="mr-0.5" />
+                                MQL
                               </span>
                             )}
                             {chat.trafficSource === 'meta' && (
                               <span
                                 title="Traffic Meta"
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30"
+                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200"
                               >
-                                <Facebook size={9} />
-                              </span>
-                            )}
-                            {chat.trafficSource === 'legacy' && (
-                              <span
-                                title="Traffic Legacy"
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-slate-500/20 text-slate-300 border border-slate-500/30"
-                              >
-                                <Layers size={9} />
+                                <Facebook size={9} className="mr-0.5" />
+                                Meta
                               </span>
                             )}
                             {chat.isSandboxTest && (
                               <span
-                                className="inline-flex items-center justify-center w-4 h-4 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                                title="Chat test/simulasi (bukan WhatsApp asli)"
+                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
+                                title="Chat test/simulasi"
                               >
-                                <CheckCircle size={9} />
+                                Sandbox
                               </span>
                             )}
                             {!!chat.purchaseCount && chat.purchaseCount > 0 && (
@@ -697,27 +739,24 @@ export const LiveChatMonitor: React.FC = () => {
                                     ? `Purchase 1x (LTV: ${formatRp(chat.ltv || 0)})`
                                     : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRp(chat.ltv || 0)})`
                                 }
-                                className={`inline-flex items-center space-x-0.5 px-1 py-0.5 rounded text-[8px] font-black border ${
+                                className={`inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border ${
                                   chat.purchaseCount === 1
-                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                    : 'bg-amber-100 text-amber-800 border-amber-200'
                                 }`}
                               >
-                                <ShoppingBag size={9} />
+                                <ShoppingBag size={9} className="mr-0.5" />
                                 <span>{chat.purchaseCount}x</span>
-                                {!!chat.ltv && chat.ltv > 0 && (
-                                  <span className="opacity-80 font-normal">({formatRpShort(chat.ltv)})</span>
-                                )}
                               </span>
                             )}
                           </span>
                           <span className="flex items-center space-x-2">
                             {chat.lastMessageAt && (
-                              <span className="text-slate-400 font-sans text-[10px]">
+                              <span className="text-[#667781] font-sans text-[10px]">
                                 {formatLastChat(chat.lastMessageAt)}
                               </span>
                             )}
-                            <span className="font-mono text-[9px] uppercase">{chat.currentState}</span>
+                            <span className="font-mono text-[9px] font-bold uppercase text-[#8696a0]">{chat.currentState}</span>
                           </span>
                         </div>
                     </div>
@@ -728,9 +767,9 @@ export const LiveChatMonitor: React.FC = () => {
                     <button
                       onClick={() => loadChats(false)}
                       disabled={loadingMore}
-                      className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 border border-white/10 rounded-lg text-[10px] font-bold text-slate-300 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
+                      className="px-3.5 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5"
                     >
-                      {loadingMore && <Loader size={11} className="animate-spin text-pink-500" />}
+                      {loadingMore && <Loader size={11} className="animate-spin text-[#008069]" />}
                       <span>{loadingMore ? 'Memuat...' : 'Muat lebih banyak'}</span>
                     </button>
                   </div>
@@ -742,30 +781,30 @@ export const LiveChatMonitor: React.FC = () => {
           {/* Right Panel - Chat Inspector */}
           <div className="lg:col-span-7">
             {selectedChat ? (
-              <div className="glass-panel border border-white/5 rounded-2xl p-6 h-[635px] flex flex-col justify-between">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-5 h-[650px] flex flex-col justify-between shadow-xs">
                 {/* Header Info */}
-                <div className="border-b border-white/5 pb-4 space-y-2">
+                <div className="border-b border-[#e9edef] pb-3 space-y-2">
                   {selectedChat.isSandboxTest && (
-                    <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold uppercase tracking-wider">
                       <FlaskConical size={12} />
-                      <span>QA TEST — chat simulasi, bukan WhatsApp asli (balasan diblokir)</span>
+                      <span>QA TEST — chat simulasi, bukan WhatsApp asli</span>
                     </div>
                   )}
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                        <MessageCircle className="text-pink-400" />
+                      <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                        <MessageCircle className="text-[#008069]" size={16} />
                         <span>{selectedChat.customerName || 'Customer'}</span>
                       </h3>
-                      <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                        {selectedChat.customerPhone || 'Unknown'}@c.us
+                      <p className="text-xs text-[#667781] font-mono mt-0.5">
+                        {selectedChat.customerPhone || 'Unknown'}
                       </p>
                       {!!selectedChat.purchaseCount && selectedChat.purchaseCount > 0 && (
-                        <p className="text-[10px] text-emerald-400 font-medium flex items-center space-x-1 mt-0.5">
+                        <p className="text-xs text-[#008069] font-medium flex items-center space-x-1 mt-0.5">
                           <ShoppingBag size={11} />
                           <span>{selectedChat.purchaseCount === 1 ? 'Purchase 1x' : `Repeat Order ${selectedChat.purchaseCount}x`}</span>
                           {!!selectedChat.ltv && selectedChat.ltv > 0 && (
-                            <span className="text-slate-400">· LTV: {formatRp(selectedChat.ltv)}</span>
+                            <span className="text-[#667781]">· LTV: {formatRp(selectedChat.ltv)}</span>
                           )}
                         </p>
                       )}
@@ -774,47 +813,57 @@ export const LiveChatMonitor: React.FC = () => {
                       <button
                         onClick={() => handleRelease(selectedChat)}
                         disabled={releasingId === selectedChat.conversationId}
-                        className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-lg shadow-pink-500/10 disabled:opacity-50"
+                        className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
                       >
-                        <Play size={12} fill="currentColor" />
+                        <Play size={11} fill="currentColor" />
                         <span>Kembalikan ke Bot</span>
                       </button>
                     ) : (
                       <span
                         title="Ditangani Bot"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-slate-500 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-wider"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] rounded-xl text-xs font-semibold uppercase tracking-wider"
                       >
-                        <Bot size={11} />
+                        <Bot size={12} />
                         <span>Bot</span>
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Chat Bubbles Container */}
-                <div ref={chatContainerRef} className="flex-1 overflow-y-auto py-4 space-y-3 my-4 pr-1">
+                {/* Chat Bubbles Container with WhatsApp Wallpaper */}
+                <div 
+                  ref={chatContainerRef} 
+                  className="flex-1 overflow-y-auto p-4 space-y-3 my-3 rounded-xl border border-[#e9edef] bg-[#efeae2]"
+                  style={{
+                    backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
+                    backgroundSize: '16px 16px',
+                  }}
+                >
                   {messages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-slate-600 text-xs">
-                      <MessageCircle size={32} className="mb-2 text-slate-700" />
+                    <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs">
+                      <MessageCircle size={32} className="mb-2 text-[#8696a0]" />
                       <p>Belum ada pesan di percakapan ini.</p>
                     </div>
                   ) : (
                     messages.map((msg) => {
                       const isCustomer = msg.direction === 'INBOUND';
                       const isAdmin = msg.direction === 'OUTBOUND' && msg.sender_type === 'ADMIN';
+                      const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || (msg as any).is_revoked || (msg as any).payload_raw?.is_revoked;
+                      const canRevoke = !isCustomer && !isRevoked && !!gatewayCapability?.supportsRevoke;
+
                       return (
                         <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
-                          <div className={`max-w-[80%] rounded-2xl p-3.5 text-xs leading-relaxed ${
+                          <div className={`max-w-[82%] sm:max-w-[70%] rounded-lg px-3 py-2 text-xs leading-relaxed shadow-xs ${
                             isCustomer
-                              ? 'bg-slate-800 text-slate-100 rounded-tl-none border border-white/5'
+                              ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
                               : isAdmin
-                                ? 'bg-emerald-600/80 text-white rounded-tr-none'
-                                : 'bg-pink-500 text-white rounded-tr-none'
+                                ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                                : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                           }`}>
-                            <span className={`block text-[8px] font-black uppercase tracking-wider mb-1 flex items-center space-x-1 ${
-                              isCustomer ? 'text-slate-400' : isAdmin ? 'text-emerald-100' : 'text-pink-100'
+                            <span className={`block text-[10px] font-bold mb-1 flex items-center space-x-1 ${
+                              isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
                             }`}>
-                              {!isCustomer && !isAdmin && <Bot size={9} />}
+                              {!isCustomer && !isAdmin && <Bot size={10} />}
                               <span>{senderLabel(msg)}</span>
                             </span>
                             {msg.media && (
@@ -828,11 +877,28 @@ export const LiveChatMonitor: React.FC = () => {
                               </div>
                             )}
                             {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && (
-                              <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
+                              <p className={`font-sans whitespace-pre-wrap ${isRevoked ? 'italic text-[#667781]' : ''}`}>{msg.content}</p>
                             )}
-                            <span className="block text-[8px] text-slate-400/80 mt-1.5 text-right font-mono">
-                              {msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : ''}
-                            </span>
+                            <div className="flex items-center justify-end space-x-1.5 mt-1 text-right select-none text-[10px] text-[#667781]">
+                              <span>
+                                {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.') : ''}
+                              </span>
+                              {canRevoke && (
+                                <button
+                                  type="button"
+                                  disabled={revokingId === msg.id}
+                                  onClick={() => handleRevokeMessage(msg)}
+                                  className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-rose-600 hover:bg-rose-50 transition active:scale-90"
+                                  title="Tarik / Hapus pesan untuk semua orang (Delete for Everyone)"
+                                >
+                                  {revokingId === msg.id ? (
+                                    <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent" />
+                                  ) : (
+                                    <Trash2 size={11} />
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -841,10 +907,10 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
 
                 {/* Reply Composer */}
-                <div className="border-t border-white/5 pt-4">
+                <div className="border-t border-[#e9edef] pt-3">
                   {selectedChat.isSandboxTest ? (
-                    <div className="flex items-center justify-center space-x-2 px-3 py-3 rounded-xl bg-slate-900/60 border border-purple-500/25 text-purple-300/80 text-[10px] font-bold uppercase tracking-wider">
-                      <FlaskConical size={12} />
+                    <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
+                      <FlaskConical size={13} />
                       <span>Chat sandbox — balasan admin diblokir otomatis</span>
                     </div>
                   ) : (
@@ -854,20 +920,20 @@ export const LiveChatMonitor: React.FC = () => {
                       <img
                         src={selectedImage.preview}
                         alt="Preview"
-                        className="w-24 h-20 object-cover rounded-xl border border-white/10"
+                        className="w-20 h-16 object-cover rounded-xl border border-[#d1d7db]"
                       />
                       <button
                         onClick={() => {
                           setSelectedImage(null);
                         }}
-                        className="absolute -top-2 -right-2 p-1 rounded-full bg-rose-500 text-white shadow hover:bg-rose-600 transition"
+                        className="absolute -top-1.5 -right-1.5 p-1 rounded-full bg-rose-500 text-white shadow-xs hover:bg-rose-600 transition"
                         title="Hapus lampiran"
                       >
-                        <X size={12} />
+                        <X size={11} />
                       </button>
                     </div>
                   )}
-                  <div className="flex items-end space-x-2">
+                  <div className="flex items-end space-x-2 bg-[#f0f2f5] p-2 rounded-xl border border-[#e9edef]">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -878,10 +944,10 @@ export const LiveChatMonitor: React.FC = () => {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={sending}
-                      className="px-3 py-3 bg-slate-900 border border-white/10 hover:border-pink-500/50 disabled:opacity-40 text-slate-400 hover:text-pink-400 rounded-xl text-xs font-bold transition flex items-center"
+                      className="p-2 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 text-[#54656f] hover:text-[#008069] rounded-xl text-xs font-bold transition flex items-center shadow-xs"
                       title="Lampirkan gambar"
                     >
-                      <ImagePlus size={14} />
+                      <ImagePlus size={15} />
                     </button>
                     <textarea
                       value={replyText}
@@ -894,12 +960,12 @@ export const LiveChatMonitor: React.FC = () => {
                       }}
                       rows={2}
                       placeholder="Tulis balasan sebagai admin... (Enter kirim, Shift+Enter baris baru)"
-                      className="flex-1 resize-none rounded-xl bg-slate-900 border border-white/10 focus:border-emerald-500/50 focus:outline-none text-xs text-slate-200 placeholder-slate-600 p-3"
+                      className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-xs text-[#111b21] placeholder-[#8696a0] p-2.5 shadow-xs"
                     />
                     <button
                       onClick={handleSendReply}
                       disabled={sending || (!replyText.trim() && !selectedImage)}
-                      className="px-4 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-xs font-black transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/10"
+                      className="px-3.5 py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
                     >
                       <Send size={13} />
                       <span>{sending ? 'Mengirim...' : 'Kirim'}</span>
@@ -910,10 +976,10 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="glass-panel border border-white/5 rounded-2xl p-12 h-[635px] flex flex-col justify-center items-center text-center text-slate-500 text-xs">
-                <MessageSquare size={48} className="mb-4 text-slate-700" />
-                <p className="font-bold text-slate-400">Pilih Percakapan</p>
-                <p className="text-slate-600 max-w-sm mt-1">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-12 h-[650px] flex flex-col justify-center items-center text-center text-[#667781] text-xs shadow-xs">
+                <MessageSquare size={44} className="mb-3 text-[#8696a0]" />
+                <p className="font-bold text-[#111b21] text-sm">Pilih Percakapan</p>
+                <p className="text-[#667781] max-w-sm mt-1">
                   Pilih salah satu percakapan dari daftar di sebelah kiri untuk melihat thread dan membalas langsung.
                 </p>
               </div>

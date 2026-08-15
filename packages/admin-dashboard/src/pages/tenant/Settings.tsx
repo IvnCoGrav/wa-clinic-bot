@@ -660,14 +660,14 @@ export const Settings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-3xl font-extrabold tracking-tight text-white flex items-center space-x-3">
-          <SettingsIcon className="text-pink-400" />
+        <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
+          <SettingsIcon className="text-[#008069]" size={22} />
           <span>Operational Settings</span>
         </h2>
-        <p className="text-slate-400">Configure coordinates, delivery tiers, active engines, and auto-responders</p>
+        <p className="text-xs text-[#667781] mt-0.5">Konfigurasi WhatsApp provider, AI router, Meta Pixel/CAPI, dan operasional bot</p>
       </div>
 
       {/* WhatsApp Gateway — channel utama + sub-tab WAHA/WABA */}
@@ -762,103 +762,103 @@ export const Settings: React.FC = () => {
       <InstallAppPanel />
 
       {/* Remaining panels: Global Toggle + Branch Picker + Delivery Tiers + Broadcast */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Left column: Global Bot Toggle + Branch picker */}
-        <div className="space-y-8">
+        <div className="space-y-6">
 
           {/* Bot ON/OFF Toggle */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <ShieldCheck className="text-pink-400" />
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+              <ShieldCheck className="text-[#008069]" size={16} />
               <span>Global Chatbot Toggle</span>
             </h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Enable or disable the AI responder engine globally. When disabled, all incoming WhatsApp messages are automatically bypassed and routed directly to human handling.
+            <p className="text-xs text-[#667781] leading-relaxed">
+              Aktifkan atau nonaktifkan bot AI secara global. Saat dinonaktifkan, semua pesan WhatsApp masuk akan otomatis dialihkan ke antrian manusia (Staff / Bidan).
             </p>
-            <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950 border border-white/5 mt-4">
-              <span className="text-sm font-semibold text-slate-300">AI Auto-Responder Bot</span>
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] mt-2">
+              <span className="text-xs font-semibold text-[#111b21]">AI Auto-Responder Bot</span>
               <button
                 onClick={() => handleSaveGlobalToggle(!globalBotActive)}
-                className={`w-14 h-7 rounded-full transition-all relative ${globalBotActive ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                className={`w-12 h-6 rounded-full transition-all relative ${globalBotActive ? 'bg-[#008069]' : 'bg-[#d1d7db]'}`}
               >
-                <div className={`absolute top-1 left-1 bg-white h-5 w-5 rounded-full transition-all ${globalBotActive ? 'translate-x-7' : ''}`}></div>
+                <div className={`absolute top-0.5 left-0.5 bg-white h-5 w-5 rounded-full transition-all ${globalBotActive ? 'translate-x-6' : ''}`}></div>
               </button>
             </div>
           </div>
 
           {/* Coordinate picker & Branch Map */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <MapPin className="text-pink-400" />
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
+            <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+              <MapPin className="text-[#008069]" size={16} />
               <span>Branch Coordinate Picker (Map)</span>
             </h3>
 
             {/* Out of scope Alert banner */}
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-2 text-[10px]">
-              <AlertTriangle className="flex-shrink-0 mt-0.5" size={14} />
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2 text-xs">
+              <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={14} />
               <div>
                 <p className="font-bold">UI Demo Only (Belum Tersambung Backend Tier 2.4)</p>
-                <p className="mt-0.5 text-amber-500/80">
-                  Data koordinat cabang yang diinput di sini hanya tersimpan lokal di browser dan belum terintegrasi dengan backend delivery.service.ts.
+                <p className="mt-0.5 text-[11px] text-amber-700">
+                  Data koordinat cabang yang diinput di sini hanya tersimpan lokal di browser.
                 </p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Set the GPS location of the clinic branch. This is the starting point for calculating distance-based homecare delivery fees.
+            <p className="text-xs text-[#667781]">
+              Atur titik lokasi GPS cabang klinik untuk perhitungan estimasi jarak ongkir homecare.
             </p>
 
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-slate-400">Branch Name</label>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[#111b21]">Nama Cabang</label>
                 <input
                   type="text"
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
-                  className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-400">Latitude</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[#111b21]">Latitude</label>
                   <input
                     type="number"
                     step="0.0001"
                     value={lat}
                     onChange={(e) => setLat(parseFloat(e.target.value))}
-                    className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-400">Longitude</label>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[#111b21]">Longitude</label>
                   <input
                     type="number"
                     step="0.0001"
                     value={lng}
                     onChange={(e) => setLng(parseFloat(e.target.value))}
-                    className="w-full p-2.5 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                    className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               {/* Simulated Map */}
-              <div className="h-40 rounded-xl bg-slate-950 border border-white/5 relative overflow-hidden flex items-center justify-center">
-                <Map className="absolute text-slate-800 w-full h-full opacity-20" />
-                <div className="relative text-center space-y-1">
-                  <MapPin className="mx-auto text-pink-400 animate-bounce" size={24} />
-                  <p className="text-[10px] text-slate-400 font-semibold">{branchName}</p>
-                  <p className="text-[9px] text-slate-500">[{lat}, {lng}]</p>
+              <div className="h-36 rounded-xl bg-[#f8fafc] border border-[#e9edef] relative overflow-hidden flex items-center justify-center">
+                <Map className="absolute text-[#d1d7db] w-full h-full opacity-30" />
+                <div className="relative text-center space-y-0.5">
+                  <MapPin className="mx-auto text-[#008069] animate-bounce" size={22} />
+                  <p className="text-xs text-[#111b21] font-semibold">{branchName}</p>
+                  <p className="text-[10px] text-[#8696a0]">[{lat}, {lng}]</p>
                 </div>
               </div>
 
               <button
                 onClick={handleSaveBranch}
-                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
+                className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
               >
-                <Check size={14} />
-                <span>Save Location Coordinates</span>
+                <Check size={13} />
+                <span>Simpan Koordinat Lokasi</span>
               </button>
             </div>
           </div>
@@ -866,29 +866,29 @@ export const Settings: React.FC = () => {
         </div>
 
         {/* Right column: Tiering Ongkir & Broadcast Engine */}
-        <div className="space-y-8">
+        <div className="space-y-6">
 
           {/* Delivery fee tiering */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs">
             <div className="flex justify-between items-center">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <Truck className="text-pink-400" />
+              <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                <Truck className="text-[#008069]" size={16} />
                 <span>Delivery Fee Tiering (Homecare)</span>
               </h3>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
                 Haversine Active
               </span>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Tentukan tarif biaya pengiriman (ongkir) normal dan potongan promo berdasarkan jarak haversine rute dari koordinat spa ke lokasi customer. Editor lengkap dengan simulasi ada di menu <span className="text-pink-400 font-semibold">Delivery Fee</span>.
+            <p className="text-xs text-[#667781] leading-relaxed">
+              Tentukan tarif biaya pengiriman (ongkir) normal dan potongan promo berdasarkan jarak haversine rute dari koordinat spa ke lokasi customer. Editor lengkap dengan simulasi ada di menu <span className="text-[#008069] font-bold">Delivery Fee</span>.
             </p>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {ongkirTiers.map((tier, idx) => (
                 <div key={tier.id} className="grid grid-cols-4 gap-2 items-end">
                   <div className="space-y-1">
-                    <label className="text-[9px] text-slate-500 block uppercase font-bold">Max Dist (km)</label>
+                    <label className="text-[10px] text-[#667781] block uppercase font-bold">Max Dist (km)</label>
                     <input
                       type="number"
                       value={tier.maxDist}
@@ -897,11 +897,11 @@ export const Settings: React.FC = () => {
                         newTiers[idx].maxDist = parseFloat(e.target.value);
                         setOngkirTiers(newTiers);
                       }}
-                      className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] text-slate-500 block uppercase font-bold">Normal Fee (Rp)</label>
+                    <label className="text-[10px] text-[#667781] block uppercase font-bold">Tarif (Rp)</label>
                     <input
                       type="number"
                       value={tier.fee}
@@ -910,11 +910,11 @@ export const Settings: React.FC = () => {
                         newTiers[idx].fee = parseInt(e.target.value);
                         setOngkirTiers(newTiers);
                       }}
-                      className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] text-slate-500 block uppercase font-bold">Promo Disc (Rp)</label>
+                    <label className="text-[10px] text-[#667781] block uppercase font-bold">Promo (Rp)</label>
                     <input
                       type="number"
                       value={tier.promoDiscount !== undefined ? tier.promoDiscount : 0}
@@ -923,13 +923,13 @@ export const Settings: React.FC = () => {
                         newTiers[idx].promoDiscount = parseInt(e.target.value) || 0;
                         setOngkirTiers(newTiers);
                       }}
-                      className="w-full p-2 bg-slate-950 border border-white/5 rounded-lg text-xs text-white"
+                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                   <div className="flex space-x-2">
                     <button
                       onClick={() => { setOngkirTiers(ongkirTiers.filter(t => t.id !== tier.id)); }}
-                      className="p-2 w-full rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition flex justify-center items-center"
+                      className="p-2 w-full rounded-lg bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex justify-center items-center shadow-xs"
                       title="Hapus Tier"
                     >
                       <Trash size={12} />
@@ -941,80 +941,80 @@ export const Settings: React.FC = () => {
               <div className="pt-2 flex justify-between">
                 <button
                   onClick={() => { setOngkirTiers([...ongkirTiers, { id: Date.now(), maxDist: 20, fee: 30000, promoDiscount: 5000 }]); }}
-                  className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white flex items-center space-x-1"
+                  className="px-3 py-1.5 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] flex items-center space-x-1 shadow-xs"
                 >
-                  <Plus size={10} />
-                  <span>Add Tier</span>
+                  <Plus size={11} />
+                  <span>+ Tambah Tier</span>
                 </button>
 
                 <button
                   onClick={handleSaveOngkirTiers}
-                  className="px-4 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-[10px] font-bold transition flex items-center space-x-1"
+                  className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                 >
-                  <Check size={10} />
-                  <span>Save Tiers</span>
+                  <Check size={12} />
+                  <span>Simpan Tiers</span>
                 </button>
               </div>
             </div>
           </div>
 
           {/* Broadcast & Quiet Hours with Alert Banner */}
-          <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-6">
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
 
             {/* Out of scope Alert banner */}
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-start space-x-3 text-xs">
-              <AlertTriangle className="flex-shrink-0 mt-0.5" size={16} />
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2 text-xs">
+              <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={15} />
               <div>
                 <p className="font-bold">Broadcast &amp; Quiet Hours Engine</p>
-                <p className="mt-0.5 text-[10px] text-amber-500/80">
-                  ⚠️ **PEMBERITAHUAN:** Fitur backend Tier 3 belum aktif. Tampilan di bawah ini bersifat mockup UI mandiri.
+                <p className="mt-0.5 text-[11px] text-amber-700">
+                  Fitur broadcast campaign terjadwal saat ini bersifat antrian manual.
                 </p>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <Volume2 className="text-pink-400" />
-                <span>Broadcast message editor</span>
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                <Volume2 className="text-[#008069]" size={16} />
+                <span>Broadcast Message Editor</span>
               </h3>
 
-              <div className="space-y-1.5">
-                <label className="text-xs text-slate-400">Broadcast Teks</label>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-[#111b21]">Broadcast Teks</label>
                 <textarea
                   rows={3}
                   value={broadcastText}
                   onChange={(e) => setBroadcastText(e.target.value)}
                   placeholder="Kirim promo bulanan ke pelanggan loyal..."
-                  className="w-full p-3 bg-slate-950 border border-white/5 rounded-xl text-xs text-white resize-none"
+                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-400">Random delay interval (sec)</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[#111b21]">Random Delay (detik)</label>
                   <input
                     type="number"
                     value={randomDelay}
                     onChange={(e) => setRandomDelay(parseInt(e.target.value))}
-                    className="w-full p-2 bg-slate-950 border border-white/5 rounded-xl text-xs text-white"
+                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-400">Quiet Hours (Start - End)</label>
-                  <div className="flex space-x-2 items-center">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-[#111b21]">Quiet Hours (Mulai - Selesai)</label>
+                  <div className="flex space-x-1.5 items-center">
                     <input
                       type="text"
                       value={quietHoursStart}
                       onChange={(e) => setQuietHoursStart(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-white/5 rounded-xl text-xs text-white text-center"
+                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] text-center focus:outline-none focus:border-[#008069] shadow-xs"
                     />
-                    <span className="text-slate-500">-</span>
+                    <span className="text-[#8696a0]">-</span>
                     <input
                       type="text"
                       value={quietHoursEnd}
                       onChange={(e) => setQuietHoursEnd(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-white/5 rounded-xl text-xs text-white text-center"
+                      className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] text-center focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
                 </div>
@@ -1022,10 +1022,10 @@ export const Settings: React.FC = () => {
 
               <button
                 disabled
-                className="w-full py-2 bg-white/5 border border-white/5 text-slate-500 rounded-xl text-xs font-semibold cursor-not-allowed flex items-center justify-center space-x-1"
-                title="Menunggu backend Tier 3"
+                className="w-full py-2 bg-[#f0f2f5] border border-[#e9edef] text-[#8696a0] rounded-xl text-xs font-semibold cursor-not-allowed flex items-center justify-center space-x-1"
+                title="Menunggu broadcast scheduler"
               >
-                <span>Queue Broadcast Campaign (Waiting Backend Tier 3)</span>
+                <span>Antrikan Broadcast Campaign</span>
               </button>
             </div>
 

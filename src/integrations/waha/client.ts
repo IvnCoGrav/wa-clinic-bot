@@ -64,6 +64,7 @@ export interface IWahaClient {
   getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
   getContact(phone: string): Promise<WahaContact | null>;
   downloadMedia(messageId: string, chatId: string): Promise<Buffer | null>;
+  deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<boolean>;
 }
 
 /**
@@ -1156,6 +1157,52 @@ export class WahaClient implements IWahaClient {
     } catch (error: any) {
       console.warn(`[WAHA API ERROR] getAuthQr failed for session ${sessionName}:`, error?.response?.data || error.message);
       return null;
+    }
+  }
+
+  /**
+   * Menghapus / menarik pesan WhatsApp (Delete for Everyone / Revoke).
+   * Mendukung parameter everyone=true untuk menarik pesan dari perangkat customer.
+   */
+  public async deleteMessage(chatId: string, messageId: string, everyone = true): Promise<boolean> {
+    if (this.shouldMock) {
+      console.log(`[WAHA MOCK] deleteMessage: chat=${chatId}, msgId=${messageId}, everyone=${everyone}`);
+      return true;
+    }
+
+    const sessionName = this.session;
+    try {
+      // 1. Coba DELETE /api/{session}/chats/{chatId}/messages/{messageId}
+      const response = await axios.delete(
+        `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`,
+        {
+          params: { everyone },
+          headers: this.headers,
+          timeout: this.timeoutMs,
+        }
+      );
+      return response.status >= 200 && response.status < 300;
+    } catch (err: any) {
+      // 2. Fallback ke POST /api/messages/delete jika endpoint DELETE berbeda versi
+      try {
+        const response = await axios.post(
+          `${this.baseUrl}/api/messages/delete`,
+          {
+            session: sessionName,
+            chatId,
+            messageId,
+            everyone,
+          },
+          {
+            headers: this.headers,
+            timeout: this.timeoutMs,
+          }
+        );
+        return response.status >= 200 && response.status < 300;
+      } catch (postErr: any) {
+        console.error(`[WAHA API ERROR] deleteMessage failed:`, postErr?.response?.data || postErr.message);
+        throw postErr;
+      }
     }
   }
 }

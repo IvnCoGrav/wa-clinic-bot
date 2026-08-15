@@ -89,50 +89,50 @@ export const DailyReportPanel: React.FC = () => {
   };
 
   return (
-    <div className="glass-panel border border-white/5 rounded-2xl p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-white flex items-center space-x-2">
-          <BarChart3 className="text-pink-400" />
+    <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+          <BarChart3 className="text-[#008069]" size={16} />
           <span>Laporan Operasional Harian (Daily Ops Report)</span>
         </h3>
         {telegramConfigured ? (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle size={10} />
+          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <CheckCircle size={11} className="text-emerald-600" />
             <span>Telegram Terkonfigurasi</span>
           </span>
         ) : (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <AlertCircle size={10} />
+          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+            <AlertCircle size={11} className="text-amber-600" />
             <span>Telegram Belum Terkonfigurasi</span>
           </span>
         )}
       </div>
 
-      <p className="text-xs text-slate-400 leading-relaxed">
+      <p className="text-xs text-[#667781] leading-relaxed">
         Kirim ringkasan performa operasional (Sales, Omzet, Customer Baru, Atribusi Iklan, &amp; Kesehatan Bot) secara otomatis ke Telegram setiap pagi.
       </p>
 
       {loading ? (
-        <div className="py-4 text-xs text-slate-500 animate-pulse">Memuat konfigurasi laporan harian...</div>
+        <div className="py-4 text-xs text-[#8696a0] animate-pulse">Memuat konfigurasi laporan harian...</div>
       ) : (
-        <div className="space-y-4 pt-2">
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-white/5">
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
             <div>
-              <span className="text-xs font-bold text-slate-200 block">Aktifkan Pengiriman Otomatis</span>
-              <span className="text-[10px] text-slate-500">Kirim notifikasi ringkasan otomatis setiap hari di jam terpilih</span>
+              <span className="text-xs font-bold text-[#111b21] block">Aktifkan Pengiriman Otomatis</span>
+              <span className="text-xs text-[#667781]">Kirim notifikasi ringkasan otomatis setiap hari di jam terpilih</span>
             </div>
             <input
               type="checkbox"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              className="w-4 h-4 text-pink-500 rounded focus:ring-pink-500 cursor-pointer"
+              className="w-4 h-4 text-[#008069] rounded focus:ring-[#008069] cursor-pointer"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 flex items-center space-x-1">
-                <KeyRound size={12} className="text-pink-400" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+                <KeyRound size={12} className="text-[#008069]" />
                 <span>Telegram Bot Token</span>
               </label>
               <input
@@ -140,16 +140,16 @@ export const DailyReportPanel: React.FC = () => {
                 value={telegramBotToken}
                 onChange={(e) => setTelegramBotToken(e.target.value)}
                 placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyZ..."
-                className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500"
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
               />
-              <span className="text-[10px] text-slate-500 mt-1 block">
+              <span className="text-[10px] text-[#8696a0] block">
                 Token dari BotFather Telegram. Kosongkan untuk memakai fallback env `TELEGRAM_BOT_TOKEN`.
               </span>
             </div>
 
-            <div>
-              <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 flex items-center space-x-1">
-                <MessageSquare size={12} className="text-pink-400" />
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+                <MessageSquare size={12} className="text-[#008069]" />
                 <span>Telegram Chat ID</span>
               </label>
               <input
@@ -157,17 +157,17 @@ export const DailyReportPanel: React.FC = () => {
                 value={telegramChatId}
                 onChange={(e) => setTelegramChatId(e.target.value)}
                 placeholder="-1001234567890 atau ID Chat/Group"
-                className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500"
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
               />
-              <span className="text-[10px] text-slate-500 mt-1 block">
+              <span className="text-[10px] text-[#8696a0] block">
                 ID Chat/Grup Telegram target laporan. Kosongkan untuk memakai fallback env `TELEGRAM_CHAT_ID`.
               </span>
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1 flex items-center space-x-1">
-              <Clock size={12} className="text-pink-400" />
+          <div className="space-y-1">
+            <label className="text-[11px] font-bold text-[#111b21] block flex items-center space-x-1">
+              <Clock size={12} className="text-[#008069]" />
               <span>Jam Pengiriman (WIB, 00-23)</span>
             </label>
             <input
@@ -176,9 +176,9 @@ export const DailyReportPanel: React.FC = () => {
               max={23}
               value={reportHour}
               onChange={(e) => setReportHour(parseInt(e.target.value, 10) || 0)}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500"
+              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
-            <span className="text-[10px] text-slate-500 mt-1 block">
+            <span className="text-[10px] text-[#8696a0] block">
               Default: Jam 07:00 WIB (merangkum data jam 00:00 - 23:59 WIB hari sebelumnya).
             </span>
           </div>
@@ -187,16 +187,16 @@ export const DailyReportPanel: React.FC = () => {
             <button
               onClick={handleTestSend}
               disabled={testing}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition flex items-center space-x-2 disabled:opacity-50 border border-white/10"
+              className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 border border-[#d1d7db] shadow-xs"
             >
-              <Send size={12} className="text-pink-400" />
+              <Send size={12} className="text-[#008069]" />
               <span>{testing ? 'Mengirim...' : 'Tes Kirim Sekarang'}</span>
             </button>
 
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center space-x-2 disabled:opacity-50"
+              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
             >
               <Save size={12} />
               <span>{saving ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>

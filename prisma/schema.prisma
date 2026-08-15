@@ -250,11 +250,14 @@ model Reservation {
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
   children                 Child[]
+  assigned_staff_id        String?
+  assigned_staff           Staff?            @relation(fields: [assigned_staff_id], references: [id], onDelete: SetNull)
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
   @@index([customer_id])
   @@index([customer_id, status])
+  @@index([assigned_staff_id])
   @@map("reservations")
 }
 
@@ -614,3 +617,41 @@ model LlmAuditLog {
   @@index([customer_phone])
   @@map("llm_audit_logs")
 }
+
+enum StaffRole {
+  THERAPIST
+  ADMIN_CS
+  ADVERTISER
+}
+
+model Staff {
+  id            String         @id @default(uuid())
+  tenant_id     String         @default("default-tenant")
+  name          String
+  phone         String         @unique
+  password_hash String
+  role          StaffRole      @default(THERAPIST)
+  active        Boolean        @default(true)
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  reservations  Reservation[]
+  sessions      StaffSession[]
+
+  @@index([tenant_id])
+  @@map("staff")
+}
+
+model StaffSession {
+  id         String    @id @default(uuid())
+  staff_id   String
+  staff      Staff     @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  token_hash String    @unique
+  created_at DateTime  @default(now())
+  expires_at DateTime
+  revoked_at DateTime?
+
+  @@index([staff_id])
+  @@index([token_hash])
+  @@map("staff_sessions")
+}
+

@@ -198,6 +198,8 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
 
   // Cek apakah pesan merupakan sapaan pembuka murni vs mengandung pertanyaan/catatan ekstra
   const { checkLeadGreetingText } = await import('../utils/greeting-checker');
+  const { hasIslamicGreeting } = await import('../utils/islamic-greeting-helper');
+  const isIslamic = hasIslamicGreeting(userText);
   const greetingCheck = await checkLeadGreetingText(userText, incomingMessage.text?.body, tenantId);
 
   // BYPASS TOTAL: Jika murni sapaan pembuka lead (sesuai Greetings Text / template), LANGSUNG kembalikan TEMPLATES.greeting() instan tanpa LLM
@@ -205,7 +207,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     console.log(`[GREETING BYPASS] Pure lead greeting verified for tenant ${tenantId}. Returning instant template.`);
     return {
       nextState: ConversationState.AWAITING_LOCATION,
-      replyText: TEMPLATES.greeting({ skipGreeting }),
+      replyText: TEMPLATES.greeting({ skipGreeting, isIslamic }),
       shouldSendReply: true,
     };
   }
@@ -232,7 +234,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
     
     // Prepend greeting header wajib di depan jawaban AI
     if (interestResult.replyText) {
-      interestResult.replyText = TEMPLATES.firstContactGreetingHeader() + '\n\n' + interestResult.replyText;
+      interestResult.replyText = TEMPLATES.firstContactGreetingHeader({ isIslamic }) + '\n\n' + interestResult.replyText;
     }
     
     // Tetap set nextState ke AWAITING_LOCATION karena lokasi belum diketahui
@@ -242,7 +244,7 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
 
   // 4. Default Greeting Baru (Belum punya lokasi)
   // BYPASS LLM: Jika murni sapaan lead (sesuai Greetings Text / template), langsung kirim TEMPLATES.greeting() instan
-  const fallbackGreeting = TEMPLATES.greeting({ skipGreeting });
+  const fallbackGreeting = TEMPLATES.greeting({ skipGreeting, isIslamic });
   const greetingText = greetingCheck.isPureGreeting
     ? fallbackGreeting
     : await phrasingService.generate({

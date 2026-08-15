@@ -11,21 +11,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed:faq": "tsx src/cli/seed-faq.ts",
     "scrape:all": "tsx src/cli/scrape-all.ts",
     "sync:history": "tsx src/scripts/sync-waha-history.ts",
     "backfill:labels": "tsx scripts/backfill-customer-labels.ts"
-
   },
   "dependencies": {
     "@fastify/rate-limit": "^8.1.1",
     "@googlemaps/google-maps-services-js": "^3.4.0",
     "@prisma/client": "^5.19.1",
+    "@types/bcrypt": "^6.0.0",
     "@types/sanitize-html": "^2.16.1",
     "axios": "^1.7.5",
+    "bcrypt": "^6.0.0",
     "bullmq": "^5.80.10",
     "capi-param-builder-nodejs": "^1.3.1",
     "cheerio": "^1.2.0",

@@ -106,7 +106,7 @@ export const MediaImage: React.FC<{
           title="Lihat / unduh resolusi penuh"
           className="absolute inset-0 flex items-center justify-center group"
         >
-          <span className="p-2.5 rounded-full bg-slate-900/80 border border-white/20 text-white shadow-lg hover:bg-pink-500 transition group-hover:scale-105">
+          <span className="p-2.5 rounded-full bg-black/60 border border-white/20 text-white shadow-lg hover:bg-[#008069] transition group-hover:scale-105">
             <Download size={16} />
           </span>
         </a>

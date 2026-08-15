@@ -29,11 +29,11 @@ export let activeDeliveryTiers: DeliveryTier[] = [];
 
 /**
  * Faktor pembulatan jarak lurus (Haversine) ke estimasi jarak jalan.
- * Dapat di-override per env HAVERSINE_CIRCUITY_FACTOR; default 1.50x mengikuti
- * nilai historis agar jarak estimasi konsisten dengan test yang ada.
+ * Dapat di-override per env HAVERSINE_CIRCUITY_FACTOR; default 1.60x mengikuti
+ * profil kelokan rute perkotaan Surabaya-Sidoarjo.
  * Lihat Fase 3 docs/HARDCODED_FIX_PLAN.md.
  */
-const HAVERSINE_CIRCUITY_FACTOR = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.50');
+const HAVERSINE_CIRCUITY_FACTOR = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.60');
 
 export function loadDeliveryTiers() {
   try {

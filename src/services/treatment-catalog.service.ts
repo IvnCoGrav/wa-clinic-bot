@@ -350,14 +350,30 @@ export class TreatmentCatalogService {
   }
 
   /**
-   * Filter layanan bayi/anak berdasarkan usia (dalam bulan)
+   * Filter layanan bayi/anak berdasarkan usia (dalam bulan).
+   * @param ageInMonths Usia bayi/anak dalam bulan
+   * @param onlyGeneral Jika true, hanya kembalikan treatment relaksasi/wellness umum (tanpa terapi sakit/alat medis addon)
    */
-  public getServicesByAge(ageInMonths: number): ClinicServiceItem[] {
+  public getServicesByAge(ageInMonths: number, onlyGeneral = false): ClinicServiceItem[] {
     return this.getAllServices().filter((s) => {
       if (s.category === 'MOMS') return false;
       const { minAgeMonths, maxAgeMonths } = s.ageTier;
       if (ageInMonths < minAgeMonths) return false;
       if (maxAgeMonths !== null && ageInMonths > maxAgeMonths) return false;
+
+      // Jika general only (tidak ada keluhan sakit), filter out terapi flu/batuk/alat medis add-on
+      if (onlyGeneral) {
+        const lowerName = s.name.toLowerCase();
+        const isTherapyOrAddon = lowerName.includes('terapi') || 
+                                 lowerName.includes('pulih') || 
+                                 lowerName.includes('nebulizer') || 
+                                 lowerName.includes('moksa') ||
+                                 lowerName.includes('add-on') ||
+                                 lowerName.includes('tindik') ||
+                                 lowerName.includes('cukur');
+        if (isTherapyOrAddon) return false;
+      }
+
       return true;
     });
   }

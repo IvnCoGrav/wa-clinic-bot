@@ -12,6 +12,7 @@ import { conversationService } from '../../services/conversation.service';
 import { measure } from '../../utils/timer';
 import { llmConcurrencyLimiter } from '../../utils/llm-concurrency';
 import dotenv from 'dotenv';
+import { isAskingClinicLocation } from '../../state-machine/utils/clinic-location-checker';
 function isReferentialQuestion(userQuestion: string): boolean {
   if (!userQuestion) return false;
   const q = userQuestion.toLowerCase();
@@ -213,6 +214,10 @@ ATURAN BALASAN:
    Contoh SALAH (tetap dilarang): "Untuk harga pastinya, boleh tanya ke tim kami dulu ya" — ini BUKAN klarifikasi nama, ini cuci tangan, TETAP dilarang.
    Pengecualian ini TIDAK berlaku jika Referensi hanya punya SATU item yang match, atau jika customer menanyakan kebutuhan umum (bukan menyebut nama spesifik) — untuk kasus itu tetap ikuti poin 3 & 4 (mode rekomendasi, sebutkan semua opsi relevan sekaligus, bukan tanya balik).
 8. ATURAN SAPAAN (DILARANG SAPAAN WAKTU DAN GREETING HEADER): Ini adalah balasan FAQ/informasi lanjutan. DILARANG KERAS menyertakan sapaan waktu ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam"). DILARANG mengulangi greeting header ("Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya Bidan Yusi...") karena greeting header sudah ditambahkan otomatis oleh sistem di depan pesanmu. Langsung jawab ke inti pertanyaan.
+9. ATURAN PERTANYAAN USIA UMUM (GENERAL WELLNESS):
+   Jika customer menanyakan rekomendasi treatment untuk usia tertentu secara UMUM (contoh: "Untuk anak umur 17 bulan yg mana yaa", "buat anak 2 tahun treatment apa"), TANPA menyebutkan keluhan batuk, pilek, demam, kolik, atau sakit:
+   - ARAHKAN KE TREATMENT UMUM/RELAKSASI: Cukup rekomendasikan treatment kebugaran/relaksasi standar untuk usianya (misal *Pijat Bayi Ceria* untuk bayi/balita di bawah 2 tahun, *Pijat Kids Ceria* untuk anak di atas 2 tahun, serta *Pijat Lahap Juara* untuk nafsu makan).
+   - DILARANG KERAS berinisiatif menawarkan terapi penyakit / alat medis (seperti Nebulizer, Sinar Moksa, Terapi Bapil/Pulih Ceria) jika customer TIDAK menceritakan keluhan batuk, pilek, demam, atau sesak napas!
 ${ctaInstruction}
 
 ${maxCharsInstruction}
@@ -598,6 +603,11 @@ ATURAN EKSTRAKSI PREFERENSI:
         const names = recommendations.map((r) => r.name).join(' atau ');
         return `Bunda, kami punya beberapa opsi yang cocok: ${list}. ${recommendations[0].description} 😊\n\nMau saya bantu pilih di antara ${names} untuk Bunda?`;
       }
+    }
+
+    // Jalur FAQ lokasi klinik / homebase: jawab factual lokasi Waru + Homecare
+    if (firstChunk.id === 'clinic-location-faq' || isAskingClinicLocation(userQuestion)) {
+      return `Kami berlokasi di daerah Waru (perbatasan Sidoarjo - Surabaya), Bunda. Kami melayani sistem Homecare (panggilan langsung ke rumah), jadi tim bidan kami yang akan datang langsung ke rumah Bunda 😊\n\nKalau boleh tahu untuk rumah Bunda di kelurahan mana ya bund? Biar sekalian kami bantu cekkan ketersediaan jadwal & ongkirnya 🙏`;
     }
 
     // Jalur RAG/FAQ mentah (non-catalog) TIDAK lagi di-echo verbatim ke customer.

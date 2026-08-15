@@ -12,8 +12,11 @@ import { fireCapiEvent } from '../../services/capi.service';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
 import { buildPriceAnswer, isAskPrice, isPricelistLostRequest } from '../../services/price-answer.service';
 import { isLocationQueryMessage } from '../utils/location-query';
+import { isNeedTimeOrDiscussionMessage } from '../utils/need-time-checker';
+import { isAskingClinicLocation } from '../utils/clinic-location-checker';
 import { stageLog } from '../../utils/stage-logger';
 import { parseAgeTextToBirthDate, parseAgeTextToMonths, monthsBetween } from '../../utils/age-calculator';
+import { checkMedicalKeywords } from '../../config/medical-keywords';
 
 /**
  * Handler untuk state AWAITING_INTEREST:
@@ -138,16 +141,34 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
+
+  // --- JEDA WAKTU / DISKUSI KELUARGA (Hold / Need Time): kalau customer minta waktu untuk tanya suami/keluarga
+  if (isNeedTimeOrDiscussionMessage(lower)) {
+    const needTimeReply = await phrasingService.generate({
+      intent: 'need_time_acknowledgment',
+      conversationId: conversation.id,
+      tenantId,
+      facts: { customer_message: userText },
+      fallbackTemplate: `Baik Bunda, kami tunggu kabarnya ya bund 🤗 Santai saja yaa, nanti kalau sudah siap atau ada yang ingin ditanyakan lagi, langsung kabari kami ya Bunda 😊🙏🏻`,
+    });
+    return {
+      nextState: ConversationState.AWAITING_INTEREST,
+      replyText: needTimeReply,
+      shouldSendReply: true,
+    };
+  }
+
   // --- MIXED-SIGNAL DETECTION ---
-  // Deteksi pola "afirmasi + tapi/tetapi/tp + negasi" → minta klarifikasi
+  // Deteksi pola "afirmasi + tapi/tetapi/tp + negasi" TANPA keluhan kesehatan/gejala → minta klarifikasi
   const hasAffirmWord = /\b(iya|yup|ok|oke|bener|betul|lanjut|benar|yes|sip|gpp|ho.?oh)\b/i.test(lower);
   const hasNegateWord = /\b(bukan|ga|gak|tidak|no|salah|enggak|beda|berubah)\b/i.test(lower);
   const hasConjunction = /\b(tapi|tetapi|tp|cuma|akan\s+tapi|tapi\s+kok|tapi\s+kan)\b/i.test(lower);
-  
-  if (hasAffirmWord && hasNegateWord && hasConjunction) {
+  const isHealthSymptomQuery = /\b(grok|nafas|napas|sesak|demam|panas|pilek|batuk|flu|lendir|sakit|muntah|diare|sembelit|kolik|resep|bidan|terapi|nebulizer)\b/i.test(lower);
+
+  if (hasAffirmWord && hasNegateWord && hasConjunction && !isHealthSymptomQuery) {
     return {
       nextState: ConversationState.AWAITING_INTEREST,
-      replyText: `Maaf Bunda, sepertinya ada yang kurang tepat. Bunda ingin mengubah lokasi atau informasi lainnya? Bisa diperjelas lagi ya bund. 😊`,
+      replyText: `Maaf Bunda, sepertinya ada yang kurang tepat. Bunda ingin mengubah pilihan treatment atau ada hal lain yang ingin ditanyakan? Bisa diperjelas lagi ya bund. 😊`,
       shouldSendReply: true,
     };
   }
@@ -267,13 +288,16 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // --- QUESTION OVERRIDE GUARD ---
-  // Jika customer mengajukan pertanyaan (mengandung '?', 'tanya', 'berapa', 'brp', 'apakah', 'usia', dst.),
-  // JANGAN izinkan intent ter-map ke 'interested' (karena frasa seperti "saya ingin tanya" sering disalahartikan sebagai minat reservasi).
+  // Jika customer mengajukan pertanyaan (mengandung '?', 'tanya', 'berapa', 'brp', 'apakah', 'usia', 'darimana', dst.)
+  // ATAU menanyakan lokasi klinik (isAskingClinicLocation),
+  // JANGAN izinkan intent ter-map ke 'interested', 'other', atau 'off_topic'.
   // Pertanyaan WAJIB dijawab terlebih dahulu sebagai 'faq_question'!
-  const isQuestionMessage = /\?/.test(userText) || /\b(tanya|bertanya|berapa|brp|apakah|bagaimana|kapan|dimana|usia|umur)\b/i.test(userText);
-  if (intentResult.intent === 'interested' && isQuestionMessage) {
-    console.log(`[QUESTION OVERRIDE] Message "${userText}" is a question but was mapped to 'interested'. Overriding to 'faq_question'.`);
-    stageLog('INTENT', `Question Override: Intent 'interested' -> Re-mapped to 'faq_question'`, customer.phone);
+  const isQuestionMessage = /\?/.test(userText) || 
+                            /\b(tanya|bertanya|berapa|brp|apakah|bagaimana|kapan|dimana|darimana|di\s+mana|dari\s+mana|mana|usia|umur)\b/i.test(userText) ||
+                            isAskingClinicLocation(userText);
+  if ((intentResult.intent === 'interested' || intentResult.intent === 'other') && isQuestionMessage) {
+    console.log(`[QUESTION OVERRIDE] Message "${userText}" is a question/inquiry but was mapped to '${intentResult.intent}'. Overriding to 'faq_question'.`);
+    stageLog('INTENT', `Question Override: Intent '${intentResult.intent}' -> Re-mapped to 'faq_question'`, customer.phone);
     intentResult.intent = 'faq_question';
   }
 
@@ -350,7 +374,21 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       }
 
       // 2. Query Knowledge Base menggunakan Postgres Full-Text Search ('simple')
-      const relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3, tenantId);
+      let relevantChunks = await knowledgeBaseService.searchRelevantChunks(userText, 3, tenantId);
+
+      // Jika customer menanyakan lokasi klinik/homebase, pastikan chunk lokasi klinik selalu ada di context
+      if (isAskingClinicLocation(userText)) {
+        const clinicName = getBrandIdentity().businessName || 'Kala Moms and Baby Spa';
+        const clinicChunk = {
+          id: 'clinic-location-faq',
+          tenantId,
+          sourceType: 'FAQ' as any,
+          title: `Lokasi Klinik dan Layanan Homecare ${clinicName}`,
+          content: `Pertanyaan: Di mana lokasi/alamat kantor ${clinicName}?\nJawaban: Kami berlokasi di daerah Waru (perbatasan Sidoarjo - Surabaya), Bunda. Kami melayani sistem Homecare (panggilan langsung ke rumah), jadi tim bidan bersertifikat kami yang datang langsung ke rumah Bunda di area Surabaya & Sidoarjo sehingga Bunda tidak perlu repot keluar rumah.`,
+          documentName: 'faq-lokasi-klinik',
+        };
+        relevantChunks = [clinicChunk, ...relevantChunks.filter(c => c.id !== 'clinic-location-faq')];
+      }
 
       // 2b. Jika FAQ tidak match, FALLBACK ke katalog treatment sebagai konteks LLM.
       // Data treatment (durasi, usia, deskripsi, manfaat) dijadikan knowledge — TANPA harga.
@@ -364,10 +402,12 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         let isAgeMatch = false;
 
         if (detectedAgeMonths !== null) {
-          catalogItems = treatmentCatalogService.getServicesByAge(detectedAgeMonths);
+          const hasSymptomOrMedical = checkMedicalKeywords(userText).isMedical ||
+                                      /\b(batuk|pilek|bapil|flu|demam|panas|grok|kembung|kolik|sembelit|susah\s*bab|rewel|terapi|sakit|uap|nebu)\b/i.test(userText);
+          catalogItems = treatmentCatalogService.getServicesByAge(detectedAgeMonths, !hasSymptomOrMedical);
           if (catalogItems.length > 0) {
             isAgeMatch = true;
-            console.log(`[AGE SMART MATCH] Injecting ${catalogItems.length} catalog items for age ${detectedAgeMonths} months.`);
+            console.log(`[AGE SMART MATCH] Injecting ${catalogItems.length} catalog items for age ${detectedAgeMonths} months (onlyGeneral: ${!hasSymptomOrMedical}).`);
           }
         }
 

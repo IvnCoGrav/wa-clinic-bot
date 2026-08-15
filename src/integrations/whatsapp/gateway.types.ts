@@ -20,6 +20,7 @@ export interface TemplateComponent {
 
 export interface WhatsAppGateway {
   readonly providerType: WhatsAppProvider;
+  readonly supportsRevoke: boolean;
 
   sendTextMessage(to: string, text: string): Promise<SendResult>;
 
@@ -35,6 +36,8 @@ export interface WhatsAppGateway {
   sendTypingIndicator(to: string, incomingMessageId?: string, durationMs?: number): Promise<void>;
 
   markAsRead(chatId: string, messageId?: string): Promise<void>;
+
+  deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<{ success: boolean; error?: string }>;
 }
 
 export interface NormalizedInboundMessage {

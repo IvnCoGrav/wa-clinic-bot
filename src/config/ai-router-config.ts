@@ -12,7 +12,7 @@ export interface AiRouterConfig {
   shadowMode: boolean;
 }
 
-const DEFAULTS: AiRouterConfig = { enabled: true, shadowMode: true };
+const DEFAULTS: AiRouterConfig = { enabled: true, shadowMode: false };
 
 // Cache in-memory per tenant — diisi saat boot (loadConfigsFromDb) & saat admin update.
 const configCache = new Map<string, AiRouterConfig>();

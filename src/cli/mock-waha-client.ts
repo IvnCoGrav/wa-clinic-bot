@@ -57,6 +57,11 @@ export class MockWAHAClient implements IWahaClient {
     return Buffer.from(MOCK_QR_BASE64, 'base64');
   }
 
+  public async deleteMessage(chatId: string, messageId: string, everyone = true): Promise<boolean> {
+    process.stdout.write(`\x1b[90m[🗑️ Pesan ${messageId} ditarik untuk semua orang]\x1b[0m\n`);
+    return true;
+  }
+
   public async addLabel(chatId: string, labelId: string): Promise<boolean> {
     return true;
   }

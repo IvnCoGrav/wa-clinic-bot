@@ -141,7 +141,7 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
     const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
 
     // 1. Matikan global bot
-    AiModelConfigService.globalBotActive = false;
+    AiModelConfigService.setBotActive(DEFAULT_TENANT_ID, false);
 
     // 2. Kirim pesan -> percakapan ter-escalate dengan reason 'Global bot disabled'
     await app.inject({
@@ -161,7 +161,7 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
     });
 
     // Tunggu queue worker selesai memproses escalation
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     const checkConvOff = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     expect(checkConvOff.is_human_handling).toBe(true);

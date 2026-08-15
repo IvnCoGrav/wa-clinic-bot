@@ -83,12 +83,12 @@ function toDateInput(d: Date): string {
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: React.ReactNode }) {
   const toneCls =
-    tone === 'ok' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : tone === 'err' ? 'text-rose-400' : 'text-slate-100';
+    tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : tone === 'err' ? 'text-rose-600' : 'text-[#111b21]';
   return (
-    <div className="glass-panel rounded-2xl p-4 flex flex-col gap-1">
-      <p className="text-[11px] uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`text-2xl font-bold ${toneCls}`}>{value}</p>
-      {sub && <p className="text-[11px] text-slate-500 truncate">{sub}</p>}
+    <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col gap-1 shadow-xs">
+      <p className="text-[11px] uppercase font-bold text-[#667781] tracking-wider">{label}</p>
+      <p className={`text-2xl font-extrabold ${toneCls}`}>{value}</p>
+      {sub && <p className="text-xs text-[#8696a0] truncate">{sub}</p>}
     </div>
   );
 }
@@ -96,14 +96,14 @@ function StatCard({ label, value, tone = 'default', sub }: { label: string; valu
 function StatusBadge({ entry }: { entry: ClickEntry }) {
   if (entry.status === 'MATCHED') {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-        <CheckCircle2 size={11} /> MATCHED
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+        <CheckCircle2 size={11} className="text-emerald-600" /> MATCHED
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">
-      <Activity size={11} /> PENDING
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+      <Activity size={11} className="text-slate-500" /> PENDING
     </span>
   );
 }
@@ -111,7 +111,7 @@ function StatusBadge({ entry }: { entry: ClickEntry }) {
 function MetaTiny({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <p className="text-[10px]"><span className="text-slate-600 uppercase">{label}:</span> <span className="text-slate-400 font-mono">{value}</span></p>
+    <p className="text-[10px]"><span className="text-[#8696a0] uppercase font-bold">{label}:</span> <span className="text-[#111b21] font-mono">{value}</span></p>
   );
 }
 
@@ -202,7 +202,7 @@ export const MetaClickCatcher: React.FC = () => {
     setPage(1);
   };
 
-  // Paksa reload kedua sumber data (ringkasan + log klik) pakai filter yang sedang berlaku.
+  // Paksa reload kedua sumber data pakai filter yang sedang berlaku.
   const handleRefresh = () => {
     loadSummary(startDate, endDate);
     loadClicks({ startDate, endDate, status, search, utmCampaign, page });
@@ -245,25 +245,25 @@ export const MetaClickCatcher: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
         <div>
-          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-            <MousePointerClick size={20} className="text-pink-400" /> Meta Click Catcher &amp; CAPI Debug
+          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+            <MousePointerClick size={22} className="text-[#008069]" /> Meta Click Catcher &amp; CAPI Debug
           </h2>
-          <p className="text-sm text-slate-500">Pantau performa iklan Meta Ads, atribusi chat WhatsApp, dan kesehatan Conversion API.</p>
+          <p className="text-xs text-[#667781] mt-0.5">Pantau performa iklan Meta Ads, atribusi chat WhatsApp, dan kesehatan Conversion API.</p>
         </div>
         <button
           onClick={handleRefresh}
-          className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 disabled:opacity-50"
+          className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
         >
-          <RefreshCw size={14} className={loadingSummary || loadingClicks ? 'animate-spin' : ''} />
-          Muat Ulang
+          <RefreshCw size={13} className={loadingSummary || loadingClicks ? 'animate-spin' : ''} />
+          <span>Muat Ulang</span>
         </button>
       </div>
 
       {summary?.dbNote && (
-        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-          <AlertTriangle size={14} />
+        <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+          <AlertTriangle size={14} className="text-amber-600" />
           <span>{summary.dbNote} — menampilkan data fallback.</span>
         </div>
       )}
@@ -274,44 +274,44 @@ export const MetaClickCatcher: React.FC = () => {
         <StatCard label="Matched WA Chats" value={summary?.matchedChats ?? '-'} tone="ok" sub="klik → chat ter-link tracking code" />
         <StatCard label="WA Conversion Rate" value={summary ? fmtPct(summary.conversionRate) : '-'} tone="ok" sub={`${summary?.matchedChats ?? 0} / ${summary?.totalClicks ?? 0} klik jadi chat`} />
         <StatCard label="CAPI Events Delivered" value={summary?.capiEventsDelivered ?? '-'} tone="warn" sub={`Contact ${summary?.matchedChats ?? 0} + Purchase ${summary?.purchaseEvents ?? 0}`} />
-        <StatCard label="Unmatched Drain" value={summary?.unmatchedDrain ?? '-'} tone={summary && summary.unmatchedDrain > 0 ? 'err' : 'default'} sub="klik tanpa pengiriman pesan WA" />
+        <StatCard label="Unmatched Drain" value={summary?.unmatchedDrain ?? '-'} tone={summary && summary.unmatchedDrain > 0 ? 'err' : 'default'} sub="klik tanpa kirim pesan WA" />
       </section>
 
       {/* ---------------- 2. Filter Bar ---------------- */}
-      <section className="glass-panel rounded-2xl p-4">
+      <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs">
         <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1"><CalendarDays size={11} /> Dari</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500" />
+          <div className="space-y-1">
+            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Dari</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
           </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1"><CalendarDays size={11} /> Sampai</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500" />
+          <div className="space-y-1">
+            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
           </div>
-          <div>
-            <label className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1"><Activity size={11} /> Status</label>
-            <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500">
+          <div className="space-y-1">
+            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
+            <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
               <option value="all">Semua</option>
               <option value="matched">MATCHED</option>
               <option value="unmatched">PENDING</option>
             </select>
           </div>
-          <div className="flex-1 min-w-[180px]">
-            <label className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1"><Tag size={11} /> Tracking Code / Campaign</label>
+          <div className="flex-1 min-w-[180px] space-y-1">
+            <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Tag size={12} className="text-[#008069]" /> Tracking Code / Campaign</label>
             <input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
               placeholder="Cari kode tracking (mis. a7) atau campaign..."
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500"
+              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleApplyFilters} className="px-4 py-2 bg-white/5 hover:bg-pink-500/10 border border-white/10 text-slate-300 hover:text-pink-400 rounded-xl text-xs font-bold transition flex items-center gap-2">
-              <Search size={13} /> Terapkan
+            <button onClick={handleApplyFilters} className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
+              <Search size={13} /> <span>Terapkan</span>
             </button>
-            <button onClick={handleResetFilters} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-xs font-medium transition">
+            <button onClick={handleResetFilters} className="px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs">
               Reset
             </button>
           </div>
@@ -319,78 +319,78 @@ export const MetaClickCatcher: React.FC = () => {
       </section>
 
       {/* ---------------- 3. Ad Click Log Table ---------------- */}
-      <section className="glass-panel rounded-2xl p-5">
+      <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-            <MousePointerClick size={16} className="text-pink-400" /> Log Klik Iklan (atribusi)
+          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+            <MousePointerClick size={16} className="text-[#008069]" /> <span>Log Klik Iklan (Atribusi)</span>
           </h3>
-          <span className="text-[11px] text-slate-500">{total} klik · halaman {page}/{totalPages}</span>
+          <span className="text-xs text-[#8696a0]">{total} klik · halaman {page}/{totalPages}</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left uppercase tracking-wider text-slate-500 border-b border-white/5">
-                <th className="py-2 pr-3">Tracking</th>
-                <th className="py-2 pr-3">Waktu Klik</th>
-                <th className="py-2 pr-3">Status Atribusi</th>
-                <th className="py-2 pr-3">Pasien</th>
-                <th className="py-2 pr-3">UTM</th>
-                <th className="py-2">Meta / Browser</th>
+              <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+                <th className="py-2.5 px-3">Tracking</th>
+                <th className="py-2.5 px-3">Waktu Klik</th>
+                <th className="py-2.5 px-3">Status Atribusi</th>
+                <th className="py-2.5 px-3">Pasien</th>
+                <th className="py-2.5 px-3">UTM</th>
+                <th className="py-2.5 px-3">Meta / Browser</th>
               </tr>
             </thead>
             <tbody>
               {entries.length === 0 && !loadingClicks && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-500">Belum ada klik iklan pada rentang/filter ini.</td>
+                  <td colSpan={6} className="py-6 text-center text-[#8696a0]">Belum ada klik iklan pada rentang/filter ini.</td>
                 </tr>
               )}
               {loadingClicks && entries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-slate-500"><Loader size={14} className="inline animate-spin mr-2" />Memuat...</td>
+                  <td colSpan={6} className="py-6 text-center text-[#8696a0]"><Loader size={14} className="inline animate-spin mr-2 text-[#008069]" />Memuat...</td>
                 </tr>
               )}
               {entries.map((e) => (
-                <tr key={e.id} className="border-b border-white/5 last:border-0 align-top">
-                  <td className="py-2 pr-3">
-                    <span className="font-mono font-bold text-pink-400 bg-pink-500/10 border border-pink-500/20 rounded-lg px-2 py-0.5">{e.trackingCode ?? '-'}</span>
+                <tr key={e.id} className="border-b border-[#e9edef] last:border-0 align-top hover:bg-[#f8fafc] transition-colors">
+                  <td className="py-2.5 px-3">
+                    <span className="font-mono font-bold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] rounded-lg px-2 py-0.5">{e.trackingCode ?? '-'}</span>
                   </td>
-                  <td className="py-2 pr-3 whitespace-nowrap text-slate-400">{fmtTime(e.createdAt)}</td>
-                  <td className="py-2 pr-3">
+                  <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(e.createdAt)}</td>
+                  <td className="py-2.5 px-3">
                     <StatusBadge entry={e} />
                     {e.status === 'MATCHED' && e.matchedAt && (
-                      <span className="block text-[10px] text-emerald-500/80 mt-0.5">matched {fmtTime(e.matchedAt)}</span>
+                      <span className="block text-[10px] text-emerald-700 mt-0.5 font-medium">matched {fmtTime(e.matchedAt)}</span>
                     )}
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="py-2.5 px-3">
                     {e.customer ? (
                       <div>
-                        <p className="text-slate-200 font-medium">{e.customer.name || 'Tanpa nama'}</p>
-                        <p className="text-slate-500 font-mono">{e.customer.phone}</p>
+                        <p className="text-[#111b21] font-semibold">{e.customer.name || 'Tanpa nama'}</p>
+                        <p className="text-[#667781] font-mono text-[11px]">{e.customer.phone}</p>
                       </div>
                     ) : e.phone ? (
-                      <p className="text-slate-600 font-mono">{e.phone}</p>
+                      <p className="text-[#667781] font-mono text-[11px]">{e.phone}</p>
                     ) : (
-                      <span className="text-slate-600">-</span>
+                      <span className="text-[#8696a0]">-</span>
                     )}
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="py-2.5 px-3">
                     {e.utmCampaign ? (
-                      <div className="text-[10px] space-y-0.5">
-                        <p className="text-sky-400">@{e.utmCampaign}</p>
-                        {e.utmSource && <p className="text-slate-500">{e.utmSource}{e.utmMedium ? ` / ${e.utmMedium}` : ''}</p>}
-                        {e.landingUrl && <p className="text-slate-600 truncate max-w-[160px]" title={e.landingUrl}><Globe size={9} className="inline mr-0.5 -mt-px" />{e.landingUrl}</p>}
+                      <div className="text-[11px] space-y-0.5">
+                        <p className="text-[#008069] font-semibold">@{e.utmCampaign}</p>
+                        {e.utmSource && <p className="text-[#667781]">{e.utmSource}{e.utmMedium ? ` / ${e.utmMedium}` : ''}</p>}
+                        {e.landingUrl && <p className="text-[#8696a0] truncate max-w-[160px]" title={e.landingUrl}><Globe size={10} className="inline mr-0.5 text-[#008069]" />{e.landingUrl}</p>}
                       </div>
                     ) : (
-                      <span className="text-slate-600">-</span>
+                      <span className="text-[#8696a0]">-</span>
                     )}
                   </td>
-                  <td className="py-2">
+                  <td className="py-2.5 px-3">
                     <MetaTiny label="fbclid" value={e.fbclid} />
                     <MetaTiny label="fbp" value={e.fbp} />
                     <MetaTiny label="fbc" value={e.fbc} />
-                    {e.ipAddress && <p className="text-[10px]"><span className="text-slate-600 uppercase">IP:</span> <span className="text-slate-400 font-mono">{e.ipAddress}</span></p>}
-                    {e.userAgent && <p className="text-[10px] text-slate-600 truncate max-w-[220px]" title={e.userAgent}>{e.userAgent}</p>}
+                    {e.ipAddress && <p className="text-[10px]"><span className="text-[#8696a0] uppercase font-bold">IP:</span> <span className="text-[#111b21] font-mono">{e.ipAddress}</span></p>}
+                    {e.userAgent && <p className="text-[10px] text-[#8696a0] truncate max-w-[220px]" title={e.userAgent}>{e.userAgent}</p>}
                   </td>
                 </tr>
               ))}
@@ -402,19 +402,19 @@ export const MetaClickCatcher: React.FC = () => {
       </section>
 
       {/* ---------------- 4. CAPI Health & Live Tester ---------------- */}
-      <section className="glass-panel rounded-2xl p-5 space-y-4">
+      <section className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-            <Zap size={16} className="text-pink-400" /> Meta CAPI Health &amp; Live Tester
+          <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+            <Zap size={16} className="text-[#008069]" /> <span>Meta CAPI Health &amp; Live Tester</span>
           </h3>
           {capi && (
             <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                 circuitOk
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                   : capi.circuitState === 'HALF_OPEN'
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                  ? 'bg-amber-100 text-amber-800 border-amber-200'
+                  : 'bg-rose-100 text-rose-800 border-rose-200'
               }`}
             >
               <Activity size={11} /> Circuit: {capi.circuitState}
@@ -423,33 +423,33 @@ export const MetaClickCatcher: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${capi?.pixelIdConfigured ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-slate-400 border-white/10'}`}>
-            <ShieldCheck size={11} /> Pixel ID {capi?.pixelIdConfigured ? 'OK' : 'MISSING'}
+          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${capi?.pixelIdConfigured ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+            <ShieldCheck size={12} className={capi?.pixelIdConfigured ? 'text-emerald-600' : 'text-slate-500'} /> Pixel ID {capi?.pixelIdConfigured ? 'OK' : 'MISSING'}
           </span>
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${capi?.tokenConfigured ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-            <ShieldCheck size={11} /> Access Token {capi?.tokenConfigured ? 'OK' : 'MISSING'}
+          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${capi?.tokenConfigured ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200'}`}>
+            <ShieldCheck size={12} className={capi?.tokenConfigured ? 'text-emerald-600' : 'text-rose-600'} /> Access Token {capi?.tokenConfigured ? 'OK' : 'MISSING'}
           </span>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/5 text-slate-400 border border-white/10">
-            <ShieldCheck size={11} /> Sumber: {capi?.source ? capi.source.toUpperCase() : '-'}
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            <ShieldCheck size={12} className="text-slate-500" /> Sumber: {capi?.source ? capi.source.toUpperCase() : '-'}
           </span>
         </div>
 
         {capi?.circuitFallbackUsed && (
-          <p className="text-[11px] text-amber-400 flex items-center gap-1">
-            <AlertTriangle size={11} /> Fallback Circuit Breaker aktif — beberapa request CAPI terakhir difallback (jaringan / rate-limit / server Meta).
+          <p className="text-xs text-amber-800 flex items-center gap-1">
+            <AlertTriangle size={13} className="text-amber-600" /> Fallback Circuit Breaker aktif — beberapa request CAPI terakhir difallback (jaringan / rate-limit / server Meta).
           </p>
         )}
 
-        <div className="border-t border-white/5 pt-4">
-          <h4 className="text-sm font-bold text-slate-200 mb-3">Live Test Event CAPI</h4>
-          <p className="text-[11px] text-slate-500 mb-3">
-            Kirim event test ke Meta untuk memastikan Pixel ID &amp; Access Token valid tanpa menunggu transaksi riil. Konfigurasi kredensial di <span className="text-slate-300">Operational Settings → Meta Pixel &amp; CAPI</span>.
+        <div className="border-t border-[#e9edef] pt-4">
+          <h4 className="text-xs font-bold text-[#111b21] mb-2">Live Test Event CAPI</h4>
+          <p className="text-xs text-[#667781] mb-3">
+            Kirim event test ke Meta untuk memastikan Pixel ID &amp; Access Token valid tanpa menunggu transaksi riil. Konfigurasi kredensial di <span className="text-[#111b21] font-semibold">Operational Settings → Meta Pixel &amp; CAPI</span>.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 block">Event</label>
-              <select value={testEvent} onChange={(e) => setTestEvent(e.target.value as any)} className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500">
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Event</label>
+              <select value={testEvent} onChange={(e) => setTestEvent(e.target.value as any)} className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
                 <option>Contact</option>
                 <option>Purchase</option>
                 <option>Lead</option>
@@ -458,20 +458,20 @@ export const MetaClickCatcher: React.FC = () => {
                 <option>AddToCart</option>
               </select>
             </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 block">Nilai (opsional)</label>
-              <input type="number" value={testValue} onChange={(e) => setTestValue(e.target.value)} placeholder="mis. 150000" className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500" />
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Nilai (opsional)</label>
+              <input type="number" value={testValue} onChange={(e) => setTestValue(e.target.value)} placeholder="mis. 150000" className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs" />
             </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 block">Currency</label>
-              <select value={testCurrency} onChange={(e) => setTestCurrency(e.target.value)} className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-pink-500">
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Currency</label>
+              <select value={testCurrency} onChange={(e) => setTestCurrency(e.target.value)} className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
                 <option>IDR</option>
                 <option>USD</option>
               </select>
             </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 block">Test Event Code (opsional)</label>
-              <input type="text" value={testEventCode} onChange={(e) => setTestEventCode(e.target.value)} placeholder="TESTxxxx (Events Manager)" className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500" />
+            <div className="space-y-1">
+              <label className="text-[11px] uppercase font-bold text-[#111b21] block">Test Event Code (opsional)</label>
+              <input type="text" value={testEventCode} onChange={(e) => setTestEventCode(e.target.value)} placeholder="TESTxxxx (Events Manager)" className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs" />
             </div>
           </div>
 
@@ -479,21 +479,21 @@ export const MetaClickCatcher: React.FC = () => {
             <button
               onClick={handleTestCapi}
               disabled={testing}
-              className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
             >
-              {testing ? <Loader size={14} className="animate-spin" /> : <Send size={14} />}
-              {testing ? 'Mengirim test...' : 'Kirim Test Event CAPI'}
+              {testing ? <Loader size={13} className="animate-spin" /> : <Send size={13} />}
+              <span>{testing ? 'Mengirim test...' : 'Kirim Test Event CAPI'}</span>
             </button>
             {testResult && (
-              <span className={`text-[11px] inline-flex items-center gap-1 ${testResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {testResult.success ? <CheckCircle2 size={12} /> : <XCircle size={12} />} HTTP {testResult.status ?? '-'}
+              <span className={`text-xs inline-flex items-center gap-1 font-semibold ${testResult.success ? 'text-emerald-700' : 'text-rose-600'}`}>
+                {testResult.success ? <CheckCircle2 size={13} /> : <XCircle size={13} />} HTTP {testResult.status ?? '-'}
               </span>
             )}
           </div>
 
           {testResult && (
-            <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
-              testResult.success ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+            <div className={`mt-3 rounded-xl border px-3.5 py-2.5 text-xs shadow-xs ${
+              testResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'
             }`}>
               {testResult.message}
             </div>
