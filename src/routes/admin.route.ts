@@ -53,7 +53,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
       request.url.startsWith('/admin/') ||
       request.url === '/api/admin/auth/login' ||
       request.url === '/api/admin/auth/logout' ||
-      request.url === '/api/admin/auth/me'
+      request.url === '/api/admin/auth/me' ||
+      request.url === '/api/admin/auth/restore'
     ) {
       return;
     }

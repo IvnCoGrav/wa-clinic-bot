@@ -17,9 +17,29 @@ interface StaffAuthContextType {
 
 const StaffAuthContext = createContext<StaffAuthContextType | undefined>(undefined);
 
+// Token cadangan untuk fallback PWA (cookie bisa hilang saat aplikasi Android ditutup,
+// sesi server tetap valid — token ini dipakai untuk me-issue ulang cookie via /restore).
+const TOKEN_STORAGE_KEY = 'staff_session_token';
+
 export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [staff, setStaff] = useState<StaffUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) return 'invalid';
+    try {
+      const res = await apiRequest('/api/staff/auth/restore', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      });
+      return res && res.success ? 'ok' : 'invalid';
+    } catch (err: any) {
+      const status = (err as any)?.status;
+      if (status === 401 || status === 403) return 'invalid';
+      return 'network';
+    }
+  }
 
   // Check auth session on mount
   useEffect(() => {
@@ -45,7 +65,19 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (cancelled) return;
         const status = (err as any)?.status;
         if (status === 401 || status === 403) {
-          // Sesi benar-benar tidak valid/kadaluarsa — arahkan ke login
+          // Cookie hilang/tidak valid — coba pulihkan dari token cadangan (PWA fallback)
+          const restoreResult = await restoreSession();
+          if (cancelled) return;
+          if (restoreResult === 'ok') {
+            retryTimer = setTimeout(checkAuth, 500);
+            return;
+          }
+          if (restoreResult === 'network') {
+            // Server sedang bermasalah — jangan hapus token, retry nanti
+            retryTimer = setTimeout(checkAuth, 5000);
+            return;
+          }
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
           setStaff(null);
           setLoading(false);
           return;
@@ -78,6 +110,7 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify({ phone, password }),
       });
       if (data.success && data.staff) {
+        if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
         setStaff({
           id: data.staff.id,
           name: data.staff.name,
@@ -94,6 +127,7 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const logout = async () => {
     setLoading(true);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     try {
       await apiRequest('/api/staff/auth/logout', { method: 'POST' });
     } catch (err) {

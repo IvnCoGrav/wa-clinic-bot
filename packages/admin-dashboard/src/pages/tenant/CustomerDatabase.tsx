@@ -245,7 +245,7 @@ export const CustomerDatabase: React.FC = () => {
         </button>
       </form>
 
-      {/* Customer Table */}
+      {/* Customer Table & Mobile Cards */}
       <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
         {loading ? (
           <div className="flex justify-center items-center py-20">
@@ -257,132 +257,242 @@ export const CustomerDatabase: React.FC = () => {
             <p className="font-bold text-[#111b21]">Tidak ada customer ditemukan</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-4">Tracking Code (ID)</th>
-                  <th className="py-3 px-4">No HP / Nama</th>
-                  <th className="py-3 px-4">Status MQL</th>
-                  <th className="py-3 px-4">Label WA</th>
-                  <th className="py-3 px-4">LTV (Lifetime Value)</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e9edef]">
-                {customers.map((customer) => (
-                  <tr key={customer.id} className="hover:bg-[#f8fafc] transition">
-                    {/* Tracking Code */}
-                    <td className="py-3.5 px-4">
+          <>
+            {/* Mobile Card List (< md) */}
+            <div className="md:hidden divide-y divide-[#e9edef]">
+              {customers.map((customer) => (
+                <div key={customer.id} className="p-4 space-y-3 bg-white">
+                  {/* Top row: Name/Phone & LTV */}
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-mono text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] px-2 py-0.5 rounded text-[11px] font-bold">
-                          {customer.trackingCode}
+                        <span className="font-bold text-sm text-[#111b21]">
+                          {customer.name || 'Bunda Customer'}
                         </span>
-                        <button
-                          onClick={() => handleCopyCode(customer.trackingCode)}
-                          className="text-[#8696a0] hover:text-[#111b21] transition p-1 rounded hover:bg-[#f0f2f5]"
-                          title="Salin Tracking Code"
-                        >
-                          {copiedCode === customer.trackingCode ? <Check size={12} className="text-[#008069]" /> : <Copy size={12} />}
-                        </button>
                       </div>
-                      {customer.adClick?.utmCampaign && (
-                        <p className="text-[10px] text-[#667781] mt-1 truncate max-w-[150px]">
-                          Campaign: {customer.adClick.utmCampaign}
-                        </p>
-                      )}
-                    </td>
-
-                    {/* Customer Phone & Name */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center space-x-2">
-                        <Phone size={14} className="text-[#8696a0] flex-shrink-0" />
-                        <div>
-                          <span className="font-bold text-[#111b21] block">{customer.phone}</span>
-                          <span className="text-[11px] text-[#667781]">{customer.name || 'Bunda Customer'}</span>
-                        </div>
+                      <div className="flex items-center space-x-1.5 text-xs text-[#54656f] mt-0.5">
+                        <Phone size={13} className="text-[#8696a0]" />
+                        <span className="font-mono">{customer.phone}</span>
                       </div>
-                    </td>
+                    </div>
 
-                    {/* Status MQL */}
-                    <td className="py-3.5 px-4">
-                      {customer.isMql ? (
-                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
-                          <Zap size={10} className="fill-emerald-700 text-emerald-700" />
-                          <span>MQL ({customer.mqlBubbleCount} Bubble)</span>
-                        </span>
-                      ) : (
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f0f2f5] text-[#54656f] border border-[#e9edef]">
-                          Regular ({customer.mqlBubbleCount} Bubble)
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Label WA */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center space-x-1.5">
-                        <button
-                          onClick={() => handleToggleLabel(customer, 'admin', !customer.isAdminLabeled)}
-                          title={customer.isAdminLabeled ? 'Klik untuk lepas label Admin' : 'Klik untuk pasang label Admin'}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
-                            customer.isAdminLabeled
-                              ? 'bg-rose-100 text-rose-800 border-rose-200'
-                              : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef] hover:text-[#111b21] hover:bg-[#e2e8f0]'
-                          }`}
-                        >
-                          Admin
-                        </button>
-                        <button
-                          onClick={() => handleToggleLabel(customer, 'hold', !customer.isHoldLabeled)}
-                          title={customer.isHoldLabeled ? 'Klik untuk lepas label Hold' : 'Klik untuk pasang label Hold'}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
-                            customer.isHoldLabeled
-                              ? 'bg-amber-100 text-amber-800 border-amber-200'
-                              : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef] hover:text-[#111b21] hover:bg-[#e2e8f0]'
-                          }`}
-                        >
-                          Hold
-                        </button>
-                      </div>
-                    </td>
-
-                    {/* LTV */}
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-[#008069] text-xs">
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-bold text-[#008069] text-sm">
                         {formatCurrency(customer.ltv)}
                       </div>
                       <span className="text-[10px] text-[#667781]">
-                        {customer.reservationCount} transaksi terkonfirmasi
+                        {customer.reservationCount}x transaksi
                       </span>
-                    </td>
+                    </div>
+                  </div>
 
-                    {/* Actions */}
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end space-x-1.5">
-                        {/* Chat History Button */}
-                        <button
-                          onClick={() => handleOpenHistory(customer)}
-                          className="px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
-                        >
-                          <MessageSquare size={12} />
-                          <span>History</span>
-                        </button>
+                  {/* Badges & Meta */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex items-center space-x-1">
+                      <span className="font-mono text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] px-2 py-0.5 rounded text-[11px] font-bold">
+                        {customer.trackingCode}
+                      </span>
+                      <button
+                        onClick={() => handleCopyCode(customer.trackingCode)}
+                        className="text-[#8696a0] hover:text-[#111b21] transition p-1.5 rounded hover:bg-[#f0f2f5]"
+                        title="Salin Tracking Code"
+                        aria-label="Salin Tracking Code"
+                      >
+                        {copiedCode === customer.trackingCode ? <Check size={13} className="text-[#008069]" /> : <Copy size={13} />}
+                      </button>
+                    </div>
 
-                        {/* Send Event Button */}
-                        <button
-                          onClick={() => setActiveEventCustomer(customer)}
-                          className="px-2.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
-                        >
-                          <Send size={12} />
-                          <span>Send Event</span>
-                        </button>
-                      </div>
-                    </td>
+                    {customer.isMql ? (
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
+                        <Zap size={10} className="fill-emerald-700 text-emerald-700" />
+                        <span>MQL ({customer.mqlBubbleCount} Bubble)</span>
+                      </span>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f0f2f5] text-[#54656f] border border-[#e9edef]">
+                        Regular ({customer.mqlBubbleCount} Bubble)
+                      </span>
+                    )}
+
+                    <div className="flex items-center space-x-1 ml-auto">
+                      <button
+                        onClick={() => handleToggleLabel(customer, 'admin', !customer.isAdminLabeled)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
+                          customer.isAdminLabeled
+                            ? 'bg-rose-100 text-rose-800 border-rose-200'
+                            : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef]'
+                        }`}
+                      >
+                        Admin
+                      </button>
+                      <button
+                        onClick={() => handleToggleLabel(customer, 'hold', !customer.isHoldLabeled)}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
+                          customer.isHoldLabeled
+                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                            : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef]'
+                        }`}
+                      >
+                        Hold
+                      </button>
+                    </div>
+                  </div>
+
+                  {customer.adClick?.utmCampaign && (
+                    <p className="text-[11px] text-[#667781] truncate">
+                      Campaign: <span className="text-[#111b21] font-medium">{customer.adClick.utmCampaign}</span>
+                    </p>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={() => handleOpenHistory(customer)}
+                      className="py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                    >
+                      <MessageSquare size={14} />
+                      <span>History Chat</span>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveEventCustomer(customer)}
+                      className="py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                    >
+                      <Send size={14} />
+                      <span>Send Event</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-4">Tracking Code (ID)</th>
+                    <th className="py-3 px-4">No HP / Nama</th>
+                    <th className="py-3 px-4">Status MQL</th>
+                    <th className="py-3 px-4">Label WA</th>
+                    <th className="py-3 px-4">LTV (Lifetime Value)</th>
+                    <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[#e9edef]">
+                  {customers.map((customer) => (
+                    <tr key={customer.id} className="hover:bg-[#f8fafc] transition">
+                      {/* Tracking Code */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-mono text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] px-2 py-0.5 rounded text-[11px] font-bold">
+                            {customer.trackingCode}
+                          </span>
+                          <button
+                            onClick={() => handleCopyCode(customer.trackingCode)}
+                            className="text-[#8696a0] hover:text-[#111b21] transition p-1 rounded hover:bg-[#f0f2f5]"
+                            title="Salin Tracking Code"
+                          >
+                            {copiedCode === customer.trackingCode ? <Check size={12} className="text-[#008069]" /> : <Copy size={12} />}
+                          </button>
+                        </div>
+                        {customer.adClick?.utmCampaign && (
+                          <p className="text-[10px] text-[#667781] mt-1 truncate max-w-[150px]">
+                            Campaign: {customer.adClick.utmCampaign}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* Customer Phone & Name */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center space-x-2">
+                          <Phone size={14} className="text-[#8696a0] flex-shrink-0" />
+                          <div>
+                            <span className="font-bold text-[#111b21] block">{customer.phone}</span>
+                            <span className="text-[11px] text-[#667781]">{customer.name || 'Bunda Customer'}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status MQL */}
+                      <td className="py-3.5 px-4">
+                        {customer.isMql ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
+                            <Zap size={10} className="fill-emerald-700 text-emerald-700" />
+                            <span>MQL ({customer.mqlBubbleCount} Bubble)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f0f2f5] text-[#54656f] border border-[#e9edef]">
+                            Regular ({customer.mqlBubbleCount} Bubble)
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Label WA */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            onClick={() => handleToggleLabel(customer, 'admin', !customer.isAdminLabeled)}
+                            title={customer.isAdminLabeled ? 'Klik untuk lepas label Admin' : 'Klik untuk pasang label Admin'}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
+                              customer.isAdminLabeled
+                                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef] hover:text-[#111b21] hover:bg-[#e2e8f0]'
+                            }`}
+                          >
+                            Admin
+                          </button>
+                          <button
+                            onClick={() => handleToggleLabel(customer, 'hold', !customer.isHoldLabeled)}
+                            title={customer.isHoldLabeled ? 'Klik untuk lepas label Hold' : 'Klik untuk pasang label Hold'}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
+                              customer.isHoldLabeled
+                                ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef] hover:text-[#111b21] hover:bg-[#e2e8f0]'
+                            }`}
+                          >
+                            Hold
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* LTV */}
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-[#008069] text-xs">
+                          {formatCurrency(customer.ltv)}
+                        </div>
+                        <span className="text-[10px] text-[#667781]">
+                          {customer.reservationCount} transaksi terkonfirmasi
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end space-x-1.5">
+                          {/* Chat History Button */}
+                          <button
+                            onClick={() => handleOpenHistory(customer)}
+                            className="px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                          >
+                            <MessageSquare size={12} />
+                            <span>History</span>
+                          </button>
+
+                          {/* Send Event Button */}
+                          <button
+                            onClick={() => setActiveEventCustomer(customer)}
+                            className="px-2.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                          >
+                            <Send size={12} />
+                            <span>Send Event</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         {/* Pagination Footer */}

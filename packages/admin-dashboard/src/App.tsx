@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Layout } from './components/common/Layout';
 import { UiFeedbackProvider } from './components/common/UiFeedback';
@@ -32,6 +32,19 @@ const StaffLogin = lazy(() => import('./pages/staff/StaffLogin').then(m => ({ de
 const StaffToday = lazy(() => import('./pages/staff/StaffToday').then(m => ({ default: m.StaffToday })));
 const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m => ({ default: m.StaffSchedule })));
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
+
+/** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. */
+const IndexRedirect: React.FC = () => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f0f2f5]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#008069] border-t-transparent"></div>
+      </div>
+    );
+  }
+  return <Navigate to={user?.role === 'therapist' ? '/admin/staff/today' : '/admin/overview'} replace />;
+};
 
 export const App: React.FC = () => {
   return (
@@ -246,9 +259,9 @@ export const App: React.FC = () => {
             <Route path="/jadwal" element={<Navigate to="/admin/staff/schedule" replace />} />
 
             {/* Fallbacks */}
-            <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
-            <Route path="/admin/*" element={<Navigate to="/admin/overview" replace />} />
-            <Route path="*" element={<Navigate to="/admin/overview" replace />} />
+            <Route path="/admin" element={<IndexRedirect />} />
+            <Route path="/admin/*" element={<IndexRedirect />} />
+            <Route path="*" element={<IndexRedirect />} />
           </Routes>
         </Suspense>
         </UiFeedbackProvider>
