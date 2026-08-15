@@ -45,7 +45,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
     const setCookieHeader = resLogin.headers['set-cookie'] as string;
     expect(setCookieHeader).toContain('admin_session=');
     expect(setCookieHeader).toContain('HttpOnly');
-    expect(setCookieHeader).toContain('SameSite=Strict');
+    expect(setCookieHeader).toContain('SameSite=Lax');
+    expect(JSON.parse(resLogin.body).token).toBeDefined();
 
     const sessionCookieToken = setCookieHeader.match(/admin_session=([^;]+)/)?.[1] || '';
     expect(sessionCookieToken.length).toBeGreaterThan(10);
@@ -92,6 +93,33 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
     expect(resBlocked.statusCode).toBe(429);
     expect(JSON.parse(resBlocked.body).error).toContain('Too Many Requests');
+  });
+
+  it('2e. Session Restore (PWA fallback): POST /api/admin/auth/restore re-issues cookie from stored token', async () => {
+    // Buat sesi langsung via service (hindari rate-limit dari test 2)
+    const session = AdminSessionService.createSession('Bidan Kenanga');
+    const token = session.token;
+    expect(token).toBeDefined();
+
+    // Restore tanpa cookie → server mengembalikan Set-Cookie baru
+    const resRestore = await app.inject({
+      method: 'POST',
+      url: '/api/admin/auth/restore',
+      payload: { token },
+    });
+    expect(resRestore.statusCode).toBe(200);
+    const restoreCookie = resRestore.headers['set-cookie'] as string;
+    expect(restoreCookie).toContain('admin_session=');
+    expect(restoreCookie).toContain('HttpOnly');
+    expect(restoreCookie).toContain('SameSite=Lax');
+
+    // Token tidak valid → 401
+    const resInvalid = await app.inject({
+      method: 'POST',
+      url: '/api/admin/auth/restore',
+      payload: { token: 'invalid-token-xyz' },
+    });
+    expect(resInvalid.statusCode).toBe(401);
   });
 
   it('3. 3-Table Staging Review Flow: Fetch & Review endpoints for Medical, General, and Legacy Staging', async () => {

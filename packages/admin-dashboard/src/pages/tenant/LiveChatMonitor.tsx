@@ -26,6 +26,7 @@ import {
   FlaskConical,
   RefreshCw,
   Trash2,
+  ChevronLeft,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 
@@ -206,8 +207,11 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
+    setMobileView('chat');
     loadThread(conversationId);
   };
 
@@ -498,14 +502,26 @@ export const LiveChatMonitor: React.FC = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
-            <MessageSquare className="text-[#008069]" size={22} />
-            <span>Live Chat Monitor</span>
-          </h1>
-          <p className="text-xs text-[#667781] mt-0.5">
-            Pantau percakapan dan balas langsung dari dashboard secara real-time.
-          </p>
+        <div className="flex items-center space-x-3">
+          {mobileView === 'chat' && (
+            <button
+              onClick={() => setMobileView('list')}
+              className="lg:hidden p-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] transition shadow-xs flex items-center space-x-1 font-semibold text-xs"
+              title="Kembali ke daftar percakapan"
+            >
+              <ChevronLeft size={18} />
+              <span>Daftar</span>
+            </button>
+          )}
+          <div>
+            <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+              <MessageSquare className="text-[#008069]" size={22} />
+              <span>Live Chat Monitor</span>
+            </h1>
+            <p className="text-xs text-[#667781] mt-0.5">
+              Pantau percakapan dan balas langsung dari dashboard secara real-time.
+            </p>
+          </div>
         </div>
         <div className="flex items-center space-x-2.5">
           <button
@@ -560,7 +576,7 @@ export const LiveChatMonitor: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Conversations List */}
-          <div className="lg:col-span-5 space-y-3">
+          <div className={`${mobileView === 'chat' ? 'hidden lg:block' : 'block'} lg:col-span-5 space-y-3`}>
             <div className="flex justify-between items-center">
               <h3 className="text-xs font-bold text-[#667781] uppercase tracking-wider block">
                 Daftar Percakapan
@@ -779,9 +795,9 @@ export const LiveChatMonitor: React.FC = () => {
           </div>
 
           {/* Right Panel - Chat Inspector */}
-          <div className="lg:col-span-7">
+          <div className={`${mobileView === 'list' ? 'hidden lg:block' : 'block'} lg:col-span-7`}>
             {selectedChat ? (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-5 h-[650px] flex flex-col justify-between shadow-xs">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-3 sm:p-5 h-[calc(100dvh-170px)] lg:h-[650px] flex flex-col justify-between shadow-xs">
                 {/* Header Info */}
                 <div className="border-b border-[#e9edef] pb-3 space-y-2">
                   {selectedChat.isSandboxTest && (
@@ -790,24 +806,33 @@ export const LiveChatMonitor: React.FC = () => {
                       <span>QA TEST — chat simulasi, bukan WhatsApp asli</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                        <MessageCircle className="text-[#008069]" size={16} />
-                        <span>{selectedChat.customerName || 'Customer'}</span>
-                      </h3>
-                      <p className="text-xs text-[#667781] font-mono mt-0.5">
-                        {selectedChat.customerPhone || 'Unknown'}
-                      </p>
-                      {!!selectedChat.purchaseCount && selectedChat.purchaseCount > 0 && (
-                        <p className="text-xs text-[#008069] font-medium flex items-center space-x-1 mt-0.5">
-                          <ShoppingBag size={11} />
-                          <span>{selectedChat.purchaseCount === 1 ? 'Purchase 1x' : `Repeat Order ${selectedChat.purchaseCount}x`}</span>
-                          {!!selectedChat.ltv && selectedChat.ltv > 0 && (
-                            <span className="text-[#667781]">· LTV: {formatRp(selectedChat.ltv)}</span>
-                          )}
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex items-start space-x-2.5">
+                      <button
+                        onClick={() => setMobileView('list')}
+                        className="lg:hidden p-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0"
+                        title="Kembali ke daftar percakapan"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <div>
+                        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                          <MessageCircle className="text-[#008069]" size={16} />
+                          <span>{selectedChat.customerName || 'Customer'}</span>
+                        </h3>
+                        <p className="text-xs text-[#667781] font-mono mt-0.5">
+                          {selectedChat.customerPhone || 'Unknown'}
                         </p>
-                      )}
+                        {!!selectedChat.purchaseCount && selectedChat.purchaseCount > 0 && (
+                          <p className="text-xs text-[#008069] font-medium flex items-center space-x-1 mt-0.5">
+                            <ShoppingBag size={11} />
+                            <span>{selectedChat.purchaseCount === 1 ? 'Purchase 1x' : `Repeat Order ${selectedChat.purchaseCount}x`}</span>
+                            {!!selectedChat.ltv && selectedChat.ltv > 0 && (
+                              <span className="text-[#667781]">· LTV: {formatRp(selectedChat.ltv)}</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     {selectedChat.isHumanHandling ? (
                       <button

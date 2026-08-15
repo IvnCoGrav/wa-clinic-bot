@@ -68,8 +68,50 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       const body = JSON.parse(res.body);
       expect(body.success).toBe(true);
       expect(body.staff.name).toBe('Bidan Dewi');
+      expect(body.token).toBe('mock_token_abc');
       expect(res.headers['set-cookie']).toBeDefined();
       expect(res.headers['set-cookie']).toContain('staff_session=mock_token_abc');
+    });
+
+    it('POST /api/staff/auth/restore re-issues staff_session cookie from stored token', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
+        id: 'session-1',
+        token_hash: 'hash',
+        staff_id: 'staff-1',
+        expires_at: new Date(Date.now() + 3600000),
+        revoked_at: null,
+        created_at: new Date(),
+        staff: {
+          id: 'staff-1',
+          name: 'Bidan Dewi',
+          phone: '08123456789',
+          role: 'THERAPIST',
+          active: true,
+        } as any,
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/restore',
+        payload: { token: 'stored_token_abc' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(res.headers['set-cookie']).toContain('staff_session=stored_token_abc');
+    });
+
+    it('POST /api/staff/auth/restore returns 401 for invalid token', async () => {
+      vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/staff/auth/restore',
+        payload: { token: 'invalid_token' },
+      });
+
+      expect(res.statusCode).toBe(401);
     });
 
     it('GET /api/staff/auth/me returns 401 when no session', async () => {

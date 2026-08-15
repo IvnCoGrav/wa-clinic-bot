@@ -67,6 +67,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
         message: 'Login Super Admin berhasil.',
         role: 'super_admin',
         redirectTo: '/admin/overview',
+        token: session.token,
         user: {
           id: session.id,
           email: getAdminEmail(),
@@ -115,6 +116,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
               message: `Login berhasil sebagai ${staff.name}.`,
               role: frontendRole,
               redirectTo,
+              token: result.token,
               user: {
                 id: staff.id,
                 name: staff.name,
@@ -135,6 +137,68 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
 
     // --- TAHAP C: Kredensial tidak valid ---
     return reply.status(401).send({ error: 'Email / Nomor WhatsApp atau password salah.' });
+  });
+
+  /**
+   * POST /api/admin/auth/restore
+   * Mengembalikan cookie sesi dari token yang disimpan di localStorage (fallback PWA).
+   * Dipakai saat browser kehilangan cookie (mis. PWA Android ditutup) tapi sesi server masih valid.
+   */
+  fastify.post('/api/admin/auth/restore', async (request, reply) => {
+    const body = (request.body || {}) as { token?: string };
+    const token = (body.token || '').trim();
+    if (!token) {
+      return reply.status(400).send({ error: 'Token wajib diisi.' });
+    }
+
+    const isSecureRequest =
+      request.protocol === 'https' ||
+      String(request.headers['x-forwarded-proto'] || '')
+        .split(',')[0]
+        .trim() === 'https';
+
+    // 1. Coba sebagai sesi admin
+    const adminSession = AdminSessionService.validateSession(token);
+    if (adminSession) {
+      const cookieValue = `admin_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
+        isSecureRequest ? '; Secure' : ''
+      }`;
+      reply.header('Set-Cookie', cookieValue);
+      return reply.status(200).send({
+        success: true,
+        message: 'Sesi admin dipulihkan.',
+        user: {
+          id: adminSession.id,
+          email: getAdminEmail(),
+          name: adminSession.adminIdentity,
+          role: 'super_admin',
+          tenantId: DEFAULT_TENANT_ID,
+        },
+      });
+    }
+
+    // 2. Coba sebagai sesi staff
+    const staffSession = await StaffAuthService.validateSession(token);
+    if (staffSession) {
+      const cookieValue = `staff_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
+        isSecureRequest ? '; Secure' : ''
+      }`;
+      reply.header('Set-Cookie', cookieValue);
+      const staffRole = staffSession.staff.role;
+      return reply.status(200).send({
+        success: true,
+        message: 'Sesi staff dipulihkan.',
+        user: {
+          id: staffSession.staff.id,
+          name: staffSession.staff.name,
+          phone: staffSession.staff.phone,
+          role: staffRole === 'THERAPIST' ? 'therapist' : staffRole.toLowerCase(),
+          tenantId: DEFAULT_TENANT_ID,
+        },
+      });
+    }
+
+    return reply.status(401).send({ error: 'Sesi tidak valid atau telah kadaluarsa.' });
   });
 
   /**

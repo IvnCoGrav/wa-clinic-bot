@@ -38,11 +38,32 @@
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: #f0f2f5;
   color: #111b21;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mobile Touch Ergonomics & Typography Baseline Overrides */
+@media (max-width: 767px) {
+  /* Elevate body text readability from 12px (text-xs) to comfortable 13.5px-14px on mobile screens */
+  .text-xs {
+    font-size: 0.8125rem; /* 13px */
+    line-height: 1.25rem;
+  }
+
+  /* Prevent micro-text (<11px) from becoming unreadable on handhelds */
+  [class*="text-[9px]"],
+  [class*="text-[10px]"] {
+    font-size: 0.6875rem !important; /* 11px */
+    line-height: 0.875rem !important;
+  }
+
+  /* Standard touch target baseline for action buttons & interactive icons */
+  button:not(.no-touch-min):not(table button):not(.inline-chip) {
+    min-height: 36px;
+  }
 }
 
 /* WhatsApp Clean Panel Components */

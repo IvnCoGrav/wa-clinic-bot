@@ -9,7 +9,11 @@ export async function staffRoutes(fastify: FastifyInstance) {
     const urlPath = request.url.split('?')[0];
 
     // Login & logout endpoint dapat diakses tanpa sesi
-    if (urlPath === '/api/staff/auth/login' || urlPath === '/api/staff/auth/logout') {
+    if (
+      urlPath === '/api/staff/auth/login' ||
+      urlPath === '/api/staff/auth/logout' ||
+      urlPath === '/api/staff/auth/restore'
+    ) {
       return;
     }
 
