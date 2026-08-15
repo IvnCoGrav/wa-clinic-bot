@@ -26,15 +26,18 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Pencantuman Kelurahan & Kecamatan pada Watermark Foto Rumah (`media.service.ts`, `staff-reservation.service.ts`, `customers.subroute.ts`)**:
   - Banner watermark pada foto depan rumah pasien kini otomatis menyertakan nama Kelurahan & Kecamatan (contoh: `📍 GPS: -7.348812, 112.751623 · Kel. Wonokromo, Kec. Wonokromo`).
   - Baris kedua mencantumkan catatan patokan dan tanggal/jam WIB secara rapi dan tajam.
-- **Skema Kroscek & Penolakan Otomatis Koordinat GPS yang Melenceng Jauh (`staff-reservation.service.ts`, `customers.subroute.ts`)**:
-  - Menambahkan validasi ketat sebelum titik koordinat GPS baru disimpan ke database:
-    1. **Batas Jangkauan Klinik (Maks. 45 km)**: Menolak otomatis titik koordinat jika berjarak > 45 km dari klinik (mencegah koordinat luar kota/luar pulau/koordinat 0,0) dengan pesan ramah.
-    2. **Kroscek Pergeseran Area (Maks. 25 km selisih)**: Menolak otomatis jika titik GPS baru melenceng > 25 km dari estimasi area/kelurahan customer yang sudah terdaftar.
-- **Perbaikan Modal Konfirmasi Tertutup Modal Edit via `createPortal` (`UiFeedback.tsx`)**:
-  - Memindahkan rendering dialog konfirmasi (`confirm`) dan notifikasi (`toast`) ke `createPortal(..., document.body)` dengan `zIndex: 99999`.
-  - Menghilangkan jebakan CSS *stacking context* sehingga modal konfirmasi dipastikan selalu tampil di lapisan paling depan di atas modal form apapun.
+- **Aturan Haversine > 1 km (Pertahankan Koordinat Utama & Simpan Revisi ke Ancer-ancer) (`staff-reservation.service.ts`, `customers.subroute.ts`)**:
+  - Jika koordinat GPS baru yang dikirim terapis/admin berselisih **> 1 km** dari koordinat utama customer saat ini:
+    - **Koordinat utama (`Customer.lat` & `Customer.lng`) tetap dipertahankan / tidak ditimpa**.
+    - Koordinat revisi lapangan otomatis dicatat dan ditambahkan ke catatan **patokan / ancer-ancer** (contoh: `[📍 GPS Lapangan: -7.348812, 112.751623 (+1.4km)]`) serta disimpan dalam preferensi customer (`field_gps_lat`, `field_gps_lng`, `field_gps_diverged`).
+    - Mencatat audit log `STAFF_UPDATE_CUSTOMER_LOCATION_DIVERGED` untuk kemudahan pelacakan CS/Admin.
+  - Jika selisih **≤ 1 km** (koreksi presisi pagar/pintu rumah): koordinat utama diperbarui dan jarak dihitung ulang secara normal.
+- **Kunci Akurasi GPS HP Target Maksimal 10 Meter (`StaffToday.tsx`)**:
+  - Tombol *"Gunakan Titik GPS HP Saya Sekarang"* dan auto-GPS kamera kini melacak sinyal satelit dengan high accuracy.
+  - Menampilkan badge status real-time: `🟢 GPS Sangat Akurat (≤10m)` bila akurasi ≤ 10 meter, atau `🟡 Akurasi Cukup (±Xm)` bila sinyal masih lemah lengkap dengan tombol refresh/ulang.
+  - Menampilkan dialog konfirmasi khusus jika terapis menyimpan dengan akurasi > 10 meter untuk memastikan lokasi tetap presisi.
 - **Test & Verifikasi**:
-  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (19/19 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS) — total 30/30 test PASS.
+  - Penambahan unit test `tests/unit/staff-auth-and-reservation.test.ts` (19/19 PASS) dan integrasi `tests/integration/admin-customer-label.test.ts` (11/11 PASS) — total 31/31 test PASS.
   - Build dashboard admin (`npm run build`) dan typecheck backend (`tsc --noEmit`) 100% PASS.
 
 ### Added — Right Sidebar Drawer Menu (Garis Tiga) & Tab Treatment Selesai untuk Portal Terapis
