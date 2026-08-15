@@ -912,8 +912,14 @@ export const StaffManagement: React.FC = () => {
       {/* MODAL: TAMBAH / EDIT ROLE & HAK AKSES */}
       {/* ========================================================================= */}
       {showRoleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setShowRoleModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3 flex-shrink-0">
               <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
                 <ShieldCheck className="text-[#008069]" size={19} />
@@ -1090,8 +1096,14 @@ export const StaffManagement: React.FC = () => {
       {/* MODAL: TAMBAH STAFF BARU */}
       {/* ========================================================================= */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setShowCreateModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
               <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
                 <UserPlus className="text-[#008069]" size={18} />
@@ -1205,8 +1217,14 @@ export const StaffManagement: React.FC = () => {
       {/* MODAL: EDIT STAFF */}
       {/* ========================================================================= */}
       {selectedStaffForEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setSelectedStaffForEdit(null)}
+        >
+          <div
+            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
               <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
                 <Pencil className="text-[#008069]" size={16} />

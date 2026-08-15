@@ -315,8 +315,14 @@ export const ClinicServices: React.FC = () => {
 
       {/* Modal Form */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-lg overflow-hidden flex flex-col shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-lg overflow-hidden flex flex-col shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">

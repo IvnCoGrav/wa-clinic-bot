@@ -372,8 +372,14 @@ export const FollowUpQueue: React.FC = () => {
 
       {/* Reschedule Modal */}
       {rescheduleModal.open && rescheduleModal.item && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-md space-y-4 shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+          onClick={() => setRescheduleModal({ open: false })}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-md space-y-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
               <Calendar className="text-[#008069]" size={18} />
               <span>Ubah Jadwal Kirim Follow-Up</span>
@@ -414,8 +420,14 @@ export const FollowUpQueue: React.FC = () => {
 
       {/* Confirm Modal untuk Send Now / Cancel */}
       {confirmAction && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+          onClick={() => setConfirmAction(null)}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
               {confirmAction.type === 'cancel'
                 ? <><XCircle className="text-rose-600" size={18} /><span>Batalkan Follow-Up?</span></>

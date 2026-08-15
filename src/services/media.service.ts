@@ -193,6 +193,51 @@ export class MediaService {
   }
 
   /**
+   * Mengompres gambar agar dimensi terpanjangnya tidak melebihi maxDim (JPEG q80).
+   * Gambar yang sudah ≤ maxDim dikembalikan apa adanya (tanpa re-encode).
+   * Dipakai untuk bukti bayar & media penting lain — hemat MQL & beban server.
+   */
+  public async resizeImageToMax(buffer: Buffer, maxDim: number, quality = 80): Promise<Buffer> {
+    try {
+      const sharp = (await import('sharp')).default;
+      const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+      if (!meta.width || !meta.height) return buffer;
+      const longest = Math.max(meta.width, meta.height);
+      if (longest <= maxDim) return buffer;
+      return await sharp(buffer, { failOn: 'none' })
+        .rotate()
+        .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer();
+    } catch (err: any) {
+      console.warn('[MEDIA] Gagal resize gambar (dikirim asli):', err?.message || err);
+      return buffer;
+    }
+  }
+
+  /**
+   * Mengompres gambar menjadi 1/divisor dari dimensi terpanjang (JPEG q80,
+   * minimal 120px agar tetap terbaca). Dipakai pricelist — konsisten dengan
+   * versi kecil yang dikirim ke WhatsApp.
+   */
+  public async resizeImageToFraction(buffer: Buffer, divisor: number, quality = 80): Promise<Buffer> {
+    try {
+      const sharp = (await import('sharp')).default;
+      const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+      if (!meta.width || !meta.height) return buffer;
+      const targetDim = Math.max(120, Math.round(Math.max(meta.width, meta.height) / divisor));
+      return await sharp(buffer, { failOn: 'none' })
+        .rotate()
+        .resize({ width: targetDim, height: targetDim, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality })
+        .toBuffer();
+    } catch (err: any) {
+      console.warn('[MEDIA] Gagal resize pecahan gambar (dikirim asli):', err?.message || err);
+      return buffer;
+    }
+  }
+
+  /**
    * Mengonversi relative URL /media/... menjadi:
    * - path absolut lokal   → untuk pengiriman via WAHA (client membaca file langsung)
    * - URL publik penuh     → untuk pengiriman via WABA (Meta fetch link)

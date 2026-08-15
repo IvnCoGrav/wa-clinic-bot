@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
@@ -21,11 +21,12 @@ import {
   LayoutGrid,
   ListFilter,
   Columns,
-  Filter,
+  Eye,
   Receipt,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
-import { CalendarSidebar } from '../../components/calendar/CalendarSidebar';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
 import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
 import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
@@ -37,11 +38,12 @@ export const Reservations: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
   const [proofModal, setProofModal] = useState<Reservation | null>(null);
+  const [proofUploading, setProofUploading] = useState(false);
+  const proofFileInputRef = useRef<HTMLInputElement>(null);
 
   // Calendar View State
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('table');
-  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [filterState, setFilterState] = useState<CalendarFilterState>({
     searchQuery: '',
     category: 'all',
@@ -312,6 +314,85 @@ export const Reservations: React.FC = () => {
     return '-';
   };
 
+  const fileToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+      reader.readAsDataURL(file);
+    });
+
+  // Upload bukti bayar dari modal Manage (dikompres server-side max 800px)
+  const handleProofUpload = async (imageB64: string, mimeType: string, fileName: string) => {
+    if (!selectedRes) return;
+    setProofUploading(true);
+    try {
+      const res = await apiRequest(`/api/admin/reservation/${selectedRes.id}/proof`, {
+        method: 'PUT',
+        body: JSON.stringify({ imageB64, mimeType, fileName }),
+      });
+      if (res && res.success) {
+        toast('Bukti bayar berhasil disimpan.', 'success');
+        setSelectedRes((prev) => (prev ? { ...prev, proof_url: res.data?.proof_url ?? prev.proof_url } : prev));
+        loadReservations();
+      }
+    } catch (err: any) {
+      toast(`Gagal menyimpan bukti bayar: ${err.message}`, 'error');
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
+  const handleProofPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Hanya file gambar yang didukung.', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast('Gambar maksimal 8 MB.', 'error');
+      return;
+    }
+    void (async () => {
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        await handleProofUpload(dataUrl, file.type || 'image/jpeg', file.name);
+      } catch (err: any) {
+        toast(`Gagal membaca file: ${err.message}`, 'error');
+      } finally {
+        if (proofFileInputRef.current) proofFileInputRef.current.value = '';
+      }
+    })();
+  };
+
+  const handleProofRemove = async () => {
+    if (!selectedRes || !selectedRes.proof_url) return;
+    const ok = await confirm({
+      title: 'Hapus Bukti Bayar',
+      message: 'Hapus bukti bayar dari reservasi ini?',
+      danger: true,
+      confirmText: 'Ya, Hapus',
+    });
+    if (!ok) return;
+    setProofUploading(true);
+    try {
+      const res = await apiRequest(`/api/admin/reservation/${selectedRes.id}/proof`, {
+        method: 'PUT',
+        body: JSON.stringify({ remove: true }),
+      });
+      if (res && res.success) {
+        toast('Bukti bayar dihapus.', 'success');
+        setSelectedRes((prev) => (prev ? { ...prev, proof_url: null } : prev));
+        loadReservations();
+      }
+    } catch (err: any) {
+      toast(`Gagal menghapus bukti bayar: ${err.message}`, 'error');
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
   // Header month/year display
   const headerDateTitle = selectedDate.toLocaleDateString('id-ID', {
     month: 'long',
@@ -412,20 +493,6 @@ export const Reservations: React.FC = () => {
 
           {/* Action buttons */}
           <div className="flex items-center space-x-2">
-            {/* Mobile Filter Toggle */}
-            <button
-              onClick={() => setShowMobileSidebar(!showMobileSidebar)}
-              className={`lg:hidden flex items-center space-x-1.5 px-3 py-2 border rounded-xl text-xs font-semibold transition shadow-xs ${
-                showMobileSidebar
-                  ? 'bg-[#e8f5f2] text-[#008069] border-[#c2e7e0]'
-                  : 'bg-white text-[#111b21] border-[#d1d7db] hover:bg-[#f0f2f5]'
-              }`}
-              title="Toggle Filter & Spotlight"
-            >
-              <Filter size={14} />
-              <span>{showMobileSidebar ? 'Tutup Filter' : 'Filter'}</span>
-            </button>
-
             <button
               onClick={() => {
                 setQuickSlotTarget(null);
@@ -450,23 +517,10 @@ export const Reservations: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Dual-Pane Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-5 items-start">
-        {/* Left Column: Sidebar Widgets (Collapsible on mobile) */}
-        <div className={`${showMobileSidebar ? 'block' : 'hidden'} lg:block w-full`}>
-          <CalendarSidebar
-            reservations={reservations}
-            filterState={filterState}
-            onFilterChange={setFilterState}
-            staffList={staffList}
-            onSelectReservation={(r) => setSelectedRes(r)}
-          />
-        </div>
-
-        {/* Right Column: Calendar / Schedule Views */}
-        <div className="space-y-4 min-w-0">
-          {/* Search bar inside view */}
-          <div className="relative">
+      {/* Main Calendar Pane (pure calendar) */}
+      <div className="space-y-4">
+        {/* Search bar */}
+        <div className="relative">
             <input
               type="text"
               value={filterState.searchQuery}
@@ -561,10 +615,10 @@ export const Reservations: React.FC = () => {
                         {res.status === 'completed' && res.proof_url && (
                           <button
                             onClick={() => setProofModal(res)}
-                            className="px-3 py-1.5 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all font-semibold text-xs flex items-center space-x-1"
+                            className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center"
+                            title={`Lihat Bukti Bayar (${getPaymentMethodLabel(res.payment_method)})`}
                           >
-                            <Receipt size={12} />
-                            <span>Cek Bukti Bayar</span>
+                            <Eye size={15} />
                           </button>
                         )}
                         <button
@@ -643,11 +697,10 @@ export const Reservations: React.FC = () => {
                               {res.status === 'completed' && res.proof_url ? (
                                 <button
                                   onClick={() => setProofModal(res)}
-                                  className="px-2.5 py-1.5 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl text-xs font-semibold transition-all flex items-center space-x-1"
-                                  title={`Metode: ${getPaymentMethodLabel(res.payment_method)}`}
+                                  className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center"
+                                  title={`Lihat Bukti Bayar — ${getPaymentMethodLabel(res.payment_method)}`}
                                 >
-                                  <Receipt size={12} />
-                                  <span>Cek Bukti Bayar</span>
+                                  <Eye size={15} />
                                 </button>
                               ) : res.payment_method ? (
                                 <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
@@ -703,12 +756,17 @@ export const Reservations: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
 
       {/* Reservation Details & Management Modal */}
       {selectedRes && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl relative max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setSelectedRes(null)}
+        >
+          <div
+            className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl relative max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setSelectedRes(null)}
               className="absolute top-4 right-4 p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
@@ -789,6 +847,61 @@ export const Reservations: React.FC = () => {
                     <span>Haversine Multiplier</span>
                     <span className="font-bold">Active (1.25x)</span>
                   </div>
+                </div>
+
+                {/* Bukti Bayar (upload + lihat) */}
+                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
+                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Bukti Bayar</span>
+                  {selectedRes.proof_url ? (
+                    <div className="flex items-center space-x-2.5">
+                      <img
+                        src={selectedRes.proof_url}
+                        alt="Bukti bayar"
+                        className="h-14 w-14 object-cover rounded-lg border border-[#e9edef] shadow-xs bg-white"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-[#54656f] truncate">
+                          Metode: <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(selectedRes.payment_method)}</span>
+                        </p>
+                        <p className="text-[10px] text-[#8696a0]">Bukti tersimpan (versi ringan)</p>
+                      </div>
+                      <button
+                        onClick={() => setProofModal(selectedRes)}
+                        className="p-2 rounded-lg bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] transition flex items-center justify-center"
+                        title="Lihat Detail Bukti Bayar"
+                      >
+                        <Eye size={15} />
+                      </button>
+                      <button
+                        onClick={handleProofRemove}
+                        disabled={proofUploading}
+                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition flex items-center justify-center disabled:opacity-50"
+                        title="Hapus Bukti Bayar"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => proofFileInputRef.current?.click()}
+                      disabled={proofUploading}
+                      className="w-full py-3 rounded-xl border-2 border-dashed border-[#d1d7db] hover:border-[#008069] hover:bg-[#e8f5f2]/20 text-xs text-[#54656f] hover:text-[#008069] font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50"
+                    >
+                      {proofUploading ? (
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
+                      ) : (
+                        <Upload size={14} />
+                      )}
+                      <span>{proofUploading ? 'Menyimpan...' : 'Unggah Bukti Bayar (maks 8 MB)'}</span>
+                    </button>
+                  )}
+                  <input
+                    ref={proofFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleProofPick}
+                  />
                 </div>
               </div>
 

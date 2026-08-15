@@ -498,6 +498,75 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PUT /api/admin/reservation/:id/proof
+   * Upload / hapus bukti bayar dari modal Manage reservasi.
+   * Gambar dikompres max 800px (sharp) lalu disimpan sebagai media outbound
+   * tenant (inline MQL & retensi media). remove=true menghapus proof_url.
+   */
+  fastify.put(
+    '/api/admin/reservation/:id/proof',
+    { bodyLimit: 12 * 1024 * 1024 },
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { imageB64?: string; mimeType?: string; fileName?: string; remove?: boolean };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { imageB64, mimeType, fileName, remove } = request.body || {};
+
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+
+        let proofUrl: string | null = null;
+        if (!remove && imageB64) {
+          const { mediaService } = await import('../../services/media.service');
+          const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
+          const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+          const saved = await mediaService.saveOutboundMedia({
+            tenantId: DEFAULT_TENANT_ID,
+            imageB64: resized.toString('base64'),
+            mimeType: mimeType && mimeType !== 'application/octet-stream' ? mimeType : 'image/jpeg',
+            fileName: fileName || `proof-${id}.jpg`,
+          });
+          proofUrl = saved.hdUrl;
+        }
+
+        const updated = await prisma.reservation.update({
+          where: { id },
+          data: { proof_url: proofUrl },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: remove ? 'ADMIN_REMOVE_PROOF' : 'ADMIN_UPLOAD_PROOF',
+          targetId: id,
+          payload: remove ? { removed: true } : { proofUrl },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: updated });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.proof_url = remove ? null : mock.proof_url;
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
    * PATCH /api/admin/reservation/:id/assign-staff
    * Menugaskan atau mengubah penugasan staff (terapis) pada reservasi.
    */

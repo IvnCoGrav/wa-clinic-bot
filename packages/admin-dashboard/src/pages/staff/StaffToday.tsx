@@ -1570,8 +1570,14 @@ export const StaffToday: React.FC = () => {
       {/* MODAL / DRAWER PROFIL STAFF & LOGOUT */}
       {/* ========================================================================= */}
       {showStaffProfileModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setShowStaffProfileModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setShowStaffProfileModal(false)}
               className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
@@ -1626,8 +1632,14 @@ export const StaffToday: React.FC = () => {
       {/* MODAL DETAIL JADWAL & PASIEN (PRIVACY SAFE - NO PHONE LEAK) */}
       {/* ========================================================================= */}
       {detailModalTask && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setDetailModalTask(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
               <div className="flex items-center space-x-3">
@@ -1777,8 +1789,14 @@ export const StaffToday: React.FC = () => {
       {/* MODAL CATAT PEMBAYARAN (TUNAI VS NON-TUNAI / TRANSFER / QRIS) */}
       {/* ========================================================================= */}
       {paymentModalTask && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left">
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setPaymentModalTask(null)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
