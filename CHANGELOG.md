@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Changed — Paket Perbaikan Dashboard: Kalender Reservasi, Chat Terapis Kirim Gambar, Bot Diam Saat Staf Balas, Pricelist Kecil, PWA & Ongkir
+
+- **Kalender Reservasi dirapikan** (`Reservations.tsx`, `CalendarSidebar.tsx`, `MonthScheduleGrid.tsx`):
+  - Urutan tab diubah menjadi **Tabel → Hari → Minggu → Bulan** (sebelumnya Bulan/Minggu di depan).
+  - Tombol navigasi tanggal ("Hari Ini", `<`, `>`) kini **disembunyikan di mode Tabel** — sebelumnya tetap tampil padahal tidak berfungsi di daftar tabel (kondisi awal penyebab tombol terasa "tidak bisa").
+  - **Mini kalender di sidebar dihapus**; sidebar kini langsung berisi kartu spot light "Segera Datang" + filter (kategori, terapis, status). Tombol toggle mobile diganti label "Filter".
+  - **Tampilan Bulan diurutkan jam paling pagi di atas** per hari (`getEventsForDay` sort `booking_date` ascending).
+- **Chat terapis: bisa kirim gambar** (`StaffToday.tsx`): tombol lampirkan gambar (ikon) + preview lampiran + hapus lampiran di bar input; kirim via `imageB64/thumbB64/mimeType/fileName` yang sudah didukung backend. Pesan optimis menampilkan preview lokal, lalu diganti respons server.
+- **Bot diam saat terapis membalas** (`live-chat.service.ts`, `today.subroute.ts`, `staff-reservation.service.ts`): parameter baru `forceEscalate` pada `sendAdminReply` — balasan Staff/Bidan (termasuk konfirmasi pembayaran) kini **selalu** mengaktifkan mode human-handling (`is_human_handling`) sehingga bot tidak membalas menyela percakapan, terlepas dari config `manual_reply_escalates` tenant (yang hanya berlaku untuk balasan Admin dashboard).
+- **Pricelist dikirim versi kecil (1/3 dimensi)** (`pricelist-config.service.ts`, `machine.ts`): fungsi baru `resolvePricelistSendTarget` me-resize gambar pricelist (sharp, max ~1/3 dimensi terpanjang, JPEG q80) lalu menyimpannya via `saveOutboundMedia` — **terintegrasi kuota media (MQL) & retensi media chat** — sebelum dikirim WAHA/WABA. Gambar pricelist yang terkirim tidak lagi file raksasa dan ikut dibersihkan retensi.
+- **PWA Install App dipindah** (`Settings.tsx`): panel "Install Aplikasi" kini berada **di kolom kiri (setengah lebar) tepat di atas Global Chatbot Toggle**, bukan satu baris penuh di atas grid.
+- **Delivery Fee: label ongkir jadi + tombol hapus kecil** (`Settings.tsx`): tiap baris tier kini menampilkan kolom **"Ongkir Jadi (Rp)"** (tarif − promo, hijau; "GRATIS" bila 0) dan tombol hapus diubah jadi **ikon tempat sampah kecil** (tidak lagi full-width).
+- **Label ongkir di kartu tugas terapis** (`StaffToday.tsx`, `StaffSchedule.tsx`): kartu kini menampilkan `(ongkir Rp X)` di samping total biaya bila ongkir > 0.
+- Test: 151 files / 1381 tests pass; build dashboard & backend hijau.
+
 ### Added — Tab Reservasi: Tombol "Cek Bukti Bayar" (TF/QRIS) + Default Tampilan Daftar (Tabel)
 
 - **Backend**: kolom baru `payment_method` & `proof_url` pada tabel `reservations` (migration `20260833000000_add_payment_proof`); `recordPayment` (`staff-reservation.service.ts`) kini menyimpan metode bayar & URL media bukti ke record reservasi — sebelumnya hanya tersimpan di audit log (`STAFF_RECORD_PAYMENT`).

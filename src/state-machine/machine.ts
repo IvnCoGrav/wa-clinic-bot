@@ -509,9 +509,9 @@ export class ConversationStateMachine {
             const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
 
             if (!alreadySent || result.forcePricelistResend) {
-              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+              const { resolvePricelistSendTarget } = await import('../services/pricelist-config.service');
               const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+              const pricelistTarget = await resolvePricelistSendTarget(tenantId, gateway.providerType);
               const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
 
               if (!pricelistTarget) {
@@ -539,9 +539,9 @@ export class ConversationStateMachine {
             console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
             // Best-effort tetap kirim walaupun DB offline (tidak membalikkan transaksi).
             if (!sendOk) {
-              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+              const { resolvePricelistSendTarget } = await import('../services/pricelist-config.service');
               const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+              const pricelistTarget = await resolvePricelistSendTarget(tenantId, gateway.providerType);
               const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
               if (pricelistTarget) {
                 if (customer.is_sandbox_test) {

@@ -1,13 +1,10 @@
 import React from 'react';
 import { Reservation } from '../../types';
-import { MiniMonthCalendar } from './MiniMonthCalendar';
 import { UpcomingSpotlightCard } from './UpcomingSpotlightCard';
 import { CalendarFilterState, StaffOption } from './types';
 import { Users, Filter } from 'lucide-react';
 
 interface CalendarSidebarProps {
-  selectedDate: Date;
-  onSelectDate: (date: Date) => void;
   reservations: Reservation[];
   filterState: CalendarFilterState;
   onFilterChange: (updater: (prev: CalendarFilterState) => CalendarFilterState) => void;
@@ -16,8 +13,6 @@ interface CalendarSidebarProps {
 }
 
 export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
-  selectedDate,
-  onSelectDate,
   reservations,
   filterState,
   onFilterChange,
@@ -43,13 +38,6 @@ export const CalendarSidebar: React.FC<CalendarSidebarProps> = ({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Mini Calendar Widget */}
-      <MiniMonthCalendar
-        selectedDate={selectedDate}
-        onSelectDate={onSelectDate}
-        reservations={reservations}
-      />
-
       {/* Upcoming Spotlight Card */}
       <UpcomingSpotlightCard
         reservations={reservations}
