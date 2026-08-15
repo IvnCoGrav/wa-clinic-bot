@@ -792,6 +792,7 @@ export const StaffToday: React.FC = () => {
   };
 
   // Get GPS directly from mobile device
+  // Ambil titik GPS aktual dari HP terapis (Target akurasi ≤ 10m)
   const handleGetCurrentGps = () => {
     if (!('geolocation' in navigator)) {
       toast('Perangkat Anda tidak mendukung fitur Geolocation GPS.', 'error');
@@ -801,13 +802,18 @@ export const StaffToday: React.FC = () => {
     setLocGettingGps(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const acc = Math.round(position.coords.accuracy);
         setLocCoords({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-          accuracy: Math.round(position.coords.accuracy),
+          accuracy: acc,
         });
         setLocGettingGps(false);
-        toast(`📍 Koordinat GPS berhasil diambil (akurasi ±${Math.round(position.coords.accuracy)}m)`, 'success');
+        if (acc <= 10) {
+          toast(`🟢 GPS presisi tinggi terkunci (akurasi ±${acc}m)`, 'success');
+        } else {
+          toast(`📍 GPS diambil (akurasi ±${acc}m). Disarankan berdiri di luar ruangan agar ≤ 10m.`, 'info');
+        }
       },
       (error) => {
         setLocGettingGps(false);
@@ -834,13 +840,18 @@ export const StaffToday: React.FC = () => {
       setLocGettingGps(true);
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          const acc = Math.round(position.coords.accuracy);
           setLocCoords({
             lat: position.coords.latitude,
             lng: position.coords.longitude,
-            accuracy: Math.round(position.coords.accuracy),
+            accuracy: acc,
           });
           setLocGettingGps(false);
-          toast(`📍 GPS otomatis terkunci bersama foto (akurasi ±${Math.round(position.coords.accuracy)}m)`, 'success');
+          if (acc <= 10) {
+            toast(`🟢 GPS presisi tinggi terkunci bersama foto (akurasi ±${acc}m)`, 'success');
+          } else {
+            toast(`📍 GPS otomatis diambil (akurasi ±${acc}m)`, 'info');
+          }
         },
         (error) => {
           setLocGettingGps(false);
@@ -857,11 +868,17 @@ export const StaffToday: React.FC = () => {
 
     // Konfirmasi titik lokasi GPS sebelum menyimpan
     if (locCoords) {
+      const isLowAccuracy = locCoords.accuracy && locCoords.accuracy > 10;
+      const confirmMsg = isLowAccuracy
+        ? `⚠️ Perhatian: Akurasi GPS saat ini ±${locCoords.accuracy}m (target maksimal 10m).\n\nUntuk hasil paling presisi, disarankan berdiri di luar pagar/gerbang rumah pasien.\n\nApakah Anda ingin tetap menyimpan koordinat ini?`
+        : `Apakah Anda yakin saat ini sedang berada di depan/lokasi rumah pasien (${updateLocationModalTask.customerName || 'Bunda'})? Titik koordinat GPS ini akan disimpan sebagai panduan tetap untuk kunjungan berikutnya.`;
+
       const ok = await confirm({
-        title: 'Konfirmasi Titik Lokasi Rumah Pasien',
-        message: `Apakah Anda yakin saat ini sedang berada di depan/lokasi rumah pasien (${updateLocationModalTask.customerName || 'Bunda'})? Titik koordinat GPS ini akan disimpan sebagai panduan tetap untuk kunjungan berikutnya.`,
-        confirmText: 'Ya, Saya di Lokasi Pasien',
-        cancelText: 'Batal / Cek Lagi',
+        title: isLowAccuracy ? 'Konfirmasi Akurasi GPS' : 'Konfirmasi Titik Lokasi Rumah Pasien',
+        message: confirmMsg,
+        confirmText: isLowAccuracy ? 'Ya, Tetap Simpan' : 'Ya, Saya di Lokasi Pasien',
+        cancelText: 'Batal / Kunci GPS Lagi',
+        danger: !!isLowAccuracy,
       });
       if (!ok) return;
     }
@@ -2894,31 +2911,58 @@ export const StaffToday: React.FC = () => {
               </button>
 
               {locCoords ? (
-                <div className="p-2.5 rounded-xl bg-[#d9fdd3]/70 border border-[#00a884]/30 text-xs text-[#008069] flex items-center justify-between">
+                <div
+                  className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition ${
+                    (locCoords.accuracy ?? 999) <= 10
+                      ? 'bg-[#d9fdd3]/70 border-[#00a884]/30 text-[#008069]'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
                   <div>
                     <div className="font-bold flex items-center gap-1">
-                      <CheckCircle2 size={13} />
-                      <span>Koordinat Presisi Terkunci</span>
+                      {(locCoords.accuracy ?? 999) <= 10 ? (
+                        <>
+                          <CheckCircle2 size={13} className="text-[#008069]" />
+                          <span>GPS Sangat Akurat (≤10m)</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle size={13} className="text-amber-600" />
+                          <span>Akurasi Cukup (±{locCoords.accuracy}m)</span>
+                        </>
+                      )}
                     </div>
                     <div className="font-mono text-[11px] text-[#54656f] mt-0.5">
                       {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}
                       {locCoords.accuracy ? ` (Akurasi: ±${locCoords.accuracy}m)` : ''}
                     </div>
                   </div>
-                  <a
-                    href={`https://maps.google.com/?q=${locCoords.lat},${locCoords.lng}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded-lg bg-white text-[#008069] border border-[#00a884]/30 hover:bg-[#e8f5f2] text-xs font-semibold flex items-center gap-1 shadow-xs"
-                    title="Cek di Google Maps"
-                  >
-                    <Navigation size={12} />
-                    <span>Cek</span>
-                  </a>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleGetCurrentGps}
+                      disabled={locGettingGps}
+                      className="p-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#54656f] text-[11px] font-semibold flex items-center gap-1 shadow-xs"
+                      title="Kunci Ulang GPS"
+                    >
+                      <RefreshCw size={11} className={locGettingGps ? 'animate-spin' : ''} />
+                      <span>Ulang</span>
+                    </button>
+                    <a
+                      href={`https://maps.google.com/?q=${locCoords.lat},${locCoords.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg bg-white text-[#008069] border border-[#00a884]/30 hover:bg-[#e8f5f2] text-xs font-semibold flex items-center gap-1 shadow-xs"
+                      title="Cek di Google Maps"
+                    >
+                      <Navigation size={12} />
+                      <span>Cek</span>
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <p className="text-[11px] text-[#8696a0] italic">
-                  * Berdirilah di depan pagar rumah pasien lalu tekan tombol GPS di atas.
+                  * Berdirilah di luar pagar/depan rumah pasien lalu tekan tombol GPS di atas (target akurasi ≤ 10m).
                 </p>
               )}
             </div>
