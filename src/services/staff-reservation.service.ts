@@ -877,19 +877,51 @@ export class StaffReservationService {
         return { success: false, error: 'Data customer tidak ditemukan.' };
       }
 
+      // Hitung ulang jarak dari klinik jika koordinat baru diberikan
+      let distanceKm = customer.distance_km;
+      const targetLat = lat ?? customer.lat;
+      const targetLng = lng ?? customer.lng;
+
+      if (targetLat != null && targetLng != null) {
+        // Validasi range koordinat Indonesia
+        if (targetLat < -12 || targetLat > 7 || targetLng < 94 || targetLng > 142) {
+          return { success: false, error: 'Koordinat GPS di luar wilayah Indonesia atau tidak valid.' };
+        }
+
+        const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
+        distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
+
+        // Skema kroscek 1: Tolak jika jarak dari klinik melenceng > 45 km (di luar area Surabaya-Sidoarjo-Gresik)
+        const MAX_ALLOWED_DISTANCE_KM = 45;
+        if (distanceKm > MAX_ALLOWED_DISTANCE_KM) {
+          return {
+            success: false,
+            error: `Titik GPS terdeteksi berjarak ${distanceKm.toFixed(1)} km dari klinik (melenceng jauh di luar area jangkauan maksimal ${MAX_ALLOWED_DISTANCE_KM} km). Pastikan Anda sedang berada di lokasi rumah pasien.`,
+          };
+        }
+
+        // Skema kroscek 2: Tolak jika pergeseran titik melenceng > 25 km dari data kelurahan/wilayah customer sebelumnya
+        if (customer.distance_km && Math.abs(distanceKm - customer.distance_km) > 25) {
+          return {
+            success: false,
+            error: `Titik GPS melenceng terlalu jauh (${Math.abs(distanceKm - customer.distance_km).toFixed(1)} km selisih) dari estimasi area ${customer.kelurahan || 'pasien'}. Pembaruan lokasi ditolak untuk mencegah salah alamat.`,
+          };
+        }
+      }
+
       let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
-      // Kompres, beri watermark GPS, dan simpan foto tampak depan rumah jika ada
+      // Kompres, beri watermark GPS (lengkap dengan Kelurahan & Kecamatan), dan simpan foto jika ada
       if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
         const matches = housePhotoB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         const rawB64 = matches ? matches[2] : housePhotoB64;
         const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
-        const targetLat = lat ?? customer.lat;
-        const targetLng = lng ?? customer.lng;
         const watermarked = await mediaService.overlayGpsBadge(resized, {
           lat: targetLat,
           lng: targetLng,
+          kelurahan: customer.kelurahan,
+          kecamatan: customer.kecamatan,
           landmark,
         });
         const saved = await mediaService.saveOutboundMedia({
@@ -910,16 +942,6 @@ export class StaffReservationService {
         location_updated_by_staff_id: staffId,
         location_updated_by_staff_name: staffName,
       };
-
-      // Hitung ulang jarak dari klinik jika koordinat baru diberikan
-      let distanceKm = customer.distance_km;
-      const targetLat = lat ?? customer.lat;
-      const targetLng = lng ?? customer.lng;
-
-      if (targetLat != null && targetLng != null) {
-        const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-        distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
-      }
 
       const updatedCustomer = await prisma.customer.update({
         where: { id: customer.id },

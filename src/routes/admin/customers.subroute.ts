@@ -394,17 +394,50 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
 
         let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
+        let distanceKm = customer.distance_km;
+        const targetLat = lat !== undefined ? lat : customer.lat;
+        const targetLng = lng !== undefined ? lng : customer.lng;
+
+        if (targetLat != null && targetLng != null) {
+          // Validasi range koordinat Indonesia
+          if (targetLat < -12 || targetLat > 7 || targetLng < 94 || targetLng > 142) {
+            return reply.status(400).send({ success: false, error: 'Koordinat GPS di luar wilayah Indonesia atau tidak valid.' });
+          }
+
+          const { clinicConfig } = await import('../../config/clinic');
+          const { calculateHaversineDistance } = await import('../../utils/haversine');
+          const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
+          distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
+
+          // Skema kroscek 1: Tolak jika jarak dari klinik melenceng > 45 km (di luar area jangkauan)
+          const MAX_ALLOWED_DISTANCE_KM = 45;
+          if (distanceKm > MAX_ALLOWED_DISTANCE_KM) {
+            return reply.status(400).send({
+              success: false,
+              error: `Titik GPS terdeteksi berjarak ${distanceKm.toFixed(1)} km dari klinik (melenceng jauh di luar area jangkauan maksimal ${MAX_ALLOWED_DISTANCE_KM} km). Pastikan titik koordinat berada di lokasi rumah pasien.`,
+            });
+          }
+
+          // Skema kroscek 2: Tolak jika pergeseran titik melenceng > 25 km dari data kelurahan/wilayah customer sebelumnya
+          if (customer.distance_km && Math.abs(distanceKm - customer.distance_km) > 25) {
+            return reply.status(400).send({
+              success: false,
+              error: `Titik GPS melenceng terlalu jauh (${Math.abs(distanceKm - customer.distance_km).toFixed(1)} km selisih) dari estimasi area ${customer.kelurahan || 'pasien'}. Pembaruan lokasi ditolak untuk mencegah salah alamat.`,
+            });
+          }
+        }
+
         if (removePhoto) {
           housePhotoUrl = null;
         } else if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = housePhotoB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
-          const targetLat = lat ?? customer.lat;
-          const targetLng = lng ?? customer.lng;
           const watermarked = await mediaService.overlayGpsBadge(resized, {
             lat: targetLat,
             lng: targetLng,
+            kelurahan: customer.kelurahan,
+            kecamatan: customer.kecamatan,
             landmark,
           });
           const saved = await mediaService.saveOutboundMedia({
@@ -424,17 +457,6 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           location_updated_at: new Date().toISOString(),
           location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
         };
-
-        let distanceKm = customer.distance_km;
-        const targetLat = lat ?? customer.lat;
-        const targetLng = lng ?? customer.lng;
-
-        if (targetLat != null && targetLng != null) {
-          const { clinicConfig } = await import('../../config/clinic');
-          const { calculateHaversineDistance } = await import('../../utils/haversine');
-          const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-          distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
-        }
 
         let updatedCustomer: any = null;
         try {
