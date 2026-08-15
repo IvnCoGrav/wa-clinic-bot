@@ -477,5 +477,64 @@ describe('Staff Auth & Reservation Services', () => {
         })
       );
     });
+
+    it('should reject coordinates that deviate too far (> 45km from clinic)', async () => {
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-1',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        customer: {
+          id: 'cust-1',
+          name: 'Bunda Sarah',
+          lat: -7.25,
+          lng: 112.75,
+          distance_km: 5.0,
+          preferences: {},
+        },
+      });
+
+      // Jakarta coordinates (~660km from Surabaya/Sidoarjo clinic)
+      const result = await StaffReservationService.updateCustomerLocation({
+        reservationId: 'res-1',
+        staffId: 'staff-1',
+        staffName: 'Bidan Dewi',
+        tenantId: 'default-tenant',
+        lat: -6.2088,
+        lng: 106.8456,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('melenceng jauh di luar area jangkauan');
+    });
+
+    it('should reject coordinates that shift excessively (> 25km from registered customer area)', async () => {
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-1',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        customer: {
+          id: 'cust-1',
+          name: 'Bunda Sarah',
+          lat: -7.3488,
+          lng: 112.7516,
+          kelurahan: 'Waru',
+          distance_km: 2.0,
+          preferences: {},
+        },
+      });
+
+      // Pasuruan / Bangil (~35km away from Waru, shift > 25km)
+      const result = await StaffReservationService.updateCustomerLocation({
+        reservationId: 'res-1',
+        staffId: 'staff-1',
+        staffName: 'Bidan Dewi',
+        tenantId: 'default-tenant',
+        lat: -7.6000,
+        lng: 112.8500,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('melenceng terlalu jauh');
+    });
   });
 });
