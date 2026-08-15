@@ -4,6 +4,11 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Changed — Tombol Navigasi Peta Terapis dari Mode Mobil ke Sepeda (`travelmode=bicycling`)
+
+- **`src/services/staff-reservation.service.ts`**: Mengubah parameter `travelmode` pada `navigationUrl` (link turn-by-turn Google Maps) dari `driving` (mobil) menjadi `bicycling` (sepeda) untuk semua kartu tugas terapis (Staff Today & Jadwal Mendatang), karena terapis berangkat dengan sepeda.
+- Memperbarui assertion terkait di `tests/unit/staff-auth-and-reservation.test.ts`.
+
 ### Fixed — Persistensi Sesi Login Admin & Perpanjangan TTL (Mencegah Sesi Cepat Ter-logout)
 
 - **Persistensi Sesi & Cookie Stability (`src/services/admin-session.service.ts`, `src/services/staff-auth.service.ts`, `src/routes/admin/auth.subroute.ts`, `src/routes/staff/auth.subroute.ts`, `src/routes/admin.route.ts`)**:
