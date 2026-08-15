@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Perombakan UI & UX Portal Terapis (StaffToday & StaffSchedule)
+
+- **Header Minimalis & Titik Status Koneksi (`StaffToday.tsx`, `StaffSchedule.tsx`)**:
+  - Menyederhanakan header menjadi sangat clean & compact: judul langsung menampilkan nama terapis (`{staff.name}`), menghilangkan teks "WhatsApp Terapis", "Portal Lapangan", "Bidan Terapis", dan teks "Aktif".
+  - Mengganti teks status realtime dengan **titik dot koneksi minimalis** (🟢 Hijau saat online/connected, 🔴 Merah berdenyut saat reconnecting).
+  - Tombol logout dihilangkan dari header utama dan dipindahkan ke dalam drawer profil staff.
+- **Avatar Staff & Profile Drawer Modal (`StaffToday.tsx`, `StaffSchedule.tsx`)**:
+  - Mengganti avatar inisial 1 huruf dengan **SVG Avatar Icon** (`UserCheck`).
+  - Menambahkan popover/drawer profil interaktif saat avatar staff di-klik: menampilkan Nama Terapis, No HP, Role (*Staff Terapis Lapangan*), dan tombol **Keluar Akun (Logout)** dengan dialog konfirmasi yang aman.
+- **Hardware / Browser Back Button Navigation (`StaffToday.tsx`)**:
+  - Mengintegrasikan `window.history.pushState` saat membuka chat dan event listener `popstate`: menekan tombol back fisik/gesture di smartphone atau browser akan kembali ke daftar chat (bukan keluar dari aplikasi web).
+  - Tombol back di UI (`ChevronLeft`) sinkron memanggil `window.history.back()`.
+  - Popstate juga otomatis menutup modal (Detail Pasien / Catat Bayar / Profil) terlebih dahulu.
+- **Icon Customer Berbasis Layanan & Modal Detail Pasien Privacy-Protected (`StaffToday.tsx`, `StaffSchedule.tsx`)**:
+  - Avatar customer pada kartu tugas dan header chat diganti dengan **Icon Kategori Layanan**:
+    - `BABY` -> Icon `Baby` berlatar soft sky blue
+    - `MOMS` -> Icon `Sparkles` berlatar soft purple
+    - `BOTH` / `KIDS` -> Icon `Smile` berlatar soft emerald
+    - Treatment lain -> Icon `User` berlatar soft teal
+  - Menambahkan modal **Detail Jadwal & Pasien** saat icon customer di-klik: memperlihatkan jam kunjungan, layanan, alamat lengkap, jarak & estimasi menit tempuh, data anak/usia, rincian biaya (biaya treatment, ongkir, total, status Lunas/Tagih), dan tombol buka peta Google Maps.
+  - **Proteksi Privasi**: Nomor HP pasien disembunyikan seluruhnya dari UI terapis untuk mencegah kebocoran data pelanggan.
+- **Aksen Warna Pembeda Antar Pasien & Auto-Scroll Chat (`StaffToday.tsx`, `StaffSchedule.tsx`)**:
+  - Menambahkan aksen border kiri tebal dan soft tint background berbasis kategori treatment (*Baby = Sky Blue, Moms = Soft Purple, Both = Emerald, Lainnya = Teal*) sebagai penanda visual yang tegas antar pasien yang berbeda.
+  - Mengoptimalkan auto-scroll chat menggunakan `requestAnimationFrame` dan timeout mikro sehingga viewport chat selalu otomatis scroll ke pesan paling akhir saat chat dibuka.
+
 ### Added & Improved — Boot Progress Bar & Retry Lebih Responsif (Mobile)
 
 - **`BootProgress`** (`packages/admin-dashboard/src/components/common/BootProgress.tsx` + `lib/bootProgress.ts`): bar progress 0-100% tipis ala YouTube + teks status ("Memeriksa sesi…", "Memuat halaman…", dst). Bukan fake murni — fase digerakkan event nyata (`auth`/`chunk`/`mount`/`data`) + creep anti-beku (cap 92%) supaya tidak pernah tampak macet. Hanya muncul saat boot pertama PWA; navigasi antar halaman tetap pakai spinner lama.
