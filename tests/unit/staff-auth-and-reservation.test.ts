@@ -424,5 +424,58 @@ describe('Staff Auth & Reservation Services', () => {
       const isNotOwned = await StaffReservationService.assertConversationOwnedByStaffToday('conv-1', 'staff-2', 'default-tenant');
       expect(isNotOwned).toBe(false);
     });
+
+    it('should successfully update customer GPS location and landmark notes', async () => {
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-1',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        customer: {
+          id: 'cust-1',
+          name: 'Bunda Sarah',
+          lat: -7.25,
+          lng: 112.75,
+          distance_km: 2.0,
+          preferences: {
+            house_photo_url: null,
+            landmark: null,
+          },
+        },
+      });
+
+      (prisma.customer.update as any).mockResolvedValue({
+        id: 'cust-1',
+        lat: -7.2600,
+        lng: 112.7600,
+        distance_km: 3.5,
+      });
+
+      const result = await StaffReservationService.updateCustomerLocation({
+        reservationId: 'res-1',
+        staffId: 'staff-1',
+        staffName: 'Bidan Dewi',
+        tenantId: 'default-tenant',
+        lat: -7.2600,
+        lng: 112.7600,
+        landmark: 'Pagar hitam, seberang masjid',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.customerId).toBe('cust-1');
+      expect(result.data.landmark).toBe('Pagar hitam, seberang masjid');
+      expect(prisma.customer.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'cust-1' },
+          data: expect.objectContaining({
+            lat: -7.2600,
+            lng: 112.7600,
+            preferences: expect.objectContaining({
+              landmark: 'Pagar hitam, seberang masjid',
+              location_updated_by_staff_id: 'staff-1',
+            }),
+          }),
+        })
+      );
+    });
   });
 });
