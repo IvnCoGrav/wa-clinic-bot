@@ -84,7 +84,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     } else if (staffCookie) {
       const { StaffAuthService } = await import('../services/staff-auth.service');
       const staffSession = await StaffAuthService.validateSession(staffCookie);
-      if (staffSession && (staffSession.staff.role === 'ADMIN_CS' || staffSession.staff.role === 'ADVERTISER')) {
+      if (staffSession && staffSession.staff.role !== 'THERAPIST') {
         isAuthenticated = true;
         identity = staffSession.staff.name;
         (request as any).staffRole = staffSession.staff.role;
