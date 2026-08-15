@@ -559,6 +559,8 @@ export class StaffReservationService {
           purchase_value: totalPaid,
           purchase_review_status: 'confirmed',
           status: 'completed',
+          payment_method: paymentMethod,
+          proof_url: proofUrl,
         },
       });
 
