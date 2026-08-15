@@ -32,8 +32,11 @@ export interface Reservation {
     kelurahan: string | null;
     kecamatan: string | null;
     kota: string | null;
+    lat?: number | null;
+    lng?: number | null;
     ongkir: number | null;
     distance_km: number | null;
+    preferences?: any;
     children?: ChildInfo[];
   };
   treatment_category: 'BABY' | 'MOMS' | 'BOTH';

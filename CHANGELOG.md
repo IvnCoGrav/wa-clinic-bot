@@ -6,10 +6,12 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Added — Foto Depan Rumah, Tombol Update Titik Lokasi GPS & Patokan, serta Kamera Langsung pada Chat Terapis
 
-- **Panduan Visual Foto Depan Rumah & Catatan Patokan (`StaffToday.tsx`, `src/services/staff-reservation.service.ts`)**:
+- **Panduan Visual Foto Depan Rumah & Catatan Patokan (`StaffToday.tsx`, `Reservations.tsx`, `src/services/staff-reservation.service.ts`)**:
   - Menyimpan `house_photo_url`, `landmark`, `location_updated_at`, `location_updated_by_staff_id`, dan `location_updated_by_staff_name` pada `Customer.preferences` (aman tanpa migrasi schema DB dan siap multi-tenant).
-  - Menampilkan thumbnail foto tampak depan rumah pasien pada setiap kartu tugas (Treatment Hari Ini, Jadwal Mendatang, Riwayat Selesai, dan Modal Detail Pasien) sebagai panduan visual tim terapis/bidan saat bergantian shift ke lokasi pasien.
-  - Menambahkan modal zoom lightbox untuk melihat foto tampak depan rumah dalam ukuran besar/HD saat diklik.
+  - Menampilkan thumbnail foto tampak depan rumah pasien & catatan patokan pada:
+    1. **Portal Terapis**: Di bawah alamat pada setiap kartu tugas (Treatment Hari Ini, Jadwal Mendatang, Riwayat Selesai, dan Modal Detail Pasien).
+    2. **Admin Dashboard**: Di dalam modal **Detail Reservasi** (section Lokasi & Pengiriman) lengkap dengan info staf yang memperbarui dan link Google Maps.
+  - Menambahkan modal zoom lightbox untuk melihat foto tampak depan rumah dalam resolusi tinggi/HD saat diklik.
 - **Tombol & Modal "Update Titik Lokasi & Foto Rumah" (`StaffToday.tsx`, `src/routes/staff/today.subroute.ts`)**:
   - Menambahkan tombol `[ 📍 Update Titik Lokasi & Foto Rumah ]` pada setiap kartu tugas dan modal detail.
   - Membuka modal interaktif yang menyediakan:
