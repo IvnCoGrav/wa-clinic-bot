@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Portal Terapis Sering Ter-logout saat Server Restart / Jaringan Gangguan
+
+- **`packages/admin-dashboard/src/services/api.ts`**: Error yang dilempar `apiRequest` kini membawa properti `status` (HTTP status code), sehingga caller bisa membedakan error otorisasi asli (401/403) vs error jaringan/timeout/server.
+- **`packages/admin-dashboard/src/contexts/StaffAuthContext.tsx`**: Pengecekan sesi saat mount tidak lagi langsung meng-clear staff pada error apa pun. Hanya `401/403` asli yang mengarahkan ke halaman login; error jaringan/timeout (mis. saat app restart/deploy) memicu **retry otomatis tiap 5 detik** di latar belakang + retry ulang saat tab kembali fokus (`visibilitychange`) — terapis tidak lagi terlempar ke login hanya karena server restart sesaat.
+- **`packages/admin-dashboard/src/contexts/AuthContext.tsx`**: Perlindungan retry yang sama diterapkan untuk pengecekan sesi admin (konsistensi perilaku).
+- Akar masalah dari investigasi: sesi staff tersimpan valid di DB (TTL 30 hari), namun `StaffProtectedRoute` meredirect ke `/admin/login` setiap kali `checkAuth` gagal — termasuk saat app container down/restart (terbukti dari log: 502 `connection refused` jam 00:52 & deploy 01:29 WIB bertepatan dengan login ulang beruntun).
+
 ### Changed — Tombol Navigasi Peta Terapis dari Mode Mobil ke Sepeda (`travelmode=bicycling`)
 
 - **`src/services/staff-reservation.service.ts`**: Mengubah parameter `travelmode` pada `navigationUrl` (link turn-by-turn Google Maps) dari `driving` (mobil) menjadi `bicycling` (sepeda) untuk semua kartu tugas terapis (Staff Today & Jadwal Mendatang), karena terapis berangkat dengan sepeda.

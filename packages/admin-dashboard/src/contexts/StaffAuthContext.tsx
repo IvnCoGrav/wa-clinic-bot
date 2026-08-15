@@ -23,9 +23,13 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Check auth session on mount
   useEffect(() => {
+    let cancelled = false;
+    let retryTimer: any = null;
+
     async function checkAuth() {
       try {
         const data = await apiRequest('/api/staff/auth/me');
+        if (cancelled) return;
         if (data.authenticated && data.staff) {
           setStaff({
             id: data.staff.id,
@@ -33,15 +37,37 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             role: data.staff.role || 'staff',
             phone: data.staff.phone,
           });
+        } else {
+          setStaff(null);
         }
-      } catch (err) {
-        // Unauthenticated or expired session
-        setStaff(null);
-      } finally {
         setLoading(false);
+      } catch (err: any) {
+        if (cancelled) return;
+        const status = (err as any)?.status;
+        if (status === 401 || status === 403) {
+          // Sesi benar-benar tidak valid/kadaluarsa — arahkan ke login
+          setStaff(null);
+          setLoading(false);
+          return;
+        }
+        // Error jaringan/timeout/server: jangan kick user (app mungkin sedang restart/deploy).
+        // Tetap di state loading & retry di latar belakang sampai server pulih.
+        retryTimer = setTimeout(checkAuth, 5000);
       }
     }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') checkAuth();
+    };
+    window.addEventListener('visibilitychange', onVisibility);
+
     checkAuth();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const login = async (phone: string, password: string) => {
