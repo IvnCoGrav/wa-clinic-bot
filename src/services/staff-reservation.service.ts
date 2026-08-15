@@ -909,6 +909,35 @@ export class StaffReservationService {
         }
       }
 
+      // Cek apakah koordinat baru berselisih > 1 km dari koordinat utama customer yang sudah ada
+      let shouldUpdatePrimaryCoords = true;
+      let diffFromOriginalKm: number | null = null;
+      const baseLandmark = landmark !== undefined ? (landmark?.trim() || null) : ((customer.preferences as any)?.landmark || null);
+      let finalLandmark = baseLandmark;
+
+      if (lat != null && lng != null) {
+        if (customer.lat != null && customer.lng != null) {
+          diffFromOriginalKm = calculateHaversineDistance(
+            { lat: customer.lat, lng: customer.lng },
+            { lat, lng }
+          );
+
+          if (diffFromOriginalKm > 1.0) {
+            // Selisih > 1km: JANGAN ubah koordinat utama (Customer.lat & Customer.lng)
+            // Simpan koordinat revisi di catatan ancer-ancer / patokan & preferences
+            shouldUpdatePrimaryCoords = false;
+            const gpsTag = `[📍 GPS Lapangan: ${lat.toFixed(6)}, ${lng.toFixed(6)} (+${diffFromOriginalKm.toFixed(1)}km)]`;
+            finalLandmark = baseLandmark ? `${baseLandmark} ${gpsTag}` : gpsTag;
+          } else {
+            // Selisih <= 1km: Koreksi presisi posisi pagar/rumah
+            shouldUpdatePrimaryCoords = true;
+          }
+        } else {
+          // Belum punya koordinat sebelumnya: simpan sebagai koordinat utama
+          shouldUpdatePrimaryCoords = true;
+        }
+      }
+
       let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
       // Kompres, beri watermark GPS (lengkap dengan Kelurahan & Kecamatan), dan simpan foto jika ada
@@ -922,7 +951,7 @@ export class StaffReservationService {
           lng: targetLng,
           kelurahan: customer.kelurahan,
           kecamatan: customer.kecamatan,
-          landmark,
+          landmark: finalLandmark,
         });
         const saved = await mediaService.saveOutboundMedia({
           tenantId,
@@ -937,7 +966,15 @@ export class StaffReservationService {
       const updatedPrefs = {
         ...currentPrefs,
         ...(housePhotoUrl ? { house_photo_url: housePhotoUrl } : {}),
-        ...(landmark !== undefined ? { landmark: landmark?.trim() || null } : {}),
+        landmark: finalLandmark,
+        ...(diffFromOriginalKm != null && diffFromOriginalKm > 1.0
+          ? {
+              field_gps_lat: lat,
+              field_gps_lng: lng,
+              field_gps_diff_km: Number(diffFromOriginalKm.toFixed(2)),
+              field_gps_diverged: true,
+            }
+          : {}),
         location_updated_at: new Date().toISOString(),
         location_updated_by_staff_id: staffId,
         location_updated_by_staff_name: staffName,
@@ -946,9 +983,9 @@ export class StaffReservationService {
       const updatedCustomer = await prisma.customer.update({
         where: { id: customer.id },
         data: {
-          ...(lat != null ? { lat } : {}),
-          ...(lng != null ? { lng } : {}),
-          ...(distanceKm != null ? { distance_km: distanceKm } : {}),
+          ...(shouldUpdatePrimaryCoords && lat != null ? { lat } : {}),
+          ...(shouldUpdatePrimaryCoords && lng != null ? { lng } : {}),
+          ...(shouldUpdatePrimaryCoords && distanceKm != null ? { distance_km: distanceKm } : {}),
           preferences: updatedPrefs,
         },
       });
@@ -958,15 +995,19 @@ export class StaffReservationService {
       await auditService.logAdminAction({
         apiKey: 'STAFF_SESSION',
         adminIdentity: staffName,
-        action: 'STAFF_UPDATE_CUSTOMER_LOCATION',
+        action: diffFromOriginalKm != null && diffFromOriginalKm > 1.0 ? 'STAFF_UPDATE_CUSTOMER_LOCATION_DIVERGED' : 'STAFF_UPDATE_CUSTOMER_LOCATION',
         targetId: customer.id,
         payload: {
           reservationId,
-          lat: updatedCustomer.lat,
-          lng: updatedCustomer.lng,
+          submittedLat: lat,
+          submittedLng: lng,
+          primaryLat: updatedCustomer.lat,
+          primaryLng: updatedCustomer.lng,
           distanceKm: updatedCustomer.distance_km,
+          diffFromOriginalKm,
+          diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
           housePhotoUrl,
-          landmark,
+          landmark: finalLandmark,
         },
         tenantId,
       });
@@ -980,7 +1021,13 @@ export class StaffReservationService {
           distanceKm: updatedCustomer.distance_km,
           estimatedMinutes: estimateTravelDurationMinutes(updatedCustomer.distance_km),
           housePhotoUrl,
-          landmark: updatedPrefs.landmark || null,
+          landmark: finalLandmark,
+          diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
+          diffKm: diffFromOriginalKm != null ? Number(diffFromOriginalKm.toFixed(2)) : null,
+          message:
+            diffFromOriginalKm != null && diffFromOriginalKm > 1.0
+              ? `Titik GPS lapangan berselisih ${diffFromOriginalKm.toFixed(1)} km (> 1 km). Koordinat utama customer dipertahankan, koordinat lapangan dicatat pada panduan ancer-ancer.`
+              : 'Titik lokasi berhasil diperbarui.',
         },
       };
     } catch (err: any) {

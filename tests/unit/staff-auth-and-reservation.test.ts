@@ -425,7 +425,7 @@ describe('Staff Auth & Reservation Services', () => {
       expect(isNotOwned).toBe(false);
     });
 
-    it('should successfully update customer GPS location and landmark notes', async () => {
+    it('should successfully update customer primary GPS location when precision shift <= 1km', async () => {
       (prisma.reservation.findUnique as any).mockResolvedValue({
         id: 'res-1',
         tenant_id: 'default-tenant',
@@ -433,8 +433,8 @@ describe('Staff Auth & Reservation Services', () => {
         customer: {
           id: 'cust-1',
           name: 'Bunda Sarah',
-          lat: -7.25,
-          lng: 112.75,
+          lat: -7.2500,
+          lng: 112.7500,
           distance_km: 2.0,
           preferences: {
             house_photo_url: null,
@@ -445,9 +445,9 @@ describe('Staff Auth & Reservation Services', () => {
 
       (prisma.customer.update as any).mockResolvedValue({
         id: 'cust-1',
-        lat: -7.2600,
-        lng: 112.7600,
-        distance_km: 3.5,
+        lat: -7.2505,
+        lng: 112.7505,
+        distance_km: 2.1,
       });
 
       const result = await StaffReservationService.updateCustomerLocation({
@@ -455,8 +455,8 @@ describe('Staff Auth & Reservation Services', () => {
         staffId: 'staff-1',
         staffName: 'Bidan Dewi',
         tenantId: 'default-tenant',
-        lat: -7.2600,
-        lng: 112.7600,
+        lat: -7.2505,
+        lng: 112.7505,
         landmark: 'Pagar hitam, seberang masjid',
       });
 
@@ -467,12 +467,62 @@ describe('Staff Auth & Reservation Services', () => {
         expect.objectContaining({
           where: { id: 'cust-1' },
           data: expect.objectContaining({
-            lat: -7.2600,
-            lng: 112.7600,
+            lat: -7.2505,
+            lng: 112.7505,
             preferences: expect.objectContaining({
               landmark: 'Pagar hitam, seberang masjid',
               location_updated_by_staff_id: 'staff-1',
             }),
+          }),
+        })
+      );
+    });
+
+    it('should preserve primary coordinates and append revised coords to landmark when shift > 1km', async () => {
+      (prisma.reservation.findUnique as any).mockResolvedValue({
+        id: 'res-1',
+        tenant_id: 'default-tenant',
+        assigned_staff_id: 'staff-1',
+        customer: {
+          id: 'cust-1',
+          name: 'Bunda Sarah',
+          lat: -7.2500,
+          lng: 112.7500,
+          distance_km: 2.0,
+          preferences: {
+            house_photo_url: null,
+            landmark: 'Pagar coklat',
+          },
+        },
+      });
+
+      (prisma.customer.update as any).mockResolvedValue({
+        id: 'cust-1',
+        lat: -7.2500, // Tetap koordinat lama
+        lng: 112.7500, // Tetap koordinat lama
+        distance_km: 2.0,
+      });
+
+      // Koordinat baru bergeser ~2.5km
+      const result = await StaffReservationService.updateCustomerLocation({
+        reservationId: 'res-1',
+        staffId: 'staff-1',
+        staffName: 'Bidan Dewi',
+        tenantId: 'default-tenant',
+        lat: -7.2700,
+        lng: 112.7600,
+        landmark: 'Pagar coklat',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.diverged).toBe(true);
+      expect(result.data.landmark).toContain('📍 GPS Lapangan: -7.270000, 112.760000');
+      expect(prisma.customer.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'cust-1' },
+          data: expect.not.objectContaining({
+            lat: -7.2700,
+            lng: 112.7600,
           }),
         })
       );

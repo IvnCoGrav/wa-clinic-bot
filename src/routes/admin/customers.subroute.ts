@@ -427,6 +427,32 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Cek selisih jarak dengan koordinat awal (Haversine > 1km)
+        let shouldUpdatePrimaryCoords = true;
+        let diffFromOriginalKm: number | null = null;
+        const baseLandmark = landmark !== undefined ? (landmark?.trim() || null) : ((customer.preferences as any)?.landmark || null);
+        let finalLandmark = baseLandmark;
+
+        if (lat !== undefined && lng !== undefined && lat != null && lng != null) {
+          if (customer.lat != null && customer.lng != null) {
+            const { calculateHaversineDistance } = await import('../../utils/haversine');
+            diffFromOriginalKm = calculateHaversineDistance(
+              { lat: customer.lat, lng: customer.lng },
+              { lat, lng }
+            );
+
+            if (diffFromOriginalKm > 1.0) {
+              shouldUpdatePrimaryCoords = false;
+              const gpsTag = `[📍 GPS Lapangan: ${lat.toFixed(6)}, ${lng.toFixed(6)} (+${diffFromOriginalKm.toFixed(1)}km)]`;
+              finalLandmark = baseLandmark ? `${baseLandmark} ${gpsTag}` : gpsTag;
+            } else {
+              shouldUpdatePrimaryCoords = true;
+            }
+          } else {
+            shouldUpdatePrimaryCoords = true;
+          }
+        }
+
         if (removePhoto) {
           housePhotoUrl = null;
         } else if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
@@ -438,7 +464,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             lng: targetLng,
             kelurahan: customer.kelurahan,
             kecamatan: customer.kecamatan,
-            landmark,
+            landmark: finalLandmark,
           });
           const saved = await mediaService.saveOutboundMedia({
             tenantId: DEFAULT_TENANT_ID,
@@ -453,7 +479,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         const updatedPrefs = {
           ...currentPrefs,
           house_photo_url: housePhotoUrl,
-          ...(landmark !== undefined ? { landmark: landmark?.trim() || null } : {}),
+          landmark: finalLandmark,
+          ...(diffFromOriginalKm != null && diffFromOriginalKm > 1.0
+            ? {
+                field_gps_lat: lat,
+                field_gps_lng: lng,
+                field_gps_diff_km: Number(diffFromOriginalKm.toFixed(2)),
+                field_gps_diverged: true,
+              }
+            : {}),
           location_updated_at: new Date().toISOString(),
           location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
         };
@@ -463,17 +497,19 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           updatedCustomer = await prisma.customer.update({
             where: { id: customer.id },
             data: {
-              ...(lat !== undefined ? { lat } : {}),
-              ...(lng !== undefined ? { lng } : {}),
-              ...(distanceKm !== undefined ? { distance_km: distanceKm } : {}),
+              ...(shouldUpdatePrimaryCoords && lat !== undefined ? { lat } : {}),
+              ...(shouldUpdatePrimaryCoords && lng !== undefined ? { lng } : {}),
+              ...(shouldUpdatePrimaryCoords && distanceKm !== undefined ? { distance_km: distanceKm } : {}),
               preferences: updatedPrefs,
             },
           });
         } catch (dbErr: any) {
           // In-memory fallback
-          customer.lat = lat !== undefined ? lat : customer.lat;
-          customer.lng = lng !== undefined ? lng : customer.lng;
-          customer.distance_km = distanceKm;
+          if (shouldUpdatePrimaryCoords) {
+            customer.lat = lat !== undefined ? lat : customer.lat;
+            customer.lng = lng !== undefined ? lng : customer.lng;
+            customer.distance_km = distanceKm;
+          }
           customer.preferences = updatedPrefs;
           customer.updated_at = new Date();
           const mem = customerService.getMemoryCustomers();
