@@ -57,7 +57,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       loginAttemptsMap.delete(ip);
 
       const session = AdminSessionService.createSession(body.adminIdentity || identifier || 'Super Admin');
-      const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400${
+      const cookieValue = `admin_session=${session.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
         isSecureRequest ? '; Secure' : ''
       }`;
       reply.header('Set-Cookie', cookieValue);
@@ -98,15 +98,17 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
 
           const result = await StaffAuthService.login(staff.phone, inputKey, DEFAULT_TENANT_ID);
           if (result) {
-            const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200${
+            const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
               isSecureRequest ? '; Secure' : ''
             }`;
             reply.header('Set-Cookie', cookieValue);
 
-            const staffRole = staff.role; // 'THERAPIST' | 'ADMIN_CS' | 'ADVERTISER'
+            const staffRole = staff.role; // 'THERAPIST' | 'ADMIN_CS' | 'ADVERTISER' | Custom
             const redirectTo = staffRole === 'THERAPIST' ? '/admin/staff/today' : '/admin/overview';
             const frontendRole =
-              staffRole === 'THERAPIST' ? 'therapist' : staffRole === 'ADMIN_CS' ? 'admin_cs' : 'advertiser';
+              staffRole === 'THERAPIST'
+                ? 'therapist'
+                : staffRole.toLowerCase();
 
             return reply.status(200).send({
               success: true,
@@ -152,8 +154,8 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     }
 
     reply.header('Set-Cookie', [
-      'admin_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
-      'staff_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+      'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      'staff_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
     ]);
     return reply.status(200).send({ success: true, message: 'Logout berhasil. Sesi dibersihkan.' });
   });
@@ -227,7 +229,7 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       if (session) {
         const staffRole = session.staff.role;
         const role =
-          staffRole === 'THERAPIST' ? 'therapist' : staffRole === 'ADMIN_CS' ? 'admin_cs' : 'advertiser';
+          staffRole === 'THERAPIST' ? 'therapist' : staffRole.toLowerCase();
         return reply.status(200).send({
           success: true,
           authenticated: true,

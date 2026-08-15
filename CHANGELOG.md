@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Persistensi Sesi Login Admin & Perpanjangan TTL (Mencegah Sesi Cepat Ter-logout)
+
+- **Persistensi Sesi & Cookie Stability (`src/services/admin-session.service.ts`, `src/services/staff-auth.service.ts`, `src/routes/admin/auth.subroute.ts`, `src/routes/staff/auth.subroute.ts`, `src/routes/admin.route.ts`)**:
+  - **Penyebab Sesi Cepat Logout**: Sebelumnya sesi Super Admin disimpan murni di in-memory `Map`. Setiap kali dev server hot-reload (`tsx watch`) karena ada kode yang diubah/disimpan atau bot restart, memori sesi langsung terhapus bersih dan menyebabkan browser mengembalikan status `401 Unauthorized`.
+  - **Storage Disk Persistence**: Menambahkan mekanisme auto-save & auto-load token sesi admin ke `storage/admin_sessions.json`. Sekarang saat server di-restart atau hot-reload, sesi login aktif **tetap utuh dan tidak ter-logout**.
+  - **Perpanjangan Masa Aktif Sesi (TTL 30 Hari)**:
+    - Sesi Admin & Staff diperpanjang menjadi **30 hari penuh (2.592.000 detik)**.
+  - **SameSite=Lax Cookie Policy**: Mengubah atribut cookie dari `SameSite=Strict` menjadi `SameSite=Lax` agar cookie sesi tidak terputus saat berpindah tab atau diarahkan dari URL eksternal/redirect.
+  - **Dukungan Custom Roles di API Admin**: Memperluas filter `admin.route.ts` agar seluruh peran staf non-terapis (termasuk peran kustom baru) dapat mengakses endpoint dashboard tanpa terhambat otorisasi.
+
 ### Added — Manajemen Role & Setup Hak Akses Modul Dashboard (RBAC) Terpadu
 
 - **Fitur Setup Role & Hak Akses di Manajemen Staff (`packages/admin-dashboard/src/pages/tenant/StaffManagement.tsx`, `packages/admin-dashboard/src/config/rolePermissions.ts`)**:

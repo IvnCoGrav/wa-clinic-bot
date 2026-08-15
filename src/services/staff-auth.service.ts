@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '../db/client';
 import { verifyPassword } from '../utils/bcrypt';
 
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 jam (shift kerja)
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 hari
 
 export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
