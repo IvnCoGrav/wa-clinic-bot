@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 export interface AdminSession {
   id: string;
@@ -8,9 +10,51 @@ export interface AdminSession {
   expiresAt: Date;
 }
 
-// In-Memory Admin Session Store (24-hour TTL)
+// 30-day TTL for stable sessions (prevents unexpected logouts)
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days
+const STORAGE_FILE = path.join(process.cwd(), 'storage', 'admin_sessions.json');
+
 const adminSessionStore = new Map<string, AdminSession>();
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 Hours
+
+// Load persisted sessions on boot
+function loadPersistedSessions() {
+  try {
+    if (fs.existsSync(STORAGE_FILE)) {
+      const raw = fs.readFileSync(STORAGE_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      const now = new Date();
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          const expiresAt = new Date(item.expiresAt);
+          if (expiresAt > now) {
+            adminSessionStore.set(item.token, {
+              ...item,
+              createdAt: new Date(item.createdAt),
+              expiresAt,
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // Silently ignore corrupted cache
+  }
+}
+
+function savePersistedSessions() {
+  try {
+    const dir = path.dirname(STORAGE_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const list = Array.from(adminSessionStore.values());
+    fs.writeFileSync(STORAGE_FILE, JSON.stringify(list), 'utf-8');
+  } catch (err) {
+    // Silently ignore write failures
+  }
+}
+
+loadPersistedSessions();
 
 export class AdminSessionService {
   /**
@@ -30,6 +74,7 @@ export class AdminSessionService {
     };
 
     adminSessionStore.set(token, session);
+    savePersistedSessions();
     console.log(`[ADMIN SESSION CREATED] Session token issued for ${adminIdentity}. Expires: ${expiresAt.toISOString()}`);
     return session;
   }
@@ -47,6 +92,7 @@ export class AdminSessionService {
     if (new Date() > session.expiresAt) {
       console.log(`[ADMIN SESSION EXPIRED] Token ${token.substring(0, 8)}... has expired. Removing.`);
       adminSessionStore.delete(token);
+      savePersistedSessions();
       return null;
     }
 
@@ -60,6 +106,7 @@ export class AdminSessionService {
     if (!token) return false;
     const deleted = adminSessionStore.delete(token);
     if (deleted) {
+      savePersistedSessions();
       console.log(`[ADMIN SESSION DESTROYED] Session token ${token.substring(0, 8)}... logged out.`);
     }
     return deleted;
@@ -70,10 +117,15 @@ export class AdminSessionService {
    */
   static cleanupExpiredSessions() {
     const now = new Date();
+    let hasChanges = false;
     for (const [token, session] of adminSessionStore.entries()) {
       if (now > session.expiresAt) {
         adminSessionStore.delete(token);
+        hasChanges = true;
       }
+    }
+    if (hasChanges) {
+      savePersistedSessions();
     }
   }
 }
@@ -82,3 +134,4 @@ export class AdminSessionService {
 setInterval(() => {
   AdminSessionService.cleanupExpiredSessions();
 }, 60 * 60 * 1000);
+

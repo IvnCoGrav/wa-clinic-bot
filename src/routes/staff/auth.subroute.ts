@@ -51,7 +51,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
         .split(',')[0]
         .trim() === 'https';
 
-    const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200${
+    const cookieValue = `staff_session=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${
       isSecureRequest ? '; Secure' : ''
     }`;
     reply.header('Set-Cookie', cookieValue);
@@ -82,7 +82,7 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       await StaffAuthService.logout(cookie);
     }
 
-    reply.header('Set-Cookie', 'staff_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+    reply.header('Set-Cookie', 'staff_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
     return reply.status(200).send({ success: true, message: 'Logout staff berhasil.' });
   });
 
