@@ -21,6 +21,7 @@ import {
   BarChart,
   Bar
 } from 'recharts';
+import { emitBootPhase } from '../../lib/bootProgress';
 
 export const Overview: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -61,6 +62,7 @@ export const Overview: React.FC = () => {
       console.error('Failed to load dashboard overview health metrics:', err);
     } finally {
       setLoading(false);
+      emitBootPhase('data');
     }
   };
 
