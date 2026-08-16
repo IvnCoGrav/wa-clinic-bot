@@ -4,6 +4,98 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Personal Therapist/Midwife Telegram Assignment Dispatch & Privacy Protection
+
+- **Notifikasi Penugasan Khusus Terapis / Bidan (`src/services/staff-notification.service.ts`, `src/routes/admin/reservations.subroute.ts`)**:
+  - Setiap kali reservasi pasien dibuat atau dialokasikan kepada seorang bidan/terapis, sistem otomatis mengirimkan rincian tugas ke akun Telegram pribadi terapis yang bersangkutan secara instan.
+  - Rincian data yang dikirimkan:
+    * 👤 Nama Pasien & Bayi/Anak (termasuk usia)
+    * 💆‍♀️ Layanan Treatment
+    * 📅 Hari, Tanggal, & Jam Kunjungan (WIB)
+    * 📍 Alamat Lengkap & Patokan Rumah / Landmark
+    * 🗺️ Link Rute Navigasi Google Maps Motor (`travelmode=two-wheeler`) & Estimasi Jarak Tempuh
+    * 💰 Rincian Biaya & Status Pembayaran (`LUNAS (Transfer)` / `TAGIH DI TEMPAT`)
+    * 📝 Catatan Khusus Pasien (alergi / preferensi)
+- **Proteksi Privasi Perusahaan (Data Privacy Shield)**:
+  - Nomor telepon WhatsApp pasien **TIDAK dikirimkan** ke ruang obrolan Telegram.
+  - Sebagai gantinya, disediakan tautan cepat aman: `[ 💬 Buka Tugas & Chat Pasien di Portal Terapis ]` (`#staff-today`) sehingga seluruh komunikasi pelanggan tetap terlindungi dan terekam di dalam sistem klinik.
+- **Tautan 1-Klik Akun Telegram Terapis (`src/routes/staff/auth.subroute.ts`, `StaffToday.tsx`, `StaffManagement.tsx`)**:
+  - Terapis dapat menghubungkan akun Telegram pribadinya melalui tombol 1-klik `[ 🔗 Sambungkan Telegram Saya ]` di dalam Drawer Profil Portal Terapis (`showStaffProfileModal`).
+  - Halaman Admin Staff Management menampilkan kolom status indikator Telegram terhubung / belum terhubung.
+- **Database Migration (`20260835000000_add_staff_telegram_fields`)**:
+  - Menambahkan kolom `telegram_chat_id` dan `telegram_pairing_token` pada tabel `staff`.
+- **Pengujian & Validasi (`tests/unit/staff-telegram-notification.test.ts`)**:
+  - Unit test suite penugasan terapis & validasi proteksi nomor telepon lulus 100% (3/3 PASS, total 9/9 suite test lulus).
+
+### Added — Telegram SaaS 1-Click Zero-Setup Pairing & Dynamic Topic Webhook Routing
+
+- **Integrasi Telegram 1-Klik Berbasis Deep Linking (`src/services/telegram.service.ts`, `src/routes/telegram-webhook.route.ts`, `schema.prisma`)**:
+  - Menyediakan token pairing unik per-tenant (`tenants.telegram_pairing_token`) yang otomatis digenerate untuk mendukung model *Single Shared SaaS Bot*.
+  - Menghadirkan 2 opsi tombol 1-klik di antarmuka Admin Dashboard:
+    1. **`[ 💬 Sambungkan Chat Pribadi (DM) ]`**: Deep link `t.me/<bot>?start=<TOKEN>` yang mengaitkan chat 1-on-1 langsung saat menekan tombol `START` di Telegram tanpa input konfigurasi manual.
+    2. **`[ 👥 Sambungkan ke Grup Tim / Staff ]`**: Deep link `t.me/<bot>?startgroup=<TOKEN>` yang mengaitkan grup tim secara instan saat bot diundang ke grup.
+- **Dynamic Forum Topic Routing via Webhook (`src/routes/telegram-webhook.route.ts`, `src/services/alert.service.ts`)**:
+  - Endpoint webhook `POST /api/webhook/telegram` yang menangani command perintah di dalam grup/topik:
+    * `/set_daily_report` (atau `/report_here`): Mengaitkan sub-topik aktif untuk Laporan Operasional Harian.
+    * `/set_error_alerts` (atau `/error_here`): Mengaitkan sub-topik aktif untuk Error Sistem & Outage.
+    * `/set_medical_alerts` (atau `/medical_here`): Mengaitkan sub-topik aktif untuk Eskalasi Medis Urgent ke Bidan.
+    * `/status_server` (atau `/server` / `/health`): Memeriksa status kesehatan server secara real-time (Uptime, Beban RAM, Database Postgres Latency, & WhatsApp Gateway Status).
+    * `/status_telegram`: Menampilkan ringkasan status target chat dan ID topik yang sedang aktif.
+    * `/help`: Menampilkan daftar perintah bot yang tersedia.
+- **Pembaruan Admin UI Dashboard (`DailyReportPanel.tsx`)**:
+  - Banner koneksi 1-klik instan dengan status real-time (`Cek Status`), kartu panduan sub-topik Telegram, dan tab pengaturan manual (BYOB/Custom token) yang dapat disembunyikan.
+- **Database Migration (`20260834000000_add_telegram_pairing_and_topics`)**:
+  - Menambahkan kolom `telegram_pairing_token`, `telegram_topic_daily_report`, `telegram_topic_system_errors`, dan `telegram_topic_medical_alerts` pada tabel `tenants`.
+- **Pengujian & Validasi (`tests/unit/telegram-webhook.test.ts`)**:
+  - Seluruh unit test suite Telegram Webhook & Routing lulus 100% (5/5 PASS, total 28/28 test lulus).
+
+### Changed — Telegram Daily Report QA Dummy Test Mode & Safe Simulation
+
+- **Pemisahan Pengujian Laporan Telegram & Proteksi Database (`src/services/daily-report.service.ts`, `src/routes/admin/settings.subroute.ts`, `DailyReportPanel.tsx`)**:
+  - Tombol **"Tes Kirim (Data Dummy)"** di dashboard admin kini mengirimkan pesan simulasi berlabel `🧪 [TEST / DATA DUMMY]` yang menginfokan secara transparan bahwa data yang dikirim adalah data dummy uji coba koneksi Telegram.
+  - Pengetesan **TIDAK** lagi memicu perhitungan data riil dan **TIDAK** mencatat status ke tabel `DailyReportLog` di database, sehingga tidak memblokir atau mengganggu jadwal cron laporan harian yang sebenarnya.
+  - Request pengujian kini otomatis menyertakan input token dan chat ID yang sedang diketik, sehingga dapat langsung diuji sebelum atau sesudah menekan simpan.
+  - Memperbaiki transparansi error Telegram API: jika terjadi kegagalan (misal format salah atau bot belum di-`/start`), response error dikembalikan secara jelas ke antarmuka admin (bukan silent fallback).
+  - **Dukungan Routing Topik / Forum Telegram per Kategori (`src/services/alert.service.ts`, `.env.example`)**:
+    * Sistem kini mendukung pemisahan sub-topik Telegram untuk setiap kategori laporan/alert:
+      - **Laporan Harian**: diarahkan ke Topic ID dari `TELEGRAM_TOPIC_DAILY_REPORT` atau format Chat ID `[IDGrup]:[TopicID]` di admin settings.
+      - **Error Sistem & Outage** (Redis down, WAHA putus, LLM timeout): otomatis diarahkan ke `TELEGRAM_TOPIC_SYSTEM_ERRORS`.
+      - **Eskalasi Medis Urgent** (gejala demam/kejang): otomatis diarahkan ke `TELEGRAM_TOPIC_MEDICAL_ALERTS`.
+    * Penambahan unit test `tests/unit/alert_triggers.test.ts` (16/16 PASS).
+
+### Changed — Live Chat Retry, Telegram Alert, Language Naturalization & Symptom Grounding
+
+- **Live Chat Admin Reply (`src/services/live-chat.service.ts`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan *Retry Loop Lokal* pada pengiriman chat manual oleh terapis/admin. Jika gagal (timeout/WAHA down), sistem otomatis mencoba 1x lagi setelah 2 detik.
+  - Menerapkan *Idempotency Check* 2 detik untuk mencegah spam pesan yang tidak disengaja (double klik tombol kirim).
+  - Mengintegrasikan peringatan darurat ke Telegram (memanggil `AlertService`) bila pengiriman masih gagal setelah retry, agar admin sadar WhatsApp Gateway sedang bermasalah.
+  - Memperbarui feedback UI untuk memberikan pesan toast (alert) bila error terjadi.
+
+- **Perbaikan Ungkapan Kaku & Bahasa Alami (`src/config/persona.ts`, `src/integrations/llm/phrasing.service.ts`, `src/utils/language-sanitizer.ts`)**:
+  - Melarang kata kaku/baku seperti *"Syukur sekali"*, *"Puji syukur"*, *"Alangkah baiknya"*. Diubah menjadi ungkapan hangat dan santai: *"Wah dekat ya Bunda..."*, *"Wah senang sekali..."*.
+  - Menetapkan aturan gramatikal tegas pada sapaan *"Bunda"* (kata ganti/sapaan utama) vs *"bund"* (partikel panggilan di akhir kalimat). Dilarang menulis *"untuk bund"*, *"ke bund"*, *"dari bund"* $\rightarrow$ otomatis dinormalisasi menjadi *"untuk Bunda"*, *"ke Bunda"*.
+  - Melarang dan membersihkan kebocoran kata bahasa Inggris seperti *"appointment"* / *"appointment-nya"* $\rightarrow$ disanitasi menjadi *"jadwal reservasi"* / *"jadwalnya"*.
+- **Grounding Rekomendasi Gejala Keluhan Anak ke Katalog Klinik (`src/integrations/llm/generator.ts`, `src/services/treatment-catalog.service.ts`)**:
+  - Menambahkan **Aturan 11 (Pemetaan Keluhan & Gejala Spesifik)** pada prompt LLM:
+    * Keluhan **kembung / kolik / susah BAB / batuk pilek / rewel** WAJIB diarahkan ke **Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)** (bukan Pijat Bayi Ceria / Kids Ceria).
+    * Terapi **Sinar Moksa** / **Nebulizer** dijelaskan sebagai add-on terapi pernapasan (dada/punggung) bila disertai batuk pilek atau dahak lendir.
+- **Logging Transparan Perhitungan Jarak (`src/services/delivery.service.ts`)**:
+  - Menambahkan structured console log setiap kalkulasi jarak:
+    * **OpenRouteService (ORS API)**: `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Distance: X km (est. travel: Y mins) | Clinic: [...] ──▶ Customer: [...]`
+    * **Haversine Fallback**: `[DISTANCE CALC] 📐 Method: Haversine Fallback (1.60x circuity) | Straight: A km ──▶ Road Est: B km | Clinic: [...] ──▶ Customer: [...]`
+- **Unit Testing**:
+  - `tests/unit/language-sanitizer.test.ts` & `tests/unit/delivery.test.ts` (10 files, 113 tests PASS).
+
+### Changed — Natural & Conversational Price Inquiry Formatting ("Mijat balita usia 2 tahun, kena biaya berapa?")
+
+- **Peningkatan Respons Harga & Rekomendasi Alami (`src/services/treatment-catalog.service.ts`, `price-answer.service.ts`, `src/config/persona.ts`)**:
+  - Memperbaiki respons pertanyaan harga usia spesifik (*"mijat balita usia 2 tahun, kena biaya berapa?"*) agar hanya merekomendasikan treatment pijat yang relevan (*Pijat Kids Ceria*) tanpa memunculkan menu non-pijat seperti *Custom Kids Bubble Spa*.
+  - Mengubah template harga dan CTA menjadi format percakapan yang hangat, natural, dan manusiawi:
+    * *"Untuk pijat si kecil usia 2 tahun, kami rekomendasikan **Pijat Kids Ceria** ya Bunda 😊 Durasinya 45 menit, dan saat ini lagi ada promo jadi **Rp 90.000** saja (harga normal Rp 110.000)."*
+    * *"Kira-kira mau dijadwalkan di hari apa ya Bunda? Biar sekalian kami bantu cekkan slot terapisnya 🤗"*
+  - Menambahkan prioritas kategori usia (`KIDS` untuk usia $\ge 2$ tahun dan `BABY` untuk usia $< 2$ tahun).
+  - Penambahan unit test `tests/unit/price-answer.test.ts` (11/11 PASS).
+
 ### Added — Foto Depan Rumah, Tombol Update Titik Lokasi GPS & Patokan, serta Kamera Langsung pada Chat Terapis
 
 - **Panduan Visual Foto Depan Rumah & Catatan Patokan (`StaffToday.tsx`, `Reservations.tsx`, `src/services/staff-reservation.service.ts`)**:

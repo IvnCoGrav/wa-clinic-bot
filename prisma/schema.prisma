@@ -515,9 +515,13 @@ model Tenant {
   message_retention_days    Int              @default(120)
   daily_report_enabled      Boolean          @default(false)
   daily_report_hour         Int              @default(7)
-  telegram_bot_token        String?
-  telegram_chat_id          String?
-  pricelist_image_url       String?
+  telegram_bot_token            String?
+  telegram_chat_id              String?
+  telegram_pairing_token        String?          @unique
+  telegram_topic_daily_report   String?
+  telegram_topic_system_errors  String?
+  telegram_topic_medical_alerts String?
+  pricelist_image_url           String?
   cs_name                   String?          @default("Cs Yusi")
   format_visit              String?          @default("Promo[%ID%]")
   greetings_text            String?          @default("Promo [%ID%]")
@@ -632,10 +636,12 @@ model Staff {
   name          String
   phone         String         @unique
   password_hash String
-  role          StaffRole      @default(THERAPIST)
-  active        Boolean        @default(true)
-  created_at    DateTime       @default(now())
-  updated_at    DateTime       @updatedAt
+  role                   StaffRole      @default(THERAPIST)
+  active                 Boolean        @default(true)
+  telegram_chat_id       String?
+  telegram_pairing_token String?        @unique
+  created_at             DateTime       @default(now())
+  updated_at             DateTime       @updatedAt
   reservations  Reservation[]
   sessions      StaffSession[]
 

@@ -4,6 +4,7 @@ import { conversationService, buildConversationUpdatedPayload } from './conversa
 import { customerService } from './customer.service';
 import { messageService } from './message.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
+import { alertService, AlertType, AlertSeverity } from './alert.service';
 
 // WABA free-form text hanya diperbolehkan dalam 24 jam sejak pesan inbound terakhir customer
 const WABA_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -51,6 +52,9 @@ export interface AdminReplyResult {
 }
 
 export class LiveChatService {
+  // Local cache for idempotency check (to prevent double tap)
+  private static recentReplies = new Map<string, number>();
+
   /**
    * Monitor Live Chat: daftar percakapan terbaru + preview pesan (dengan sender_type/sender_name).
    * Paging offset-based untuk infinite scroll; hasMore=true bila masih ada halaman berikutnya.
@@ -169,6 +173,15 @@ export class LiveChatService {
     const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate } = params;
 
     const hasText = !!text && !!text.trim();
+    
+    // Idempotency Check: cegah pengiriman ganda dalam 2 detik
+    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64}`;
+    const now = Date.now();
+    const lastSent = LiveChatService.recentReplies.get(hash);
+    if (lastSent && now - lastSent < 2000) {
+      return { success: false, error: { code: 'DUPLICATE_REPLY', message: 'Pesan yang sama sedang diproses/sudah dikirim dalam 2 detik terakhir.' } };
+    }
+    LiveChatService.recentReplies.set(hash, now);
     const hasImage = !!imageB64;
     if (!hasText && !hasImage) {
       return { success: false, error: { code: 'EMPTY_REPLY', message: 'Isi balasan tidak boleh kosong.' } };
@@ -225,10 +238,12 @@ export class LiveChatService {
       }
     }
 
-    let sendResult;
+    let sendResult: any = { success: false };
     let content = (hasText ? text!.trim() : '') || '';
     let mediaMeta: any;
+    let sendTarget = '';
 
+    // Hanya proses media satu kali, jangan dilakukan berulang kali dalam loop
     if (hasImage) {
       const { mediaService } = await import('./media.service');
       const saved = await mediaService.saveOutboundMedia({
@@ -239,14 +254,12 @@ export class LiveChatService {
         fileName,
       });
 
-      const sendTarget = mediaService.resolveOutboundForProvider(saved.hdUrl, gateway.providerType);
-      if (!sendTarget) {
+      const resolved = mediaService.resolveOutboundForProvider(saved.hdUrl, gateway.providerType);
+      if (!resolved) {
         return { success: false, error: { code: 'MEDIA_PUBLIC_URL_REQUIRED', message: 'Gagal me-resolve URL media untuk pengiriman.' }, provider: gateway.providerType };
       }
-
-      // Jika image + text, text dipakai sebagai caption gambar.
-      sendResult = await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined);
-      if (!hasText) content = '[IMAGE]';
+      sendTarget = resolved;
+      
       mediaMeta = {
         url: saved.thumbUrl || saved.hdUrl,
         hdUrl: saved.hdUrl,
@@ -254,17 +267,52 @@ export class LiveChatService {
         caption: hasText ? text!.trim() : null,
         fileName,
       };
-    } else {
-      sendResult = await gateway.sendTextMessage(customer.phone, content);
+    }
+
+    // Skema Retry Lokal (Maksimal 2 Percobaan)
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      if (hasImage) {
+        sendResult = await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined);
+      } else {
+        sendResult = await gateway.sendTextMessage(customer.phone, content);
+      }
+
+      if (sendResult.success) {
+        break; // Berhasil, keluar dari loop
+      } else if (attempts < maxAttempts) {
+        console.warn(`[Live Chat] Percobaan ${attempts} gagal kirim ke ${customer.phone}, retry dalam 2s...`);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+
+    if (hasImage && !hasText) {
+      content = '[IMAGE]';
     }
 
     if (!sendResult.success) {
       if (hasImage && mediaMeta?.hdUrl) {
         console.warn(`[LIVE CHAT MEDIA] Pengiriman gambar ke WhatsApp gagal, tetapi file tetap tersimpan di storage: ${mediaMeta.hdUrl}`);
       }
+      
+      // Kirim Notifikasi Darurat ke Telegram agar Admin Tahu Gateway Bermasalah
+      alertService.notifyAlert({
+        type: AlertType.THIRD_PARTY_OUTAGE,
+        severity: AlertSeverity.CRITICAL,
+        provider: gateway.providerType,
+        message: `Admin/Terapis (${adminName || 'Admin'}) gagal membalas chat ke ${customer.phone} setelah ${maxAttempts}x percobaan. Pesan: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}". Harap periksa status WAHA/WABA.`,
+        metadata: {
+          error: sendResult.error,
+          conversationId,
+        }
+      });
+
       return {
         success: false,
-        error: sendResult.error || { code: 'SEND_FAILED', message: 'Gagal mengirim pesan ke WhatsApp.' },
+        error: sendResult.error || { code: 'SEND_FAILED', message: 'Gagal mengirim pesan ke WhatsApp setelah percobaan ulang.' },
         provider: gateway.providerType,
       };
     }

@@ -8,6 +8,7 @@ import { healthRoutes } from './routes/health.route';
 import { trackingRoutes } from './routes/tracking.route';
 import { landingRoutes } from './routes/landing.route';
 import { mediaRoutes } from './routes/media.route';
+import { telegramWebhookRoutes } from './routes/telegram-webhook.route';
 import rateLimit from '@fastify/rate-limit';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
@@ -102,6 +103,7 @@ export function buildApp() {
   app.register(trackingRoutes);
   app.register(landingRoutes);
   app.register(mediaRoutes);
+  app.register(telegramWebhookRoutes);
 
   return app;
 }

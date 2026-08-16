@@ -16,6 +16,7 @@
 import { treatmentCatalogService } from './treatment-catalog.service';
 import { TEMPLATES } from '../config/persona';
 import { isMultiChildTransportQuestion } from '../state-machine/utils/transport-policy-checker';
+import { parseAgeTextToMonths } from '../utils/age-calculator';
 
 export interface PriceAnswerResult {
   replyText: string;
@@ -112,15 +113,26 @@ export function buildPriceAnswer(
   }
 
   // ---- SPESIFIK → tampilkan harga (kalimat ngobrol, bukan format brosur) ----
+  const ageMonths = parseAgeTextToMonths(userText);
+  let ageQueryStr: string | undefined;
+  const ageMatch = userText.match(/\b(?:usia|umur|anak|bayi|balita)?\s*(\d+(?:[.,]\d+)?\s*(?:tahun|thn|th|bulan|bln|hari|hr))\b/i);
+  if (ageMatch) {
+    ageQueryStr = ageMatch[1].trim();
+  } else if (ageMonths !== null) {
+    ageQueryStr = ageMonths >= 12 ? `${Math.round(ageMonths / 12)} tahun` : `${ageMonths} bulan`;
+  }
+
   const list = items
     .slice(0, 2)
     .map((s) =>
       TEMPLATES.priceInfo({
         name: s.name,
+        ageQuery: ageQueryStr,
         ageTierLabel: s.ageTier.label,
         durationMinutes: s.durationMinutes,
         normalPrice: s.originalPrice,
         promoPrice: s.promoPrice,
+        isRecommendation: !!ageQueryStr,
       })
     )
     .join('\n\n');

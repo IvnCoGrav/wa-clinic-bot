@@ -1132,11 +1132,17 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           daily_report_hour: true,
           telegram_bot_token: true,
           telegram_chat_id: true,
+          telegram_topic_daily_report: true,
+          telegram_topic_system_errors: true,
+          telegram_topic_medical_alerts: true,
         },
       });
 
       const envEnabled = process.env.ENABLE_DAILY_REPORT_CRON === 'true';
       const envHour = parseInt(process.env.DAILY_REPORT_HOUR || '7', 10);
+
+      const { telegramService } = await import('../../services/telegram.service');
+      const pairingInfo = await telegramService.getTenantPairingInfo(DEFAULT_TENANT_ID);
 
       const effectiveToken = tenant?.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
       const effectiveChatId = tenant?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
@@ -1149,10 +1155,44 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
           reportHour: tenant ? tenant.daily_report_hour : envHour,
           telegramBotToken: tenant?.telegram_bot_token || '',
           telegramChatId: tenant?.telegram_chat_id || '',
+          telegramPairingToken: pairingInfo.pairingToken,
+          telegramDirectLink: pairingInfo.directLink,
+          telegramGroupLink: pairingInfo.groupLink,
+          telegramBotUsername: pairingInfo.botUsername,
+          telegramTopicDailyReport: tenant?.telegram_topic_daily_report || '',
+          telegramTopicSystemErrors: tenant?.telegram_topic_system_errors || '',
+          telegramTopicMedicalAlerts: tenant?.telegram_topic_medical_alerts || '',
           envFallbackEnabled: envEnabled,
           envFallbackHour: envHour,
           telegramConfigured,
         },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/admin/settings/telegram/regenerate-token
+   * Membuat token pairing baru untuk tenant
+   */
+  fastify.post('/api/admin/settings/telegram/regenerate-token', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { telegramService } = await import('../../services/telegram.service');
+      const pairingInfo = await telegramService.regeneratePairingToken(DEFAULT_TENANT_ID);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'REGENERATE_TELEGRAM_PAIRING_TOKEN',
+        payload: { tenantId: DEFAULT_TENANT_ID },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: pairingInfo,
+        message: 'Token pairing Telegram baru berhasil dibuat.',
       });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message });
@@ -1166,11 +1206,27 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/settings/daily-report',
     async (
       request: FastifyRequest<{
-        Body: { enabled?: boolean; reportHour?: number; telegramBotToken?: string; telegramChatId?: string };
+        Body: {
+          enabled?: boolean;
+          reportHour?: number;
+          telegramBotToken?: string;
+          telegramChatId?: string;
+          telegramTopicDailyReport?: string;
+          telegramTopicSystemErrors?: string;
+          telegramTopicMedicalAlerts?: string;
+        };
       }>,
       reply: FastifyReply
     ) => {
-      const { enabled, reportHour, telegramBotToken, telegramChatId } = request.body || {};
+      const {
+        enabled,
+        reportHour,
+        telegramBotToken,
+        telegramChatId,
+        telegramTopicDailyReport,
+        telegramTopicSystemErrors,
+        telegramTopicMedicalAlerts,
+      } = request.body || {};
 
       if (reportHour !== undefined && (typeof reportHour !== 'number' || reportHour < 0 || reportHour > 23)) {
         return reply.status(400).send({ success: false, error: 'reportHour harus berupa angka antara 0 - 23 (jam WIB).' });
@@ -1182,6 +1238,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         if (reportHour !== undefined) updateData.daily_report_hour = Math.floor(reportHour);
         if (telegramBotToken !== undefined) updateData.telegram_bot_token = telegramBotToken.trim() || null;
         if (telegramChatId !== undefined) updateData.telegram_chat_id = telegramChatId.trim() || null;
+        if (telegramTopicDailyReport !== undefined) updateData.telegram_topic_daily_report = telegramTopicDailyReport.trim() || null;
+        if (telegramTopicSystemErrors !== undefined) updateData.telegram_topic_system_errors = telegramTopicSystemErrors.trim() || null;
+        if (telegramTopicMedicalAlerts !== undefined) updateData.telegram_topic_medical_alerts = telegramTopicMedicalAlerts.trim() || null;
 
         const updated = await prisma.tenant.update({
           where: { id: DEFAULT_TENANT_ID },
@@ -1208,6 +1267,9 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
             reportHour: updated.daily_report_hour,
             telegramBotToken: updated.telegram_bot_token || '',
             telegramChatId: updated.telegram_chat_id || '',
+            telegramTopicDailyReport: updated.telegram_topic_daily_report || '',
+            telegramTopicSystemErrors: updated.telegram_topic_system_errors || '',
+            telegramTopicMedicalAlerts: updated.telegram_topic_medical_alerts || '',
           },
           message: 'Pengaturan Laporan Operasional Harian & Telegram berhasil disimpan.',
         });
@@ -1219,27 +1281,51 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/admin/settings/daily-report/test-send
+   * Mengirimkan pesan uji coba laporan (data dummy QA) ke Telegram tanpa mengubah log harian database.
    */
-  fastify.post('/api/admin/settings/daily-report/test-send', async (request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { dailyReportService } = await import('../../services/daily-report.service');
-      await dailyReportService.sendDailyReport(DEFAULT_TENANT_ID);
+  fastify.post(
+    '/api/admin/settings/daily-report/test-send',
+    async (
+      request: FastifyRequest<{
+        Body: { telegramBotToken?: string; telegramChatId?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { telegramBotToken, telegramChatId } = request.body || {};
+        const { dailyReportService } = await import('../../services/daily-report.service');
+        const result = await dailyReportService.sendTestDailyReport(DEFAULT_TENANT_ID, {
+          botToken: telegramBotToken,
+          chatId: telegramChatId,
+        });
 
-      await auditService.logAdminAction({
-        apiKey: (request as any).adminKeyUsed,
-        adminIdentity: (request as any).adminIdentity,
-        action: 'TEST_SEND_DAILY_REPORT',
-        payload: { tenantId: DEFAULT_TENANT_ID },
-        ipAddress: request.ip,
-      });
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'TEST_SEND_DAILY_REPORT',
+          payload: {
+            tenantId: DEFAULT_TENANT_ID,
+            success: result.success,
+            channel: result.channel,
+          },
+          ipAddress: request.ip,
+        });
 
-      return reply.status(200).send({
-        success: true,
-        message: 'Laporan harian berhasil di-trigger dan dikirim ke Telegram.',
-      });
-    } catch (err: any) {
-      return reply.status(500).send({ success: false, error: err.message });
+        if (!result.success) {
+          return reply.status(400).send({
+            success: false,
+            error: result.message,
+          });
+        }
+
+        return reply.status(200).send({
+          success: true,
+          message: result.message,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
     }
-  });
+  );
 }
 
