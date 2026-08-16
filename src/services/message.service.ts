@@ -56,6 +56,66 @@ export class MessageService {
   }
 
   /**
+   * Pengecekan deduplikasi outbound: memeriksa apakah pesan outbound dengan konten serupa
+   * baru saja dicatat (misal via Live Chat / Staff Dashboard) dalam window detik tertentu.
+   * Jika ada, tautkan wa_message_id pesan tersebut agar tidak membuat baris baru ganda di database.
+   */
+  public async checkAndAttachOutboundDuplicate(
+    conversationId: string,
+    content: string,
+    waMessageId: string,
+    tenantId: string,
+    windowSeconds = 30
+  ): Promise<boolean> {
+    const cutoff = new Date(Date.now() - windowSeconds * 1000);
+    const normalizedContent = (content || '').trim();
+
+    // 1. Cek memoryMessages fallback
+    const memMsg = memoryMessages.find(
+      (m) =>
+        m.conversation_id === conversationId &&
+        m.tenant_id === tenantId &&
+        m.direction === 'OUTBOUND' &&
+        (m.content || '').trim() === normalizedContent &&
+        new Date(m.created_at) >= cutoff
+    );
+    if (memMsg) {
+      if (!memMsg.wa_message_id && waMessageId) {
+        memMsg.wa_message_id = waMessageId;
+        memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+      }
+      return true;
+    }
+
+    // 2. Cek DB Prisma
+    try {
+      const existing = await prisma.message.findFirst({
+        where: {
+          conversation_id: conversationId,
+          tenant_id: tenantId,
+          direction: 'OUTBOUND',
+          content: normalizedContent,
+          created_at: { gte: cutoff },
+        },
+        orderBy: { created_at: 'desc' },
+      });
+
+      if (existing) {
+        if (!existing.wa_message_id && waMessageId) {
+          await prisma.message.update({
+            where: { id: existing.id },
+            data: { wa_message_id: waMessageId },
+          });
+          memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+        }
+        return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  /**
    * Menyimpan record pesan (Audit Trail) ke tabel messages dan menambahkan wa_message_id ke idempotency store.
    */
   public async logMessage(data: {

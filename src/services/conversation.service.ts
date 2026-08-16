@@ -201,8 +201,8 @@ export class ConversationService {
         tenantId
       ).catch((err) => console.error('Failed to sync auto-release to DB:', err));
 
-      // Remove label "hold" from WhatsApp/WAHA chat (default ON, matikan dengan ENABLE_WAHA_HOLD_LABEL=false)
-      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
+      // Remove label "hold" from WhatsApp/WAHA chat (default OFF di produksi, aktif jika ENABLE_WAHA_HOLD_LABEL=true)
+      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
       if (enableHoldLabel) {
         try {
           const { wahaClient } = require('../integrations/waha/client');
@@ -321,34 +321,38 @@ export class ConversationService {
 
     const currentStateBeforeEscalation = conversation.current_state;
 
-    // Tambahkan label "hold" secara otomatis ke chat WAHA (kecuali untuk global_bot_disabled)
-    const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
+    // 1. Tambahkan label "hold" secara fisik ke chat WAHA jika diaktifkan (default disabled di produksi)
+    const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
     const isGlobalDisabled = escalationReason === 'global_bot_disabled' || escalationReason === 'Global bot disabled';
 
     if (enableHoldLabel && !isGlobalDisabled) {
       try {
         const { wahaClient } = await import('../integrations/waha/client');
         await wahaClient.addLabel(`${phone}@c.us`, 'hold').catch((err: any) => console.warn(`[LABEL ERROR] Failed to auto-add hold label:`, err.message));
-        
-        const groupJidStr = process.env.ESCALATION_GROUP_JID || '120363428465130209@g.us';
-        if (groupJidStr) {
-          const groupJids = groupJidStr.split(',').map(j => j.trim()).filter(Boolean);
-          const customerName = conversation.customer?.name || 'Pelanggan';
-          const cleanPhone = phone.replace(/\D/g, '');
-          const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-          const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: HUMAN_HANDLING\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
-          
-          for (const gJid of groupJids) {
-            wahaClient.sendText(gJid, alertText).catch((err: any) => console.warn(`[GROUP ALERT ERROR] Failed to send group alert to ${gJid}:`, err.message));
-          }
-        }
       } catch (err: any) {
         console.warn(`[WAHA CLIENT ERROR] Failed to import wahaClient:`, err.message);
       }
-    } else if (isGlobalDisabled) {
-      console.log(`[LABEL SKIP] Skipping hold label addition because escalation reason is global_bot_disabled.`);
     } else {
-      console.log(`[LABEL SKIP] Skipping hold label addition in production (feature flag disabled).`);
+      console.log(`[LABEL SKIP] Skipping WAHA hold label mutation (feature flag disabled / UI-managed).`);
+    }
+
+    // 2. Kirim notifikasi teks ke grup WhatsApp koordinasi tim (selalu aktif via sendText standar)
+    try {
+      const groupJidStr = process.env.ESCALATION_GROUP_JID || '120363428465130209@g.us';
+      if (groupJidStr) {
+        const { wahaClient } = await import('../integrations/waha/client');
+        const groupJids = groupJidStr.split(',').map(j => j.trim()).filter(Boolean);
+        const customerName = conversation.customer?.name || 'Pelanggan';
+        const cleanPhone = phone.replace(/\D/g, '');
+        const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: HUMAN_HANDLING\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
+        
+        for (const gJid of groupJids) {
+          wahaClient.sendText(gJid, alertText).catch((err: any) => console.warn(`[GROUP ALERT ERROR] Failed to send group alert to ${gJid}:`, err.message));
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[GROUP ALERT ERROR] Failed to send group alert:`, err.message);
     }
 
     return await this.updateConversationState(
