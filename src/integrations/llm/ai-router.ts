@@ -726,7 +726,7 @@ export class AIRouterLLMClient {
   }
 
   private get model(): string {
-    return process.env.AI_MODEL_ROUTER || process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+    return process.env.AI_MODEL_ROUTER || process.env.AI_MODEL_NLU || 'deepseek-v4-flash';
   }
 
   public async classify(input: AIRouterInput): Promise<AIRouterResponse> {

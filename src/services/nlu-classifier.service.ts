@@ -172,8 +172,20 @@ export class NluClassifierService {
       intents.push('faq_question');
     }
 
+    // 7b. Clarification / Anaphora Correction ("maksud saya yang paket newborn", "maksudku pijat laktasi")
+    const clarificationMatch = text.match(/\b(?:maksud\s*(?:saya|ku|e|kami|sy)|bukan(?:\s+yang\s+itu)?[,\s]+(?:maksud(?:ku|saya)?\s+)?)\s*(?:yang\s+)?(?:paket\s+)?([a-z0-9\s\-+]+)/i);
+    if (clarificationMatch) {
+      if (!intents.includes('faq_question')) {
+        intents.push('faq_question');
+      }
+      const rawTarget = clarificationMatch[1].trim();
+      if (rawTarget.length >= 3) {
+        entities.treatment_name = rawTarget;
+      }
+    }
+
     // 8. Express Interest / Reservation (Must not be a pure question like "apakah...")
-    if (/(\bbooking\b|\bdaftar\b|\bpesan\b|\bmau\b|\bmohon\b|\breservasi\b)/i.test(text) || (!isQuestion && /\btreatment\b/i.test(text))) {
+    if (/(\bbooking\b|\bdaftar\b|\bpesan\b|\bmau\b|\bmohon\b|\breservasi\b)/i.test(text) || (!isQuestion && /\b(treatment|paket)\b/i.test(text))) {
       intents.push('express_interest');
     }
 
@@ -320,7 +332,7 @@ You MUST end your response with this complete JSON block (values may be null/omi
           },
           payload: {
             temperature: config.temperature,
-            max_tokens: config.maxTokens,
+            max_tokens: Math.max(config.maxTokens || 1500, 1500),
             response_format: { type: 'json_object' },
             messages: messagesPayload,
           },

@@ -1,4 +1,3 @@
-import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { getBrandIdentity } from '../../config/brand';
 import { checkMedicalKeywords } from '../../config/medical-keywords';
 import { llmOutageStorage } from './context';
@@ -26,7 +25,7 @@ export interface IntentAuditContext {
  */
 export class LLMIntentService {
   private get model(): string {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+    return process.env.AI_MODEL_LEGACY_INTENT || process.env.AI_MODEL_INTENT || 'qwen3.7-flash-2026-07-15';
   }
 
   constructor() {}
@@ -67,19 +66,22 @@ export class LLMIntentService {
               messages: [
                 {
                   role: 'system',
-                  content: `${BOT_PERSONA_PROMPT}
- 
-Anda adalah Intent Classifier untuk percakapan WhatsApp ${getBrandIdentity().businessName}.
-Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format JSON strictly {"intent": "interested" | "not_interested" | "asking_schedule" | "faq_question" | "other"}:
- 
-- "faq_question": Jika pengguna menanyakan informasi umum/FAQ moms & baby spa, seperti manfaat treatment, jenis perawatan, harga, durasi, atau pertanyaan seputar pijat dan treatment (contoh: "pijat bayi itu buat apa?", "ada pijat ibu hamil ga?", "berapa harga treatmentnya?", "pijat bayi boleh dari umur berapa?").
-- "asking_schedule": Jika pengguna menanyakan ketersediaan hari/jam/jadwal spesifik (contoh: "apakah hari Senin bisa?", "bisa booking besok jam 3 sore?").
-- "medical_query": Jika pengguna menanyakan keluhan medis, masalah kesehatan bayi/ibu, dosis obat, atau saran medis (contoh: "anak saya demam dikasih apa ya", "ada obat batuk bayi?", "bekas jahitan melahirkan perih").
-- "complaint": Jika pengguna mengeluhkan layanan, komplain, kecewa, atau kesalahan (contoh: "tindik telinganya miring", "kok bidannya belum sampai", "nyasar ya mbak").
-- "interested": Jika pengguna menyatakan mau, berminat, setuju, atau ingin kirim list reservasi (contoh: "mau dong", "kirim format booking", "setuju", "boleh").
-- "not_interested": Jika pengguna menolak, batal, atau keberatan (contoh: "ga jadi", "batal", "nanti saja").
-- "other": Kategori lainnya.`,
-            },
+                  content: `You are an internal JSON intent classifier for ${getBrandIdentity().businessName} WhatsApp Chatbot.
+Your job is ONLY to classify user messages into one of the following intents and return strictly valid JSON.
+DO NOT respond with conversational text. DO NOT greet or say "Baik Bunda". Output strictly JSON.
+
+Allowed JSON output format:
+{"intent": "interested" | "not_interested" | "asking_schedule" | "faq_question" | "medical_query" | "complaint" | "other"}
+
+Intent definitions:
+- "faq_question": General info/treatment questions, service details, price, duration, packages, or clarifying/pointing to a package/treatment (e.g. "pijat bayi itu buat apa?", "berapa harganya?", "maksud saya yang paket newborn", "maksudku pijat laktasi").
+- "asking_schedule": Inquiring about specific days/hours/slots (e.g. "apakah hari Senin bisa?", "bisa booking besok jam 3 sore?").
+- "medical_query": Health concerns, medical complaints, medication requests (e.g. "anak saya demam dikasih apa ya", "bekas jahitan melahirkan perih").
+- "complaint": Customer complaints or dissatisfaction (e.g. "tindik telinganya miring", "kok bidannya belum sampai").
+- "interested": Customer agreeing, wanting to book, or expressing interest (e.g. "mau dong", "kirim format booking", "setuju", "boleh").
+- "not_interested": Refusal, cancellation, or postponing (e.g. "ga jadi", "batal", "nanti saja").
+- "other": Anything else.`,
+                },
             {
               role: 'user',
               content: userMessageText,
@@ -178,6 +180,11 @@ Klasifikasikan pesan pengguna ke salah satu dari 5 intent berikut dalam format J
     // 4. Deteksi FAQ / Pertanyaan Info
     const faqKeywords = ['apa', 'berapa', 'fasilitas', 'manfaat', 'harga', 'biaya', 'fungsi', 'treatment', 'facial', 'acne', 'jerawat', 'glowing', 'bagus', 'mana'];
     if (faqKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('apa') || lower.includes('berapa') || lower.includes('ada'))) {
+      return { intent: 'faq_question', confidence: 0.9 };
+    }
+
+    // 4b. Deteksi Klarifikasi / Anaphora Correction ("maksud saya yang paket newborn", "maksudku pijat...")
+    if (/\b(maksud\s*(?:saya|ku|e|kami|sy)|bukan(?:\s+yang\s+itu)?[,\s]+(?:maksud(?:ku|saya)?\s+)?)\b/i.test(lower)) {
       return { intent: 'faq_question', confidence: 0.9 };
     }
 
