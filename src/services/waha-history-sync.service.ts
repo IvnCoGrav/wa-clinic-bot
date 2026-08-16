@@ -73,7 +73,8 @@ export class WahaHistorySyncService {
           continue;
         }
 
-        const rawMessages = await wahaClient.getMessages(chat.id, messagesPerChat);
+        const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
+        const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
         const textMessages = (rawMessages || [])
           .filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0)
           .sort((a, b) => a.timestamp - b.timestamp);
