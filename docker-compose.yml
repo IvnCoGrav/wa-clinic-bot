@@ -33,6 +33,10 @@ services:
       - FB_CAPI_ACCESS_TOKEN=${FB_CAPI_ACCESS_TOKEN}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-KalaReport_bot}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
