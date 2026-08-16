@@ -391,6 +391,29 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'BLOCKED' });
       }
 
+      // --- GUARD CLAUSE: STALE / CATCH-UP MESSAGE (Mencegah bot membalas massal chat riwayat saat QR scan / reconnect) ---
+      // Pesan lama tetap dicatat ke database (audit trail & Live Chat), tetapi dilewati dari bot auto-reply & state machine.
+      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
+      if (maxAgeSeconds > 0 && payload.timestamp) {
+        const rawTs = Number(payload.timestamp);
+        if (!isNaN(rawTs) && rawTs > 0) {
+          const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
+          const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
+          if (ageSeconds > maxAgeSeconds) {
+            console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Logging to DB and dropping auto-reply.`);
+            await messageService.logMessage({
+              tenantId: DEFAULT_TENANT_ID,
+              conversationId: conversation.id,
+              direction: 'INBOUND',
+              content: inboundContent,
+              waMessageId,
+              payloadRaw: mergeMediaIntoPayload(payload),
+            });
+            return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
+          }
+        }
+      }
+
       // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
       // Evaluasi sebelum state machine / AI Router / LLM. Legacy customer yang
       // tidak eligible di-senyapkan (human handling + escalation khusus) — lihat
