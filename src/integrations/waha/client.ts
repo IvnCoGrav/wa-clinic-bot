@@ -47,7 +47,9 @@ export interface IWahaClient {
   startTyping(chatId: string): Promise<boolean>;
   stopTyping(chatId: string): Promise<boolean>;
   sendText(chatId: string, text: string): Promise<boolean>;
+  sendTextDetailed?(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }>;
   sendImage(chatId: string, url: string, caption?: string): Promise<boolean>;
+  sendImageDetailed?(chatId: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string }>;
   addLabel(chatId: string, labelName: string): Promise<boolean>;
   removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
@@ -357,6 +359,12 @@ export class WahaClient implements IWahaClient {
   public async markUnread(chatId: string): Promise<boolean> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
 
+    const isTest = process.env.NODE_ENV === 'test';
+    if (!isTest && process.env.ENABLE_WAHA_UNREAD !== 'true') {
+      console.log(`[WAHA UNREAD] markUnread bypassed in production (UI-managed mode) -> chatId: ${targetChatId}`);
+      return true;
+    }
+
     if (this.shouldMock) {
       console.log(`[MOCK WAHA] markUnread -> chatId: ${targetChatId}`);
       return true;
@@ -451,13 +459,18 @@ export class WahaClient implements IWahaClient {
    * Pengiriman pesan teks utama ke WAHA API (/api/sendText)
    */
   public async sendText(chatId: string, text: string): Promise<boolean> {
+    const res = await this.sendTextDetailed(chatId, text);
+    return res.success;
+  }
+
+  public async sendTextDetailed(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }> {
     const targetChatId = await this.resolveActiveJid(chatId);
     // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
     const normalizedText = normalizeWhatsAppFormat(text);
 
     if (this.shouldMock) {
       console.log(`[MOCK WAHA OUTBOUND] sendText -> chatId: ${targetChatId} | text: "${normalizedText}"`);
-      return true;
+      return { success: true, messageId: `mock_${Date.now()}` };
     }
 
     try {
@@ -474,10 +487,12 @@ export class WahaClient implements IWahaClient {
           )
         )
       );
-      return response.status === 200 || response.status === 201;
+      const ok = response.status === 200 || response.status === 201;
+      const messageId = response.data?.id || response.data?.key?.id || response.data?._data?.id?.id || undefined;
+      return { success: ok, messageId };
     } catch (error: any) {
       console.error(`[WAHA API ERROR] sendText failed for ${targetChatId}:`, error?.response?.data || error.message);
-      return false;
+      return { success: false };
     }
   }
 
@@ -567,6 +582,73 @@ export class WahaClient implements IWahaClient {
     }
   }
 
+  public async sendImageDetailed(chatId: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string }> {
+    const targetChatId = await this.resolveActiveJid(chatId);
+
+    if (this.shouldMock) {
+      console.log(`[MOCK WAHA OUTBOUND] sendImage -> chatId: ${targetChatId} | url: "${url}" | caption: "${caption || ''}"`);
+      return { success: true, messageId: `mock_img_${Date.now()}` };
+    }
+
+    try {
+      let base64Data = '';
+      let mimetype = 'image/jpeg';
+      let filename = 'image.jpg';
+
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        const response = await axios.get(url, { responseType: 'arraybuffer', timeout: this.mediaTimeoutMs });
+        base64Data = Buffer.from(response.data, 'binary').toString('base64');
+        mimetype = String(response.headers['content-type'] || 'image/jpeg');
+
+        const urlPathname = new URL(url).pathname;
+        const lastSegment = urlPathname.substring(urlPathname.lastIndexOf('/') + 1);
+        if (lastSegment) filename = lastSegment;
+      } else {
+        const fs = await import('fs/promises');
+        const { existsSync } = await import('fs');
+        const path = await import('path');
+
+        let resolvedPath = url;
+        if (!existsSync(resolvedPath)) {
+          const fallbackPath = path.resolve(process.cwd(), url.replace(/^\//, ''));
+          if (existsSync(fallbackPath)) {
+            resolvedPath = fallbackPath;
+          }
+        }
+
+        const fileBuffer = await fs.readFile(resolvedPath);
+        base64Data = fileBuffer.toString('base64');
+
+        const ext = path.extname(resolvedPath).toLowerCase();
+        if (ext === '.png') mimetype = 'image/png';
+        else if (ext === '.gif') mimetype = 'image/gif';
+        else if (ext === '.webp') mimetype = 'image/webp';
+        filename = path.basename(resolvedPath);
+      }
+
+      const response = await axios.post(
+        `${this.baseUrl}/api/sendImage`,
+        {
+          chatId: targetChatId,
+          file: {
+            mimetype,
+            data: base64Data,
+            filename,
+          },
+          caption,
+          session: this.session,
+        },
+        { headers: this.headers, timeout: this.mediaTimeoutMs }
+      );
+      const ok = response.status === 200 || response.status === 201;
+      const messageId = response.data?.id || response.data?.key?.id || response.data?._data?.id?.id || undefined;
+      return { success: ok, messageId };
+    } catch (error: any) {
+      console.error(`[WAHA API ERROR] sendImage failed for ${targetChatId}:`, error?.response?.data || error.message);
+      return { success: false };
+    }
+  }
+
   /**
    * Menambahkan label ke chat menggunakan API WAHA baru (PUT /api/{session}/labels/chats/{chatId})
    * Best-effort: kegagalan tidak pernah melempar ke pemanggil (return false).
@@ -574,14 +656,21 @@ export class WahaClient implements IWahaClient {
   public async addLabel(chatId: string, labelName: string): Promise<boolean> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
 
-    if (this.shouldMock) {
-      console.log(`[MOCK WAHA OUTBOUND] addLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
-      const existing = this.mockLabels.get(targetChatId) || [];
-      if (!existing.includes(labelName)) {
-        existing.push(labelName);
+    const isTest = process.env.NODE_ENV === 'test';
+    const isHold = labelName.toLowerCase() === 'hold' || labelName.toLowerCase() === 'admin';
+    const isEnabled = isTest || (isHold
+      ? process.env.ENABLE_WAHA_HOLD_LABEL === 'true'
+      : process.env.ENABLE_LIFECYCLE_LABELS === 'true');
+
+    if (!isEnabled || this.shouldMock) {
+      if (this.shouldMock) {
+        const existing = this.mockLabels.get(targetChatId) || [];
+        if (!existing.includes(labelName)) {
+          existing.push(labelName);
+        }
+        this.mockLabels.set(targetChatId, existing);
+        invalidateCachedLabels(targetChatId);
       }
-      this.mockLabels.set(targetChatId, existing);
-      invalidateCachedLabels(targetChatId);
       await this.syncLabelColumn(targetChatId, labelName, true);
       return true;
     }
@@ -663,12 +752,19 @@ export class WahaClient implements IWahaClient {
   public async removeLabel(chatId: string, labelName: string): Promise<boolean> {
     const targetChatId = await this.resolvePrimaryJid(chatId);
 
-    if (this.shouldMock) {
-      console.log(`[MOCK WAHA OUTBOUND] removeLabel -> chatId: ${targetChatId} | label: "${labelName}"`);
-      const existing = this.mockLabels.get(targetChatId) || [];
-      const filtered = existing.filter(l => l !== labelName);
-      this.mockLabels.set(targetChatId, filtered);
-      invalidateCachedLabels(targetChatId);
+    const isTest = process.env.NODE_ENV === 'test';
+    const isHold = labelName.toLowerCase() === 'hold' || labelName.toLowerCase() === 'admin';
+    const isEnabled = isTest || (isHold
+      ? process.env.ENABLE_WAHA_HOLD_LABEL === 'true'
+      : process.env.ENABLE_LIFECYCLE_LABELS === 'true');
+
+    if (!isEnabled || this.shouldMock) {
+      if (this.shouldMock) {
+        const existing = this.mockLabels.get(targetChatId) || [];
+        const filtered = existing.filter(l => l !== labelName);
+        this.mockLabels.set(targetChatId, filtered);
+        invalidateCachedLabels(targetChatId);
+      }
       await this.syncLabelColumn(targetChatId, labelName, false);
       return true;
     }
@@ -730,15 +826,19 @@ export class WahaClient implements IWahaClient {
     const toAdd = changes.add || [];
     const toRemove = (changes.remove || []).map(l => l.toLowerCase());
 
-    if (this.shouldMock) {
-      const existing = this.mockLabels.get(targetChatId) || [];
-      const next = existing.filter(l => !toRemove.includes(l.toLowerCase()));
-      for (const l of toAdd) if (!next.includes(l)) next.push(l);
-      this.mockLabels.set(targetChatId, next);
-      invalidateCachedLabels(targetChatId);
+    const isTest = process.env.NODE_ENV === 'test';
+    const isEnabled = isTest || process.env.ENABLE_LIFECYCLE_LABELS === 'true' || process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
+
+    if (!isEnabled || this.shouldMock) {
+      if (this.shouldMock) {
+        const existing = this.mockLabels.get(targetChatId) || [];
+        const next = existing.filter(l => !toRemove.includes(l.toLowerCase()));
+        for (const l of toAdd) if (!next.includes(l)) next.push(l);
+        this.mockLabels.set(targetChatId, next);
+        invalidateCachedLabels(targetChatId);
+      }
       for (const l of toAdd) await this.syncLabelColumn(targetChatId, l, true);
       for (const l of toRemove) await this.syncLabelColumn(targetChatId, l, false);
-      console.log(`[MOCK WAHA OUTBOUND] batchUpdateLabels -> chatId: ${targetChatId} | add: ${JSON.stringify(toAdd)} | remove: ${JSON.stringify(toRemove)}`);
       return true;
     }
 

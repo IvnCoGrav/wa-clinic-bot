@@ -18,6 +18,10 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   async sendTextMessage(to: string, text: string): Promise<SendResult> {
     const chatId = this.toChatId(to);
     try {
+      if (typeof this.client.sendTextDetailed === 'function') {
+        const res = await this.client.sendTextDetailed(chatId, text);
+        return { success: res.success, messageId: res.messageId, provider: 'WAHA' };
+      }
       const ok = await this.client.sendText(chatId, text);
       return { success: ok, provider: 'WAHA' };
     } catch (err: any) {
@@ -52,6 +56,10 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<SendResult> {
     const chatId = this.toChatId(to);
     try {
+      if (typeof this.client.sendImageDetailed === 'function') {
+        const res = await this.client.sendImageDetailed(chatId, imageUrl, caption);
+        return { success: res.success, messageId: res.messageId, provider: 'WAHA' };
+      }
       const ok = await this.client.sendImage(chatId, imageUrl, caption);
       return { success: ok, provider: 'WAHA' };
     } catch (err: any) {

@@ -114,7 +114,7 @@ export const CustomerDatabase: React.FC = () => {
     const labelName = label === 'admin' ? 'Admin' : 'Hold';
     const ok = await confirm({
       title: `${enabled ? 'Pasang' : 'Lepas'} Label "${labelName}"`,
-      message: `${enabled ? 'Pasang' : 'Lepas'} label WhatsApp "${labelName}" untuk ${customer.name || customer.phone}?`,
+      message: `${enabled ? 'Pasang' : 'Lepas'} label "${labelName}" di sistem untuk ${customer.name || customer.phone}?`,
       confirmText: `Ya, ${enabled ? 'Pasang' : 'Lepas'}`,
       danger: !enabled,
     });
@@ -126,10 +126,7 @@ export const CustomerDatabase: React.FC = () => {
         body: JSON.stringify({ label, enabled }),
       });
       if (res && res.success) {
-        toast(res.message || `Label "${labelName}" diperbarui.`);
-        if (!res.data?.wahaOk) {
-          toast('Label tersimpan di database, tapi gagal di-mirror ke WhatsApp (cek WAHA).', 'error');
-        }
+        toast(res.message || `Label "${labelName}" berhasil diperbarui di sistem.`, 'success');
         loadCustomers();
       } else {
         toast(res?.error || `Gagal memperbarui label "${labelName}".`, 'error');
