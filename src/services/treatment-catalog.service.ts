@@ -445,7 +445,11 @@ export class TreatmentCatalogService {
    * TAPI mengembalikan data mentah — biarkan pembentuk jawaban (LLM/fallback) yang menyusun kalimat.
    */
   public searchCatalogItems(userText: string): ClinicServiceItem[] {
-    const q = userText.toLowerCase();
+    const rawQ = userText.toLowerCase();
+    // Bersihkan partikel pembuka koreksi / anaphora (misal "maksud saya yang paket newborn" -> "paket newborn")
+    const q = rawQ
+      .replace(/\b(?:maksud\s*(?:saya|ku|e|kami|sy)|bukan(?:\s+yang\s+itu)?[,\s]+(?:maksud(?:ku|saya)?\s+)?)\s*(?:yang\s+)?/i, '')
+      .trim() || rawQ;
     const services = this.getAllServices();
 
     // 1. Exact Phrase Match & Bigram Phrase Match pada Nama Treatment
@@ -457,9 +461,10 @@ export class TreatmentCatalogService {
     for (const s of services) {
       if (!s.isActive) continue;
       const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+      const fullName = s.name.toLowerCase();
       const nameParts = cleanName.split(/\s+/);
 
-      if (q.includes(cleanName) || cleanName.includes(q.trim())) {
+      if (q.includes(cleanName) || fullName.includes(q.trim()) || (q.length >= 4 && cleanName.includes(q.trim()))) {
         exactMatches.push(s);
       } else if (nameParts.length >= 2) {
         const twoWordPhrase = `${nameParts[0]} ${nameParts[1]}`;
@@ -524,6 +529,8 @@ export class TreatmentCatalogService {
       'balita': 'anak',           // balita = anak
       'kembung': 'kembung',       // sudah ada di nama
       'kolik': 'kembung',         // bayi kolik
+      'newborn': 'selapan newborn', // newborn care
+      'selapan': 'selapan newborn', // paket selapan
     };
 
     const stopwords = new Set([

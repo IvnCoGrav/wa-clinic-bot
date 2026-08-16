@@ -205,7 +205,7 @@ describe('LiveChatService — monitor & balas admin', () => {
 
     const ack = await liveChatService.sendAdminReply({
       conversationId: conversation.id,
-      text: 'Test',
+      text: 'Test Ack',
       tenantId: DEFAULT_TENANT_ID,
       acknowledgeOutsideWindow: true,
     });

@@ -39,7 +39,7 @@ describe('AiModelConfigService — tenant-aware registry', () => {
     const cSum = c.find((x) => x.task === 'SUMMARIZATION')!;
     const defSum = def.find((x) => x.task === 'SUMMARIZATION')!;
     expect(cSum.modelName).toBe('qwen3.7-flash-2026-07-15');
-    expect(defSum.modelName).toBe(process.env.AI_MODEL_SUMMARIZATION || 'MiniMax-M2.7-highspeed');
+    expect(defSum.modelName).toBe(process.env.AI_MODEL_SUMMARIZATION || 'qwen3.7-flash-2026-07-15');
   });
 
   it('globalBotActive per-tenant: disable tenant A tidak memengaruhi tenant B', () => {

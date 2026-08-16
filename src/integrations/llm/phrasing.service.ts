@@ -25,9 +25,9 @@ export class PhrasingService {
   private get model(): string {
     try {
       const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
-      return chatConfig?.modelName || process.env.OPENAI_MODEL || 'deepseek-v4-flash';
+      return process.env.AI_MODEL_PHRASING || process.env.AI_MODEL_HUMANIZER || 'qwen3.7-flash-2026-07-15';
     } catch {
-      return process.env.OPENAI_MODEL || 'deepseek-v4-flash';
+      return process.env.AI_MODEL_PHRASING || process.env.AI_MODEL_HUMANIZER || 'qwen3.7-flash-2026-07-15';
     }
   }
 
