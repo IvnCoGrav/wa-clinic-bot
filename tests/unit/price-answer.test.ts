@@ -77,6 +77,14 @@ describe('buildPriceAnswer — Resolusi Anaphora', () => {
     expect(res.pricelist?.force).toBe(true);
   });
 
+  it('pesan klarifikasi "Maksud saya yang paket newborn" → harga Paket Selapan (Newborn Care)', () => {
+    const res = buildPriceAnswer('Maksud saya yang paket newborn', baseOpts);
+    expect(res.replyText).toContain('Paket Selapan');
+    expect(res.replyText).toContain('Rp 80.000');
+    expect(res.replyText).toContain('Rp 100.000');
+    expect(res.pricelist).toBeUndefined();
+  });
+
   it('sudah pernah kirim pricelist & generik tanpa kandidat → hanya caption teks', () => {
     const res = buildPriceAnswer('berapa itu bund ?', {
       hasLocation: true,

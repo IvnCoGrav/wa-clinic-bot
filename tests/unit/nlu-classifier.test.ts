@@ -36,6 +36,12 @@ describe('NLU Classifier Service Unit Tests', () => {
       expect(result.intents).not.toContain('express_interest');
     });
 
+    it('should classify clarification / anaphora "Maksud saya yang paket newborn" as faq_question', async () => {
+      const result = await NluClassifierService.classifyMessage('Maksud saya yang paket newborn', []);
+      expect(result.intents).toContain('faq_question');
+      expect(result.entities?.treatment_name).toContain('newborn');
+    });
+
     it('should classify affirmation & negation responses', async () => {
       const affirmRes = await NluClassifierService.classifyMessage('iya bener', []);
       expect(affirmRes.intents).toContain('affirmation');

@@ -185,4 +185,17 @@ describe('Treatment Questions → searchCatalog (30 Test Cases)', () => {
     const res = treatmentCatalogService.searchCatalog('xyzabc');
     expect(res).toBe('');
   });
+
+  // ============ F. Anaphora & Clarification Resolution ============
+  it('31. "Maksud saya yang paket newborn" → Paket Selapan (Newborn Care)', () => {
+    const items = treatmentCatalogService.searchCatalogItems('Maksud saya yang paket newborn');
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0].name).toContain('Paket Selapan');
+  });
+
+  it('32. "Bukan itu, maksudku pijat laktasi" → Paket Laktasi (Breast Massage)', () => {
+    const items = treatmentCatalogService.searchCatalogItems('Bukan itu, maksudku pijat laktasi');
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0].name).toContain('Laktasi');
+  });
 });

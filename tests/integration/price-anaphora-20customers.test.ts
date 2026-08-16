@@ -50,85 +50,85 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
       q: 'berapa itu bund ?',
       seeds: ['Kami rekomendasikan Pijat Bayi Pulih Ceria untuk bunda.'],
       expectName: 'Pijat Bayi Pulih Ceria',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
     {
       q: 'harganya berapa ya bun?',
       seeds: ['Pijat Bayi Ceria cocok buat si kecil.'],
       expectName: 'Pijat Bayi Ceria',
-      expectPrice: 'Rp60.000',
+      expectPrice: 'Rp 60.000',
     },
     {
       q: 'itu berapa kak?',
       seeds: ['Untuk bunda bisa coba Pijat Lahap Juara.'],
       expectName: 'Pijat Lahap Juara',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
     {
       q: 'berapa ya bu?',
       seeds: ['Pijat Kids Ceria buat anak 2-7 tahun.'],
       expectName: 'Pijat Kids Ceria',
-      expectPrice: 'Rp90.000',
+      expectPrice: 'Rp 90.000',
     },
     {
       q: 'kalo itu berapa?',
       seeds: ['Kami sarankan Pijat Bayi Pulih Ceria buat bapil.'],
       expectName: 'Pijat Bayi Pulih Ceria',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
     {
       q: 'itu tadi berapa?',
       seeds: ['Pijat Bayi Ceria sudah cukup bunda.'],
       expectName: 'Pijat Bayi Ceria',
-      expectPrice: 'Rp60.000',
+      expectPrice: 'Rp 60.000',
     },
     {
       q: 'berapa dong bund?',
       seeds: ['Pijat Lahap Juara bantu nafsu makan.'],
       expectName: 'Pijat Lahap Juara',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
     {
       q: 'itu berapa harganya bun?',
       seeds: ['Pijat Kids Ceria sangat recommended.'],
       expectName: 'Pijat Kids Ceria',
-      expectPrice: 'Rp90.000',
+      expectPrice: 'Rp 90.000',
     },
     {
       q: 'berapa itu bund?',
       seeds: ['Kami punya Pijat Bayi Ceria', 'Atau Pijat Kids Ceria juga bisa'],
       expectName: 'Pijat Kids Ceria',
-      expectPrice: 'Rp90.000',
+      expectPrice: 'Rp 90.000',
     },
     {
       q: 'itu berapa ya bund?',
       seeds: ['Treatmentnya adalah (Pijat Bayi Pulih Ceria) bunda.'],
       expectName: 'Pijat Bayi Pulih Ceria',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
     {
       q: 'berapa itu bund ?',
       seeds: ['Pijat Lahap Juara tersedia.'],
       expectName: 'Pijat Lahap Juara',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
     {
       q: 'kalau yang itu berapa bun?',
       seeds: ['Pijat Bayi Ceria mulai dari promo.'],
       expectName: 'Pijat Bayi Ceria',
-      expectPrice: 'Rp60.000',
+      expectPrice: 'Rp 60.000',
     },
     {
       q: 'itu harganya berapa?',
       seeds: ['Pijat Kids Ceria bisa di-book.'],
       expectName: 'Pijat Kids Ceria',
-      expectPrice: 'Rp90.000',
+      expectPrice: 'Rp 90.000',
     },
     {
       q: 'itu berapa ya bun?',
       seeds: ['Bisa pilih Pijat Bayi Pulih Ceria.'],
       expectName: 'Pijat Bayi Pulih Ceria',
-      expectPrice: 'Rp70.000',
+      expectPrice: 'Rp 70.000',
     },
   ];
 
@@ -170,7 +170,7 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
     await runTurn(scenario, 'berapa itu bund ?');
 
     const reply = joinedReply(scenario.client);
-    expect(reply).toContain('Rp70.000');
+    expect(reply).toContain('Rp 70.000');
     expect(reply).toContain('Pijat Bayi Pulih Ceria');
     expect(mocks.sendImage).not.toHaveBeenCalled();
   });
@@ -181,7 +181,7 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
     await runTurn(scenario, 'pijat bayi pulih ceria harganya berapa?');
 
     const reply = joinedReply(scenario.client);
-    expect(reply).toContain('Rp70.000');
+    expect(reply).toContain('Rp 70.000');
     expect(reply).toContain('Pijat Bayi Pulih Ceria');
     expect(reply).not.toContain('pricelist dari kami');
   });
@@ -211,7 +211,7 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
     await runTurn(scenario, 'itu berapa ya bund?');
 
     const reply = joinedReply(scenario.client);
-    expect(reply).toContain('Rp60.000');
+    expect(reply).toContain('Rp 60.000');
     expect(reply).toContain('Pijat Bayi Ceria');
     expect(reply).not.toContain('pricelist dari kami');
   });
