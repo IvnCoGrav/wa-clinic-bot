@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Changed — Anaphora Clarification Resolution ("Maksud saya yang paket newborn"), NLU Token Truncation Fix, & Intent Prompt Isolation
+
+- **Resolusi Anaphora & Koreksi Kalimat ("Maksud saya yang...") (`src/services/treatment-catalog.service.ts`, `nlu-classifier.service.ts`, `src/integrations/llm/intent.ts`)**:
+  - Menambahkan pembersihan partikel koreksi (*"maksud saya yang"*, *"maksudku"*, *"bukan itu maksud saya"*) sebelum pencarian katalog, sehingga pencarian katalog langsung menargetkan entitas intinya.
+  - Memetakan istilah `"newborn"` & `"selapan"` langsung ke **`Paket Selapan (Newborn Care)`** (ID: `baby-paket-selapan`).
+  - Menambahkan deteksi pola anaphora pada `fallbackClassify` dan `ruleBasedFallbackIntent` sehingga pesan koreksi tidak lagi terbuang menjadi `other` melainkan diklasifikasikan sebagai `faq_question` / `express_interest` dengan entitas treatment yang diekstrak.
+- **Peningkatan Kapasitas `max_tokens` pada Model Reasoning NLU (`src/services/nlu-classifier.service.ts`)**:
+  - Mengatur batas `max_tokens` minimal menjadi 1.500 token untuk mencegah pemotongan token di tengah penulisan `reasoning_content` pada model seperti DeepSeek-R1 / MiniMax.
+- **Isolasi System Prompt Legacy Intent Classifier (`src/integrations/llm/intent.ts`)**:
+  - Menghapus `${BOT_PERSONA_PROMPT}` dari classifier sistem agar model AI tidak lagi membalas chat customer (*"Baik, Bunda..."*), melainkan strictly mengembalikan JSON intent.
+- **Pengujian (`tests/unit/treatment-catalog-search.test.ts`, `tests/unit/price-answer.test.ts`, `tests/unit/nlu-classifier.test.ts`)**:
+  - Seluruh unit test & integrasi lulus 100% (11 files, 125 tests PASS).
+
 ### Added — Comprehensive Server Infrastructure Monitoring (`/server`)
 
 - **Perintah Real-time `/server` (dan `/status_server`) (`src/routes/telegram-webhook.route.ts`)**:
