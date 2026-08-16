@@ -246,10 +246,11 @@ export class WahaClient implements IWahaClient {
     if (chatId.includes('@lid')) {
       return await this.resolvePrimaryJid(chatId);
     }
-    if (!chatId.includes('@c.us')) {
-      return `${chatId}@c.us`;
+    const cleanId = chatId.replace(/@s\.whatsapp\.net$/, '');
+    if (!cleanId.includes('@c.us')) {
+      return `${cleanId}@c.us`;
     }
-    return chatId;
+    return cleanId;
   }
 
   /**
@@ -272,10 +273,11 @@ export class WahaClient implements IWahaClient {
       return chatId;
     }
     
-    if (!chatId.includes('@c.us')) {
-      return `${chatId}@c.us`;
+    const cleanId = chatId.replace(/@s\.whatsapp\.net$/, '');
+    if (!cleanId.includes('@c.us')) {
+      return `${cleanId}@c.us`;
     }
-    return chatId;
+    return cleanId;
   }
 
   /**
