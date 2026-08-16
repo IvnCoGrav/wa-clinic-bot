@@ -22,6 +22,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           phone: true,
           role: true,
           active: true,
+          telegram_chat_id: true,
           created_at: true,
           updated_at: true,
           _count: {

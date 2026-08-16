@@ -54,10 +54,13 @@ describe('language-sanitizer (anti bocor aksara asing)', () => {
     expect(sanitizeForbiddenEnglishWords('little one-nya sudah melewati 2 minggu')).toBe('si kecil sudah melewati 2 minggu');
     expect(sanitizeForbiddenEnglishWords('apabila baby rewel')).toBe('apabila bayi rewel');
     expect(sanitizeForbiddenEnglishWords('mommy bisa booking schedule')).toBe('Bunda bisa booking jadwal');
+    expect(sanitizeForbiddenEnglishWords('Boleh infokan jam untuk appointment-nya?')).toBe('Boleh infokan jam untuk jadwal reservasi?');
   });
 
-  it('sanitizeHallucinatedTerms membersihkan istilah aneh seperti antimeminjamkannya', () => {
+  it('sanitizeHallucinatedTerms membersihkan istilah aneh seperti antimeminjamkannya dan untuk bund', () => {
     expect(sanitizeHallucinatedTerms('Supaya bisa kami hitung biaya antimeminjamkannya, boleh tahu kira-kira rumahnya di mana?')).toBe('Supaya bisa kami hitung ongkirnya, boleh tahu kira-kira rumahnya di mana?');
     expect(sanitizeHallucinatedTerms('untuk biaya peminjamannya')).toBe('untuk ongkos kirimnya');
+    expect(sanitizeHallucinatedTerms('Silakan dipilih waktu yang paling cocok untuk bund.')).toBe('Silakan dipilih waktu yang paling cocok untuk Bunda.');
+    expect(sanitizeHallucinatedTerms('Syukur sekali, rumahnya dekat bund.')).toBe('Wah senang sekali, rumahnya dekat bund.');
   });
 });

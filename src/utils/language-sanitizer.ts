@@ -47,7 +47,7 @@ export function sanitizeRagLeakage(text: string): string {
 
 /**
  * Membersihkan kata-kata bahasa Inggris yang dilarang bocor ke customer
- * (seperti "little one", "little one-nya", "baby", "mommy", "schedule").
+ * (seperti "little one", "little one-nya", "baby", "mommy", "schedule", "appointment").
  */
 export function sanitizeForbiddenEnglishWords(text: string): string {
   if (!text) return text;
@@ -55,7 +55,8 @@ export function sanitizeForbiddenEnglishWords(text: string): string {
     .replace(/\blittle\s+one(?:-nya|nya)?\b/gi, 'si kecil')
     .replace(/\bbaby(?:-nya|nya)?\b/gi, 'bayi')
     .replace(/\bmommy(?:-nya|nya)?\b/gi, 'Bunda')
-    .replace(/\bschedule\b/gi, 'jadwal');
+    .replace(/\bschedule\b/gi, 'jadwal')
+    .replace(/\bappointment(?:-nya|nya)?\b/gi, 'jadwal reservasi');
 }
 
 /**
@@ -67,6 +68,9 @@ export function sanitizeHallucinatedTerms(text: string): string {
   return text
     .replace(/\b(?:biaya\s+)?antimeminjamkan(?:nya)?\b/gi, 'ongkirnya')
     .replace(/\banti\s*meminjamkan(?:nya)?\b/gi, 'ongkirnya')
-    .replace(/\bbiaya\s+peminjaman(?:nya)?\b/gi, 'ongkos kirimnya');
+    .replace(/\bbiaya\s+peminjaman(?:nya)?\b/gi, 'ongkos kirimnya')
+    .replace(/\b(untuk|ke|dari|pada|bagi|buat|oleh)\s+bund\b/gi, '$1 Bunda')
+    .replace(/\bsyukur\s+sekali\b/gi, 'Wah senang sekali')
+    .replace(/\bpuji\s+syukur\b/gi, 'Wah senang sekali');
 }
 

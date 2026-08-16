@@ -267,6 +267,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
         });
 
+        if (assignedStaffId) {
+          const { staffNotificationService } = await import('../../services/staff-notification.service');
+          staffNotificationService.sendReservationAssignmentNotification(reservation.id, assignedStaffId).catch((err) => {
+            console.error('[Admin API] Failed to send Telegram notification to assigned staff on create:', err.message);
+          });
+        }
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -609,6 +616,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             },
           },
         });
+
+        if (assigned_staff_id) {
+          const { staffNotificationService } = await import('../../services/staff-notification.service');
+          staffNotificationService.sendReservationAssignmentNotification(id, assigned_staff_id).catch((err) => {
+            console.error('[Admin API] Failed to send Telegram notification to assigned staff:', err.message);
+          });
+        }
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,

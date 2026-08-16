@@ -40,7 +40,7 @@ describe('buildPriceAnswer — Resolusi Anaphora', () => {
       candidateTreatmentName: 'Pijat Bayi Pulih Ceria',
     });
     expect(res.replyText).toContain('Pijat Bayi Pulih Ceria');
-    expect(res.replyText).toContain('Rp70.000');
+    expect(res.replyText).toContain('Rp 70.000');
     expect(res.replyText).not.toContain('pricelist dari kami');
     expect(res.pricelist).toBeUndefined();
   });
@@ -54,8 +54,19 @@ describe('buildPriceAnswer — Resolusi Anaphora', () => {
   it('pesan berisi nama treatment eksplisit → harga spesifik tanpa riwayat', () => {
     const res = buildPriceAnswer('harga pijat bayi ceria berapa ya?', baseOpts);
     expect(res.replyText).toContain('Pijat Bayi Ceria');
-    expect(res.replyText).toContain('Rp60.000');
+    expect(res.replyText).toContain('Rp 60.000');
     expect(res.pricelist).toBeUndefined();
+  });
+
+  it('pesan tanya biaya pijat balita usia 2 tahun → rekomendasi Pijat Kids Ceria natural dan luwes', () => {
+    const res = buildPriceAnswer('mijat balita usia 2 tahun, kena biaya berapa?', baseOpts);
+    expect(res.replyText).toContain('Untuk pijat si kecil usia 2 tahun, kami rekomendasikan *Pijat Kids Ceria* ya Bunda');
+    expect(res.replyText).toContain('Durasinya 45 menit');
+    expect(res.replyText).toContain('Rp 90.000');
+    expect(res.replyText).toContain('Rp 110.000');
+    expect(res.replyText).toContain('Kira-kira mau dijadwalkan di hari apa ya Bunda? Biar sekalian kami bantu cekkan slot terapisnya 🤗');
+    // Must NOT include bubble spa
+    expect(res.replyText).not.toContain('Bubble Spa');
   });
 
   it('minta pricelist ulang tetap prioritas (walau ada kandidat)', () => {

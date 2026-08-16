@@ -169,4 +169,93 @@ describe('AlertService — 8 Triggers, Sub-Tags, Per-Trigger Throttling & Fallba
     expect(logContent).toContain('THIRD_PARTY_OUTAGE:Meta CAPI');
     expect(logContent).toContain('628***'); // PII sanitized!
   });
+
+  describe('Telegram Forum Topic / Thread Routing', () => {
+    it('should parse combined Chat ID with Topic ID syntax (-100123:42) and send message_thread_id', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch' as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true })
+      } as any);
+
+      process.env.TELEGRAM_BOT_TOKEN = 'mock-bot-token';
+
+      const res = await alertService.notifyAlert({
+        type: AlertType.DAILY_OPS_REPORT,
+        severity: AlertSeverity.INFO,
+        message: 'Test daily report',
+        chatId: '-1001234567890:42',
+        rawMessage: true,
+      });
+
+      expect(res.channel).toBe('telegram');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://api.telegram.org/botmock-bot-token/sendMessage',
+        expect.objectContaining({
+          body: JSON.stringify({
+            chat_id: '-1001234567890',
+            text: 'Test daily report',
+            parse_mode: 'Markdown',
+            message_thread_id: 42
+          })
+        })
+      );
+    });
+
+    it('should auto-route system errors to TELEGRAM_TOPIC_SYSTEM_ERRORS if env is configured', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch' as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true })
+      } as any);
+
+      process.env.TELEGRAM_BOT_TOKEN = 'mock-bot-token';
+      process.env.TELEGRAM_CHAT_ID = '-1001234567890';
+      process.env.TELEGRAM_TOPIC_SYSTEM_ERRORS = '50';
+
+      const res = await alertService.notifyAlert({
+        type: AlertType.REDIS_OFFLINE,
+        severity: AlertSeverity.CRITICAL,
+        message: 'Redis server dropped',
+      });
+
+      expect(res.channel).toBe('telegram');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://api.telegram.org/botmock-bot-token/sendMessage',
+        expect.objectContaining({
+          body: expect.stringContaining('"message_thread_id":50')
+        })
+      );
+
+      delete process.env.TELEGRAM_TOPIC_SYSTEM_ERRORS;
+    });
+
+    it('should auto-route medical escalations to TELEGRAM_TOPIC_MEDICAL_ALERTS', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch' as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true })
+      } as any);
+
+      process.env.TELEGRAM_BOT_TOKEN = 'mock-bot-token';
+      process.env.TELEGRAM_CHAT_ID = '-1001234567890';
+      process.env.TELEGRAM_TOPIC_MEDICAL_ALERTS = '65';
+
+      const res = await alertService.notifyAlert({
+        type: AlertType.MEDICAL_EMERGENCY_HIGH,
+        severity: AlertSeverity.CRITICAL,
+        message: 'Pasien mengalami demam tinggi dan kejang',
+      });
+
+      expect(res.channel).toBe('telegram');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://api.telegram.org/botmock-bot-token/sendMessage',
+        expect.objectContaining({
+          body: expect.stringContaining('"message_thread_id":65')
+        })
+      );
+
+      delete process.env.TELEGRAM_TOPIC_MEDICAL_ALERTS;
+    });
+  });
 });

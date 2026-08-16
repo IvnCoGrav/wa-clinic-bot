@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { parseAgeTextToMonths } from '../utils/age-calculator';
+import { checkMedicalKeywords } from '../config/medical-keywords';
 
 export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE';
 
@@ -476,7 +478,37 @@ export class TreatmentCatalogService {
       return partialMatches;
     }
 
-    // 2. Fallback Keyword Scoring (sama dengan searchCatalog)
+    // 2. Smart Age & Category Matching
+    const ageMonths = parseAgeTextToMonths(userText);
+    const hasMedical = checkMedicalKeywords(userText).isMedical;
+    if (ageMonths !== null && !hasMedical) {
+      const isMassage = /\b(pijat|mijat|pijet|urut|massage)\b/i.test(q);
+      const isSpa = /\b(spa|bubble|mandi|berendam)\b/i.test(q);
+      const ageServices = this.getServicesByAge(ageMonths, true);
+
+      if (isMassage && !isSpa) {
+        let massageServices = ageServices.filter((s) => s.name.toLowerCase().includes('pijat') || s.name.toLowerCase().includes('massage'));
+        if (ageMonths >= 24) {
+          // Usia 2 tahun ke atas: utamakan KIDS
+          massageServices.sort((a, b) => (b.category === 'KIDS' ? 1 : 0) - (a.category === 'KIDS' ? 1 : 0));
+        } else {
+          // Usia di bawah 2 tahun: utamakan BABY
+          massageServices.sort((a, b) => (b.category === 'BABY' ? 1 : 0) - (a.category === 'BABY' ? 1 : 0));
+        }
+        if (massageServices.length > 0) {
+          return [massageServices[0]];
+        }
+      } else if (isSpa) {
+        const spaServices = ageServices.filter((s) => s.name.toLowerCase().includes('spa') || s.name.toLowerCase().includes('bubble'));
+        if (spaServices.length > 0) {
+          return [spaServices[0]];
+        }
+      } else if (ageServices.length > 0) {
+        return [ageServices[0]];
+      }
+    }
+
+    // 3. Fallback Keyword Scoring (sama dengan searchCatalog)
     // Synonym expansion: istilah colloquial → keyword yang ada di catalog
     const SYNONYMS: Record<string, string> = {
       'bumil': 'hamil',           // ibu hamil

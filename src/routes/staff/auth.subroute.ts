@@ -169,4 +169,45 @@ export async function staffAuthRoutes(fastify: FastifyInstance) {
       },
     });
   });
+
+  /**
+   * GET /api/staff/me/telegram-pairing
+   * Mengambil tautan deep link & token pairing Telegram milik profil staff yang sedang login
+   */
+  fastify.get('/api/staff/me/telegram-pairing', async (request, reply) => {
+    const staffId = (request as any).staffId;
+    if (!staffId) {
+      return reply.status(401).send({ success: false, error: 'Unauthorized' });
+    }
+
+    try {
+      const { staffNotificationService } = await import('../../services/staff-notification.service');
+      const info = await staffNotificationService.getStaffPairingInfo(staffId);
+      if (!info) {
+        return reply.status(404).send({ success: false, error: 'Staff tidak ditemukan' });
+      }
+      return reply.status(200).send({ success: true, data: info });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
+
+  /**
+   * POST /api/staff/me/telegram-pairing/regenerate
+   * Membuat ulang token pairing Telegram staf
+   */
+  fastify.post('/api/staff/me/telegram-pairing/regenerate', async (request, reply) => {
+    const staffId = (request as any).staffId;
+    if (!staffId) {
+      return reply.status(401).send({ success: false, error: 'Unauthorized' });
+    }
+
+    try {
+      const { staffNotificationService } = await import('../../services/staff-notification.service');
+      const info = await staffNotificationService.regenerateStaffPairingToken(staffId);
+      return reply.status(200).send({ success: true, data: info, message: 'Token Telegram staf berhasil diperbarui.' });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
 }
