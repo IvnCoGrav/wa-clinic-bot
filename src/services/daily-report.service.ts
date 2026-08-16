@@ -138,6 +138,131 @@ export class DailyReportService {
   }
 
   /**
+   * Sends a dummy QA test daily report to Telegram without touching DailyReportLog in DB.
+   */
+  public async sendTestDailyReport(
+    tenantId: string,
+    overrideCredentials?: { botToken?: string; chatId?: string }
+  ): Promise<{ success: boolean; message: string; channel: string }> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, telegram_bot_token: true, telegram_chat_id: true }
+    });
+
+    const botToken = overrideCredentials?.botToken?.trim() || tenant?.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = overrideCredentials?.chatId?.trim() || tenant?.telegram_chat_id || process.env.TELEGRAM_CHAT_ID;
+
+    if (!botToken || !chatId) {
+      return {
+        success: false,
+        message: 'Telegram Bot Token atau Chat ID belum diisi. Silakan isi dan simpan pengaturan terlebih dahulu.',
+        channel: 'none'
+      };
+    }
+
+    const tenantName = tenant?.name || 'Kala Mom & Baby';
+    
+    // Sample dummy report data (explicitly marked QA Dummy)
+    const dummyData: DailyReportData = {
+      reportDateStr: '2026-08-15',
+      sales: {
+        totalConfirmed: 5,
+        totalRevenue: 1500000,
+        revenueIsEstimated: false,
+        newCustomersCount: 3,
+        repeatCustomersCount: 2
+      },
+      chat: {
+        newConversations: 12,
+        inboundMessages: 45,
+        outboundMessages: 50,
+        averageResponseSeconds: 15
+      },
+      adAttribution: {
+        totalClicks: 8,
+        convertedClicks: 2
+      },
+      opsHealth: {
+        highMedicalEscalations: 0,
+        mediumMedicalEscalations: 0,
+        pendingMedicalEscalations: 0,
+        otherEscalations: 1,
+        pendingMedicalFaq: 0,
+        pendingGeneralFaq: 0
+      },
+      insights: {
+        summarization: 'Ini adalah data simulasi dummy untuk verifikasi koneksi Telegram.',
+        topLocations: [
+          { name: 'Jakarta Selatan', count: 3 },
+          { name: 'Depok', count: 2 }
+        ],
+        outOfCoverageCount: 0
+      }
+    };
+
+    const dashboardUrl = process.env.ADMIN_DASHBOARD_URL || 'http://localhost:3000/admin';
+    const rawDummyMessage = `🧪 *[TEST / DATA DUMMY] Laporan Harian Operasional — ${tenantName}*
+⚠️ _Pesan ini adalah simulasi uji coba integrasi Telegram._
+_Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat laporan database._
+
+*Tanggal Simulasi*: ${dummyData.reportDateStr}
+
+💰 *Sales & Konversi (Dummy)*
+- Reservasi Confirmed: *${dummyData.sales.totalConfirmed}*
+- Total Omzet: *Rp 1.500.000*
+- Customer Baru: *${dummyData.sales.newCustomersCount}*
+- Repeat Order: *${dummyData.sales.repeatCustomersCount}*
+
+💬 *Chat & Engagement (Dummy)*
+- Percakapan Baru: *${dummyData.chat.newConversations}*
+- Pesan Masuk: *${dummyData.chat.inboundMessages}*
+- Pesan Keluar: *${dummyData.chat.outboundMessages}*
+
+🎯 *Atribusi Iklan (Dummy)*
+- Klik Masuk: *${dummyData.adAttribution.totalClicks}*
+- Konversi ke Reservasi: *${dummyData.adAttribution.convertedClicks}*
+
+🚨 *Kesehatan Operasional (Dummy)*
+- Eskalasi Medis (High): *${dummyData.opsHealth.highMedicalEscalations}*
+- Eskalasi Medis (Medium): *${dummyData.opsHealth.mediumMedicalEscalations}*
+- Medis Masih Pending: *${dummyData.opsHealth.pendingMedicalEscalations}*
+- Eskalasi Non-Medis: *${dummyData.opsHealth.otherEscalations}*
+- Antrian Staging (Medis/Umum): *${dummyData.opsHealth.pendingMedicalFaq}* / *${dummyData.opsHealth.pendingGeneralFaq}*
+
+🧠 *Insight AI (Dummy)*
+- Ringkasan: _${dummyData.insights.summarization}_
+- Top Lokasi: Jakarta Selatan (3), Depok (2)
+- Out of Coverage: *0*
+
+✅ _Koneksi Telegram Chatbot Klinik berhasil aktif dan siap digunakan._
+🔍 [Buka Control Panel](${dashboardUrl}) untuk melihat performa asli.`;
+
+    const result = await alertService.notifyAlert({
+      type: AlertType.DAILY_OPS_REPORT,
+      severity: AlertSeverity.INFO,
+      message: rawDummyMessage,
+      rawMessage: true,
+      botToken,
+      chatId,
+      metadata: { is_test: true, ...dummyData }
+    });
+
+    if (result.channel === 'telegram') {
+      return {
+        success: true,
+        message: 'Pesan uji coba (data dummy) berhasil dikirim ke Telegram!',
+        channel: 'telegram'
+      };
+    } else {
+      return {
+        success: false,
+        message: `Gagal mengirim ke Telegram (dialihkan ke ${result.channel}). Pastikan Bot Telegram sudah di-/start, Token & Chat ID benar, dan bot sudah ditambahkan jika targetnya Grup.`,
+        channel: result.channel
+      };
+    }
+  }
+
+  /**
    * Data accumulation logic
    */
   public async generateReport(tenantId: string, targetDateWib: Date, reportDateStr: string): Promise<DailyReportData> {

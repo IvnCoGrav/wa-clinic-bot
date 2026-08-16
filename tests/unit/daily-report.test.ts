@@ -125,4 +125,67 @@ describe('DailyReportService', () => {
     const formatted = dailyReportService.formatForTelegram('Tenant Test', reportData);
     expect(formatted).toContain('(estimasi)');
   });
+
+  describe('sendTestDailyReport (QA Dummy Mode)', () => {
+    it('should send dummy test message to Telegram without writing to DailyReportLog in DB', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        name: 'Kala Test Clinic',
+        telegram_bot_token: 'bot123',
+        telegram_chat_id: 'chat123'
+      } as any);
+      vi.mocked(alertService.notifyAlert).mockResolvedValue({ sent: true, throttled: false, channel: 'telegram' } as any);
+
+      const result = await dailyReportService.sendTestDailyReport('tenant-1');
+
+      expect(result.success).toBe(true);
+      expect(result.channel).toBe('telegram');
+      expect(alertService.notifyAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('[TEST / DATA DUMMY]'),
+          rawMessage: true,
+          botToken: 'bot123',
+          chatId: 'chat123',
+          metadata: expect.objectContaining({ is_test: true })
+        })
+      );
+      // Critical check: Never write to daily report log in DB
+      expect(prisma.dailyReportLog.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should reject test send if credentials are not configured', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        name: 'Kala Test Clinic',
+        telegram_bot_token: null,
+        telegram_chat_id: null
+      } as any);
+
+      const originalEnvToken = process.env.TELEGRAM_BOT_TOKEN;
+      const originalEnvChat = process.env.TELEGRAM_CHAT_ID;
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      delete process.env.TELEGRAM_CHAT_ID;
+
+      const result = await dailyReportService.sendTestDailyReport('tenant-1');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('belum diisi');
+
+      process.env.TELEGRAM_BOT_TOKEN = originalEnvToken;
+      process.env.TELEGRAM_CHAT_ID = originalEnvChat;
+    });
+
+    it('should report failure if Telegram dispatch falls back or fails', async () => {
+      vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+        name: 'Kala Test Clinic',
+        telegram_bot_token: 'bot123',
+        telegram_chat_id: 'chat123'
+      } as any);
+      vi.mocked(alertService.notifyAlert).mockResolvedValue({ sent: true, throttled: false, channel: 'emergency_file' } as any);
+
+      const result = await dailyReportService.sendTestDailyReport('tenant-1');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Gagal mengirim ke Telegram');
+      expect(prisma.dailyReportLog.upsert).not.toHaveBeenCalled();
+    });
+  });
 });

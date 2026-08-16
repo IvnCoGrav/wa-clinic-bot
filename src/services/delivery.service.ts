@@ -187,6 +187,10 @@ export class DeliveryService {
       // Konversi meter ke km (presisi 2 desimal)
       distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(2));
       isEstimated = false;
+      const durationMins = orsResult.durationSeconds ? Math.round(orsResult.durationSeconds / 60) : null;
+      console.log(
+        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Distance: ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+      );
     } else {
       // 2. FALLBACK: Haversine + circuity factor
       console.warn(
@@ -195,6 +199,9 @@ export class DeliveryService {
       const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
       distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(2));
       isEstimated = true;
+      console.log(
+        `[DISTANCE CALC] 📐 Method: Haversine Fallback (${HAVERSINE_CIRCUITY_FACTOR}x circuity) | Straight: ${straightLineKm.toFixed(2)} km ──▶ Road Est: ${distanceKm} km | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+      );
     }
 
     // 3. Ambil tier ongkir per tenant (DB -> fallback file)

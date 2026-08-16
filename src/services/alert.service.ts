@@ -39,8 +39,10 @@ export interface AlertPayload {
   provider?: 'ORS' | 'Google Maps' | 'Meta CAPI' | string;
   metadata?: Record<string, any>;
   rawMessage?: boolean;
+  tenantId?: string;
   botToken?: string;
   chatId?: string;
+  messageThreadId?: number | string;
 }
 
 export class AlertService {
@@ -74,7 +76,7 @@ export class AlertService {
   /**
    * Triggers a system alert with per-trigger throttling and emergency fallback logging.
    */
-  public async notifyAlert(payload: AlertPayload): Promise<{ sent: boolean; throttled: boolean; channel: 'telegram' | 'emergency_file' | 'console' }> {
+  public async notifyAlert(payload: AlertPayload): Promise<{ sent: boolean; throttled?: boolean; channel: 'telegram' | 'emergency_file' | 'console' }> {
     const key = this.getCooldownKey(payload);
     const now = Date.now();
     const lastTime = this.lastAlertTimes.get(key) || 0;
@@ -92,8 +94,77 @@ export class AlertService {
     console.warn(`\n🚨 ${formattedLog}`, sanitizedMeta ? JSON.stringify(sanitizedMeta) : '');
 
     // 2. Try Dispatch via Telegram Bot API
-    const botToken = payload.botToken || process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = payload.chatId || process.env.TELEGRAM_CHAT_ID;
+    let botToken = payload.botToken || process.env.TELEGRAM_BOT_TOKEN;
+    let chatId = payload.chatId || process.env.TELEGRAM_CHAT_ID;
+    let messageThreadId = payload.messageThreadId ? Number(payload.messageThreadId) : undefined;
+
+    // Check Tenant Database for per-tenant Telegram credentials & topic routing if tenantId provided
+    if (payload.tenantId && (messageThreadId === undefined || isNaN(messageThreadId))) {
+      try {
+        const { prisma } = await import('../db/client');
+        const tenant = await prisma.tenant.findUnique({ where: { id: payload.tenantId } });
+        if (tenant) {
+          if (!botToken && tenant.telegram_bot_token) botToken = tenant.telegram_bot_token;
+          if (!chatId && tenant.telegram_chat_id) chatId = tenant.telegram_chat_id;
+
+          if (payload.type === AlertType.DAILY_OPS_REPORT && tenant.telegram_topic_daily_report) {
+            const parsed = parseInt(tenant.telegram_topic_daily_report, 10);
+            if (!isNaN(parsed)) messageThreadId = parsed;
+          } else if (
+            (payload.type === AlertType.MEDICAL_EMERGENCY_HIGH ||
+              payload.type === AlertType.MEDICAL_CONCERN_MEDIUM ||
+              payload.type === AlertType.PENDING_PURCHASE_MODERATION) &&
+            tenant.telegram_topic_medical_alerts
+          ) {
+            const parsed = parseInt(tenant.telegram_topic_medical_alerts, 10);
+            if (!isNaN(parsed)) messageThreadId = parsed;
+          } else if (tenant.telegram_topic_system_errors) {
+            const parsed = parseInt(tenant.telegram_topic_system_errors, 10);
+            if (!isNaN(parsed)) messageThreadId = parsed;
+          }
+        }
+      } catch {
+        // Fallback silently if DB is unreachable
+      }
+    }
+
+    // Support combined Chat ID format: "-1001234567890:42" or "-1001234567890/42" or "-1001234567890#42"
+    if (typeof chatId === 'string' && (chatId.includes(':') || chatId.includes('/') || chatId.includes('#'))) {
+      const delimiter = chatId.includes(':') ? ':' : chatId.includes('/') ? '/' : '#';
+      const [baseChatId, threadPart] = chatId.split(delimiter);
+      if (baseChatId && threadPart) {
+        chatId = baseChatId.trim();
+        const parsedThread = parseInt(threadPart.trim(), 10);
+        if (!isNaN(parsedThread)) {
+          messageThreadId = parsedThread;
+        }
+      }
+    }
+
+    // Auto-resolve category-specific topic ID from environment variables if not explicitly provided
+    if (messageThreadId === undefined || isNaN(messageThreadId)) {
+      if (payload.type === AlertType.DAILY_OPS_REPORT) {
+        const topicStr = process.env.TELEGRAM_TOPIC_DAILY_REPORT || process.env.TELEGRAM_TOPIC_REPORTS;
+        if (topicStr && !isNaN(parseInt(topicStr, 10))) {
+          messageThreadId = parseInt(topicStr, 10);
+        }
+      } else if (
+        payload.type === AlertType.MEDICAL_EMERGENCY_HIGH ||
+        payload.type === AlertType.MEDICAL_CONCERN_MEDIUM ||
+        payload.type === AlertType.PENDING_PURCHASE_MODERATION
+      ) {
+        const topicStr = process.env.TELEGRAM_TOPIC_MEDICAL_ALERTS || process.env.TELEGRAM_TOPIC_EMERGENCY;
+        if (topicStr && !isNaN(parseInt(topicStr, 10))) {
+          messageThreadId = parseInt(topicStr, 10);
+        }
+      } else {
+        // System outages, server errors, waha disconnect, etc.
+        const topicStr = process.env.TELEGRAM_TOPIC_SYSTEM_ERRORS || process.env.TELEGRAM_TOPIC_ERRORS || process.env.TELEGRAM_TOPIC_ALERTS;
+        if (topicStr && !isNaN(parseInt(topicStr, 10))) {
+          messageThreadId = parseInt(topicStr, 10);
+        }
+      }
+    }
 
     if (botToken && chatId) {
       try {
@@ -103,14 +174,23 @@ export class AlertService {
         } else {
           text = `🚨 *[${payload.severity}] ${payload.type}*\n${payload.message}\n${payload.provider ? `*Provider:* ${payload.provider}\n` : ''}\`\`\`json\n${JSON.stringify(sanitizedMeta || {}, null, 2)}\n\`\`\``;
         }
+
+        const bodyPayload: any = { chat_id: chatId, text, parse_mode: 'Markdown' };
+        if (messageThreadId !== undefined && !isNaN(messageThreadId)) {
+          bodyPayload.message_thread_id = messageThreadId;
+        }
+
         const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+          body: JSON.stringify(bodyPayload),
         });
 
         if (response.ok) {
           return { sent: true, throttled: false, channel: 'telegram' };
+        } else {
+          const errBody = await response.text().catch(() => '');
+          console.error(`[AlertService] Telegram API error (${response.status}): ${errBody}`);
         }
       } catch (err: any) {
         console.error(`[AlertService] Telegram dispatch failed: ${err.message}. Falling back to emergency file log.`);

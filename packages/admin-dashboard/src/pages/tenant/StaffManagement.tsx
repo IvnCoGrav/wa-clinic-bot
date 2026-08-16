@@ -19,6 +19,7 @@ import {
   Search,
   ChevronRight,
   Info,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   ROLE_LABELS,
@@ -36,6 +37,7 @@ interface StaffItem {
   phone: string;
   role: string;
   active: boolean;
+  telegram_chat_id?: string | null;
   created_at: string;
   updated_at: string;
   _count?: {
@@ -597,20 +599,21 @@ export const StaffManagement: React.FC = () => {
                     <th className="px-5 py-3.5">Nama Staff</th>
                     <th className="px-5 py-3.5">Nomor WhatsApp</th>
                     <th className="px-5 py-3.5">Peran / Hak Akses</th>
+                    <th className="px-5 py-3.5">Notifikasi Telegram</th>
                     <th className="px-5 py-3.5 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e9edef]">
                   {loading ? (
                     <tr>
-                      <td colSpan={4} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={5} className="px-5 py-12 text-center text-[#667781]">
                         <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#008069] border-t-transparent mb-2"></div>
                         <p className="text-xs">Memuat data staff...</p>
                       </td>
                     </tr>
                   ) : filteredStaffList.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-5 py-12 text-center text-[#667781]">
+                      <td colSpan={5} className="px-5 py-12 text-center text-[#667781]">
                         <Users size={36} className="mx-auto text-[#8696a0] mb-2" />
                         <p className="font-bold text-[#111b21]">Tidak ada akun staff yang cocok</p>
                         <p className="text-xs mt-1">Coba sesuaikan kata kunci pencarian atau filter peran.</p>
@@ -640,6 +643,20 @@ export const StaffManagement: React.FC = () => {
                         {/* Role */}
                         <td className="px-5 py-3.5">
                           {getRoleBadge(staff.role)}
+                        </td>
+
+                        {/* Telegram Status */}
+                        <td className="px-5 py-3.5">
+                          {staff.telegram_chat_id ? (
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              <span>Terhubung</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f2f5] text-[#8696a0] border border-[#e9edef]">
+                              <span>Belum Terhubung</span>
+                            </span>
+                          )}
                         </td>
 
                         {/* Actions */}

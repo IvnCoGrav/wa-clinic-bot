@@ -150,6 +150,13 @@ export const StaffToday: React.FC = () => {
 
   // Staff Profile Drawer State
   const [showStaffProfileModal, setShowStaffProfileModal] = useState(false);
+  const [telegramPairingInfo, setTelegramPairingInfo] = useState<{
+    pairingToken: string;
+    directLink: string;
+    isConnected: boolean;
+    telegramChatId: string | null;
+  } | null>(null);
+  const [loadingTelegramInfo, setLoadingTelegramInfo] = useState(false);
 
   // Customer Detail Modal State (Privacy Safe - No Phone Leak)
   const [detailModalTask, setDetailModalTask] = useState<StaffTask | null>(null);
@@ -398,6 +405,21 @@ export const StaffToday: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [mobileView, detailModalTask, paymentModalTask, showStaffProfileModal]);
 
+  // Fetch Staff Telegram Pairing Status on Profile Modal Open
+  useEffect(() => {
+    if (showStaffProfileModal) {
+      setLoadingTelegramInfo(true);
+      apiRequest<{ success: boolean; data: any }>('/api/staff/me/telegram-pairing')
+        .then((res) => {
+          if (res.success && res.data) {
+            setTelegramPairingInfo(res.data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingTelegramInfo(false));
+    }
+  }, [showStaffProfileModal]);
+
   // Connect SSE for realtime live chat messages
   useEffect(() => {
     let es: EventSource | null = null;
@@ -570,7 +592,9 @@ export const StaffToday: React.FC = () => {
         setMessages((prev) => prev.map((m) => (m.id === tempId ? res.data : m)));
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Gagal mengirim pesan balasan.');
+      const errorMsg = err.message || 'Gagal mengirim pesan balasan. Harap periksa koneksi WhatsApp (WAHA/WABA).';
+      setErrorMessage(errorMsg);
+      toast('error', errorMsg);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setReplyText(textToSend);
       setSelectedImage(image);
@@ -2489,6 +2513,58 @@ export const StaffToday: React.FC = () => {
               <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 mt-1">
                 Staff Terapis Lapangan
               </span>
+            </div>
+
+            {/* Telegram Dispatch Card */}
+            <div className="p-3.5 bg-[#f8fafc] border border-emerald-200 rounded-2xl text-left space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                  <Send size={13} className="text-[#008069]" />
+                  <span>Notifikasi Telegram Tugas</span>
+                </span>
+                {telegramPairingInfo?.isConnected ? (
+                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    <CheckCircle2 size={10} className="text-emerald-600" />
+                    <span>Terhubung</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                    <span>Belum Aktif</span>
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-[#667781] leading-relaxed">
+                Terima rincian jadwal kunjungan pasien, patokan rumah, navigasi Google Maps, dan status bayar langsung di Telegram pribadi Anda.
+              </p>
+
+              {loadingTelegramInfo ? (
+                <div className="text-[11px] text-[#8696a0] animate-pulse">Memeriksa status Telegram...</div>
+              ) : telegramPairingInfo?.isConnected ? (
+                <div className="pt-1 flex items-center justify-between text-[11px]">
+                  <span className="text-[#54656f] text-[10px] font-mono">ID: {telegramPairingInfo.telegramChatId}</span>
+                  <a
+                    href={telegramPairingInfo.directLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#008069] hover:underline font-bold text-[11px]"
+                  >
+                    Buka Bot Telegram &rarr;
+                  </a>
+                </div>
+              ) : (
+                <div className="pt-1">
+                  <a
+                    href={telegramPairingInfo?.directLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 px-3 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                  >
+                    <Send size={13} />
+                    <span>Sambungkan Telegram Saya (1-Klik)</span>
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Actions */}
