@@ -432,50 +432,72 @@ export const StaffToday: React.FC = () => {
         setSseConnected(true);
       };
 
-      es.onmessage = (event) => {
+      es.addEventListener('message.created', (event) => {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'connected') return;
+          const payload = JSON.parse((event as MessageEvent).data);
+          const convId = payload.conversationId || payload.conversation_id;
+          const msg: ChatMessage = {
+            id: payload.messageId || payload.id || `sse_${Date.now()}`,
+            direction: payload.direction,
+            content: payload.content || '',
+            sender_type: payload.senderType || payload.sender_type || null,
+            sender_name: payload.senderName || payload.sender_name || null,
+            created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
+            media: extractMedia(payload),
+          };
 
-          if (data.type === 'message.created' && data.payload?.message) {
-            const msg = data.payload.message;
-            const convId = data.payload.conversationId;
+          // Play notification tone
+          playNotificationSound();
 
-            // Play notification tone
-            playNotificationSound();
-
-            // Native browser notification
-            if ('Notification' in window && Notification.permission === 'granted') {
-              const sender = msg.sender_name || (msg.direction === 'INBOUND' ? 'Customer' : 'Bot');
-              new Notification(`Pesan Baru dari ${sender}`, {
-                body: msg.content || 'Mengirim media/gambar',
-                icon: '/pwa-icon.svg',
-              });
-            }
-
-            // Append message if matches currently open conversation (Maksimal 10 bubble)
-            if (selectedTaskRef.current?.conversationId === convId) {
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === msg.id)) return prev;
-                return [...prev, msg].slice(-10);
-              });
-            }
+          // Native browser notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const sender = msg.sender_name || (msg.direction === 'INBOUND' ? 'Customer' : 'Bot');
+            new Notification(`Pesan Baru dari ${sender}`, {
+              body: msg.content || 'Mengirim media/gambar',
+              icon: '/pwa-icon.svg',
+            });
           }
 
-          if (data.type === 'message.updated' && data.payload?.messageId) {
-            const { messageId, content, isRevoked } = data.payload;
-            if (selectedTaskRef.current?.conversationId === data.payload.conversationId) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
+          // Append/reconcile message if matches currently open conversation (Maksimal 10 bubble)
+          if (selectedTaskRef.current?.conversationId === convId) {
+            setMessages((prev) => {
+              if (
+                prev.some(
+                  (m) =>
+                    m.id === msg.id ||
+                    (m.content === msg.content &&
+                      m.direction === msg.direction &&
+                      Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000)
                 )
-              );
-            }
+              ) {
+                // Reconcile: jika ada pesan sementara (temp-), ganti id-nya dengan id resmi dari server
+                return prev.map((m) =>
+                  m.content === msg.content && m.direction === msg.direction && m.id.startsWith('temp-')
+                    ? { ...m, id: msg.id }
+                    : m
+                );
+              }
+              return [...prev, msg].slice(-10);
+            });
           }
         } catch {
           // Ignore non-JSON heartbeat
         }
-      };
+      });
+
+      es.addEventListener('message.updated', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+          const { messageId, content, isRevoked, conversationId } = payload;
+          if (selectedTaskRef.current?.conversationId === conversationId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
+              )
+            );
+          }
+        } catch {}
+      });
 
       es.onerror = () => {
         setSseConnected(false);
@@ -588,8 +610,14 @@ export const StaffToday: React.FC = () => {
         body: JSON.stringify(body),
       });
 
-      if (res.success && res.data) {
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? res.data : m)));
+      if (res.success) {
+        // Jangan menimpa seluruh object pesan agar created_at & content tidak hilang/menjadi Invalid Date
+        const assignedId = res.data?.messageId || res.data?.id;
+        if (assignedId) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === tempId ? { ...m, id: assignedId } : m))
+          );
+        }
       }
     } catch (err: any) {
       const errorMsg = err.message || 'Gagal mengirim pesan balasan. Harap periksa koneksi WhatsApp (WAHA/WABA).';
@@ -1642,10 +1670,16 @@ export const StaffToday: React.FC = () => {
                         const isStaff = !isInbound && msg.sender_type === 'STAFF';
                         const media = extractMedia(msg);
 
-                        const timeStr = new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        }).replace(':', '.');
+                        const isValidDate = msg.created_at && !isNaN(new Date(msg.created_at).getTime());
+                        const timeStr = isValidDate
+                          ? new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }).replace(':', '.')
+                          : new Date().toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }).replace(':', '.');
 
                         return (
                           <div

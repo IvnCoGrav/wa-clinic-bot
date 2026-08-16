@@ -4,6 +4,38 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Changed & Security — Penonaktifan Fitur App State Fisik WAHA (Anti-Session Logout) & Migrasi Penuh ke Label UI Sistem
+
+- **Akar Masalah & Penonaktifan Fitur App State Fisik WAHA (`src/integrations/waha/client.ts`, `src/services/conversation.service.ts`, `src/routes/webhook.route.ts`, `.env.example`, `.env`)**:
+  - **Temuan Root Cause**: Operasi manipulasi chat state fisik ke WhatsApp via WAHA NOWEB (Baileys) seperti `addLabel`, `removeLabel`, `batchUpdateLabels`, dan `markUnread` memicu mutasi kriptografi *WhatsApp App State Sync* (`regular_low`). Akibat ketidakcocokan skema Protobuf biner terbaru Meta di server WhatsApp (`invalid wire type 4 at offset 6`), server Meta secara sepihak memutus sesi tertaut dengan error `stream:error code 401 conflict type: device_removed`, memaksa logout WhatsApp dan meminta scan QR ulang.
+  - **Penonaktifan Fitur**: Mengubah nilai default `ENABLE_WAHA_HOLD_LABEL=false`, `ENABLE_LIFECYCLE_LABELS=false`, dan `ENABLE_WAHA_UNREAD=false` pada seluruh konfigurasi dan engine bot.
+  - **Pencegahan Blocking**: Menghapus pemanggilan mutasi App State ke WAHA di lingkungan produksi dan memastikan fungsi label mengembalikan status sukses murni secara instan tanpa mengunci antrean global `runSerialized`.
+- **Pemisahan Alert Notifikasi Grup Eskalasi (`src/services/conversation.service.ts`)**:
+  - Memisahkan pengiriman notifikasi grup WhatsApp koordinasi tim (`ESCALATION_GROUP_JID`) dari guard `enableHoldLabel`. Notifikasi tiket eskalasi medis/CS ke grup admin kini tetap terkirim 100% menggunakan pesan teks standar (`sendText`), yang bebas dari App State Sync dan terbukti aman tanpa pernah memutus sesi WhatsApp.
+- **Transisi ke Manajemen Label UI Sistem & Dashboard (`packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx`, `LiveChatMonitor.tsx`, `src/routes/admin/customers.subroute.ts`)**:
+  - Kolom database (`Customer.is_admin_labeled`, `Customer.is_hold_labeled`, `Customer.is_mql`, `Conversation.is_human_handling`) kini menjadi sumber kebenaran tunggal (*Single Source of Truth*).
+  - Modal aksi label dan toast notifikasi di Admin Dashboard Customer Database disesuaikan menjadi *"Label berhasil diperbarui di sistem"* tanpa menampilkan pesan peringatan gagal mirror WAHA.
+  - Alur auto-release dan status human handling di Live Chat Monitor berjalan secara digital dan real-time via Server-Sent Events (SSE).
+
+### Fixed — "Invalid Date" Web Terapis & "Double Bubble" Live Chat Admin
+
+- **Perbaikan State Chat & Formatting Jam Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengoreksi penanganan respons API `/api/staff/conversations/:id/reply` agar tidak menimpa objek pesan optimistik dengan payload status metadata API (mencegah `created_at` dan `content` menjadi `undefined` yang memicu tampilan *"Invalid Date"*).
+  - Menambahkan guard validasi tanggal pada pemformatan jam chat (`isValidDate ? ... : new Date().toLocaleTimeString(...)`).
+  - Mengoreksi listener SSE di `StaffToday.tsx` menggunakan `es.addEventListener('message.created')` dan payload reconciliation untuk menukar `tempId` dengan ID resmi server secara mulus.
+- **Deduplikasi Outbound Webhook WAHA & Gateway (`src/integrations/waha/client.ts`, `src/integrations/whatsapp/waha.driver.ts`, `src/services/message.service.ts`, `src/routes/webhook.route.ts`)**:
+  - Menangkap `messageId` langsung dari kembalian API WAHA `/api/sendText` & `/api/sendImage` agar pesan outbound terdaftar di memory idempotency store sejak pengiriman awal.
+  - Menambahkan method `checkAndAttachOutboundDuplicate` pada `MessageService` dengan time-window 30 detik untuk mendeteksi pesan outbound yang sama dari webhook WAHA (`fromMe: true`) dan mengaitkan `wa_message_id` tanpa membuat baris baru di database atau membroadcast event SSE ganda.
+  - Memperkuat deduplikasi SSE di `LiveChatMonitor.tsx` dengan toleransi 30 detik.
+
+### Docs — Panduan Setup Meta CAPI & Kunci Enkripsi
+
+- **Panduan terverifikasi (`docs/META_CAPI_SETUP.md`)**: Panduan setup Meta Conversions API (CAPI) & `WABA_TOKEN_ENCRYPTION_KEY` yang disesuaikan dengan kondisi nyata repo & server (`ubuntu@43.157.197.148`, port 1403, `/opt/wa-clinic-bot`) — bukan panduan generik.
+  - Menjelaskan arsitektur: sumber kebenaran kredensial = DB per-tenant (`tenants.meta_pixel_id` / `meta_capi_access_token`, terenkripsi AES-256-GCM), fallback env `FB_PIXEL_ID` / `FB_CAPI_ACCESS_TOKEN`.
+  - Peringatan tegas: JANGAN ganti `WABA_TOKEN_ENCRYPTION_KEY` setelah token tersimpan (AES-GCM auth tag mismatch → decrypt gagal → CAPI & WABA mati), kecuali re-input ulang semua token.
+  - Koreksi cara menerapkan env: `docker compose up -d --no-deps app` (bukan `restart`, yang tidak membaca ulang `.env`).
+  - Termasuk verifikasi status server saat ini (CAPI sudah terkonfigurasi: Pixel ID `1382300863013984` + token terenkripsi di DB) dan langkah verifikasi via Meta CAPI Health & Live Tester (`/admin/meta-click-catcher`) & Meta CAPI Queue.
+
 ### Changed — Anaphora Clarification Resolution ("Maksud saya yang paket newborn"), NLU Token Truncation Fix, & Intent Prompt Isolation
 
 - **Resolusi Anaphora & Koreksi Kalimat ("Maksud saya yang...") (`src/services/treatment-catalog.service.ts`, `nlu-classifier.service.ts`, `src/integrations/llm/intent.ts`)**:

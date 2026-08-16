@@ -20,8 +20,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../src/integrations/waha/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/integrations/waha/client')>();
   // Jangan spread instance (metode class ada di prototype → hilang). Mutasi langsung
-  // instance singleton & override sendImage; metode lain (addLabel dll) tetap utuh.
-  Object.assign(actual.wahaClient, { sendImage: mocks.sendImage });
+  // instance singleton & override sendImage + sendImageDetailed; metode lain (addLabel dll) tetap utuh.
+  Object.assign(actual.wahaClient, {
+    sendImage: mocks.sendImage,
+    sendImageDetailed: vi.fn().mockImplementation(async (chatId, url, caption) => {
+      mocks.sendImage(chatId, url, caption);
+      return { success: true, messageId: 'mock_img' };
+    }),
+  });
   return actual;
 });
 

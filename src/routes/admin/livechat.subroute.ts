@@ -333,7 +333,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
-        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
+        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
         if (enableHoldLabel) {
           try {
             const { wahaClient } = await import('../../integrations/waha/client');

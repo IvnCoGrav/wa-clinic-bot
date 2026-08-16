@@ -157,7 +157,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 
                 // 3. Log outbound manual reply ke tabel Messages agar terbaca oleh Bot sebagai history
                 const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
-                if (!isDuplicateOutbound) {
+                const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
+                  conversation.id,
+                  adminReplyText,
+                  payload.id,
+                  DEFAULT_TENANT_ID,
+                  30
+                );
+
+                if (!isDuplicateOutbound && !isRecentDuplicate) {
                   await messageService.logMessage({
                     tenantId: DEFAULT_TENANT_ID,
                     conversationId: conversation.id,
@@ -168,7 +176,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     senderName: 'Admin (WhatsApp)',
                   }).catch(err => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
                 } else {
-                  console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} was already logged by Live Chat. Skipping duplicate log.`);
+                  console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} was already logged by Live Chat/Staff. Skipping duplicate log.`);
                 }
               }
             }
@@ -514,10 +522,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
 
-        // If hold label feature is disabled (ENABLE_WAHA_HOLD_LABEL=false), do not check WAHA labels for release
-        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL !== 'false';
+        // If hold label feature is disabled (default disabled di produksi), do not check WAHA labels for release
+        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
         if (!enableHoldLabel) {
-          console.log(`[LABEL SYNC DISABLED] Skipping WAHA label checks in production. Bot stays silent.`);
+          console.log(`[LABEL SYNC DISABLED] Skipping WAHA label checks in production (UI-managed mode). Bot stays silent in HUMAN_HANDLING.`);
           await messageService.logMessage({
             tenantId: DEFAULT_TENANT_ID,
             conversationId: conversation.id,
@@ -529,7 +537,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
 
-        // Periksa apakah admin telah melepas label 'hold' di WhatsApp
+        // Periksa apakah admin telah melepas label 'hold' di WhatsApp (hanya jika ENABLE_WAHA_HOLD_LABEL=true)
         // Fast path: baca Customer.is_hold_labeled dari DB (nol HTTP ke WAHA).
         // Fallback: kolom belum tersync (DB offline / customer baru) → tanya WAHA (cached).
         let hasHoldLabel = false;
@@ -546,9 +554,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
         }
 
-
-
-        if (!hasHoldLabel && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false') {
+        if (!hasHoldLabel && enableHoldLabel) {
           console.log(`[ADMIN RELEASE] Hold label removed by admin for chat ${chatId}. Auto-releasing from HUMAN_HANDLING.`);
           // Sinkronkan kolom flag (event label.chat.deleted bisa terlewat; safety-net tetap reconciliation)
           customerService.setLabelFlags(phone, { isHoldLabeled: false }).catch(() => {});

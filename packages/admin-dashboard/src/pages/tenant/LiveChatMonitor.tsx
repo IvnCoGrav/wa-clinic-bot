@@ -234,7 +234,7 @@ export const LiveChatMonitor: React.FC = () => {
             media: extractMedia(payload),
           };
 
-          // Append ke thread yang sedang dibuka (hindari duplikat by id / timestamp & content)
+          // Append ke thread yang sedang dibuka (hindari duplikat by id / timestamp & content dalam rentang 30 detik)
           if (selectedIdRef.current === conversationId) {
             setMessages((prev) =>
               prev.some(
@@ -242,7 +242,7 @@ export const LiveChatMonitor: React.FC = () => {
                   m.id === msg.id ||
                   (m.content === msg.content &&
                     m.direction === msg.direction &&
-                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 3000)
+                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000)
               )
                 ? prev
                 : [...prev, msg]

@@ -230,18 +230,21 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           isHoldLabeled: normalizedLabel === 'hold' ? enabled : undefined,
         });
 
-        // 2. Mirror ke WAHA (best-effort, tidak pernah throw)
+        // 2. Mirror ke WAHA (best-effort, hanya jika ENABLE_WAHA_HOLD_LABEL === 'true' / test)
         let wahaOk = true;
-        try {
-          const { wahaClient } = await import('../../integrations/waha/client');
-          if (enabled) {
-            wahaOk = await wahaClient.addLabel(`${customer.phone}@c.us`, normalizedLabel);
-          } else {
-            wahaOk = await wahaClient.removeLabel(`${customer.phone}@c.us`, normalizedLabel);
+        const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
+        if (enableHoldLabel) {
+          try {
+            const { wahaClient } = await import('../../integrations/waha/client');
+            if (enabled) {
+              wahaOk = await wahaClient.addLabel(`${customer.phone}@c.us`, normalizedLabel);
+            } else {
+              wahaOk = await wahaClient.removeLabel(`${customer.phone}@c.us`, normalizedLabel);
+            }
+          } catch (err: any) {
+            wahaOk = false;
+            console.warn(`[LABEL] Gagal mirror label "${normalizedLabel}" ke WAHA utk ${customer.phone}:`, err.message);
           }
-        } catch (err: any) {
-          wahaOk = false;
-          console.warn(`[LABEL] Gagal mirror label "${normalizedLabel}" ke WAHA utk ${customer.phone}:`, err.message);
         }
 
 
@@ -327,7 +330,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
               },
               DEFAULT_TENANT_ID
             );
-            const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || process.env.NODE_ENV !== 'production';
+            const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
             if (enableHoldLabel) {
               try {
                 const { wahaClient } = await import('../../integrations/waha/client');
