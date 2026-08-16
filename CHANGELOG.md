@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Comprehensive Server Infrastructure Monitoring (`/server`)
+
+- **Perintah Real-time `/server` (dan `/status_server`) (`src/routes/telegram-webhook.route.ts`)**:
+  - Menampilkan laporan beban keseluruhan server dan kondisi infrastruktur secara komprehensif:
+    * ⚙️ **Beban CPU & Sistem**: Persentase CPU aktif, jumlah vCPU core, Load Average (1m, 5m, 15m), Host OS Uptime, dan Bot Engine Uptime.
+    * 💾 **Memori Server (RAM)**: Beban RAM total OS/VM (`used / total` & persentase), RAM sisa bebas, serta alokasi khusus Bot Node.js (RSS & Heap).
+    * 💽 **Penyimpanan Hard Disk**: Kapasitas disk terpakai (`used / total` & persentase) dan sisa ruang disk bebas (GB) menggunakan native `fs.promises.statfs`.
+    * 🔌 **Status Koneksi & Layanan**: Latency ping PostgreSQL, status WhatsApp Gateway (WAHA/WABA), antrean Redis, dan waktu respons bot.
+- **Pengujian & Validasi (`tests/unit/telegram-webhook.test.ts`)**:
+  - Test suite diperbarui dan lulus 100% (6/6 PASS).
+
 ### Added — Personal Therapist/Midwife Telegram Assignment Dispatch & Privacy Protection
 
 - **Notifikasi Penugasan Khusus Terapis / Bidan (`src/services/staff-notification.service.ts`, `src/routes/admin/reservations.subroute.ts`)**:

@@ -317,11 +317,13 @@ _Ketik \`/help\` untuk melihat perintah konfigurasi topik._`,
     }
 
     // -----------------------------------------------------------------------------------------
-    // 6. Command: /status_server (or /server / /server_status / /health)
     // -----------------------------------------------------------------------------------------
-    if (/^\/(?:status_server|server_status|server|health|ping)(?:@\w+)?$/i.test(text)) {
+    // 6. Command: /server (or /status_server / /server_status / /health / /ping)
+    // -----------------------------------------------------------------------------------------
+    if (/^\/(?:server|status_server|server_status|health|ping)(?:@\w+)?$/i.test(text)) {
       const startTime = Date.now();
       const os = await import('os');
+      const fs = await import('fs');
 
       // 1. Database Check & Latency
       let dbStatus = '🟢 CONNECTED';
@@ -355,42 +357,100 @@ _Ketik \`/help\` untuk melihat perintah konfigurasi topik._`,
         waStatus = '⚪ Mock / Offline';
       }
 
-      // 3. System Resources
-      const uptimeSec = process.uptime();
-      const d = Math.floor(uptimeSec / (3600 * 24));
-      const h = Math.floor((uptimeSec % (3600 * 24)) / 3600);
-      const m = Math.floor((uptimeSec % 3600) / 60);
-      const s = Math.floor(uptimeSec % 60);
-      const uptimeStr = `${d > 0 ? `${d}h ` : ''}${h > 0 ? `${h}j ` : ''}${m}m ${s}d`;
+      // 3. CPU Metrics & Load Average
+      const cpus = os.cpus() || [];
+      const cpuCount = cpus.length || 1;
+      const cpuModel = cpus[0]?.model ? cpus[0].model.replace(/\s+/g, ' ').trim() : 'Virtual CPU';
+      const loadAvg = os.loadavg();
+      const loadAvgStr = `${loadAvg[0].toFixed(2)}, ${loadAvg[1].toFixed(2)}, ${loadAvg[2].toFixed(2)}`;
+
+      // Approximate CPU usage percentage from CPU tick times
+      let cpuPercent = 0;
+      try {
+        let totalIdle = 0;
+        let totalTick = 0;
+        for (const cpu of cpus) {
+          for (const type in cpu.times) {
+            totalTick += (cpu.times as any)[type];
+          }
+          totalIdle += cpu.times.idle;
+        }
+        if (totalTick > 0) {
+          cpuPercent = Math.max(0, Math.min(100, Math.round(((totalTick - totalIdle) / totalTick) * 100)));
+        }
+      } catch (_) {}
+
+      // 4. Memory Metrics (Total OS RAM + Node.js Process)
+      const totalRamBytes = os.totalmem();
+      const freeRamBytes = os.freemem();
+      const usedRamBytes = totalRamBytes - freeRamBytes;
+      const totalRamGb = (totalRamBytes / (1024 ** 3)).toFixed(1);
+      const usedRamGb = (usedRamBytes / (1024 ** 3)).toFixed(1);
+      const freeRamMb = Math.round(freeRamBytes / (1024 ** 2));
+      const ramPercent = Math.round((usedRamBytes / totalRamBytes) * 100);
 
       const mem = process.memoryUsage();
-      const rssMb = (mem.rss / 1024 / 1024).toFixed(1);
-      const heapMb = (mem.heapUsed / 1024 / 1024).toFixed(1);
+      const rssMb = (mem.rss / (1024 ** 2)).toFixed(1);
+      const heapMb = (mem.heapUsed / (1024 ** 2)).toFixed(1);
 
-      const totalRamGb = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
-      const freeRamGb = (os.freemem() / 1024 / 1024 / 1024).toFixed(1);
-      const usedRamGb = (parseFloat(totalRamGb) - parseFloat(freeRamGb)).toFixed(1);
-      const ramPercent = Math.round((parseFloat(usedRamGb) / parseFloat(totalRamGb)) * 100);
+      // 5. Hard Disk Storage Metrics
+      let diskInfoStr = 'Memeriksa storage...';
+      try {
+        const stat = await fs.promises.statfs('/');
+        const totalDiskBytes = stat.blocks * stat.bsize;
+        const freeDiskBytes = stat.bavail * stat.bsize;
+        const usedDiskBytes = totalDiskBytes - freeDiskBytes;
 
+        const totalDiskGb = (totalDiskBytes / (1024 ** 3)).toFixed(1);
+        const usedDiskGb = (usedDiskBytes / (1024 ** 3)).toFixed(1);
+        const freeDiskGb = (freeDiskBytes / (1024 ** 3)).toFixed(1);
+        const diskPercent = Math.round((usedDiskBytes / totalDiskBytes) * 100);
+
+        diskInfoStr = `\`${usedDiskGb} GB / ${totalDiskGb} GB (${diskPercent}%)\`\n• *Sisa Ruang Bebas:* \`${freeDiskGb} GB\``;
+      } catch (diskErr: any) {
+        diskInfoStr = `\`Info disk tidak tersedia: ${diskErr.message}\``;
+      }
+
+      // 6. Uptime Metrics (Host OS vs Bot Engine Process)
+      const formatUptime = (seconds: number) => {
+        const d = Math.floor(seconds / (3600 * 24));
+        const h = Math.floor((seconds % (3600 * 24)) / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        return `${d > 0 ? `${d}h ` : ''}${h > 0 ? `${h}j ` : ''}${m}m ${s}d`;
+      };
+
+      const hostUptimeStr = formatUptime(os.uptime());
+      const botUptimeStr = formatUptime(process.uptime());
       const nowWib = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
 
       await telegramService.sendMessage({
         chatId,
         messageThreadId,
-        text: `🖥️ *Status Server & Infrastruktur Chatbot*
+        text: `🖥️ *STATUS KESEHATAN SERVER & INFRASTRUKTUR*
 📅 *Waktu:* ${nowWib} WIB
 
-⏱️ *Server Uptime:* \`${uptimeStr}\`
-💾 *RAM Node.js:* \`${rssMb} MB\` _(Heap: ${heapMb} MB)_
-⚙️ *Beban RAM Server:* \`${usedRamGb} GB / ${totalRamGb} GB (${ramPercent}%)\`
+⚙️ *Beban CPU & Sistem:*
+• *Penggunaan CPU:* \`${cpuPercent}%\` _(${cpuCount} vCPU Core)_
+• *Load Average (1m, 5m, 15m):* \`${loadAvgStr}\`
+• *Host OS Uptime:* \`${hostUptimeStr}\`
+• *Bot Engine Uptime:* \`${botUptimeStr}\`
 
-🔌 *Koneksi Layanan:*
+💾 *Memori Server (RAM):*
+• *Beban Total Server:* \`${usedRamGb} GB / ${totalRamGb} GB (${ramPercent}%)\`
+• *RAM Sisa Bebas:* \`${freeRamMb} MB\`
+• *Alokasi Bot Node.js:* \`${rssMb} MB\` _(Heap: ${heapMb} MB)_
+
+💽 *Penyimpanan Hard Disk:*
+• *Kapasitas Terpakai:* ${diskInfoStr}
+
+🔌 *Status Koneksi & Layanan:*
 • *Database Postgres:* ${dbStatus}
 • *WhatsApp Gateway:* ${waStatus}
 • *SaaS Multi-Tenant:* 🟢 Siap
-• *Proses Respon:* \`${Date.now() - startTime}ms\`
+• *Waktu Respons:* \`${Date.now() - startTime}ms\`
 
-_Semua sistem beroperasi normal._`,
+_Semua infrastruktur server beroperasi optimal._`,
       });
       return reply.status(200).send({ ok: true });
     }
@@ -404,7 +464,7 @@ _Semua sistem beroperasi normal._`,
         messageThreadId,
         text: `🤖 *Daftar Perintah Bot Telegram:*
 
-• \`/status_server\` — Cek kondisi kesehatan server, RAM, DB & WhatsApp
+• \`/server\` (atau \`/status_server\`) — Cek beban total CPU, RAM, Harddisk & status koneksi
 • \`/set_daily_report\` — Daftarkan topik aktif untuk Laporan Harian
 • \`/set_error_alerts\` — Daftarkan topik aktif untuk Notifikasi Error Server
 • \`/set_medical_alerts\` — Daftarkan topik aktif untuk Eskalasi Medis Bidan

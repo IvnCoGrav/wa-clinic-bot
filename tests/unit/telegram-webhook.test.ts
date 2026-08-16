@@ -187,7 +187,7 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
     );
   });
 
-  it('POST /api/webhook/telegram: /status_server should reply with server health card', async () => {
+  it('POST /api/webhook/telegram: /server (and /status_server) should reply with comprehensive server health card', async () => {
     const sendSpy = vi.spyOn(telegramService, 'sendMessage').mockResolvedValue({ ok: true });
 
     const res = await app.inject({
@@ -198,7 +198,7 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
         message: {
           message_id: 35,
           chat: { id: 1383337873, first_name: 'Ivan', type: 'private' },
-          text: '/status_server',
+          text: '/server',
         },
       },
     });
@@ -206,7 +206,7 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
     expect(res.statusCode).toBe(200);
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining('Status Server & Infrastruktur Chatbot'),
+        text: expect.stringContaining('STATUS KESEHATAN SERVER & INFRASTRUKTUR'),
       })
     );
   });
