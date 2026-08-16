@@ -156,15 +156,20 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
                 
                 // 3. Log outbound manual reply ke tabel Messages agar terbaca oleh Bot sebagai history
-                await messageService.logMessage({
-                  tenantId: DEFAULT_TENANT_ID,
-                  conversationId: conversation.id,
-                  direction: 'OUTBOUND',
-                  content: adminReplyText,
-                  waMessageId: payload.id,
-                  senderType: 'human',
-                  senderName: 'Admin (WhatsApp)',
-                }).catch(err => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
+                const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
+                if (!isDuplicateOutbound) {
+                  await messageService.logMessage({
+                    tenantId: DEFAULT_TENANT_ID,
+                    conversationId: conversation.id,
+                    direction: 'OUTBOUND',
+                    content: adminReplyText,
+                    waMessageId: payload.id,
+                    senderType: 'ADMIN',
+                    senderName: 'Admin (WhatsApp)',
+                  }).catch(err => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
+                } else {
+                  console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} was already logged by Live Chat. Skipping duplicate log.`);
+                }
               }
             }
           }

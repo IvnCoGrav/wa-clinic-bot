@@ -485,7 +485,8 @@ export const LiveChatMonitor: React.FC = () => {
 
   const senderLabel = (m: ChatMessage) => {
     if (m.direction === 'INBOUND') return 'Customer';
-    return m.sender_type === 'ADMIN' ? m.sender_name || 'Admin' : 'Bot';
+    const type = (m.sender_type || '').toUpperCase();
+    return type === 'ADMIN' || type === 'HUMAN' || type === 'STAFF' ? m.sender_name || 'Admin' : 'Bot';
   };
 
   const formatRp = (val: number) =>
@@ -872,7 +873,8 @@ export const LiveChatMonitor: React.FC = () => {
                   ) : (
                     messages.map((msg) => {
                       const isCustomer = msg.direction === 'INBOUND';
-                      const isAdmin = msg.direction === 'OUTBOUND' && msg.sender_type === 'ADMIN';
+                      const senderTypeUpper = (msg.sender_type || '').toUpperCase();
+                      const isAdmin = msg.direction === 'OUTBOUND' && (senderTypeUpper === 'ADMIN' || senderTypeUpper === 'HUMAN' || senderTypeUpper === 'STAFF');
                       const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || (msg as any).is_revoked || (msg as any).payload_raw?.is_revoked;
                       const canRevoke = !isCustomer && !isRevoked && !!gatewayCapability?.supportsRevoke;
 

@@ -554,7 +554,8 @@ export const CustomerDatabase: React.FC = () => {
               ) : (
                 historyMessages.map((msg) => {
                   const isInbound = msg.direction === 'INBOUND';
-                  const sender = isInbound ? 'Customer' : msg.sender_type === 'ADMIN' ? msg.sender_name || 'Admin' : 'Bot';
+                  const typeUpper = (msg.sender_type || '').toUpperCase();
+                  const sender = isInbound ? 'Customer' : (typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF') ? msg.sender_name || 'Admin' : 'Bot';
 
                   return (
                     <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
