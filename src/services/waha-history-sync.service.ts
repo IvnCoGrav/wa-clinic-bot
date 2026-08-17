@@ -106,8 +106,23 @@ export class WahaHistorySyncService {
         const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
         let chatSynced = 0;
+        let latestMsgDate: Date | null = null;
+
         for (const msg of textMessages) {
           if (!msg.id) continue;
+
+          let msgDate: Date | undefined = undefined;
+          if (msg.timestamp) {
+            const rawTs = Number(msg.timestamp);
+            if (!isNaN(rawTs) && rawTs > 0) {
+              const ms = rawTs > 10000000000 ? rawTs : rawTs * 1000;
+              msgDate = new Date(ms);
+            }
+          }
+          if (msgDate && (!latestMsgDate || msgDate > latestMsgDate)) {
+            latestMsgDate = msgDate;
+          }
+
           const duplicate = await messageService.isDuplicateMessage(msg.id, tenantId);
           if (duplicate) continue;
 
@@ -119,9 +134,28 @@ export class WahaHistorySyncService {
             waMessageId: msg.id,
             senderType: msg.fromMe ? 'BOT' : undefined,
             senderName: msg.fromMe ? 'Bot' : undefined,
+            createdAt: msgDate,
             skipMqlEvaluation: true,
           });
           chatSynced++;
+        }
+
+        // Sinkronkan waktu percakapan (last_message_at & updated_at) dengan waktu asli pesan terakhir WhatsApp
+        if (latestMsgDate) {
+          try {
+            await prisma.conversation.update({
+              where: { id: conversation.id },
+              data: {
+                last_message_at: latestMsgDate,
+                updated_at: latestMsgDate,
+              },
+            });
+            const memConv = conversationService.getMemoryConversations().find((c) => c.id === conversation.id);
+            if (memConv) {
+              memConv.last_message_at = latestMsgDate;
+              memConv.updated_at = latestMsgDate;
+            }
+          } catch (_) {}
         }
 
         syncedMessages += chatSynced;

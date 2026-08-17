@@ -131,6 +131,7 @@ export class MessageService {
     metaErrorCode?: string;
     metaErrorDesc?: string;
     skipMqlEvaluation?: boolean;
+    createdAt?: Date;
   }) {
     if (data.waMessageId) {
       memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
@@ -151,6 +152,7 @@ export class MessageService {
           delivery_status: data.deliveryStatus ?? undefined,
           meta_error_code: data.metaErrorCode ?? undefined,
           meta_error_desc: data.metaErrorDesc ?? undefined,
+          created_at: data.createdAt || undefined,
         },
       });
       if (saved) return saved;
@@ -170,7 +172,7 @@ export class MessageService {
         delivery_status: data.deliveryStatus ?? null,
         meta_error_code: data.metaErrorCode ?? null,
         meta_error_desc: data.metaErrorDesc ?? null,
-        created_at: new Date(),
+        created_at: data.createdAt || new Date(),
       };
       memoryMessages.push(fallbackMessage);
       return fallbackMessage;
