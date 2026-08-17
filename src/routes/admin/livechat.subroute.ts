@@ -108,6 +108,57 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/live-chat/sync-full
+   * Memulai proses sinkronisasi seluruh riwayat chat WhatsApp di latar belakang (background sync).
+   */
+  fastify.post(
+    '/api/admin/live-chat/sync-full',
+    async (
+      request: FastifyRequest<{
+        Body: { messagesPerChat?: number };
+      }>,
+      reply
+    ) => {
+      const body = request.body || {};
+      const messagesPerChat = Math.min(Math.max(parseInt(String(body.messagesPerChat || '100'), 10) || 100, 1), 500);
+
+      const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
+      const result = await wahaHistorySyncService.startBackgroundFullSync(messagesPerChat, DEFAULT_TENANT_ID);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'LIVE_CHAT_SYNC_FULL_START',
+        targetId: DEFAULT_TENANT_ID,
+        payload: { messagesPerChat, started: result.started },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({ success: true, ...result });
+    }
+  );
+
+  /**
+   * GET /api/admin/live-chat/sync-status
+   * Memeriksa status & progres sinkronisasi riwayat chat di latar belakang.
+   */
+  fastify.get('/api/admin/live-chat/sync-status', async (request, reply) => {
+    const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
+    const status = wahaHistorySyncService.getBackgroundSyncStatus(DEFAULT_TENANT_ID);
+    return reply.status(200).send({ success: true, data: status });
+  });
+
+  /**
+   * POST /api/admin/live-chat/sync-cancel
+   * Membatalkan proses sinkronisasi latar belakang yang sedang berjalan.
+   */
+  fastify.post('/api/admin/live-chat/sync-cancel', async (request, reply) => {
+    const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
+    const cancelled = wahaHistorySyncService.stopBackgroundSync(DEFAULT_TENANT_ID);
+    return reply.status(200).send({ success: true, cancelled });
+  });
+
+  /**
    * GET /api/admin/live-chat/conversations/:id/messages
    * Thread pesan sebuah percakapan (kronologis).
    */
