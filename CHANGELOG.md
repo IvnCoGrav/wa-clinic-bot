@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — 199% Bulletproof Admin Swipe: Popstate Sync, Touch-Action Pan-Y & Generous Zone (`v1.12.10`)
+
+- **Kunci Standar CSS `touch-action: pan-y` (`packages/admin-dashboard/src/index.css`)**:
+  - Mengonfigurasi `touch-action: pan-y` dan `-webkit-overflow-scrolling: touch` pada `html, body, #root` agar browser engine secara eksplisit menyerahkan kontrol gestur horizontal ke JavaScript aplikasi dan mematikan navigasi gestur horizontal browser.
+- **Sinkronisasi Popstate History Navigation (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Menyelaraskan pembukaan sidebar admin dengan `window.history.pushState({ adminMenuOpen: true }, '')` dan listener `popstate`.
+  - Jika pengguna menekan tombol *hardware back* di Android atau terpicu gestur *back*, aplikasi akan **menutup menu sidebar** dan TIDAK meninggalkan halaman dashboard admin.
+- **Zona Sentuh Responsif Thumb-Friendly Hingga 120px (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Memperluas zona deteksi usap dari sisi kiri hingga 120px (35% layar) sehingga usapan jempol dari area tepi kiri dapat membuka menu navigasi admin secara instan tanpa perlu menyentuh bezel ekstrem sub-piksel.
+
 ### Fixed & Improved — Native DOM Interception for Admin Edge Swipe & 50vw Compact Therapist Drawer with Slide-Right Dismiss (v1.12.9)
 
 - **Intersepsi Gestur Usap Tepi Admin via Native DOM Event Listener (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:

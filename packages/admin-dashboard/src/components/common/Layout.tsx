@@ -147,60 +147,87 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     },
   ];
 
+  // Handle browser / hardware back button so it dismisses sidebar menu instead of navigating back
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    // Push dummy history state when menu opens
+    window.history.pushState({ adminMenuOpen: true }, '');
+
+    const handlePopState = () => {
+      setMobileMenuOpen(false);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [mobileMenuOpen]);
+
   // Native DOM touch gesture listener with { passive: false } to reliably prevent browser history back
   useEffect(() => {
-    let touchStart: { x: number; y: number; time: number } | null = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isTracking = false;
 
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) {
-        touchStart = {
-          x: e.touches[0].clientX,
-          y: e.touches[0].clientY,
-          time: Date.now(),
-        };
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+
+      // Allow opening by swiping from left zone (up to 120px from left)
+      // OR allow closing by swiping left anywhere on screen when menu is already open
+      const maxLeftZone = Math.min(window.innerWidth * 0.35, 120);
+      if (mobileMenuOpen || touchStartX <= maxLeftZone) {
+        isTracking = true;
+      } else {
+        isTracking = false;
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!touchStart || e.touches.length === 0) return;
+      if (!isTracking || e.touches.length === 0) return;
       const touch = e.touches[0];
-      const deltaX = touch.clientX - touchStart.x;
-      const deltaY = touch.clientY - touchStart.y;
+      const deltaX = touch.clientX - touchStartX;
+      const deltaY = touch.clientY - touchStartY;
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      // Case 1: When sidebar is CLOSED -> User is swiping from left edge (x <= 50) to right
-      if (!mobileMenuOpen && touchStart.x <= 50) {
+      const maxLeftZone = Math.min(window.innerWidth * 0.35, 120);
+
+      // Case 1: When sidebar is CLOSED -> User is swiping from left zone towards right
+      if (!mobileMenuOpen && touchStartX <= maxLeftZone) {
         // If horizontal movement to right is detected, intercept and prevent browser back navigation!
-        if (deltaX > 10 && absX > absY) {
+        if (deltaX > 10 && absX > absY * 1.1) {
           if (e.cancelable) {
             e.preventDefault();
           }
         }
         // Trigger sidebar open smoothly once threshold passed
-        if (deltaX > 35 && absX > absY) {
+        if (deltaX > 30 && absX > absY * 1.1) {
           setMobileMenuOpen(true);
-          touchStart = null;
+          isTracking = false;
         }
         return;
       }
 
       // Case 2: When sidebar is OPEN -> User is swiping left anywhere to close
       if (mobileMenuOpen) {
-        if (deltaX < -15 && absX > absY) {
+        if (deltaX < -10 && absX > absY * 1.1) {
           if (e.cancelable) {
             e.preventDefault();
           }
         }
-        if (deltaX < -35 && absX > absY) {
+        if (deltaX < -30 && absX > absY * 1.1) {
           setMobileMenuOpen(false);
-          touchStart = null;
+          isTracking = false;
         }
       }
     };
 
     const onTouchEnd = () => {
-      touchStart = null;
+      isTracking = false;
     };
 
     window.addEventListener('touchstart', onTouchStart, { passive: true });
