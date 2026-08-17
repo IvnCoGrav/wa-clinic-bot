@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Overscroll Background Fix, Directional Tab Slide & Right-Edge Swipe Sidebar (v1.12.6)
+
+- **Eliminasi Bug Background Hitam saat Overscroll Dashboard (`packages/admin-dashboard/index.html`, `packages/admin-dashboard/src/index.css`)**:
+  - Memperbaiki warna dasar `body` dari `bg-slate-950` (#020617 hitam pekat) menjadi `bg-[#f0f2f5] text-[#111b21]` dan menyelaraskan `<meta name="theme-color" content="#008069">`.
+  - Mengunci `html, body { background-color: #f0f2f5; overscroll-behavior-y: none; }` guna mencegah kebocoran warna hitam saat melakukan *rubber-band pull* atas/bawah di mobile Safari/Chrome.
+- **Animasi Geser Horizontal Directional Antar Tab Terapis (`packages/admin-dashboard/src/index.css`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengintegrasikan keyframes GPU `animate-slideInFromRight` (geser masuk dari kanan) dan `animate-slideInFromLeft` (geser masuk dari kiri) saat berpindah tab (*Hari Ini* ↔ *Mendatang* ↔ *Selesai*).
+  - Mengikat transisi arah pada gestur swipe maupun penekanan tombol tab navigasi.
+- **Gestur Right-Edge Swipe untuk Membuka Menu Sidebar/Drawer (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan listener gestur usap dari tepi paling kanan layar (`start.x >= window.innerWidth - 55`) ke arah kiri untuk langsung memunculkan menu drawer/sidebar profil terapis secara instan.
+  - Mendukung gestur swipe ke kanan untuk menutup drawer kembali secara mulus.
+
 ### Fixed & Improved — Therapist Portal Dedicated Polish & Super Admin Restore (v1.12.5)
 
 - **Restore Super Admin Layout (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:

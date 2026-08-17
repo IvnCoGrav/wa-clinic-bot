@@ -37,10 +37,14 @@
   }
 }
 
-body {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+html, body {
   background-color: #f0f2f5;
   color: #111b21;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -194,15 +198,33 @@ body {
   animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animate-slideFadeIn {
-  animation: slideFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes slideInFromRight {
+  from {
+    opacity: 0.3;
+    transform: translateX(45px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.animate-modalScaleUp {
-  animation: modalScaleUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0.3;
+    transform: translateX(-45px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.animate-pulseGlow {
-  animation: pulseGlow 2.5s infinite;
+.animate-slideInFromRight {
+  animation: slideInFromRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slideInFromLeft {
+  animation: slideInFromLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
