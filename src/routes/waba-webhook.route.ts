@@ -129,6 +129,36 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         continue;
       }
 
+      // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE FOR WABA ---
+      // Cegah eksekusi CAPI, download media berat, dan pemicu antrean AI saat sinkronisasi pesan lama
+      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
+      if (maxAgeSeconds > 0 && msg.timestamp) {
+        const rawTs = Number(msg.timestamp);
+        if (!isNaN(rawTs) && rawTs > 0) {
+          const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
+          const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
+          if (ageSeconds > maxAgeSeconds) {
+            console.log(`[WABA STALE MESSAGE GUARD] Message ${msg.messageId} from ${msg.fromNumber} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/CAPI.`);
+            const staleCustomer = await customerService.getOrCreateCustomer(
+              msg.fromNumber,
+              msg.contactName,
+              tenantId
+            );
+            const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, tenantId);
+            await messageService.logMessage({
+              tenantId,
+              conversationId: staleConversation.id,
+              direction: 'INBOUND',
+              content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+              waMessageId: msg.messageId,
+              payloadRaw: msg.rawPayload,
+            });
+            processed++;
+            continue;
+          }
+        }
+      }
+
       const existingCustomer = await customerService.getCustomerByPhone(msg.fromNumber, tenantId);
       const isNewCustomerRecord = !existingCustomer;
 

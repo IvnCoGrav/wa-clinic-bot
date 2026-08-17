@@ -234,6 +234,32 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       stageLog('INCOMING', `Customer: "${inboundTextPreview.slice(0, 50).replace(/\n/g, ' ')}${inboundTextPreview.length > 50 ? '...' : ''}"`, phone);
       const contactName = payload._data?.notifyName;
 
+      // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
+      // Dievaluasi SEDINI MUNGKIN SEBELUM API eksternal (Google Contacts, WAHA Label, Unduh Media, State Machine).
+      // Pesan lama tetap dicatat ke database (audit trail & Live Chat), tetapi dilewati dari bot auto-reply & API eksternal.
+      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
+      if (maxAgeSeconds > 0 && payload.timestamp) {
+        const rawTs = Number(payload.timestamp);
+        if (!isNaN(rawTs) && rawTs > 0) {
+          const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
+          const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
+          if (ageSeconds > maxAgeSeconds) {
+            console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
+            const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+            const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, DEFAULT_TENANT_ID);
+            await messageService.logMessage({
+              tenantId: DEFAULT_TENANT_ID,
+              conversationId: staleConversation.id,
+              direction: 'INBOUND',
+              content: inboundTextPreview,
+              waMessageId,
+              payloadRaw: payload,
+            });
+            return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
+          }
+        }
+      }
+
       const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
       let labels: string[] | null = null;
 
@@ -404,28 +430,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'BLOCKED' });
       }
 
-      // --- GUARD CLAUSE: STALE / CATCH-UP MESSAGE (Mencegah bot membalas massal chat riwayat saat QR scan / reconnect) ---
-      // Pesan lama tetap dicatat ke database (audit trail & Live Chat), tetapi dilewati dari bot auto-reply & state machine.
-      const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
-      if (maxAgeSeconds > 0 && payload.timestamp) {
-        const rawTs = Number(payload.timestamp);
-        if (!isNaN(rawTs) && rawTs > 0) {
-          const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
-          const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
-          if (ageSeconds > maxAgeSeconds) {
-            console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Logging to DB and dropping auto-reply.`);
-            await messageService.logMessage({
-              tenantId: DEFAULT_TENANT_ID,
-              conversationId: conversation.id,
-              direction: 'INBOUND',
-              content: inboundContent,
-              waMessageId,
-              payloadRaw: mergeMediaIntoPayload(payload),
-            });
-            return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
-          }
-        }
-      }
+
 
       // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
       // Evaluasi sebelum state machine / AI Router / LLM. Legacy customer yang
