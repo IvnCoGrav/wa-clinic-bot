@@ -115,6 +115,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
+  const chatListContainerRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
@@ -157,21 +158,6 @@ export const LiveChatMonitor: React.FC = () => {
       textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
     }
   };
-
-  // Auto-scroll internal container ke pesan terbaru saat thread berubah / pesan baru masuk, serta pastikan area textfield/composer terlihat.
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-    if (selectedId) {
-      const timer = setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [messages, selectedId]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -817,7 +803,11 @@ export const LiveChatMonitor: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 mt-1.5">
+              <div
+                ref={chatListContainerRef}
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1.5 pr-1 mt-1.5"
+                style={{ overscrollBehavior: 'contain' }}
+              >
                 {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
@@ -1160,10 +1150,11 @@ export const LiveChatMonitor: React.FC = () => {
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
                   ref={chatContainerRef} 
-                  className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 space-y-2 my-1.5 rounded-xl border border-[#e9edef] bg-[#efeae2]"
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 sm:p-3 space-y-2 my-1.5 rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
                     backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
                     backgroundSize: '16px 16px',
+                    overscrollBehavior: 'contain',
                   }}
                 >
                   {messages.length === 0 ? (
