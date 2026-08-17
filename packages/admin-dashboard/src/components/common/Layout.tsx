@@ -254,9 +254,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [mobileMenuOpen]);
 
   const currentRole = user?.role || 'super_admin';
+  const isLiveChat = location.pathname.includes('/live-chat');
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row">
+    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row`}>
       {/* Mobile backdrop overlay with smooth fade */}
       <div
         onClick={() => setMobileMenuOpen(false)}
@@ -355,10 +356,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
+      <div className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
         
         {/* Top Header */}
-        <header className="h-16 border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs">
+        <header className="h-16 border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs shrink-0">
           <div className="flex items-center space-x-3">
             <button 
               onClick={() => setMobileMenuOpen(true)} 
@@ -493,20 +494,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </header>
 
         {/* Content Body */}
-        {(() => {
-          const isLiveChat = location.pathname.includes('/live-chat');
-          return (
-            <main
-              className={`flex-1 ${
-                isLiveChat
-                  ? 'p-2 sm:p-2.5 overflow-hidden flex flex-col min-h-0'
-                  : 'p-4 sm:p-5 md:p-7 space-y-6 overflow-y-auto'
-              } bg-[#f0f2f5]`}
-            >
-              {children}
-            </main>
-          );
-        })()}
+        <main
+          className={`flex-1 ${
+            isLiveChat
+              ? 'p-2 sm:p-2.5 overflow-hidden flex flex-col min-h-0'
+              : 'p-4 sm:p-5 md:p-7 space-y-6 overflow-y-auto'
+          } bg-[#f0f2f5]`}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
