@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Sidebar Scroll Isolation & Eliminating scrollIntoView Bleed
+
+- **Pemberantasan Bug Auto-Scroll Nyasar pada Sidebar Chat List (`LiveChatMonitor.tsx`)**:
+  - **Root Cause**: Ditemukan panggilan `textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })` di dalam `useEffect` setiap kali percakapan aktif (`selectedId`) dipilih. Pemanggilan `scrollIntoView()` secara native pada browser menyebabkan peramban menggulir seluruh *ancestor scroll container* (termasuk membocorkan event scroll ke sidebar daftar percakapan kiri sehingga ikut melompat ke bawah).
+  - **Solusi**:
+    - Menghapus pemanggilan `scrollIntoView()` pada textarea.
+    - Menetapkan ref mandiri (`chatListContainerRef` pada sidebar dan `chatContainerRef` pada thread riwayat chat).
+    - Membatasi logika auto-scroll ke bawah secara ketat hanya pada `chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight` saat `messages` atau `selectedId` berubah, sehingga posisi scroll sidebar kiri **100% terkunci dan tidak pernah berubah** saat mengklik chat.
+    - Menambahkan `overscroll-behavior: contain` (`overscroll-contain`) pada kedua container independen untuk mencegah *scroll chaining* antar elemen.
+
 ### Fixed & Improved — Native Wheel Scrolling Fix, 80% Chat Screen Expansion & AI Draft Resizing
 
 - **Perbaikan Total Scrolling Mouse Wheel & Touchpad (`index.css`, `LiveChatMonitor.tsx`)**:
