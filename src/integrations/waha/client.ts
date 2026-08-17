@@ -18,7 +18,10 @@ export interface WahaChat {
 
 export interface WahaContact {
   id: string;
+  name?: string;
   pushname?: string;
+  shortName?: string;
+  number?: string;
 }
 
 export interface WahaMessage {
@@ -997,6 +1000,31 @@ export class WahaClient implements IWahaClient {
       return response.data?.value || response.data || [];
     } catch (error: any) {
       console.warn(`[WAHA API WARN] getMessages for ${targetChatId} timed out or failed (chat still indexing in WAHA):`, error?.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Mengambil seluruh daftar kontak dari WAHA (GET /api/contacts/all atau GET /api/{session}/contacts).
+   */
+  public async getAllContacts(): Promise<WahaContact[]> {
+    if (this.shouldMock) return [];
+    try {
+      const response = await axios
+        .get(`${this.baseUrl}/api/contacts/all`, {
+          headers: this.headers,
+          params: { session: this.session },
+          timeout: Math.max(this.timeoutMs, 25000),
+        })
+        .catch(async () => {
+          return await axios.get(`${this.baseUrl}/api/${this.session}/contacts`, {
+            headers: this.headers,
+            timeout: Math.max(this.timeoutMs, 25000),
+          });
+        });
+      return response.data?.value || response.data || [];
+    } catch (error: any) {
+      console.warn('[WAHA API WARN] getAllContacts failed:', error?.response?.data || error.message);
       return [];
     }
   }
