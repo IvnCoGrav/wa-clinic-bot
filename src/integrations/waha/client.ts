@@ -953,17 +953,18 @@ export class WahaClient implements IWahaClient {
       return this.mockChats;
     }
 
+    const fetchTimeout = Math.max(this.timeoutMs, 25000);
     try {
       const response = await axios.get(
         `${this.baseUrl}/api/${this.session}/chats`,
         {
           headers: this.headers,
-          timeout: this.timeoutMs,
+          timeout: fetchTimeout,
         }
       );
       return response.data?.value || response.data || [];
     } catch (error: any) {
-      console.error('[WAHA API ERROR] getChats failed:', error?.response?.data || error.message);
+      console.warn('[WAHA API WARN] getChats failed/timed out:', error?.response?.data || error.message);
       return [];
     }
   }
@@ -979,6 +980,7 @@ export class WahaClient implements IWahaClient {
       return msgs.slice(0, limit);
     }
 
+    const fetchTimeout = Math.max(this.timeoutMs, 25000);
     try {
       const response = await axios.get(
         `${this.baseUrl}/api/messages`,
@@ -989,12 +991,12 @@ export class WahaClient implements IWahaClient {
             limit,
             session: this.session,
           },
-          timeout: this.timeoutMs,
+          timeout: fetchTimeout,
         }
       );
       return response.data?.value || response.data || [];
     } catch (error: any) {
-      console.error(`[WAHA API ERROR] getMessages failed for ${targetChatId}:`, error?.response?.data || error.message);
+      console.warn(`[WAHA API WARN] getMessages for ${targetChatId} timed out or failed (chat still indexing in WAHA):`, error?.response?.data || error.message);
       return [];
     }
   }
