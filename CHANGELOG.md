@@ -6,15 +6,19 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ### Fixed & Improved — Live Chat Monitor Mobile UX & Anti-Zoom Input Focus
 
-- **Pencegahan Otomatis Zoom-In pada Input & Textarea Mobile (`packages/admin-dashboard/src/index.css`)**:
-  - Menambahkan aturan CSS global untuk layar mobile (`max-width: 767px`) dengan `font-size: 16px !important` pada elemen `input`, `textarea`, dan `select` guna mencegah iOS Safari & Android mobile browser melakukan auto-zoom paksa saat admin mengetuk field input/balasan.
+- **Pencegahan Otomatis Zoom-In pada Input & Textarea Mobile (`packages/admin-dashboard/src/index.css`, `index.html`, `LiveChatMonitor.tsx`)**:
+  - Menambahkan aturan CSS global untuk layar mobile (`max-width: 767px`) dengan `font-size: 16px !important` pada elemen `input`, `textarea`, dan `select` serta inline `style={{ fontSize: '16px' }}` dan class `text-[16px]` pada textarea Live Chat guna mencegah iOS Safari & Android mobile browser melakukan auto-zoom paksa saat admin mengetuk field input/balasan.
+  - Memperbarui meta viewport pada `index.html` dengan atribut `maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content` untuk menangani pergeseran keyboard virtual.
 - **Penyempurnaan UX & Auto-Growing Textarea Live Chat (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`)**:
   - **Auto-Grow Composer**: Textarea balasan admin kini otomatis memanjang dinamis (1 baris hingga ~5 baris / maks 130px) sesuai panjang ketikan teks dan otomatis me-reset tinggi ke ukuran awal setelah pesan terkirim atau berganti percakapan.
   - **Pembersihan Navigasi Mobile**: Menghilangkan tombol kembali (*back button*) redundan di header atas saat tampilan chat mobile aktif dan mengoptimalkan tombol kembali tunggal di dalam panel inspector obrolan.
   - **Ergonomi Tombol Kirim Mobile**: Menyesuaikan tombol kirim menjadi icon-only di layar HP sempit agar textarea balasan memiliki ruang lebar horizontal maksimal dan nyaman diketik.
   - **Layout & Ketinggian Adaptif**: Menyesuaikan ketinggian container daftar percakapan dan panel obrolan dengan viewport mobile (`100dvh`) agar tidak terpotong oleh virtual keyboard.
-- **Pengujian & Validasi**:
-  - Seluruh test suite unit & integrasi (155 file, 1.414 tests PASS). Build bundle admin dashboard berhasil tanpa error (0 warning/error).
+- **Label Versi & Waktu Update Dashboard (`packages/admin-dashboard/src/pages/tenant/Overview.tsx`, `version.ts`)**:
+  - Menambahkan label badge versi (contoh: `v1.12.1`) dan stempel waktu pembaruan terakhir (contoh: `Update: 17 Ags 2026, 07:35 WIB`) di header dan footer halaman Overview admin dashboard.
+- **Cache-Busting & Invalidation Service Worker (`src/routes/admin.route.ts`, `packages/admin-dashboard/public/sw.js`)**:
+  - Menyematkan header HTTP `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0` pada `index.html` agar browser HP selalu memuat bundle Vite terbaru dan tidak tertahan pada cache lokal lama.
+  - Memperbarui cache name Service Worker ke `kala-admin-v2` dengan auto-deletion cache lama pada event `activate`.
 
 ### Changed & Security — Penonaktifan Fitur App State Fisik WAHA (Anti-Session Logout) & Migrasi Penuh ke Label UI Sistem
 
