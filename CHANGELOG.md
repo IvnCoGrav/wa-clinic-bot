@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Sanitizer Em-Dash (—) pada Output AI & Semua Pesan Keluar
+
+- **Sanitizer baru `sanitizeEmDash` (`src/utils/language-sanitizer.ts`)**: Menghilangkan karakter em-dash (—) yang sering bocor dari output LLM, sesuai pedoman anti-slop `design.md` §9 (EM-DASH BAN). Penggantian kontekstual:
+  - Rentang angka (`jam 9—11`) → hyphen `-` (`jam 9-11`)
+  - Bullet list di awal baris (`— Gratis ongkir`) → `- ` (`- Gratis ongkir`)
+  - Pemisah antar klausa (`Halo—mau tanya`) → koma `, ` (`Halo, mau tanya`)
+- **Wire ke jalur LLM**: rantai sanitasi di `src/integrations/llm/generator.ts` (dynamic import) dan `src/integrations/llm/phrasing.service.ts` (finalContent).
+- **Wire ke jalur outbound**: `normalizeWhatsAppFormat` (`src/utils/whatsapp-format.ts`) kini memanggil `sanitizeEmDash` terlebih dahulu, sehingga SEMUA pesan keluar (termasuk template statis seperti `followup-templates.ts`) bebas em-dash — otomatis melindungi `src/integrations/waha/client.ts` dan `src/integrations/whatsapp/waba.driver.ts`.
+- **Test**: 5 kasus baru di `tests/unit/language-sanitizer.test.ts` (klausa, rentang angka, bullet list, no-op, null/empty).
+
 ### Added & Improved — AI Copilot Draft for Midwives, Strict Silent Medical Hold & Live Chat UI Overhaul (`v1.15.0`)
 
 - **Fitur AI Copilot Draft Saran Balasan Bidan (`src/services/live-chat.service.ts`, `src/routes/admin/livechat.subroute.ts`, `LiveChatMonitor.tsx`)**:
@@ -19,6 +29,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - **Pemisahan Label 2 Grup**: Grup 1 (status & segmentasi: `Hold`, `Legacy`, `New Customer`, label DB) diletakkan rapi tepat di bawah nama customer; Grup 2 (metrik operasional: `MQL`, `Order count`, `Sandbox`, `Meta`) ditaruh di footer bar di samping jam.
   - **Ikonografi Minimalis**: Tombol "Release" / "Kembalikan ke Bot" diganti dengan icon Bot minimalis modern. Tulisan status Live Chat di header luar disederhanakan menjadi icon sync WAHA berputar dan icon Wifi berwarna dengan tooltip status real-time.
   - **Default Filter WhatsApp Asli & Optimalisasi Mobile**: Default filter sumber diset ke `WhatsApp Asli` dan ukuran badge/dropdown dioptimalkan agar compact di tampilan mobile.
+
 
 ### Added & Improved — WhatsApp Customer Profile Picture Retrieval & Smart Avatar Display (`v1.14.0`)
 
