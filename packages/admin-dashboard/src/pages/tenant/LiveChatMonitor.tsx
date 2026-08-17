@@ -27,6 +27,9 @@ import {
   RefreshCw,
   Trash2,
   ChevronLeft,
+  Tag,
+  Plus,
+  Check,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 
@@ -44,6 +47,12 @@ function extractMedia(msg: any): ChatMediaData | undefined {
   const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
   if (m && (m.url || m.hdUrl)) return m;
   return undefined;
+}
+
+interface CustomerLabelData {
+  id: string;
+  name: string;
+  color: string;
 }
 
 interface LiveChatItem {
@@ -64,6 +73,7 @@ interface LiveChatItem {
   trafficSource?: 'meta' | 'legacy' | null;
   purchaseCount?: number;
   ltv?: number;
+  customerLabels?: CustomerLabelData[];
 }
 
 export const LiveChatMonitor: React.FC = () => {
@@ -96,6 +106,10 @@ export const LiveChatMonitor: React.FC = () => {
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
 
+  const [allLabels, setAllLabels] = useState<CustomerLabelData[]>([]);
+  const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
+  const [togglingLabelId, setTogglingLabelId] = useState<string | null>(null);
+
   const resetTextareaHeight = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px';
@@ -111,10 +125,18 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
-  // Auto-scroll internal container ke pesan terbaru saat thread berubah / pesan baru masuk.
+  // Auto-scroll internal container ke pesan terbaru saat thread berubah / pesan baru masuk, serta pastikan area textfield/composer terlihat.
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+    if (selectedId) {
+      const timer = setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [messages, selectedId]);
 
@@ -122,14 +144,58 @@ export const LiveChatMonitor: React.FC = () => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
 
-  // Load gateway capability on mount
+  // Load gateway capability & available customer labels on mount
   useEffect(() => {
     apiRequest('/api/admin/gateway-capability')
       .then((res) => {
         if (res?.success && res.data) setGatewayCapability(res.data);
       })
       .catch(() => {});
+
+    apiRequest('/api/admin/labels')
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data)) {
+          setAllLabels(res.data);
+        } else if (Array.isArray(res)) {
+          setAllLabels(res);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const handleToggleLabel = async (customerId: string, label: CustomerLabelData) => {
+    if (togglingLabelId) return;
+    setTogglingLabelId(label.id);
+    try {
+      const targetChat = chatsRef.current.find((c) => c.customerId === customerId);
+      const currentLabels = targetChat?.customerLabels || [];
+      const isAssigned = currentLabels.some((l) => l.id === label.id);
+      const action = isAssigned ? 'remove' : 'add';
+
+      // Optimistic update
+      const nextLabels = isAssigned
+        ? currentLabels.filter((l) => l.id !== label.id)
+        : [...currentLabels, label];
+
+      setChats((prev) => {
+        const updated = prev.map((c) =>
+          c.customerId === customerId ? { ...c, customerLabels: nextLabels } : c
+        );
+        chatsRef.current = updated;
+        return updated;
+      });
+
+      await apiRequest(`/api/admin/customers/${customerId}/labels`, {
+        method: 'POST',
+        body: JSON.stringify({ labelId: label.id, action }),
+      });
+    } catch (err: any) {
+      toast(err.message || 'Gagal memperbarui label customer.', 'error');
+      loadChats(true);
+    } finally {
+      setTogglingLabelId(null);
+    }
+  };
 
   // Ganti filter label → reset daftar ke halaman pertama.
   useEffect(() => {
@@ -774,6 +840,16 @@ export const LiveChatMonitor: React.FC = () => {
                                 <span>{chat.purchaseCount}x</span>
                               </span>
                             )}
+                            {(chat.customerLabels || []).map((lbl) => (
+                              <span
+                                key={lbl.id}
+                                className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs"
+                                style={{ backgroundColor: lbl.color || '#008069' }}
+                                title={`Label: ${lbl.name}`}
+                              >
+                                {lbl.name}
+                              </span>
+                            ))}
                           </span>
                           <span className="flex items-center space-x-2">
                             {chat.lastMessageAt && (
@@ -833,8 +909,85 @@ export const LiveChatMonitor: React.FC = () => {
                         <p className="text-xs text-[#667781] font-mono mt-0.5">
                           {selectedChat.customerPhone || 'Unknown'}
                         </p>
+                        {/* Customer Labels Badge & Interactive Picker */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2 relative">
+                          {(selectedChat.customerLabels || []).map((lbl) => (
+                            <span
+                              key={lbl.id}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-2xs"
+                              style={{ backgroundColor: lbl.color || '#008069' }}
+                            >
+                              <Tag size={10} />
+                              <span>{lbl.name}</span>
+                            </span>
+                          ))}
+
+                          {/* Add / Manage Label Button */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] border border-[#d1d7db] transition shadow-2xs active:scale-95"
+                              title="Kelola Label Pasien"
+                            >
+                              <Plus size={11} />
+                              <span>Label</span>
+                            </button>
+
+                            {/* Label Picker Popover */}
+                            {labelPopoverOpen && (
+                              <div className="absolute left-0 top-full mt-1.5 z-30 w-52 bg-white border border-[#e9edef] rounded-xl shadow-lg p-2 space-y-1">
+                                <div className="flex justify-between items-center px-1.5 pb-1 border-b border-[#f0f2f5] text-[11px] font-bold text-[#667781]">
+                                  <span>PILIH LABEL</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setLabelPopoverOpen(false)}
+                                    className="text-[#8696a0] hover:text-[#111b21] text-xs font-semibold"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                                {allLabels.length === 0 ? (
+                                  <p className="text-[11px] text-[#667781] p-2 text-center">
+                                    Belum ada label.{' '}
+                                    <a href="/admin/labels" className="text-[#008069] underline font-semibold">
+                                      Buat label
+                                    </a>
+                                  </p>
+                                ) : (
+                                  <div className="max-h-48 overflow-y-auto space-y-0.5 py-1">
+                                    {allLabels.map((lbl) => {
+                                      const isChecked = (selectedChat.customerLabels || []).some((l) => l.id === lbl.id);
+                                      return (
+                                        <button
+                                          key={lbl.id}
+                                          type="button"
+                                          onClick={() => handleToggleLabel(selectedChat.customerId, lbl)}
+                                          disabled={togglingLabelId === lbl.id}
+                                          className={`w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                                            isChecked ? 'bg-[#e8f5f2] text-[#008069]' : 'hover:bg-[#f0f2f5] text-[#111b21]'
+                                          }`}
+                                        >
+                                          <span className="flex items-center space-x-2 truncate">
+                                            <span
+                                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                                              style={{ backgroundColor: lbl.color }}
+                                            />
+                                            <span className="truncate">{lbl.name}</span>
+                                          </span>
+                                          {isChecked && <Check size={13} className="text-[#008069] shrink-0" />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         {!!selectedChat.purchaseCount && selectedChat.purchaseCount > 0 && (
-                          <p className="text-xs text-[#008069] font-medium flex items-center space-x-1 mt-0.5">
+                          <p className="text-xs text-[#008069] font-medium flex items-center space-x-1 mt-1.5">
                             <ShoppingBag size={11} />
                             <span>{selectedChat.purchaseCount === 1 ? 'Purchase 1x' : `Repeat Order ${selectedChat.purchaseCount}x`}</span>
                             {!!selectedChat.ltv && selectedChat.ltv > 0 && (
@@ -989,14 +1142,8 @@ export const LiveChatMonitor: React.FC = () => {
                       ref={textareaRef}
                       value={replyText}
                       onChange={handleReplyTextChange}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendReply();
-                        }
-                      }}
                       rows={1}
-                      placeholder="Tulis balasan... (Enter kirim, Shift+Enter baris baru)"
+                      placeholder="Tulis balasan... (Klik tombol Kirim untuk mengirim)"
                       className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[130px] leading-relaxed"
                       style={{ fontSize: '16px' }}
                     />

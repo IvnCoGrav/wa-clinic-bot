@@ -27,6 +27,7 @@ import { evaluationsAdminRoutes } from './admin/evaluations.subroute';
 import { metaAttributionAdminRoutes } from './admin/meta-attribution.subroute';
 import { exportAdminRoutes } from './admin/export.subroute';
 import { staffManagementAdminRoutes } from './admin/staff-management.subroute';
+import { labelsAdminRoutes } from './admin/labels.subroute';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
@@ -117,6 +118,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(metaAttributionAdminRoutes);
   fastify.register(exportAdminRoutes);
   fastify.register(staffManagementAdminRoutes);
+  fastify.register(labelsAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');

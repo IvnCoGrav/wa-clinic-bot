@@ -28,6 +28,7 @@ export interface LiveChatConversationItem {
   trafficSource?: 'meta' | 'legacy' | null;
   purchaseCount?: number;
   ltv?: number;
+  customerLabels?: { id: string; name: string; color: string }[];
 }
 
 /** Deteksi sumber traffic dari baris ad_clicks. */
@@ -78,7 +79,7 @@ export class LiveChatService {
     try {
       const rows = await prisma.customer.findMany({
         where: { id: { in: customerIds }, tenant_id: tenantId },
-        include: { adClick: true, reservations: true },
+        include: { adClick: true, reservations: true, labels: { include: { label: true } } },
       });
       customers = new Map(rows.map((c) => [c.id, c]));
     } catch (error) {
@@ -497,6 +498,7 @@ export class LiveChatService {
       trafficSource: detectTrafficSource(c.customer?.adClick, !!c.customer?.is_legacy_source),
       purchaseCount: stats?.purchaseCount ?? (c.customer?.reservations?.length || 0),
       ltv: stats?.ltv || 0,
+      customerLabels: c.customer?.labels?.map((cl: any) => cl.label || cl) || [],
     };
   }
 
