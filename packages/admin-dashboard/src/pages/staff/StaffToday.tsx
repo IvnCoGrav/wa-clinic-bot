@@ -134,6 +134,17 @@ export const StaffToday: React.FC = () => {
   
   // Navigation Tabs: 'today' (Hari Ini & Live Chat) vs 'upcoming' (Jadwal Mendatang) vs 'completed' (Treatment Selesai)
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>('today');
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | 'none'>('none');
+
+  const handleTabChange = (nextTab: 'today' | 'upcoming' | 'completed') => {
+    if (nextTab === activeTab) return;
+    const tabs: Array<'today' | 'upcoming' | 'completed'> = ['today', 'upcoming', 'completed'];
+    const currentIndex = tabs.indexOf(activeTab);
+    const nextIndex = tabs.indexOf(nextTab);
+    setSlideDirection(nextIndex > currentIndex ? 'left' : 'right');
+    setActiveTab(nextTab);
+    setMobileView('list');
+  };
 
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<StaffTask[]>([]);
@@ -433,12 +444,26 @@ export const StaffToday: React.FC = () => {
     const deltaY = endY - start.y;
     const deltaTime = Date.now() - start.time;
 
-    // Ignore slow gestures (> 650ms) or short drags (< 50px) or mostly vertical scrolls
-    if (deltaTime > 650 || Math.abs(deltaX) < 50 || Math.abs(deltaX) < Math.abs(deltaY) * 1.3) {
+    // Ignore slow gestures (> 650ms) or short drags (< 40px) or mostly vertical scrolls
+    if (deltaTime > 650 || Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
       return;
     }
 
-    // Ignore if modal/drawer is open
+    const isRightEdgeStart = start.x >= window.innerWidth - 55;
+
+    // Right-Edge Swipe Gesture (Usap dari tepi paling kanan layar ke kiri) -> Buka Menu Drawer/Sidebar!
+    if (isRightEdgeStart && deltaX < -35) {
+      setShowMenuDrawer(true);
+      return;
+    }
+
+    // Swipe ke kanan saat drawer terbuka -> Tutup drawer
+    if (showMenuDrawer && deltaX > 40) {
+      setShowMenuDrawer(false);
+      return;
+    }
+
+    // Ignore tab/chat swipe if other modals or image zoom are open
     if (
       detailModalTask ||
       paymentModalTask ||
@@ -450,23 +475,25 @@ export const StaffToday: React.FC = () => {
       return;
     }
 
-    // Case 1: In full-screen mobile chat view -> swipe navigates back to list
+    // Case 1: In full-screen mobile chat view -> swipe horizontal navigates back to list
     if (mobileView === 'chat' && activeTab === 'today') {
-      handleBackToList();
+      if (Math.abs(deltaX) > 40) {
+        handleBackToList();
+      }
       return;
     }
 
-    // Case 2: In tab list view -> swipe left/right switches tabs
+    // Case 2: In tab list view -> swipe left/right switches tabs with directional sliding animation
     if (mobileView === 'list') {
       const tabs: Array<'today' | 'upcoming' | 'completed'> = ['today', 'upcoming', 'completed'];
       const currentIndex = tabs.indexOf(activeTab);
 
-      if (deltaX < -50 && currentIndex < tabs.length - 1) {
-        // Swipe Left -> next tab
-        setActiveTab(tabs[currentIndex + 1]);
-      } else if (deltaX > 50 && currentIndex > 0) {
-        // Swipe Right -> previous tab
-        setActiveTab(tabs[currentIndex - 1]);
+      if (deltaX < -40 && currentIndex < tabs.length - 1) {
+        // Swipe Left -> next tab (content slides from right)
+        handleTabChange(tabs[currentIndex + 1]);
+      } else if (deltaX > 40 && currentIndex > 0) {
+        // Swipe Right -> previous tab (content slides from left)
+        handleTabChange(tabs[currentIndex - 1]);
       }
     }
   };
@@ -1214,10 +1241,7 @@ export const StaffToday: React.FC = () => {
             <div className="hidden sm:flex items-center bg-[#f0f2f5] p-1 rounded-xl border border-[#e9edef]">
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('today');
-                  setMobileView('list');
-                }}
+                onClick={() => handleTabChange('today')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'today'
                     ? 'bg-white text-[#008069] shadow-xs'
@@ -1237,10 +1261,7 @@ export const StaffToday: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('upcoming');
-                  setMobileView('list');
-                }}
+                onClick={() => handleTabChange('upcoming')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'upcoming'
                     ? 'bg-white text-[#008069] shadow-xs'
@@ -1260,10 +1281,7 @@ export const StaffToday: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('completed');
-                  setMobileView('list');
-                }}
+                onClick={() => handleTabChange('completed')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'completed'
                     ? 'bg-white text-[#008069] shadow-xs'
@@ -1327,10 +1345,7 @@ export const StaffToday: React.FC = () => {
         <nav aria-label="Mobile Navigation" className="sm:hidden px-3 py-2 bg-white border-b border-[#e9edef] flex items-center justify-between gap-1.5 shadow-xs z-20">
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('today');
-              setMobileView('list');
-            }}
+            onClick={() => handleTabChange('today')}
             className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
               activeTab === 'today'
                 ? 'bg-[#008069] text-white shadow-xs'
@@ -1350,10 +1365,7 @@ export const StaffToday: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('upcoming');
-              setMobileView('list');
-            }}
+            onClick={() => handleTabChange('upcoming')}
             className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
               activeTab === 'upcoming'
                 ? 'bg-[#008069] text-white shadow-xs'
@@ -1373,10 +1385,7 @@ export const StaffToday: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => {
-              setActiveTab('completed');
-              setMobileView('list');
-            }}
+            onClick={() => handleTabChange('completed')}
             className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
               activeTab === 'completed'
                 ? 'bg-[#008069] text-white shadow-xs'
@@ -1424,7 +1433,13 @@ export const StaffToday: React.FC = () => {
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0 min-h-0 h-full`}
+              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0 min-h-0 h-full ${
+                slideDirection === 'left'
+                  ? 'animate-slideInFromRight'
+                  : slideDirection === 'right'
+                  ? 'animate-slideInFromLeft'
+                  : 'animate-fadeIn'
+              }`}
             >
               {/* Panel Search & Header */}
               <div className="p-3 bg-white border-b border-[#e9edef] space-y-2.5">
@@ -2091,7 +2106,15 @@ export const StaffToday: React.FC = () => {
           /* ========================================================================= */
           /* TAB 2: JADWAL MENDATANG (READ-ONLY, NO CHAT) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
+          <div
+            className={`flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 ${
+              slideDirection === 'left'
+                ? 'animate-slideInFromRight'
+                : slideDirection === 'right'
+                ? 'animate-slideInFromLeft'
+                : 'animate-fadeIn'
+            }`}
+          >
             {/* Search Bar */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
@@ -2319,7 +2342,15 @@ export const StaffToday: React.FC = () => {
           /* ========================================================================= */
           /* TAB 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
+          <div
+            className={`flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 ${
+              slideDirection === 'left'
+                ? 'animate-slideInFromRight'
+                : slideDirection === 'right'
+                ? 'animate-slideInFromLeft'
+                : 'animate-fadeIn'
+            }`}
+          >
             {/* Header / Summary Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
@@ -2585,8 +2616,7 @@ export const StaffToday: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('today');
-                  setMobileView('list');
+                  handleTabChange('today');
                   setShowMenuDrawer(false);
                 }}
                 className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
@@ -2623,8 +2653,7 @@ export const StaffToday: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('upcoming');
-                  setMobileView('list');
+                  handleTabChange('upcoming');
                   setShowMenuDrawer(false);
                 }}
                 className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
@@ -2661,8 +2690,7 @@ export const StaffToday: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('completed');
-                  setMobileView('list');
+                  handleTabChange('completed');
                   setShowMenuDrawer(false);
                 }}
                 className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
