@@ -130,6 +130,7 @@ export class MessageService {
     deliveryStatus?: 'sent' | 'delivered' | 'read' | 'failed';
     metaErrorCode?: string;
     metaErrorDesc?: string;
+    skipMqlEvaluation?: boolean;
   }) {
     if (data.waMessageId) {
       memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
@@ -174,8 +175,8 @@ export class MessageService {
       memoryMessages.push(fallbackMessage);
       return fallbackMessage;
     } finally {
-      // Jika pesan INBOUND (dari customer), increment bubble count & evaluasi status MQL
-      if (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND') {
+      // Jika pesan INBOUND (dari customer) dan bukan sinkronisasi riwayat masa lalu (skipMqlEvaluation), increment bubble count & evaluasi status MQL
+      if (!data.skipMqlEvaluation && (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND')) {
         try {
           const { conversationService } = await import('./conversation.service');
           const { customerService } = await import('./customer.service');
