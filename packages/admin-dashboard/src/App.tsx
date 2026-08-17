@@ -25,6 +25,7 @@ const FollowUpTemplates = lazy(() => import('./pages/tenant/FollowUpTemplates').
 const Debug = lazy(() => import('./pages/tenant/Debug').then(m => ({ default: m.Debug })));
 const LandingPage = lazy(() => import('./pages/tenant/LandingPage').then(m => ({ default: m.LandingPage })));
 const CustomerDatabase = lazy(() => import('./pages/tenant/CustomerDatabase').then(m => ({ default: m.CustomerDatabase })));
+const CustomerLabels = lazy(() => import('./pages/tenant/CustomerLabels').then(m => ({ default: m.CustomerLabels })));
 const CustomerService = lazy(() => import('./pages/tenant/CustomerService').then(m => ({ default: m.CustomerService })));
 const AiEvaluations = lazy(() => import('./pages/tenant/AiEvaluations').then(m => ({ default: m.AiEvaluations })));
 const MetaClickCatcher = lazy(() => import('./pages/tenant/MetaClickCatcher').then(m => ({ default: m.MetaClickCatcher })));
@@ -81,6 +82,14 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/labels" element={
+              <ProtectedRoute>
+                <Layout>
+                  <CustomerLabels />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/customer-labels" element={<Navigate to="/admin/labels" replace />} />
             <Route path="/admin/customer-service" element={
               <ProtectedRoute>
                 <Layout>
