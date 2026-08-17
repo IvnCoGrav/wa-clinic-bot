@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Portal Terapis Mobile UX, Anti-Zoom Focus, Quick Reply & Navigasi Cepat (v1.12.2)
+
+- **Pencegahan Zoom-In & Auto-Growing Textarea Chat Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengganti input single-line menjadi `<textarea>` auto-grow (1 hingga ~5 baris / maks 130px) dengan `style={{ fontSize: '16px' }}` dan `text-[16px]` guna mencegah mobile Safari & Chrome melakukan auto-zoom paksa saat terapis mengetik balasan.
+  - Mendukung shortcut keyboard `Enter` untuk mengirim pesan dan `Shift+Enter` untuk baris baru, serta auto-reset tinggi saat berganti pasien atau pesan terkirim.
+- **Quick Reply Chips untuk Pesan Cepat Lapangan (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menyediakan tombol chip template cepat di atas composer chat untuk status umum: *"🛵 Sedang OTW"*, *"📍 Sudah Sampai"*, dan *"🙏 Selesai"*, memudahkan terapis berkirim kabar tanpa perlu mengetik panjang saat mobilitas.
+- **Tab Bar Navigasi Mobile Terbuka (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menampilkan segment navigation bar horizontal langsung di mobile untuk beralih antara *"Hari Ini"*, *"Mendatang"*, dan *"Selesai"* dengan 1 ketukan tanpa harus membuka menu drawer garis tiga.
+- **Badge Nomor Urut Kunjungan & Notifikasi Getar (Haptic Feedback) (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan badge urutan penugasan (`#1`, `#2`, `#3`...) pada setiap kartu pasien berdasarkan kronologi jam reservasi.
+  - Menambahkan getaran haptic (`navigator.vibrate`) pada saat pesan WhatsApp baru masuk ke portal terapis.
+  - Memperluas riwayat percakapan yang dimuat awal menjadi 30 pesan terakhir.
+- **Versi Rilis & Timestamp (`packages/admin-dashboard/src/config/version.ts`)**:
+  - Memperbarui versi portal menjadi `v1.12.2` (Build: 17 Ags 2026, 07:48 WIB).
+
 ### Fixed & Improved — Live Chat Monitor Mobile UX & Anti-Zoom Input Focus
 
 - **Pencegahan Otomatis Zoom-In pada Input & Textarea Mobile (`packages/admin-dashboard/src/index.css`, `index.html`, `LiveChatMonitor.tsx`)**:
