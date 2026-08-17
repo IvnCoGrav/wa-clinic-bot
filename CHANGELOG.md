@@ -4,6 +4,20 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Swipe Gesture Navigation, Auto-Scroll Instant, Enter Fix & Sidebar Version Tag (v1.12.3)
+
+- **Perbaikan Kirim Pesan via Tombol Enter & Toast Feedback (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Memperbaiki event signature pada handler pengiriman balasan `handleSendReply` agar kompatibel menangani synthetic keyboard event saat tombol `Enter` ditekan dari textarea tanpa melempar error.
+  - Memperbaiki parameter pesan toast error menjadi `toast(errorMsg, 'error')` yang sebelumnya terbalik.
+- **Auto-Scroll Instan ke Pesan Terakhir (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengimplementasikan multi-tick `requestAnimationFrame` dan timeout bertingkat (0ms, 40ms, 120ms, 300ms) saat membuka chat pasien, berpindah thread, atau saat pesan balasan terkirim agar viewport chat langsung bergulir mulus ke posisi paling bawah.
+- **Gestur Swipe Kiri/Kanan untuk Pindah Tab & Back Chat (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan touch swipe listener:
+    - **Di halaman daftar**: Swipe kiri/kanan otomatis berpindah antar tab (*Hari Ini* ↔ *Mendatang* ↔ *Selesai*).
+    - **Di dalam panel chat mobile**: Swipe horizontal (kiri atau kanan) langsung kembali (*back*) ke daftar kunjungan pasien.
+- **Label Versi Aplikasi di Sidebar (`packages/admin-dashboard/src/components/common/Layout.tsx`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan label versi dan waktu build aplikasi yang rapi dan elegan di bagian bawah sidebar admin dashboard utama dan menu drawer portal terapis.
+
 ### Fixed & Improved — Portal Terapis Mobile UX, Anti-Zoom Focus, Quick Reply & Navigasi Cepat (v1.12.2)
 
 - **Pencegahan Zoom-In & Auto-Growing Textarea Chat Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
