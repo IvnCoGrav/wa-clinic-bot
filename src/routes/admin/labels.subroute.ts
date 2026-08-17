@@ -9,20 +9,21 @@ export interface MemoryLabel {
   tenant_id: string;
   name: string;
   color: string;
+  description?: string | null;
   created_at: Date;
   updated_at: Date;
   _count?: { customers: number };
 }
 
 export const DEFAULT_SYSTEM_LABELS = [
-  { name: 'Hold', color: '#dc2626' }, // Merah - Penanganan khusus / tahan bot
-  { name: 'Admin (CS)', color: '#7c3aed' }, // Ungu - Ditangani Admin CS
-  { name: 'Pending Payment', color: '#d97706' }, // Amber - Menunggu Pembayaran
-  { name: 'Repeat Order', color: '#059669' }, // Hijau - Pelanggan Setia / Repeat
-  { name: 'New Customer', color: '#0284c7' }, // Biru - Pasien Baru
-  { name: 'Medical Emergency', color: '#e11d48' }, // Rose - Darurat Medis / Bidan
-  { name: 'Unresolved FAQ', color: '#ea580c' }, // Oranye - Pertanyaan Belum Terjawab
-  { name: 'MQL (Hot Lead)', color: '#10b981' }, // Emerald - Hot Lead
+  { name: 'Hold', color: '#dc2626', description: 'Penanganan khusus / tahan balasan bot otomatis' },
+  { name: 'Admin (CS)', color: '#7c3aed', description: 'Percakapan ditangani manual oleh Admin CS' },
+  { name: 'Pending Payment', color: '#d97706', description: 'Pasien dalam tahap menunggu pembayaran / transfer' },
+  { name: 'Repeat Order', color: '#059669', description: 'Pelanggan setia yang pernah melakukan reservasi' },
+  { name: 'New Customer', color: '#0284c7', description: 'Pasien baru yang baru pertama kali kontak' },
+  { name: 'Medical Emergency', color: '#e11d48', description: 'Kebutuhan darurat medis atau konsultasi bidan khusus' },
+  { name: 'Unresolved FAQ', color: '#ea580c', description: 'Pertanyaan kompleks yang belum terjawab otomatis' },
+  { name: 'MQL (Hot Lead)', color: '#10b981', description: 'Prospek hangat berpotensi tinggi untuk closing' },
 ];
 
 export const memoryLabels = new Map<string, MemoryLabel>();
@@ -38,6 +39,7 @@ function initMemoryLabels() {
         tenant_id: DEFAULT_TENANT_ID,
         name: item.name,
         color: item.color,
+        description: item.description,
         created_at: new Date(),
         updated_at: new Date(),
       });
@@ -67,11 +69,12 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         for (const item of DEFAULT_SYSTEM_LABELS) {
           await prisma.label.upsert({
             where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
-            update: {},
+            update: { description: item.description },
             create: {
               tenant_id: DEFAULT_TENANT_ID,
               name: item.name,
               color: item.color,
+              description: item.description,
             },
           });
         }
@@ -112,11 +115,12 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       for (const item of DEFAULT_SYSTEM_LABELS) {
         await prisma.label.upsert({
           where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
-          update: { color: item.color },
+          update: { color: item.color, description: item.description },
           create: {
             tenant_id: DEFAULT_TENANT_ID,
             name: item.name,
             color: item.color,
+            description: item.description,
           },
         });
       }
@@ -142,11 +146,11 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/labels',
     async (
       request: FastifyRequest<{
-        Body: { name?: string; color?: string };
+        Body: { name?: string; color?: string; description?: string | null };
       }>,
       reply: FastifyReply
     ) => {
-      const { name, color = '#008069' } = request.body || {};
+      const { name, color = '#008069', description } = request.body || {};
 
       if (!name || !name.trim()) {
         return reply.status(400).send({ success: false, error: 'Nama label wajib diisi.' });
@@ -154,6 +158,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
 
       const cleanName = name.trim();
       const cleanColor = color.trim() || '#008069';
+      const cleanDescription = description !== undefined ? (description ? description.trim() : null) : null;
 
       try {
         const existing = await prisma.label.findFirst({
@@ -169,6 +174,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
             tenant_id: DEFAULT_TENANT_ID,
             name: cleanName,
             color: cleanColor,
+            description: cleanDescription,
           },
         });
 
@@ -177,7 +183,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_LABEL',
           targetId: label.id,
-          payload: { name: label.name, color: label.color },
+          payload: { name: label.name, color: label.color, description: label.description },
           ipAddress: request.ip,
           tenantId: DEFAULT_TENANT_ID,
         });
@@ -191,6 +197,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           tenant_id: DEFAULT_TENANT_ID,
           name: cleanName,
           color: cleanColor,
+          description: cleanDescription,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -202,19 +209,19 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * PATCH /api/admin/labels/:id
-   * Mengedit nama atau warna label.
+   * Mengedit nama, warna, atau deskripsi label.
    */
   fastify.patch(
     '/api/admin/labels/:id',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body: { name?: string; color?: string };
+        Body: { name?: string; color?: string; description?: string | null };
       }>,
       reply: FastifyReply
     ) => {
       const { id } = request.params;
-      const { name, color } = request.body || {};
+      const { name, color, description } = request.body || {};
 
       try {
         const existing = await prisma.label.findFirst({
@@ -228,6 +235,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         const updateData: any = {};
         if (name !== undefined && name.trim()) updateData.name = name.trim();
         if (color !== undefined && color.trim()) updateData.color = color.trim();
+        if (description !== undefined) updateData.description = description ? description.trim() : null;
 
         const updated = await prisma.label.update({
           where: { id },
@@ -250,6 +258,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         if (mem) {
           if (name) mem.name = name.trim();
           if (color) mem.color = color.trim();
+          if (description !== undefined) mem.description = description ? description.trim() : null;
           mem.updated_at = new Date();
           return reply.status(200).send({ success: true, data: mem, note: 'Fallback in-memory mode' });
         }
@@ -325,18 +334,35 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
       const { labelId, action, labelIds } = request.body || {};
 
       try {
+        // Resolve customer from DB
+        let customer = await prisma.customer.findFirst({
+          where: {
+            OR: [{ id: customerId }, { phone: customerId }],
+          },
+        });
+        if (!customer) {
+          throw new Error(`Customer ${customerId} tidak ditemukan di database.`);
+        }
+        const resolvedCustomerId = customer.id;
+
         // If labelIds array provided, replace all labels for customer
         if (Array.isArray(labelIds)) {
+          // Resolve all valid label IDs
+          const validLabels = await prisma.label.findMany({
+            where: { tenant_id: DEFAULT_TENANT_ID, id: { in: labelIds } },
+          });
+          const validLabelIds = validLabels.map((l) => l.id);
+
           await prisma.$transaction([
-            prisma.customerLabel.deleteMany({ where: { customer_id: customerId } }),
+            prisma.customerLabel.deleteMany({ where: { customer_id: resolvedCustomerId } }),
             prisma.customerLabel.createMany({
-              data: labelIds.map((lid) => ({ customer_id: customerId, label_id: lid })),
+              data: validLabelIds.map((lid) => ({ customer_id: resolvedCustomerId, label_id: lid })),
               skipDuplicates: true,
             }),
           ]);
 
           const updatedCustomer = await prisma.customer.findUnique({
-            where: { id: customerId },
+            where: { id: resolvedCustomerId },
             include: {
               labels: {
                 include: { label: true },
@@ -354,28 +380,78 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           return reply.status(400).send({ success: false, error: 'labelId atau labelIds wajib disertakan.' });
         }
 
+        // Resolve label from DB (with fallback to default label auto-creation)
+        let targetLabel = await prisma.label.findUnique({ where: { id: labelId } });
+        if (!targetLabel) {
+          const memLbl = memoryLabels.get(labelId);
+          const lookupName = memLbl?.name || labelId;
+          targetLabel = await prisma.label.findFirst({
+            where: { tenant_id: DEFAULT_TENANT_ID, name: { equals: lookupName, mode: 'insensitive' } },
+          });
+          if (!targetLabel) {
+            const defItem = DEFAULT_SYSTEM_LABELS.find((d) => d.name.toLowerCase() === lookupName.toLowerCase());
+            if (defItem) {
+              targetLabel = await prisma.label.upsert({
+                where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: defItem.name } },
+                update: { description: defItem.description },
+                create: {
+                  tenant_id: DEFAULT_TENANT_ID,
+                  name: defItem.name,
+                  color: defItem.color,
+                  description: defItem.description,
+                },
+              });
+            }
+          }
+        }
+
+        if (!targetLabel) {
+          throw new Error(`Label ${labelId} tidak ditemukan di database.`);
+        }
+        const resolvedLabelId = targetLabel.id;
+
         if (action === 'remove') {
           await prisma.customerLabel.deleteMany({
-            where: { customer_id: customerId, label_id: labelId },
+            where: { customer_id: resolvedCustomerId, label_id: resolvedLabelId },
           });
         } else {
           await prisma.customerLabel.upsert({
             where: {
               customer_id_label_id: {
-                customer_id: customerId,
-                label_id: labelId,
+                customer_id: resolvedCustomerId,
+                label_id: resolvedLabelId,
               },
             },
             update: {},
             create: {
-              customer_id: customerId,
-              label_id: labelId,
+              customer_id: resolvedCustomerId,
+              label_id: resolvedLabelId,
             },
           });
         }
 
+        // Auto-sync customer boolean flags (is_hold_labeled, is_admin_labeled)
+        try {
+          const normName = targetLabel.name.toLowerCase();
+          const isAssigned = action !== 'remove';
+          const flagUpdates: Record<string, boolean> = {};
+          if (normName === 'hold') {
+            flagUpdates.is_hold_labeled = isAssigned;
+          } else if (normName.includes('admin')) {
+            flagUpdates.is_admin_labeled = isAssigned;
+          }
+          if (Object.keys(flagUpdates).length > 0) {
+            await prisma.customer.updateMany({
+              where: { id: resolvedCustomerId },
+              data: flagUpdates,
+            });
+          }
+        } catch {
+          // Best-effort flag sync
+        }
+
         const activeLabels = await prisma.customerLabel.findMany({
-          where: { customer_id: customerId },
+          where: { customer_id: resolvedCustomerId },
           include: { label: true },
         });
 
@@ -398,6 +474,19 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
             memoryCustomerLabels.delete(key);
           } else {
             memoryCustomerLabels.add(key);
+          }
+
+          const memLbl = memoryLabels.get(labelId);
+          if (memLbl) {
+            const normName = memLbl.name.toLowerCase();
+            const isAssigned = action !== 'remove';
+            const { customerService } = await import('../../services/customer.service');
+            for (const cust of customerService.getMemoryCustomers().values()) {
+              if (cust?.id === customerId || cust?.phone === customerId) {
+                if (normName === 'hold') cust.is_hold_labeled = isAssigned;
+                if (normName.includes('admin')) cust.is_admin_labeled = isAssigned;
+              }
+            }
           }
         }
 

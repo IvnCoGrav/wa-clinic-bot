@@ -76,6 +76,26 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan' });
         }
 
+        let customerLabels = customer.labels || [];
+        if (customerLabels.length === 0) {
+          try {
+            const { memoryCustomerLabels, memoryLabels } = await import('./labels.subroute');
+            const matched: any[] = [];
+            for (const key of memoryCustomerLabels) {
+              if (key.startsWith(`${customer.id}:`) || key.startsWith(`${customer.phone}:`)) {
+                const lid = key.split(':')[1];
+                const l = memoryLabels.get(lid);
+                if (l) matched.push({ label: l });
+              }
+            }
+            if (matched.length > 0) {
+              customerLabels = matched;
+            }
+          } catch {
+            // fallback ignore
+          }
+        }
+
         let ltv = 0;
         try {
           const { resolveTreatmentValue } = await import('../../services/capi.service');
@@ -93,7 +113,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             ...customer,
             children: customer.children || [],
             reservations: customer.reservations || [],
-            labels: customer.labels || [],
+            labels: customerLabels,
             ltv: customer.ltv ?? ltv,
             purchaseCount: customer.purchaseCount ?? (customer.reservations?.length || 0),
           },

@@ -597,17 +597,24 @@ export class CustomerService {
   public async getCustomerById(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
     try {
       const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-      if (customer) return customer;
-      if (memoryCustomers.has(customerId)) {
-        return memoryCustomers.get(customerId);
+      if (customer) {
+        if (tenantId && customer.tenant_id && customer.tenant_id !== tenantId) return null;
+        return customer;
+      }
+      const memCust = memoryCustomers.get(customerId);
+      if (memCust) {
+        if (tenantId && memCust.tenant_id && memCust.tenant_id !== tenantId) return null;
+        return memCust;
       }
       for (const [, cust] of memoryCustomers.entries()) {
         if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
       }
       return null;
     } catch (error) {
-      if (memoryCustomers.has(customerId)) {
-        return memoryCustomers.get(customerId);
+      const memCust = memoryCustomers.get(customerId);
+      if (memCust) {
+        if (tenantId && memCust.tenant_id && memCust.tenant_id !== tenantId) return null;
+        return memCust;
       }
       for (const [, cust] of memoryCustomers.entries()) {
         if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;

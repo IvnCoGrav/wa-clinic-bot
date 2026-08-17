@@ -4,6 +4,82 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Native Wheel Scrolling Fix, 80% Chat Screen Expansion & AI Draft Resizing
+
+- **Perbaikan Total Scrolling Mouse Wheel & Touchpad (`index.css`, `LiveChatMonitor.tsx`)**:
+  - Menghapus restriksi global `overscroll-behavior: none` pada `html, body, #root` di [index.css](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/packages/admin-dashboard/src/index.css) yang sebelumnya menyebabkan *scroll event hijacking* di peramban desktop (Chrome Windows) sehingga scroll wheel macet.
+  - Memastikan kedua section (daftar chat & thread pesan) memiliki container flex yang solid dengan `flex-1 min-h-0 overflow-y-auto` sehingga scroll wheel mouse maupun gestur trackpad/touch dapat menggeser riwayat chat ke atas dan ke bawah secara mulus tanpa harus mengklik batang scrollbar secara manual.
+- **Ekspansi Layar Live Chat ~75-80% & Textfield Melebar (`LiveChatMonitor.tsx`)**:
+  - Mengubah struktur kolom grid menjadi flex layout dinamis: Section 1 (Daftar Chat) berukuran tetap `w-80` / `w-[320px] - w-[360px]`, sedangkan Section 2 (Thread Chat & Composer) mengambil seluruh sisa lebar layar (`flex-1 min-w-0`), mengalokasikan ~75-80% bidang layar langsung untuk live chat dan textfield.
+  - Memperluas kapasitas auto-resize `<textarea>` composer saat membuat AI Copilot Draft atau mengetik pesan panjang dari maksimum `130px` menjadi `220px` (`max-h-[220px]`) dengan animasi resize mulus.
+
+### Fixed & Improved — Database Schema Sync & 2-Section Dedicated Independent Scrolling
+
+- **Sinkronisasi Database Postgres (`prisma db push` & `labels.description`)**:
+  - Menjalankan sinkronisasi skema database lokal sehingga kolom `description` pada tabel `labels` terdaftar secara valid di PostgreSQL, menyelesaikan error `The column labels.description does not exist in the current database`.
+  - Melakukan regenerasi Prisma Client (`npm run prisma:generate`) agar query `findMany` berjalan tanpa error.
+- **Arsitektur 2-Section Layar Desktop dengan Slider Independen (`Layout.tsx`, `LiveChatMonitor.tsx`)**:
+  - Menghapus scrollbar luar pada browser window saat membuka halaman Live Chat:
+    - Di [Layout.tsx](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/packages/admin-dashboard/src/components/common/Layout.tsx), kontainer `<main>` otomatis terkunci (`overflow-hidden min-h-0`) saat membuka rute `/admin/live-chat`.
+    - **Section 1 (List Chat / Kiri)**: Memiliki slider vertikal mandiri tepat di samping daftar kartu percakapan. Posisi scroll daftar chat tetap (*stay in place*) saat admin berinteraksi di panel pesan.
+    - **Section 2 (Live Chat / Kanan)**: Memiliki slider vertikal mandiri tepat di samping gelembung pesan. Dilengkapi fungsi **Auto-Scroll ke bawah (*bottom*)** secara otomatis saat percakapan dibuka atau saat pesan baru masuk.
+    - Menghilangkan `overscroll-contain` yang sebelumnya mengunci pergerakan mouse wheel.
+
+### Fixed & Improved — Label Synchronization, Foreign Key Safety & 2-Slider Chat Layout
+
+- **Pencegahan Error Foreign Key `prisma.customerLabel.upsert` (`labels.subroute.ts`)**:
+  - Menambahkan resolusi entitas customer dan label sebelum operasi database pada endpoint `POST /api/admin/customers/:id/labels`.
+  - Jika ID label berasal dari memory / sistem default yang belum tersimpan di DB, sistem otomatis meresolusi atau melakukan seeding transparan, sehingga mencegah error `Foreign key constraint violated: customer_labels_label_id_fkey`.
+- **Relokasi Filter Sumber & Label Khusus ke Daftar Percakapan (`LiveChatMonitor.tsx`)**:
+  - Memindahkan tombol tab `WhatsApp Asli / Semua / Sandbox` dan dropdown filter label dari header global ke bagian header **Daftar Percakapan (kolom kiri)**, sehingga area thread chat bersih dan fokus.
+- **Pembersihan Scrollbar & Slider Mandiri (`LiveChatMonitor.tsx`)**:
+  - Menambahkan `overscroll-contain` pada container pesan chat dan container percakapan sehingga hanya ada **2 slider yang bersih dan independen** (1 untuk riwayat pesan chat, 1 untuk scroll halaman/daftar chat), mencegah scroll-chaining yang menjebak saat scroll ke atas/bawah.
+- **Pembersihan Mismatch & Duplikasi Label "Hold" (`LiveChatMonitor.tsx`)**:
+  - Menghapus badge hardcoded `"Hold"` yang sebelumnya ditautkan ke status penanganan `isHumanHandling`. Status bot/human handling tetap diwakili oleh tombol aksi Bot.
+  - Label kustom pasien pada kartu percakapan kiri kini murni bersumber dari relasi `customerLabels` sehingga tidak terjadi duplikasi label Hold saat ditambahkan.
+- **Alokasi 90% Layar untuk Live Chat & Penipisan Margin (`LiveChatMonitor.tsx`)**:
+  - Menipiskan margin atas halaman dari `space-y-6` menjadi `space-y-2`.
+  - Mengatur tinggi container chat monitor ke `h-[calc(100vh-130px)]` dengan flex layout `flex-1` sehingga 90%+ area layar langsung dialokasikan untuk thread percakapan dan daftar pesan.
+  - Merampingkan margin avatar, nama customer, nomor telepon, padding kartu, bubble chat, dan composer.
+- **Sinkronisasi Reaktif Modal Detail Customer (`LiveChatMonitor.tsx`, `customers.subroute.ts`)**:
+  - Menjadikan perubahan label melalui menu `+` langsung ter-update secara reaktif pada modal detail customer tanpa memerlukan reload.
+  - Menginisialisasi awal data label pada modal dengan label percakapan aktif dan melengkapi fallback pembacaan label in-memory di `GET /api/admin/customers/:id`.
+- **Backend Auto-Sync Flag `is_hold_labeled` & Auto-Cleanup saat Release (`labels.subroute.ts`, `livechat.subroute.ts`)**:
+  - Pada `POST /api/admin/customers/:id/labels`: otomatis sinkronkan kolom `is_hold_labeled` dan `is_admin_labeled` di database saat label terkait ditambahkan atau dilepas.
+  - Pada `PATCH /api/admin/conversation/:id/release`: otomatis mereset `is_hold_labeled = false` dan menghapus record label "Hold" dari tabel `CustomerLabel`.
+
+### Added & Improved — Chat Header Label Dots, Label Description Field & AI Copilot Telemetry
+
+- **Label Header Chat (Dot Berwarna & Tombol `+` Inline) (`LiveChatMonitor.tsx`)**:
+  - Di header chat sebelah kanan, label aktif pasien kini ditampilkan sebagai **bulatan dot berwarna compact** (dengan tooltip judul nama label saat di-hover).
+  - Tombol **`+`** diletakkan tepat inline di samping nomor HP customer untuk kemudahan pengelolaan label.
+  - Pada **daftar percakapan sebelah kiri (*chat list*)** dan **modal detail customer**, label tetap tampil secara **lengkap dengan nama dan badge warna**.
+- **Field Deskripsi Label Customer (`schema.prisma`, `labels.subroute.ts`, `CustomerLabels.tsx`)**:
+  - Menambahkan kolom `description` pada skema `Label` di Prisma dan membuat migrasi `20260830000000_add_label_description`.
+  - Mengupdate REST API (`GET`, `POST`, `PATCH`) dan in-memory fallback untuk mendukung field `description`.
+  - Menambahkan input textarea deskripsi pada form modal Tambah/Edit Label serta menampilkannya pada kartu daftar label di halaman [CustomerLabels.tsx](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/packages/admin-dashboard/src/pages/tenant/CustomerLabels.tsx).
+- **Pencatatan LLM Audit & AI Usage Telemetry untuk AI Copilot Bidan (`live-chat.service.ts`, `livechat.subroute.ts`)**:
+  - Mengintegrasikan `recordLlmUsage` pada fungsi `generateAiSuggestion` untuk merekam metrik prompt tokens, completion tokens, cached tokens, provider, model, latensi, dan estimasi biaya ke buffer `llm_audit_logs`.
+  - Mencatat aksi admin `AI_COPILOT_GENERATE_DRAFT` ke tabel audit log admin saat endpoint `suggest-reply` dipanggil.
+
+### Added & Improved — Live Chat UI & Ergonomics Overhaul: Tools Menu Popover, 100% Width Textfield, Safe Enter Multiline, Header Label Row & Toast Repositioning
+
+- **Konsolidasi Menu Tools (Gambar + AI Copilot Draft) (`LiveChatMonitor.tsx`)**:
+  - Menggabungkan tombol lampirkan gambar dan tombol AI Copilot menjadi 1 tombol action menu **Tools (`+`)** dengan popover dropdown elegan, menghemat ruang horizontal composer.
+  - Dilengkapi fitur click-outside listener untuk menutup menu otomatis saat mengklik area di luar popover.
+- **Maksimalisasi Panjang Textfield Composer 100% Width (`LiveChatMonitor.tsx`)**:
+  - Kolom textarea balasan admin diperluas mengisi 100% lebar horizontal yang tersedia (`flex-1 w-full min-w-0`), memaksimalkan kenyamanan mengetik di mobile maupun desktop.
+- **Safe Enter Key Multiline di Mobile & Web (`LiveChatMonitor.tsx`)**:
+  - Tombol `Enter` pada kolom chat murni menghasilkan baris baru (*new line*) di semua perangkat (mencegah pengiriman pesan tidak sengaja dari keyboard virtual HP).
+  - Pengiriman pesan dilakukan secara aman melalui tombol **Kirim** (atau shortcut desktop `Ctrl+Enter` / `Cmd+Enter`).
+- **Full-Width Label Row (100% Width) & Tombol `+` Compact (`LiveChatMonitor.tsx`)**:
+  - Memisahkan deretan badge label customer dari kolom profil/nama pasien menjadi baris mandiri selebar 100% dari kiri ke kanan.
+  - Mengubah tombol `+ Label` menjadi icon **`+`** yang compact.
+- **Eliminasi Teks Jam Duplikat pada Kartu Percakapan (`LiveChatMonitor.tsx`)**:
+  - Menghapus tampilan jam relatif berulang di sisi kiri footer kartu percakapan dan mempertahankan timestamp pesan terakhir di sisi kanan kartu.
+- **Reposisi Floating Toast Notifikasi ke Bagian Atas Layar (`UiFeedback.tsx`)**:
+  - Memindahkan posisi toast notifikasi sukses/gagal dari `bottom-6 right-6` ke `top-4 left-4 right-4 sm:left-auto sm:right-6 sm:top-6`, sehingga tidak lagi menutupi area textfield/composer dan tombol kirim.
+
 ### Fixed & Improved — Sanitizer Em-Dash (—) pada Output AI & Semua Pesan Keluar
 
 - **Sanitizer baru `sanitizeEmDash` (`src/utils/language-sanitizer.ts`)**: Menghilangkan karakter em-dash (—) yang sering bocor dari output LLM, sesuai pedoman anti-slop `design.md` §9 (EM-DASH BAN). Penggantian kontekstual:
