@@ -2552,49 +2552,54 @@ export const StaffToday: React.FC = () => {
       {/* ========================================================================= */}
       {/* RIGHT SIDEBAR SLIDE-OVER DRAWER (MENU GARIS TIGA) */}
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* RIGHT SIDEBAR SLIDE-OVER DRAWER (MENU GARIS TIGA - MAKS 50% LAYAR) */}
+      {/* ========================================================================= */}
       <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${
           showMenuDrawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
-        {/* Backdrop Overlay */}
+        {/* Backdrop Overlay (Sisa 50% layar kiri transparan/gelap mudah diklik/diswipe) */}
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
           onClick={() => setShowMenuDrawer(false)}
         />
 
-        {/* Drawer Body */}
+        {/* Drawer Body (Maks 50% layar mobile) */}
         <div
-          className={`relative w-[320px] sm:w-[380px] max-w-[85vw] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
+          className={`relative w-[50vw] sm:w-[280px] max-w-[50vw] sm:max-w-[280px] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
             showMenuDrawer ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
             {/* Drawer Header */}
-            <div className="p-4 bg-[#008069] text-white flex items-center justify-between shadow-xs">
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center text-white border border-white/30 flex-shrink-0">
-                  <UserCheck size={20} />
+            <div className="p-3 bg-[#008069] text-white flex items-center justify-between shadow-xs">
+              <div className="flex items-center space-x-2 min-w-0">
+                <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-white border border-white/30 flex-shrink-0">
+                  <UserCheck size={16} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-bold text-sm truncate">{staff?.name || 'Terapis'}</h3>
-                  <p className="text-[11px] text-white/80 truncate">Terapis Homecare Klinik</p>
+                  <h3 className="font-bold text-xs truncate">{staff?.name || 'Terapis'}</h3>
+                  <p className="text-[10px] text-white/80 truncate">Terapis Homecare</p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setShowMenuDrawer(false)}
-                className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95"
-                title="Tutup Menu"
+                className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95 flex-shrink-0 ml-1"
+                title="Tutup Menu (atau Usap ke Kanan)"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
             {/* Navigation Menu List */}
-            <div className="flex-1 overflow-y-auto p-3.5 space-y-2">
-              <div className="px-2 py-1 text-[11px] font-bold text-[#667781] uppercase tracking-wider">
-                Menu Jadwal & Treatment
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
+              <div className="px-1.5 py-0.5 text-[10px] font-bold text-[#667781] uppercase tracking-wider">
+                Menu Jadwal
               </div>
 
               {/* Menu 1: Treatment Hari Ini */}
@@ -2604,29 +2609,29 @@ export const StaffToday: React.FC = () => {
                   handleTabChange('today');
                   setShowMenuDrawer(false);
                 }}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
+                className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'today'
                     ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
                     : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
                 }`}
               >
-                <div className="flex items-center space-x-3 min-w-0">
+                <div className="flex items-center space-x-2 min-w-0">
                   <div
-                    className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
                       activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
                     }`}
                   >
-                    <Calendar size={18} />
+                    <Calendar size={14} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">Treatment Hari Ini</div>
-                    <div className="text-[11px] text-[#667781] font-normal truncate">
-                      Kunjungan & chat pasien aktif
+                    <div className="text-xs font-semibold truncate">Hari Ini</div>
+                    <div className="text-[10px] text-[#667781] font-normal truncate hidden sm:block">
+                      Pasien aktif
                     </div>
                   </div>
                 </div>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
                     activeTab === 'today' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
                   }`}
                 >
@@ -2641,29 +2646,29 @@ export const StaffToday: React.FC = () => {
                   handleTabChange('upcoming');
                   setShowMenuDrawer(false);
                 }}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
+                className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'upcoming'
                     ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
                     : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
                 }`}
               >
-                <div className="flex items-center space-x-3 min-w-0">
+                <div className="flex items-center space-x-2 min-w-0">
                   <div
-                    className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
                       activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
                     }`}
                   >
-                    <Clock size={18} />
+                    <Clock size={14} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">Jadwal Mendatang</div>
-                    <div className="text-[11px] text-[#667781] font-normal truncate">
-                      Reservasi hari esok & seterusnya
+                    <div className="text-xs font-semibold truncate">Mendatang</div>
+                    <div className="text-[10px] text-[#667781] font-normal truncate hidden sm:block">
+                      Hari esok+
                     </div>
                   </div>
                 </div>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
                     activeTab === 'upcoming' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
                   }`}
                 >
@@ -2678,29 +2683,29 @@ export const StaffToday: React.FC = () => {
                   handleTabChange('completed');
                   setShowMenuDrawer(false);
                 }}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all text-left ${
+                className={`w-full flex items-center justify-between p-2 rounded-xl transition-all text-left ${
                   activeTab === 'completed'
                     ? 'bg-[#d9fdd3] text-[#008069] font-bold shadow-xs border border-[#00a884]/30'
                     : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
                 }`}
               >
-                <div className="flex items-center space-x-3 min-w-0">
+                <div className="flex items-center space-x-2 min-w-0">
                   <div
-                    className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
                       activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] shadow-xs'
                     }`}
                   >
-                    <CheckCircle2 size={18} />
+                    <CheckCircle2 size={14} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">Treatment Selesai</div>
-                    <div className="text-[11px] text-[#667781] font-normal truncate">
-                      Riwayat yang sudah dilakukan
+                    <div className="text-xs font-semibold truncate">Selesai</div>
+                    <div className="text-[10px] text-[#667781] font-normal truncate hidden sm:block">
+                      Riwayat
                     </div>
                   </div>
                 </div>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 ${
                     activeTab === 'completed' ? 'bg-[#008069] text-white' : 'bg-white text-[#008069] border border-[#e9edef]'
                   }`}
                 >
@@ -2710,17 +2715,17 @@ export const StaffToday: React.FC = () => {
             </div>
 
             {/* Drawer Footer Actions */}
-            <div className="p-4 border-t border-[#e9edef] bg-[#f0f2f5] space-y-2">
+            <div className="p-3 border-t border-[#e9edef] bg-[#f0f2f5] space-y-1.5">
               <button
                 type="button"
                 onClick={() => {
                   setShowMenuDrawer(false);
                   setShowStaffProfileModal(true);
                 }}
-                className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-white hover:bg-[#e9edef] text-xs font-semibold text-[#111b21] border border-[#e9edef] shadow-xs transition-all active:scale-95"
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-white hover:bg-[#e9edef] text-[11px] font-semibold text-[#111b21] border border-[#e9edef] shadow-xs transition-all active:scale-95"
               >
-                <Info size={14} className="text-[#008069]" />
-                <span>Informasi Profil & Akun</span>
+                <Info size={13} className="text-[#008069] flex-shrink-0" />
+                <span className="truncate">Profil Akun</span>
               </button>
 
               <button
@@ -2737,15 +2742,15 @@ export const StaffToday: React.FC = () => {
                     logout();
                   }
                 }}
-                className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 text-xs font-semibold text-rose-600 border border-rose-200 shadow-xs transition-all active:scale-95"
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-[11px] font-semibold text-rose-600 border border-rose-200 shadow-xs transition-all active:scale-95"
               >
-                <LogOut size={14} />
-                <span>Keluar dari Akun</span>
+                <LogOut size={13} className="flex-shrink-0" />
+                <span className="truncate">Keluar</span>
               </button>
 
               {/* Version & Build Timestamp */}
-              <div className="pt-2 text-center text-[10px] text-[#8696a0]">
-                Kala Staff Portal {APP_VERSION} ({BUILD_TIME})
+              <div className="pt-1 text-center text-[9px] text-[#8696a0] truncate">
+                Staff Portal {APP_VERSION}
               </div>
             </div>
           </div>

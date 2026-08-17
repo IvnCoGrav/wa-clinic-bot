@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Native DOM Interception for Admin Edge Swipe & 50vw Compact Therapist Drawer with Slide-Right Dismiss (v1.12.9)
+
+- **Intersepsi Gestur Usap Tepi Admin via Native DOM Event Listener (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Mengganti React synthetic `onTouch...` dengan native `window` event listener (`{ passive: false }` pada `touchmove`).
+  - Memanggil `e.preventDefault()` saat usapan horizontal dimulai dari sisi kiri (`x <= 50` dan `deltaX > 10`), membatalkan secara mutlak aksi *history back* bawaan OS/browser mobile dan membuka sidebar navigasi dengan mulus.
+  - Menghapus listener touch global dari root layout sehingga aktivitas scrolling vertikal pada tabel dan dashboard 100% lancar tanpa intervensi.
+- **Optimasi Sidebar Kanan Portal Terapis Maks 50% Layar & Slide-Right to Close (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Membatasi lebar menu drawer terapis menjadi maksimal **50vw** (`w-[50vw] sm:w-[280px] max-w-[50vw] sm:max-w-[280px]`), menyisakan 50% layar sebelah kiri tetap terlihat terang/mudah disentuh untuk keluar.
+  - Memasang gesture **slide ke kanan (usap kanan)** untuk menutup sidebar secara instan dari drawer body maupun backdrop overlay.
+  - Menyesuaikan tata letak menu navigasi, tombol footer, dan avatar profil agar pas, proporsional, dan elegan pada tampilan 50vw.
+
 ### Fixed & Improved — Prevent Browser Back on Admin Edge Swipe & Restored Clean 1-Page per Tab for Therapist (v1.12.8)
 
 - **Eliminasi Bentrok Browser Back pada Usap Tepi Admin (`packages/admin-dashboard/src/index.css`, `packages/admin-dashboard/src/components/common/Layout.tsx`)**:
