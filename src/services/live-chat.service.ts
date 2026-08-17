@@ -283,6 +283,11 @@ export class LiveChatService {
       };
     }
 
+    // Tandai pesan terbaca (sendSeen / centang biru) saat admin mengirim balasan
+    if (typeof gateway.markAsRead === 'function') {
+      await gateway.markAsRead(customer.phone).catch(() => {});
+    }
+
     // Skema Retry Lokal (Maksimal 2 Percobaan)
     let attempts = 0;
     const maxAttempts = 2;
