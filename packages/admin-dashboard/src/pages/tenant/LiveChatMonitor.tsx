@@ -60,6 +60,7 @@ interface CustomerLabelData {
   id: string;
   name: string;
   color: string;
+  description?: string | null;
 }
 
 interface LiveChatItem {
@@ -121,6 +122,26 @@ export const LiveChatMonitor: React.FC = () => {
   const [allLabels, setAllLabels] = useState<CustomerLabelData[]>([]);
   const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
   const [togglingLabelId, setTogglingLabelId] = useState<string | null>(null);
+  const labelPopoverRef = useRef<HTMLDivElement>(null);
+
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
+  const toolsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close label popover and tools menu on outside click
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      if (labelPopoverRef.current && !labelPopoverRef.current.contains(e.target as Node)) {
+        setLabelPopoverOpen(false);
+      }
+      if (toolsMenuRef.current && !toolsMenuRef.current.contains(e.target as Node)) {
+        setToolsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+    };
+  }, []);
 
   const resetTextareaHeight = () => {
     if (textareaRef.current) {
@@ -132,7 +153,7 @@ export const LiveChatMonitor: React.FC = () => {
     setReplyText(e.target.value);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      const nextHeight = Math.min(textareaRef.current.scrollHeight, 130);
+      const nextHeight = Math.min(textareaRef.current.scrollHeight, 220);
       textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
     }
   };
@@ -184,7 +205,7 @@ export const LiveChatMonitor: React.FC = () => {
       const isAssigned = currentLabels.some((l) => l.id === label.id);
       const action = isAssigned ? 'remove' : 'add';
 
-      // Optimistic update
+      // Optimistic update for chats list
       const nextLabels = isAssigned
         ? currentLabels.filter((l) => l.id !== label.id)
         : [...currentLabels, label];
@@ -195,6 +216,16 @@ export const LiveChatMonitor: React.FC = () => {
         );
         chatsRef.current = updated;
         return updated;
+      });
+
+      // Optimistic update for customer detail modal if open
+      setCustomerDetailData((prev: any) => {
+        if (!prev) return prev;
+        if (prev.id !== customerId && prev.phone !== targetChat?.customerPhone) return prev;
+        return {
+          ...prev,
+          labels: nextLabels.map((l) => ({ label: l })),
+        };
       });
 
       await apiRequest(`/api/admin/customers/${customerId}/labels`, {
@@ -302,6 +333,20 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+
+  const scrollToBottom = (smooth = false) => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
+      });
+    }
+  };
+
+  useEffect(() => {
+    // Auto scroll down to latest message when messages change or new chat opened
+    scrollToBottom(false);
+  }, [messages, selectedId]);
 
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
@@ -477,11 +522,13 @@ export const LiveChatMonitor: React.FC = () => {
       });
       if (res?.data?.draftText) {
         setReplyText(res.data.draftText);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-          const nextHeight = Math.min(textareaRef.current.scrollHeight, 130);
-          textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
-        }
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            const nextHeight = Math.min(textareaRef.current.scrollHeight, 220);
+            textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
+          }
+        }, 50);
         toast('Draf jawaban AI berhasil dibuat! Anda dapat mengedit sebelum mengirim.', 'success');
       } else {
         toast('Gagal mendapatkan saran balasan AI.', 'error');
@@ -496,31 +543,30 @@ export const LiveChatMonitor: React.FC = () => {
   const handleOpenCustomerDetail = async (chat: LiveChatItem) => {
     setCustomerDetailModalOpen(true);
     setCustomerDetailLoading(true);
+    // Instant preliminary data so modal never opens empty
+    const initialLabels = (chat.customerLabels || []).map((l) => ({ label: l }));
+    setCustomerDetailData({
+      id: chat.customerId,
+      name: chat.customerName,
+      phone: chat.customerPhone,
+      profile_picture_url: chat.customerProfilePictureUrl,
+      labels: initialLabels,
+      purchaseCount: chat.purchaseCount || 0,
+      ltv: chat.ltv || 0,
+    });
     try {
       const res = await apiRequest(`/api/admin/customers/${chat.customerId}`);
       if (res?.data) {
-        setCustomerDetailData(res.data);
-      } else {
+        const fetchedLabels = (res.data.labels && res.data.labels.length > 0)
+          ? res.data.labels
+          : initialLabels;
         setCustomerDetailData({
-          id: chat.customerId,
-          name: chat.customerName,
-          phone: chat.customerPhone,
-          profile_picture_url: chat.customerProfilePictureUrl,
-          labels: (chat.customerLabels || []).map((l) => ({ label: l })),
-          purchaseCount: chat.purchaseCount || 0,
-          ltv: chat.ltv || 0,
+          ...res.data,
+          labels: fetchedLabels,
         });
       }
     } catch (err: any) {
-      setCustomerDetailData({
-        id: chat.customerId,
-        name: chat.customerName,
-        phone: chat.customerPhone,
-        profile_picture_url: chat.customerProfilePictureUrl,
-        labels: (chat.customerLabels || []).map((l) => ({ label: l })),
-        purchaseCount: chat.purchaseCount || 0,
-        ltv: chat.ltv || 0,
-      });
+      // Preliminary data already active
     } finally {
       setCustomerDetailLoading(false);
     }
@@ -654,133 +700,124 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col min-h-0 space-y-1.5">
       {/* Top Header */}
-      <div className="flex justify-between items-center gap-3">
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
-            <MessageSquare className="text-[#008069]" size={20} />
+      <div className="flex justify-between items-center bg-white border border-[#e9edef] rounded-xl px-3 py-1.5 shadow-xs shrink-0">
+        <div className="flex items-center space-x-2.5">
+          <h1 className="text-sm sm:text-base font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
+            <MessageSquare className="text-[#008069]" size={18} />
             <span>Live Chat Monitor</span>
           </h1>
-          <p className="text-[11px] sm:text-xs text-[#667781] mt-0.5">
-            Pantau percakapan dan balas langsung secara real-time.
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          {/* Sync WAHA Icon Button */}
-          <button
-            onClick={() => handleSyncHistory(syncNextOffset ?? 0)}
-            disabled={syncingHistory}
-            className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] shadow-xs transition flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={syncNextOffset !== null ? `Lanjutkan Sync WAHA (${syncNextOffset})` : 'Sinkronisasi riwayat chat WAHA'}
-          >
-            <RefreshCw size={14} className={syncingHistory ? 'animate-spin text-[#008069]' : 'text-[#54656f]'} />
-            <span className="hidden sm:inline text-xs font-semibold">
-              {syncingHistory ? 'Sync...' : syncNextOffset !== null ? `Sync (${syncNextOffset})` : 'Sync'}
-            </span>
-          </button>
-
           {/* Real-time Status Icon Indicator */}
           <div
-            className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 bg-white border border-[#e9edef] rounded-xl shadow-xs"
+            className="flex items-center space-x-1 px-2 py-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-full text-[10px] font-semibold text-[#54656f]"
             title={sseConnected ? 'Status: Real-time Terhubung (SSE Aktif)' : 'Status: Menyambungkan kembali ke server...'}
           >
-            {sseConnected ? (
-              <>
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <Wifi size={13} className="text-emerald-600" />
-              </>
-            ) : (
-              <>
-                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-                <WifiOff size={13} className="text-amber-600" />
-              </>
-            )}
+            <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+            <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
         </div>
+
+        {/* Sync WAHA Button */}
+        <button
+          onClick={() => handleSyncHistory(syncNextOffset ?? 0)}
+          disabled={syncingHistory}
+          className="px-2.5 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-bold shadow-2xs transition flex items-center space-x-1 disabled:opacity-50"
+          title={syncNextOffset !== null ? `Lanjutkan Sync WAHA (${syncNextOffset})` : 'Sinkronisasi riwayat chat WAHA'}
+        >
+          <RefreshCw size={12} className={syncingHistory ? 'animate-spin' : ''} />
+          <span>{syncingHistory ? 'Sync...' : syncNextOffset !== null ? `Sync (${syncNextOffset})` : 'Sync WAHA'}</span>
+        </button>
       </div>
 
       {syncProgress && (
-        <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium flex items-center space-x-2">
-          <RefreshCw size={13} className="text-sky-600 animate-spin" />
+        <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium flex items-center space-x-2 shrink-0">
+          <RefreshCw size={12} className="text-sky-600 animate-spin" />
           <span>{syncProgress}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center space-x-2">
-          <AlertTriangle size={14} className="text-rose-600" />
+        <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium flex items-center space-x-2 shrink-0">
+          <AlertTriangle size={13} className="text-rose-600" />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="flex justify-center items-center py-20">
+        <div className="flex-1 flex justify-center items-center py-20">
           <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Conversations List */}
-          <div className={`${mobileView === 'chat' ? 'hidden lg:block' : 'block'} lg:col-span-5 space-y-2.5`}>
-            <div className="flex justify-between items-center gap-1.5">
-              <h3 className="text-[11px] font-bold text-[#667781] uppercase tracking-wider block">
-                Daftar Percakapan
-              </h3>
-              <select
-                value={labelFilter}
-                onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
-                className="px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-xs max-w-[140px] sm:max-w-none"
-              >
-                <option value="all">Semua Label</option>
-                <option value="human_request">Human Request</option>
-                <option value="medical_concern">Medical Emergency</option>
-                <option value="unresolved_faq">Unresolved FAQ</option>
-              </select>
-            </div>
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 overflow-hidden">
+          {/* Section 1: Conversations List */}
+          <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-2xl p-2.5 shadow-xs overflow-hidden min-h-0`}>
+            {/* Header Toolbar Daftar Percakapan: Source Filter & Label Dropdown */}
+            <div className="space-y-1.5 pb-2 border-b border-[#f0f2f5] shrink-0">
+              <div className="flex justify-between items-center gap-1.5">
+                <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">
+                  Percakapan ({filteredChats.length})
+                </span>
 
-            {/* Filter sumber percakapan: Default WhatsApp Asli vs Sandbox */}
-            <div className="flex items-center space-x-1 p-0.5 bg-white border border-[#e9edef] rounded-xl w-fit shadow-xs">
-              {(
-                [
-                  { value: 'real', label: 'WhatsApp Asli' },
-                  { value: 'all', label: 'Semua' },
-                  { value: 'sandbox', label: 'Sandbox' },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setSourceFilter(opt.value)}
-                  className={`px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold transition flex items-center space-x-1 cursor-pointer ${
-                    sourceFilter === opt.value
-                      ? opt.value === 'sandbox'
-                        ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-xs'
-                        : opt.value === 'real'
-                          ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-xs'
-                          : 'bg-[#111b21] text-white shadow-xs'
-                      : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
-                  }`}
+                {/* Filter sumber percakapan: WhatsApp Asli vs Sandbox (Khusus Daftar Chat) */}
+                <div className="flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg">
+                  {(
+                    [
+                      { value: 'real', label: 'WhatsApp Asli' },
+                      { value: 'all', label: 'Semua' },
+                      { value: 'sandbox', label: 'Sandbox' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSourceFilter(opt.value)}
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition flex items-center space-x-1 cursor-pointer ${
+                        sourceFilter === opt.value
+                          ? opt.value === 'sandbox'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs'
+                            : opt.value === 'real'
+                              ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
+                              : 'bg-[#111b21] text-white shadow-2xs'
+                          : 'text-[#667781] hover:text-[#111b21]'
+                      }`}
+                    >
+                      {opt.value === 'sandbox' && <FlaskConical size={10} />}
+                      {opt.value === 'real' && <CheckCircle size={10} />}
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Label Filter Dropdown */}
+              <div className="flex items-center space-x-1.5">
+                <select
+                  value={labelFilter}
+                  onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
+                  className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs"
                 >
-                  {opt.value === 'sandbox' && <FlaskConical size={10} />}
-                  {opt.value === 'real' && <CheckCircle size={10} />}
-                  <span>{opt.label}</span>
-                </button>
-              ))}
+                  <option value="all">Semua Label Pasien</option>
+                  <option value="human_request">Human Request</option>
+                  <option value="medical_concern">Medical Emergency</option>
+                  <option value="unresolved_faq">Unresolved FAQ</option>
+                </select>
+              </div>
             </div>
 
             {filteredChats.length === 0 ? (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-[#667781] text-xs shadow-xs">
-                <CheckCircle className="mx-auto text-[#008069] mb-2" size={28} />
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-[#667781] text-xs">
+                <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
                 <p className="font-bold text-[#111b21]">
                   {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
                 </p>
-                <p className="text-[#667781] text-[11px] mt-0.5">
+                <p className="text-[#667781] text-[10px] mt-0.5">
                   {chats.length === 0
                     ? 'Percakapan baru akan muncul secara real-time.'
-                    : 'Ganti filter sumber atau label untuk melihat percakapan lainnya.'}
+                    : 'Ganti filter sumber atau label untuk melihat lainnya.'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[calc(100dvh-230px)] lg:max-h-[620px] overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 mt-1.5">
                 {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
@@ -793,7 +830,7 @@ export const LiveChatMonitor: React.FC = () => {
                     <div
                       key={chat.conversationId}
                       onClick={() => handleSelect(chat.conversationId)}
-                      className={`bg-white rounded-xl p-3 border transition cursor-pointer text-left flex flex-col justify-between space-y-2 shadow-xs ${
+                      className={`bg-white rounded-xl p-2 border transition cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs ${
                         isSelected
                           ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
@@ -803,29 +840,21 @@ export const LiveChatMonitor: React.FC = () => {
                     >
                       {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon */}
                       <div className="flex justify-between items-start gap-2">
-                        <div className="flex items-start space-x-2.5 min-w-0">
+                        <div className="flex items-start space-x-2 min-w-0">
                           <CustomerAvatar
                             src={chat.customerProfilePictureUrl}
                             name={chatName}
                             phone={chat.customerPhone}
                             size="sm"
                           />
-                          <div className="space-y-1 min-w-0">
+                          <div className="space-y-0.5 min-w-0">
                             <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 truncate">
                               <span className="truncate">{chatName}</span>
                               <span className="text-[10px] text-[#667781] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
                             </h4>
 
-                            {/* GRUP 1: Label Status & Segmentasi (Ditaruh Tepat di Bawah Nama) */}
+                            {/* GRUP 1: Label Pasien & Tag Segmentasi */}
                             <div className="flex flex-wrap items-center gap-1">
-                              {chat.isHumanHandling && (
-                                <span
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-600 text-white shadow-2xs"
-                                  title="Customer sedang di-hold"
-                                >
-                                  Hold
-                                </span>
-                              )}
                               {chat.trafficSource === 'legacy' && (
                                 <span
                                   className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-600 text-white shadow-2xs"
@@ -834,14 +863,6 @@ export const LiveChatMonitor: React.FC = () => {
                                   Legacy
                                 </span>
                               )}
-                              {!chat.purchaseCount || chat.purchaseCount === 0 ? (
-                                <span
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-600 text-white shadow-2xs"
-                                  title="Pasien Baru"
-                                >
-                                  New Customer
-                                </span>
-                              ) : null}
                               {isMedical && (
                                 <span
                                   className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
@@ -856,7 +877,7 @@ export const LiveChatMonitor: React.FC = () => {
                                   key={lbl.id}
                                   className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs"
                                   style={{ backgroundColor: lbl.color || '#008069' }}
-                                  title={`Label: ${lbl.name}`}
+                                  title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
                                 >
                                   {lbl.name}
                                 </span>
@@ -903,17 +924,9 @@ export const LiveChatMonitor: React.FC = () => {
                         "{preview || 'Tidak ada pesan'}"
                       </p>
 
-                      {/* GRUP 2: Metrik, Order, Traffic, & Jam (Di Footer Bar Samping Jam) */}
+                      {/* GRUP 2: Metrik, Order, Traffic, & Jam (Di Footer Bar) */}
                       <div className="flex justify-between items-center text-[10px] text-[#667781] pt-1.5 border-t border-[#e9edef]">
                         <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                          <span className="flex items-center space-x-1" title={chat.isHumanHandling ? 'Ditangani admin' : 'Ditangani bot'}>
-                            <Clock size={10} />
-                            <span>
-                              {chat.isHumanHandling
-                                ? getElapsedTime(chat.humanHandlingSince) || 'Admin'
-                                : 'Bot'}
-                            </span>
-                          </span>
 
                           {/* MQL Badge */}
                           {chat.isMql && (
@@ -996,23 +1009,23 @@ export const LiveChatMonitor: React.FC = () => {
             )}
           </div>
 
-          {/* Right Panel - Chat Inspector */}
-          <div className={`${mobileView === 'list' ? 'hidden lg:block' : 'block'} lg:col-span-7`}>
+          {/* Section 2: Right Panel - Live Chat Messages */}
+          <div className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}>
             {selectedChat ? (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-3 sm:p-5 h-[calc(100dvh-135px)] sm:h-[calc(100dvh-160px)] lg:h-[650px] flex flex-col justify-between shadow-xs">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-2.5 sm:p-3 h-full flex flex-col justify-between shadow-xs overflow-hidden min-h-0">
                 {/* Header Info: Clickable Card to view full customer detail modal */}
-                <div className="border-b border-[#e9edef] pb-3 space-y-2">
+                <div className="border-b border-[#e9edef] pb-2 space-y-1.5 shrink-0">
                   {selectedChat.isSandboxTest && (
-                    <div className="flex items-center space-x-2 px-3 py-1 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold uppercase tracking-wider">
-                      <FlaskConical size={12} />
+                    <div className="flex items-center space-x-2 px-2.5 py-0.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
+                      <FlaskConical size={11} />
                       <span>QA TEST — chat simulasi</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-start gap-2">
+                  <div className="flex justify-between items-center gap-2">
                     {/* Clickable Customer Header Box */}
                     <div
                       onClick={() => handleOpenCustomerDetail(selectedChat)}
-                      className="flex items-start space-x-2.5 p-1.5 -m-1.5 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0"
+                      className="flex items-center space-x-2 p-1 -m-1 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0"
                       title="Klik untuk melihat detail lengkap profil customer"
                     >
                       <button
@@ -1020,53 +1033,48 @@ export const LiveChatMonitor: React.FC = () => {
                           e.stopPropagation();
                           setMobileView('list');
                         }}
-                        className="lg:hidden p-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0 active:scale-95"
+                        className="lg:hidden p-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0 active:scale-95"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"
                       >
-                        <ChevronLeft size={18} />
+                        <ChevronLeft size={16} />
                       </button>
                       <CustomerAvatar
                         src={selectedChat.customerProfilePictureUrl}
                         name={selectedChat.customerName}
                         phone={selectedChat.customerPhone}
-                        size="md"
+                        size="sm"
                       />
                       <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-1.5 group-hover:text-[#008069] transition truncate">
+                        <h3 className="text-xs sm:text-sm font-bold text-[#111b21] flex items-center space-x-1 group-hover:text-[#008069] transition truncate">
                           <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
-                          <ExternalLink size={12} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
+                          <ExternalLink size={11} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
                         </h3>
-                        <p className="text-xs text-[#667781] font-mono mt-0.5">
-                          {selectedChat.customerPhone || 'Unknown'}
-                        </p>
+                        <div className="flex items-center space-x-1.5 mt-0.5 flex-wrap gap-y-1">
+                          <p className="text-[11px] text-[#667781] font-mono">
+                            {selectedChat.customerPhone || 'Unknown'}
+                          </p>
 
-                        {/* Customer Labels Badge & Interactive Picker */}
-                        <div
-                          className="flex flex-wrap items-center gap-1.5 mt-1.5 relative"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                          {/* Active Label Colored Dots */}
                           {(selectedChat.customerLabels || []).map((lbl) => (
                             <span
                               key={lbl.id}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-2xs"
+                              className="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-2xs cursor-help ring-1 ring-white"
                               style={{ backgroundColor: lbl.color || '#008069' }}
-                            >
-                              <Tag size={9} />
-                              <span>{lbl.name}</span>
-                            </span>
+                              title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
+                            />
                           ))}
 
-                          {/* Add / Manage Label Button */}
-                          <div className="relative">
+                          {/* Add / Manage Label Button (+) right next to phone & dots */}
+                          <div className="relative inline-flex" ref={labelPopoverRef} onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] border border-[#d1d7db] transition shadow-2xs active:scale-95"
-                              title="Kelola Label Pasien"
+                              className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-md text-[10px] font-bold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] hover:text-[#008069] border border-[#d1d7db] transition shadow-2xs active:scale-95 ml-0.5"
+                              title="Tambah / Kelola Label Pasien"
+                              aria-label="Tambah Label"
                             >
                               <Plus size={10} />
-                              <span>Label</span>
                             </button>
 
                             {/* Label Picker Popover */}
@@ -1152,7 +1160,7 @@ export const LiveChatMonitor: React.FC = () => {
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
                   ref={chatContainerRef} 
-                  className="flex-1 overflow-y-auto p-4 space-y-3 my-3 rounded-xl border border-[#e9edef] bg-[#efeae2]"
+                  className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 space-y-2 my-1.5 rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
                     backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
                     backgroundSize: '16px 16px',
@@ -1173,21 +1181,21 @@ export const LiveChatMonitor: React.FC = () => {
 
                       return (
                         <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
-                          <div className={`max-w-[82%] sm:max-w-[70%] rounded-lg px-3 py-2 text-xs leading-relaxed shadow-xs ${
+                          <div className={`max-w-[82%] sm:max-w-[70%] rounded-lg px-3 py-1.5 text-xs leading-relaxed shadow-2xs ${
                             isCustomer
                               ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
                               : isAdmin
                                 ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
                                 : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                           }`}>
-                            <span className={`block text-[10px] font-bold mb-1 flex items-center space-x-1 ${
+                            <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
                               isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
                             }`}>
                               {!isCustomer && !isAdmin && <Bot size={10} />}
                               <span>{senderLabel(msg)}</span>
                             </span>
                             {msg.media && (
-                              <div className="mb-2">
+                              <div className="mb-1.5">
                                 <MediaImage
                                   src={msg.media.url || msg.media.hdUrl}
                                   downloadSrc={msg.media.hdUrl}
@@ -1199,7 +1207,7 @@ export const LiveChatMonitor: React.FC = () => {
                             {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && (
                               <p className={`font-sans whitespace-pre-wrap ${isRevoked ? 'italic text-[#667781]' : ''}`}>{msg.content}</p>
                             )}
-                            <div className="flex items-center justify-end space-x-1.5 mt-1 text-right select-none text-[10px] text-[#667781]">
+                            <div className="flex items-center justify-end space-x-1.5 mt-0.5 text-right select-none text-[10px] text-[#667781]">
                               <span>
                                 {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.') : ''}
                               </span>
@@ -1227,7 +1235,7 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
 
                 {/* Reply Composer */}
-                <div className="border-t border-[#e9edef] pt-3">
+                <div className="border-t border-[#e9edef] pt-1.5 shrink-0">
                   {selectedChat.isSandboxTest ? (
                     <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
                       <FlaskConical size={13} />
@@ -1253,7 +1261,7 @@ export const LiveChatMonitor: React.FC = () => {
                       </button>
                     </div>
                   )}
-                  <div className="flex items-end space-x-2 bg-[#f0f2f5] p-2 rounded-xl border border-[#e9edef]">
+                  <div className="flex items-end space-x-2 bg-[#f0f2f5] p-2 rounded-xl border border-[#e9edef] w-full">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -1261,44 +1269,86 @@ export const LiveChatMonitor: React.FC = () => {
                       onChange={handlePickImage}
                       className="hidden"
                     />
-                    {/* Attachment Button */}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={sending}
-                      className="p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 text-[#54656f] hover:text-[#008069] rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs shrink-0 active:scale-95"
-                      title="Lampirkan gambar"
-                    >
-                      <ImagePlus size={18} />
-                    </button>
 
-                    {/* AI Copilot Suggestion Button (Sparkles) */}
-                    <button
-                      type="button"
-                      onClick={handleGenerateAiDraft}
-                      disabled={generatingDraft || sending}
-                      className="p-2.5 bg-white border border-[#d1d7db] hover:border-amber-400 disabled:opacity-40 text-amber-500 hover:text-amber-600 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs shrink-0 active:scale-95 group"
-                      title="AI Copilot: Dapatkan draf saran balasan otomatis untuk Bidan"
-                    >
-                      {generatingDraft ? (
-                        <Loader size={18} className="animate-spin text-amber-500" />
-                      ) : (
-                        <Sparkles size={18} className="text-amber-500 group-hover:scale-110 transition-transform" />
+                    {/* Tools Button with Dropdown Menu (AI Copilot + Lampirkan Gambar) */}
+                    <div className="relative shrink-0" ref={toolsMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setToolsMenuOpen(!toolsMenuOpen)}
+                        disabled={sending || generatingDraft}
+                        className={`p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 ${
+                          toolsMenuOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
+                        }`}
+                        title="Fitur & Lampiran (AI Copilot / Gambar)"
+                        aria-label="Menu Tools & Lampiran"
+                      >
+                        {generatingDraft ? (
+                          <Loader size={18} className="animate-spin text-amber-500" />
+                        ) : (
+                          <Plus size={18} className={`transition-transform duration-200 ${toolsMenuOpen ? 'rotate-45 text-[#008069]' : ''}`} />
+                        )}
+                      </button>
+
+                      {/* Tools Popover Menu */}
+                      {toolsMenuOpen && (
+                        <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 animate-fadeIn space-y-1">
+                          {/* Option 1: AI Copilot Draft */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              handleGenerateAiDraft();
+                            }}
+                            disabled={generatingDraft || sending}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <Sparkles size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate flex items-center gap-1">
+                                <span>AI Copilot Draft</span>
+                                <span className="text-[9px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">AI</span>
+                              </p>
+                              <p className="text-[10px] text-[#667781] truncate">Saran balasan otomatis bidan</p>
+                            </div>
+                          </button>
+
+                          {/* Option 2: Image Attachment */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              fileInputRef.current?.click();
+                            }}
+                            disabled={sending}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <ImagePlus size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">Lampirkan Gambar</p>
+                              <p className="text-[10px] text-[#667781] truncate">Kirim foto/pricelist (maks 8MB)</p>
+                            </div>
+                          </button>
+                        </div>
                       )}
-                    </button>
+                    </div>
 
                     <textarea
                       ref={textareaRef}
                       value={replyText}
                       onChange={handleReplyTextChange}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                           e.preventDefault();
                           handleSendReply();
                         }
                       }}
                       rows={1}
-                      placeholder="Tulis balasan... (Enter kirim, Shift+Enter baris baru)"
-                      className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[130px] leading-relaxed"
+                      placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
+                      className="flex-1 w-full min-w-0 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[220px] leading-relaxed"
                       style={{ fontSize: '16px' }}
                     />
                     <button
@@ -1316,7 +1366,7 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-12 h-[650px] flex flex-col justify-center items-center text-center text-[#667781] text-xs shadow-xs">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-8 h-full flex flex-col justify-center items-center text-center text-[#667781] text-xs shadow-xs">
                 <MessageSquare size={44} className="mb-3 text-[#8696a0]" />
                 <p className="font-bold text-[#111b21] text-sm">Pilih Percakapan</p>
                 <p className="text-[#667781] max-w-sm mt-1">
@@ -1411,6 +1461,7 @@ export const LiveChatMonitor: React.FC = () => {
                               key={lbl.id}
                               className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold text-white shadow-2xs"
                               style={{ backgroundColor: lbl.color || '#008069' }}
+                              title={lbl.description ? `${lbl.name}: ${lbl.description}` : lbl.name}
                             >
                               {lbl.name}
                             </span>

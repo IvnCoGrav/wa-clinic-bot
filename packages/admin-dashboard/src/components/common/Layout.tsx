@@ -493,9 +493,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 p-4 sm:p-5 md:p-7 space-y-6 overflow-y-auto bg-[#f0f2f5]">
-          {children}
-        </main>
+        {(() => {
+          const isLiveChat = location.pathname.includes('/live-chat');
+          return (
+            <main
+              className={`flex-1 ${
+                isLiveChat
+                  ? 'p-2 sm:p-2.5 overflow-hidden flex flex-col min-h-0'
+                  : 'p-4 sm:p-5 md:p-7 space-y-6 overflow-y-auto'
+              } bg-[#f0f2f5]`}
+            >
+              {children}
+            </main>
+          );
+        })()}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ interface LabelItem {
   id: string;
   name: string;
   color: string;
+  description?: string | null;
   created_at: string;
   updated_at: string;
   _count?: { customers: number };
@@ -33,6 +34,7 @@ export const CustomerLabels: React.FC = () => {
   const [editingLabel, setEditingLabel] = useState<LabelItem | null>(null);
   const [name, setName] = useState('');
   const [color, setColor] = useState('#008069');
+  const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export const CustomerLabels: React.FC = () => {
     setEditingLabel(null);
     setName('');
     setColor('#008069');
+    setDescription('');
     setModalOpen(true);
   };
 
@@ -66,6 +69,7 @@ export const CustomerLabels: React.FC = () => {
     setEditingLabel(label);
     setName(label.name);
     setColor(label.color || '#008069');
+    setDescription(label.description || '');
     setModalOpen(true);
   };
 
@@ -82,7 +86,11 @@ export const CustomerLabels: React.FC = () => {
         // Update
         const res = await apiRequest(`/api/admin/labels/${editingLabel.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: name.trim(), color: color.trim() }),
+          body: JSON.stringify({
+            name: name.trim(),
+            color: color.trim(),
+            description: description.trim() || null,
+          }),
         });
         if (res?.success) {
           toast(`Label "${name}" berhasil diperbarui.`, 'success');
@@ -95,7 +103,11 @@ export const CustomerLabels: React.FC = () => {
         // Create
         const res = await apiRequest('/api/admin/labels', {
           method: 'POST',
-          body: JSON.stringify({ name: name.trim(), color: color.trim() }),
+          body: JSON.stringify({
+            name: name.trim(),
+            color: color.trim(),
+            description: description.trim() || null,
+          }),
         });
         if (res?.success) {
           toast(`Label "${name}" berhasil dibuat.`, 'success');
@@ -230,22 +242,27 @@ export const CustomerLabels: React.FC = () => {
               className="bg-white border border-[#e9edef] hover:border-[#c2e7e0] rounded-2xl p-4 transition shadow-xs flex flex-col justify-between space-y-3"
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-2.5">
+                <div className="flex items-center space-x-2.5 min-w-0">
                   <span
                     className="w-4 h-4 rounded-full border border-black/10 shrink-0"
                     style={{ backgroundColor: label.color }}
                   />
-                  <div>
-                    <h3 className="text-sm font-bold text-[#111b21]">{label.name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-[#111b21] truncate">{label.name}</h3>
                     <span
                       className="inline-block mt-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-2xs"
                       style={{ backgroundColor: label.color }}
                     >
                       {label.name}
                     </span>
+                    {label.description && (
+                      <p className="text-[11px] text-[#667781] mt-1.5 line-clamp-2 leading-relaxed">
+                        {label.description}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center space-x-1">
+                <div className="flex items-center space-x-1 shrink-0 ml-2">
                   <button
                     onClick={() => handleOpenEdit(label)}
                     className="p-1.5 rounded-lg text-[#667781] hover:text-[#008069] hover:bg-[#f0f2f5] transition"
@@ -305,6 +322,19 @@ export const CustomerLabels: React.FC = () => {
                   className="w-full px-3 py-2 border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   autoFocus
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#111b21] mb-1">
+                  Deskripsi Label <span className="text-[#8696a0] font-normal">(Opsional)</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Keterangan singkat fungsi / arti label..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-[#d1d7db] rounded-xl text-xs focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-none"
                 />
               </div>
 

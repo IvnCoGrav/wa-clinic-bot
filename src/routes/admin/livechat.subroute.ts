@@ -334,6 +334,27 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
+        // Auto cleanup Hold label and flag in database
+        try {
+          const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
+          if (customer) {
+            await prisma.customer.update({
+              where: { id: customer.id },
+              data: { is_hold_labeled: false },
+            });
+            const holdLabel = await prisma.label.findFirst({
+              where: { tenant_id: DEFAULT_TENANT_ID, name: { equals: 'Hold', mode: 'insensitive' } },
+            });
+            if (holdLabel) {
+              await prisma.customerLabel.deleteMany({
+                where: { customer_id: customer.id, label_id: holdLabel.id },
+              });
+            }
+          }
+        } catch (err: any) {
+          console.warn(`[LABEL ERROR] Failed to auto-clear hold label during manual admin release:`, err.message);
+        }
+
         const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
         if (enableHoldLabel) {
           try {
@@ -343,7 +364,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
               await wahaClient.removeLabel(`${customer.phone}@c.us`, 'hold');
             }
           } catch (err: any) {
-            console.warn(`[LABEL ERROR] Failed to auto-remove hold label during manual admin release:`, err.message);
+            console.warn(`[LABEL ERROR] Failed to auto-remove WAHA hold label during manual admin release:`, err.message);
           }
         }
 
@@ -429,6 +450,17 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
       try {
         const draftText = await liveChatService.generateAiSuggestion(id, DEFAULT_TENANT_ID);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'admin',
+          adminIdentity: (request as any).adminIdentity || 'Bidan / CS',
+          action: 'AI_COPILOT_GENERATE_DRAFT',
+          targetId: id,
+          payload: { conversationId: id },
+          ipAddress: request.ip,
+          tenantId: DEFAULT_TENANT_ID,
+        });
+
         return reply.status(200).send({
           success: true,
           data: { draftText },

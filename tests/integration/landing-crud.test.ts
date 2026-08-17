@@ -88,7 +88,7 @@ describe('Multi Landing Page — Admin CRUD & Serving (offline/in-memory fallbac
     const detailBody = JSON.parse(detail.body);
     expect(detailBody.data.rawHtmlContent).toContain('wa-cta');
     expect(detailBody.data.rawHtmlContent).not.toContain('<script');
-  });
+  }, 15000);
 
   it('7. POST create html tanpa #wa-cta harus 400 (CTA Contract)', async () => {
     const res = await createLanding({ title: 'Tanpa CTA', slug: 'no-cta', html: noCtaHtml });

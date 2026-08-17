@@ -115,12 +115,12 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <UiFeedbackContext.Provider value={{ toast, confirm }}>
       {children}
 
-      {/* Toast Notification (Portal ke document.body agar tidak terhalang modal apapun) */}
+      {/* Toast Notification (Portal ke document.body di bagian atas layar agar tidak menutupi textfield/composer) */}
       {toastState &&
         createPortal(
           <div
             style={{ zIndex: 99999 }}
-            className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl bg-white border border-[#e9edef] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] max-w-sm ${toastBorder(toastState.type)}`}
+            className={`fixed top-4 left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-white border border-[#e9edef] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] sm:max-w-sm ${toastBorder(toastState.type)}`}
           >
             {toastIcon(toastState.type)}
             <span className="flex-1 leading-snug">{toastState.text}</span>
