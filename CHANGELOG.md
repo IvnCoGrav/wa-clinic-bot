@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Multiline Enter, Rock-Solid Auto-Scroll Anchor & GPU Micro-Animations (v1.12.4)
+
+- **Perilaku Tombol Enter Murni Menambah Baris Baru (*Multiline*) (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menghapus submit on Enter pada textarea chat agar penekanan tombol `Enter` murni menghasilkan baris baru (`\n`) dan melebarkan tinggi textarea secara otomatis.
+  - Pengiriman pesan kini secara eksklusif dipicu melalui tombol Send (`<Send />`).
+- **Jaminan Auto-Scroll Chat 100% (*Dual Anchor + Media Load Listener*) (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menyematkan invisible anchor element (`messagesEndRef`) di akhir daftar pesan dan menjalankan dual scroll (`scrollTop = scrollHeight + 99999` dan `scrollIntoView`).
+  - Menambahkan event listener `onLoad` pada thumbnail gambar media chat agar viewport otomatis melakukan re-scroll begitu gambar selesai di-render.
+- **Integrasi GPU-Accelerated Micro-Animations (`packages/admin-dashboard/src/index.css`, `packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan keyframes animasi ringan: `popIn` (speech bubble chat), `slideFadeIn` & `fadeIn` (transisi tab), `pulseGlow` (kartu pasien aktif), dan `modalScaleUp` (spring-like modal dialog).
+  - Menghilangkan kekakuan tampilan dengan transisi interaktif pada penekanan tombol (*active:scale-95*), quick reply chips, dan kartu reservasi (*hover & active states*).
+
 ### Fixed & Improved — Swipe Gesture Navigation, Auto-Scroll Instant, Enter Fix & Sidebar Version Tag (v1.12.3)
 
 - **Perbaikan Kirim Pesan via Tombol Enter & Toast Feedback (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
