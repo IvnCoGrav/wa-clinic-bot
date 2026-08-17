@@ -4,6 +4,13 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Intercept Browser History Back at Frame 0 (Touchstart Passive: False) (`v1.12.11`)
+
+- **Intersepsi Mutlak pada Frame 0 Touchstart (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Mengubah opsi listener `touchstart` dari `{ passive: true }` menjadi `{ passive: false }`.
+  - Memanggil `e.preventDefault()` langsung pada saat jari menyentuh zona tepi kiri layar (`clientX <= 30px`), membatalkan secara mutlak *system-level navigation recognizer* milik iOS Safari & Android Chrome sebelum browser sempat memulai animasi *history.back()*.
+  - Menghapus konfigurasi CSS `touch-action: pan-y` yang tidak efektif untuk system history dan bisa mengganggu scroll tabel data horizontal.
+
 ### Fixed & Improved — 199% Bulletproof Admin Swipe: Popstate Sync, Touch-Action Pan-Y & Generous Zone (`v1.12.10`)
 
 - **Kunci Standar CSS `touch-action: pan-y` (`packages/admin-dashboard/src/index.css`)**:

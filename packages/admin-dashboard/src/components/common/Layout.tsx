@@ -176,6 +176,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
 
+      // CRITICAL (iOS Safari / Android Chrome):
+      // Prevent browser system navigation gesture at Frame 0 (touchstart) when touch starts at edge (<= 30px)
+      if (!mobileMenuOpen && touchStartX <= 30) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+
       // Allow opening by swiping from left zone (up to 120px from left)
       // OR allow closing by swiping left anywhere on screen when menu is already open
       const maxLeftZone = Math.min(window.innerWidth * 0.35, 120);
@@ -199,13 +207,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       // Case 1: When sidebar is CLOSED -> User is swiping from left zone towards right
       if (!mobileMenuOpen && touchStartX <= maxLeftZone) {
         // If horizontal movement to right is detected, intercept and prevent browser back navigation!
-        if (deltaX > 10 && absX > absY * 1.1) {
+        if (deltaX > 8 && absX > absY * 1.1) {
           if (e.cancelable) {
             e.preventDefault();
           }
         }
         // Trigger sidebar open smoothly once threshold passed
-        if (deltaX > 30 && absX > absY * 1.1) {
+        if (deltaX > 25 && absX > absY * 1.1) {
           setMobileMenuOpen(true);
           isTracking = false;
         }
@@ -214,12 +222,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       // Case 2: When sidebar is OPEN -> User is swiping left anywhere to close
       if (mobileMenuOpen) {
-        if (deltaX < -10 && absX > absY * 1.1) {
+        if (deltaX < -8 && absX > absY * 1.1) {
           if (e.cancelable) {
             e.preventDefault();
           }
         }
-        if (deltaX < -30 && absX > absY * 1.1) {
+        if (deltaX < -25 && absX > absY * 1.1) {
           setMobileMenuOpen(false);
           isTracking = false;
         }
@@ -230,7 +238,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       isTracking = false;
     };
 
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: false });
     window.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('touchend', onTouchEnd, { passive: true });
     window.addEventListener('touchcancel', onTouchEnd, { passive: true });
