@@ -147,74 +147,82 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     },
   ];
 
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Native DOM touch gesture listener with { passive: false } to reliably prevent browser history back
+  useEffect(() => {
+    let touchStart: { x: number; y: number; time: number } | null = null;
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    }
-  };
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        touchStart = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+          time: Date.now(),
+        };
+      }
+    };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || e.touches.length === 0) return;
-    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
-    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchStart || e.touches.length === 0) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStart.x;
+      const deltaY = touch.clientY - touchStart.y;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
 
-    // Real-time left-edge swipe trigger (buka sidebar saat digeser dari sisi kiri)
-    if (touchStartRef.current.x <= 75 && deltaX > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      setMobileMenuOpen(true);
-      touchStartRef.current = null;
-    }
-  };
+      // Case 1: When sidebar is CLOSED -> User is swiping from left edge (x <= 50) to right
+      if (!mobileMenuOpen && touchStart.x <= 50) {
+        // If horizontal movement to right is detected, intercept and prevent browser back navigation!
+        if (deltaX > 10 && absX > absY) {
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+        }
+        // Trigger sidebar open smoothly once threshold passed
+        if (deltaX > 35 && absX > absY) {
+          setMobileMenuOpen(true);
+          touchStart = null;
+        }
+        return;
+      }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || e.changedTouches.length === 0) return;
-    const start = touchStartRef.current;
-    touchStartRef.current = null;
+      // Case 2: When sidebar is OPEN -> User is swiping left anywhere to close
+      if (mobileMenuOpen) {
+        if (deltaX < -15 && absX > absY) {
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+        }
+        if (deltaX < -35 && absX > absY) {
+          setMobileMenuOpen(false);
+          touchStart = null;
+        }
+      }
+    };
 
-    const deltaX = e.changedTouches[0].clientX - start.x;
-    const deltaY = e.changedTouches[0].clientY - start.y;
+    const onTouchEnd = () => {
+      touchStart = null;
+    };
 
-    if (Math.abs(deltaX) < 35 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
-    // Left edge swipe fallback
-    if (start.x <= 75 && deltaX > 35) {
-      setMobileMenuOpen(true);
-      return;
-    }
-
-    // Swipe ke kiri saat sidebar terbuka -> Tutup Sidebar
-    if (mobileMenuOpen && deltaX < -35) {
-      setMobileMenuOpen(false);
-      return;
-    }
-  };
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [mobileMenuOpen]);
 
   const currentRole = user?.role || 'super_admin';
 
   return (
-    <div
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row touch-pan-y"
-    >
-      {/* Invisible Left-Edge Touch Strip for Smooth Sidebar Opening */}
-      {!mobileMenuOpen && (
-        <div
-          className="fixed inset-y-0 left-0 w-8 z-30 md:hidden"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-        />
-      )}
-
+    <div className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row">
       {/* Mobile backdrop overlay with smooth fade */}
       <div
         onClick={() => setMobileMenuOpen(false)}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
         className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
           mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
