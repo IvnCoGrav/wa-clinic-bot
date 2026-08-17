@@ -104,9 +104,12 @@ function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
 }
 
-// Sound notification generator using Web Audio API
+// Sound notification generator using Web Audio API & Haptic Vibration
 function playNotificationSound() {
   try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([100, 50, 100]);
+    }
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
@@ -186,8 +189,17 @@ export const StaffToday: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   selectedTaskRef.current = selectedTask;
+
+  const handleReplyTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setReplyText(e.target.value);
+    if (replyTextareaRef.current) {
+      replyTextareaRef.current.style.height = 'auto';
+      replyTextareaRef.current.style.height = `${Math.min(replyTextareaRef.current.scrollHeight, 130)}px`;
+    }
+  };
 
   // Category Icon & Color Mapping Helper
   const getCategoryIcon = (category: string | null) => {
@@ -331,14 +343,14 @@ export const StaffToday: React.FC = () => {
     });
   }, []);
 
-  // Fetch messages for selected task conversation (Dibatasi maksimal 10 bubble chat)
+  // Fetch messages for selected task conversation (Maksimal 30 bubble chat)
   const fetchMessages = useCallback(async (conversationId: string) => {
     setLoadingMessages(true);
     setErrorMessage(null);
     try {
       const res = await apiRequest(`/api/staff/conversations/${conversationId}/messages`);
       if (res.success && Array.isArray(res.data)) {
-        setMessages(res.data.slice(-10));
+        setMessages(res.data.slice(-30));
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memuat riwayat pesan.');
@@ -349,6 +361,9 @@ export const StaffToday: React.FC = () => {
 
   // Load conversation when task is selected
   useEffect(() => {
+    if (replyTextareaRef.current) {
+      replyTextareaRef.current.style.height = 'auto';
+    }
     if (selectedTask?.conversationId) {
       fetchMessages(selectedTask.conversationId);
     } else {
@@ -477,7 +492,7 @@ export const StaffToday: React.FC = () => {
                     : m
                 );
               }
-              return [...prev, msg].slice(-10);
+              return [...prev, msg].slice(-30);
             });
           }
         } catch {
@@ -591,9 +606,12 @@ export const StaffToday: React.FC = () => {
       created_at: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, optimisticMsg].slice(-10));
+    setMessages((prev) => [...prev, optimisticMsg].slice(-30));
     setReplyText('');
     setSelectedImage(null);
+    if (replyTextareaRef.current) {
+      replyTextareaRef.current.style.height = 'auto';
+    }
 
     try {
       const body: Record<string, any> = { text: hasText ? textToSend : '' };
@@ -1219,6 +1237,80 @@ export const StaffToday: React.FC = () => {
         </div>
       </header>
 
+      {/* Mobile Navigation Segment Tab Bar (Always visible on mobile when not inside full-screen chat) */}
+      {!(mobileView === 'chat' && activeTab === 'today') && (
+        <nav aria-label="Mobile Navigation" className="sm:hidden px-3 py-2 bg-white border-b border-[#e9edef] flex items-center justify-between gap-1.5 shadow-xs z-20">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('today');
+              setMobileView('list');
+            }}
+            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
+              activeTab === 'today'
+                ? 'bg-[#008069] text-white shadow-xs'
+                : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+            }`}
+          >
+            <Calendar size={13} />
+            <span>Hari Ini</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeTab === 'today' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
+              }`}
+            >
+              {tasks.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('upcoming');
+              setMobileView('list');
+            }}
+            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
+              activeTab === 'upcoming'
+                ? 'bg-[#008069] text-white shadow-xs'
+                : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+            }`}
+          >
+            <Clock size={13} />
+            <span>Mendatang</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeTab === 'upcoming' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
+              }`}
+            >
+              {upcomingTasks.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('completed');
+              setMobileView('list');
+            }}
+            className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
+              activeTab === 'completed'
+                ? 'bg-[#008069] text-white shadow-xs'
+                : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+            }`}
+          >
+            <CheckCircle2 size={13} />
+            <span>Selesai</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeTab === 'completed' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
+              }`}
+            >
+              {completedTasks.length}
+            </span>
+          </button>
+        </nav>
+      )}
+
       {/* Error notification banner */}
       {errorMessage && (
         <div className="bg-rose-50 border-b border-rose-200 px-4 py-2 text-rose-700 text-xs flex items-center justify-between z-20">
@@ -1324,11 +1416,16 @@ export const StaffToday: React.FC = () => {
                           title="Klik untuk melihat detail lengkap pasien"
                         >
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            {/* Service Category Avatar Icon */}
-                            <div
-                              className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
-                            >
-                              {catInfo.icon}
+                            {/* Service Category Avatar Icon with Visit Order Badge */}
+                            <div className="relative flex-shrink-0">
+                              <div
+                                className={`h-10 w-10 rounded-2xl flex items-center justify-center border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
+                              >
+                                {catInfo.icon}
+                              </div>
+                              <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-full bg-[#008069] text-white text-[9px] font-extrabold shadow-xs">
+                                #{idx + 1}
+                              </span>
                             </div>
                             <div className="min-w-0">
                               <h3 className="font-semibold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
@@ -1774,10 +1871,39 @@ export const StaffToday: React.FC = () => {
                   {/* WhatsApp Quick Reply Input Bar */}
                   <form
                     onSubmit={handleSendReply}
-                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-3 z-10"
+                    className="bg-[#f0f2f5] border-t border-[#e9edef] p-2.5 sm:p-3 z-10 space-y-2"
                   >
+                    {/* Quick Reply Template Chips for Fast Field Messaging */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      {[
+                        { label: '🛵 Sedang OTW', text: 'Halo Bunda, saya sudah dalam perjalanan (OTW) menuju ke lokasi Bunda ya 🙏' },
+                        { label: '📍 Sudah Sampai', text: 'Halo Bunda, saya sudah sampai di depan rumah/lokasi Bunda ya 🙏' },
+                        { label: '🙏 Selesai', text: 'Terima kasih banyak Bunda atas kepercayaannya. Treatment hari ini telah selesai 🙏' },
+                      ].map((chip, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setReplyText(chip.text);
+                            if (replyTextareaRef.current) {
+                              replyTextareaRef.current.focus();
+                              replyTextareaRef.current.style.height = 'auto';
+                              setTimeout(() => {
+                                if (replyTextareaRef.current) {
+                                  replyTextareaRef.current.style.height = `${Math.min(replyTextareaRef.current.scrollHeight, 130)}px`;
+                                }
+                              }, 0);
+                            }
+                          }}
+                          className="text-[11px] font-medium bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 px-2.5 py-1 rounded-full whitespace-nowrap transition-all shadow-2xs active:scale-95 flex-shrink-0"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+
                     {selectedImage && (
-                      <div className="flex items-center space-x-2 mb-2 bg-white border border-[#e9edef] rounded-xl p-2">
+                      <div className="flex items-center space-x-2 bg-white border border-[#e9edef] rounded-xl p-2">
                         <img
                           src={selectedImage.preview}
                           alt="Lampiran"
@@ -1796,7 +1922,7 @@ export const StaffToday: React.FC = () => {
                         </button>
                       </div>
                     )}
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-end space-x-2">
                       <input
                         type="file"
                         accept="image/*"
@@ -1809,20 +1935,28 @@ export const StaffToday: React.FC = () => {
                         type="button"
                         onClick={() => chatFileInputRef.current?.click()}
                         disabled={sending}
-                        className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40"
+                        className="h-10 w-10 rounded-xl bg-white border border-[#e9edef] text-[#008069] hover:bg-[#e8f5f2] transition shadow-xs flex items-center justify-center flex-shrink-0 disabled:opacity-40 active:scale-95"
                         title="Buka Kamera & Ambil Foto"
                         aria-label="Kamera"
                       >
                         <Camera size={18} />
                       </button>
                       <div className="flex-1 relative">
-                        <input
-                          type="text"
+                        <textarea
+                          ref={replyTextareaRef}
+                          rows={1}
                           value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder="Ketik pesan balasan..."
+                          onChange={handleReplyTextChange}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendReply(e);
+                            }
+                          }}
+                          placeholder="Ketik pesan balasan... (Enter kirim, Shift+Enter baris baru)"
                           disabled={sending}
-                          className="w-full bg-white border border-[#e9edef] focus:border-[#008069] text-[#111b21] rounded-xl px-4 py-2.5 text-xs sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs"
+                          style={{ fontSize: '16px' }}
+                          className="w-full resize-none bg-white border border-[#e9edef] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] text-[#111b21] rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
                         />
                       </div>
 
