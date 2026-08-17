@@ -111,6 +111,25 @@ export const LiveChatMonitor: React.FC = () => {
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
+  const [bgSyncProgress, setBgSyncProgress] = useState<{
+    isSyncing: boolean;
+    status: 'idle' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+    syncedChats: number;
+    skippedChats: number;
+    syncedMessages: number;
+    totalChats: number;
+    currentChatName?: string;
+    currentOffset: number;
+    error?: string;
+  }>({
+    isSyncing: false,
+    status: 'idle',
+    syncedChats: 0,
+    skippedChats: 0,
+    syncedMessages: 0,
+    totalChats: 0,
+    currentOffset: 0,
+  });
   const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean } | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const chatsRef = useRef<LiveChatItem[]>([]);
@@ -127,6 +146,71 @@ export const LiveChatMonitor: React.FC = () => {
 
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Periksa status background sync saat pertama kali buka halaman
+  const checkBackgroundSyncStatus = async () => {
+    try {
+      const res = await apiRequest('/api/admin/live-chat/sync-status');
+      if (res?.success && res.data) {
+        setBgSyncProgress(res.data);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    checkBackgroundSyncStatus();
+  }, []);
+
+  // Polling halus setiap 2.5 detik selama background sync berjalan
+  useEffect(() => {
+    if (!bgSyncProgress.isSyncing) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiRequest('/api/admin/live-chat/sync-status');
+        if (res?.success && res.data) {
+          setBgSyncProgress(res.data);
+          if (!res.data.isSyncing) {
+            loadChats(true);
+            if (res.data.status === 'completed') {
+              toast(`🎉 Sinkronisasi seluruh riwayat WhatsApp selesai: ${res.data.syncedChats} chat (${res.data.syncedMessages} pesan baru)!`, 'success');
+            } else if (res.data.status === 'failed') {
+              toast(`Sinkronisasi latar belakang terhenti: ${res.data.error || 'Terjadi kesalahan'}`, 'error');
+            }
+          }
+        }
+      } catch (_) {}
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [bgSyncProgress.isSyncing]);
+
+  const handleStartBackgroundFullSync = async () => {
+    try {
+      const res = await apiRequest('/api/admin/live-chat/sync-full', {
+        method: 'POST',
+        body: JSON.stringify({ messagesPerChat: 100 }),
+      });
+      if (res?.success) {
+        toast('🚀 Sinkronisasi seluruh riwayat WhatsApp dimulai di latar belakang...', 'success');
+        if (res.progress) {
+          setBgSyncProgress(res.progress);
+        } else {
+          setBgSyncProgress((prev) => ({ ...prev, isSyncing: true, status: 'in_progress' }));
+        }
+      }
+    } catch (err: any) {
+      toast(`Gagal memulai sinkronisasi: ${err.message}`, 'error');
+    }
+  };
+
+  const handleCancelBackgroundSync = async () => {
+    try {
+      await apiRequest('/api/admin/live-chat/sync-cancel', { method: 'POST' });
+      toast('Sinkronisasi latar belakang dihentikan.', 'info');
+      setBgSyncProgress((prev) => ({ ...prev, isSyncing: false, status: 'cancelled' }));
+    } catch (err: any) {
+      toast(`Gagal membatalkan: ${err.message}`, 'error');
+    }
+  };
 
   // Close label popover and tools menu on outside click
   useEffect(() => {
@@ -189,7 +273,7 @@ export const LiveChatMonitor: React.FC = () => {
       const targetChat = chatsRef.current.find((c) => c.customerId === customerId);
       const currentLabels = targetChat?.customerLabels || [];
       const isAssigned = currentLabels.some((l) => l.id === label.id);
-      const action = isAssigned ? 'remove' : 'add';
+      const action = isAssigned ? 'unassign' : 'assign';
 
       // Optimistic update for chats list
       const nextLabels = isAssigned
@@ -290,6 +374,7 @@ export const LiveChatMonitor: React.FC = () => {
       const res = await apiRequest('/api/admin/live-chat/sync-history', {
         method: 'POST',
         body: JSON.stringify({ limit: 50, offset }),
+        timeoutMs: 120000,
       });
       const data = res?.data || res;
       if (!data || data.success === false) {
@@ -421,6 +506,14 @@ export const LiveChatMonitor: React.FC = () => {
                 m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
               )
             );
+          }
+        } else if (type === ('sync.progress' as any) || payload?.status) {
+          const syncData = payload.payload || payload;
+          if (syncData && typeof syncData.syncedChats === 'number') {
+            setBgSyncProgress((prev) => ({ ...prev, ...syncData }));
+            if (syncData.status === 'completed') {
+              loadChats(true);
+            }
           }
         }
       },
@@ -704,19 +797,44 @@ export const LiveChatMonitor: React.FC = () => {
           </div>
         </div>
 
-        {/* Sync WAHA Button */}
-        <button
-          onClick={() => handleSyncHistory(syncNextOffset ?? 0)}
-          disabled={syncingHistory}
-          className="px-2.5 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-bold shadow-2xs transition flex items-center space-x-1 disabled:opacity-50"
-          title={syncNextOffset !== null ? `Lanjutkan Sync WAHA (${syncNextOffset})` : 'Sinkronisasi riwayat chat WAHA'}
-        >
-          <RefreshCw size={12} className={syncingHistory ? 'animate-spin' : ''} />
-          <span>{syncingHistory ? 'Sync...' : syncNextOffset !== null ? `Sync (${syncNextOffset})` : 'Sync WAHA'}</span>
-        </button>
+        {/* Sync Controls */}
+        <div className="flex items-center space-x-1.5">
+          {/* Background Full Sync Button */}
+          <button
+            onClick={handleStartBackgroundFullSync}
+            disabled={bgSyncProgress.isSyncing}
+            className="px-2.5 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-bold shadow-2xs transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
+            title="Ambil seluruh riwayat chat WhatsApp di latar belakang (tanpa batas waktu)"
+          >
+            <RefreshCw size={12} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
+            <span>{bgSyncProgress.isSyncing ? 'Sync Background...' : 'Sync Semua (Background)'}</span>
+          </button>
+        </div>
       </div>
 
-      {syncProgress && (
+      {/* Real-time Background Sync Banner */}
+      {bgSyncProgress.isSyncing && (
+        <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+          <div className="flex items-center space-x-2 min-w-0">
+            <RefreshCw size={14} className="text-[#008069] animate-spin shrink-0" />
+            <div className="truncate">
+              <span className="font-bold text-[#008069]">Sinkronisasi Background Berjalan:</span>{' '}
+              <span>
+                {bgSyncProgress.syncedChats} / {bgSyncProgress.totalChats || '?'} chat ({bgSyncProgress.syncedMessages} pesan baru)
+                {bgSyncProgress.currentChatName ? ` • Sedang memproses: ${bgSyncProgress.currentChatName}` : ''}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleCancelBackgroundSync}
+            className="px-2.5 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-100 hover:bg-rose-200 border border-rose-200 rounded-md transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+          >
+            Batalkan
+          </button>
+        </div>
+      )}
+
+      {syncProgress && !bgSyncProgress.isSyncing && (
         <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-medium flex items-center space-x-2 shrink-0">
           <RefreshCw size={12} className="text-sky-600 animate-spin" />
           <span>{syncProgress}</span>

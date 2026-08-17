@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Background Full Sync Engine & Real-time Sync Progress
+
+- **Sinkronisasi Riwayat Chat Penuh di Latar Belakang (Non-Blocking Full Sync) (`waha-history-sync.service.ts`, `livechat.subroute.ts`, `LiveChatMonitor.tsx`)**:
+  - **Background Worker Loop**: Menambahkan method `startBackgroundFullSync()` yang berjalan asinkron di latar belakang tanpa terikat oleh timeout koneksi HTTP. Bot secara otomatis mengiterasi seluruh obrolan WhatsApp secara bertahap (batch 10 chat dengan throttle 50ms) sampai **100% data selesai terambil**.
+  - **Live Progress & SSE Broadcast**: Setiap batch yang selesai diproses disiarkan secara real-time via `LiveChatHub` (`sync.progress`) dan endpoint status `GET /api/admin/live-chat/sync-status`.
+  - **Indikator Banner Dinamis**: Live Chat Panel kini menampilkan banner status interaktif lengkap dengan jumlah chat tersinkron, pesan baru, nama chat yang sedang diproses, dan tombol *Batalkan*.
+  - **Eliminasi Batas Timeout 15s**: Menaikkan `timeoutMs` pada panggilan manual menjadi 120s dan mengalihkan sync besar ke background worker agar tidak pernah lagi terputus oleh error timeout browser.
+
 ### Fixed & Improved — Meta CAPI Historical Sync Guard & Webhook Rate Limit Exemption
 
 - **Pencegahan Tembakan Meta CAPI Lead pada Sinkronisasi Riwayat Chat (`message.service.ts`, `waha-history-sync.service.ts`, `webhook.route.ts`)**:
