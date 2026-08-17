@@ -385,12 +385,12 @@ export const StaffToday: React.FC = () => {
     }
   }, [selectedTask?.conversationId, fetchMessages]);
 
-  // Auto scroll chat when messages update or view switches to chat
+  // Auto scroll chat when messages update or loading completes or view switches to chat
   useEffect(() => {
-    if (mobileView === 'chat' || selectedTask) {
+    if (!loadingMessages && (mobileView === 'chat' || selectedTask)) {
       scrollToBottom(true);
     }
-  }, [mobileView, selectedTask, messages, scrollToBottom]);
+  }, [mobileView, selectedTask, messages, loadingMessages, scrollToBottom]);
 
   // Open Chat with history push for Android/iOS Hardware Back Button
   const handleOpenChat = (task: StaffTask) => {
@@ -1202,8 +1202,9 @@ export const StaffToday: React.FC = () => {
               <h1 className="font-bold text-sm sm:text-base text-[#111b21] tracking-tight truncate">
                 {staff?.name || 'Terapis'}
               </h1>
-              <p className="text-[11px] text-[#667781] truncate">
-                {tasks.length} Hari Ini • {upcomingTasks.length} Mendatang
+              <p className="text-[11px] text-[#667781] truncate flex items-center gap-1">
+                <span>{tasks.length} Hari Ini • {upcomingTasks.length} Mendatang</span>
+                <span className="text-[9px] text-[#8696a0] font-mono">({APP_VERSION})</span>
               </p>
             </div>
           </div>
@@ -1423,7 +1424,7 @@ export const StaffToday: React.FC = () => {
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0`}
+              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0 min-h-0 h-full`}
             >
               {/* Panel Search & Header */}
               <div className="p-3 bg-white border-b border-[#e9edef] space-y-2.5">
@@ -1722,7 +1723,7 @@ export const StaffToday: React.FC = () => {
             <div
               className={`${
                 mobileView === 'list' ? 'hidden md:flex' : 'flex'
-              } flex-1 flex-col bg-[#efeae2] overflow-hidden relative`}
+              } flex-1 flex-col bg-[#efeae2] overflow-hidden relative min-h-0 h-full`}
             >
               {selectedTask ? (
                 <>
@@ -1824,7 +1825,7 @@ export const StaffToday: React.FC = () => {
                   {/* WhatsApp Chat Bubbles Viewport (Warm Beige Wallpaper Canvas) */}
                   <div
                     ref={chatContainerRef}
-                    className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#efeae2] relative"
+                    className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#efeae2] relative min-h-0"
                     style={{
                       backgroundImage: `radial-gradient(#d1c7b8 1px, transparent 1px)`,
                       backgroundSize: '24px 24px',
@@ -1833,7 +1834,7 @@ export const StaffToday: React.FC = () => {
                     {/* Date separator badge */}
                     <div className="flex justify-center my-1.5">
                       <div className="bg-white text-[#54656f] text-[11px] font-medium px-3 py-1 rounded-lg text-center shadow-xs border border-[#e9edef]">
-                        Hari Ini (10 Pesan Terakhir)
+                        Percakapan WhatsApp Pasien
                       </div>
                     </div>
 
