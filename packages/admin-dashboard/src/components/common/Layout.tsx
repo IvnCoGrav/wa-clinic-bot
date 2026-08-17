@@ -155,6 +155,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
   };
 
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.touches.length === 0) return;
+    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+
+    // Real-time left-edge swipe trigger (buka sidebar saat digeser dari sisi kiri)
+    if (touchStartRef.current.x <= 75 && deltaX > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      setMobileMenuOpen(true);
+      touchStartRef.current = null;
+    }
+  };
+
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (!touchStartRef.current || e.changedTouches.length === 0) return;
     const start = touchStartRef.current;
@@ -163,16 +175,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const deltaX = e.changedTouches[0].clientX - start.x;
     const deltaY = e.changedTouches[0].clientY - start.y;
 
-    if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
+    if (Math.abs(deltaX) < 35 || Math.abs(deltaX) < Math.abs(deltaY)) return;
 
-    // Left edge swipe (start.x <= 50, deltaX > 40) -> Buka Menu Sidebar Admin
-    if (start.x <= 50 && deltaX > 40) {
+    // Left edge swipe fallback
+    if (start.x <= 75 && deltaX > 35) {
       setMobileMenuOpen(true);
       return;
     }
 
     // Swipe ke kiri saat sidebar terbuka -> Tutup Sidebar
-    if (mobileMenuOpen && deltaX < -40) {
+    if (mobileMenuOpen && deltaX < -35) {
       setMobileMenuOpen(false);
       return;
     }
@@ -183,13 +195,26 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row touch-pan-y"
     >
-      
+      {/* Invisible Left-Edge Touch Strip for Smooth Sidebar Opening */}
+      {!mobileMenuOpen && (
+        <div
+          className="fixed inset-y-0 left-0 w-8 z-30 md:hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        />
+      )}
+
       {/* Mobile backdrop overlay with smooth fade */}
       <div
         onClick={() => setMobileMenuOpen(false)}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
           mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
