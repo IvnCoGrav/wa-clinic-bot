@@ -65,6 +65,7 @@ export interface IWahaClient {
   getChats(): Promise<WahaChat[]>;
   getMessages(chatId: string, limit?: number): Promise<WahaMessage[]>;
   getContact(phone: string): Promise<WahaContact | null>;
+  getProfilePicture?(phone: string, session?: string): Promise<string | null>;
   downloadMedia(messageId: string, chatId: string): Promise<Buffer | null>;
   deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<boolean>;
 }
@@ -1017,6 +1018,64 @@ export class WahaClient implements IWahaClient {
     } catch (error: any) {
       console.warn(`[WAHA API ERROR] getContact failed for ${phone}:`, error?.response?.data || error.message);
       return null;
+    }
+  }
+
+  /**
+   * Mengambil URL foto profil WhatsApp dari kontak (standar preview/non-HD CDN URL).
+   * Endpoint WAHA: GET /api/contacts/profile-picture?contactId={contactId}&session={session}
+   * Mengembalikan string URL atau null jika tidak ada foto / dibatasi privasi.
+   */
+  public async getProfilePicture(phone: string, session?: string): Promise<string | null> {
+    if (this.shouldMock) return null;
+    const sessionName = session || this.session;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    if (!cleanPhone) return null;
+    const contactId = `${cleanPhone}@c.us`;
+
+    try {
+      // 1. Coba endpoint GET /api/contacts/profile-picture?contactId=...&session=...
+      const response = await axios.get(
+        `${this.baseUrl}/api/contacts/profile-picture`,
+        {
+          params: { contactId, session: sessionName },
+          headers: this.headers,
+          timeout: this.timeoutMs,
+        }
+      );
+      const picUrl =
+        response.data?.profilePictureURL ||
+        response.data?.url ||
+        response.data?.picture ||
+        (typeof response.data === 'string' ? response.data : null);
+      if (picUrl && typeof picUrl === 'string') {
+        return picUrl;
+      }
+      return null;
+    } catch (error: any) {
+      // 2. Fallback ke GET /api/{session}/contacts/profile-picture?contactId=... jika format path berbeda
+      try {
+        const fallbackRes = await axios.get(
+          `${this.baseUrl}/api/${sessionName}/contacts/profile-picture`,
+          {
+            params: { contactId },
+            headers: this.headers,
+            timeout: this.timeoutMs,
+          }
+        );
+        const picUrl =
+          fallbackRes.data?.profilePictureURL ||
+          fallbackRes.data?.url ||
+          fallbackRes.data?.picture ||
+          (typeof fallbackRes.data === 'string' ? fallbackRes.data : null);
+        if (picUrl && typeof picUrl === 'string') {
+          return picUrl;
+        }
+        return null;
+      } catch (fallbackErr: any) {
+        // WhatsApp privasi / 404 / no photo -> normal, return null best-effort
+        return null;
+      }
     }
   }
 

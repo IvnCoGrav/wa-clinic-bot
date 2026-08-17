@@ -74,3 +74,19 @@ export function sanitizeHallucinatedTerms(text: string): string {
     .replace(/\bpuji\s+syukur\b/gi, 'Wah senang sekali');
 }
 
+/**
+ * Menghilangkan karakter em-dash (—) sesuai pedoman anti-slop (design.md §9 EM-DASH BAN).
+ * LLM sering menyelipkan em-dash di tengah jawaban; WhatsApp & gaya chat santai
+ * persona tidak memakainya. Penggantian kontekstual:
+ * - Rentang angka ("jam 9—11")  -> hyphen "-"   ("jam 9-11")
+ * - Bullet list di awal baris   -> "- "         ("- Gratis ongkir")
+ * - Pemisah antar klausa        -> koma ", "    ("Halo—mau tanya" -> "Halo, mau tanya")
+ */
+export function sanitizeEmDash(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/(\d)—(\d)/g, '$1-$2')
+    .replace(/^—\s*/gm, '- ')
+    .replace(/\s*—\s*/g, ', ');
+}
+

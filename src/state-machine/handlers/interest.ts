@@ -353,17 +353,16 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         if (userMatches.length > 0) {
           const cleanName = userMatches[0].name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
           await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, cleanName).catch(() => {});
-        } else if (conversation.last_discussed_treatment) {
-          candidateTreatmentName = conversation.last_discussed_treatment;
-          console.log(`[PRICE ANAPHORA] No treatment in "${userText}", resolved from conversation state → "${candidateTreatmentName}".`);
         } else if (ctx.history && ctx.history.length > 0) {
-          for (let i = ctx.history.length - 1; i >= 0; i--) {
-            const msg = ctx.history[i];
+          // Hanya cari di 4 pesan terakhir dalam riwayat chat AKTIF
+          const recentHistory = ctx.history.slice(-4);
+          for (let i = recentHistory.length - 1; i >= 0; i--) {
+            const msg = recentHistory[i];
             if (msg.role !== 'assistant' || !msg.content) continue;
             const botMatch = treatmentCatalogService.searchCatalogItems(msg.content);
             if (botMatch.length > 0) {
               candidateTreatmentName = botMatch[0].name.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
-              console.log(`[PRICE ANAPHORA] No treatment in "${userText}", resolved from bot history → "${candidateTreatmentName}".`);
+              console.log(`[PRICE ANAPHORA] No treatment in "${userText}", resolved from active history → "${candidateTreatmentName}".`);
               await conversationService.updateLastDiscussedTreatment(conversation.id, tenantId, candidateTreatmentName).catch(() => {});
               break;
             }

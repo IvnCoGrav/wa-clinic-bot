@@ -5,6 +5,7 @@ import {
   sanitizeRagLeakage,
   sanitizeForbiddenEnglishWords,
   sanitizeHallucinatedTerms,
+  sanitizeEmDash,
 } from '../../src/utils/language-sanitizer';
 
 describe('language-sanitizer (anti bocor aksara asing)', () => {
@@ -62,5 +63,29 @@ describe('language-sanitizer (anti bocor aksara asing)', () => {
     expect(sanitizeHallucinatedTerms('untuk biaya peminjamannya')).toBe('untuk ongkos kirimnya');
     expect(sanitizeHallucinatedTerms('Silakan dipilih waktu yang paling cocok untuk bund.')).toBe('Silakan dipilih waktu yang paling cocok untuk Bunda.');
     expect(sanitizeHallucinatedTerms('Syukur sekali, rumahnya dekat bund.')).toBe('Wah senang sekali, rumahnya dekat bund.');
+  });
+
+  it('sanitizeEmDash mengganti em-dash antar klausa dengan koma', () => {
+    expect(sanitizeEmDash('Halo—mau tanya soal pijat bayi')).toBe('Halo, mau tanya soal pijat bayi');
+    expect(sanitizeEmDash('Kami siap — kapan pun Bunda butuh')).toBe('Kami siap, kapan pun Bunda butuh');
+    expect(sanitizeEmDash('Kami siap—kapan pun Bunda butuh')).toBe('Kami siap, kapan pun Bunda butuh');
+  });
+
+  it('sanitizeEmDash mengganti em-dash rentang angka dengan hyphen', () => {
+    expect(sanitizeEmDash('Buka jam 9—11')).toBe('Buka jam 9-11');
+    expect(sanitizeEmDash('Jarak 5—10 km')).toBe('Jarak 5-10 km');
+  });
+
+  it('sanitizeEmDash mengganti bullet list di awal baris dengan hyphen', () => {
+    expect(sanitizeEmDash('— Gratis ongkir\n— Bidan berlisensi')).toBe('- Gratis ongkir\n- Bidan berlisensi');
+    expect(sanitizeEmDash('—Gratis ongkir')).toBe('- Gratis ongkir');
+  });
+
+  it('sanitizeEmDash tidak mengubah teks tanpa em-dash', () => {
+    const clean = 'Halo Bunda, harganya Rp60.000 ya 😊';
+    expect(sanitizeEmDash(clean)).toBe(clean);
+    expect(sanitizeEmDash('')).toBe('');
+    expect(sanitizeEmDash(null as any)).toBeNull();
+    expect(sanitizeEmDash(undefined as any)).toBeUndefined();
   });
 });

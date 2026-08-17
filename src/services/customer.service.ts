@@ -52,6 +52,30 @@ export class CustomerService {
   }
 
   /**
+   * Mengambil data customer berdasarkan id, dengan fallback ke memory store jika DB offline
+   */
+  public async getCustomerById(id: string): Promise<Customer | null> {
+    try {
+      const customer = await prisma.customer.findUnique({
+        where: { id },
+      });
+      if (customer) return customer;
+    } catch (err) {
+      // ignore and check memory store
+    }
+    const mem = this.getMemoryCustomers();
+    if (mem.has(id)) {
+      return mem.get(id);
+    }
+    for (const val of mem.values()) {
+      if (val && (val.id === id || val._id === id)) {
+        return val;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Cari customer berdasarkan nomor telepon unik dan tenantId, atau buat record baru jika belum ada.
    */
   public async getOrCreateCustomer(
@@ -94,6 +118,7 @@ export class CustomerService {
 
 
       memoryCustomers.set(phone, customer);
+      if (customer?.id) memoryCustomers.set(customer.id, customer);
       return customer;
     } catch (error) {
       // Memory fallback for offline mode
@@ -125,6 +150,8 @@ export class CustomerService {
           updated_at: new Date(),
         };
         memoryCustomers.set(phone, mockCustomer);
+        memoryCustomers.set(mockCustomer.id, mockCustomer);
+        return mockCustomer;
       }
       return memoryCustomers.get(phone);
     }
@@ -902,6 +929,84 @@ export class CustomerService {
     } catch (err: any) {
       console.warn('[Customer Service] getCustomerGroundTruth failed:', err?.message || err);
       return null;
+    }
+  }
+
+  /**
+   * Sync foto profil customer dari WhatsApp Gateway secara background (non-blocking & rate-limited).
+   * URL standar yang diambil dari WAHA/CDN WhatsApp disimpan ke database PostgreSQL.
+   */
+  public async syncProfilePictureInBackground(
+    customerId: string,
+    phone: string,
+    tenantId: string,
+    force = false
+  ): Promise<void> {
+    if (!phone) return;
+    setImmediate(async () => {
+      try {
+        let shouldFetch = force;
+        if (!force) {
+          try {
+            const customer = await prisma.customer.findUnique({
+              where: { id: customerId },
+              select: { profile_picture_updated_at: true, profile_picture_url: true },
+            });
+            if (!customer?.profile_picture_updated_at) {
+              shouldFetch = true;
+            } else {
+              const ageMs = Date.now() - new Date(customer.profile_picture_updated_at).getTime();
+              const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+              if (ageMs > THREE_DAYS_MS) {
+                shouldFetch = true;
+              }
+            }
+          } catch {
+            const mem = memoryCustomers.get(phone);
+            if (!mem?.profile_picture_updated_at) {
+              shouldFetch = true;
+            }
+          }
+        }
+
+        if (shouldFetch) {
+          const { resolveGatewayForTenant } = await import('../integrations/whatsapp/factory');
+          const gateway = await resolveGatewayForTenant(tenantId);
+          if (gateway && typeof gateway.getProfilePicture === 'function') {
+            const picUrl = await gateway.getProfilePicture(phone);
+            await this.updateProfilePicture(customerId, phone, picUrl);
+          }
+        }
+      } catch {
+        // Best-effort: jangan crash background job
+      }
+    });
+  }
+
+  /**
+   * Simpan URL foto profil ke database & memory fallback.
+   */
+  public async updateProfilePicture(
+    customerId: string,
+    phone: string,
+    profilePictureUrl: string | null
+  ): Promise<void> {
+    const now = new Date();
+    try {
+      await prisma.customer.update({
+        where: { id: customerId },
+        data: {
+          profile_picture_url: profilePictureUrl || null,
+          profile_picture_updated_at: now,
+        },
+      });
+    } catch {
+      // Memory fallback
+    }
+    const mem = memoryCustomers.get(phone);
+    if (mem) {
+      mem.profile_picture_url = profilePictureUrl || null;
+      mem.profile_picture_updated_at = now;
     }
   }
 }

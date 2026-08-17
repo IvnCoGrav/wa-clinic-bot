@@ -118,4 +118,8 @@ export class MockWAHAClient implements IWahaClient {
   public async getContact(phone: string): Promise<import('../integrations/waha/client').WahaContact | null> {
     return null;
   }
+
+  public async getProfilePicture(_phone: string, _session?: string): Promise<string | null> {
+    return null;
+  }
 }

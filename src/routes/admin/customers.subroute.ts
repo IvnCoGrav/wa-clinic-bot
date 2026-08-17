@@ -36,6 +36,75 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/customers/:id
+   * Mengambil detail lengkap customer termasuk reservasi, anak, label, dan ad click
+   */
+  fastify.get(
+    '/api/admin/customers/:id',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        let customer: any = null;
+        try {
+          customer = await prisma.customer.findFirst({
+            where: { id, tenant_id: DEFAULT_TENANT_ID },
+            include: {
+              children: true,
+              reservations: { orderBy: { created_at: 'desc' } },
+              labels: { include: { label: true } },
+              adClick: true,
+            },
+          });
+        } catch (dbErr) {
+          // DB offline fallback
+        }
+
+        if (!customer) {
+          customer = await customerService.getCustomerById(id);
+        }
+
+        if (!customer) {
+          for (const c of customerService.getMemoryCustomers().values()) {
+            if (c?.id === id || c?.phone === id) {
+              customer = c;
+              break;
+            }
+          }
+        }
+
+        if (!customer) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan' });
+        }
+
+        let ltv = 0;
+        try {
+          const { resolveTreatmentValue } = await import('../../services/capi.service');
+          for (const r of customer.reservations || []) {
+            const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
+            ltv += val || 0;
+          }
+        } catch (e) {
+          ltv = 0;
+        }
+
+        return reply.status(200).send({
+          success: true,
+          data: {
+            ...customer,
+            children: customer.children || [],
+            reservations: customer.reservations || [],
+            labels: customer.labels || [],
+            ltv: customer.ltv ?? ltv,
+            purchaseCount: customer.purchaseCount ?? (customer.reservations?.length || 0),
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/customers/:id/messages
    * Riwayat percakapan kronologis (Chat History) untuk modal pada customer tertentu
    */
