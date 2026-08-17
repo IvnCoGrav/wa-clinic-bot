@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Prevent Browser Back on Admin Edge Swipe & Restored Clean 1-Page per Tab for Therapist (v1.12.8)
+
+- **Eliminasi Bentrok Browser Back pada Usap Tepi Admin (`packages/admin-dashboard/src/index.css`, `packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Menambahkan `overscroll-behavior-x: none` pada `html, body, #root` untuk memblokir gestur *history back/forward* default browser.
+  - Memasang sensor sentuh sisi kiri (`w-8 fixed inset-y-0 left-0`) dan deteksi `handleTouchMove` real-time (`start.x <= 75 && deltaX > 35`) sehingga usapan dari sisi kiri langsung membuka menu sidebar admin secara mulus tanpa memicu navigasi kembali di browser mobile.
+- **Restorasi Total 1-Page per Tab pada Tampilan Mobile Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengembalikan arsitektur perenderan 1 halaman murni per tab tanpa distorsi horizontal:
+    - Tab 1 (*Hari Ini*): 1 halaman penuh untuk daftar pasien (`mobileView === 'list'`) atau 1 halaman penuh untuk live chat WhatsApp (`mobileView === 'chat'`).
+    - Tab 2 (*Jadwal Mendatang*): 1 halaman penuh jadwal reservasi.
+    - Tab 3 (*Treatment Selesai*): 1 halaman penuh riwayat treatment selesai.
+  - Menjaga transisi halus `animate-fadeIn` dan gestur usap tepi kanan untuk membuka menu profil terapis.
+
 ### Fixed & Improved — Admin Left-Edge Swipe Sidebar & Continuous 60fps Carousel Track for Therapist (v1.12.7)
 
 - **Navigasi Gestur Usap Kiri-ke-Kanan Sidebar Menu Admin (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
