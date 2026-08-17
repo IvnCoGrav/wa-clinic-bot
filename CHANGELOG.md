@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Meta CAPI Historical Sync Guard & Webhook Rate Limit Exemption
+
+- **Pencegahan Tembakan Meta CAPI Lead pada Sinkronisasi Riwayat Chat (`message.service.ts`, `waha-history-sync.service.ts`, `webhook.route.ts`)**:
+  - **Root Cause**: Saat melakukan sinkronisasi riwayat obrolan masa lalu (`Sync WAHA`) atau catch-up pesan lama, setiap pesan inbound yang diimpor memicu `incrementCustomerMessageCount`. Ketika bubble pesan lama mencapai batas MQL (5 bubble), sistem secara otomatis menembakkan event `Lead` ke Meta CAPI untuk seluruh customer dari obrolan masa lalu.
+  - **Solusi**: Menambahkan parameter `skipMqlEvaluation: true` pada `messageService.logMessage` di jalur sinkronisasi riwayat WAHA dan guard pesan usang (*stale message guard*). Evaluasi MQL dan penembakan Meta CAPI kini **hanya aktif untuk percakapan baru yang sedang berlangsung secara real-time**.
+- **Pengecualian Webhook & SSE dari Rate Limit (`app.ts`)**:
+  - Menambahkan `allowList` pada Fastify rate limiter untuk mengecualikan endpoint webhook `/webhook`, `/api/webhook/*`, dan stream SSE, mencegah error `429 Too Many Requests` saat WAHA mengirim burst ratusan event.
+- **Perpanjangan Timeout Ingestion WAHA (`client.ts`)**:
+  - Menaikkan timeout `getMessages` dan `getChats` menjadi 25s dengan log informatif saat WAHA sedang sibuk mengindeks riwayat obrolan awal.
+
 ### Fixed & Improved — Mobile Live Chat Layout & +45% Textfield Width Expansion
 
 - **Optimalisasi Layar Mobile & Perlebaran Textfield Chat (`Layout.tsx`, `LiveChatMonitor.tsx`)**:
