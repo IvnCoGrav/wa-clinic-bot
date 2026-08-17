@@ -105,79 +105,117 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
 
       if (payload.fromMe) {
-        // Outbound message check for self-learning & MedicalFaqStaging capture
+        // Outbound message dari HP WhatsApp asli / Live Chat / Bot
         const customerJid = payload.chatId || (payload as any).to || payload.from;
         if (customerJid) {
-          const phone = customerJid.replace(/@.*$/, '');
-          const customer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
-          if (customer) {
-            const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
-            if (conversation && conversation.is_human_handling) {
-              const adminReplyText = payload.body || '';
+          // Lewati grup WhatsApp & status broadcast
+          if (customerJid.includes('@g.us') || customerJid.includes('broadcast') || customerJid.includes('@newsletter')) {
+            return reply.status(200).send({ status: 'IGNORED_OUTBOUND_GROUP' });
+          }
 
-              // CRITICAL FILTER: Ignore bot automated emergency/waiting templates
-              const isBotAutoReply = 
-                adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
-                adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
-                adminReplyText.startsWith('Pricelist ') ||
-                adminReplyText.startsWith('[AUTOMATED]');
+          let phone: string | null = null;
+          if (customerJid.includes('@lid')) {
+            try {
+              phone = await wahaClient.getPhoneNumberFromLid(customerJid);
+            } catch (_) {}
+          }
+          if (!phone) {
+            phone = customerJid.replace(/@.*$/, '');
+          }
 
-              if (adminReplyText.trim() && !isBotAutoReply) {
-                // 0. Konsistensi auto-release: balasan admin dari HP asli me-reset timer 6 jam
+          if (phone && /^\d+$/.test(phone) && !phone.startsWith('6289999')) {
+            const adminReplyText = payload.body || '';
+
+            // CRITICAL FILTER: Ignore bot automated emergency/waiting templates if echoed back
+            const isBotAutoReply = 
+              adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
+              adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
+              adminReplyText.startsWith('Pricelist ') ||
+              adminReplyText.startsWith('[AUTOMATED]');
+
+            if (adminReplyText.trim() && !isBotAutoReply) {
+              const customer = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
+              const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+              // 1. Jika percakapan sedang human handling, reset timer 6 jam
+              if (conversation.is_human_handling) {
                 conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
-                  .catch(err => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
+                  .catch((err) => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
+              } else {
+                // Jika admin membalas langsung dari HP saat bot aktif, eskalasi ke human handling (takeover)
+                try {
+                  const tenantConfig = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+                  if (tenantConfig?.manual_reply_escalates !== false) {
+                    await conversationService.escalateToHumanHandling(
+                      conversation,
+                      phone,
+                      'Admin membalas manual via aplikasi WhatsApp HP',
+                      DEFAULT_TENANT_ID,
+                      'manual_reply'
+                    );
+                  }
+                } catch (_) {}
+              }
 
-                // 1. Self Learning Capture
-                console.log(`[SELF-LEARNING] Captured admin manual outbound reply to customer ${phone}: "${adminReplyText}"`);
-                const { selfLearningService } = await import('../services/self-learning.service');
-                selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
-                  .catch(err => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
+              // 2. Self Learning Capture
+              const { selfLearningService } = await import('../services/self-learning.service');
+              selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
+                .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
 
-                // 2. Component 4: MedicalFaqStaging Capture Hook
-                if (conversation.escalation_reason === 'medical_concern') {
-                  console.log(`[MEDICAL FAQ STAGING CAPTURE] Capturing manual bidan reply for customer ${phone}`);
+              // 3. MedicalFaqStaging Capture Hook
+              if (conversation.escalation_reason === 'medical_concern') {
+                try {
                   const lastInbound = await messageService.getLastInboundMessage(conversation.id, DEFAULT_TENANT_ID);
                   const rawQuestion = lastInbound?.content || 'Pertanyaan medis customer';
+                  await prisma.medicalFaqStaging.create({
+                    data: {
+                      tenant_id: DEFAULT_TENANT_ID,
+                      conversation_id: conversation.id,
+                      customer_phone: phone,
+                      raw_question: rawQuestion,
+                      bidan_raw_reply: adminReplyText,
+                      status: 'PENDING',
+                    },
+                  });
+                } catch (err: any) {
+                  console.error('[MEDICAL FAQ STAGING ERROR] Failed to create staging record:', err.message);
+                }
+              }
 
-                  try {
-                    await prisma.medicalFaqStaging.create({
-                      data: {
-                        tenant_id: DEFAULT_TENANT_ID,
-                        conversation_id: conversation.id,
-                        customer_phone: phone,
-                        raw_question: rawQuestion,
-                        bidan_raw_reply: adminReplyText,
-                        status: 'PENDING',
-                      },
-                    });
-                  } catch (err: any) {
-                    console.error('[MEDICAL FAQ STAGING ERROR] Failed to create staging record:', err.message);
+              // 4. Log outbound manual reply ke tabel Messages & broadcast SSE ke Live Chat Panel
+              const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
+              const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
+                conversation.id,
+                adminReplyText,
+                payload.id,
+                DEFAULT_TENANT_ID,
+                30
+              );
+
+              if (!isDuplicateOutbound && !isRecentDuplicate) {
+                let msgDate: Date | undefined = undefined;
+                if (payload.timestamp) {
+                  const rawTs = Number(payload.timestamp);
+                  if (!isNaN(rawTs) && rawTs > 0) {
+                    const ms = rawTs > 10000000000 ? rawTs : rawTs * 1000;
+                    msgDate = new Date(ms);
                   }
                 }
-                
-                // 3. Log outbound manual reply ke tabel Messages agar terbaca oleh Bot sebagai history
-                const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
-                const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
-                  conversation.id,
-                  adminReplyText,
-                  payload.id,
-                  DEFAULT_TENANT_ID,
-                  30
-                );
 
-                if (!isDuplicateOutbound && !isRecentDuplicate) {
-                  await messageService.logMessage({
-                    tenantId: DEFAULT_TENANT_ID,
-                    conversationId: conversation.id,
-                    direction: 'OUTBOUND',
-                    content: adminReplyText,
-                    waMessageId: payload.id,
-                    senderType: 'ADMIN',
-                    senderName: 'Admin (WhatsApp)',
-                  }).catch(err => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
-                } else {
-                  console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} was already logged by Live Chat/Staff. Skipping duplicate log.`);
-                }
+                await messageService.logMessage({
+                  tenantId: DEFAULT_TENANT_ID,
+                  conversationId: conversation.id,
+                  direction: 'OUTBOUND',
+                  content: adminReplyText,
+                  waMessageId: payload.id,
+                  senderType: 'ADMIN',
+                  senderName: 'Admin (WhatsApp HP)',
+                  createdAt: msgDate,
+                }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
+
+                console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp HP ke ${phone} tercatat & disiarkan ke Live Chat.`);
+              } else {
+                console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded.`);
               }
             }
           }
