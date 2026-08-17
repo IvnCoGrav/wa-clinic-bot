@@ -32,6 +32,7 @@ import {
 
 import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
 import { emitBootPhase } from '../../lib/bootProgress';
+import { APP_VERSION, BUILD_TIME } from '../../config/version';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
@@ -245,6 +246,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             >
               <LogOut size={16} />
             </button>
+          </div>
+          <div className="pt-2 text-center text-[10px] text-[#8696a0]">
+            {BRAND.panelName} {APP_VERSION} ({BUILD_TIME})
           </div>
         </div>
       </aside>

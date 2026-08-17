@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { emitBootPhase } from '../../lib/bootProgress';
+import { APP_VERSION, BUILD_TIME } from '../../config/version';
 
 interface StaffTaskChild {
   name: string;
@@ -334,13 +335,19 @@ export const StaffToday: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchTasks]);
 
-  // Auto-scroll chat viewport to latest message
-  const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
+  // Auto-scroll chat viewport to latest message with multi-tick execution
+  const scrollToBottom = useCallback((forceMulti = true) => {
+    const doScroll = () => {
       if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
       }
-    });
+    };
+    requestAnimationFrame(doScroll);
+    if (forceMulti) {
+      setTimeout(doScroll, 40);
+      setTimeout(doScroll, 120);
+      setTimeout(doScroll, 300);
+    }
   }, []);
 
   // Fetch messages for selected task conversation (Maksimal 30 bubble chat)
@@ -351,13 +358,15 @@ export const StaffToday: React.FC = () => {
       const res = await apiRequest(`/api/staff/conversations/${conversationId}/messages`);
       if (res.success && Array.isArray(res.data)) {
         setMessages(res.data.slice(-30));
+        scrollToBottom(true);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memuat riwayat pesan.');
     } finally {
       setLoadingMessages(false);
+      scrollToBottom(true);
     }
-  }, []);
+  }, [scrollToBottom]);
 
   // Load conversation when task is selected
   useEffect(() => {
@@ -374,9 +383,7 @@ export const StaffToday: React.FC = () => {
   // Auto scroll chat when messages update or view switches to chat
   useEffect(() => {
     if (mobileView === 'chat' || selectedTask) {
-      scrollToBottom();
-      const t = setTimeout(scrollToBottom, 60);
-      return () => clearTimeout(t);
+      scrollToBottom(true);
     }
   }, [mobileView, selectedTask, messages, scrollToBottom]);
 
@@ -385,6 +392,7 @@ export const StaffToday: React.FC = () => {
     setSelectedTask(task);
     setMobileView('chat');
     window.history.pushState({ view: 'chat', taskId: task.reservationId }, '');
+    scrollToBottom(true);
   };
 
   // Back button in UI
@@ -393,6 +401,68 @@ export const StaffToday: React.FC = () => {
       window.history.back();
     } else {
       setMobileView('list');
+    }
+  };
+
+  // Touch swipe gesture handler for mobile navigation
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        time: Date.now(),
+      };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length === 0) return;
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const deltaX = endX - start.x;
+    const deltaY = endY - start.y;
+    const deltaTime = Date.now() - start.time;
+
+    // Ignore slow gestures (> 650ms) or short drags (< 50px) or mostly vertical scrolls
+    if (deltaTime > 650 || Math.abs(deltaX) < 50 || Math.abs(deltaX) < Math.abs(deltaY) * 1.3) {
+      return;
+    }
+
+    // Ignore if modal/drawer is open
+    if (
+      detailModalTask ||
+      paymentModalTask ||
+      updateLocationModalTask ||
+      showStaffProfileModal ||
+      showMenuDrawer ||
+      zoomImageUrl
+    ) {
+      return;
+    }
+
+    // Case 1: In full-screen mobile chat view -> swipe navigates back to list
+    if (mobileView === 'chat' && activeTab === 'today') {
+      handleBackToList();
+      return;
+    }
+
+    // Case 2: In tab list view -> swipe left/right switches tabs
+    if (mobileView === 'list') {
+      const tabs: Array<'today' | 'upcoming' | 'completed'> = ['today', 'upcoming', 'completed'];
+      const currentIndex = tabs.indexOf(activeTab);
+
+      if (deltaX < -50 && currentIndex < tabs.length - 1) {
+        // Swipe Left -> next tab
+        setActiveTab(tabs[currentIndex + 1]);
+      } else if (deltaX > 50 && currentIndex > 0) {
+        // Swipe Right -> previous tab
+        setActiveTab(tabs[currentIndex - 1]);
+      }
     }
   };
 
@@ -580,12 +650,14 @@ export const StaffToday: React.FC = () => {
     if (chatFileInputRef.current) chatFileInputRef.current.value = '';
   };
 
-  const handleSendReply = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendReply = async (e?: React.FormEvent | React.KeyboardEvent | React.SyntheticEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     const image = selectedImage;
-    if ((!replyText.trim() && !image) || !selectedTask?.conversationId || sending) return;
-
     const textToSend = replyText.trim();
+    if ((!textToSend && !image) || !selectedTask?.conversationId || sending) return;
+
     const signature = `~ ${staff?.name || 'Bidan Terapis'}`;
     const hasText = !!textToSend;
     const optimisticContent = hasText
@@ -612,6 +684,7 @@ export const StaffToday: React.FC = () => {
     if (replyTextareaRef.current) {
       replyTextareaRef.current.style.height = 'auto';
     }
+    scrollToBottom(true);
 
     try {
       const body: Record<string, any> = { text: hasText ? textToSend : '' };
@@ -629,18 +702,24 @@ export const StaffToday: React.FC = () => {
       });
 
       if (res.success) {
-        // Jangan menimpa seluruh object pesan agar created_at & content tidak hilang/menjadi Invalid Date
         const assignedId = res.data?.messageId || res.data?.id;
         if (assignedId) {
           setMessages((prev) =>
             prev.map((m) => (m.id === tempId ? { ...m, id: assignedId } : m))
           );
         }
+      } else {
+        const errorMsg = res.error || 'Gagal mengirim pesan balasan.';
+        setErrorMessage(errorMsg);
+        toast(errorMsg, 'error');
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setReplyText(textToSend);
+        setSelectedImage(image);
       }
     } catch (err: any) {
-      const errorMsg = err.message || 'Gagal mengirim pesan balasan. Harap periksa koneksi WhatsApp (WAHA/WABA).';
+      const errorMsg = err.message || 'Gagal mengirim pesan balasan. Harap periksa koneksi WhatsApp.';
       setErrorMessage(errorMsg);
-      toast('error', errorMsg);
+      toast(errorMsg, 'error');
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setReplyText(textToSend);
       setSelectedImage(image);
@@ -1324,8 +1403,12 @@ export const StaffToday: React.FC = () => {
         </div>
       )}
 
-      {/* Main Split-View Workspace */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Split-View Workspace with Mobile Touch Swipe Navigation */}
+      <div
+        className="flex-1 flex overflow-hidden touch-pan-y"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {/* ========================================================================= */}
         {/* TAB 1: TUGAS HARI INI & LIVE CHAT SPLIT-VIEW */}
         {/* ========================================================================= */}
@@ -2641,6 +2724,11 @@ export const StaffToday: React.FC = () => {
                 <LogOut size={14} />
                 <span>Keluar dari Akun</span>
               </button>
+
+              {/* Version & Build Timestamp */}
+              <div className="pt-2 text-center text-[10px] text-[#8696a0]">
+                Kala Staff Portal {APP_VERSION} ({BUILD_TIME})
+              </div>
             </div>
           </div>
         </div>
