@@ -14,17 +14,45 @@ export interface MemoryLabel {
   _count?: { customers: number };
 }
 
+export const DEFAULT_SYSTEM_LABELS = [
+  { name: 'Hold', color: '#dc2626' }, // Merah - Penanganan khusus / tahan bot
+  { name: 'Admin (CS)', color: '#7c3aed' }, // Ungu - Ditangani Admin CS
+  { name: 'Pending Payment', color: '#d97706' }, // Amber - Menunggu Pembayaran
+  { name: 'Repeat Order', color: '#059669' }, // Hijau - Pelanggan Setia / Repeat
+  { name: 'New Customer', color: '#0284c7' }, // Biru - Pasien Baru
+  { name: 'Medical Emergency', color: '#e11d48' }, // Rose - Darurat Medis / Bidan
+  { name: 'Unresolved FAQ', color: '#ea580c' }, // Oranye - Pertanyaan Belum Terjawab
+  { name: 'MQL (Hot Lead)', color: '#10b981' }, // Emerald - Hot Lead
+];
+
 export const memoryLabels = new Map<string, MemoryLabel>();
 export const memoryCustomerLabels = new Set<string>(); // "customerId:labelId"
+
+// Inisialisasi default memory labels jika kosong
+function initMemoryLabels() {
+  if (memoryLabels.size === 0) {
+    for (const [idx, item] of DEFAULT_SYSTEM_LABELS.entries()) {
+      const id = `mem_label_default_${idx + 1}`;
+      memoryLabels.set(id, {
+        id,
+        tenant_id: DEFAULT_TENANT_ID,
+        name: item.name,
+        color: item.color,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
+    }
+  }
+}
 
 export async function labelsAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/labels
-   * Mengambil daftar label untuk tenant.
+   * Mengambil daftar label untuk tenant (otomatis menginisialisasi default jika kosong).
    */
   fastify.get('/api/admin/labels', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const labels = await prisma.label.findMany({
+      let labels = await prisma.label.findMany({
         where: { tenant_id: DEFAULT_TENANT_ID },
         include: {
           _count: {
@@ -34,9 +62,34 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         orderBy: { name: 'asc' },
       });
 
+      // Jika belum ada label sama sekali, auto-seed default system labels
+      if (labels.length === 0) {
+        for (const item of DEFAULT_SYSTEM_LABELS) {
+          await prisma.label.upsert({
+            where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
+            update: {},
+            create: {
+              tenant_id: DEFAULT_TENANT_ID,
+              name: item.name,
+              color: item.color,
+            },
+          });
+        }
+        labels = await prisma.label.findMany({
+          where: { tenant_id: DEFAULT_TENANT_ID },
+          include: {
+            _count: {
+              select: { customers: true },
+            },
+          },
+          orderBy: { name: 'asc' },
+        });
+      }
+
       return reply.status(200).send({ success: true, data: labels });
     } catch (err: any) {
       // In-memory fallback
+      initMemoryLabels();
       const list = Array.from(memoryLabels.values())
         .filter((l) => l.tenant_id === DEFAULT_TENANT_ID)
         .map((l) => {
@@ -47,6 +100,37 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           return { ...l, _count: { customers: count } };
         });
       return reply.status(200).send({ success: true, data: list, note: 'Fallback in-memory mode' });
+    }
+  });
+
+  /**
+   * POST /api/admin/labels/seed-defaults
+   * Menambahkan/merestorasi seluruh label default sistem.
+   */
+  fastify.post('/api/admin/labels/seed-defaults', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      for (const item of DEFAULT_SYSTEM_LABELS) {
+        await prisma.label.upsert({
+          where: { tenant_id_name: { tenant_id: DEFAULT_TENANT_ID, name: item.name } },
+          update: { color: item.color },
+          create: {
+            tenant_id: DEFAULT_TENANT_ID,
+            name: item.name,
+            color: item.color,
+          },
+        });
+      }
+
+      const labels = await prisma.label.findMany({
+        where: { tenant_id: DEFAULT_TENANT_ID },
+        include: { _count: { select: { customers: true } } },
+        orderBy: { name: 'asc' },
+      });
+
+      return reply.status(200).send({ success: true, data: labels });
+    } catch (err: any) {
+      initMemoryLabels();
+      return reply.status(200).send({ success: true, data: Array.from(memoryLabels.values()) });
     }
   });
 
