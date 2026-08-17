@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Mobile Live Chat Layout & +45% Textfield Width Expansion
+
+- **Optimalisasi Layar Mobile & Perlebaran Textfield Chat (`Layout.tsx`, `LiveChatMonitor.tsx`)**:
+  - **Memangkas Padding Bertumpuk di HP**: Mengubah padding `<main>` di `Layout.tsx` menjadi `p-0.5` di mobile dan memangkas padding card container dari `p-2.5` ke `p-1`, sehingga area percakapan memanfaatkan hampir 100% lebar layar smartphone.
+  - **Redesain Baris Input / Composer Mobile Compact**:
+    - Tombol *Tools (+)* dan *Kirim* diubah ke format compact `w-9 h-9 min-h-[36px]`, memperlebar textarea dari ~218px menjadi **~315px (+45% lebih lapang)** di layar smartphone.
+    - Sembunyikan bar header atas global di HP saat membuka thread chat (`mobileView === 'chat'`) sehingga 100% ruang vertikal dialokasikan untuk percakapan.
+
 ### Fixed & Improved — Sidebar Scroll Isolation, Layout Viewport Bounds & Eliminating scrollIntoView Bleed
 
 - **Perbaikan Bounding Box Viewport & Pengaktifan Scrollbar Flex Child (`Layout.tsx`)**:

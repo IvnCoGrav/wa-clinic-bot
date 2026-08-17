@@ -686,9 +686,9 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col min-h-0 space-y-1.5">
+    <div className="h-full flex flex-col min-h-0 space-y-1 sm:space-y-1.5">
       {/* Top Header */}
-      <div className="flex justify-between items-center bg-white border border-[#e9edef] rounded-xl px-3 py-1.5 shadow-xs shrink-0">
+      <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0`}>
         <div className="flex items-center space-x-2.5">
           <h1 className="text-sm sm:text-base font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
             <MessageSquare className="text-[#008069]" size={18} />
@@ -737,7 +737,7 @@ export const LiveChatMonitor: React.FC = () => {
       ) : (
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 overflow-hidden">
           {/* Section 1: Conversations List */}
-          <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-2xl p-2.5 shadow-xs overflow-hidden min-h-0`}>
+          <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}>
             {/* Header Toolbar Daftar Percakapan: Source Filter & Label Dropdown */}
             <div className="space-y-1.5 pb-2 border-b border-[#f0f2f5] shrink-0">
               <div className="flex justify-between items-center gap-1.5">
@@ -1002,9 +1002,9 @@ export const LiveChatMonitor: React.FC = () => {
           {/* Section 2: Right Panel - Live Chat Messages */}
           <div className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}>
             {selectedChat ? (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-2.5 sm:p-3 h-full flex flex-col justify-between shadow-xs overflow-hidden min-h-0">
+              <div className="bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1 sm:p-2.5 md:p-3 h-full flex flex-col justify-between shadow-xs overflow-hidden min-h-0">
                 {/* Header Info: Clickable Card to view full customer detail modal */}
-                <div className="border-b border-[#e9edef] pb-2 space-y-1.5 shrink-0">
+                <div className="border-b border-[#e9edef] pb-1.5 sm:pb-2 space-y-1 sm:space-y-1.5 shrink-0">
                   {selectedChat.isSandboxTest && (
                     <div className="flex items-center space-x-2 px-2.5 py-0.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
                       <FlaskConical size={11} />
@@ -1150,7 +1150,7 @@ export const LiveChatMonitor: React.FC = () => {
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
                   ref={chatContainerRef} 
-                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 sm:p-3 space-y-2 my-1.5 rounded-xl border border-[#e9edef] bg-[#efeae2]"
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
                     backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
                     backgroundSize: '16px 16px',
@@ -1172,7 +1172,7 @@ export const LiveChatMonitor: React.FC = () => {
 
                       return (
                         <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
-                          <div className={`max-w-[82%] sm:max-w-[70%] rounded-lg px-3 py-1.5 text-xs leading-relaxed shadow-2xs ${
+                          <div className={`max-w-[88%] sm:max-w-[75%] md:max-w-[70%] rounded-lg px-2.5 sm:px-3 py-1.5 text-xs leading-relaxed shadow-2xs ${
                             isCustomer
                               ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
                               : isAdmin
@@ -1226,7 +1226,7 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
 
                 {/* Reply Composer */}
-                <div className="border-t border-[#e9edef] pt-1.5 shrink-0">
+                <div className="border-t border-[#e9edef] pt-1 sm:pt-1.5 shrink-0">
                   {selectedChat.isSandboxTest ? (
                     <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
                       <FlaskConical size={13} />
@@ -1252,7 +1252,7 @@ export const LiveChatMonitor: React.FC = () => {
                       </button>
                     </div>
                   )}
-                  <div className="flex items-end space-x-2 bg-[#f0f2f5] p-2 rounded-xl border border-[#e9edef] w-full">
+                  <div className="flex items-end space-x-1 sm:space-x-1.5 md:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 rounded-xl border border-[#e9edef] w-full">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -1267,16 +1267,16 @@ export const LiveChatMonitor: React.FC = () => {
                         type="button"
                         onClick={() => setToolsMenuOpen(!toolsMenuOpen)}
                         disabled={sending || generatingDraft}
-                        className={`p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
                           toolsMenuOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
                         }`}
                         title="Fitur & Lampiran (AI Copilot / Gambar)"
                         aria-label="Menu Tools & Lampiran"
                       >
                         {generatingDraft ? (
-                          <Loader size={18} className="animate-spin text-amber-500" />
+                          <Loader size={17} className="animate-spin text-amber-500" />
                         ) : (
-                          <Plus size={18} className={`transition-transform duration-200 ${toolsMenuOpen ? 'rotate-45 text-[#008069]' : ''}`} />
+                          <Plus size={17} className={`transition-transform duration-200 ${toolsMenuOpen ? 'rotate-45 text-[#008069]' : ''}`} />
                         )}
                       </button>
 
@@ -1339,13 +1339,13 @@ export const LiveChatMonitor: React.FC = () => {
                       }}
                       rows={1}
                       placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
-                      className="flex-1 w-full min-w-0 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[220px] leading-relaxed"
+                      className="flex-1 w-full min-w-0 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[220px] leading-relaxed"
                       style={{ fontSize: '16px' }}
                     />
                     <button
                       onClick={handleSendReply}
                       disabled={sending || (!replyText.trim() && !selectedImage)}
-                      className="px-3.5 sm:px-4 py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 min-h-[38px]"
+                      className="w-9 h-9 sm:w-auto sm:px-4 min-h-[36px] sm:min-h-[38px] p-0 sm:py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95"
                       title="Kirim Balasan"
                     >
                       <Send size={15} />
