@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Therapist Portal Dedicated Polish & Super Admin Restore (v1.12.5)
+
+- **Restore Super Admin Layout (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Mengembalikan sidebar Super Admin ke kondisi semula tanpa modifikasi. Label versi aplikasi difokuskan secara khusus di Portal Terapis (`StaffToday.tsx`).
+- **Penyempurnaan Viewport & Flexbox Auto-Scroll Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menambahkan constraint `min-h-0 h-full` pada kolom chat flexbox dan mengikat re-scroll effect saat `loadingMessages` selesai agar viewport chat 100% instan bergulir ke pesan terbawah di mobile browser.
+  - Memperbarui tag versi halus di header portal terapis (`v1.12.5`) dan menu drawer.
+
 ### Fixed & Improved — Multiline Enter, Rock-Solid Auto-Scroll Anchor & GPU Micro-Animations (v1.12.4)
 
 - **Perilaku Tombol Enter Murni Menambah Baris Baru (*Multiline*) (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
