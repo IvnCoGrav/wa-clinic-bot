@@ -254,6 +254,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               content: inboundTextPreview,
               waMessageId,
               payloadRaw: payload,
+              skipMqlEvaluation: true,
             });
             return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
           }

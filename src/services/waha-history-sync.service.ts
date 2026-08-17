@@ -119,6 +119,7 @@ export class WahaHistorySyncService {
             waMessageId: msg.id,
             senderType: msg.fromMe ? 'BOT' : undefined,
             senderName: msg.fromMe ? 'Bot' : undefined,
+            skipMqlEvaluation: true,
           });
           chatSynced++;
         }
