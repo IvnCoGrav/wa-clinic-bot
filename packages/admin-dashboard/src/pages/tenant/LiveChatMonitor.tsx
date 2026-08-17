@@ -997,7 +997,8 @@ export const LiveChatMonitor: React.FC = () => {
                       }}
                       rows={1}
                       placeholder="Tulis balasan... (Enter kirim, Shift+Enter baris baru)"
-                      className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[130px] leading-relaxed"
+                      className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[130px] leading-relaxed"
+                      style={{ fontSize: '16px' }}
                     />
                     <button
                       onClick={handleSendReply}

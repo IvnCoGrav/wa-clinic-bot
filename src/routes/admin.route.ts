@@ -226,7 +226,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/index.html');
       const content = await fs.readFile(filePath, 'utf-8');
       reply.type('text/html');
-      reply.header('Cache-Control', 'no-cache');
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
       return reply.send(content);
     } catch (err) {
       const filename = urlPath.split('/admin/')[1] || 'login.html';

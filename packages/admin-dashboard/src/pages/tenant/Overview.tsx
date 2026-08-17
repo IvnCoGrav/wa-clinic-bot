@@ -22,6 +22,7 @@ import {
   Bar
 } from 'recharts';
 import { emitBootPhase } from '../../lib/bootProgress';
+import { APP_VERSION, BUILD_DATE, BUILD_TIME } from '../../config/version';
 
 export const Overview: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -85,8 +86,19 @@ export const Overview: React.FC = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21]">Overview</h2>
-          <p className="text-xs text-[#667781]">Real-time statistics & operational liveness metrics</p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-[#111b21]">Overview</h2>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+              {APP_VERSION}
+            </span>
+          </div>
+          <p className="text-xs text-[#667781] mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>Real-time statistics & operational liveness metrics</span>
+            <span className="text-[#d1d7db]">·</span>
+            <span className="text-[10px] text-[#8696a0] font-mono bg-white px-1.5 py-0.5 rounded border border-[#e9edef]">
+              Update: {BUILD_DATE}, {BUILD_TIME}
+            </span>
+          </p>
         </div>
         <button 
           onClick={() => { setLoading(true); fetchStatus(); }}
@@ -255,9 +267,11 @@ export const Overview: React.FC = () => {
             </div>
           </div>
 
-          <div className="pt-3.5 border-t border-[#e9edef] text-[11px] text-[#667781] flex justify-between">
+          <div className="pt-3.5 border-t border-[#e9edef] text-[11px] text-[#667781] flex flex-wrap justify-between items-center gap-2">
             <span>Uptime: {healthData ? `${(healthData.systemUptimeSeconds / 3600).toFixed(2)} hours` : 'loading...'}</span>
-            <span>OS: Windows</span>
+            <span className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-[#e9edef] text-[#8696a0]">
+              Dashboard {APP_VERSION} ({BUILD_DATE} {BUILD_TIME})
+            </span>
           </div>
         </div>
       </div>
