@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Live Chat Monitor Mobile UX & Anti-Zoom Input Focus
+
+- **Pencegahan Otomatis Zoom-In pada Input & Textarea Mobile (`packages/admin-dashboard/src/index.css`)**:
+  - Menambahkan aturan CSS global untuk layar mobile (`max-width: 767px`) dengan `font-size: 16px !important` pada elemen `input`, `textarea`, dan `select` guna mencegah iOS Safari & Android mobile browser melakukan auto-zoom paksa saat admin mengetuk field input/balasan.
+- **Penyempurnaan UX & Auto-Growing Textarea Live Chat (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`)**:
+  - **Auto-Grow Composer**: Textarea balasan admin kini otomatis memanjang dinamis (1 baris hingga ~5 baris / maks 130px) sesuai panjang ketikan teks dan otomatis me-reset tinggi ke ukuran awal setelah pesan terkirim atau berganti percakapan.
+  - **Pembersihan Navigasi Mobile**: Menghilangkan tombol kembali (*back button*) redundan di header atas saat tampilan chat mobile aktif dan mengoptimalkan tombol kembali tunggal di dalam panel inspector obrolan.
+  - **Ergonomi Tombol Kirim Mobile**: Menyesuaikan tombol kirim menjadi icon-only di layar HP sempit agar textarea balasan memiliki ruang lebar horizontal maksimal dan nyaman diketik.
+  - **Layout & Ketinggian Adaptif**: Menyesuaikan ketinggian container daftar percakapan dan panel obrolan dengan viewport mobile (`100dvh`) agar tidak terpotong oleh virtual keyboard.
+- **Pengujian & Validasi**:
+  - Seluruh test suite unit & integrasi (155 file, 1.414 tests PASS). Build bundle admin dashboard berhasil tanpa error (0 warning/error).
+
 ### Changed & Security — Penonaktifan Fitur App State Fisik WAHA (Anti-Session Logout) & Migrasi Penuh ke Label UI Sistem
 
 - **Akar Masalah & Penonaktifan Fitur App State Fisik WAHA (`src/integrations/waha/client.ts`, `src/services/conversation.service.ts`, `src/routes/webhook.route.ts`, `.env.example`, `.env`)**:
