@@ -116,8 +116,32 @@ export class AiModelConfigService {
     return this.globalBotActive.get(tenantId) ?? true;
   }
 
-  static setBotActive(tenantId: string, active: boolean): void {
+  static async setBotActive(tenantId: string, active: boolean): Promise<void> {
     this.globalBotActive.set(tenantId, active);
+    try {
+      const { prisma } = await import('../db/client');
+      await prisma.tenantAiConfig.upsert({
+        where: {
+          tenant_id_task: {
+            tenant_id: tenantId,
+            task: 'GLOBAL_BOT_ENABLED',
+          },
+        },
+        create: {
+          tenant_id: tenantId,
+          task: 'GLOBAL_BOT_ENABLED',
+          provider: 'SYSTEM',
+          model_name: active ? 'true' : 'false',
+          max_tokens: 0,
+          temperature: 0,
+        },
+        update: {
+          model_name: active ? 'true' : 'false',
+        },
+      });
+    } catch (err: any) {
+      console.warn('[AI MODEL CONFIG] Failed to persist bot active status:', err.message);
+    }
   }
 
   /**
@@ -130,6 +154,11 @@ export class AiModelConfigService {
       const dbConfigs = await prisma.tenantAiConfig.findMany({
         where: { tenant_id: tenantId },
       });
+
+      const botActiveConfig = dbConfigs.find((c) => c.task === 'GLOBAL_BOT_ENABLED');
+      if (botActiveConfig) {
+        this.globalBotActive.set(tenantId, botActiveConfig.model_name === 'true');
+      }
 
       const reg = getOrCreateTenantRegistry(tenantId);
       if (dbConfigs.length > 0) {
