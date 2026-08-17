@@ -587,6 +587,7 @@ ${messagesAsc.map((m: any) => `${m.direction === 'INBOUND' ? 'Bunda' : 'Bidan'}:
 
 Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda:`;
 
+      const startTime = Date.now();
       const callResult = await callChatWithRetry({
         baseUrl: endpoint.baseUrl,
         apiKey: endpoint.apiKey,
@@ -601,6 +602,33 @@ Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda
           ],
         },
       });
+      const latencyMs = Date.now() - startTime;
+
+      // Telemetry: Catat LLM Usage & Biaya ke Buffer Audit
+      try {
+        const usage = callResult.data?.usage;
+        const promptTokens = usage?.prompt_tokens || 0;
+        const completionTokens = usage?.completion_tokens || 0;
+        const cachedTokens = usage?.prompt_tokens_details?.cached_tokens || usage?.cached_prompt_tokens || 0;
+
+        const { recordLlmUsage } = await import('../utils/llm-audit-buffer');
+        const { deriveProvider } = await import('../utils/cost-calculator');
+
+        recordLlmUsage({
+          tenant_id: tenantId,
+          customer_phone: customer?.phone || 'unknown',
+          conversation_id: conversationId,
+          provider: deriveProvider(endpoint.baseUrl),
+          model_name: endpoint.model,
+          task_type: 'AI_COPILOT_SUGGESTION',
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          cached_prompt_tokens: cachedTokens,
+          latency_ms: latencyMs,
+        });
+      } catch (logErr: any) {
+        console.warn('[AI SUGGESTION TELEMETRY ERROR]:', logErr.message);
+      }
 
       const draft = callResult.data?.choices?.[0]?.message?.content?.trim() || '';
       return draft.replace(/^["']|["']$/g, '');

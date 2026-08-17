@@ -667,13 +667,14 @@ model StaffSession {
 }
 
 model Label {
-  id         String          @id @default(uuid())
-  tenant_id  String          @default("default-tenant")
-  name       String
-  color      String          @default("#008069")
-  created_at DateTime        @default(now())
-  updated_at DateTime        @updatedAt
-  customers  CustomerLabel[]
+  id          String          @id @default(uuid())
+  tenant_id   String          @default("default-tenant")
+  name        String
+  color       String          @default("#008069")
+  description String?
+  created_at  DateTime        @default(now())
+  updated_at  DateTime        @updatedAt
+  customers   CustomerLabel[]
 
   @@unique([tenant_id, name])
   @@index([tenant_id])

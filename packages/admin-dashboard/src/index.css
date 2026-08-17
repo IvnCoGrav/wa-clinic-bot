@@ -40,8 +40,6 @@
 html, body, #root {
   background-color: #f0f2f5;
   color: #111b21;
-  overscroll-behavior-y: none;
-  overscroll-behavior-x: none;
 }
 
 body {
