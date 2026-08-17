@@ -36,8 +36,26 @@ const DEFAULT_BATCH = 50;
 const DEFAULT_MESSAGES_PER_CHAT = 100;
 
 /**
+ * Ekstraksi nama customer dari isi pesan/form reservasi jika kontak tidak memiliki pushname di WA
+ */
+function extractCustomerNameFromMessages(messages: { body: string; fromMe?: boolean }[]): string | undefined {
+  for (const m of messages) {
+    if (!m.body || m.fromMe) continue;
+    const text = m.body;
+    const match = text.match(/(?:Nama(?:\s+Bunda|\s+Moms|\s+Ibu|\s+Pasien|\s+Lengkap|\s+Pemesan)?\s*[:=]\s*)([A-Za-z\s'.]{3,35})/i);
+    if (match && match[1]) {
+      const candidate = match[1].trim();
+      if (!/^(alamat|jadwal|tanggal|treatment|paket|pilihan|kelurahan|kecamatan|terapi|pijat|surabaya|sidoarjo)/i.test(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Sinkronisasi history chat dari WAHA ke DB bot (mirip WhatsApp Web):
- * - Ambil daftar chat dari WAHA (store fullSync), batch per `limit`.
+ * - Ambil daftar chat dan contacts lengkap dari WAHA (matching by address book name & pushname).
  * - Per chat: resolusi LID -> nomor HP, upsert customer + conversation + messages.
  * - Dedupe by wa_message_id → aman dijalankan ulang (idempoten).
  * - Skip: grup (@g.us), broadcast, nomor sandbox test (6289999), chat tanpa nomor valid.
@@ -114,6 +132,22 @@ export class WahaHistorySyncService {
     void (async () => {
       try {
         console.log(`[WAHA BACKGROUND SYNC] Memulai sinkronisasi seluruh chat di background untuk tenant: ${tenantId}...`);
+
+        // 1. Fetch seluruh contacts dari WAHA untuk matching nama buku telepon / pushname
+        const contacts = await wahaClient.getAllContacts();
+        const contactMap = new Map<string, string>();
+        for (const c of contacts) {
+          const contactName = (c.name || c.pushname || c.shortName || '').trim();
+          if (!contactName) continue;
+          const clean = (c.id || '').replace(/@.*$/, '');
+          if (clean) {
+            contactMap.set(clean, contactName);
+            contactMap.set(`${clean}@c.us`, contactName);
+            contactMap.set(`${clean}@s.whatsapp.net`, contactName);
+          }
+          if (c.id) contactMap.set(c.id, contactName);
+        }
+
         const chats = await wahaClient.getChats();
         const totalChats = chats.length;
         initialProgress.totalChats = totalChats;
@@ -156,12 +190,22 @@ export class WahaHistorySyncService {
               continue;
             }
 
-            let customerName = chat.name || undefined;
+            const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
+            const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
+            const textMessages = (rawMessages || [])
+              .filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0)
+              .sort((a, b) => a.timestamp - b.timestamp);
+
+            // Matching nama dari contacts buku telepon / pushname / chat name / form text
+            let customerName = chat.name || contactMap.get(phone) || contactMap.get(chat.id) || undefined;
             if (!customerName) {
               try {
                 const contact = await wahaClient.getContact(phone);
-                if (contact?.pushname) customerName = contact.pushname;
+                customerName = (contact?.name || contact?.pushname || contact?.shortName || '').trim() || undefined;
               } catch (e) {}
+            }
+            if (!customerName) {
+              customerName = extractCustomerNameFromMessages(textMessages);
             }
 
             initialProgress.currentChatName = customerName || phone;
@@ -170,7 +214,7 @@ export class WahaHistorySyncService {
               skipFollowUpScheduling: true,
             });
 
-            if (customerName && !customer.name) {
+            if (customerName && customerName !== customer.name) {
               try {
                 await customerService.updateCustomerName(customer.id, customerName, tenantId);
                 customer.name = customerName;
@@ -178,11 +222,6 @@ export class WahaHistorySyncService {
             }
 
             const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
-            const targetChatId = chat.id.includes('@lid') ? chat.id : `${phone}@c.us`;
-            const rawMessages = await wahaClient.getMessages(targetChatId, messagesPerChat);
-            const textMessages = (rawMessages || [])
-              .filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0)
-              .sort((a, b) => a.timestamp - b.timestamp);
 
             let chatSynced = 0;
             let latestMsgDate: Date | null = null;
@@ -276,6 +315,20 @@ export class WahaHistorySyncService {
     tenantId = DEFAULT_TENANT_ID
   ): Promise<WahaHistorySyncResult> {
     try {
+      const contacts = await wahaClient.getAllContacts();
+      const contactMap = new Map<string, string>();
+      for (const c of contacts) {
+        const contactName = (c.name || c.pushname || c.shortName || '').trim();
+        if (!contactName) continue;
+        const clean = (c.id || '').replace(/@.*$/, '');
+        if (clean) {
+          contactMap.set(clean, contactName);
+          contactMap.set(`${clean}@c.us`, contactName);
+          contactMap.set(`${clean}@s.whatsapp.net`, contactName);
+        }
+        if (c.id) contactMap.set(c.id, contactName);
+      }
+
       const chats = await wahaClient.getChats();
       const totalChats = chats.length;
       const batch = chats.slice(offset, offset + limit);
@@ -320,15 +373,16 @@ export class WahaHistorySyncService {
           .filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0)
           .sort((a, b) => a.timestamp - b.timestamp);
 
-        // Nama chat sering kosong di daftar chats → coba ambil pushname via contacts (best-effort)
-        let customerName = chat.name || undefined;
+        // Matching nama dari contacts buku telepon / pushname / chat name / form text
+        let customerName = chat.name || contactMap.get(phone) || contactMap.get(chat.id) || undefined;
         if (!customerName) {
           try {
             const contact = await wahaClient.getContact(phone);
-            if (contact?.pushname) customerName = contact.pushname;
-          } catch (e) {
-            // abaikan — nama tetap kosong, tidak fatal
-          }
+            customerName = (contact?.name || contact?.pushname || contact?.shortName || '').trim() || undefined;
+          } catch (e) {}
+        }
+        if (!customerName) {
+          customerName = extractCustomerNameFromMessages(textMessages);
         }
 
         const customer = await customerService.getOrCreateCustomer(phone, customerName, tenantId, {
@@ -336,7 +390,7 @@ export class WahaHistorySyncService {
         });
 
         // Backfill nama customer lama yang masih kosong (data hasil sync sebelumnya)
-        if (customerName && !customer.name) {
+        if (customerName && customerName !== customer.name) {
           try {
             await customerService.updateCustomerName(customer.id, customerName, tenantId);
             customer.name = customerName;
