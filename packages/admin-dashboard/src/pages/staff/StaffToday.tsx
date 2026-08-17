@@ -188,6 +188,7 @@ export const StaffToday: React.FC = () => {
 
   const selectedTaskRef = useRef<StaffTask | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -335,18 +336,22 @@ export const StaffToday: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchTasks]);
 
-  // Auto-scroll chat viewport to latest message with multi-tick execution
+  // Auto-scroll chat viewport to latest message with multi-tick dual execution
   const scrollToBottom = useCallback((forceMulti = true) => {
     const doScroll = () => {
       if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
+      }
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
       }
     };
     requestAnimationFrame(doScroll);
     if (forceMulti) {
-      setTimeout(doScroll, 40);
-      setTimeout(doScroll, 120);
-      setTimeout(doScroll, 300);
+      setTimeout(doScroll, 30);
+      setTimeout(doScroll, 100);
+      setTimeout(doScroll, 250);
+      setTimeout(doScroll, 500);
     }
   }, []);
 
@@ -1483,10 +1488,10 @@ export const StaffToday: React.FC = () => {
                     return (
                       <div
                         key={task.reservationId}
-                        className={`p-3.5 rounded-2xl transition-all text-left relative bg-white shadow-xs border ${
+                        className={`p-3.5 rounded-2xl transition-all duration-200 text-left relative bg-white shadow-xs border ${
                           isSelected
-                            ? 'border-[#008069] ring-2 ring-[#008069]/25 shadow-md'
-                            : 'border-[#e9edef] hover:border-[#008069]/40 hover:shadow-sm'
+                            ? 'border-[#008069] ring-2 ring-[#008069]/30 shadow-md animate-pulseGlow'
+                            : 'border-[#e9edef] hover:border-[#008069]/40 hover:shadow-sm active:scale-[0.98]'
                         } ${catInfo.borderAccent} border-l-4`}
                       >
                         {/* Header: Customer Icon & Name & Time (KLIK BARIS INI = DETAIL CUSTOMER) */}
@@ -1864,7 +1869,7 @@ export const StaffToday: React.FC = () => {
                         return (
                           <div
                             key={msg.id}
-                            className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}
+                            className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'} animate-popIn`}
                           >
                             {/* Sender Label Tag */}
                             <div className="text-[10px] text-[#667781] mb-0.5 px-1.5 flex items-center space-x-1">
@@ -1906,7 +1911,10 @@ export const StaffToday: React.FC = () => {
                             >
                               {/* Media Attachment Thumbnail Preview */}
                               {media && (
-                                <div className="mb-2 rounded-xl overflow-hidden border border-black/5 bg-black/5">
+                                <div
+                                  onLoad={() => scrollToBottom(false)}
+                                  className="mb-2 rounded-xl overflow-hidden border border-black/5 bg-black/5"
+                                >
                                   <MediaImage
                                     src={media.url || media.hdUrl}
                                     downloadSrc={media.hdUrl || media.url}
@@ -1949,6 +1957,8 @@ export const StaffToday: React.FC = () => {
                         );
                       })
                     )}
+                    {/* Invisible Anchor for 100% Reliable Auto-Scroll */}
+                    <div ref={messagesEndRef} className="h-0 w-0 pointer-events-none" />
                   </div>
 
                   {/* WhatsApp Quick Reply Input Bar */}
@@ -1978,7 +1988,7 @@ export const StaffToday: React.FC = () => {
                               }, 0);
                             }
                           }}
-                          className="text-[11px] font-medium bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 px-2.5 py-1 rounded-full whitespace-nowrap transition-all shadow-2xs active:scale-95 flex-shrink-0"
+                          className="text-[11px] font-medium bg-white hover:bg-[#e8f5f2] text-[#008069] border border-[#00a884]/30 px-2.5 py-1 rounded-full whitespace-nowrap transition-transform duration-150 hover:scale-105 active:scale-95 shadow-2xs flex-shrink-0"
                         >
                           {chip.label}
                         </button>
@@ -2030,13 +2040,7 @@ export const StaffToday: React.FC = () => {
                           rows={1}
                           value={replyText}
                           onChange={handleReplyTextChange}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleSendReply(e);
-                            }
-                          }}
-                          placeholder="Ketik pesan balasan... (Enter kirim, Shift+Enter baris baru)"
+                          placeholder="Ketik pesan balasan... (Enter untuk baris baru)"
                           disabled={sending}
                           style={{ fontSize: '16px' }}
                           className="w-full resize-none bg-white border border-[#e9edef] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] text-[#111b21] rounded-xl px-3.5 py-2 text-[16px] sm:text-sm focus:outline-none placeholder-[#667781] transition-colors disabled:opacity-50 shadow-xs min-h-[40px] max-h-[130px] leading-relaxed block"
@@ -2086,7 +2090,7 @@ export const StaffToday: React.FC = () => {
           /* ========================================================================= */
           /* TAB 2: JADWAL MENDATANG (READ-ONLY, NO CHAT) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Search Bar */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
@@ -2314,7 +2318,7 @@ export const StaffToday: React.FC = () => {
           /* ========================================================================= */
           /* TAB 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
             {/* Header / Summary Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
@@ -2743,7 +2747,7 @@ export const StaffToday: React.FC = () => {
           onClick={() => setShowStaffProfileModal(false)}
         >
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative"
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-[#e9edef] space-y-5 text-center relative animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -2857,7 +2861,7 @@ export const StaffToday: React.FC = () => {
           onClick={() => setDetailModalTask(null)}
         >
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -3077,7 +3081,7 @@ export const StaffToday: React.FC = () => {
           onClick={() => setPaymentModalTask(null)}
         >
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left"
+            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
@@ -3222,7 +3226,7 @@ export const StaffToday: React.FC = () => {
           onClick={() => setUpdateLocationModalTask(null)}
         >
           <div
-            className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[92vh] overflow-y-auto"
+            className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
