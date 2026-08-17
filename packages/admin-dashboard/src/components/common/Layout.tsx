@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiRequest } from '../../services/api';
@@ -147,21 +147,56 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     },
   ];
 
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length === 0) return;
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+
+    const deltaX = e.changedTouches[0].clientX - start.x;
+    const deltaY = e.changedTouches[0].clientY - start.y;
+
+    if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
+
+    // Left edge swipe (start.x <= 50, deltaX > 40) -> Buka Menu Sidebar Admin
+    if (start.x <= 50 && deltaX > 40) {
+      setMobileMenuOpen(true);
+      return;
+    }
+
+    // Swipe ke kiri saat sidebar terbuka -> Tutup Sidebar
+    if (mobileMenuOpen && deltaX < -40) {
+      setMobileMenuOpen(false);
+      return;
+    }
+  };
+
   const currentRole = user?.role || 'super_admin';
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row">
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="min-h-screen bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row touch-pan-y"
+    >
       
-      {/* Mobile backdrop overlay */}
-      {mobileMenuOpen && (
-        <div
-          onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity"
-        />
-      )}
+      {/* Mobile backdrop overlay with smooth fade */}
+      <div
+        onClick={() => setMobileMenuOpen(false)}
+        className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
+          mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      />
 
       {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-[#e9edef] flex flex-col transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out shadow-lg md:shadow-xs`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-[#e9edef] flex flex-col transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-out shadow-lg md:shadow-xs`}>
         {/* Brand/Header */}
         <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
           <div className="flex items-center space-x-2.5">
