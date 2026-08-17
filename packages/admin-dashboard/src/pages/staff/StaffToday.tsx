@@ -1418,28 +1418,33 @@ export const StaffToday: React.FC = () => {
         </div>
       )}
 
-      {/* Main Split-View Workspace with Mobile Touch Swipe Navigation */}
+      {/* Main Split-View Workspace with Continuous 3-Slide Hardware-Accelerated Carousel Track */}
       <div
-        className="flex-1 flex overflow-hidden touch-pan-y"
+        className="flex-1 flex overflow-hidden touch-pan-y relative w-full"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {/* ========================================================================= */}
-        {/* TAB 1: TUGAS HARI INI & LIVE CHAT SPLIT-VIEW */}
-        {/* ========================================================================= */}
-        {activeTab === 'today' ? (
-          <>
+        <div
+          className="flex h-full w-[300%] transition-transform duration-300 ease-out will-change-transform"
+          style={{
+            transform: `translateX(${
+              activeTab === 'today'
+                ? '0%'
+                : activeTab === 'upcoming'
+                ? '-33.333333%'
+                : '-66.666667%'
+            })`,
+          }}
+        >
+          {/* ========================================================================= */}
+          {/* SLIDE 1: TUGAS HARI INI & LIVE CHAT SPLIT-VIEW */}
+          {/* ========================================================================= */}
+          <div className="w-1/3 h-full flex overflow-hidden">
             {/* Left Column: WhatsApp Chat List & Visit Schedule */}
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0 min-h-0 h-full ${
-                slideDirection === 'left'
-                  ? 'animate-slideInFromRight'
-                  : slideDirection === 'right'
-                  ? 'animate-slideInFromLeft'
-                  : 'animate-fadeIn'
-              }`}
+              } w-full md:w-[420px] flex-col border-r border-[#e9edef] bg-[#f0f2f5] overflow-hidden flex-shrink-0 min-h-0 h-full`}
             >
               {/* Panel Search & Header */}
               <div className="p-3 bg-white border-b border-[#e9edef] space-y-2.5">
@@ -2101,20 +2106,13 @@ export const StaffToday: React.FC = () => {
                 </div>
               )}
             </div>
-          </>
-        ) : activeTab === 'upcoming' ? (
-          /* ========================================================================= */
-          /* TAB 2: JADWAL MENDATANG (READ-ONLY, NO CHAT) */
-          /* ========================================================================= */
-          <div
-            className={`flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 ${
-              slideDirection === 'left'
-                ? 'animate-slideInFromRight'
-                : slideDirection === 'right'
-                ? 'animate-slideInFromLeft'
-                : 'animate-fadeIn'
-            }`}
-          >
+          </div>
+
+          {/* ========================================================================= */}
+          {/* SLIDE 2: JADWAL MENDATANG (READ-ONLY, NO CHAT) */}
+          {/* ========================================================================= */}
+          <div className="w-1/3 h-full flex flex-col overflow-hidden bg-[#f0f2f5]">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
             {/* Search Bar */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-[#54656f]">
@@ -2337,20 +2335,14 @@ export const StaffToday: React.FC = () => {
                 </div>
               ))
             )}
+            </div>
           </div>
-        ) : (
-          /* ========================================================================= */
-          /* TAB 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI) */
-          /* ========================================================================= */
-          <div
-            className={`flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6 ${
-              slideDirection === 'left'
-                ? 'animate-slideInFromRight'
-                : slideDirection === 'right'
-                ? 'animate-slideInFromLeft'
-                : 'animate-fadeIn'
-            }`}
-          >
+
+          {/* ========================================================================= */}
+          {/* SLIDE 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI) */}
+          {/* ========================================================================= */}
+          <div className="w-1/3 h-full flex flex-col overflow-hidden bg-[#f0f2f5]">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-5xl mx-auto w-full space-y-6">
             {/* Header / Summary Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3.5">
@@ -2567,23 +2559,31 @@ export const StaffToday: React.FC = () => {
                 </div>
               ))
             )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ========================================================================= */}
       {/* RIGHT SIDEBAR SLIDE-OVER DRAWER (MENU GARIS TIGA) */}
       {/* ========================================================================= */}
-      {showMenuDrawer && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* Backdrop Overlay */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
-            onClick={() => setShowMenuDrawer(false)}
-          />
+      <div
+        className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${
+          showMenuDrawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        {/* Backdrop Overlay */}
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-300"
+          onClick={() => setShowMenuDrawer(false)}
+        />
 
-          {/* Drawer Body */}
-          <div className="relative w-[320px] sm:w-[380px] max-w-[85vw] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-in-out">
+        {/* Drawer Body */}
+        <div
+          className={`relative w-[320px] sm:w-[380px] max-w-[85vw] bg-white h-full shadow-2xl flex flex-col z-10 transform transition-transform duration-300 ease-out ${
+            showMenuDrawer ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
             {/* Drawer Header */}
             <div className="p-4 bg-[#008069] text-white flex items-center justify-between shadow-xs">
               <div className="flex items-center space-x-3 min-w-0">
@@ -2765,7 +2765,6 @@ export const StaffToday: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL / DRAWER PROFIL STAFF & LOGOUT */}

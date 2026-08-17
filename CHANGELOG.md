@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Improved — Admin Left-Edge Swipe Sidebar & Continuous 60fps Carousel Track for Therapist (v1.12.7)
+
+- **Navigasi Gestur Usap Kiri-ke-Kanan Sidebar Menu Admin (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:
+  - Menambahkan touch gesture listener pada root layout admin (`start.x <= 50 && deltaX > 40`) agar saat mengusap dari tepi paling kiri layar ke kanan di perangkat mobile, sidebar navigasi admin terbuka secara halus dan responsif.
+  - Memperbaiki transisi backdrop gelap dengan `opacity-100` / `opacity-0` halus dan menambahkan gesture swipe ke kiri untuk menutup kembali sidebar.
+- **Arsitektur Carousel Track 60 FPS Buttery-Smooth Portal Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Mengubah perenderan tab dari unmount/mount bersyarat (yang menyebabkan DOM re-layout dan jeda kaku) menjadi **3-slide horizontal carousel track** (`w-[300%]` dengan `transform: translateX(...)` dan `will-change: transform`).
+  - Ketiga tab (*Hari Ini*, *Jadwal Mendatang*, *Selesai*) tetap terpasang di memori sehingga pergantian tab via geser/klik berjalan instan 60 FPS tanpa lag perenderan ulang dan mempertahankan posisi scroll masing-masing.
+- **Transisi CSS GPU-Accelerated Menu Drawer Terapis (`packages/admin-dashboard/src/pages/staff/StaffToday.tsx`)**:
+  - Menghilangkan pop-in kaku pada menu drawer kanan dengan transisi CSS `translate-x-full` ke `translate-x-0` yang mulus dan elastis.
+
 ### Fixed & Improved — Overscroll Background Fix, Directional Tab Slide & Right-Edge Swipe Sidebar (v1.12.6)
 
 - **Eliminasi Bug Background Hitam saat Overscroll Dashboard (`packages/admin-dashboard/index.html`, `packages/admin-dashboard/src/index.css`)**:
