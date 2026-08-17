@@ -4,8 +4,11 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed & Improved — Sidebar Scroll Isolation & Eliminating scrollIntoView Bleed
+### Fixed & Improved — Sidebar Scroll Isolation, Layout Viewport Bounds & Eliminating scrollIntoView Bleed
 
+- **Perbaikan Bounding Box Viewport & Pengaktifan Scrollbar Flex Child (`Layout.tsx`)**:
+  - Pada rute `/admin/live-chat`, wrapper induk di `Layout.tsx` kini secara ketat menetapkan `h-screen max-h-screen overflow-hidden min-h-0` (bukan `min-h-screen` yang menyebabkan tinggi flex unbounded).
+  - Dengan batas tinggi viewport yang fixed dan jelas, browser kini secara otomatis mengaktifkan scrollbar pada kedua flex child (`chatListContainerRef` di sidebar dan `chatContainerRef` di panel riwayat chat) sehingga seluruh daftar chat dan thread pesan dapat digulir (*scrollable*) dengan sempurna.
 - **Pemberantasan Bug Auto-Scroll Nyasar pada Sidebar Chat List (`LiveChatMonitor.tsx`)**:
   - **Root Cause**: Ditemukan panggilan `textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })` di dalam `useEffect` setiap kali percakapan aktif (`selectedId`) dipilih. Pemanggilan `scrollIntoView()` secara native pada browser menyebabkan peramban menggulir seluruh *ancestor scroll container* (termasuk membocorkan event scroll ke sidebar daftar percakapan kiri sehingga ikut melompat ke bawah).
   - **Solusi**:
