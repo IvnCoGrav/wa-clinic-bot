@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { Customer } from '@prisma/client';
+import { DEFAULT_TENANT_ID } from '../config/tenant';
 
 // In-Memory store fallback jika DB offline
 const memoryCustomers = new Map<string, any>();
@@ -10,7 +11,6 @@ export class CustomerService {
   }
 
   /**
-
    * Koerce input koordinat (bisa string dari WAHA/LLM/DB) menjadi number,
    * demi menghindari error Prisma "Expected Float, provided String".
    * null/undefined/NaN → null.
@@ -23,10 +23,40 @@ export class CustomerService {
 
   /**
    * Set flag label chat (is_admin_labeled / is_hold_labeled) pada semua customer
-   * dengan nomor HP tersebut. Chat WhatsApp adalah entitas lintas-tenant, jadi
-   * update dilakukan via updateMany tanpa filter tenant (mencakup semua tenant).
-   * Best-effort penuh: DB offline → update memory store saja, tidak pernah throw.
+   * yang memiliki nomor HP yang sama (baik awalan 62 maupun 0).
+   * Menjamin konsistensi status chat di seluruh record customer.
    */
+  public async setChatLabelFlag(
+    phone: string,
+    flag: 'is_admin_labeled' | 'is_hold_labeled',
+    value: boolean
+  ): Promise<void> {
+    const raw = phone.replace(/\D/g, '');
+    const clean = raw.startsWith('62') ? raw.slice(2) : raw.startsWith('0') ? raw.slice(1) : raw;
+    const formats = [`62${clean}`, `0${clean}`, clean];
+
+    try {
+      await prisma.customer.updateMany({
+        where: {
+          phone: { in: formats },
+        },
+        data: {
+          [flag]: value,
+          labels_synced_at: new Date(),
+        },
+      });
+    } catch {
+      // Memory fallback untuk offline/mock mode
+      for (const fmt of formats) {
+        if (memoryCustomers.has(fmt)) {
+          const cust = memoryCustomers.get(fmt);
+          cust[flag] = value;
+          cust.labels_synced_at = new Date();
+        }
+      }
+    }
+  }
+
   public async setLabelFlags(
     phone: string,
     flags: { isAdminLabeled?: boolean; isHoldLabeled?: boolean }
@@ -49,30 +79,6 @@ export class CustomerService {
         cust.labels_synced_at = new Date();
       }
     }
-  }
-
-  /**
-   * Mengambil data customer berdasarkan id, dengan fallback ke memory store jika DB offline
-   */
-  public async getCustomerById(id: string): Promise<Customer | null> {
-    try {
-      const customer = await prisma.customer.findUnique({
-        where: { id },
-      });
-      if (customer) return customer;
-    } catch (err) {
-      // ignore and check memory store
-    }
-    const mem = this.getMemoryCustomers();
-    if (mem.has(id)) {
-      return mem.get(id);
-    }
-    for (const val of mem.values()) {
-      if (val && (val.id === id || val._id === id)) {
-        return val;
-      }
-    }
-    return null;
   }
 
   /**
@@ -588,17 +594,23 @@ export class CustomerService {
   /**
    * Cari customer berdasarkan id (dengan memory store fallback saat DB offline).
    */
-  public async getCustomerById(customerId: string, tenantId: string): Promise<any> {
+  public async getCustomerById(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
     try {
       const customer = await prisma.customer.findUnique({ where: { id: customerId } });
       if (customer) return customer;
+      if (memoryCustomers.has(customerId)) {
+        return memoryCustomers.get(customerId);
+      }
       for (const [, cust] of memoryCustomers.entries()) {
-        if (cust.id === customerId && cust.tenant_id === tenantId) return cust;
+        if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
       }
       return null;
     } catch (error) {
+      if (memoryCustomers.has(customerId)) {
+        return memoryCustomers.get(customerId);
+      }
       for (const [, cust] of memoryCustomers.entries()) {
-        if (cust.id === customerId && cust.tenant_id === tenantId) return cust;
+        if (cust && cust.id === customerId && (!tenantId || cust.tenant_id === tenantId)) return cust;
       }
       return null;
     }
