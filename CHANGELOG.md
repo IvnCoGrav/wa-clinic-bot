@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Customer Labels CRUD & Live Chat Tagging System (`v1.13.0`)
+
+- **Fitur Master Data Label Customer (`prisma/schema.prisma` & `src/routes/admin/labels.subroute.ts`)**:
+  - Menambahkan model `Label` dan relasi pivot `CustomerLabel` untuk kategorisasi multi-label customer per tenant.
+  - Endpoint REST API lengkap: `GET /api/admin/labels`, `POST /api/admin/labels`, `PATCH /api/admin/labels/:id`, `DELETE /api/admin/labels/:id`, dan `POST /api/admin/customers/:id/labels`.
+- **Halaman Manajemen Label Customer (`packages/admin-dashboard/src/pages/tenant/CustomerLabels.tsx`)**:
+  - Halaman admin baru di navigasi `Operasional & Jadwal` untuk membuat, mengedit nama & warna palette, serta menghapus label.
+  - Dilengkapi preview badge interaktif, hitungan customer tertag, serta modal UI Feedback aman (tanpa native confirm/alert).
+- **Integrasi Tagging Label di Live Chat (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`)**:
+  - Menampilkan badge label aktif tepat di bawah nama dan nomor telepon pasien.
+  - Tombol `+ Label` interaktif dengan popover picker untuk toggle label langsung secara real-time (optimistic update).
+  - Badge label juga ditampilkan pada daftar percakapan di kolom kiri untuk kemudahan pemantauan.
+- **Ergonomi Input Chat & Auto-Scroll Viewport**:
+  - Tombol Enter pada textarea kini murni menambahkan baris baru (menghilangkan insiden pesan terkirim tidak sengaja di HP). Pengiriman pesan dilakukan dengan menekan tombol **Kirim**.
+  - Logika auto-scroll diperbarui untuk memastikan seluruh area chat dan textfield/composer tetap terlihat di viewport layar.
+
 ### Fixed & Improved — Intercept Browser History Back at Frame 0 (Touchstart Passive: False) (`v1.12.11`)
 
 - **Intersepsi Mutlak pada Frame 0 Touchstart (`packages/admin-dashboard/src/components/common/Layout.tsx`)**:

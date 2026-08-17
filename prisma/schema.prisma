@@ -95,6 +95,7 @@ model Customer {
   ai_override             AiOverride?
 
   preferences             Json?
+  labels                  CustomerLabel[]
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
@@ -662,4 +663,32 @@ model StaffSession {
   @@index([token_hash])
   @@map("staff_sessions")
 }
+
+model Label {
+  id         String          @id @default(uuid())
+  tenant_id  String          @default("default-tenant")
+  name       String
+  color      String          @default("#008069")
+  created_at DateTime        @default(now())
+  updated_at DateTime        @updatedAt
+  customers  CustomerLabel[]
+
+  @@unique([tenant_id, name])
+  @@index([tenant_id])
+  @@map("labels")
+}
+
+model CustomerLabel {
+  customer_id String
+  label_id    String
+  customer    Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  label       Label    @relation(fields: [label_id], references: [id], onDelete: Cascade)
+  assigned_at DateTime @default(now())
+
+  @@id([customer_id, label_id])
+  @@index([customer_id])
+  @@index([label_id])
+  @@map("customer_labels")
+}
+
 

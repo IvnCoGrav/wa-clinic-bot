@@ -35,6 +35,13 @@ export const ALL_MODULES: ModuleDefinition[] = [
     description: 'Basis data profil pasien, riwayat alamat, dan rekaman chat',
   },
   {
+    id: 'labels',
+    path: '/admin/labels',
+    name: 'Customer Labels',
+    category: 'DASHBOARD & PELANGGAN',
+    description: 'Kelola master label dan penandaan kategori pasien',
+  },
+  {
     id: 'customer-service',
     path: '/admin/customer-service',
     name: 'Customer Service & CTA',
@@ -197,6 +204,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
     allowedPaths: [
       '/admin/overview',
       '/admin/customers',
+      '/admin/labels',
       '/admin/customer-service',
       '/admin/reservations',
       '/admin/staff-management',

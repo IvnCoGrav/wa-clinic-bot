@@ -28,6 +28,7 @@ import {
   BadgeCheck,
   FileDown,
   UserCheck,
+  Tag,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
@@ -108,6 +109,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },
         { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
         { name: 'Customer Database', path: '/admin/customers', icon: Users },
+        { name: 'Customer Labels', path: '/admin/labels', icon: Tag },
         { name: 'Customer Service & CTA', path: '/admin/customer-service', icon: Headphones },
         { name: 'Follow-Up Queue', path: '/admin/follow-ups', icon: Clock },
         { name: 'Follow-Up Templates', path: '/admin/follow-up-templates', icon: MessageSquareText },
