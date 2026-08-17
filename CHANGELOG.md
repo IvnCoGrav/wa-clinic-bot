@@ -4,6 +4,38 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — AI Copilot Draft for Midwives, Strict Silent Medical Hold & Live Chat UI Overhaul (`v1.15.0`)
+
+- **Fitur AI Copilot Draft Saran Balasan Bidan (`src/services/live-chat.service.ts`, `src/routes/admin/livechat.subroute.ts`, `LiveChatMonitor.tsx`)**:
+  - Menambahkan endpoint `POST /api/admin/live-chat/conversations/:id/suggest-reply` yang menghasilkan 1 draf balasan profesional, ramah, dan empatik menggunakan LLM (`CHAT_REPLY`). Draf disusun berdasarkan konteks nama bunda, data anak, riwayat reservasi, dan 10 riwayat percakapan terakhir.
+  - Menambahkan tombol interaktif **`Sparkles` (✨)** di textfield composer Live Chat. Bidan/admin cukup menekan icon ini untuk mengisi otomatis draf ke kolom balasan, lalu dapat mengedit atau langsung mengirimnya.
+- **Strict Silent Auto-Hold untuk Pasien Medis & Legacy (`src/state-machine/machine.ts`)**:
+  - Konsultasi medis untuk pasien legacy (`is_legacy_source = true`) maupun pasien yang sudah pernah treatment terkonfirmasi (`status = 'confirmed'`) kini dikecualikan secara ketat dari balasan FAQ otomatis.
+  - State machine langsung mengeskalasi percakapan ke `HUMAN_HANDLING` dengan mode *silent* (bot tetap diam tanpa mengirim balasan otomatis ke customer) dan mengirim alert darurat ke grup WhatsApp admin.
+- **Modal Detail Lengkap Profil Customer (`src/routes/admin/customers.subroute.ts`, `LiveChatMonitor.tsx`)**:
+  - Menambahkan endpoint `GET /api/admin/customers/:id` dengan metrik LTV, purchase count, data anak, riwayat reservasi, dan label.
+  - Header profil customer di sebelah kanan Live Chat kini dapat diklik untuk membuka **Customer Detail Modal** interaktif (menampilkan data kontak lengkap, ringkasan LTV/order, segmen pasien, riwayat anak, daftar reservasi, dan tombol direct WA).
+- **Pembaruan Visual & Ergonomi Live Chat Dashboard (`LiveChatMonitor.tsx`)**:
+  - **Pemisahan Label 2 Grup**: Grup 1 (status & segmentasi: `Hold`, `Legacy`, `New Customer`, label DB) diletakkan rapi tepat di bawah nama customer; Grup 2 (metrik operasional: `MQL`, `Order count`, `Sandbox`, `Meta`) ditaruh di footer bar di samping jam.
+  - **Ikonografi Minimalis**: Tombol "Release" / "Kembalikan ke Bot" diganti dengan icon Bot minimalis modern. Tulisan status Live Chat di header luar disederhanakan menjadi icon sync WAHA berputar dan icon Wifi berwarna dengan tooltip status real-time.
+  - **Default Filter WhatsApp Asli & Optimalisasi Mobile**: Default filter sumber diset ke `WhatsApp Asli` dan ukuran badge/dropdown dioptimalkan agar compact di tampilan mobile.
+
+### Added & Improved — WhatsApp Customer Profile Picture Retrieval & Smart Avatar Display (`v1.14.0`)
+
+- **Dukungan Pengambilan Foto Profil WhatsApp (`src/integrations/waha/client.ts`, `src/integrations/whatsapp/`)**:
+  - Menambahkan method `getProfilePicture(phone)` pada `IWahaClient`, `WahaClient`, dan gateway abstraction `WhatsAppGateway` / `WahaGatewayDriver`.
+  - Mengambil URL standar/preview avatar CDN WhatsApp (`pps.whatsapp.net`) secara efisien via endpoint WAHA.
+  - Untuk provider WABA (Meta Cloud API Official), sistem melakukan fallback *graceful* karena kebijakan privasi Meta tidak menyediakan endpoint foto profil customer.
+- **Skema Database & Background Sync Non-Blocking (`prisma/schema.prisma`, `src/services/customer.service.ts`)**:
+  - Menambahkan kolom `profile_picture_url` dan `profile_picture_updated_at` pada model `Customer`.
+  - Pengambilan foto profil dijalankan secara asinkron di latar belakang (*lazy sync / background job*) dengan cache TTL 3 hari untuk menghemat storage, kuota, serta mencegah *rate-limiting* ke WAHA.
+  - Menambahkan endpoint admin `POST /api/admin/live-chat/customers/:id/refresh-profile-picture` untuk on-demand refresh foto profil langsung dari dashboard.
+- **Komponen Smart Avatar Reusable (`packages/admin-dashboard/src/components/common/CustomerAvatar.tsx`)**:
+  - Komponen avatar baru dengan lazy loading, deteksi error CDN otomatis (`onError` fallback), dan generator inisial nama deterministik dengan palet warna elegan.
+- **Integrasi Live Chat Admin & Portal Terapis (`packages/admin-dashboard/`)**:
+  - **Live Chat Monitor (`LiveChatMonitor.tsx`)**: Menampilkan foto profil / smart avatar customer pada daftar percakapan sebelah kiri dan di header chat sebelah kanan.
+  - **Portal Terapis (`StaffToday.tsx`)**: Menampilkan foto profil customer pada kartu tugas hari ini (lengkap dengan badge nomor urut kunjungan), header chat WhatsApp terapis, riwayat tugas selesai, dan modal detail pasien.
+
 ### Added & Improved — Customer Labels CRUD & Live Chat Tagging System (`v1.13.0`)
 
 - **Fitur Master Data Label Customer (`prisma/schema.prisma` & `src/routes/admin/labels.subroute.ts`)**:

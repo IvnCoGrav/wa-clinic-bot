@@ -244,4 +244,37 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     expect(res.statusCode).toBe(404);
     expect(JSON.parse(res.body).error.code).toBe('CONVERSATION_NOT_FOUND');
   });
+
+  it('POST /api/admin/live-chat/conversations/:id/suggest-reply menghasilkan draf saran AI', async () => {
+    const phone = `628900${Date.now()}`;
+    const cust = await customerService.getOrCreateCustomer(phone, 'Bunda AI Test', DEFAULT_TENANT_ID);
+    const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/admin/live-chat/conversations/${conv.id}/suggest-reply`,
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(typeof body.data.draftText).toBe('string');
+    expect(body.data.draftText.length).toBeGreaterThan(0);
+  });
+
+  it('GET /api/admin/customers/:id mengembalikan detail customer & metrik', async () => {
+    const phone = `628901${Date.now()}`;
+    const cust = await customerService.getOrCreateCustomer(phone, 'Bunda Detail Test', DEFAULT_TENANT_ID);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/admin/customers/${cust.id}`,
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.id).toBe(cust.id);
+    expect(typeof body.data.ltv).toBe('number');
+    expect(typeof body.data.purchaseCount).toBe('number');
+  });
 });
+

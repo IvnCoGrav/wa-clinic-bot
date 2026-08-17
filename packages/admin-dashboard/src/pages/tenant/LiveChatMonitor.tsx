@@ -30,8 +30,15 @@ import {
   Tag,
   Plus,
   Check,
+  Sparkles,
+  ExternalLink,
+  Calendar,
+  DollarSign,
+  FileText,
+  Phone,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 
 interface ChatMessage {
   id: string;
@@ -64,9 +71,9 @@ interface LiveChatItem {
   isHumanHandling: boolean;
   humanHandlingSince: string | null;
   escalationReason: string | null;
-  lastMessageAt: string;
+  lastMessageAt: string | null;
   createdAt: string;
-  lastMessages?: ChatMessage[];
+  lastMessages?: { content: string }[];
   isMql?: boolean;
   mqlBubbleCount?: number;
   isSandboxTest?: boolean;
@@ -74,6 +81,7 @@ interface LiveChatItem {
   purchaseCount?: number;
   ltv?: number;
   customerLabels?: CustomerLabelData[];
+  customerProfilePictureUrl?: string | null;
 }
 
 export const LiveChatMonitor: React.FC = () => {
@@ -85,6 +93,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [customerDetailModalOpen, setCustomerDetailModalOpen] = useState(false);
+  const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
+  const [customerDetailData, setCustomerDetailData] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -92,7 +104,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [syncingHistory, setSyncingHistory] = useState(false);
@@ -456,6 +468,64 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
+  const handleGenerateAiDraft = async () => {
+    if (!selectedId) return;
+    setGeneratingDraft(true);
+    try {
+      const res = await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/suggest-reply`, {
+        method: 'POST',
+      });
+      if (res?.data?.draftText) {
+        setReplyText(res.data.draftText);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          const nextHeight = Math.min(textareaRef.current.scrollHeight, 130);
+          textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
+        }
+        toast('Draf jawaban AI berhasil dibuat! Anda dapat mengedit sebelum mengirim.', 'success');
+      } else {
+        toast('Gagal mendapatkan saran balasan AI.', 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal memuat saran AI: ${err.message}`, 'error');
+    } finally {
+      setGeneratingDraft(false);
+    }
+  };
+
+  const handleOpenCustomerDetail = async (chat: LiveChatItem) => {
+    setCustomerDetailModalOpen(true);
+    setCustomerDetailLoading(true);
+    try {
+      const res = await apiRequest(`/api/admin/customers/${chat.customerId}`);
+      if (res?.data) {
+        setCustomerDetailData(res.data);
+      } else {
+        setCustomerDetailData({
+          id: chat.customerId,
+          name: chat.customerName,
+          phone: chat.customerPhone,
+          profile_picture_url: chat.customerProfilePictureUrl,
+          labels: (chat.customerLabels || []).map((l) => ({ label: l })),
+          purchaseCount: chat.purchaseCount || 0,
+          ltv: chat.ltv || 0,
+        });
+      }
+    } catch (err: any) {
+      setCustomerDetailData({
+        id: chat.customerId,
+        name: chat.customerName,
+        phone: chat.customerPhone,
+        profile_picture_url: chat.customerProfilePictureUrl,
+        labels: (chat.customerLabels || []).map((l) => ({ label: l })),
+        purchaseCount: chat.purchaseCount || 0,
+        ltv: chat.ltv || 0,
+      });
+    } finally {
+      setCustomerDetailLoading(false);
+    }
+  };
+
   const handleSendReply = async () => {
     const image = selectedImage;
     if (!selectedId || (!replyText.trim() && !image)) return;
@@ -585,45 +655,45 @@ export const LiveChatMonitor: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div className="flex items-center space-x-3">
-          <div>
-            <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
-              <MessageSquare className="text-[#008069]" size={22} />
-              <span>Live Chat Monitor</span>
-            </h1>
-            <p className="text-xs text-[#667781] mt-0.5">
-              Pantau percakapan dan balas langsung dari dashboard secara real-time.
-            </p>
-          </div>
+      {/* Top Header */}
+      <div className="flex justify-between items-center gap-3">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+            <MessageSquare className="text-[#008069]" size={20} />
+            <span>Live Chat Monitor</span>
+          </h1>
+          <p className="text-[11px] sm:text-xs text-[#667781] mt-0.5">
+            Pantau percakapan dan balas langsung secara real-time.
+          </p>
         </div>
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-2">
+          {/* Sync WAHA Icon Button */}
           <button
             onClick={() => handleSyncHistory(syncNextOffset ?? 0)}
             disabled={syncingHistory}
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] shadow-xs transition flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={syncNextOffset !== null ? 'Lanjutkan sinkronisasi batch berikutnya' : 'Backfill history chat dari WAHA ke Live Chat (batch 50)'}
+            className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#111b21] border border-[#d1d7db] shadow-xs transition flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={syncNextOffset !== null ? `Lanjutkan Sync WAHA (${syncNextOffset})` : 'Sinkronisasi riwayat chat WAHA'}
           >
-            {syncingHistory ? <Loader size={12} className="animate-spin text-[#008069]" /> : <RefreshCw size={12} />}
-            <span>{syncingHistory ? 'Menyinkronkan...' : syncNextOffset !== null ? `Load More Sync (${syncNextOffset})` : 'Sync WAHA History'}</span>
+            <RefreshCw size={14} className={syncingHistory ? 'animate-spin text-[#008069]' : 'text-[#54656f]'} />
+            <span className="hidden sm:inline text-xs font-semibold">
+              {syncingHistory ? 'Sync...' : syncNextOffset !== null ? `Sync (${syncNextOffset})` : 'Sync'}
+            </span>
           </button>
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-white border border-[#e9edef] rounded-xl shadow-xs">
+
+          {/* Real-time Status Icon Indicator */}
+          <div
+            className="flex items-center space-x-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 bg-white border border-[#e9edef] rounded-xl shadow-xs"
+            title={sseConnected ? 'Status: Real-time Terhubung (SSE Aktif)' : 'Status: Menyambungkan kembali ke server...'}
+          >
             {sseConnected ? (
               <>
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-[11px] text-emerald-700 font-semibold flex items-center space-x-1">
-                  <Wifi size={11} />
-                  <span>Real-time</span>
-                </span>
+                <Wifi size={13} className="text-emerald-600" />
               </>
             ) : (
               <>
                 <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-                <span className="text-[11px] text-amber-700 font-semibold flex items-center space-x-1">
-                  <WifiOff size={11} />
-                  <span>Menyambung...</span>
-                </span>
+                <WifiOff size={13} className="text-amber-600" />
               </>
             )}
           </div>
@@ -631,15 +701,15 @@ export const LiveChatMonitor: React.FC = () => {
       </div>
 
       {syncProgress && (
-        <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium flex items-center space-x-2">
-          <RefreshCw size={14} className="text-sky-600" />
+        <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-medium flex items-center space-x-2">
+          <RefreshCw size={13} className="text-sky-600 animate-spin" />
           <span>{syncProgress}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center space-x-2">
-          <AlertTriangle size={15} className="text-rose-600" />
+        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center space-x-2">
+          <AlertTriangle size={14} className="text-rose-600" />
           <span>{errorMessage}</span>
         </div>
       )}
@@ -651,36 +721,36 @@ export const LiveChatMonitor: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Conversations List */}
-          <div className={`${mobileView === 'chat' ? 'hidden lg:block' : 'block'} lg:col-span-5 space-y-3`}>
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-bold text-[#667781] uppercase tracking-wider block">
+          <div className={`${mobileView === 'chat' ? 'hidden lg:block' : 'block'} lg:col-span-5 space-y-2.5`}>
+            <div className="flex justify-between items-center gap-1.5">
+              <h3 className="text-[11px] font-bold text-[#667781] uppercase tracking-wider block">
                 Daftar Percakapan
               </h3>
               <select
                 value={labelFilter}
                 onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
-                className="px-2.5 py-1 bg-white border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-xs"
+                className="px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-xs max-w-[140px] sm:max-w-none"
               >
-                <option value="all">Semua (Normal + Label)</option>
+                <option value="all">Semua Label</option>
                 <option value="human_request">Human Request</option>
                 <option value="medical_concern">Medical Emergency</option>
                 <option value="unresolved_faq">Unresolved FAQ</option>
               </select>
             </div>
 
-            {/* Filter sumber percakapan: WhatsApp asli vs sandbox/test */}
-            <div className="flex items-center space-x-1 p-1 bg-white border border-[#e9edef] rounded-xl w-fit shadow-xs">
+            {/* Filter sumber percakapan: Default WhatsApp Asli vs Sandbox */}
+            <div className="flex items-center space-x-1 p-0.5 bg-white border border-[#e9edef] rounded-xl w-fit shadow-xs">
               {(
                 [
-                  { value: 'all', label: 'Semua' },
                   { value: 'real', label: 'WhatsApp Asli' },
-                  { value: 'sandbox', label: 'Sandbox/Test' },
+                  { value: 'all', label: 'Semua' },
+                  { value: 'sandbox', label: 'Sandbox' },
                 ] as const
               ).map((opt) => (
                 <button
                   key={opt.value}
                   onClick={() => setSourceFilter(opt.value)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+                  className={`px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold transition flex items-center space-x-1 cursor-pointer ${
                     sourceFilter === opt.value
                       ? opt.value === 'sandbox'
                         ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-xs'
@@ -690,27 +760,27 @@ export const LiveChatMonitor: React.FC = () => {
                       : 'text-[#667781] hover:text-[#111b21] hover:bg-[#f0f2f5]'
                   }`}
                 >
-                  {opt.value === 'sandbox' && <FlaskConical size={11} />}
-                  {opt.value === 'real' && <CheckCircle size={11} />}
+                  {opt.value === 'sandbox' && <FlaskConical size={10} />}
+                  {opt.value === 'real' && <CheckCircle size={10} />}
                   <span>{opt.label}</span>
                 </button>
               ))}
             </div>
 
             {filteredChats.length === 0 ? (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-10 text-center text-[#667781] text-xs shadow-xs">
-                <CheckCircle className="mx-auto text-[#008069] mb-2" size={32} />
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-[#667781] text-xs shadow-xs">
+                <CheckCircle className="mx-auto text-[#008069] mb-2" size={28} />
                 <p className="font-bold text-[#111b21]">
-                  {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan sesuai filter'}
+                  {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
                 </p>
-                <p className="text-[#667781] mt-1">
+                <p className="text-[#667781] text-[11px] mt-0.5">
                   {chats.length === 0
-                    ? 'Percakapan baru akan muncul di sini secara real-time.'
-                    : 'Coba ganti filter label atau pilih "Semua Label".'}
+                    ? 'Percakapan baru akan muncul secara real-time.'
+                    : 'Ganti filter sumber atau label untuk melihat percakapan lainnya.'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[calc(100dvh-230px)] lg:max-h-[620px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[calc(100dvh-230px)] lg:max-h-[620px] overflow-y-auto pr-1">
                 {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
@@ -723,7 +793,7 @@ export const LiveChatMonitor: React.FC = () => {
                     <div
                       key={chat.conversationId}
                       onClick={() => handleSelect(chat.conversationId)}
-                      className={`bg-white rounded-xl p-3.5 border transition cursor-pointer text-left flex flex-col justify-between space-y-2.5 shadow-xs ${
+                      className={`bg-white rounded-xl p-3 border transition cursor-pointer text-left flex flex-col justify-between space-y-2 shadow-xs ${
                         isSelected
                           ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
@@ -731,135 +801,182 @@ export const LiveChatMonitor: React.FC = () => {
                             : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc]'
                       }`}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-0.5">
-                          <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5">
-                            <User size={13} className="text-[#8696a0]" />
-                            <span>{chatName}</span>
-                            <span className="text-[11px] text-[#667781] font-normal">({chat.customerPhone || 'Unknown'})</span>
-                          </h4>
+                      {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon */}
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex items-start space-x-2.5 min-w-0">
+                          <CustomerAvatar
+                            src={chat.customerProfilePictureUrl}
+                            name={chatName}
+                            phone={chat.customerPhone}
+                            size="sm"
+                          />
+                          <div className="space-y-1 min-w-0">
+                            <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 truncate">
+                              <span className="truncate">{chatName}</span>
+                              <span className="text-[10px] text-[#667781] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
+                            </h4>
+
+                            {/* GRUP 1: Label Status & Segmentasi (Ditaruh Tepat di Bawah Nama) */}
+                            <div className="flex flex-wrap items-center gap-1">
+                              {chat.isHumanHandling && (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-600 text-white shadow-2xs"
+                                  title="Customer sedang di-hold"
+                                >
+                                  Hold
+                                </span>
+                              )}
+                              {chat.trafficSource === 'legacy' && (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-600 text-white shadow-2xs"
+                                  title="Pasien Legacy (Riwayat Lama)"
+                                >
+                                  Legacy
+                                </span>
+                              )}
+                              {!chat.purchaseCount || chat.purchaseCount === 0 ? (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-600 text-white shadow-2xs"
+                                  title="Pasien Baru"
+                                >
+                                  New Customer
+                                </span>
+                              ) : null}
+                              {isMedical && (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
+                                  title="Medical Concern / Emergency"
+                                >
+                                  <AlertTriangle size={8} className="mr-0.5" />
+                                  Medis
+                                </span>
+                              )}
+                              {(chat.customerLabels || []).map((lbl) => (
+                                <span
+                                  key={lbl.id}
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs"
+                                  style={{ backgroundColor: lbl.color || '#008069' }}
+                                  title={`Label: ${lbl.name}`}
+                                >
+                                  {lbl.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                        {chat.isHumanHandling ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRelease(chat);
-                            }}
-                            disabled={releasingId === chat.conversationId}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition flex items-center space-x-1 uppercase disabled:opacity-50 ${
-                              isMedical
-                                ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                                : 'bg-[#008069] hover:bg-[#00a884] text-white'
-                            }`}
-                          >
-                            <Play size={9} fill="currentColor" />
-                            <span>{releasingId === chat.conversationId ? 'Releasing...' : 'Release'}</span>
-                          </button>
-                        ) : (
-                          <span
-                            title="Ditangani bot"
-                            className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-[#f0f2f5] text-[#667781] border border-[#e9edef]"
-                          >
-                            <Bot size={12} />
-                          </span>
-                        )}
+
+                        {/* Bot / Release Icon Button */}
+                        <div className="shrink-0">
+                          {chat.isHumanHandling ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRelease(chat);
+                              }}
+                              disabled={releasingId === chat.conversationId}
+                              title="Kembalikan percakapan ke Bot AI"
+                              className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-2xs disabled:opacity-50 ${
+                                isMedical
+                                  ? 'bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300'
+                                  : 'bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0]'
+                              }`}
+                            >
+                              {releasingId === chat.conversationId ? (
+                                <Loader size={12} className="animate-spin" />
+                              ) : (
+                                <Bot size={13} />
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              title="Ditangani Bot AI"
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[#f0f2f5] text-[#667781] border border-[#e9edef]"
+                            >
+                              <Bot size={12} />
+                            </span>
+                          )}
+                        </div>
                       </div>
 
+                      {/* Chat Preview */}
                       <p className="text-xs text-[#54656f] line-clamp-1 italic leading-relaxed">
                         "{preview || 'Tidak ada pesan'}"
                       </p>
 
+                      {/* GRUP 2: Metrik, Order, Traffic, & Jam (Di Footer Bar Samping Jam) */}
                       <div className="flex justify-between items-center text-[10px] text-[#667781] pt-1.5 border-t border-[#e9edef]">
-                          <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                            <span className="flex items-center space-x-1" title={chat.isHumanHandling ? 'Ditangani admin' : 'Ditangani bot'}>
-                              <Clock size={11} />
-                              <span>
-                                {chat.isHumanHandling
-                                  ? getElapsedTime(chat.humanHandlingSince) || 'Ditangani admin'
-                                  : 'Bot'}
-                              </span>
+                        <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                          <span className="flex items-center space-x-1" title={chat.isHumanHandling ? 'Ditangani admin' : 'Ditangani bot'}>
+                            <Clock size={10} />
+                            <span>
+                              {chat.isHumanHandling
+                                ? getElapsedTime(chat.humanHandlingSince) || 'Admin'
+                                : 'Bot'}
                             </span>
-                            {isMedical && (
-                              <span
-                                title="Medical Emergency"
-                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
-                              >
-                                <AlertTriangle size={9} className="mr-0.5" />
-                                Medis
-                              </span>
-                            )}
-                            {!isMedical && chat.escalationReason === 'unresolved_faq' && (
-                              <span
-                                title="Unresolved FAQ"
-                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200"
-                              >
-                                <Info size={9} className="mr-0.5" />
-                                FAQ
-                              </span>
-                            )}
-                            {chat.isMql && (
-                              <span
-                                title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
-                              >
-                                <Zap size={9} className="mr-0.5" />
-                                MQL
-                              </span>
-                            )}
-                            {chat.trafficSource === 'meta' && (
-                              <span
-                                title="Traffic Meta"
-                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200"
-                              >
-                                <Facebook size={9} className="mr-0.5" />
-                                Meta
-                              </span>
-                            )}
-                            {chat.isSandboxTest && (
-                              <span
-                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
-                                title="Chat test/simulasi"
-                              >
-                                Sandbox
-                              </span>
-                            )}
-                            {!!chat.purchaseCount && chat.purchaseCount > 0 && (
-                              <span
-                                title={
-                                  chat.purchaseCount === 1
-                                    ? `Purchase 1x (LTV: ${formatRp(chat.ltv || 0)})`
-                                    : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRp(chat.ltv || 0)})`
-                                }
-                                className={`inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border ${
-                                  chat.purchaseCount === 1
-                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                    : 'bg-amber-100 text-amber-800 border-amber-200'
-                                }`}
-                              >
-                                <ShoppingBag size={9} className="mr-0.5" />
-                                <span>{chat.purchaseCount}x</span>
-                              </span>
-                            )}
-                            {(chat.customerLabels || []).map((lbl) => (
-                              <span
-                                key={lbl.id}
-                                className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold text-white shadow-2xs"
-                                style={{ backgroundColor: lbl.color || '#008069' }}
-                                title={`Label: ${lbl.name}`}
-                              >
-                                {lbl.name}
-                              </span>
-                            ))}
                           </span>
-                          <span className="flex items-center space-x-2">
-                            {chat.lastMessageAt && (
-                              <span className="text-[#667781] font-sans text-[10px]">
-                                {formatLastChat(chat.lastMessageAt)}
-                              </span>
-                            )}
-                            <span className="font-mono text-[9px] font-bold uppercase text-[#8696a0]">{chat.currentState}</span>
-                          </span>
-                        </div>
+
+                          {/* MQL Badge */}
+                          {chat.isMql && (
+                            <span
+                              title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            >
+                              <Zap size={8} className="mr-0.5" />
+                              MQL
+                            </span>
+                          )}
+
+                          {/* Order Count / Repeat Badge */}
+                          {!!chat.purchaseCount && chat.purchaseCount > 0 && (
+                            <span
+                              title={
+                                chat.purchaseCount === 1
+                                  ? `Purchase 1x (LTV: ${formatRp(chat.ltv || 0)})`
+                                  : `Repeat Order ${chat.purchaseCount}x (LTV: ${formatRp(chat.ltv || 0)})`
+                              }
+                              className={`inline-flex items-center space-x-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${
+                                chat.purchaseCount === 1
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                  : 'bg-amber-100 text-amber-800 border-amber-200'
+                              }`}
+                            >
+                              <ShoppingBag size={8} className="mr-0.5" />
+                              <span>{chat.purchaseCount}x</span>
+                            </span>
+                          )}
+
+                          {/* Traffic Source Meta Badge */}
+                          {chat.trafficSource === 'meta' && (
+                            <span
+                              title="Traffic Iklan Meta"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200"
+                            >
+                              <Facebook size={8} className="mr-0.5" />
+                              Meta
+                            </span>
+                          )}
+
+                          {/* Sandbox Badge */}
+                          {chat.isSandboxTest && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
+                              title="Chat simulasi / sandbox"
+                            >
+                              Sandbox
+                            </span>
+                          )}
+                        </span>
+
+                        {/* Timestamp & Current State */}
+                        <span className="flex items-center space-x-1.5">
+                          {chat.lastMessageAt && (
+                            <span className="text-[#667781] font-sans text-[10px]">
+                              {formatLastChat(chat.lastMessageAt)}
+                            </span>
+                          )}
+                          <span className="font-mono text-[9px] font-bold uppercase text-[#8696a0]">{chat.currentState}</span>
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -883,41 +1000,59 @@ export const LiveChatMonitor: React.FC = () => {
           <div className={`${mobileView === 'list' ? 'hidden lg:block' : 'block'} lg:col-span-7`}>
             {selectedChat ? (
               <div className="bg-white border border-[#e9edef] rounded-2xl p-3 sm:p-5 h-[calc(100dvh-135px)] sm:h-[calc(100dvh-160px)] lg:h-[650px] flex flex-col justify-between shadow-xs">
-                {/* Header Info */}
+                {/* Header Info: Clickable Card to view full customer detail modal */}
                 <div className="border-b border-[#e9edef] pb-3 space-y-2">
                   {selectedChat.isSandboxTest && (
-                    <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold uppercase tracking-wider">
+                    <div className="flex items-center space-x-2 px-3 py-1 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-bold uppercase tracking-wider">
                       <FlaskConical size={12} />
-                      <span>QA TEST — chat simulasi, bukan WhatsApp asli</span>
+                      <span>QA TEST — chat simulasi</span>
                     </div>
                   )}
                   <div className="flex justify-between items-start gap-2">
-                    <div className="flex items-start space-x-2.5">
+                    {/* Clickable Customer Header Box */}
+                    <div
+                      onClick={() => handleOpenCustomerDetail(selectedChat)}
+                      className="flex items-start space-x-2.5 p-1.5 -m-1.5 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0"
+                      title="Klik untuk melihat detail lengkap profil customer"
+                    >
                       <button
-                        onClick={() => setMobileView('list')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobileView('list');
+                        }}
                         className="lg:hidden p-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0 active:scale-95"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"
                       >
-                        <ChevronLeft size={20} />
+                        <ChevronLeft size={18} />
                       </button>
-                      <div>
-                        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                          <MessageCircle className="text-[#008069]" size={16} />
-                          <span>{selectedChat.customerName || 'Customer'}</span>
+                      <CustomerAvatar
+                        src={selectedChat.customerProfilePictureUrl}
+                        name={selectedChat.customerName}
+                        phone={selectedChat.customerPhone}
+                        size="md"
+                      />
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-1.5 group-hover:text-[#008069] transition truncate">
+                          <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
+                          <ExternalLink size={12} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
                         </h3>
                         <p className="text-xs text-[#667781] font-mono mt-0.5">
                           {selectedChat.customerPhone || 'Unknown'}
                         </p>
+
                         {/* Customer Labels Badge & Interactive Picker */}
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2 relative">
+                        <div
+                          className="flex flex-wrap items-center gap-1.5 mt-1.5 relative"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {(selectedChat.customerLabels || []).map((lbl) => (
                             <span
                               key={lbl.id}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-2xs"
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-2xs"
                               style={{ backgroundColor: lbl.color || '#008069' }}
                             >
-                              <Tag size={10} />
+                              <Tag size={9} />
                               <span>{lbl.name}</span>
                             </span>
                           ))}
@@ -927,10 +1062,10 @@ export const LiveChatMonitor: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] border border-[#d1d7db] transition shadow-2xs active:scale-95"
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] border border-[#d1d7db] transition shadow-2xs active:scale-95"
                               title="Kelola Label Pasien"
                             >
-                              <Plus size={11} />
+                              <Plus size={10} />
                               <span>Label</span>
                             </button>
 
@@ -985,38 +1120,34 @@ export const LiveChatMonitor: React.FC = () => {
                             )}
                           </div>
                         </div>
-
-                        {!!selectedChat.purchaseCount && selectedChat.purchaseCount > 0 && (
-                          <p className="text-xs text-[#008069] font-medium flex items-center space-x-1 mt-1.5">
-                            <ShoppingBag size={11} />
-                            <span>{selectedChat.purchaseCount === 1 ? 'Purchase 1x' : `Repeat Order ${selectedChat.purchaseCount}x`}</span>
-                            {!!selectedChat.ltv && selectedChat.ltv > 0 && (
-                              <span className="text-[#667781]">· LTV: {formatRp(selectedChat.ltv)}</span>
-                            )}
-                          </p>
-                        )}
                       </div>
                     </div>
-                    {selectedChat.isHumanHandling ? (
-                      <button
-                        onClick={() => handleRelease(selectedChat)}
-                        disabled={releasingId === selectedChat.conversationId}
-                        className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-                      >
-                        <Play size={11} fill="currentColor" />
-                        <span>Kembalikan ke Bot</span>
-                      </button>
-                    ) : (
-                      <span
-                        title="Ditangani Bot"
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] rounded-xl text-xs font-semibold uppercase tracking-wider"
-                      >
-                        <Bot size={12} />
-                        <span>Bot</span>
-                      </span>
-                    )}
+
+                    {/* Bot Release Button in Chat Header (Icon-based) */}
+                    <div className="shrink-0">
+                      {selectedChat.isHumanHandling ? (
+                        <button
+                          onClick={() => handleRelease(selectedChat)}
+                          disabled={releasingId === selectedChat.conversationId}
+                          title="Kembalikan percakapan ke Bot AI"
+                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                        >
+                          <Bot size={14} />
+                          <span className="hidden sm:inline">Kembalikan ke Bot</span>
+                        </button>
+                      ) : (
+                        <span
+                          title="Ditangani Bot AI"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] rounded-xl text-xs font-semibold uppercase tracking-wider"
+                        >
+                          <Bot size={13} />
+                          <span>Bot</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+
 
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
@@ -1130,6 +1261,7 @@ export const LiveChatMonitor: React.FC = () => {
                       onChange={handlePickImage}
                       className="hidden"
                     />
+                    {/* Attachment Button */}
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={sending}
@@ -1138,12 +1270,34 @@ export const LiveChatMonitor: React.FC = () => {
                     >
                       <ImagePlus size={18} />
                     </button>
+
+                    {/* AI Copilot Suggestion Button (Sparkles) */}
+                    <button
+                      type="button"
+                      onClick={handleGenerateAiDraft}
+                      disabled={generatingDraft || sending}
+                      className="p-2.5 bg-white border border-[#d1d7db] hover:border-amber-400 disabled:opacity-40 text-amber-500 hover:text-amber-600 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs shrink-0 active:scale-95 group"
+                      title="AI Copilot: Dapatkan draf saran balasan otomatis untuk Bidan"
+                    >
+                      {generatingDraft ? (
+                        <Loader size={18} className="animate-spin text-amber-500" />
+                      ) : (
+                        <Sparkles size={18} className="text-amber-500 group-hover:scale-110 transition-transform" />
+                      )}
+                    </button>
+
                     <textarea
                       ref={textareaRef}
                       value={replyText}
                       onChange={handleReplyTextChange}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendReply();
+                        }
+                      }}
                       rows={1}
-                      placeholder="Tulis balasan... (Klik tombol Kirim untuk mengirim)"
+                      placeholder="Tulis balasan... (Enter kirim, Shift+Enter baris baru)"
                       className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[130px] leading-relaxed"
                       style={{ fontSize: '16px' }}
                     />
@@ -1173,6 +1327,170 @@ export const LiveChatMonitor: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Customer Detail Modal */}
+      {customerDetailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc]">
+              <div className="flex items-center space-x-3">
+                <CustomerAvatar
+                  src={customerDetailData?.profile_picture_url || selectedChat?.customerProfilePictureUrl}
+                  name={customerDetailData?.name || selectedChat?.customerName}
+                  phone={customerDetailData?.phone || selectedChat?.customerPhone}
+                  size="md"
+                />
+                <div>
+                  <h3 className="text-base font-bold text-[#111b21]">
+                    {customerDetailData?.name || selectedChat?.customerName || 'Customer'}
+                  </h3>
+                  <p className="text-xs text-[#667781] font-mono">
+                    {customerDetailData?.phone || selectedChat?.customerPhone || '-'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomerDetailModalOpen(false)}
+                className="p-2 rounded-xl text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs text-[#111b21]">
+              {customerDetailLoading ? (
+                <div className="py-12 flex justify-center items-center">
+                  <Loader size={24} className="animate-spin text-[#008069]" />
+                </div>
+              ) : (
+                <>
+                  {/* Quick Metric Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
+                      <p className="text-[10px] text-[#667781] font-semibold uppercase">Total Order</p>
+                      <p className="text-base font-bold text-[#111b21]">{customerDetailData?.purchaseCount || customerDetailData?.reservations?.length || 0}x</p>
+                    </div>
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
+                      <p className="text-[10px] text-[#667781] font-semibold uppercase">LTV (Value)</p>
+                      <p className="text-base font-bold text-[#008069]">{formatRpShort(customerDetailData?.ltv || 0)}</p>
+                    </div>
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
+                      <p className="text-[10px] text-[#667781] font-semibold uppercase">Segment</p>
+                      <p className="text-xs font-bold text-[#111b21] truncate">
+                        {customerDetailData?.is_legacy_source ? 'Legacy' : (customerDetailData?.purchaseCount > 0 ? 'Repeat' : 'New Customer')}
+                      </p>
+                    </div>
+                    <a
+                      href={`https://wa.me/${(customerDetailData?.phone || '').replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] rounded-xl text-center space-y-1 transition flex flex-col items-center justify-center text-[#008069] font-bold shadow-2xs"
+                    >
+                      <Phone size={14} />
+                      <span className="text-[10px]">Chat WA</span>
+                    </a>
+                  </div>
+
+                  {/* Customer Labels Section */}
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                      <Tag size={12} />
+                      <span>Label Pasien</span>
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(customerDetailData?.labels || []).length === 0 ? (
+                        <p className="text-[#8696a0] italic">Belum ada label kustom.</p>
+                      ) : (
+                        customerDetailData.labels.map((cl: any) => {
+                          const lbl = cl.label || cl;
+                          return (
+                            <span
+                              key={lbl.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold text-white shadow-2xs"
+                              style={{ backgroundColor: lbl.color || '#008069' }}
+                            >
+                              {lbl.name}
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Children / Anak Data */}
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px]">
+                      Data Anak / Bayi ({customerDetailData?.children?.length || 0})
+                    </h4>
+                    {(customerDetailData?.children || []).length === 0 ? (
+                      <p className="text-[#8696a0] italic">Belum ada data anak tercatat.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {customerDetailData.children.map((ch: any) => (
+                          <div key={ch.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white space-y-0.5">
+                            <p className="font-bold text-[#111b21]">{ch.name || 'Anak'}</p>
+                            <p className="text-[#667781] text-[11px]">
+                              {ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : '-'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Riwayat Reservasi */}
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                      <Calendar size={12} />
+                      <span>Riwayat Reservasi ({customerDetailData?.reservations?.length || 0})</span>
+                    </h4>
+                    {(customerDetailData?.reservations || []).length === 0 ? (
+                      <p className="text-[#8696a0] italic">Belum pernah membuat reservasi.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {customerDetailData.reservations.map((r: any) => (
+                          <div key={r.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-[#111b21]">{r.treatment_detail || r.raw_text || 'Layanan Homecare'}</p>
+                              <p className="text-[11px] text-[#667781]">
+                                {r.booking_date ? new Date(r.booking_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date(r.created_at).toLocaleDateString('id-ID')}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                              r.status === 'confirmed'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : r.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {r.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCustomerDetailModalOpen(false)}
+                className="px-4 py-2 bg-[#111b21] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

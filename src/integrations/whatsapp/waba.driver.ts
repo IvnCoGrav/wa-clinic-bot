@@ -37,6 +37,11 @@ export class WabaGatewayDriver implements WhatsAppGateway {
     };
   }
 
+  async getProfilePicture(): Promise<string | null> {
+    // Meta Cloud API for WhatsApp tidak menyediakan akses foto profil customer demi privasi Meta
+    return null;
+  }
+
   private get messagesUrl(): string {
     return `${this.baseUrl}/${GRAPH_API_VERSION}/${this.phoneNumberId}/messages`;
   }

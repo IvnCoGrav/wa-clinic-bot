@@ -1,4 +1,5 @@
 import { ConversationState, Direction } from '@prisma/client';
+import { prisma } from '../db/client';
 import { StateHandlerContext, StateHandlerResult } from './types';
 import { handleGreetingState } from './handlers/greeting';
 import { handleLocationState } from './handlers/location';
@@ -135,12 +136,27 @@ export class ConversationStateMachine {
       const { knowledgeBaseService } = await import('../services/knowledge.service');
       const approvedFaqMatch = await knowledgeBaseService.findMatchingFaq(incomingText, tenantId);
 
-      // Exemption: If approved medical FAQ matches, allow bot to answer facts from approved FAQ
-      if (approvedFaqMatch && (approvedFaqMatch as any).category === 'medical' && (approvedFaqMatch as any).status === 'APPROVED') {
-        console.log(`[MEDICAL FAQ EXEMPTION] Approved medical FAQ found for "${incomingText}". Proceeding with official FAQ response.`);
+      // Strict Rule: Pasien legacy ATAU pasien yang sudah pernah confirmed reservasi
+      // TIDAK BOLEH dijawab oleh bot (bahkan jika ada FAQ). Wajib STRICT SILENT AUTO-HOLD!
+      const isLegacy = !!(customer as any).is_legacy_source;
+      let hasPriorConfirmed = false;
+      try {
+        const confirmedCount = await prisma.reservation.count({
+          where: { customer_id: customer.id, status: 'confirmed', tenant_id: tenantId },
+        });
+        hasPriorConfirmed = confirmedCount > 0;
+      } catch (err: any) {
+        // Fallback: anggap customer lama jika status offline tidak pasti
+      }
+
+      const allowFaqExemption = !isLegacy && !hasPriorConfirmed;
+
+      // Exemption: Hanya untuk customer baru (belum pernah treatment & non-legacy) jika ada FAQ resmi
+      if (allowFaqExemption && approvedFaqMatch && (approvedFaqMatch as any).category === 'medical' && (approvedFaqMatch as any).status === 'APPROVED') {
+        console.log(`[MEDICAL FAQ EXEMPTION] Approved medical FAQ found for new customer "${incomingText}". Proceeding with official FAQ response.`);
       } else {
         const isHigh = medicalResult.severity === 'HIGH';
-        console.log(`[MEDICAL ESCALATION] Severity ${medicalResult.severity} detected for customer ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}`);
+        console.log(`[STRICT MEDICAL ESCALATION] Severity ${medicalResult.severity} detected for customer ${customer.phone} (isLegacy=${isLegacy}, hasPriorConfirmed=${hasPriorConfirmed}). Symptoms: ${medicalResult.detectedSymptoms.join(', ')}`);
 
         // Set conversation to HUMAN_HANDLING with escalation_reason = 'medical_concern'
         conversation.is_human_handling = true;
@@ -223,6 +239,8 @@ export class ConversationStateMachine {
         },
         tenantId
       );
+      await conversationService.updateLastDiscussedTreatment(activeConversation.id, tenantId, null as any).catch(() => {});
+      activeConversation.last_discussed_treatment = null;
       activeConversation.current_state = ConversationState.INITIAL;
     }
 

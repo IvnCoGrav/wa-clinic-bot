@@ -5,6 +5,7 @@ import { auditService } from '../../services/audit.service';
 import { liveChatService } from '../../services/live-chat.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { conversationService, buildConversationUpdatedPayload } from '../../services/conversation.service';
+import { customerService } from '../../services/customer.service';
 import { ConversationState } from '@prisma/client';
 
 export async function livechatAdminRoutes(fastify: FastifyInstance) {
@@ -381,4 +382,61 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * POST /api/admin/live-chat/customers/:id/refresh-profile-picture
+   * Memperbarui foto profil WhatsApp customer dari gateway secara langsung.
+   */
+  fastify.post(
+    '/api/admin/live-chat/customers/:id/refresh-profile-picture',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+        if (!customer) {
+          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+        }
+
+        const { resolveGatewayForTenant } = await import('../../integrations/whatsapp/factory');
+        const gateway = await resolveGatewayForTenant(DEFAULT_TENANT_ID);
+        let profilePictureUrl: string | null = null;
+        if (gateway && typeof gateway.getProfilePicture === 'function') {
+          profilePictureUrl = await gateway.getProfilePicture(customer.phone);
+          await customerService.updateProfilePicture(customer.id, customer.phone, profilePictureUrl);
+        }
+
+        return reply.status(200).send({
+          success: true,
+          data: {
+            customerId: customer.id,
+            profilePictureUrl,
+            updatedAt: new Date(),
+          },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal merefresh foto profil' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/live-chat/conversations/:id/suggest-reply
+   * AI Copilot: Menggenerasi draf balasan profesional untuk Bidan/CS berdasarkan percakapan.
+   */
+  fastify.post(
+    '/api/admin/live-chat/conversations/:id/suggest-reply',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const draftText = await liveChatService.generateAiSuggestion(id, DEFAULT_TENANT_ID);
+        return reply.status(200).send({
+          success: true,
+          data: { draftText },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal menggenerasi draf balasan AI' });
+      }
+    }
+  );
 }
+

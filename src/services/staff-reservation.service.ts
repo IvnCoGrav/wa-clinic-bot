@@ -46,6 +46,7 @@ export interface StaffTaskItem {
   children: StaffTaskChild[];
   pricing: StaffTaskPricing;
   shareLocationText: string | null;
+  customerProfilePictureUrl?: string | null;
 }
 
 function buildAddressText(c: {
@@ -128,6 +129,7 @@ export class StaffReservationService {
               distance_km: true,
               ongkir: true,
               preferences: true,
+              profile_picture_url: true,
               children: {
                 select: {
                   name: true,
@@ -263,6 +265,7 @@ export class StaffReservationService {
             mapsUrl,
             pricing
           ),
+          customerProfilePictureUrl: cust?.profile_picture_url || null,
         };
       });
     } catch (err: any) {
@@ -316,6 +319,7 @@ export class StaffReservationService {
               distance_km: true,
               ongkir: true,
               preferences: true,
+              profile_picture_url: true,
               children: {
                 select: {
                   name: true,
@@ -442,6 +446,7 @@ export class StaffReservationService {
           children: childrenList,
           pricing,
           shareLocationText: null,
+          customerProfilePictureUrl: cust?.profile_picture_url || null,
         };
       });
     } catch (err: any) {
@@ -505,6 +510,7 @@ export class StaffReservationService {
               distance_km: true,
               ongkir: true,
               preferences: true,
+              profile_picture_url: true,
               children: {
                 select: {
                   name: true,
@@ -594,6 +600,7 @@ export class StaffReservationService {
           children: childrenList,
           pricing,
           shareLocationText: null,
+          customerProfilePictureUrl: cust?.profile_picture_url || null,
         };
       });
     } catch (err: any) {

@@ -38,6 +38,7 @@ export interface WhatsAppGateway {
   markAsRead(chatId: string, messageId?: string): Promise<void>;
 
   deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<{ success: boolean; error?: string }>;
+  getProfilePicture?(phone: string): Promise<string | null>;
 }
 
 export interface NormalizedInboundMessage {
