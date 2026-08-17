@@ -60,6 +60,17 @@ body {
     line-height: 0.875rem !important;
   }
 
+  /* Prevent iOS / Mobile Safari automatic zoom on focus when font-size < 16px */
+  input[type="text"],
+  input[type="number"],
+  input[type="search"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
   /* Standard touch target baseline for action buttons & interactive icons */
   button:not(.no-touch-min):not(table button):not(.inline-chip) {
     min-height: 36px;

@@ -77,6 +77,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
@@ -94,6 +95,21 @@ export const LiveChatMonitor: React.FC = () => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
+
+  const resetTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '38px';
+    }
+  };
+
+  const handleReplyTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setReplyText(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const nextHeight = Math.min(textareaRef.current.scrollHeight, 130);
+      textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
+    }
+  };
 
   // Auto-scroll internal container ke pesan terbaru saat thread berubah / pesan baru masuk.
   useEffect(() => {
@@ -212,6 +228,7 @@ export const LiveChatMonitor: React.FC = () => {
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
+    resetTextareaHeight();
     loadThread(conversationId);
   };
 
@@ -395,6 +412,7 @@ export const LiveChatMonitor: React.FC = () => {
         body: JSON.stringify(body),
       });
       setReplyText('');
+      resetTextareaHeight();
       setSelectedImage(null);
       toast('Balasan admin terkirim.', 'success');
     } catch (err: any) {
@@ -504,16 +522,6 @@ export const LiveChatMonitor: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center space-x-3">
-          {mobileView === 'chat' && (
-            <button
-              onClick={() => setMobileView('list')}
-              className="lg:hidden p-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] transition shadow-xs flex items-center space-x-1 font-semibold text-xs"
-              title="Kembali ke daftar percakapan"
-            >
-              <ChevronLeft size={18} />
-              <span>Daftar</span>
-            </button>
-          )}
           <div>
             <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
               <MessageSquare className="text-[#008069]" size={22} />
@@ -636,7 +644,7 @@ export const LiveChatMonitor: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[calc(100dvh-230px)] lg:max-h-[620px] overflow-y-auto pr-1">
                 {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
@@ -798,7 +806,7 @@ export const LiveChatMonitor: React.FC = () => {
           {/* Right Panel - Chat Inspector */}
           <div className={`${mobileView === 'list' ? 'hidden lg:block' : 'block'} lg:col-span-7`}>
             {selectedChat ? (
-              <div className="bg-white border border-[#e9edef] rounded-2xl p-3 sm:p-5 h-[calc(100dvh-170px)] lg:h-[650px] flex flex-col justify-between shadow-xs">
+              <div className="bg-white border border-[#e9edef] rounded-2xl p-3 sm:p-5 h-[calc(100dvh-135px)] sm:h-[calc(100dvh-160px)] lg:h-[650px] flex flex-col justify-between shadow-xs">
                 {/* Header Info */}
                 <div className="border-b border-[#e9edef] pb-3 space-y-2">
                   {selectedChat.isSandboxTest && (
@@ -811,10 +819,11 @@ export const LiveChatMonitor: React.FC = () => {
                     <div className="flex items-start space-x-2.5">
                       <button
                         onClick={() => setMobileView('list')}
-                        className="lg:hidden p-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0"
+                        className="lg:hidden p-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0 active:scale-95"
                         title="Kembali ke daftar percakapan"
+                        aria-label="Kembali ke daftar percakapan"
                       >
-                        <ChevronLeft size={18} />
+                        <ChevronLeft size={20} />
                       </button>
                       <div>
                         <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
@@ -971,31 +980,33 @@ export const LiveChatMonitor: React.FC = () => {
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={sending}
-                      className="p-2 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 text-[#54656f] hover:text-[#008069] rounded-xl text-xs font-bold transition flex items-center shadow-xs"
+                      className="p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 text-[#54656f] hover:text-[#008069] rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs shrink-0 active:scale-95"
                       title="Lampirkan gambar"
                     >
-                      <ImagePlus size={15} />
+                      <ImagePlus size={18} />
                     </button>
                     <textarea
+                      ref={textareaRef}
                       value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
+                      onChange={handleReplyTextChange}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           handleSendReply();
                         }
                       }}
-                      rows={2}
-                      placeholder="Tulis balasan sebagai admin... (Enter kirim, Shift+Enter baris baru)"
-                      className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-xs text-[#111b21] placeholder-[#8696a0] p-2.5 shadow-xs"
+                      rows={1}
+                      placeholder="Tulis balasan... (Enter kirim, Shift+Enter baris baru)"
+                      className="flex-1 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-3 shadow-xs min-h-[38px] max-h-[130px] leading-relaxed"
                     />
                     <button
                       onClick={handleSendReply}
                       disabled={sending || (!replyText.trim() && !selectedImage)}
-                      className="px-3.5 py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                      className="px-3.5 sm:px-4 py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 min-h-[38px]"
+                      title="Kirim Balasan"
                     >
-                      <Send size={13} />
-                      <span>{sending ? 'Mengirim...' : 'Kirim'}</span>
+                      <Send size={15} />
+                      <span className="hidden sm:inline">{sending ? 'Mengirim...' : 'Kirim'}</span>
                     </button>
                   </div>
                 </>
