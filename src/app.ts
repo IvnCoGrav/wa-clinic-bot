@@ -71,6 +71,22 @@ export function buildApp() {
   app.register(rateLimit, {
     max: 300,
     timeWindow: '1 minute',
+    allowList: (request) => {
+      const url = request.url || '';
+      // Webhooks WAHA/WABA mengirim ratusan event bertubi-tubi saat WA connect/sync
+      if (url.startsWith('/webhook') || url.startsWith('/api/webhook')) {
+        return true;
+      }
+      // SSE Real-time stream events
+      if (url.includes('/events') || url.includes('/stream')) {
+        return true;
+      }
+      // Static assets & SPA
+      if (url.startsWith('/admin') || url.startsWith('/assets') || url.startsWith('/landing')) {
+        return true;
+      }
+      return false;
+    },
     keyGenerator: (request) => {
       const apiKey = request.headers['x-api-key'] as string;
       const clientIp = request.ip;
