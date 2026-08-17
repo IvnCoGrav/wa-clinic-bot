@@ -42,8 +42,6 @@ html, body, #root {
   color: #111b21;
   overscroll-behavior-y: none;
   overscroll-behavior-x: none;
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
 }
 
 body {
