@@ -29,6 +29,7 @@ export interface LiveChatConversationItem {
   purchaseCount?: number;
   ltv?: number;
   customerLabels?: { id: string; name: string; color: string }[];
+  customerProfilePictureUrl?: string | null;
 }
 
 /** Deteksi sumber traffic dari baris ad_clicks. */
@@ -122,6 +123,18 @@ export class LiveChatService {
       // DB offline → fallback per-conversation (memory store)
       for (const cid of conversationIds) {
         lastMessagesByConv.set(cid, await messageService.getRecentMessages(cid, 3, tenantId));
+      }
+    }
+
+    // Background sync foto profil untuk customer yang belum ada / sudah kedaluwarsa (> 3 hari)
+    for (const cust of customers.values()) {
+      if (cust && cust.phone && !cust.is_sandbox_test) {
+        const isStale =
+          !cust.profile_picture_updated_at ||
+          Date.now() - new Date(cust.profile_picture_updated_at).getTime() > 3 * 24 * 60 * 60 * 1000;
+        if (isStale) {
+          customerService.syncProfilePictureInBackground(cust.id, cust.phone, tenantId);
+        }
       }
     }
 
@@ -499,6 +512,7 @@ export class LiveChatService {
       purchaseCount: stats?.purchaseCount ?? (c.customer?.reservations?.length || 0),
       ltv: stats?.ltv || 0,
       customerLabels: c.customer?.labels?.map((cl: any) => cl.label || cl) || [],
+      customerProfilePictureUrl: c.customer?.profile_picture_url || null,
     };
   }
 
@@ -516,6 +530,86 @@ export class LiveChatService {
     }
   }
 
+  /**
+   * AI Copilot: Menghasilkan draf saran balasan profesional dari sudut pandang Bidan/CS
+   * berdasarkan riwayat pesan terakhir, konteks anak/reservasi, dan persona klinik.
+   */
+  public async generateAiSuggestion(conversationId: string, tenantId: string): Promise<string> {
+    try {
+      const conv = await prisma.conversation.findFirst({
+        where: { id: conversationId, tenant_id: tenantId },
+        include: {
+          customer: {
+            include: {
+              children: true,
+              reservations: { take: 5, orderBy: { created_at: 'desc' } },
+              labels: { include: { label: true } },
+            },
+          },
+          messages: {
+            take: 10,
+            orderBy: { created_at: 'desc' },
+          },
+        },
+      });
+
+      if (!conv) {
+        throw new Error('Percakapan tidak ditemukan');
+      }
+
+      const customer = conv.customer;
+      const customerName = customer?.name || 'Bunda';
+      const childrenList = (customer?.children || []).map((c: any) => `${c.name || 'Anak'}${c.age_months ? ` (${c.age_months} bln)` : ''}`).join(', ') || '-';
+      const reservationsList = (customer?.reservations || []).map((r: any) => `${r.treatment_detail || r.raw_text || 'Treatment'} [${r.status}]`).join(', ') || '-';
+      const messagesAsc = (conv.messages || []).slice().reverse();
+
+      const { getLlmEndpointConfig, callChatWithRetry } = await import('../integrations/llm/llm-gateway');
+      const endpoint = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+
+      if (!endpoint.apiKey) {
+        return `Halo Bunda ${customerName}, terima kasih sudah menghubungi kami. Bidan kami siap membantu Bunda dan si kecil. Ada keluhan atau kebutuhan yang bisa kami bantu? 🙏🥰`;
+      }
+
+      const systemPrompt = `Kamu adalah Asisten Bidan & Customer Service di klinik homecare ibu dan anak "Kala Homecare".
+Tugasmu adalah membantu Bidan menulis 1 draf balasan WhatsApp yang:
+- Ramah, sopan, empatik, dan menenangkan (selalu sapa dengan "Bunda").
+- Ringkas, to-the-point, dan solutif (jangan bertele-tele).
+- Menggunakan bahasa Indonesia yang luwes dan hangat (boleh gunakan 1-2 emoji seperti 🙏🥰✨).
+- HANYA kembalikan teks balasan yang siap dikirim langsung ke WhatsApp. JANGAN sertakan kalimat pembuka meta seperti "Berikut draf balasan:" atau tanda kutip.`;
+
+      const userPrompt = `[DATA PASIEN]
+Nama: ${customerName}
+Anak: ${childrenList}
+Riwayat Reservasi: ${reservationsList}
+
+[RIWAYAT PERCAKAPAN TERAKHIR]
+${messagesAsc.map((m: any) => `${m.direction === 'INBOUND' ? 'Bunda' : 'Bidan'}: ${m.content}`).join('\n')}
+
+Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda:`;
+
+      const callResult = await callChatWithRetry({
+        baseUrl: endpoint.baseUrl,
+        apiKey: endpoint.apiKey,
+        model: endpoint.model,
+        fallbackModel: endpoint.fallbackModel,
+        timeoutMs: 25000,
+        payload: {
+          temperature: 0.3,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        },
+      });
+
+      const draft = callResult.data?.choices?.[0]?.message?.content?.trim() || '';
+      return draft.replace(/^["']|["']$/g, '');
+    } catch (err: any) {
+      console.warn('[AI SUGGESTION ERROR]:', err.message);
+      return `Halo Bunda, terima kasih atas pesannya. Terkait pertanyaan Bunda, ada yang bisa Bidan bantu lebih lanjut hari ini? 🙏✨`;
+    }
+  }
+
   private async getManualReplyEscalates(tenantId: string): Promise<boolean> {
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -527,3 +621,4 @@ export class LiveChatService {
 }
 
 export const liveChatService = new LiveChatService();
+

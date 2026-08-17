@@ -1,7 +1,7 @@
 import { getWibTimeInfo } from '../../utils/time-wib';
 import { BOT_PERSONA_PROMPT } from '../../config/persona';
 import { CircuitBreaker } from '../../utils/circuit-breaker';
-import { stripNonIndonesianScripts, containsForeignScripts, sanitizeHallucinatedTerms, sanitizeForbiddenEnglishWords } from '../../utils/language-sanitizer';
+import { stripNonIndonesianScripts, containsForeignScripts, sanitizeHallucinatedTerms, sanitizeForbiddenEnglishWords, sanitizeEmDash } from '../../utils/language-sanitizer';
 import { llmOutageStorage } from './context';
 import { openerTracker } from './opener-tracker';
 import { getLlmEndpointConfig } from './llm-gateway';
@@ -240,15 +240,17 @@ ${templateConstraint}`;
         }
 
         // Safety Check 3: Bersihkan double greeting, kata terlarang & halusinasi istilah
-        let finalContent = sanitizeForbiddenEnglishWords(
-          sanitizeHallucinatedTerms(
-            cleanedMeta
-              .replace(/^(Selamat\s+(?:Pagi|Siang|Sore|Malam))\s*,\s*(Selamat\s+datang)/i, '$2')
-              .replace(/\b(dimana|di\s+mana)\s+lokasinya\b/gi, 'rumahnya di mana')
-              .replace(/\bmana\s+lokasinya\b/gi, 'rumahnya di mana')
-              .replace(/\b(tahu|tau)\s+(dimana|di\s+mana)\s+lokasi(nya)?\b/gi, '$1 rumahnya di mana')
-              .replace(/\blokasi\s+Bunda\b/gi, 'rumah Bunda')
-              .replace(/\blokasinya\b/gi, 'rumahnya')
+        let finalContent = sanitizeEmDash(
+          sanitizeForbiddenEnglishWords(
+            sanitizeHallucinatedTerms(
+              cleanedMeta
+                .replace(/^(Selamat\s+(?:Pagi|Siang|Sore|Malam))\s*,\s*(Selamat\s+datang)/i, '$2')
+                .replace(/\b(dimana|di\s+mana)\s+lokasinya\b/gi, 'rumahnya di mana')
+                .replace(/\bmana\s+lokasinya\b/gi, 'rumahnya di mana')
+                .replace(/\b(tahu|tau)\s+(dimana|di\s+mana)\s+lokasi(nya)?\b/gi, '$1 rumahnya di mana')
+                .replace(/\blokasi\s+Bunda\b/gi, 'rumah Bunda')
+                .replace(/\blokasinya\b/gi, 'rumahnya')
+            )
           )
         );
 

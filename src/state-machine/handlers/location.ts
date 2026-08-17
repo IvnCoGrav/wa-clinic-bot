@@ -10,6 +10,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isLocationQueryMessage } from '../utils/location-query';
 import { isNeedTimeOrDiscussionMessage } from '../utils/need-time-checker';
 import { isAskingClinicLocation } from '../utils/clinic-location-checker';
+import { parseAgeTextToMonths } from '../../utils/age-calculator';
 
 /**
  * Handler untuk state AWAITING_LOCATION:
@@ -144,27 +145,46 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     };
   }
 
-  // --- INTERSEPSI FAQ / PRICE: kalau customer tanya hal lain (bukan lokasi) saat state lokasi,
-  // jawab via interest handler (knowledge base / katalog treatment), TANPA mengganggu state lokasi.
+  // --- ARSITEKTUR HYBRID OPSI 1 + 3: DETEKSI JAWABAN KONSULTASI / USIA / FAQ SAAT STATE LOKASI ---
+  // 1. Deteksi Pola Usia (Age Match)
+  const detectedAgeMonths = parseAgeTextToMonths(cleanLower);
+  const hasAgePattern = detectedAgeMonths !== null ||
+    /\b\d+\s*(bulan|bln|thn|tahun|hari|minggu|mg|hr)\b/i.test(cleanLower) ||
+    /\b(anak\s+(saya\s+)?(usia|umur|\d+)|newborn|bayi\s+baru\s+lahir|balita|batita|anak\s+pertama|anak\s+ke\s*\d+)\b/i.test(cleanLower);
+
+  // 2. Deteksi Keluhan / Kondisi Medis / Treatment
+  const hasClinicalOrTreatment = /\b(kembung|kolik|bapil|batuk|pilek|demam|panas|anget|vaksin|imunisasi|diare|sembelit|gundul|cukur|tindik|tindikan|terapi|pijat|massage|spa)\b/i.test(cleanLower);
+
+  // 3. Deteksi Kontekstual Pertanyaan Terakhir Bot (Opsi 1)
+  const historyList = (ctx as any).history || [];
+  const lastAssistant = historyList.slice().reverse().find((m: any) => m.role === 'assistant');
+  const lastBotText = (lastAssistant?.content || '').toLowerCase();
+  const botAskedAgeOrConsultation = /\b(usia|umur|berapa\s+bulan|berapa\s+hari|keluhan|treatment|perawatan|kondisi|si\s+kecil)\b/i.test(lastBotText);
+
+  const rawBodyText = incomingMessage.text?.body?.trim() || '';
+  const isDirectLocation = isLocationQueryMessage(incomingMessage, rawBodyText) || Boolean(nluConfident && nluLocationText);
+  const isConversationalClarification = botAskedAgeOrConsultation && !isDirectLocation;
+
+  // --- INTERSEPSI FAQ / PRICE / CONSULTATION: kalau customer tanya/jawab hal lain (bukan lokasi) saat state lokasi,
+  // jawab via interest handler (knowledge base / katalog treatment / LLM Generator), TANPA mengganggu state lokasi.
   // Prinsip: STATE PUNYA PRIORITAS — jawab sela, lalu tetap tanya lokasi.
   const nlu = ctx.nluResult;
   const hasNluPriceOrFaq = nlu && (nlu.intents.includes('faq_question') || nlu.intents.includes('ask_price') || nlu.intents.includes('chitchat') || nlu.intents.includes('ask_schedule'));
   const hasFaqRegex = (/\b(berapa|harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|jam|buka|jadwal|manfaat|untuk apa|boleh|umur|usia|efek|perawatan|treatment|cukur|gundul|potong|pijat|massage|spa|nanya|tanya|bisa|apakah|gimana|bagaimana|apa|persyaratan|syarat|paket|\d+\s*(rb|k|ribu))\b/i.test(cleanLower) && !/\b(di|ke|kelurahan|desa|alamat)\b/i.test(cleanLower));
   const isAskingClinic = isAskingClinicLocation(cleanLower);
-  const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex || isAskingClinic;
+  const hasFaqIntent = hasNluPriceOrFaq || hasFaqRegex || isAskingClinic || hasAgePattern || hasClinicalOrTreatment || isConversationalClarification;
   const interceptDepth = ctx._interceptDepth || 0;
-  const rawBodyText = incomingMessage.text?.body?.trim() || '';
   const hasNluLocationEntity = Boolean(nluConfident && nluLocationText);
-  const skipFaqIntercept = (!isAskingClinic && (isLocationQueryMessage(incomingMessage, rawBodyText) || hasNluLocationEntity)) || interceptDepth > 0;
+  const skipFaqIntercept = (!isAskingClinic && !hasAgePattern && !hasClinicalOrTreatment && !isConversationalClarification && (isLocationQueryMessage(incomingMessage, rawBodyText) || hasNluLocationEntity)) || interceptDepth > 0;
   if (hasFaqIntent && !skipFaqIntercept) {
-    console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
+    console.log(`[LOCATION FAQ INTERCEPT] Customer asked non-location / consultation question during location flow: "${rawTextLocation}". Deferring to interest handler.`);
     const { handleInterestState } = await import('./interest');
     const interestResult = await handleInterestState({
       ...ctx,
       _interceptDepth: interceptDepth + 1,
       conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any,
     });
-    // STATE PUNYA PRIORITAS: setelah jawab FAQ, kembalikan state ke AWAITING_LOCATION,
+    // STATE PUNYA PRIORITAS: setelah jawab FAQ / rekomendasi, kembalikan state ke AWAITING_LOCATION,
     // KECUALI jika customer melakukan form submission atau eskalasi ke human handling.
     const isFormOrEscalation = interestResult.isHumanHandling ||
                                interestResult.nextState === ConversationState.HUMAN_HANDLING ||
@@ -191,6 +211,21 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     .replace(/\s+(bund|bunda|ya|kak|ka|min|mbak|mas|gan|sis|dong|kah|\?)\b/gi, '')
     .replace(/\?/g, '')
     .trim();
+
+  // --- SANITY GUARD: JANGAN PERNAH GEOCODE POLA USIA / KELUHAN (Mencegah "3 bulan" -> "Bulang") ---
+  if (hasAgePattern || hasClinicalOrTreatment || detectedAgeMonths !== null) {
+    console.log(`[GEOCODE GUARD] Message "${textLocation}" contains age or clinical keyword. Redirecting to interest handler.`);
+    const { handleInterestState } = await import('./interest');
+    const interestResult = await handleInterestState({
+      ...ctx,
+      _interceptDepth: interceptDepth + 1,
+      conversation: { ...conversation, current_state: ConversationState.AWAITING_INTEREST } as any,
+    });
+    return {
+      ...interestResult,
+      nextState: ConversationState.AWAITING_LOCATION,
+    };
+  }
 
   // 1. Geocode teks lokasi via Google Maps API
   let resolved = await geocodingService.geocodeText(textLocation);

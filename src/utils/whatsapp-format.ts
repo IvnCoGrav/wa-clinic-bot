@@ -12,6 +12,8 @@
  * URL, atau emoji.
  */
 
+import { sanitizeEmDash } from './language-sanitizer';
+
 const DOUBLE_TO_SINGLE: Array<[RegExp, string]> = [
   // **bold** -> *bold*  (hindari mengubah **/ yang merupakan bagian kata, mis. "d**c**")
   [/\*\*([^*]+?)\*\*/g, '*$1*'],
@@ -23,7 +25,7 @@ const DOUBLE_TO_SINGLE: Array<[RegExp, string]> = [
 
 export function normalizeWhatsAppFormat(text: string): string {
   if (!text) return text;
-  let out = text;
+  let out = sanitizeEmDash(text);
   for (const [re, replacement] of DOUBLE_TO_SINGLE) {
     out = out.replace(re, replacement);
   }

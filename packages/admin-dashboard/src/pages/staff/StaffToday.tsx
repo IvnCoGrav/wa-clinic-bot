@@ -37,6 +37,7 @@ import {
   PenLine,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
+import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
 
@@ -83,6 +84,7 @@ interface StaffTask {
   children: StaffTaskChild[];
   pricing: StaffTaskPricing;
   shareLocationText: string | null;
+  customerProfilePictureUrl?: string | null;
 }
 
 interface ChatMessage {
@@ -1514,13 +1516,13 @@ export const StaffToday: React.FC = () => {
                           title="Klik untuk melihat detail lengkap pasien"
                         >
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            {/* Service Category Avatar Icon with Visit Order Badge */}
+                            {/* Customer Avatar with Visit Order Badge */}
                             <div className="relative flex-shrink-0">
-                              <div
-                                className={`h-10 w-10 rounded-2xl flex items-center justify-center border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
-                              >
-                                {catInfo.icon}
-                              </div>
+                              <CustomerAvatar
+                                src={task.customerProfilePictureUrl}
+                                name={task.customerName}
+                                size="md"
+                              />
                               <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-full bg-[#008069] text-white text-[9px] font-extrabold shadow-xs">
                                 #{idx + 1}
                               </span>
@@ -1755,12 +1757,12 @@ export const StaffToday: React.FC = () => {
                         className="flex items-center space-x-2.5 min-w-0 p-1 -m-1 rounded-xl hover:bg-[#e9edef] transition cursor-pointer group"
                         title="Klik untuk melihat detail lengkap pasien"
                       >
-                        {/* Customer Service Category Icon */}
-                        <div
-                          className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${getCategoryIcon(selectedTask.treatmentCategory).bg}`}
-                        >
-                          {getCategoryIcon(selectedTask.treatmentCategory).icon}
-                        </div>
+                        {/* Customer Avatar */}
+                        <CustomerAvatar
+                          src={selectedTask.customerProfilePictureUrl}
+                          name={selectedTask.customerName}
+                          size="md"
+                        />
 
                         <div className="min-w-0">
                           <div className="flex items-center space-x-2">
@@ -2425,12 +2427,12 @@ export const StaffToday: React.FC = () => {
                             title="Klik untuk melihat detail lengkap pasien"
                           >
                             <div className="flex items-center space-x-2.5 min-w-0">
-                              {/* Service Category Icon */}
-                              <div
-                                className={`h-10 w-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-xs transition-all group-hover:scale-105 ${catInfo.bg}`}
-                              >
-                                {catInfo.icon}
-                              </div>
+                              {/* Customer Avatar */}
+                              <CustomerAvatar
+                                src={item.customerProfilePictureUrl}
+                                name={item.customerName}
+                                size="md"
+                              />
                               <div className="min-w-0">
                                 <h3 className="font-bold text-sm text-[#111b21] truncate group-hover:text-[#008069] transition">
                                   {item.customerName || 'Customer'}
@@ -2885,9 +2887,11 @@ export const StaffToday: React.FC = () => {
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
               <div className="flex items-center space-x-3">
-                <div className={`h-11 w-11 rounded-2xl flex items-center justify-center border shadow-xs ${getCategoryIcon(detailModalTask.treatmentCategory).bg}`}>
-                  {getCategoryIcon(detailModalTask.treatmentCategory).icon}
-                </div>
+                <CustomerAvatar
+                  src={detailModalTask.customerProfilePictureUrl}
+                  name={detailModalTask.customerName}
+                  size="lg"
+                />
                 <div>
                   <h3 className="font-bold text-base text-[#111b21]">
                     {detailModalTask.customerName || 'Customer'}

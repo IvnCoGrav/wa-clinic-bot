@@ -40,6 +40,7 @@ export const AiSandbox: React.FC = () => {
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeRequests, setActiveRequests] = useState(0);
   
   // Simulated outage toggle
   const [sumoPodOutage, setSumoPodOutage] = useState(false);
@@ -164,7 +165,7 @@ export const AiSandbox: React.FC = () => {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || loading) return;
+    if (!inputText.trim()) return;
 
     const userText = inputText;
     setInputText('');
@@ -173,6 +174,7 @@ export const AiSandbox: React.FC = () => {
     const newMsg: ChatMessage = { sender: 'user', content: userText, timestamp: new Date() };
     setMessages(prev => [...prev, newMsg]);
     setLoading(true);
+    setActiveRequests(prev => prev + 1);
 
     const startTime = Date.now();
 
@@ -207,7 +209,13 @@ export const AiSandbox: React.FC = () => {
         isError: true
       }]);
     } finally {
-      setLoading(false);
+      setActiveRequests(prev => {
+        const next = Math.max(0, prev - 1);
+        if (next === 0) {
+          setLoading(false);
+        }
+        return next;
+      });
     }
   };
 
@@ -322,7 +330,7 @@ export const AiSandbox: React.FC = () => {
               </span>
               <button
                 type="submit"
-                disabled={loading || !inputText.trim()}
+                disabled={!inputText.trim()}
                 className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
               >
                 {loading ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}

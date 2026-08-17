@@ -378,8 +378,8 @@ ATURAN EKSTRAKSI PREFERENSI:
         jawaban = this.sanitizeTeamReferral(jawaban);
 
         // Sanitizer RAG Leakage & Kata Bahasa Inggris terlarang ("little one", "baby", "mommy", "schedule")
-        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords } = await import('../../utils/language-sanitizer');
-        jawaban = sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban));
+        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords, sanitizeEmDash } = await import('../../utils/language-sanitizer');
+        jawaban = sanitizeEmDash(sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban)));
 
         // Sanitizer aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
         const sanitizedJawaban = stripNonIndonesianScripts(jawaban);

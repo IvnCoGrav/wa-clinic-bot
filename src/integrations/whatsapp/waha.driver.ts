@@ -89,6 +89,17 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     } catch { /* best-effort */ }
   }
 
+  async getProfilePicture(phone: string): Promise<string | null> {
+    try {
+      if (typeof this.client.getProfilePicture === 'function') {
+        return await this.client.getProfilePicture(phone);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   private toChatId(phone: string): string {
     if (phone.includes('@c.us') || phone.includes('@lid')) {
       return phone;

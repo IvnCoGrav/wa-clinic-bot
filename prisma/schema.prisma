@@ -96,6 +96,8 @@ model Customer {
 
   preferences             Json?
   labels                  CustomerLabel[]
+  profile_picture_url        String?
+  profile_picture_updated_at DateTime?
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])

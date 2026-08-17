@@ -342,6 +342,8 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   },
   pricelistPrompt: () => `pricelist dari kami Bunda ✨ Kira-kira mau pilih treatment yang mana bund?`,
   pricelistIntro: () => `Berikut pricelist dari kami ya Bunda 😊`,
+  promoOngoingInfo: () =>
+    `Masih berlangsung Bunda! ✨ Seluruh harga promo treatment kami saat ini masih aktif ya bund 😊\n\nKalau boleh tahu, perawatannya untuk si kecil usia berapa bulan atau untuk Bunda sendiri ya? Biar kami bantu pilihkan promo yang paling cocok 🤗`,
   // Minta share location setelah customer submit form reservasi (jika pin belum pernah dikirim).
   askShareLocation: () => `Kalau boleh, Bunda bisa sekalian kirim share location (pin) biar titiknya presisi ya 😊`,
   // INITIAL (belum ada lokasi): jangan menolak, langsung alihkan ke tanya lokasi.

@@ -33,6 +33,11 @@ export function isAskPrice(userText: string, nluIntents?: string[]): boolean {
     return false;
   }
 
+  // Pertanyaan promo umum (misal "promonya apa masih berlangsung ya?")
+  if (isGeneralPromoInquiry(userText)) {
+    return true;
+  }
+
   // Kata harga EKSPLISIT → kuat, langsung harga.
   if (
     /\b(harga(nya)?|biaya(nya)?|ongkir(nya)?|ongkos(nya)?|tarif(nya)?|pricelists?|daftar\s+harga|berapa\s+harga)\b/i.test(
@@ -54,6 +59,17 @@ export function isAskPrice(userText: string, nluIntents?: string[]): boolean {
   }
 
   return false;
+}
+
+/**
+ * Deteksi customer menanyakan promo secara umum (misal: "promonya apa masih berlangsung ya?", "ada promo apa saja?")
+ * tanpa menyebutkan nama treatment spesifik.
+ */
+export function isGeneralPromoInquiry(userText: string): boolean {
+  const lower = (userText || '').toLowerCase().trim();
+  const isPromoQuery = /\b(promo(nya)?|diskon(nya)?|potongan\s+harga)\b/i.test(lower);
+  const isAvailabilityQuestion = /\b(masih|ada|berlangsung|berlaku|aktif|bisa|dapat|apa\s+saja|apa\s+aja|gimana|infonya|info)\b/i.test(lower);
+  return isPromoQuery && isAvailabilityQuestion;
 }
 
 /**
@@ -90,6 +106,14 @@ export function buildPriceAnswer(
   }
 
   let items = treatmentCatalogService.searchCatalogItems(userText);
+
+  // ---- Pertanyaan Promo Umum (Promo validity / availability) ----
+  // Jika customer tanya promo secara umum tanpa nama treatment dan tanpa konteks anaphora aktif
+  if (isGeneralPromoInquiry(userText) && items.length === 0 && !opts.candidateTreatmentName) {
+    return {
+      replyText: TEMPLATES.promoOngoingInfo(),
+    };
+  }
 
   // ---- RESOLUSI ANAPHORA: pesan generik ("berapa itu?") tanpa nama treatment ----
   // Jika tidak ada treatment terdeteksi dari pesan customer, pakai kandidat treatment yang baru
