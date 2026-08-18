@@ -54,50 +54,6 @@ const IndexRedirect: React.FC = () => {
 };
 
 export const App: React.FC = () => {
-  useEffect(() => {
-    const handleSelectStart = (e: Event) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable ||
-          target.closest('.selectable-text') ||
-          target.closest('input') ||
-          target.closest('textarea'))
-      ) {
-        return;
-      }
-      e.preventDefault();
-      window.getSelection()?.removeAllRanges();
-    };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable ||
-          target.closest('.selectable-text') ||
-          target.closest('input') ||
-          target.closest('textarea'))
-      ) {
-        return;
-      }
-      // Mencegah menu konteks / long-press text popup native pada mobile
-      e.preventDefault();
-    };
-
-    document.addEventListener('selectstart', handleSelectStart, { capture: true, passive: false });
-    window.addEventListener('contextmenu', handleContextMenu, { capture: true, passive: false });
-
-    return () => {
-      document.removeEventListener('selectstart', handleSelectStart, { capture: true });
-      window.removeEventListener('contextmenu', handleContextMenu, { capture: true });
-    };
-  }, []);
-
   return (
     <BrowserRouter>
       <AuthProvider>
