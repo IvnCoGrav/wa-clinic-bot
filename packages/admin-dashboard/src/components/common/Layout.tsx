@@ -157,9 +157,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (!mobileMenuOpen) return;
 
-    // Push dummy history state when menu opens
-    window.history.pushState({ adminMenuOpen: true }, '');
-
     const handlePopState = () => {
       setMobileMenuOpen(false);
     };
@@ -167,10 +164,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     window.addEventListener('popstate', handlePopState);
     return () => {
       window.removeEventListener('popstate', handlePopState);
-      // Jika menu ditutup via UI (bukan via Back button), bersihkan entry history dummy
-      if (window.history.state?.adminMenuOpen) {
-        window.history.back();
-      }
     };
   }, [mobileMenuOpen]);
 
@@ -184,11 +177,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (e.touches.length !== 1) return;
       // Guard: Hanya aktifkan gesture pada mobile (< md breakpoint 768px)
       if (window.innerWidth >= 768) return;
+
+      // Guard: Abaikan jika menyentuh elemen interaktif / form
+      const target = e.target as HTMLElement | null;
+      if (target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.tagName === 'BUTTON' ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('textarea')
+      )) {
+        isTracking = false;
+        return;
+      }
+
       const touch = e.touches[0];
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
 
-      const isRightEdge = touchStartX >= window.innerWidth - 55;
+      // Zona tepi ketat: hanya 30px dari sisi kanan layar
+      const isRightEdge = touchStartX >= window.innerWidth - 30;
       if (mobileMenuOpen || isRightEdge) {
         isTracking = true;
       } else {
@@ -205,11 +215,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const absY = Math.abs(deltaY);
 
       // Case 1: When sidebar is CLOSED -> User is swiping from right edge towards left
-      if (!mobileMenuOpen && touchStartX >= window.innerWidth - 55) {
-        if (deltaX < -8 && absX > absY * 1.1) {
+      if (!mobileMenuOpen && touchStartX >= window.innerWidth - 30) {
+        // Rasio horizontal ketat 2.0x (bukan scroll vertikal)
+        if (deltaX < -15 && absX > absY * 2.0) {
           if (e.cancelable) e.preventDefault();
         }
-        if (deltaX < -30 && absX > absY * 1.1) {
+        if (deltaX < -45 && absX > absY * 2.0) {
           setMobileMenuOpen(true);
           isTracking = false;
         }
@@ -218,10 +229,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       // Case 2: When sidebar is OPEN -> User is swiping right anywhere to close
       if (mobileMenuOpen) {
-        if (deltaX > 8 && absX > absY * 1.1) {
+        if (deltaX > 15 && absX > absY * 2.0) {
           if (e.cancelable) e.preventDefault();
         }
-        if (deltaX > 30 && absX > absY * 1.1) {
+        if (deltaX > 45 && absX > absY * 2.0) {
           setMobileMenuOpen(false);
           isTracking = false;
         }

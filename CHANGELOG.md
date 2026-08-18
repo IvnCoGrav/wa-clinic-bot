@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — WhatsApp-Style Mobile Bottom Action Sheet, Gesture Calibration & History Isolation
+
+- **Redesain Context Menu Menjadi WhatsApp-Style Mobile Bottom Action Sheet (`LiveChatMonitor.tsx`)**:
+  - Pada layar smartphone, menu konteks hold-press kini meluncur mulus dari bawah layar (*slide-up bottom sheet*) dilengkapi *grab handle*, info avatar/nama pelanggan, opsi tombol sentuh besar (*Sematkan Chat, Tandai Belum Dibaca, Ambil Alih CS*), dan tombol *Batal*.
+  - Menambahkan **Backdrop Overlay Penuh** (`fixed inset-0 bg-black/40`) pada mode mobile dan desktop sehingga mengetuk area luar menutup menu dengan aman tanpa memicu klik pada elemen di bawahnya (*tap-through protection*).
+- **Kalibrasi Presisi Right-Edge Swipe Gesture (`Layout.tsx`)**:
+  - Zona aktivasi diperketat menjadi 30px dari tepi kanan layar (`touchStartX >= window.innerWidth - 30`).
+  - Diterapkan filter sudut horizontal ketat 2.0x (`Math.abs(deltaX) > Math.abs(deltaY) * 2.0`) dan pengabaian sentuhan pada elemen input/form, menjamin scroll vertikal chat tidak akan memicu pembukaan drawer secara tidak sengaja.
+- **Kalibrasi Left-Edge Swipe Back (`LiveChatMonitor.tsx`)**:
+  - Zona aktivasi tepi kiri diselaraskan (`touchStartX <= 35`), jarak geser minimum 45px ke kanan, dan eliminasi pembatasan waktu sempit agar usapan jari terasa instan dan responsif.
+- **Isolasi History Routing Tanpa Efek Samping (`Layout.tsx`)**:
+  - Menghilangkan manipulasi history pada cleanup effect menu, memastikan navigasi tautan menu di mobile berjalan mulus tanpa layar berkedip (*flicker*) atau terpental mundur.
+
 ### Fixed — Comprehensive Touch Gestures, Long-Press & History Navigation Overhaul (10 Bug Fixes)
 
 - **Perbaikan Ghost History Entries pada Sidebar (`Layout.tsx`)**:
