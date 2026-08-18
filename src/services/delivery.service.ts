@@ -35,6 +35,13 @@ export let activeDeliveryTiers: DeliveryTier[] = [];
  */
 const HAVERSINE_CIRCUITY_FACTOR = parseFloat(process.env.HAVERSINE_CIRCUITY_FACTOR || '1.60');
 
+/**
+ * Faktor buffer jarak rute OpenRouteService (ORS).
+ * Dapat di-override per env ORS_BUFFER_FACTOR; default 1.10x (1.1x / +10% buffer)
+ * sebagai toleransi deviasi rute dan kondisi jalan.
+ */
+const ORS_BUFFER_FACTOR = parseFloat(process.env.ORS_BUFFER_FACTOR || '1.10');
+
 export function loadDeliveryTiers() {
   try {
     if (fs.existsSync(TIERS_FILE)) {
@@ -184,12 +191,13 @@ export class DeliveryService {
     );
 
     if (orsResult && typeof orsResult.distanceMeters === 'number') {
-      // Konversi meter ke km (presisi 2 desimal)
-      distanceKm = parseFloat((orsResult.distanceMeters / 1000).toFixed(2));
+      // Konversi meter ke km dengan buffer 1.1x (presisi 2 desimal)
+      const rawDistanceKm = orsResult.distanceMeters / 1000;
+      distanceKm = parseFloat((rawDistanceKm * ORS_BUFFER_FACTOR).toFixed(2));
       isEstimated = false;
       const durationMins = orsResult.durationSeconds ? Math.round(orsResult.durationSeconds / 60) : null;
       console.log(
-        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Distance: ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${ORS_BUFFER_FACTOR}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
       );
     } else {
       // 2. FALLBACK: Haversine + circuity factor

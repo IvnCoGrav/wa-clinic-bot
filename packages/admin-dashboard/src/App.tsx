@@ -31,6 +31,7 @@ const AiEvaluations = lazy(() => import('./pages/tenant/AiEvaluations').then(m =
 const MetaClickCatcher = lazy(() => import('./pages/tenant/MetaClickCatcher').then(m => ({ default: m.MetaClickCatcher })));
 const MetaCapiQueue = lazy(() => import('./pages/tenant/MetaCapiQueue').then(m => ({ default: m.MetaCapiQueue })));
 const ChatExport = lazy(() => import('./pages/tenant/ChatExport').then(m => ({ default: m.ChatExport })));
+const ChatMigration = lazy(() => import('./pages/tenant/ChatMigration').then(m => ({ default: m.ChatMigration })));
 const StaffLogin = lazy(() => import('./pages/staff/StaffLogin').then(m => ({ default: m.StaffLogin })));
 const StaffToday = lazy(() => import('./pages/staff/StaffToday').then(m => ({ default: m.StaffToday })));
 const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m => ({ default: m.StaffSchedule })));
@@ -155,6 +156,15 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             } />
             <Route path="/admin/knowledge" element={<Navigate to="/admin/knowledge-base" replace />} />
+
+            <Route path="/admin/chat-migration" element={
+              <ProtectedRoute>
+                <Layout>
+                  <ChatMigration />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/migration" element={<Navigate to="/admin/chat-migration" replace />} />
 
             <Route path="/admin/sandbox" element={
               <ProtectedRoute>

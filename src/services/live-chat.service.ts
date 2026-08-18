@@ -497,6 +497,9 @@ export class LiveChatService {
   }
 
   private serialize(c: any, stats?: { purchaseCount: number; ltv: number }): LiveChatConversationItem {
+    const lastMsg = c.messages && c.messages.length > 0 ? c.messages[c.messages.length - 1] : null;
+    const effectiveLastMsgAt = lastMsg?.created_at || c.last_message_at || c.updated_at;
+
     return {
       conversationId: c.id,
       customerId: c.customer_id,
@@ -506,7 +509,7 @@ export class LiveChatService {
       isHumanHandling: !!c.is_human_handling,
       humanHandlingSince: c.human_handling_since || null,
       escalationReason: c.escalation_reason || null,
-      lastMessageAt: c.last_message_at,
+      lastMessageAt: effectiveLastMsgAt,
       createdAt: c.created_at,
       lastMessages: c.messages || [],
       isMql: !!c.customer?.is_mql,

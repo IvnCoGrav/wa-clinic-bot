@@ -109,7 +109,10 @@ export class ConversationService {
     mode: 'all' | 'real' | 'sandbox' = 'all'
   ): Promise<any[]> {
     try {
-      const where: any = { tenant_id: tenantId };
+      const where: any = {
+        tenant_id: tenantId,
+        messages: { some: {} },
+      };
       if (mode !== 'all') {
         where.customer = { is_sandbox_test: mode === 'sandbox' };
       }

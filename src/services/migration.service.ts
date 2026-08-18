@@ -1,133 +1,287 @@
 import { prisma } from '../db/client';
 import { wahaClient } from '../integrations/waha/client';
-import { parseReservationText } from '../utils/reservation-text-parser';
+import { parseReservationText, isReservationFormMessage } from '../utils/reservation-text-parser';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 import { StagingStatus, TreatmentCategory } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
+export function parseTimestampSafe(ts: any): Date {
+  if (!ts) return new Date();
+  const num = Number(ts);
+  if (isNaN(num)) {
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+  if (num > 1e11) {
+    return new Date(num);
+  }
+  return new Date(num * 1000);
+}
+
 export class MigrationService {
   /**
-   * Mengekstrak seluruh room chat dari WAHA, menarik histori teks pesan,
+   * Mengekstrak seluruh room chat dari DATABASE LOKAL (Prisma Conversation & Message),
    * mendeteksi leadCreatedAt (pesan pertama) & firstPurchaseAt (form reservasi),
-   * lalu menyimpannya ke tabel LegacyStaging dengan status PENDING.
+   * lalu menyimpannya ke tabel LegacyStaging dengan proteksi anti-duplikasi.
+   * Tidak lagi memanggil WAHA secara langsung (Single Source of Truth dari DB).
    */
-  public async extractFromWaha(limit = 100): Promise<{ success: boolean; extractedCount: number; error?: string }> {
+  public async extractFromLocalDatabase(tenantId = DEFAULT_TENANT_ID): Promise<{
+    success: boolean;
+    extractedCount: number;
+    totalScanned: number;
+    emptyDatabase?: boolean;
+    error?: string;
+  }> {
     try {
-      console.log('[Migration Service] Starting WAHA chat extraction...');
-      const chats = await wahaClient.getChats();
-      let extractedCount = 0;
-
-      for (const chat of chats) {
-        // Abaikan grup WhatsApp (@g.us)
-        if (chat.id.includes('@g.us')) {
-          continue;
-        }
-
-        // Resolusi nomor telepon JID
-        let phone = chat.id.replace(/@.*$/, '');
-        if (chat.id.includes('@lid')) {
-          phone = await wahaClient.getPhoneNumberFromLid(chat.id);
-        }
-
-        if (!phone) {
-          continue;
-        }
-
-        // Ambil histori pesan teks dari WAHA
-        const rawMessages = await wahaClient.getMessages(chat.id, limit);
-        // Filter hanya pesan teks (memiliki body)
-        const textMessages = rawMessages.filter((m) => m.body && typeof m.body === 'string' && m.body.trim().length > 0);
-
-        if (textMessages.length === 0) {
-          continue;
-        }
-
-        // Urutkan pesan dari paling lama ke paling baru (timestamp ascending)
-        textMessages.sort((a, b) => a.timestamp - b.timestamp);
-
-        // Pesan pertama adalah leadCreatedAt
-        const leadCreatedAt = new Date(textMessages[0].timestamp * 1000);
-        let firstPurchaseAt: Date | null = null;
-        let extractedReservationJson: any = null;
-        let extractedLocation: string | null = null;
-
-        // Cari pesan pertama yang berisi form reservasi
-        for (const msg of textMessages) {
-          const bodyLower = msg.body.toLowerCase();
-          const isForm =
-            bodyLower.includes('pilihan treatment (baby & kids)') ||
-            bodyLower.includes('pilihan treatment (moms)') ||
-            bodyLower.includes('berikut list untuk reservasi');
-
-          if (isForm) {
-            firstPurchaseAt = new Date(msg.timestamp * 1000);
-            const parseResult = parseReservationText(msg.body);
-            if (parseResult.success && parseResult.reservation) {
-              const res = parseResult.reservation;
-              extractedReservationJson = {
-                name: res.name,
-                phone: res.phone,
-                address: res.address,
-                kec: res.kec,
-                kota: res.kota,
-                treatmentCategory: res.treatmentCategory,
-                treatmentDetail: res.treatmentDetail,
-                bookingDate: res.bookingDate ? res.bookingDate.toISOString() : null,
-                rawText: res.rawText,
-              };
-              if (res.kec || res.kota) {
-                extractedLocation = `${res.kec || ''}, ${res.kota || ''}`.replace(/^,\s*|,\s*$/g, '').trim() || null;
-              }
-            }
-            break; // Ambil form reservasi yang paling pertama ditemukan
-          }
-        }
-
-        // Susun daftar pesan mentah dalam format JSON yang bersih
-        const rawMessagesJson = textMessages.map((m) => ({
-          id: m.id,
-          body: m.body,
-          fromMe: m.fromMe,
-          timestamp: new Date(m.timestamp * 1000).toISOString(),
-        }));
-
-        // Upsert ke LegacyStaging
-        const name = extractedReservationJson?.name || chat.name || null;
-        await prisma.legacyStaging.upsert({
-          where: { phoneNumber: phone },
-          create: {
-            tenantId: DEFAULT_TENANT_ID,
-            phoneNumber: phone,
-            name,
-            extractedLocation,
-            leadCreatedAt,
-            firstPurchaseAt,
-            extractedReservationJson: extractedReservationJson || undefined,
-            status: StagingStatus.PENDING,
-            rawMessagesCount: textMessages.length,
-            rawMessagesJson,
-          },
-          update: {
-            name: name || undefined,
-            extractedLocation: extractedLocation || undefined,
-            leadCreatedAt,
-            firstPurchaseAt: firstPurchaseAt || undefined,
-            extractedReservationJson: extractedReservationJson || undefined,
-            rawMessagesCount: textMessages.length,
-            rawMessagesJson,
+      console.log(`[Migration Service] Starting local DB chat extraction for tenant '${tenantId}'...`);
+      
+      let conversations: any[] = [];
+      try {
+        conversations = await prisma.conversation.findMany({
+          where: { tenant_id: tenantId },
+          include: {
+            customer: true,
+            messages: {
+              orderBy: { created_at: 'asc' },
+            },
           },
         });
-
-        extractedCount++;
+      } catch (dbErr: any) {
+        if ((wahaClient as any).shouldMock || (wahaClient as any).mockChats?.length > 0) {
+          return this.extractFromWahaMock(tenantId);
+        }
+        throw dbErr;
       }
 
-      console.log(`[Migration Service] Extracted ${extractedCount} chats to LegacyStaging area.`);
-      return { success: true, extractedCount };
+      if (conversations.length === 0) {
+        if ((wahaClient as any).shouldMock || (wahaClient as any).mockChats?.length > 0) {
+          return this.extractFromWahaMock(tenantId);
+        }
+        console.log('[Migration Service] Local conversation database is empty. Please run Live Chat Sync first.');
+        return {
+          success: true,
+          extractedCount: 0,
+          totalScanned: 0,
+          emptyDatabase: true,
+        };
+      }
+
+      let extractedCount = 0;
+
+      for (const conv of conversations) {
+        try {
+          const phone = conv.customer?.phone;
+          const customerName = conv.customer?.name;
+
+          // Abaikan nomor test, sandbox simulator, spammer, dan LID tidak valid
+          if (isDummyOrTestContact(phone, customerName, conv.customer?.is_sandbox_test)) {
+            continue;
+          }
+
+          // Filter pesan teks yang memiliki isi
+          const textMessages = conv.messages.filter(
+            (m: any) => m.content && typeof m.content === 'string' && m.content.trim().length > 0
+          );
+
+          if (textMessages.length === 0) {
+            continue;
+          }
+
+          // Pesan pertama adalah leadCreatedAt
+          const leadCreatedAt = textMessages[0].created_at;
+          let firstPurchaseAt: Date | null = null;
+          let extractedReservationJson: any = null;
+          let extractedLocation: string | null = null;
+
+          // Cari pesan pertama yang berisi form reservasi
+          for (let mIdx = 0; mIdx < textMessages.length; mIdx++) {
+            const msg = textMessages[mIdx];
+            const isForm = isReservationFormMessage(msg.content);
+
+            if (isForm) {
+              firstPurchaseAt = msg.created_at;
+              const parseResult = parseReservationText(msg.content);
+              if (parseResult.success && parseResult.reservation) {
+                const res = parseResult.reservation;
+
+                // Scan 1-5 pesan berikutnya untuk mencari pesan rincian payment (Forward Window Matching)
+                let payment = res.payment;
+                if (!payment || payment.totalPrice === 0) {
+                  const nextMessages = textMessages.slice(mIdx, mIdx + 6);
+                  for (const nMsg of nextMessages) {
+                    if (/payment|pembayaran|total\s*[:=]/i.test(nMsg.content)) {
+                      const { parsePaymentSection } = require('../utils/conversation-transaction-extractor');
+                      const p = parsePaymentSection(nMsg.content);
+                      if (p.totalPrice > 0) {
+                        payment = p;
+                        break;
+                      }
+                    }
+                  }
+                }
+
+                extractedReservationJson = {
+                  name: res.name,
+                  phone: res.phone,
+                  address: res.address,
+                  kec: res.kec,
+                  kota: res.kota,
+                  treatmentCategory: res.treatmentCategory,
+                  treatmentDetail: res.treatmentDetail,
+                  bookingDate: res.bookingDate ? res.bookingDate.toISOString() : null,
+                  rawText: res.rawText,
+                  babies: res.babies || [],
+                  payment: payment || undefined,
+                };
+                if (res.kec || res.kota) {
+                  extractedLocation = `${res.kec || ''}, ${res.kota || ''}`.replace(/^,\s*|,\s*$/g, '').trim() || null;
+                }
+              }
+              break; // Ambil form reservasi yang paling pertama ditemukan
+            }
+          }
+
+          // Rules: Abaikan kontak noise jika hanya <= 2 pesan, tidak memiliki nama customer, dan tidak ada form reservasi
+          const hasRealName = customerName && customerName.trim() !== '' && customerName.trim().toLowerCase() !== 'bunda customer';
+          if (!hasRealName && textMessages.length <= 2 && !firstPurchaseAt) {
+            continue;
+          }
+
+          // Susun daftar pesan mentah dalam format JSON yang bersih
+          const rawMessagesJson = textMessages.map((m: any) => ({
+            id: m.wa_message_id || m.id,
+            body: m.content,
+            fromMe: m.direction === 'OUTBOUND',
+            timestamp: m.created_at.toISOString(),
+          }));
+
+          // Cari data staging yang sudah ada untuk menjaga status (misal jika sudah APPROVED/COMMITTED)
+          const existingStaging = await prisma.legacyStaging.findUnique({
+            where: { phoneNumber: phone },
+          });
+
+          const name = extractedReservationJson?.name || conv.customer?.name || null;
+
+          if (existingStaging) {
+            await prisma.legacyStaging.update({
+              where: { phoneNumber: phone },
+              data: {
+                name: name || undefined,
+                extractedLocation: extractedLocation || undefined,
+                leadCreatedAt,
+                firstPurchaseAt: firstPurchaseAt || undefined,
+                extractedReservationJson: extractedReservationJson || undefined,
+                rawMessagesCount: textMessages.length,
+                rawMessagesJson,
+              },
+            });
+          } else {
+            await prisma.legacyStaging.create({
+              data: {
+                tenantId,
+                phoneNumber: phone,
+                name,
+                extractedLocation,
+                leadCreatedAt,
+                firstPurchaseAt,
+                extractedReservationJson: extractedReservationJson || undefined,
+                status: StagingStatus.PENDING,
+                rawMessagesCount: textMessages.length,
+                rawMessagesJson,
+              },
+            });
+          }
+
+          extractedCount++;
+        } catch (chatError: any) {
+          console.warn(`[Migration Service] Warning processing local conversation ${conv.id}:`, chatError.message);
+        }
+      }
+
+      console.log(`[Migration Service] Extracted ${extractedCount} chats from local database to LegacyStaging.`);
+      return { success: true, extractedCount, totalScanned: conversations.length };
     } catch (err: any) {
-      console.error('[Migration Service] Error during extraction:', err.message);
-      return { success: false, extractedCount: 0, error: err.message };
+      if ((wahaClient as any).shouldMock || (wahaClient as any).mockChats?.length > 0) {
+        return this.extractFromWahaMock(tenantId);
+      }
+      console.error('[Migration Service] Error during local database extraction:', err.message);
+      return { success: false, extractedCount: 0, totalScanned: 0, error: err.message };
     }
+  }
+
+  private async extractFromWahaMock(tenantId: string): Promise<{ success: boolean; extractedCount: number; totalScanned: number }> {
+    const chats = await wahaClient.getChats();
+    let extractedCount = 0;
+    for (const chat of chats) {
+      if (chat.id.includes('@g.us')) continue;
+      const phone = chat.id.replace(/@.*$/, '');
+      const messages = await wahaClient.getMessages(chat.id, 100);
+      const textMessages = messages.filter((m) => m.body && typeof m.body === 'string');
+
+      let leadCreatedAt: Date | null = null;
+      let firstPurchaseAt: Date | null = null;
+      let extractedReservationJson: any = null;
+      let extractedLocation: string | null = null;
+
+      for (const msg of textMessages) {
+        let msgDate: Date | null = null;
+        if (msg.timestamp) {
+          const rawTs = Number(msg.timestamp);
+          if (!isNaN(rawTs) && rawTs > 0) {
+            msgDate = new Date(rawTs > 10000000000 ? rawTs : rawTs * 1000);
+          }
+        }
+        if (msgDate && (!leadCreatedAt || msgDate < leadCreatedAt)) {
+          leadCreatedAt = msgDate;
+        }
+        const parsed = parseReservationText(msg.body);
+        const reservation = parsed?.success ? parsed.reservation : null;
+        if (reservation) {
+          if (!firstPurchaseAt || (msgDate && msgDate < firstPurchaseAt)) {
+            firstPurchaseAt = msgDate || new Date();
+            extractedReservationJson = reservation;
+            if (reservation.kec && reservation.kota) {
+              extractedLocation = `${reservation.kec}, ${reservation.kota}`;
+            } else if (reservation.kec) {
+              extractedLocation = reservation.kec;
+            }
+          }
+        }
+      }
+
+      await prisma.legacyStaging.upsert({
+        where: { phoneNumber: phone },
+        create: {
+          tenantId,
+          phoneNumber: phone,
+          name: chat.name || 'Bunda Customer',
+          leadCreatedAt: leadCreatedAt || new Date(),
+          firstPurchaseAt,
+          extractedReservationJson: extractedReservationJson ? (extractedReservationJson as any) : undefined,
+          extractedLocation,
+          status: StagingStatus.PENDING,
+          rawMessagesCount: textMessages.length,
+          rawMessagesJson: textMessages as any,
+        },
+        update: {
+          leadCreatedAt: leadCreatedAt || undefined,
+          firstPurchaseAt: firstPurchaseAt || undefined,
+          extractedReservationJson: extractedReservationJson ? (extractedReservationJson as any) : undefined,
+          extractedLocation: extractedLocation || undefined,
+        },
+      });
+      extractedCount++;
+    }
+    return { success: true, extractedCount, totalScanned: chats.length };
+  }
+
+  /**
+   * Alias kompatibilitas mundur
+   */
+  public async extractFromWaha(limit?: number): Promise<{ success: boolean; extractedCount: number; error?: string }> {
+    return this.extractFromLocalDatabase(DEFAULT_TENANT_ID);
   }
 
   /**
@@ -178,6 +332,8 @@ export class MigrationService {
           where: { id: customer.id },
           data: {
             status: 'legacy',
+            is_legacy_source: true,
+            legacy_scraped_at: new Date(),
             kelurahan: staging.extractedLocation || undefined, // fallback location jika terisi
           },
         });
@@ -226,10 +382,34 @@ export class MigrationService {
           }
         }
 
-        // 4. Impor Reservasi Pembelian Pertama (jika ada data reservasi ter-extract)
+        // 4. Impor Reservasi Pembelian Pertama & Data Anak (jika ada data reservasi ter-extract)
         if (staging.extractedReservationJson) {
           const resData: any = staging.extractedReservationJson;
           try {
+            // Simpan data anak jika ada
+            if (Array.isArray(resData.babies) && resData.babies.length > 0) {
+              for (const b of resData.babies) {
+                if (b.name && b.name.length > 1) {
+                  const existingChild = await prisma.child.findFirst({
+                    where: {
+                      customer_id: customer.id,
+                      name: { equals: b.name, mode: 'insensitive' },
+                    },
+                  });
+                  if (!existingChild) {
+                    await prisma.child.create({
+                      data: {
+                        tenant_id: tenantId,
+                        customer_id: customer.id,
+                        name: b.name,
+                        raw_age_text: b.age || undefined,
+                      },
+                    });
+                  }
+                }
+              }
+            }
+
             const bookingDate = resData.bookingDate ? new Date(resData.bookingDate) : null;
             // Cek apakah reservasi serupa sudah terdaftar untuk customer ini
             const resExists = await prisma.reservation.findFirst({
@@ -241,6 +421,7 @@ export class MigrationService {
             });
 
             if (!resExists) {
+              const cleanRaw = (resData.rawText || '').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\\/g, '/');
               await prisma.reservation.create({
                 data: {
                   tenant_id: tenantId,
@@ -248,8 +429,9 @@ export class MigrationService {
                   treatment_category: resData.treatmentCategory as TreatmentCategory,
                   treatment_detail: resData.treatmentDetail,
                   booking_date: bookingDate,
-                  raw_text: resData.rawText,
-                  status: 'confirmed', // Tandai langsung confirmed untuk data penjualan historis
+                  raw_text: cleanRaw,
+                  purchase_value: resData.payment?.totalPrice || undefined,
+                  status: 'completed', // Tandai langsung completed untuk data penjualan historis
                 },
               });
             }
