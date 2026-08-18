@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Comprehensive Touch Gestures, Long-Press & History Navigation Overhaul (10 Bug Fixes)
+
+- **Perbaikan Ghost History Entries pada Sidebar (`Layout.tsx`)**:
+  - Menutup drawer sidebar melalui UI (tombol X, klik backdrop, usap gesture, atau navigasi link) kini otomatis membersihkan state history dummy (`window.history.back()`), menghilangkan masalah tombol Back hardware yang sebelumnya harus ditekan berkali-kali.
+- **Guard Layar Desktop Touch Leak (`Layout.tsx`)**:
+  - Menambahkan guard `window.innerWidth < 768` pada event `onTouchStart` sehingga layar sentuh pada perangkat laptop/tablet desktop tidak memicu mobile menu drawer.
+- **Eliminasi Long-Press Click Bleed & Tremor Tolerance (`LiveChatMonitor.tsx`)**:
+  - **Click Bleed**: Mencegah browser mobile memicu `onClick` setelah menu konteks terbuka saat jari diangkat (menggunakan `longPressTriggeredRef`).
+  - **Tremor Tolerance**: Memberikan toleransi jarak getaran jari hingga 10px (`Math.hypot > 10`) pada `onTouchMove` agar long-press tidak mudah batal saat jari sedikit bergerak.
+  - Menambahkan handler `onTouchCancel` untuk mereset seluruh state gestur saat terjadi interupsi sistem OS.
+- **Dukungan Hardware/Browser Back Button untuk Live Chat (`LiveChatMonitor.tsx`)**:
+  - Menambahkan `pushState` saat membuka chat dan sinkronisasi `popstate` listener sehingga tombol Back fisik/gesture bawaan HP otomatis mengembalikan tampilan dari detail chat ke daftar percakapan (*Back to List*).
+- **Perbaikan Arah Gestur (Direction Inversion) di Portal Staff (`StaffToday.tsx`)**:
+  - Mengubah deteksi swipe pada tampilan chat dari `Math.abs(deltaX) > 40` menjadi `deltaX > 40` (hanya usapan ke KANAN yang kembali ke list; usapan ke kiri tidak lagi menutup chat tanpa sengaja).
+  - Menyelaraskan threshold batas usapan drawer (`Math.abs(deltaX) < 35`).
+  - Menambahkan sinkronisasi `popstate` untuk seluruh modal (`detailModalTask`, `paymentModalTask`, `updateLocationModalTask`, `showStaffProfileModal`, `showMenuDrawer`, `zoomImageUrl`) agar tombol Back HP menutup modal secara berurutan tanpa melempar user keluar dari portal staff.
+
 ### Added & Improved — Mobile Hold-Press Anti-Selection, Right-Aligned Hamburger Menu, Right Drawer, & Edge Swipe Gestures
 
 - **Eliminasi Text Selection pada Hold-Press Chat Card (`LiveChatMonitor.tsx`)**:
