@@ -1130,7 +1130,7 @@ export const LiveChatMonitor: React.FC = () => {
             onTouchMove={handleListTouchMove}
             onTouchEnd={() => { listTouchStartRef.current = null; }}
             onTouchCancel={() => { listTouchStartRef.current = null; }}
-            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}
+            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}
           >
             {/* Header Toolbar Daftar Percakapan: Source Filter & Label Dropdown */}
             <div className="space-y-1.5 pb-2 border-b border-[#f0f2f5] shrink-0">
@@ -1291,12 +1291,12 @@ export const LiveChatMonitor: React.FC = () => {
                         userSelect: 'none',
                         WebkitTouchCallout: 'none',
                       }}
-                      className={`bg-white rounded-xl p-2 border transition cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs relative select-none touch-manipulation ${
+                      className={`bg-white rounded-xl p-2 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs relative select-none touch-manipulation ${
                         isSelected
                           ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
-                            ? 'border-rose-300 bg-rose-50/40 hover:bg-rose-50/70'
-                            : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc]'
+                            ? 'border-rose-300 bg-rose-50/40 hover:bg-rose-50/70 active:bg-rose-100/50'
+                            : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc] active:bg-[#f0f2f5]'
                       }`}
                     >
                       {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
@@ -1512,7 +1512,7 @@ export const LiveChatMonitor: React.FC = () => {
             onTouchMove={handleDetailTouchMove}
             onTouchEnd={handleDetailTouchEnd}
             onTouchCancel={() => { detailTouchStartRef.current = null; }}
-            className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}
+            className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex animate-mobile-chat-enter lg:animate-none'} flex-1 min-w-0 h-full min-h-0 flex-col`}
           >
             {selectedChat ? (
               <div className="bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1 sm:p-2.5 md:p-3 h-full flex flex-col justify-between shadow-xs overflow-hidden min-h-0">
