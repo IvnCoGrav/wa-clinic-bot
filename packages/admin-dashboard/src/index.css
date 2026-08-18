@@ -65,6 +65,24 @@ body {
   -webkit-user-drag: none !important;
 }
 
+/* Direct text children inside non-selectable cards ignore pointer to avoid Android Chrome text-selection popup */
+[data-no-select] span,
+[data-no-select] p,
+[data-no-select] h4,
+[data-no-select] h5,
+[data-no-select] h6,
+[data-no-select] img,
+[data-no-select] svg,
+[data-no-select] div:not([data-no-select]) {
+  pointer-events: none;
+}
+
+[data-no-select] button,
+[data-no-select] a,
+[data-no-select] input {
+  pointer-events: auto !important;
+}
+
 /* Mobile Touch Ergonomics & Typography Baseline Overrides */
 @media (max-width: 767px) {
   /* Elevate body text readability from 12px (text-xs) to comfortable 13.5px-14px on mobile screens */
