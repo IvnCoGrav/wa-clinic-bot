@@ -39,9 +39,11 @@ import {
 import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { useLiveChatNotification } from '../../hooks/useLiveChatNotification';
+import { useUiFeedback } from './UiFeedback';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
+  const { toast } = useUiFeedback();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -54,6 +56,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     openChatFromToast,
     soundActive,
     toggleSound,
+    playTestSound,
     unreadLiveChatCount,
     canAccessLiveChat,
   } = useLiveChatNotification(currentRole);
@@ -508,7 +511,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {/* Live Chat Notification Sound Mute/Unmute Toggle (RBAC Filtered) */}
             {canAccessLiveChat && (
               <button
-                onClick={toggleSound}
+                onClick={() => {
+                  toggleSound();
+                  if (!soundActive) {
+                    toast('🔊 Suara notifikasi WhatsApp aktif! Jika di iPhone/HP, pastikan saklar Silent di samping HP nonaktif.', 'success');
+                  } else {
+                    toast('🔇 Suara notifikasi chat dimatikan (Mute).', 'info');
+                  }
+                }}
                 title={soundActive ? 'Suara Notifikasi Chat: Aktif (Klik untuk Mute)' : 'Suara Notifikasi Chat: Mati (Klik untuk Aktifkan)'}
                 className={`p-1.5 sm:p-2 rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs ${
                   soundActive
