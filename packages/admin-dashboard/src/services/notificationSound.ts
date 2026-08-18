@@ -1,12 +1,13 @@
 /**
  * Notification Sound & Web Notification Service
- * Menggunakan Web Audio API sintetis (WhatsApp-style chime) + Haptic Vibration + HTML5 Audio Fallback + Web Notifications
- * 100% Offline, Zero external MP3 dependency, Anti-blocking AudioContext auto-unlock untuk iOS Safari & Android Chrome.
+ * Menggunakan Web Audio API sintetis (WhatsApp-style chime) + Haptic Vibration + Pre-blessed HTML5 Audio + Web Notifications
+ * 100% Offline, Anti-blocking AudioContext auto-unlock khusus untuk iOS Safari & Android Chrome.
  */
 
 let audioCtxInstance: AudioContext | null = null;
 let isAudioUnlocked = false;
 let wavDataUriCache: string | null = null;
+let singletonAudioElement: HTMLAudioElement | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -21,7 +22,6 @@ function getAudioContext(): AudioContext | null {
 
 /**
  * Buat WAV Audio Data URI sintetis (Two-Tone WhatsApp Chime G5 -> C6)
- * Dipakai sebagai fallback saat Web Audio API di-suspend oleh browser.
  */
 function getWavDataUri(): string {
   if (wavDataUriCache) return wavDataUriCache;
@@ -39,13 +39,13 @@ function getWavDataUri(): string {
 
   // fmt sub-chunk
   writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-  view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
-  view.setUint16(22, 1, true); // NumChannels (1 = Mono)
-  view.setUint32(24, sampleRate, true); // SampleRate
-  view.setUint32(28, sampleRate * 2, true); // ByteRate
-  view.setUint16(32, 2, true); // BlockAlign
-  view.setUint16(34, 16, true); // BitsPerSample
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
 
   // data sub-chunk
   writeString(view, 36, 'data');
@@ -60,20 +60,17 @@ function getWavDataUri(): string {
     const t = i / sampleRate;
     let sample = 0;
     if (i < splitSample) {
-      // Tone 1
       const env = Math.max(0, 1 - i / splitSample);
-      sample = Math.sin(2 * Math.PI * freq1 * t) * env * 0.5;
+      sample = Math.sin(2 * Math.PI * freq1 * t) * env * 0.6;
     } else {
-      // Tone 2
       const t2 = (i - splitSample) / sampleRate;
-      const env = Math.exp(-t2 * 9.0);
-      sample = Math.sin(2 * Math.PI * freq2 * t) * env * 0.7;
+      const env = Math.exp(-t2 * 8.5);
+      sample = Math.sin(2 * Math.PI * freq2 * t) * env * 0.85;
     }
     const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
     view.setInt16(44 + i * 2, intSample, true);
   }
 
-  // Convert buffer to base64
   let binary = '';
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < bytes.byteLength; i++) {
@@ -89,26 +86,50 @@ function writeString(view: DataView, offset: number, string: string) {
   }
 }
 
+function getSingletonAudio(): HTMLAudioElement | null {
+  if (typeof window === 'undefined') return null;
+  if (!singletonAudioElement) {
+    try {
+      singletonAudioElement = new Audio(getWavDataUri());
+      singletonAudioElement.preload = 'auto';
+      singletonAudioElement.volume = 1.0;
+      (singletonAudioElement as any).playsInline = true;
+    } catch (_) {}
+  }
+  return singletonAudioElement;
+}
+
 /**
  * Standard iOS & Android Web Audio Unlocker
- * Wajib memainkan silent buffer saat user interaction (touch/click) pertama kali.
+ * Wajib memainkan silent buffer & men-trigger Audio element saat user interaction (touch/click) pertama kali.
  */
 export function unlockAudioContext(): void {
+  // 1. Unlock Web Audio Context
   const ctx = getAudioContext();
-  if (!ctx) return;
-
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
+  if (ctx) {
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    try {
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      isAudioUnlocked = true;
+    } catch (_) {}
   }
 
-  try {
-    const buffer = ctx.createBuffer(1, 1, 22050);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(0);
-    isAudioUnlocked = true;
-  } catch (_) {}
+  // 2. Pre-bless singleton HTML5 Audio Element untuk iOS Safari
+  const audio = getSingletonAudio();
+  if (audio) {
+    try {
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+      }).catch(() => {});
+    } catch (_) {}
+  }
 }
 
 /**
@@ -116,6 +137,9 @@ export function unlockAudioContext(): void {
  */
 export function initAudioUnlock(): () => void {
   if (typeof window === 'undefined') return () => {};
+
+  // Pre-initialize singleton audio element
+  getSingletonAudio();
 
   const unlock = () => {
     unlockAudioContext();
@@ -151,7 +175,7 @@ export function setSoundEnabled(enabled: boolean): void {
 
 /**
  * Mainkan nada chime pesan masuk khas WhatsApp (G5 784Hz -> C6 1046.5Hz) + Getaran Haptik
- * Dilengkapi dual engine: Web Audio API Synthesizer + HTML5 Audio Element Fallback.
+ * Memakai dua engine secara simultan untuk memastikan bunyi keluar di iOS Safari & Android.
  */
 export function playIncomingMessageSound(): void {
   if (!isSoundEnabled()) return;
@@ -159,15 +183,18 @@ export function playIncomingMessageSound(): void {
   // 1. Haptic Vibration (Khusus Smartphone Android/didukung)
   try {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate([120, 80, 150]);
+      navigator.vibrate([150, 100, 200]);
     }
   } catch (_) {}
 
   // 2. Web Audio API Two-Tone Synthesizer
-  let playedWebAudio = false;
   try {
     const ctx = getAudioContext();
-    if (ctx && ctx.state !== 'suspended') {
+    if (ctx) {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
       const now = ctx.currentTime;
 
       // Tone 1: G5 - 784 Hz
@@ -175,7 +202,7 @@ export function playIncomingMessageSound(): void {
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
       osc1.frequency.setValueAtTime(783.99, now);
-      gain1.gain.setValueAtTime(0.35, now);
+      gain1.gain.setValueAtTime(0.4, now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
@@ -187,29 +214,23 @@ export function playIncomingMessageSound(): void {
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
       osc2.frequency.setValueAtTime(1046.5, now + 0.08);
-      gain2.gain.setValueAtTime(0.45, now + 0.08);
+      gain2.gain.setValueAtTime(0.55, now + 0.08);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
       osc2.start(now + 0.08);
       osc2.stop(now + 0.42);
-
-      playedWebAudio = true;
-    } else if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
     }
-  } catch (_) {
-    playedWebAudio = false;
-  }
+  } catch (_) {}
 
-  // 3. HTML5 Audio Data-URI Fallback jika Web Audio API terhalang / suspended
-  if (!playedWebAudio) {
-    try {
-      const audio = new Audio(getWavDataUri());
-      audio.volume = 0.85;
+  // 3. HTML5 Audio Element Playback (Pre-blessed fallback)
+  try {
+    const audio = getSingletonAudio();
+    if (audio) {
+      audio.currentTime = 0;
       audio.play().catch(() => {});
-    } catch (_) {}
-  }
+    }
+  } catch (_) {}
 }
 
 /**
