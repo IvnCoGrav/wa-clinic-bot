@@ -18,6 +18,12 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Unit test** (`tests/unit/telegram-webhook.test.ts`): akses ditolak dari chat non-paired, penjadwalan + laporan hasil via polling, dan anti-antrean ganda.
 - **Efek di lapangan**: saat deploy pertama, disk server turun dari 31 GB (83%) ke 14 GB (36%) setelah `docker builder prune` membebaskan ~17 GB build cache.
 
+### Fixed — Pemulihan Total Seleksi & Salin Teks Global (System Logs, Tables, Message Trace & Text)
+
+- **Penghapusan Listener Global Anti-Seleksi (`App.tsx` & `index.css`)**:
+  - Menemukan penyebab teks log di menu System Debug, tabel data, teks pesan, dan konten dashboard tidak bisa di-select / diblok / disalin: sebelumnya terdapat listener global `selectstart` dan `contextmenu` di `App.tsx` yang memanggil `preventDefault()` serta aturan `* { user-select: none !important; }` di `index.css`.
+  - **Solusi**: Menghapus listener pencegah seleksi global di `App.tsx` dan memperbarui `index.css` agar aturan `user-select: none` hanya diaplikasikan khusus pada tombol (*button/nav*). Teks log (`code`, `pre`, `.font-mono`), tabel data, teks pesan, dan input kini dapat di-select/diblok dan disalin (*copy*) secara normal 100%.
+
 ### Fixed — Pemulihan Total Event Stream Real-Time Live Chat SSE (Redis Pub/Sub Local Delivery)
 
 - **Perbaikan Krusial Distribusi Event Real-Time (`live-chat-hub.service.ts`)**:
