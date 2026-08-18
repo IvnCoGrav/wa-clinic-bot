@@ -1,17 +1,32 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
 import { telegramWebhookRoutes } from '../../src/routes/telegram-webhook.route';
 import { prisma } from '../../src/db/client';
 import { telegramService } from '../../src/services/telegram.service';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 describe('Telegram Webhook & 1-Click Pairing Integration', () => {
   let app: FastifyInstance;
+  let tempCleanDir: string;
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    tempCleanDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-test-'));
+    process.env.CLEAN_STORAGE_DIR = tempCleanDir;
+    process.env.CLEAN_POLL_MS = '20';
+    process.env.CLEAN_POLL_TIMEOUT_MS = '500';
     app = Fastify();
     await app.register(telegramWebhookRoutes);
     await app.ready();
+  });
+
+  afterEach(() => {
+    delete process.env.CLEAN_STORAGE_DIR;
+    delete process.env.CLEAN_POLL_MS;
+    delete process.env.CLEAN_POLL_TIMEOUT_MS;
+    fs.rmSync(tempCleanDir, { recursive: true, force: true });
   });
 
   it('GET /api/webhook/telegram should return healthy status', async () => {
@@ -207,6 +222,119 @@ describe('Telegram Webhook & 1-Click Pairing Integration', () => {
     expect(sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining('STATUS KESEHATAN SERVER & INFRASTRUKTUR'),
+      })
+    );
+  });
+
+  it('POST /api/webhook/telegram: /clean from non-paired chat should be denied', async () => {
+    const sendSpy = vi.spyOn(telegramService, 'sendMessage').mockResolvedValue({ ok: true });
+
+    vi.mocked(prisma.tenant.findMany).mockResolvedValue([]);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/telegram',
+      payload: {
+        update_id: 6,
+        message: {
+          message_id: 40,
+          chat: { id: 999999, first_name: 'Unknown', type: 'private' },
+          text: '/clean',
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('Akses Ditolak'),
+      })
+    );
+    expect(fs.existsSync(path.join(tempCleanDir, '.clean-request'))).toBe(false);
+  });
+
+  it('POST /api/webhook/telegram: /clean from paired chat should schedule request file and report result', async () => {
+    const sendSpy = vi.spyOn(telegramService, 'sendMessage').mockResolvedValue({ ok: true });
+
+    vi.mocked(prisma.tenant.findMany).mockResolvedValue([
+      {
+        id: 'tenant-kala',
+        name: 'Klinik Kala',
+        telegram_chat_id: '-1002345678901',
+      } as any,
+    ]);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/telegram',
+      payload: {
+        update_id: 7,
+        message: {
+          message_id: 45,
+          chat: { id: -1002345678901, title: 'Kala Ops', type: 'supergroup' },
+          message_thread_id: 42,
+          text: '/clean',
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const requestPath = path.join(tempCleanDir, '.clean-request');
+    expect(fs.existsSync(requestPath)).toBe(true);
+    const requestJson = JSON.parse(fs.readFileSync(requestPath, 'utf-8'));
+    expect(requestJson.chatId).toBe('-1002345678901');
+    expect(requestJson.messageThreadId).toBe('42');
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: '-1002345678901',
+        messageThreadId: '42',
+        text: expect.stringContaining('Pembersihan Server Dijadwalkan'),
+      })
+    );
+
+    // Simulasi hasil cron host: tulis result file, tunggu polling, pastikan hasil terkirim
+    fs.writeFileSync(path.join(tempCleanDir, '.clean-result'), 'Total reclaimed space: 5GB\n/dev/vda2 40G 14G 24G 36% /', 'utf-8');
+    await new Promise((r) => setTimeout(r, 150));
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('Pembersihan Server Selesai'),
+      })
+    );
+    expect(fs.existsSync(path.join(tempCleanDir, '.clean-result'))).toBe(false);
+  });
+
+  it('POST /api/webhook/telegram: /clean when request still pending should warn', async () => {
+    const sendSpy = vi.spyOn(telegramService, 'sendMessage').mockResolvedValue({ ok: true });
+
+    vi.mocked(prisma.tenant.findMany).mockResolvedValue([
+      {
+        id: 'tenant-kala',
+        name: 'Klinik Kala',
+        telegram_chat_id: '-1002345678901',
+      } as any,
+    ]);
+
+    fs.writeFileSync(path.join(tempCleanDir, '.clean-request'), '{}', 'utf-8');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/webhook/telegram',
+      payload: {
+        update_id: 8,
+        message: {
+          message_id: 50,
+          chat: { id: -1002345678901, title: 'Kala Ops', type: 'supergroup' },
+          text: '/clean',
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('Masih Diproses'),
       })
     );
   });

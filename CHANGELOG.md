@@ -4,6 +4,20 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Command Telegram `/clean`: Task Pembersihan Server via Cron Host
+
+- **Perintah `/clean` (alias `/clean_server` / `/server_clean`) di bot Telegram (`src/routes/telegram-webhook.route.ts`)**:
+  - Task pembersihan server produksi dapat dipicu langsung dari chat Telegram yang sudah ter-pair dengan tenant (chat lain **ditolak** — aman dari penyalahgunaan).
+  - Mekanisme aman **file-based trigger** (tanpa membuka docker.sock ke container): bot menulis `storage/.clean-request` (volume shared host↔container), cron host `clean-trigger.sh` (tiap menit) mendeteksi request → menjalankan `server-clean.sh` → hasil ditulis ke `storage/.clean-result` → bot polling dan mengirim laporan hasil ke Telegram otomatis.
+  - Guard: `TELEGRAM_CLEAN_ENABLED=false` menonaktifkan perintah; anti-antrean ganda (request yang belum diproses cron memicu pesan "Masih Diproses").
+  - Opsi tuning: `CLEAN_STORAGE_DIR`, `CLEAN_POLL_MS`, `CLEAN_POLL_TIMEOUT_MS`.
+  - Daftar perintah `/help` diperbarui.
+- **Script server (`scripts/server-clean.sh` + `scripts/clean-trigger.sh`)**:
+  - Aman: hanya membersihkan build cache Docker (semua umur), image dangling, cache apt, temp, log `.gz`, dan vacuum journal ke 50MB. **Image aktif, container, dan volume (Postgres/WAHA/Redis/Caddy) tidak pernah disentuh.**
+  - Log aktivitas di `/var/log/server-clean.log`.
+- **Unit test** (`tests/unit/telegram-webhook.test.ts`): akses ditolak dari chat non-paired, penjadwalan + laporan hasil via polling, dan anti-antrean ganda.
+- **Efek di lapangan**: saat deploy pertama, disk server turun dari 31 GB (83%) ke 14 GB (36%) setelah `docker builder prune` membebaskan ~17 GB build cache.
+
 ### Fixed — Eliminasi Total Glitch GPU Compositor Sidebar Kanan & Masking Fisik Invisible saat Tertutup
 
 - **Masking Fisik GPU Compositor & Isolasi Sidebar (`Layout.tsx` & `index.css`)**:
