@@ -52,11 +52,10 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Deep Anti-Selection & Anti-Callout rule for cards and touch items */
-.select-none,
-.select-none *,
-[data-no-select],
-[data-no-select] * {
+/* Global App-Wide Anti-Selection & Anti-Callout (Blocks all native copy tooltips on hold) */
+*,
+*::before,
+*::after {
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
   -ms-user-select: none !important;
@@ -65,22 +64,17 @@ body {
   -webkit-user-drag: none !important;
 }
 
-/* Direct text children inside non-selectable cards ignore pointer to avoid Android Chrome text-selection popup */
-[data-no-select] span,
-[data-no-select] p,
-[data-no-select] h4,
-[data-no-select] h5,
-[data-no-select] h6,
-[data-no-select] img,
-[data-no-select] svg,
-[data-no-select] div:not([data-no-select]) {
-  pointer-events: none;
-}
-
-[data-no-select] button,
-[data-no-select] a,
-[data-no-select] input {
-  pointer-events: auto !important;
+/* Allow text selection ONLY in text input fields and explicitly designated selectable containers */
+input,
+textarea,
+[contenteditable="true"],
+.selectable-text,
+.selectable-text * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
 }
 
 /* Mobile Touch Ergonomics & Typography Baseline Overrides */
