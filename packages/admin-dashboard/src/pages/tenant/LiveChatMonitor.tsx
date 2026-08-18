@@ -132,9 +132,22 @@ export const LiveChatMonitor: React.FC = () => {
 
   const handleDetailTouchStart = (e: React.TouchEvent) => {
     if (mobileView !== 'chat' || e.touches.length !== 1) return;
+    const target = e.target as HTMLElement | null;
+    if (target && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.tagName === 'BUTTON' ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('textarea')
+    )) {
+      detailTouchStartRef.current = null;
+      return;
+    }
     const touch = e.touches[0];
-    // Allow edge swipe when touch starts from left edge zone (<= 55px)
-    if (touch && touch.clientX <= 55) {
+    // Zona tepi kiri ketat (<= 35px dari tepi kiri layar)
+    if (touch && touch.clientX <= 35) {
       detailTouchStartRef.current = {
         x: touch.clientX,
         y: touch.clientY,
@@ -152,10 +165,9 @@ export const LiveChatMonitor: React.FC = () => {
     if (!end) return;
     const deltaX = end.clientX - start.x;
     const deltaY = end.clientY - start.y;
-    const deltaTime = Date.now() - start.time;
 
-    // Horizontal swipe from left edge to right (deltaX > 40px, mostly horizontal) -> Back to list!
-    if (deltaTime < 600 && deltaX > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+    // Usapan tegas dari tepi kiri ke kanan (deltaX > 45px dengan rasio sudut horizontal 2.0x) -> Back to list!
+    if (deltaX > 45 && Math.abs(deltaX) > Math.abs(deltaY) * 2.0) {
       handleBackToList();
     }
   };
@@ -1967,59 +1979,140 @@ export const LiveChatMonitor: React.FC = () => {
         </div>
       )}
 
-      {/* Floating Context Menu Popover */}
+      {/* Context Menu Modal with Full Screen Backdrop (Prevents Tap-Through) */}
       {contextMenu && (
         <div
-          className="fixed z-50 bg-white border border-[#d1d7db] rounded-xl shadow-2xl py-1.5 w-60 text-xs text-[#111b21] animate-in fade-in zoom-in-95 duration-100 divide-y divide-[#f0f2f5]"
-          style={{
-            left: Math.min(contextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 250 : 0),
-            top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 200 : 0),
-          }}
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in duration-150"
+          onClick={() => setContextMenu(null)}
         >
-          <div className="px-3 py-1.5 text-[11px] font-bold text-[#667781] truncate">
-            {contextMenu.chat.customerName || contextMenu.chat.customerPhone || 'Opsi Percakapan'}
+          {/* Mobile Bottom Action Sheet (sm:hidden) */}
+          <div
+            className="sm:hidden w-full bg-white rounded-t-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200 border-t border-[#e9edef]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Grab Handle */}
+            <div className="w-10 h-1 bg-[#d1d7db] rounded-full mx-auto" />
+
+            {/* Header info */}
+            <div className="flex items-center space-x-3 pb-2 border-b border-[#f0f2f5]">
+              <CustomerAvatar
+                src={contextMenu.chat.customerProfilePictureUrl}
+                name={contextMenu.chat.customerName || 'Customer'}
+                phone={contextMenu.chat.customerPhone}
+                size="sm"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-[#111b21] truncate">
+                  {contextMenu.chat.customerName || 'Customer'}
+                </p>
+                <p className="text-[11px] text-[#667781] font-mono">
+                  {contextMenu.chat.customerPhone || 'Unknown'}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => handleTogglePin(contextMenu.chat)}
+                className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#111b21] cursor-pointer"
+              >
+                <Pin size={16} className={contextMenu.chat.isPinned ? 'text-[#008069] fill-current' : 'text-[#54656f]'} />
+                <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin dari Atas)' : 'Sematkan Percakapan (Pin ke Atas)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleToggleReadStatus(contextMenu.chat)}
+                className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#111b21] cursor-pointer"
+              >
+                {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
+                  <>
+                    <MailCheck size={16} className="text-emerald-600" />
+                    <span>Tandai Sudah Dibaca</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail size={16} className="text-[#005c4b]" />
+                    <span>Tandai Belum Dibaca (Badge Hijau Tua)</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const c = contextMenu.chat;
+                  setContextMenu(null);
+                  handleRelease(c);
+                }}
+                className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#54656f] cursor-pointer"
+              >
+                <Bot size={16} />
+                <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+              </button>
+            </div>
+
+            {/* Cancel Button */}
+            <button
+              type="button"
+              onClick={() => setContextMenu(null)}
+              className="w-full py-3 bg-[#f0f2f5] active:bg-[#e9edef] text-[#111b21] font-bold text-xs rounded-xl transition cursor-pointer"
+            >
+              Batal
+            </button>
           </div>
-          <div className="py-1">
-            <button
-              type="button"
-              onClick={() => handleTogglePin(contextMenu.chat)}
-              className="w-full px-3 py-2 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium"
-            >
-              <Pin size={14} className={contextMenu.chat.isPinned ? 'text-[#008069] fill-current' : 'text-[#54656f]'} />
-              <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin)' : 'Sematkan Chat (Pin ke Atas)'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleReadStatus(contextMenu.chat)}
-              className="w-full px-3 py-2 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium"
-            >
-              {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
-                <>
-                  <MailCheck size={14} className="text-emerald-600" />
-                  <span>Tandai Sudah Dibaca</span>
-                </>
-              ) : (
-                <>
-                  <Mail size={14} className="text-[#005c4b]" />
-                  <span>Tandai Belum Dibaca (Hijau Tua)</span>
-                </>
-              )}
-            </button>
-          </div>
-          <div className="py-1">
-            <button
-              type="button"
-              onClick={() => {
-                const c = contextMenu.chat;
-                setContextMenu(null);
-                handleRelease(c);
-              }}
-              className="w-full px-3 py-2 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition text-[#54656f] font-medium"
-            >
-              <Bot size={14} />
-              <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
-            </button>
+
+          {/* Desktop Floating Popover (hidden sm:block) */}
+          <div
+            className="hidden sm:block bg-white border border-[#d1d7db] rounded-xl shadow-2xl py-1.5 w-64 text-xs text-[#111b21] animate-in fade-in zoom-in-95 duration-100 divide-y divide-[#f0f2f5]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3.5 py-2 text-[11px] font-bold text-[#667781] truncate">
+              {contextMenu.chat.customerName || contextMenu.chat.customerPhone || 'Opsi Percakapan'}
+            </div>
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={() => handleTogglePin(contextMenu.chat)}
+                className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium cursor-pointer"
+              >
+                <Pin size={14} className={contextMenu.chat.isPinned ? 'text-[#008069] fill-current' : 'text-[#54656f]'} />
+                <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin)' : 'Sematkan Chat (Pin ke Atas)'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleReadStatus(contextMenu.chat)}
+                className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium cursor-pointer"
+              >
+                {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
+                  <>
+                    <MailCheck size={14} className="text-emerald-600" />
+                    <span>Tandai Sudah Dibaca</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail size={14} className="text-[#005c4b]" />
+                    <span>Tandai Belum Dibaca (Hijau Tua)</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const c = contextMenu.chat;
+                  setContextMenu(null);
+                  handleRelease(c);
+                }}
+                className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition text-[#54656f] font-medium cursor-pointer"
+              >
+                <Bot size={14} />
+                <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
