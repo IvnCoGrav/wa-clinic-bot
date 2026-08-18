@@ -4,8 +4,11 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed — Universal App-Wide Anti-Selection, Global Selectstart Interception & 100% Copy Popup Elimination
+### Fixed — Eliminasi Glitch Sidebar Hilang Pasca-Swipe & Universal Anti-Selection
 
+- **Pencegahan Trailing Click Backdrop saat Swipe Buka Sidebar (`Layout.tsx`)**:
+  - Mengatasi masalah di mana membuka sidebar via usap layar (*swipe*) langsung tertutup seketika saat jari diangkat (*touchend*), akibat event `click` sintetis browser yang jatuh pada backdrop overlay baru.
+  - Menerapkan `justSwipedRef` guard dengan cooldown 400ms dan pelacakan `wasOpenAtTouchStart` untuk memastikan sidebar tetap terbuka kokoh setelah digeser.
 - **Universal App-Wide Anti-Selection & Selectstart Blocker (`App.tsx` & `index.css`)**:
   - Menerapkan aturan CSS universal `*, *::before, *::after { user-select: none !important; -webkit-touch-callout: none !important; }` ke seluruh elemen aplikasi dashboard (hanya membuka seleksi pada elemen `input`, `textarea`, dan `.selectable-text`).
   - Memasang listener capture global `document.addEventListener('selectstart', ..., { capture: true })` dan `window.addEventListener('contextmenu', ..., { capture: true })` di root `App.tsx` untuk membatalkan (*e.preventDefault()*) semua event seleksi teks bawaan browser saat menahan sentuhan (*hold press 3+ detik*). Hal ini mengeliminasi 100% munculnya blok biru seleksi dan popup/floating bubble 'Salin / Copy / Share' bawaan OS Android dan iOS.
