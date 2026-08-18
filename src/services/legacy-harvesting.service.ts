@@ -406,11 +406,16 @@ ${existingFaqTitles}
 
         if (apiKey && !apiKey.startsWith('mock')) {
           console.log(`[HARVESTING ENGINE] Sending transcript file to DeepSeek LLM (${model}) for context analysis...`);
+          const startedAt = Date.now();
           try {
-            const { default: axios } = await import('axios');
-            const llmRes = await axios.post(
-              `${baseUrl}/chat/completions`,
-              {
+            const { callChatCompletionsWithFallback, getFallbackModel } = await import('../integrations/llm/model-fallback');
+            const callResult = await callChatCompletionsWithFallback({
+              baseUrl,
+              apiKey,
+              model,
+              fallbackModel: getFallbackModel(),
+              timeoutMs: 30000,
+              payload: {
                 model,
                 response_format: { type: 'json_object' },
                 messages: [
@@ -420,16 +425,23 @@ ${existingFaqTitles}
                 temperature: 0.2,
                 max_tokens: 3000,
               },
-              {
-                headers: {
-                  Authorization: `Bearer ${apiKey}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 30000,
-              }
-            );
+            });
 
-            const content = llmRes.data?.choices?.[0]?.message?.content || '{}';
+            try {
+              const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+              auditLlmCall({
+                customer_phone: 'harvesting-audit',
+                task_type: 'HARVESTING',
+                model_name: callResult.model,
+                baseUrl: callResult.baseUrl,
+                startedAt,
+                usage: callResult.data?.usage,
+              });
+            } catch {
+              // Fire-and-forget
+            }
+
+            const content = callResult.data?.choices?.[0]?.message?.content || '{}';
             const parsed = JSON.parse(content);
             if (parsed && typeof parsed === 'object') {
               extractedResult = {

@@ -38,8 +38,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY',
     {
       task: 'CHAT_REPLY',
-      provider: process.env.AI_PROVIDER_CHAT || 'MiniMax',
-      modelName: process.env.AI_MODEL_CHAT || 'MiniMax-M2.7-highspeed',
+      provider: process.env.AI_PROVIDER_CHAT || 'Alibaba',
+      modelName: process.env.AI_MODEL_CHAT || 'qwen3.7-flash-2026-07-15',
       description: 'Digunakan untuk menghasilkan respon percakapan otomatis kepada customer.',
       maxTokens: 1024,
       temperature: 0.7,
@@ -49,8 +49,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'MEDICAL_CHECK',
     {
       task: 'MEDICAL_CHECK',
-      provider: process.env.AI_PROVIDER_MEDICAL || 'MiniMax',
-      modelName: process.env.AI_MODEL_MEDICAL || 'MiniMax-M2.7-highspeed',
+      provider: process.env.AI_PROVIDER_MEDICAL || 'Alibaba',
+      modelName: process.env.AI_MODEL_MEDICAL || 'qwen3.7-flash-2026-07-15',
       description: 'Digunakan untuk memverifikasi dan mengevaluasi konteks medis.',
       maxTokens: 512,
       temperature: 0.1,
@@ -82,8 +82,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'INTENT_CLASSIFICATION',
     {
       task: 'INTENT_CLASSIFICATION',
-      provider: process.env.AI_PROVIDER_NLU || 'DeepSeek',
-      modelName: process.env.AI_MODEL_NLU || 'deepseek-v4-flash',
+      provider: process.env.AI_PROVIDER_NLU || 'Alibaba',
+      modelName: process.env.AI_MODEL_NLU || 'qwen3.7-flash-2026-07-15',
       description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
       maxTokens: 1024,
       temperature: 0.1,

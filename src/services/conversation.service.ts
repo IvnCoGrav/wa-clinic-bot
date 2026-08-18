@@ -16,6 +16,9 @@ export function buildConversationUpdatedPayload(conversation: any) {
     escalationReason: conversation.escalation_reason ?? null,
     lastMessageAt: conversation.last_message_at ?? null,
     customerId: conversation.customer_id,
+    isPinned: !!conversation.is_pinned,
+    pinnedAt: conversation.pinned_at ?? null,
+    isManualUnread: !!conversation.is_manual_unread,
   };
 }
 
@@ -37,6 +40,8 @@ export class ConversationService {
             customer_id: customerId,
             current_state: ConversationState.INITIAL,
             is_human_handling: false,
+            is_pinned: false,
+            is_manual_unread: false,
           },
         });
       }
@@ -58,6 +63,9 @@ export class ConversationService {
           human_handling_since: null,
           consecutive_unknown_count: 0,
           last_message_at: new Date(),
+          is_pinned: false,
+          pinned_at: null,
+          is_manual_unread: false,
           created_at: new Date(),
           updated_at: new Date(),
         };
@@ -92,15 +100,59 @@ export class ConversationService {
   }
 
   /**
+   * Sematkan / lepas sematan percakapan (Pin/Unpin).
+   */
+  public async togglePinConversation(conversationId: string, tenantId: string, isPinned?: boolean): Promise<any> {
+    const current = await this.getConversationById(conversationId, tenantId);
+    const nextPinned = typeof isPinned === 'boolean' ? isPinned : !current?.is_pinned;
+    const now = nextPinned ? new Date() : null;
+
+    try {
+      const updated = await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          is_pinned: nextPinned,
+          pinned_at: now,
+        },
+      });
+      memoryConversations.set(conversationId, updated);
+      return updated;
+    } catch (error) {
+      if (current) {
+        current.is_pinned = nextPinned;
+        current.pinned_at = now;
+        memoryConversations.set(conversationId, current);
+        return current;
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Set status manual unread percakapan.
+   */
+  public async setManualUnread(conversationId: string, tenantId: string, isManualUnread: boolean): Promise<any> {
+    const current = await this.getConversationById(conversationId, tenantId);
+    try {
+      const updated = await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { is_manual_unread: isManualUnread },
+      });
+      memoryConversations.set(conversationId, updated);
+      return updated;
+    } catch (error) {
+      if (current) {
+        current.is_manual_unread = isManualUnread;
+        memoryConversations.set(conversationId, current);
+        return current;
+      }
+      return null;
+    }
+  }
+
+  /**
    * Daftar percakapan per tenant dengan paging offset (dengan memory store fallback saat DB offline).
-   * Urutan: human-handling di atas (yang butuh aksi admin), lalu sisanya by last_message_at desc —
-   * dipindah ke DB supaya stabil antar halaman (infinite scroll).
-   *
-   * `mode` memisahkan percakapan berdasarkan asal customer:
-   * - 'all'    : semua percakapan (default, backward compatible)
-   * - 'real'   : hanya customer WhatsApp asli (is_sandbox_test = false)
-   * - 'sandbox': hanya customer test/simulasi (is_sandbox_test = true)
-   * Filter dilakukan di level DB (join relasi customer) agar pagination offset tetap akurat.
+   * Urutan: Pinned chat paling atas, lalu human-handling di atas (yang butuh aksi admin), lalu sisanya by last_message_at desc.
    */
   public async listConversations(
     tenantId: string,
@@ -119,6 +171,7 @@ export class ConversationService {
       const convs = await prisma.conversation.findMany({
         where,
         orderBy: [
+          { is_pinned: 'desc' },
           { is_human_handling: 'desc' },
           { last_message_at: 'desc' },
         ],
@@ -132,6 +185,7 @@ export class ConversationService {
       const all = Array.from(memoryConversations.values())
         .filter((c) => c.tenant_id === tenantId)
         .sort((a, b) => {
+          if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
           if (!!a.is_human_handling !== !!b.is_human_handling) return a.is_human_handling ? -1 : 1;
           return new Date(b.updated_at || b.last_message_at).getTime() - new Date(a.updated_at || a.last_message_at).getTime();
         });

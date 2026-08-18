@@ -30,6 +30,11 @@ export interface LiveChatConversationItem {
   ltv?: number;
   customerLabels?: { id: string; name: string; color: string }[];
   customerProfilePictureUrl?: string | null;
+  unreadCount: number;
+  isManualUnread: boolean;
+  isPinned: boolean;
+  pinnedAt: Date | null;
+  isAwaitingReply: boolean;
 }
 
 /** Deteksi sumber traffic dari baris ad_clicks. */
@@ -126,6 +131,9 @@ export class LiveChatService {
       }
     }
 
+    // Batch fetch unread counts
+    const unreadMap = await messageService.getUnreadCountsBatch(conversationIds, tenantId);
+
     // Background sync foto profil untuk customer yang belum ada / sudah kedaluwarsa (> 3 hari)
     for (const cust of customers.values()) {
       if (cust && cust.phone && !cust.is_sandbox_test) {
@@ -145,7 +153,8 @@ export class LiveChatService {
           customer: customers.get(c.customer_id),
           messages: lastMessagesByConv.get(c.id) || [],
         },
-        customerStats.get(c.customer_id)
+        customerStats.get(c.customer_id),
+        unreadMap.get(c.id) || 0
       )
     );
     // Urutan sudah dijamin DB (human handling di atas, lalu last_message_at desc) — stabil antar halaman.
@@ -496,9 +505,24 @@ export class LiveChatService {
     return { success: true };
   }
 
-  private serialize(c: any, stats?: { purchaseCount: number; ltv: number }): LiveChatConversationItem {
+  private serialize(c: any, stats?: { purchaseCount: number; ltv: number }, unreadCount = 0): LiveChatConversationItem {
     const lastMsg = c.messages && c.messages.length > 0 ? c.messages[c.messages.length - 1] : null;
     const effectiveLastMsgAt = lastMsg?.created_at || c.last_message_at || c.updated_at;
+
+    const isManualUnread = !!c.is_manual_unread;
+    const effectiveUnreadCount = isManualUnread ? Math.max(1, unreadCount) : unreadCount;
+
+    // Awaiting reply: unread = 0 (sudah dibaca), pesan terakhir dari customer (INBOUND), dan usia pesan <= 24 jam (86.400.000 ms)
+    let isAwaitingReply = false;
+    if (effectiveUnreadCount === 0 && !isManualUnread && lastMsg) {
+      const isLastInbound = lastMsg.direction === Direction.INBOUND || lastMsg.direction === 'INBOUND';
+      if (isLastInbound) {
+        const msgAgeMs = Date.now() - new Date(lastMsg.created_at).getTime();
+        if (msgAgeMs <= 24 * 60 * 60 * 1000) {
+          isAwaitingReply = true;
+        }
+      }
+    }
 
     return {
       conversationId: c.id,
@@ -521,6 +545,11 @@ export class LiveChatService {
       ltv: stats?.ltv || 0,
       customerLabels: c.customer?.labels?.map((cl: any) => cl.label || cl) || [],
       customerProfilePictureUrl: c.customer?.profile_picture_url || null,
+      unreadCount: effectiveUnreadCount,
+      isManualUnread,
+      isPinned: !!c.is_pinned,
+      pinnedAt: c.pinned_at || null,
+      isAwaitingReply,
     };
   }
 
@@ -626,8 +655,8 @@ Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda
           tenant_id: tenantId,
           customer_phone: customer?.phone || 'unknown',
           conversation_id: conversationId,
-          provider: deriveProvider(endpoint.baseUrl),
-          model_name: endpoint.model,
+          provider: deriveProvider(callResult.baseUrl || endpoint.baseUrl),
+          model_name: callResult.model || endpoint.model,
           task_type: 'AI_COPILOT_SUGGESTION',
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,

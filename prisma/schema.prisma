@@ -140,11 +140,15 @@ model Conversation {
   last_discussed_treatment_at DateTime?
   last_message_at             DateTime           @default(now())
   last_customer_message_at    DateTime?
+  is_pinned                   Boolean            @default(false)
+  pinned_at                   DateTime?
+  is_manual_unread            Boolean            @default(false)
   created_at                  DateTime           @default(now())
   updated_at                  DateTime           @updatedAt
   messages                    Message[]
 
   @@index([tenant_id])
+  @@index([tenant_id, is_pinned, last_message_at])
   @@index([tenant_id, is_human_handling, last_message_at])
   @@index([tenant_id, escalation_reason])
   @@index([tenant_id, review_flagged])

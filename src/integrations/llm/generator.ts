@@ -45,7 +45,7 @@ export class LLMResponseGenerator {
       ) => {
         const store = llmOutageStorage.getStore();
         if (store?.simulateOutage) {
-          throw new Error('SumoPod connection timeout (500 Internal Server Error)');
+          throw new Error('Primary LLM provider connection timeout (500 Internal Server Error)');
         }
         
         const { AiModelConfigService } = await import('../../config/ai-models.config');

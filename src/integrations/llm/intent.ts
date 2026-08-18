@@ -41,7 +41,7 @@ export class LLMIntentService {
   public async detectIntent(userMessageText: string, auditCtx?: IntentAuditContext): Promise<IntentDetectionResult> {
     const store = llmOutageStorage.getStore();
     if (store?.simulateOutage) {
-      throw new Error('SumoPod connection timeout (500 Internal Server Error)');
+      throw new Error('Primary LLM provider connection timeout (500 Internal Server Error)');
     }
 
     const endpointCheck = getLlmEndpointConfig({ model: this.model });

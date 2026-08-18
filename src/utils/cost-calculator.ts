@@ -21,36 +21,39 @@ export interface ModelPricing {
  * - DeepSeek Output Tokens: $0.28 / 1M
  */
 const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
-  // DeepSeek / SumoPod Proxy Pricing
-  'deepseek-chat': {
-    provider: 'SumoPod (DeepSeek)',
-    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Cache Miss
-    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR, // Cache Hit
-    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR,
+  // Qwen Models (Alibaba) — Primary Model
+  'qwen3.7-flash-2026-07-15': {
+    provider: 'Alibaba Qwen',
+    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR, // Cache Miss ($0.03 / 1M)
+    promptCacheHitCostPer1kIdr: (0.006 / 1000) * USD_TO_IDR, // Cache Hit ($0.006 / 1M)
+    completionCostPer1kIdr: (0.13 / 1000) * USD_TO_IDR, // Output ($0.13 / 1M)
   },
-  'deepseek-v4-flash': {
-    provider: 'SumoPod (DeepSeek)',
-    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR,
+  'qwen3.6-flash': {
+    provider: 'Alibaba Qwen',
+    promptCostPer1kIdr: (0.25 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.025 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.50 / 1000) * USD_TO_IDR,
   },
-  'deepseek-reasoner': {
-    provider: 'SumoPod (DeepSeek Reasoner)',
-    promptCostPer1kIdr: (0.55 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (2.19 / 1000) * USD_TO_IDR,
-  },
-
-  // MiniMax Models (via SumoPod)
-  // Tarif per Agust 2026: promo diskon 90% — Input $0.03 / 1M, Output $0.12 / 1M
-  // (harga normal: $0.30 / 1M input, $1.20 / 1M output; konteks 204.800 token).
-  'minimax-m2.7-highspeed': {
-    provider: 'MiniMax',
-    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR,
+  'qwen3.7-plus': {
+    provider: 'Alibaba Qwen',
+    promptCostPer1kIdr: (0.32 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.032 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.28 / 1000) * USD_TO_IDR,
   },
 
-  // OpenAI Models
+  // OpenAI Models (Internal Fallback)
+  'gpt-5-nano': {
+    provider: 'OpenAI',
+    promptCostPer1kIdr: (0.05 / 1000) * USD_TO_IDR, // Cache Miss ($0.05 / 1M)
+    promptCacheHitCostPer1kIdr: (0.005 / 1000) * USD_TO_IDR, // Cache Hit ($0.005 / 1M)
+    completionCostPer1kIdr: (0.40 / 1000) * USD_TO_IDR, // Output ($0.40 / 1M)
+  },
+  'gpt-4.1-nano': {
+    provider: 'OpenAI',
+    promptCostPer1kIdr: (0.10 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.025 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.40 / 1000) * USD_TO_IDR,
+  },
   'gpt-4o-mini': {
     provider: 'OpenAI',
     promptCostPer1kIdr: (0.15 / 1000) * USD_TO_IDR,
@@ -63,16 +66,116 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
     promptCacheHitCostPer1kIdr: (1.25 / 1000) * USD_TO_IDR,
     completionCostPer1kIdr: (10.00 / 1000) * USD_TO_IDR,
   },
+  'gpt-5.4-nano': {
+    provider: 'OpenAI',
+    promptCostPer1kIdr: (0.20 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.020 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.25 / 1000) * USD_TO_IDR,
+  },
+  'gpt-5.6-luna': {
+    provider: 'OpenAI',
+    promptCostPer1kIdr: (0.20 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.020 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.20 / 1000) * USD_TO_IDR,
+  },
 
-  // Qwen Models
-  'qwen3.7-flash-2026-07-15': {
-    provider: 'Alibaba Qwen',
+  // Embedding Models
+  'text-embedding-3-small': {
+    provider: 'OpenAI',
+    promptCostPer1kIdr: (0.02 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: 0,
+  },
+  'text-embedding-3-large': {
+    provider: 'OpenAI',
+    promptCostPer1kIdr: (0.13 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: 0,
+  },
+  'gemini/gemini-embedding-001': {
+    provider: 'Google Gemini',
+    promptCostPer1kIdr: (0.15 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: 0,
+  },
+  'gemini-embedding-001': {
+    provider: 'Google Gemini',
+    promptCostPer1kIdr: (0.15 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: 0,
+  },
+
+  // DeepSeek Models (Direct & Proxy Fallback)
+  'deepseek-chat': {
+    provider: 'DeepSeek Direct',
+    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Cache Miss ($0.14 / 1M)
+    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR, // Cache Hit ($0.003 / 1M)
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR, // Output ($0.28 / 1M)
+  },
+  'deepseek-v4-flash': {
+    provider: 'DeepSeek',
+    promptCostPer1kIdr: (0.22 / 1000) * USD_TO_IDR, // Off-peak ($0.22 / 1M)
+    promptCacheHitCostPer1kIdr: (0.007 / 1000) * USD_TO_IDR, // Off-peak ($0.007 / 1M)
+    completionCostPer1kIdr: (0.66 / 1000) * USD_TO_IDR, // Off-peak ($0.66 / 1M)
+  },
+  'deepseek-reasoner': {
+    provider: 'DeepSeek Direct',
+    promptCostPer1kIdr: (0.55 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (2.19 / 1000) * USD_TO_IDR,
+  },
+
+  // Mimo Models
+  'mimo-v2.5': {
+    provider: 'Mimo',
+    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR,
+  },
+  'mimo-v2.5-pro': {
+    provider: 'Mimo',
+    promptCostPer1kIdr: (0.43 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.004 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.87 / 1000) * USD_TO_IDR,
+  },
+
+  // MiniMax Models
+  'minimax-m2.7-highspeed': {
+    provider: 'MiniMax',
     promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.006 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.13 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.030 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR,
+  },
+  'minimax-m3': {
+    provider: 'MiniMax',
+    promptCostPer1kIdr: (0.30 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.060 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.20 / 1000) * USD_TO_IDR,
+  },
+
+  // BytePlus / Tencent
+  'seed-2-0-mini': {
+    provider: 'BytePlus',
+    promptCostPer1kIdr: (0.10 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.020 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.40 / 1000) * USD_TO_IDR,
+  },
+  'hy3': {
+    provider: 'Tencent',
+    promptCostPer1kIdr: (0.13 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.033 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (0.53 / 1000) * USD_TO_IDR,
   },
 
   // Google Gemini
+  'gemini/gemini-3.1-flash-lite': {
+    provider: 'Google Gemini',
+    promptCostPer1kIdr: (0.25 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.025 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.50 / 1000) * USD_TO_IDR,
+  },
+  'gemini-3.1-flash-lite': {
+    provider: 'Google Gemini',
+    promptCostPer1kIdr: (0.25 / 1000) * USD_TO_IDR,
+    promptCacheHitCostPer1kIdr: (0.025 / 1000) * USD_TO_IDR,
+    completionCostPer1kIdr: (1.50 / 1000) * USD_TO_IDR,
+  },
   'gemini-1.5-flash': {
     provider: 'Google Gemini',
     promptCostPer1kIdr: (0.075 / 1000) * USD_TO_IDR,
