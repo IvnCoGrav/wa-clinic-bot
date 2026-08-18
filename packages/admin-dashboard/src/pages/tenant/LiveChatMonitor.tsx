@@ -619,6 +619,35 @@ export const LiveChatMonitor: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [mobileView]);
 
+  // Global capture listener untuk memblokir total popup native 'Copy / Salin' Android Chrome saat hold-press
+  useEffect(() => {
+    const handleContextMenuCapture = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-no-select]')) {
+        e.preventDefault();
+      }
+    };
+
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const anchorNode = selection.anchorNode;
+        const elem = anchorNode instanceof HTMLElement ? anchorNode : anchorNode?.parentElement;
+        if (elem?.closest('[data-no-select]')) {
+          selection.removeAllRanges();
+        }
+      }
+    };
+
+    window.addEventListener('contextmenu', handleContextMenuCapture, { capture: true, passive: false });
+    document.addEventListener('selectionchange', handleSelectionChange);
+
+    return () => {
+      window.removeEventListener('contextmenu', handleContextMenuCapture, { capture: true });
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, []);
+
   // SSE real-time: message.created & conversation.updated
   useEffect(() => {
     loadChats(true);
