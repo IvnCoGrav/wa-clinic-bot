@@ -170,7 +170,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const justSwipedRef = useRef(false);
   const backdropTouchStartRef = useRef(false);
 
-  // Native DOM touch gesture listener: Left-Edge Swipe to Open Menu, Swipe Left to Close
+  // Native DOM touch gesture listener: Right-Edge Swipe to Open Menu, Swipe Right to Close
   useEffect(() => {
     let touchStartX = 0;
     let touchStartY = 0;
@@ -184,7 +184,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       const target = e.target as HTMLElement | null;
 
-      // Guard: Abaikan jika menyentuh area detail chat room (Section 2 memiliki gesture back tersendiri)
+      // Guard: Abaikan jika menyentuh area detail chat room
       if (target?.closest('[data-chat-detail]')) {
         isTracking = false;
         return;
@@ -209,9 +209,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       touchStartY = touch.clientY;
       wasOpenAtTouchStart = mobileMenuOpen;
 
-      // Zona tepi kiri ketat (<= 40px dari sisi kiri layar) untuk membuka menu
-      const isLeftEdge = touchStartX <= 40;
-      if (mobileMenuOpen || isLeftEdge) {
+      // Zona tepi kanan ketat (hanya 30px dari sisi kanan layar) untuk membuka menu
+      const isRightEdge = touchStartX >= window.innerWidth - 30;
+      if (mobileMenuOpen || isRightEdge) {
         isTracking = true;
       } else {
         isTracking = false;
@@ -226,12 +226,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      // Case 1: When sidebar was CLOSED at start -> Swipe from left edge to RIGHT to open
-      if (!wasOpenAtTouchStart && touchStartX <= 40) {
-        if (deltaX > 15 && absX > absY * 1.5) {
+      // Case 1: When sidebar was CLOSED at start -> Swipe from RIGHT edge towards LEFT to open
+      if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - 30) {
+        if (deltaX < -15 && absX > absY * 2.0) {
           if (e.cancelable) e.preventDefault();
         }
-        if (deltaX > 45 && absX > absY * 1.5) {
+        if (deltaX < -45 && absX > absY * 2.0) {
           justSwipedRef.current = true;
           setMobileMenuOpen(true);
           isTracking = false;
@@ -239,12 +239,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         return;
       }
 
-      // Case 2: When sidebar was OPEN at start -> Swipe LEFT anywhere to close
+      // Case 2: When sidebar was OPEN at start -> Swipe RIGHT to close
       if (wasOpenAtTouchStart) {
-        if (deltaX < -15 && absX > absY * 1.5) {
+        if (deltaX > 15 && absX > absY * 2.0) {
           if (e.cancelable) e.preventDefault();
         }
-        if (deltaX < -45 && absX > absY * 1.5) {
+        if (deltaX > 45 && absX > absY * 2.0) {
           justSwipedRef.current = true;
           setMobileMenuOpen(false);
           isTracking = false;
@@ -296,9 +296,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         }`}
       />
 
-      {/* Sidebar Navigation (Desktop & Mobile: Slide from Left) */}
-      <aside className={`fixed inset-y-0 left-0 md:left-0 z-50 w-64 bg-white border-r border-[#e9edef] flex flex-col transform ${
-        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right) */}
+      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white border-l md:border-l-0 md:border-r border-[#e9edef] flex flex-col transform ${
+        mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
       } transition-transform duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
         <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
