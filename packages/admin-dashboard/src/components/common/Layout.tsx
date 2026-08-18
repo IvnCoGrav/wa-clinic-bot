@@ -299,10 +299,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         }`}
       />
 
-      {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right) */}
+      {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right with total GPU masking when closed) */}
       <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white border-l md:border-l-0 md:border-r border-[#e9edef] flex flex-col transform ${
-        mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
-      } transition-transform duration-300 ease-out shadow-2xl md:shadow-xs`}>
+        mobileMenuOpen
+          ? 'translate-x-0 opacity-100 visible pointer-events-auto'
+          : 'translate-x-full opacity-0 invisible pointer-events-none md:opacity-100 md:visible md:pointer-events-auto md:translate-x-0'
+      } transition-all duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
         <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
           <div className="flex items-center space-x-2.5">

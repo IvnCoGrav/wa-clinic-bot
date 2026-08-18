@@ -4,12 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed — Sinkronisasi Total History Stack, Pencegahan Native OS Back pada Chat List & Isolasi Sidebar Kanan
+### Fixed — Eliminasi Total Glitch GPU Compositor Sidebar Kanan & Masking Fisik Invisible saat Tertutup
 
+- **Masking Fisik GPU Compositor & Isolasi Sidebar (`Layout.tsx` & `index.css`)**:
+  - Mengatasi akar masalah fisik di mana elemen `<aside>` yang berada di posisi `right-0` dengan `translate-x-full` tetap ter-render sebagai texture GPU off-screen. Saat pengguna mengusap layar dari kiri ke kanan dan canvas browser HP mengalami pergeseran elastis (*elastic horizontal overscroll/pan*), texture sidebar di luar layar ikut terseret masuk ke viewport dan memantul keluar lagi saat jari dilepas.
+  - Memasang aturan masking mutlak pada `<aside>` saat tertutup: `opacity-0 invisible pointer-events-none` (`visibility: hidden`), sehingga GPU browser secara mutlak tidak menggambar / me-render pixel apa pun dari sidebar saat tertutup.
+  - Menambahkan `overflow-x: hidden` dan `max-width: 100vw` pada `html, body, #root` untuk mengunci viewport horizontal agar canvas tidak dapat bergeser ke kanan.
+  - Menempatkan atribut `data-no-swipe-menu="true"` langsung pada root container `LiveChatMonitor` untuk memblokir event touchstart global di seluruh area halaman chat.
 - **Sinkronisasi Sempurna History Stack & Penanganan Back (`LiveChatMonitor.tsx`)**:
   - Memperbarui fungsi `handleBackToList()` untuk memanggil `window.history.back()` secara simetris jika `liveChatView === 'chat'`, membersihkan *dangling history state* sehingga history stack browser selalu bersih saat berada di daftar chat.
   - Memasang handler `handleListTouchMove` dengan `e.preventDefault()` pada area tepi kiri Section 1 (Chat List), mengeliminasi gangguan di mana browser smartphone (Android Chrome / Safari) memicu gestur *Native Back Preview* saat pengguna mengusap kanan di daftar chat.
-  - Menambahkan atribut `data-no-swipe-menu="true"` pada container live chat untuk mengisolasi `Layout.tsx` dari seluruh sentuhan di luar zona 30px tepi kanan.
 - **Pengembalian Posisi Mobile Sidebar ke Sisi Kanan (`Layout.tsx`)**:
   - Memastikan drawer navigasi mobile berada di **sisi kanan layar** (`right-0`, `translate-x-full` $\rightarrow$ `translate-x-0`).
   - **Membuka Menu**: Hanya dapat dipicu oleh usapan dari tepi kanan layar ke arah kiri (*swipe right-edge to left*, `touchStartX >= window.innerWidth - 30`, `deltaX < -45`).
