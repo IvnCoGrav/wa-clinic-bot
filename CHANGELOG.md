@@ -18,6 +18,16 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Unit test** (`tests/unit/telegram-webhook.test.ts`): akses ditolak dari chat non-paired, penjadwalan + laporan hasil via polling, dan anti-antrean ganda.
 - **Efek di lapangan**: saat deploy pertama, disk server turun dari 31 GB (83%) ke 14 GB (36%) setelah `docker builder prune` membebaskan ~17 GB build cache.
 
+### Added — Sistem Notifikasi Real-time Chat Masuk WhatsApp-Style (Audio Chime, Getaran, In-App Banner & Web Push)
+
+- **Sistem Notifikasi Pesan Masuk Real-Time Berbasis RBAC (`useLiveChatNotification.ts` & `notificationSound.ts`)**:
+  - **Filter Hak Akses (RBAC Guard)**: Notifikasi real-time dan audio chime hanya aktif untuk staf/admin yang memiliki hak akses modul Live Chat (`hasAccess(role, '/admin/live-chat')`).
+  - **Audio Chime Sintetis & Getaran Haptik**: Menggunakan Web Audio API untuk menghasilkan nada chime dua-nada jernih khas WhatsApp (G5 $\rightarrow$ C6) + getaran haptik smartphone (`navigator.vibrate`), 100% offline tanpa dependensi file audio eksternal dan bebas hambatan *autoplay policy* via auto-unlock.
+  - **Banner Drop-Down In-App Khas WhatsApp**: Menampilkan floating banner notifikasi di bagian atas layar saat admin sedang membuka halaman mana pun (Overview, Reservations, dll), lengkap dengan nama pelanggan, cuplikan pesan, waktu, dan tombol "Ketuk untuk Balas" yang langsung mengarahkan navigasi ke Live Chat.
+  - **HTML5 Native Browser Notification**: Mengirim notifikasi sistem OS browser saat tab dashboard sedang diminimalkan atau membuka aplikasi lain di background.
+  - **Real-Time Sidebar Badge**: Memperbarui angka indikator pesan belum dibaca pada menu "Live Chat Monitor" di sidebar secara live.
+  - **Kontrol Suara di Header**: Tombol toggle Volume Mute / Unmute & Test Suara di bar navigasi atas dengan penyimpanan preferensi di `localStorage`.
+
 ### Added & Improved — Animasi Transisi Halus (Fluid Navigation) Mobile & Eliminasi Total Native iOS Safari Edge Swipe-Back
 
 - **Animasi Transisi Halus (*Fluid Mobile View Transitions*) (`LiveChatMonitor.tsx` & `index.css`)**:
