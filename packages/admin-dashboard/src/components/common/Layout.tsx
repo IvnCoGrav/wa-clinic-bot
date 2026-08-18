@@ -167,11 +167,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, [mobileMenuOpen]);
 
+  const justSwipedRef = useRef(false);
+
   // Native DOM touch gesture listener: Right-Edge Swipe to Open Menu, Swipe Right to Close
   useEffect(() => {
     let touchStartX = 0;
     let touchStartY = 0;
     let isTracking = false;
+    let wasOpenAtTouchStart = false;
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
@@ -196,6 +199,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const touch = e.touches[0];
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
+      wasOpenAtTouchStart = mobileMenuOpen;
 
       // Zona tepi ketat: hanya 30px dari sisi kanan layar
       const isRightEdge = touchStartX >= window.innerWidth - 30;
@@ -214,25 +218,27 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      // Case 1: When sidebar is CLOSED -> User is swiping from right edge towards left
-      if (!mobileMenuOpen && touchStartX >= window.innerWidth - 30) {
+      // Case 1: When sidebar was CLOSED at start of touch -> Swipe from right edge to left to open
+      if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - 30) {
         // Rasio horizontal ketat 2.0x (bukan scroll vertikal)
         if (deltaX < -15 && absX > absY * 2.0) {
           if (e.cancelable) e.preventDefault();
         }
         if (deltaX < -45 && absX > absY * 2.0) {
+          justSwipedRef.current = true;
           setMobileMenuOpen(true);
           isTracking = false;
         }
         return;
       }
 
-      // Case 2: When sidebar is OPEN -> User is swiping right anywhere to close
-      if (mobileMenuOpen) {
+      // Case 2: When sidebar was OPEN at start of touch -> Swipe right to close
+      if (wasOpenAtTouchStart) {
         if (deltaX > 15 && absX > absY * 2.0) {
           if (e.cancelable) e.preventDefault();
         }
         if (deltaX > 45 && absX > absY * 2.0) {
+          justSwipedRef.current = true;
           setMobileMenuOpen(false);
           isTracking = false;
         }
@@ -241,6 +247,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     const onTouchEnd = () => {
       isTracking = false;
+      setTimeout(() => {
+        justSwipedRef.current = false;
+      }, 400);
     };
 
     window.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -262,7 +271,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row`}>
       <div
-        onClick={() => setMobileMenuOpen(false)}
+        onClick={() => {
+          if (justSwipedRef.current) return;
+          setMobileMenuOpen(false);
+        }}
         className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
           mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
