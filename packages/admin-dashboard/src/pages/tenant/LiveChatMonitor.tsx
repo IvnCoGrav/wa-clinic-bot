@@ -118,7 +118,17 @@ export const LiveChatMonitor: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
   const longPressTimerRef = useRef<any>(null);
+  const longPressTriggeredRef = useRef(false);
+  const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
   const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleBackToList = () => {
+    if (window.history.state?.liveChatView === 'chat') {
+      window.history.back();
+    } else {
+      setMobileView('list');
+    }
+  };
 
   const handleDetailTouchStart = (e: React.TouchEvent) => {
     if (mobileView !== 'chat' || e.touches.length !== 1) return;
@@ -146,7 +156,7 @@ export const LiveChatMonitor: React.FC = () => {
 
     // Horizontal swipe from left edge to right (deltaX > 40px, mostly horizontal) -> Back to list!
     if (deltaTime < 600 && deltaX > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      setMobileView('list');
+      handleBackToList();
     }
   };
   const [syncingHistory, setSyncingHistory] = useState(false);
@@ -556,6 +566,10 @@ export const LiveChatMonitor: React.FC = () => {
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
+    // Push history state untuk tombol Back hardware/browser mobile
+    if (window.history.state?.liveChatView !== 'chat') {
+      window.history.pushState({ liveChatView: 'chat' }, '');
+    }
     resetTextareaHeight();
     loadThread(conversationId);
 
@@ -574,6 +588,17 @@ export const LiveChatMonitor: React.FC = () => {
       });
     }
   };
+
+  // Popstate listener untuk navigasi Back hardware di mobile (kembali ke list)
+  useEffect(() => {
+    const handlePopState = () => {
+      if (mobileView === 'chat') {
+        setMobileView('list');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [mobileView]);
 
   // SSE real-time: message.created & conversation.updated
   useEffect(() => {
@@ -1120,7 +1145,13 @@ export const LiveChatMonitor: React.FC = () => {
                   return (
                     <div
                       key={chat.conversationId}
-                      onClick={() => handleSelect(chat.conversationId)}
+                      onClick={() => {
+                        if (longPressTriggeredRef.current) {
+                          longPressTriggeredRef.current = false;
+                          return;
+                        }
+                        handleSelect(chat.conversationId);
+                      }}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1134,10 +1165,12 @@ export const LiveChatMonitor: React.FC = () => {
                         if (!touch) return;
                         const x = touch.clientX;
                         const y = touch.clientY;
+                        longPressTouchRef.current = { x, y };
                         if (typeof window !== 'undefined') {
                           window.getSelection()?.removeAllRanges();
                         }
                         longPressTimerRef.current = setTimeout(() => {
+                          longPressTriggeredRef.current = true;
                           if (typeof window !== 'undefined') {
                             window.getSelection()?.removeAllRanges();
                           }
@@ -1149,12 +1182,30 @@ export const LiveChatMonitor: React.FC = () => {
                           clearTimeout(longPressTimerRef.current);
                           longPressTimerRef.current = null;
                         }
+                        longPressTouchRef.current = null;
+                        setTimeout(() => {
+                          longPressTriggeredRef.current = false;
+                        }, 200);
                       }}
-                      onTouchMove={() => {
+                      onTouchMove={(e) => {
+                        if (longPressTimerRef.current && longPressTouchRef.current && e.touches[0]) {
+                          const dx = e.touches[0].clientX - longPressTouchRef.current.x;
+                          const dy = e.touches[0].clientY - longPressTouchRef.current.y;
+                          // Hanya batalkan jika jari bergeser lebih dari 10px (toleransi getaran jari)
+                          if (Math.hypot(dx, dy) > 10) {
+                            clearTimeout(longPressTimerRef.current);
+                            longPressTimerRef.current = null;
+                            longPressTouchRef.current = null;
+                          }
+                        }
+                      }}
+                      onTouchCancel={() => {
                         if (longPressTimerRef.current) {
                           clearTimeout(longPressTimerRef.current);
                           longPressTimerRef.current = null;
                         }
+                        longPressTouchRef.current = null;
+                        longPressTriggeredRef.current = false;
                       }}
                       style={{
                         WebkitUserSelect: 'none',
@@ -1379,6 +1430,7 @@ export const LiveChatMonitor: React.FC = () => {
           <div
             onTouchStart={handleDetailTouchStart}
             onTouchEnd={handleDetailTouchEnd}
+            onTouchCancel={() => { detailTouchStartRef.current = null; }}
             className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}
           >
             {selectedChat ? (
@@ -1396,7 +1448,7 @@ export const LiveChatMonitor: React.FC = () => {
                       {/* Mobile Back Button (Dedicated Independent Touch Target) */}
                       <button
                         type="button"
-                        onClick={() => setMobileView('list')}
+                        onClick={handleBackToList}
                         className="lg:hidden flex items-center justify-center w-10 h-10 -ml-1 mr-1.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-90 touch-manipulation z-20 cursor-pointer shadow-2xs"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"

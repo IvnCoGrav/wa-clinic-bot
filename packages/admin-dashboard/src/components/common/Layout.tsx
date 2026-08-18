@@ -167,6 +167,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     window.addEventListener('popstate', handlePopState);
     return () => {
       window.removeEventListener('popstate', handlePopState);
+      // Jika menu ditutup via UI (bukan via Back button), bersihkan entry history dummy
+      if (window.history.state?.adminMenuOpen) {
+        window.history.back();
+      }
     };
   }, [mobileMenuOpen]);
 
@@ -178,6 +182,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
+      // Guard: Hanya aktifkan gesture pada mobile (< md breakpoint 768px)
+      if (window.innerWidth >= 768) return;
       const touch = e.touches[0];
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;

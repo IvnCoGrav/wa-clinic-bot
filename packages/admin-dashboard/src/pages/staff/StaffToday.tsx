@@ -446,8 +446,8 @@ export const StaffToday: React.FC = () => {
     const deltaY = endY - start.y;
     const deltaTime = Date.now() - start.time;
 
-    // Ignore slow gestures (> 650ms) or short drags (< 40px) or mostly vertical scrolls
-    if (deltaTime > 650 || Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
+    // Ignore slow gestures (> 650ms) or short drags (< 35px) or mostly vertical scrolls
+    if (deltaTime > 650 || Math.abs(deltaX) < 35 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) {
       return;
     }
 
@@ -460,7 +460,7 @@ export const StaffToday: React.FC = () => {
     }
 
     // Swipe ke kanan saat drawer terbuka -> Tutup drawer
-    if (showMenuDrawer && deltaX > 40) {
+    if (showMenuDrawer && deltaX > 35) {
       setShowMenuDrawer(false);
       return;
     }
@@ -477,9 +477,9 @@ export const StaffToday: React.FC = () => {
       return;
     }
 
-    // Case 1: In full-screen mobile chat view -> swipe horizontal navigates back to list
+    // Case 1: In full-screen mobile chat view -> swipe RIGHT (left-to-right) navigates back to list
     if (mobileView === 'chat' && activeTab === 'today') {
-      if (Math.abs(deltaX) > 40) {
+      if (deltaX > 40) {
         handleBackToList();
       }
       return;
@@ -503,6 +503,10 @@ export const StaffToday: React.FC = () => {
   // Popstate event listener for hardware / browser back button
   useEffect(() => {
     const handlePopState = () => {
+      if (showMenuDrawer) {
+        setShowMenuDrawer(false);
+        return;
+      }
       if (detailModalTask) {
         setDetailModalTask(null);
         return;
@@ -511,8 +515,16 @@ export const StaffToday: React.FC = () => {
         setPaymentModalTask(null);
         return;
       }
+      if (updateLocationModalTask) {
+        setUpdateLocationModalTask(null);
+        return;
+      }
       if (showStaffProfileModal) {
         setShowStaffProfileModal(false);
+        return;
+      }
+      if (zoomImageUrl) {
+        setZoomImageUrl(null);
         return;
       }
       if (mobileView === 'chat') {
@@ -522,7 +534,7 @@ export const StaffToday: React.FC = () => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [mobileView, detailModalTask, paymentModalTask, showStaffProfileModal]);
+  }, [mobileView, detailModalTask, paymentModalTask, updateLocationModalTask, showStaffProfileModal, showMenuDrawer, zoomImageUrl]);
 
   // Fetch Staff Telegram Pairing Status on Profile Modal Open
   useEffect(() => {
