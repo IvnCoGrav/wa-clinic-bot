@@ -30,6 +30,8 @@ import {
   UserCheck,
   Tag,
   Database,
+  QrCode,
+  Loader,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
@@ -168,7 +170,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, [mobileMenuOpen]);
 
-  // Native DOM touch gesture listener with { passive: false } to reliably prevent browser history back
+  // Native DOM touch gesture listener: Right-Edge Swipe to Open Menu, Swipe Right to Close
   useEffect(() => {
     let touchStartX = 0;
     let touchStartY = 0;
@@ -180,18 +182,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       touchStartX = touch.clientX;
       touchStartY = touch.clientY;
 
-      // CRITICAL (iOS Safari / Android Chrome):
-      // Prevent browser system navigation gesture at Frame 0 (touchstart) when touch starts at edge (<= 30px)
-      if (!mobileMenuOpen && touchStartX <= 30) {
-        if (e.cancelable) {
-          e.preventDefault();
-        }
-      }
-
-      // Allow opening by swiping from left zone (up to 120px from left)
-      // OR allow closing by swiping left anywhere on screen when menu is already open
-      const maxLeftZone = Math.min(window.innerWidth * 0.35, 120);
-      if (mobileMenuOpen || touchStartX <= maxLeftZone) {
+      const isRightEdge = touchStartX >= window.innerWidth - 55;
+      if (mobileMenuOpen || isRightEdge) {
         isTracking = true;
       } else {
         isTracking = false;
@@ -206,32 +198,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      const maxLeftZone = Math.min(window.innerWidth * 0.35, 120);
-
-      // Case 1: When sidebar is CLOSED -> User is swiping from left zone towards right
-      if (!mobileMenuOpen && touchStartX <= maxLeftZone) {
-        // If horizontal movement to right is detected, intercept and prevent browser back navigation!
-        if (deltaX > 8 && absX > absY * 1.1) {
-          if (e.cancelable) {
-            e.preventDefault();
-          }
+      // Case 1: When sidebar is CLOSED -> User is swiping from right edge towards left
+      if (!mobileMenuOpen && touchStartX >= window.innerWidth - 55) {
+        if (deltaX < -8 && absX > absY * 1.1) {
+          if (e.cancelable) e.preventDefault();
         }
-        // Trigger sidebar open smoothly once threshold passed
-        if (deltaX > 25 && absX > absY * 1.1) {
+        if (deltaX < -30 && absX > absY * 1.1) {
           setMobileMenuOpen(true);
           isTracking = false;
         }
         return;
       }
 
-      // Case 2: When sidebar is OPEN -> User is swiping left anywhere to close
+      // Case 2: When sidebar is OPEN -> User is swiping right anywhere to close
       if (mobileMenuOpen) {
-        if (deltaX < -8 && absX > absY * 1.1) {
-          if (e.cancelable) {
-            e.preventDefault();
-          }
+        if (deltaX > 8 && absX > absY * 1.1) {
+          if (e.cancelable) e.preventDefault();
         }
-        if (deltaX < -25 && absX > absY * 1.1) {
+        if (deltaX > 30 && absX > absY * 1.1) {
           setMobileMenuOpen(false);
           isTracking = false;
         }
@@ -260,7 +244,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   return (
     <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row`}>
-      {/* Mobile backdrop overlay with smooth fade */}
       <div
         onClick={() => setMobileMenuOpen(false)}
         className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
@@ -268,8 +251,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         }`}
       />
 
-      {/* Sidebar Navigation */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-[#e9edef] flex flex-col transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-out shadow-lg md:shadow-xs`}>
+      {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right) */}
+      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white border-l md:border-l-0 md:border-r border-[#e9edef] flex flex-col transform ${
+        mobileMenuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
+      } transition-transform duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
         <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
           <div className="flex items-center space-x-2.5">
@@ -363,19 +348,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         {/* Top Header */}
         <header className="h-16 border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs shrink-0">
           <div className="flex items-center space-x-3">
-            <button 
-              onClick={() => setMobileMenuOpen(true)} 
-              aria-label="Buka Menu"
-              className="md:hidden p-2 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] transition active:scale-95"
-            >
-              <Menu size={20} />
-            </button>
-            <h1 className="text-sm font-bold md:text-base text-[#111b21] truncate max-w-[160px] sm:max-w-none">
+            <h1 className="text-sm font-bold md:text-base text-[#111b21] truncate max-w-[200px] sm:max-w-none">
               {BRAND.panelName}
             </h1>
           </div>
 
-          {/* System Liveness Alerts & Interactive Popover */}
+          {/* Right Header: System Liveness Alerts & Mobile Hamburger Menu Button */}
           <div className="relative flex items-center space-x-2">
             {/* Redis Queue Status */}
             {redisQueueFallback && (
@@ -402,18 +380,36 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
                 className="rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
               >
-                <Activity size={14} />
+                <QrCode size={14} />
                 <span className="text-[11px] font-bold">Scan QR</span>
               </button>
-            ) : (
+            ) : wahaStatus === 'FAILED' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition animate-pulse flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                className="rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
               >
                 <AlertCircle size={14} />
                 <span className="text-[11px] font-bold">Offline</span>
               </button>
+            ) : (
+              <button
+                onClick={() => setShowStatusPopover(!showStatusPopover)}
+                className="rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+              >
+                <Loader size={14} className="animate-spin" />
+                <span className="text-[11px] font-bold">Memeriksa</span>
+              </button>
             )}
+
+            {/* Mobile Hamburger Menu Button (Moved to Right Side) */}
+            <button 
+              onClick={() => setMobileMenuOpen(true)} 
+              aria-label="Buka Menu"
+              title="Buka Menu Navigasi"
+              className="md:hidden p-2 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-1"
+            >
+              <Menu size={20} />
+            </button>
 
             {/* Interactive Status Popover for Mobile & Desktop Touch */}
             {showStatusPopover && (

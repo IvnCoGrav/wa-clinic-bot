@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Mobile Hold-Press Anti-Selection, Right-Aligned Hamburger Menu, Right Drawer, & Edge Swipe Gestures
+
+- **Eliminasi Text Selection pada Hold-Press Chat Card (`LiveChatMonitor.tsx`)**:
+  - Menerapkan `userSelect: 'none'`, `-webkit-user-select: 'none'`, `-webkit-touch-callout: 'none'`, dan kelas `select-none` pada seluruh kartu percakapan.
+  - Memanggil `window.getSelection()?.removeAllRanges()` otomatis pada event `onTouchStart` dan saat timer long-press terpicu, sehingga menu konteks (*Sematkan, Tandai Belum Dibaca, dll.*) muncul bersih tanpa ada teks yang terblok/terseleksi di smartphone.
+- **Pemindahan Ikon Menu Garis Tiga (Hamburger) ke Pojok Kanan Header (`Layout.tsx`)**:
+  - Memindahkan tombol `<Menu />` ke sisi kanan header navbar di samping status liveness/online, membuat jangkauan jempol satu tangan di HP jauh lebih ergonomis dan natural.
+  - Sisi kiri header kini bersih menampilkan nama panel (`KALA SPA Management Bot`).
+- **Mobile Drawer Navigasi Sisi Kanan & Right-Edge Swipe Gesture (`Layout.tsx`)**:
+  - Mengonfigurasi drawer menu navigasi mobile meluncur (*slide-in*) dari sisi kanan layar (`right-0`, `border-l`), selaras dengan posisi tombol menu di pojok kanan.
+  - Menambahkan *touch listener* gestur usap tepi kanan (**Right-Edge Swipe**, start `clientX >= window.innerWidth - 55px` geser ke kiri) untuk membuka menu drawer secara instan tanpa harus mengetuk tombol.
+  - Usapan ke kanan saat menu terbuka otomatis menutup drawer.
+- **Left-Edge Swipe Gesture sebagai Navigasi Back pada Detail Chat (`LiveChatMonitor.tsx`)**:
+  - Menambahkan gestur usap dari tepi kiri layar (**Left-Edge Swipe**, start `clientX <= 55px` geser ke kanan) pada tampilan detail chat mobile untuk kembali ke daftar percakapan (*back to list*).
+
 ### Added & Improved — Mobile Back Button Touch Hitbox Fix, Mark All as Read, & Historical Import Read Status
 
 - **Perbaikan Tombol Back Chat History di Mobile (`LiveChatMonitor.tsx`)**:
