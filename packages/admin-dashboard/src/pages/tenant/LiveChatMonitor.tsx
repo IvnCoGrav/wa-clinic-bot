@@ -123,11 +123,7 @@ export const LiveChatMonitor: React.FC = () => {
   const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const handleBackToList = () => {
-    if (window.history.state?.liveChatView === 'chat') {
-      window.history.back();
-    } else {
-      setMobileView('list');
-    }
+    setMobileView('list');
   };
 
   const handleDetailTouchStart = (e: React.TouchEvent) => {
@@ -146,13 +142,24 @@ export const LiveChatMonitor: React.FC = () => {
       return;
     }
     const touch = e.touches[0];
-    // Zona tepi kiri ketat (<= 35px dari tepi kiri layar)
-    if (touch && touch.clientX <= 35) {
+    // Zona tepi kiri (<= 45px dari tepi kiri layar)
+    if (touch && touch.clientX <= 45) {
       detailTouchStartRef.current = {
         x: touch.clientX,
         y: touch.clientY,
         time: Date.now(),
       };
+    }
+  };
+
+  const handleDetailTouchMove = (e: React.TouchEvent) => {
+    if (!detailTouchStartRef.current || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - detailTouchStartRef.current.x;
+    const deltaY = touch.clientY - detailTouchStartRef.current.y;
+    // Cegah browser native history swipe back yang menyebabkan reload halaman
+    if (deltaX > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      if (e.cancelable) e.preventDefault();
     }
   };
 
@@ -166,8 +173,8 @@ export const LiveChatMonitor: React.FC = () => {
     const deltaX = end.clientX - start.x;
     const deltaY = end.clientY - start.y;
 
-    // Usapan tegas dari tepi kiri ke kanan (deltaX > 45px dengan rasio sudut horizontal 2.0x) -> Back to list!
-    if (deltaX > 45 && Math.abs(deltaX) > Math.abs(deltaY) * 2.0) {
+    // Usapan tegas dari tepi kiri ke kanan (deltaX > 40px) -> Kembali ke list seketika tanpa reload!
+    if (deltaX > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
       handleBackToList();
     }
   };
@@ -1157,6 +1164,7 @@ export const LiveChatMonitor: React.FC = () => {
                   return (
                     <div
                       key={chat.conversationId}
+                      data-no-select="true"
                       onClick={() => {
                         if (longPressTriggeredRef.current) {
                           longPressTriggeredRef.current = false;
@@ -1441,6 +1449,7 @@ export const LiveChatMonitor: React.FC = () => {
           {/* Section 2: Right Panel - Live Chat Messages */}
           <div
             onTouchStart={handleDetailTouchStart}
+            onTouchMove={handleDetailTouchMove}
             onTouchEnd={handleDetailTouchEnd}
             onTouchCancel={() => { detailTouchStartRef.current = null; }}
             className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}
