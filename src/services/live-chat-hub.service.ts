@@ -125,16 +125,20 @@ export class LiveChatHubService {
 
   /**
    * Publikasikan event ke channel tenant. Fire-and-forget yang aman:
-   * saat Redis down, langsung disebar lewat EventEmitter in-memory.
+   * 1. Selalu emit langsung ke subscriber lokal di instance ini.
+   * 2. Broadcast ke instance lain lewat Redis pub/sub (jika Redis aktif).
    */
   public async publish(event: LiveChatHubEvent): Promise<void> {
     const channel = this.channelFor(event.tenantId);
     event._instanceId = this.instanceId;
 
+    // 1. Emit langsung ke subscriber lokal (SSE client di instance ini)
+    this.localBus.emit(channel, event);
+
+    // 2. Broadcast ke instance lain via Redis jika Redis aktif
     if (this.redisEnabled && this.redisPublisher) {
       try {
         await this.redisPublisher.publish(channel, JSON.stringify(event));
-        return;
       } catch (err: any) {
         console.error(
           `\n🚨 [CRITICAL ALERT] Redis publish failed at runtime: ${err.message}. Entering In-Memory LiveChat Hub Fallback Mode. Please check Redis server immediately.`
@@ -142,9 +146,6 @@ export class LiveChatHubService {
         this.redisEnabled = false;
       }
     }
-
-    // Fallback in-memory (Redis offline)
-    this.localBus.emit(channel, event);
   }
 
   /**
