@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Eliminasi Reload Edge Swipe Back & Deep Text Anti-Selection on Hold-Press
+
+- **Pencegahan Native Browser Edge Reload pada Slide Back (`index.css` & `LiveChatMonitor.tsx`)**:
+  - Menerapkan `overscroll-behavior-x: none` dan `touch-action: pan-y pinch-zoom` pada elemen root `html, body, #root` untuk mencegah browser mobile (Chrome/Safari) mencegat usapan tepi kiri sebagai navigasi *hard reload* halaman web.
+  - Menambahkan handler `handleDetailTouchMove` dengan `e.preventDefault()` saat usapan horizontal terdeteksi dari tepi kiri, memastikan SPA tidak pernah memuat ulang komponen booting (*"Menyiapkan tampilan…"*) saat pengguna kembali ke daftar chat.
+  - Menyesuaikan `handleBackToList()` menjadi murni transisi state React instan tanpa manipulasi history berbahaya.
+- **Deep Anti-Selection & Eliminasi Blok Teks saat Hold-Press (`index.css` & `LiveChatMonitor.tsx`)**:
+  - Menerapkan aturan CSS agresif `.select-none, .select-none *, [data-no-select], [data-no-select] *` dengan `-webkit-touch-callout: none !important`, `-webkit-user-select: none !important`, dan `-webkit-user-drag: none !important`.
+  - Menambahkan `data-no-select="true"` pada container kartu percakapan, menjamin aksi hold-press tidak akan pernah memicu blok seleksi teks biru atau popup 'Salin/Copy' bawaan HP.
+
 ### Added & Improved — WhatsApp-Style Mobile Bottom Action Sheet, Gesture Calibration & History Isolation
 
 - **Redesain Context Menu Menjadi WhatsApp-Style Mobile Bottom Action Sheet (`LiveChatMonitor.tsx`)**:

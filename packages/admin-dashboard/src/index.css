@@ -40,12 +40,29 @@
 html, body, #root {
   background-color: #f0f2f5;
   color: #111b21;
+  /* Prevent browser native horizontal edge swipe navigation reload */
+  overscroll-behavior-x: none;
+  touch-action: pan-y pinch-zoom;
 }
 
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Deep Anti-Selection & Anti-Callout rule for cards and touch items */
+.select-none,
+.select-none *,
+[data-no-select],
+[data-no-select] * {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
 }
 
 /* Mobile Touch Ergonomics & Typography Baseline Overrides */
