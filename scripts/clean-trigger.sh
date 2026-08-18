@@ -15,7 +15,7 @@ if [ ! -f "$REQUEST_FILE" ]; then
   exit 0
 fi
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*" >> /var/log/server-clean.log; }
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] $*" >> "$BASE_DIR/storage/server-clean.log"; }
 
 log "clean-trigger: request terdeteksi ($(cat "$REQUEST_FILE" 2>/dev/null | head -c 200))"
 
