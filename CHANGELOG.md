@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Mobile Back Button Touch Hitbox Fix, Mark All as Read, & Historical Import Read Status
+
+- **Perbaikan Tombol Back Chat History di Mobile (`LiveChatMonitor.tsx`)**:
+  - **Pemisahan dari Header Box Pelanggan**: Mengeluarkan tombol back dari dalam wrapper `div` modal profil customer untuk menghilangkan konflik event klik/sentuh yang sebelumnya membuat tombol sulit ditekan di layar HP.
+  - **Hitbox Sentuh Besar & Nyaman**: Memperbesar target sentuh tombol back menjadi `w-10 h-10` (40x40px), ikon `ChevronLeft` stroke tebal `stroke-[2.5]` berukuran 22px, padding responsif, efek aktif `active:scale-90`, dan CSS `touch-manipulation` untuk responsivitas instan tanpa delay 300ms browser mobile.
+- **Fitur Tandai Semua Sudah Dibaca (Mark All as Read) (`message.service.ts`, `livechat.subroute.ts`, `LiveChatMonitor.tsx`)**:
+  - **Tombol Cepat di Toolbar Filter**: Menambahkan tombol "Tandai Dibaca" berikon `MailCheck` di samping filter label pasien pada Live Chat Monitor.
+  - **Endpoint Backend**: Menambahkan `POST /api/admin/live-chat/mark-all-read` yang secara massal menyetel `read_at = now()` pada seluruh pesan inbound dan mereset status `is_manual_unread = false` serta menyiarkan update SSE real-time (`payload: { allRead: true }`).
+- **Otomatisasi Status Read pada Seluruh Jalur Import Riwayat Chat (`message.service.ts`, `waha-history-sync.service.ts`, `migration.service.ts`, `import-real-data.ts`, `standalone-import.js`)**:
+  - Semua proses import data historis atau sinkronisasi background kini otomatis menandai pesan sebagai telah dibaca (`read_at = msg.created_at || now`), mencegah ribuan pesan arsip lama muncul sebagai pesan baru yang belum dibaca.
+
 ### Added & Improved — WhatsApp-Style Unread Badge, Manual Dark Green Unread, Orange Awaiting-Reply Dot (24h), Context Menu & Pin Chat
 
 - **Skema Indikator Pesan WhatsApp Komprehensif (`schema.prisma`, `message.service.ts`, `live-chat.service.ts`, `LiveChatMonitor.tsx`)**:

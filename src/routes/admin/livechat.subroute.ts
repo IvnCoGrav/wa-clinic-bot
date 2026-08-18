@@ -524,6 +524,37 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/live-chat/mark-all-read
+   * Menandai SEMUA percakapan dari seluruh pelanggan sebagai telah dibaca.
+   */
+  fastify.post('/api/admin/live-chat/mark-all-read', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    try {
+      const count = await messageService.markAllMessagesAsRead(tenantId);
+
+      // Broadcast update via LiveChatHub
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'conversation.updated',
+          tenantId,
+          payload: {
+            allRead: true,
+          },
+        });
+      } catch {}
+
+      return reply.status(200).send({
+        success: true,
+        count,
+        message: 'Semua percakapan berhasil ditandai telah dibaca.',
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai semua telah dibaca' });
+    }
+  });
+
+  /**
    * PATCH /api/admin/conversations/:id/read
    * Menandai semua pesan inbound pada percakapan sebagai telah dibaca.
    */

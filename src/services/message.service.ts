@@ -132,10 +132,18 @@ export class MessageService {
     metaErrorDesc?: string;
     skipMqlEvaluation?: boolean;
     createdAt?: Date;
+    readAt?: Date | null;
+    isHistorical?: boolean;
   }) {
     if (data.waMessageId) {
       memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
     }
+
+    const effectiveReadAt = data.readAt !== undefined
+      ? data.readAt
+      : data.isHistorical
+        ? (data.createdAt || new Date())
+        : undefined;
 
     let saved: any = null;
     try {
@@ -153,6 +161,7 @@ export class MessageService {
           meta_error_code: data.metaErrorCode ?? undefined,
           meta_error_desc: data.metaErrorDesc ?? undefined,
           created_at: data.createdAt || undefined,
+          read_at: effectiveReadAt ?? undefined,
         },
       });
       if (saved) return saved;
@@ -173,6 +182,7 @@ export class MessageService {
         meta_error_code: data.metaErrorCode ?? null,
         meta_error_desc: data.metaErrorDesc ?? null,
         created_at: data.createdAt || new Date(),
+        read_at: effectiveReadAt ?? null,
       };
       memoryMessages.push(fallbackMessage);
       return fallbackMessage;
@@ -530,6 +540,62 @@ export class MessageService {
     }
 
     return result;
+  }
+
+  /**
+   * Menandai SEMUA pesan pada semua percakapan dalam sebuah tenant sebagai telah dibaca (read_at = now).
+   * Menyetel is_manual_unread = false pada semua percakapan.
+   */
+  public async markAllMessagesAsRead(tenantId: string): Promise<number> {
+    const now = new Date();
+    let updatedCount = 0;
+
+    // 1. Update di database PostgreSQL
+    try {
+      const res = await prisma.message.updateMany({
+        where: {
+          tenant_id: tenantId,
+          direction: Direction.INBOUND,
+          read_at: null,
+        },
+        data: {
+          read_at: now,
+        },
+      });
+      updatedCount = res.count;
+
+      await prisma.conversation.updateMany({
+        where: {
+          tenant_id: tenantId,
+          is_manual_unread: true,
+        },
+        data: {
+          is_manual_unread: false,
+        },
+      });
+    } catch (error) {
+      // Memory fallback
+    }
+
+    // 2. Update memory store fallback
+    for (const m of memoryMessages) {
+      if (m.tenant_id === tenantId && m.direction === 'INBOUND' && !m.read_at) {
+        m.read_at = now;
+        updatedCount++;
+      }
+    }
+
+    try {
+      const { conversationService } = await import('./conversation.service');
+      const convs = await conversationService.listConversations(tenantId, 1000, 0, 'all');
+      for (const c of convs) {
+        if (c.is_manual_unread) {
+          await conversationService.setManualUnread(c.id, tenantId, false);
+        }
+      }
+    } catch {}
+
+    return updatedCount;
   }
 
   public getMemoryMessages(): any[] {

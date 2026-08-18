@@ -366,6 +366,7 @@ export class MigrationService {
               wa_message_id: msg.id || `legacy_${staging.id}_${Math.random().toString(36).substring(7)}`,
               payload_raw: msg,
               created_at: new Date(msg.timestamp),
+              read_at: new Date(msg.timestamp || Date.now()),
             }));
 
           if (toCreate.length > 0) {
