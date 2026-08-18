@@ -341,6 +341,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <Link
                       key={item.path}
                       to={item.path}
+                      replace={true}
                       onClick={() => setMobileMenuOpen(false)}
                       className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
                         isActive 
@@ -529,6 +530,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   <div className="pt-1">
                     <Link
                       to="/admin/settings"
+                      replace={true}
                       onClick={() => setShowStatusPopover(false)}
                       className="block text-center py-2 px-3 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] font-semibold text-xs transition"
                     >
