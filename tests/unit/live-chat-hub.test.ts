@@ -45,6 +45,19 @@ describe('LiveChatHubService — Redis pub/sub + fallback in-memory', () => {
       );
     });
 
+    it('publish saat Redis aktif langsung mengirim event ke subscriber lokal (same instance)', async () => {
+      const hub = new LiveChatHubService();
+      await hub.whenReady();
+
+      const cb = vi.fn();
+      await hub.subscribe('default-tenant', cb);
+
+      await hub.publish({ type: 'message.created', tenantId: 'default-tenant', payload: { text: 'live' } });
+
+      expect(cb).toHaveBeenCalledTimes(1);
+      expect(cb.mock.calls[0][0].payload).toEqual({ text: 'live' });
+    });
+
     it('event lintas-instance (instanceId berbeda) dikirim ke subscriber lokal', async () => {
       const hub = new LiveChatHubService();
       await hub.whenReady();
