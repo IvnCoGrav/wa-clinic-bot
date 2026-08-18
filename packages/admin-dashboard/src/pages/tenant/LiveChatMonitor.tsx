@@ -125,11 +125,7 @@ export const LiveChatMonitor: React.FC = () => {
   const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const handleBackToList = () => {
-    if (window.history.state?.liveChatView === 'chat') {
-      window.history.back();
-    } else {
-      setMobileView('list');
-    }
+    setMobileView('list');
   };
 
   const handleListTouchStart = (e: React.TouchEvent) => {
@@ -628,10 +624,6 @@ export const LiveChatMonitor: React.FC = () => {
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
-    // Push history state untuk tombol Back hardware/browser mobile
-    if (window.history.state?.liveChatView !== 'chat') {
-      window.history.pushState({ liveChatView: 'chat' }, '');
-    }
     resetTextareaHeight();
     loadThread(conversationId);
 
@@ -650,17 +642,6 @@ export const LiveChatMonitor: React.FC = () => {
       });
     }
   };
-
-  // Popstate listener untuk navigasi Back hardware di mobile (kembali ke list)
-  useEffect(() => {
-    const handlePopState = () => {
-      if (mobileView === 'chat') {
-        setMobileView('list');
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [mobileView]);
 
   // Global capture listener untuk memblokir total popup native 'Copy / Salin' Android Chrome saat hold-press
   useEffect(() => {
