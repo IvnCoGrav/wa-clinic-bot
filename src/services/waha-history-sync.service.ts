@@ -258,6 +258,8 @@ export class WahaHistorySyncService {
                 senderType: msg.fromMe ? 'BOT' : undefined,
                 senderName: msg.fromMe ? 'Bot' : undefined,
                 createdAt: msgDate,
+                readAt: msgDate || new Date(),
+                isHistorical: true,
                 skipMqlEvaluation: true,
               });
               chatSynced++;
@@ -439,6 +441,8 @@ export class WahaHistorySyncService {
             senderType: msg.fromMe ? 'BOT' : undefined,
             senderName: msg.fromMe ? 'Bot' : undefined,
             createdAt: msgDate,
+            readAt: msgDate || new Date(),
+            isHistorical: true,
             skipMqlEvaluation: true,
           });
           chatSynced++;

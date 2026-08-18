@@ -499,6 +499,29 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
+  const handleMarkAllAsRead = async () => {
+    const confirmed = await confirm({
+      title: 'Tandai Semua Telah Dibaca',
+      message: 'Tandai semua pesan dari seluruh pelanggan sebagai telah dibaca?',
+      confirmText: 'Tandai Semua Dibaca',
+      cancelText: 'Batal',
+    });
+    if (!confirmed) return;
+    try {
+      await apiRequest('/api/admin/live-chat/mark-all-read', { method: 'POST' });
+      setChats((prev) =>
+        prev.map((c) => ({
+          ...c,
+          unreadCount: 0,
+          isManualUnread: false,
+        }))
+      );
+      toast('Semua percakapan berhasil ditandai telah dibaca!', 'success');
+    } catch (err: any) {
+      toast(`Gagal menandai semua dibaca: ${err.message}`, 'error');
+    }
+  };
+
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
@@ -528,6 +551,17 @@ export const LiveChatMonitor: React.FC = () => {
     const unsubscribe = connectLiveChatSse({
       onStatusChange: (connected) => setSseConnected(connected),
       onEvent: (type, payload) => {
+        if (type === 'conversation.updated' && payload?.allRead) {
+          setChats((prev) =>
+            prev.map((c) => ({
+              ...c,
+              unreadCount: 0,
+              isManualUnread: false,
+            }))
+          );
+          return;
+        }
+
         if (type === 'message.created') {
           const conversationId = payload.conversationId;
           const msg: ChatMessage = {
@@ -1001,18 +1035,28 @@ export const LiveChatMonitor: React.FC = () => {
                 </div>
               </div>
 
-              {/* Label Filter Dropdown */}
+              {/* Label Filter Dropdown & Mark All Read */}
               <div className="flex items-center space-x-1.5">
                 <select
                   value={labelFilter}
                   onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
-                  className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs"
+                  className="flex-1 px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs"
                 >
                   <option value="all">Semua Label Pasien</option>
                   <option value="human_request">Human Request</option>
                   <option value="medical_concern">Medical Emergency</option>
                   <option value="unresolved_faq">Unresolved FAQ</option>
                 </select>
+
+                <button
+                  type="button"
+                  onClick={handleMarkAllAsRead}
+                  title="Tandai semua percakapan sebagai telah dibaca"
+                  className="px-2 py-1 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#c2e7e0] text-[#54656f] hover:text-[#008069] rounded-lg text-[11px] font-semibold transition flex items-center space-x-1 shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <MailCheck size={13} className="text-[#008069]" />
+                  <span className="hidden sm:inline">Tandai Dibaca</span>
+                </button>
               </div>
             </div>
 
@@ -1299,34 +1343,35 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   )}
                   <div className="flex justify-between items-center gap-2">
-                    {/* Clickable Customer Header Box */}
-                    <div
-                      onClick={() => handleOpenCustomerDetail(selectedChat)}
-                      className="flex items-center space-x-2 p-1 -m-1 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0"
-                      title="Klik untuk melihat detail lengkap profil customer"
-                    >
+                    <div className="flex items-center min-w-0 flex-1">
+                      {/* Mobile Back Button (Dedicated Independent Touch Target) */}
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMobileView('list');
-                        }}
-                        className="lg:hidden p-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] transition flex-shrink-0 active:scale-95"
+                        type="button"
+                        onClick={() => setMobileView('list')}
+                        className="lg:hidden flex items-center justify-center w-10 h-10 -ml-1 mr-1.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-90 touch-manipulation z-20 cursor-pointer shadow-2xs"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"
                       >
-                        <ChevronLeft size={16} />
+                        <ChevronLeft size={22} className="stroke-[2.5]" />
                       </button>
-                      <CustomerAvatar
-                        src={selectedChat.customerProfilePictureUrl}
-                        name={selectedChat.customerName}
-                        phone={selectedChat.customerPhone}
-                        size="sm"
-                      />
-                      <div className="min-w-0">
-                        <h3 className="text-xs sm:text-sm font-bold text-[#111b21] flex items-center space-x-1 group-hover:text-[#008069] transition truncate">
-                          <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
-                          <ExternalLink size={11} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
-                        </h3>
+
+                      {/* Clickable Customer Header Box */}
+                      <div
+                        onClick={() => handleOpenCustomerDetail(selectedChat)}
+                        className="flex items-center space-x-2 p-1 -m-1 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0 flex-1"
+                        title="Klik untuk melihat detail lengkap profil customer"
+                      >
+                        <CustomerAvatar
+                          src={selectedChat.customerProfilePictureUrl}
+                          name={selectedChat.customerName}
+                          phone={selectedChat.customerPhone}
+                          size="sm"
+                        />
+                        <div className="min-w-0">
+                          <h3 className="text-xs sm:text-sm font-bold text-[#111b21] flex items-center space-x-1 group-hover:text-[#008069] transition truncate">
+                            <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
+                            <ExternalLink size={11} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
+                          </h3>
                         <div className="flex items-center space-x-1.5 mt-0.5 flex-wrap gap-y-1">
                           <p className="text-[11px] text-[#667781] font-mono">
                             {selectedChat.customerPhone || 'Unknown'}
@@ -1407,6 +1452,7 @@ export const LiveChatMonitor: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                  </div>
 
                     {/* Bot Release Button in Chat Header (Icon-based) */}
                     <div className="shrink-0">
