@@ -216,7 +216,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             chunks,
             query: text,
             timestamp: new Date(),
-            llmError: simulateOutage ? 'SumoPod connection timeout (500 Internal Server Error)' : null,
+            llmError: simulateOutage ? 'Primary LLM provider connection timeout (500 Internal Server Error)' : null,
           };
         } catch (err: any) {
           return {

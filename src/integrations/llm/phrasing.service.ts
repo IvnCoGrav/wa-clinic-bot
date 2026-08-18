@@ -36,7 +36,7 @@ export class PhrasingService {
       async (req: PhrasingRequest) => {
         const store = llmOutageStorage.getStore();
         if (store?.simulateOutage) {
-          throw new Error('SumoPod connection timeout (500 Internal Server Error)');
+          throw new Error('Primary LLM provider connection timeout (500 Internal Server Error)');
         }
 
         const recentOpeners = req.conversationId ? openerTracker.getOpeners(req.conversationId) : [];

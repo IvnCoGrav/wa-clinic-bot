@@ -402,10 +402,139 @@ export class MessageService {
     return true;
   }
 
+  /**
+   * Menandai semua pesan inbound pada sebuah percakapan sebagai telah dibaca (read_at = now).
+   * Menyetel is_manual_unread = false.
+   */
+  public async markConversationMessagesAsRead(conversationId: string, tenantId: string): Promise<void> {
+    const now = new Date();
+
+    // 1. Update di DB Prisma
+    try {
+      await prisma.message.updateMany({
+        where: {
+          conversation_id: conversationId,
+          tenant_id: tenantId,
+          direction: Direction.INBOUND,
+          read_at: null,
+        },
+        data: {
+          read_at: now,
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          is_manual_unread: false,
+        },
+      }).catch(() => {});
+    } catch (error) {
+      // Memory fallback
+    }
+
+    // 2. Update memory store fallback
+    for (const m of memoryMessages) {
+      if (m.conversation_id === conversationId && m.tenant_id === tenantId && m.direction === 'INBOUND' && !m.read_at) {
+        m.read_at = now;
+      }
+    }
+
+    try {
+      const { conversationService } = await import('./conversation.service');
+      await conversationService.setManualUnread(conversationId, tenantId, false);
+    } catch {}
+  }
+
+  /**
+   * Menandai percakapan sebagai belum dibaca (manual mark as unread).
+   * Mengosongkan read_at pada pesan inbound terakhir dan menyetel is_manual_unread = true.
+   */
+  public async markConversationAsUnread(conversationId: string, tenantId: string): Promise<void> {
+    // 1. Update di DB Prisma
+    try {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          is_manual_unread: true,
+        },
+      });
+
+      // Cari pesan inbound terakhir dan set read_at = null
+      const lastInbound = await prisma.message.findFirst({
+        where: {
+          conversation_id: conversationId,
+          tenant_id: tenantId,
+          direction: Direction.INBOUND,
+        },
+        orderBy: { created_at: 'desc' },
+      });
+
+      if (lastInbound) {
+        await prisma.message.update({
+          where: { id: lastInbound.id },
+          data: { read_at: null },
+        });
+      }
+    } catch (error) {
+      // Memory fallback
+    }
+
+    // 2. Update memory store fallback
+    const memInbounds = memoryMessages
+      .filter((m) => m.conversation_id === conversationId && m.tenant_id === tenantId && m.direction === 'INBOUND')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    if (memInbounds.length > 0) {
+      memInbounds[0].read_at = null;
+    }
+
+    try {
+      const { conversationService } = await import('./conversation.service');
+      await conversationService.setManualUnread(conversationId, tenantId, true);
+    } catch {}
+  }
+
+  /**
+   * Mengambil jumlah pesan unread secara batch per conversation_id.
+   */
+  public async getUnreadCountsBatch(conversationIds: string[], tenantId: string): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (!conversationIds.length) return result;
+
+    try {
+      const rows = await prisma.message.groupBy({
+        by: ['conversation_id'],
+        where: {
+          conversation_id: { in: conversationIds },
+          tenant_id: tenantId,
+          direction: Direction.INBOUND,
+          read_at: null,
+        },
+        _count: { id: true },
+      });
+
+      for (const r of rows) {
+        result.set(r.conversation_id, r._count.id);
+      }
+    } catch {
+      // Fallback ke memory store
+      for (const cid of conversationIds) {
+        const unreadMem = memoryMessages.filter(
+          (m) => m.conversation_id === cid && m.tenant_id === tenantId && m.direction === 'INBOUND' && !m.read_at
+        ).length;
+        if (unreadMem > 0) {
+          result.set(cid, unreadMem);
+        }
+      }
+    }
+
+    return result;
+  }
+
   public getMemoryMessages(): any[] {
     return memoryMessages;
   }
 }
-
 
 export const messageService = new MessageService();

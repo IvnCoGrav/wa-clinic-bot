@@ -6,6 +6,7 @@ import { liveChatService } from '../../services/live-chat.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { conversationService, buildConversationUpdatedPayload } from '../../services/conversation.service';
 import { customerService } from '../../services/customer.service';
+import { messageService } from '../../services/message.service';
 import { ConversationState } from '@prisma/client';
 
 export async function livechatAdminRoutes(fastify: FastifyInstance) {
@@ -518,6 +519,119 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message || 'Gagal menggenerasi draf balasan AI' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/conversations/:id/read
+   * Menandai semua pesan inbound pada percakapan sebagai telah dibaca.
+   */
+  fastify.patch(
+    '/api/admin/conversations/:id/read',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      try {
+        await messageService.markConversationMessagesAsRead(id, tenantId);
+        const conv = await conversationService.getConversationById(id, tenantId);
+
+        // Broadcast update via LiveChatHub
+        try {
+          const hub = getLiveChatHub();
+          await hub.publish({
+            type: 'conversation.updated',
+            tenantId,
+            payload: {
+              conversationId: id,
+              unreadCount: 0,
+              isManualUnread: false,
+              ...(conv ? buildConversationUpdatedPayload(conv) : {}),
+            },
+          });
+        } catch {}
+
+        return reply.status(200).send({ success: true, message: 'Percakapan ditandai telah dibaca.' });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai telah dibaca' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/conversations/:id/unread
+   * Menandai percakapan sebagai belum dibaca (Manual Mark as Unread — Hijau Tua).
+   */
+  fastify.patch(
+    '/api/admin/conversations/:id/unread',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      try {
+        await messageService.markConversationAsUnread(id, tenantId);
+        const conv = await conversationService.getConversationById(id, tenantId);
+
+        // Broadcast update via LiveChatHub
+        try {
+          const hub = getLiveChatHub();
+          await hub.publish({
+            type: 'conversation.updated',
+            tenantId,
+            payload: {
+              conversationId: id,
+              unreadCount: 1,
+              isManualUnread: true,
+              ...(conv ? buildConversationUpdatedPayload(conv) : {}),
+            },
+          });
+        } catch {}
+
+        return reply.status(200).send({ success: true, message: 'Percakapan ditandai belum dibaca.' });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai belum dibaca' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/conversations/:id/pin
+   * Menyematkan / melepas sematan percakapan (Pin/Unpin).
+   */
+  fastify.patch(
+    '/api/admin/conversations/:id/pin',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { isPinned?: boolean };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { isPinned } = request.body || {};
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      try {
+        const updated = await conversationService.togglePinConversation(id, tenantId, isPinned);
+        if (!updated) {
+          return reply.status(404).send({ success: false, error: 'Percakapan tidak ditemukan.' });
+        }
+
+        // Broadcast update via LiveChatHub
+        try {
+          const hub = getLiveChatHub();
+          await hub.publish({
+            type: 'conversation.updated',
+            tenantId,
+            payload: buildConversationUpdatedPayload(updated),
+          });
+        } catch {}
+
+        return reply.status(200).send({
+          success: true,
+          isPinned: updated.is_pinned,
+          message: updated.is_pinned ? 'Percakapan berhasil disematkan.' : 'Sematan percakapan dilepas.',
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message || 'Gagal mengubah status sematan' });
       }
     }
   );
