@@ -118,6 +118,37 @@ export const LiveChatMonitor: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
   const longPressTimerRef = useRef<any>(null);
+  const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleDetailTouchStart = (e: React.TouchEvent) => {
+    if (mobileView !== 'chat' || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    // Allow edge swipe when touch starts from left edge zone (<= 55px)
+    if (touch && touch.clientX <= 55) {
+      detailTouchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+    }
+  };
+
+  const handleDetailTouchEnd = (e: React.TouchEvent) => {
+    if (!detailTouchStartRef.current || e.changedTouches.length === 0) return;
+    const start = detailTouchStartRef.current;
+    detailTouchStartRef.current = null;
+
+    const end = e.changedTouches[0];
+    if (!end) return;
+    const deltaX = end.clientX - start.x;
+    const deltaY = end.clientY - start.y;
+    const deltaTime = Date.now() - start.time;
+
+    // Horizontal swipe from left edge to right (deltaX > 40px, mostly horizontal) -> Back to list!
+    if (deltaTime < 600 && deltaX > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      setMobileView('list');
+    }
+  };
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
@@ -1093,6 +1124,9 @@ export const LiveChatMonitor: React.FC = () => {
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        if (typeof window !== 'undefined') {
+                          window.getSelection()?.removeAllRanges();
+                        }
                         setContextMenu({ x: e.clientX, y: e.clientY, chat });
                       }}
                       onTouchStart={(e) => {
@@ -1100,9 +1134,15 @@ export const LiveChatMonitor: React.FC = () => {
                         if (!touch) return;
                         const x = touch.clientX;
                         const y = touch.clientY;
+                        if (typeof window !== 'undefined') {
+                          window.getSelection()?.removeAllRanges();
+                        }
                         longPressTimerRef.current = setTimeout(() => {
+                          if (typeof window !== 'undefined') {
+                            window.getSelection()?.removeAllRanges();
+                          }
                           setContextMenu({ x, y, chat });
-                        }, 500);
+                        }, 450);
                       }}
                       onTouchEnd={() => {
                         if (longPressTimerRef.current) {
@@ -1116,7 +1156,12 @@ export const LiveChatMonitor: React.FC = () => {
                           longPressTimerRef.current = null;
                         }
                       }}
-                      className={`bg-white rounded-xl p-2 border transition cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs relative ${
+                      style={{
+                        WebkitUserSelect: 'none',
+                        userSelect: 'none',
+                        WebkitTouchCallout: 'none',
+                      }}
+                      className={`bg-white rounded-xl p-2 border transition cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs relative select-none touch-manipulation ${
                         isSelected
                           ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
@@ -1331,7 +1376,11 @@ export const LiveChatMonitor: React.FC = () => {
           </div>
 
           {/* Section 2: Right Panel - Live Chat Messages */}
-          <div className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}>
+          <div
+            onTouchStart={handleDetailTouchStart}
+            onTouchEnd={handleDetailTouchEnd}
+            className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex'} flex-1 min-w-0 h-full min-h-0 flex-col`}
+          >
             {selectedChat ? (
               <div className="bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1 sm:p-2.5 md:p-3 h-full flex flex-col justify-between shadow-xs overflow-hidden min-h-0">
                 {/* Header Info: Clickable Card to view full customer detail modal */}
