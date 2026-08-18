@@ -18,6 +18,8 @@ import {
   MessageSquare,
   MessageSquareText,
   Volume2,
+  VolumeX,
+  Bell,
   Clock,
   Bug,
   Globe,
@@ -36,12 +38,25 @@ import {
 
 import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
 import { emitBootPhase } from '../../lib/bootProgress';
+import { useLiveChatNotification } from '../../hooks/useLiveChatNotification';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const currentRole = user?.role || 'super_admin';
+
+  // Global Real-time Live Chat Notification & Sound Hook (RBAC Filtered)
+  const {
+    incomingToast,
+    dismissToast,
+    openChatFromToast,
+    soundActive,
+    toggleSound,
+    unreadLiveChatCount,
+    canAccessLiveChat,
+  } = useLiveChatNotification(currentRole);
   const [wahaStatus, setWahaStatus] = useState<string>('UNKNOWN');
   const [redisQueueFallback, setRedisQueueFallback] = useState<boolean>(false);
   const [capiPendingCount, setCapiPendingCount] = useState<number>(0);
@@ -109,7 +124,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       title: 'Operasional & Jadwal',
       items: [
         { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
-        { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare },
+        { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare, badge: unreadLiveChatCount > 0 ? unreadLiveChatCount : undefined },
         { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
         { name: 'Customer Database', path: '/admin/customers', icon: Users },
         { name: 'Chat Migration & Seeding', path: '/admin/chat-migration', icon: Database },
@@ -275,11 +290,49 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, [mobileMenuOpen]);
 
-  const currentRole = user?.role || 'super_admin';
   const isLiveChat = location.pathname.includes('/live-chat');
 
   return (
-    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row`}>
+    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
+      {/* 🔔 Floating In-App WhatsApp-Style Incoming Chat Notification Banner */}
+      {incomingToast && (
+        <div
+          onClick={() => openChatFromToast(incomingToast.conversationId)}
+          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-white border border-[#008069]/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-[#f8fafc] transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md"
+        >
+          <div className="h-10 w-10 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 font-bold shadow-xs">
+            <MessageSquare size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-extrabold text-[#111b21] truncate">
+                {incomingToast.customerName}
+              </p>
+              <span className="text-[10px] text-[#667781] font-mono ml-2">
+                {incomingToast.createdAt}
+              </span>
+            </div>
+            <p className="text-xs text-[#54656f] line-clamp-2 mt-0.5 font-medium leading-relaxed">
+              {incomingToast.content}
+            </p>
+            <div className="flex items-center space-x-2 mt-1.5">
+              <span className="text-[10px] font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-md">
+                💬 Ketuk untuk Balas
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              dismissToast();
+            }}
+            aria-label="Tutup notifikasi"
+            className="text-[#8696a0] hover:text-[#111b21] p-1 rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
       <div
         onTouchStart={() => {
           backdropTouchStartRef.current = true;
@@ -449,6 +502,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               >
                 <Loader size={14} className="animate-spin" />
                 <span className="text-[11px] font-bold">Memeriksa</span>
+              </button>
+            )}
+
+            {/* Live Chat Notification Sound Mute/Unmute Toggle (RBAC Filtered) */}
+            {canAccessLiveChat && (
+              <button
+                onClick={toggleSound}
+                title={soundActive ? 'Suara Notifikasi Chat: Aktif (Klik untuk Mute)' : 'Suara Notifikasi Chat: Mati (Klik untuk Aktifkan)'}
+                className={`p-1.5 sm:p-2 rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs ${
+                  soundActive
+                    ? 'bg-emerald-50 border-emerald-200 text-[#008069] hover:bg-emerald-100'
+                    : 'bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200'
+                }`}
+              >
+                {soundActive ? <Volume2 size={15} /> : <VolumeX size={15} />}
               </button>
             )}
 
