@@ -6,6 +6,7 @@ import { conversationService } from './conversation.service';
 import { messageService } from './message.service';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 export interface WahaHistorySyncResult {
   success: boolean;
@@ -185,7 +186,7 @@ export class WahaHistorySyncService {
             if (!phone) {
               phone = chat.id.replace(/@.*$/, '');
             }
-            if (!phone || !/^\d+$/.test(phone) || phone.startsWith('6289999')) {
+            if (!phone || isDummyOrTestContact(phone, chat.name)) {
               initialProgress.skippedChats++;
               continue;
             }
@@ -230,11 +231,15 @@ export class WahaHistorySyncService {
               if (!msg.id) continue;
 
               let msgDate: Date | undefined = undefined;
-              if (msg.timestamp) {
-                const rawTs = Number(msg.timestamp);
+              const rawTimestamp = (msg as any).timestamp ?? (msg as any).t ?? (msg as any)._data?.t ?? (msg as any).messageTimestamp;
+              if (rawTimestamp) {
+                const rawTs = Number(rawTimestamp);
                 if (!isNaN(rawTs) && rawTs > 0) {
                   const ms = rawTs > 10000000000 ? rawTs : rawTs * 1000;
                   msgDate = new Date(ms);
+                } else {
+                  const d = new Date(rawTimestamp);
+                  if (!isNaN(d.getTime())) msgDate = d;
                 }
               }
               if (msgDate && (!latestMsgDate || msgDate > latestMsgDate)) {
@@ -407,11 +412,15 @@ export class WahaHistorySyncService {
           if (!msg.id) continue;
 
           let msgDate: Date | undefined = undefined;
-          if (msg.timestamp) {
-            const rawTs = Number(msg.timestamp);
+          const rawTimestamp = (msg as any).timestamp ?? (msg as any).t ?? (msg as any)._data?.t ?? (msg as any).messageTimestamp;
+          if (rawTimestamp) {
+            const rawTs = Number(rawTimestamp);
             if (!isNaN(rawTs) && rawTs > 0) {
               const ms = rawTs > 10000000000 ? rawTs : rawTs * 1000;
               msgDate = new Date(ms);
+            } else {
+              const d = new Date(rawTimestamp);
+              if (!isNaN(d.getTime())) msgDate = d;
             }
           }
           if (msgDate && (!latestMsgDate || msgDate > latestMsgDate)) {

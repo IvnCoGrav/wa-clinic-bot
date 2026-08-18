@@ -26,7 +26,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
   });
 
   describe('2. ORS Directions API Integration Tests (Mocked IOrsClient)', () => {
-    it('should calculate ongkir correctly when ORS API returns 4500m (4.5 km -> Free Ongkir)', async () => {
+    it('should calculate ongkir correctly when ORS API returns 4500m (raw 4.5 km -> 4.95 km buffered -> Free Ongkir)', async () => {
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: 4500,
@@ -38,13 +38,13 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
 
       expect(mockOrsClient.calculateRoute).toHaveBeenCalled();
-      expect(res.distanceKm).toBe(4.5);
+      expect(res.distanceKm).toBe(4.95);
       expect(res.ongkir).toBe(0);
       expect(res.isOutOfCoverage).toBe(false);
       expect(res.messageTemplate).toContain('GRATIS ongkir');
     });
 
-    it('should calculate ongkir correctly when ORS API returns 5500m (5.5 km -> normal Rp 15.000, promo Rp 5.000)', async () => {
+    it('should calculate ongkir correctly when ORS API returns 5500m (raw 5.5 km -> 6.05 km buffered -> normal Rp 15.000, promo Rp 5.000)', async () => {
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: 5500,
@@ -55,7 +55,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
 
       const res = await service.calculateDelivery({ lat: -7.27, lng: 112.73 });
 
-      expect(res.distanceKm).toBe(5.5);
+      expect(res.distanceKm).toBe(6.05);
       expect(res.normalPrice).toBe(15000);
       expect(res.promoPrice).toBe(5000);
       expect(res.ongkir).toBe(5000);
@@ -64,7 +64,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.messageTemplate).toContain('Rp5.000');
     });
 
-    it('should calculate ongkir correctly when ORS API returns 8000m (8.0 km -> normal Rp 15.000, promo Rp 10.000)', async () => {
+    it('should calculate ongkir correctly when ORS API returns 8000m (raw 8.0 km -> 8.80 km buffered -> normal Rp 15.000, promo Rp 10.000)', async () => {
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: 8000,
@@ -75,7 +75,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
 
       const res = await service.calculateDelivery({ lat: -7.30, lng: 112.70 });
 
-      expect(res.distanceKm).toBe(8.0);
+      expect(res.distanceKm).toBe(8.8);
       expect(res.normalPrice).toBe(15000);
       expect(res.promoPrice).toBe(10000);
       expect(res.ongkir).toBe(10000);
@@ -84,7 +84,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.messageTemplate).toContain('Rp10.000');
     });
 
-    it('should calculate ongkir correctly when ORS API returns 12000m (12.0 km -> normal Rp 25.000, promo Rp 15.000)', async () => {
+    it('should calculate ongkir correctly when ORS API returns 12000m (raw 12.0 km -> 13.20 km buffered -> normal Rp 25.000, promo Rp 15.000)', async () => {
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: 12000,
@@ -95,7 +95,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
 
       const res = await service.calculateDelivery({ lat: -7.40, lng: 112.60 });
 
-      expect(res.distanceKm).toBe(12.0);
+      expect(res.distanceKm).toBe(13.2);
       expect(res.normalPrice).toBe(25000);
       expect(res.promoPrice).toBe(15000);
       expect(res.ongkir).toBe(15000);
@@ -104,7 +104,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.messageTemplate).toContain('Rp15.000');
     });
 
-    it('should mark as Out of Coverage when ORS API returns 32000m (32.0 km -> isOutOfCoverage = true)', async () => {
+    it('should mark as Out of Coverage when ORS API returns 32000m (raw 32.0 km -> 35.20 km buffered -> isOutOfCoverage = true)', async () => {
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
           distanceMeters: 32000,
@@ -115,7 +115,7 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
 
       const res = await service.calculateDelivery({ lat: -7.50, lng: 112.40 });
 
-      expect(res.distanceKm).toBe(32.0);
+      expect(res.distanceKm).toBe(35.2);
       expect(res.isOutOfCoverage).toBe(true);
       expect(res.messageTemplate).toContain('luar jangkauan');
     });
@@ -142,26 +142,28 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
   });
 
   describe('4. Exact Boundary Delivery Price Tier Testing via ORS-Mocked Path', () => {
-    const createMockService = (meters: number) => {
+    const createMockService = (targetKm: number) => {
+      // Hitung raw meters agar setelah buffer 1.1x menghasilkan tepat targetKm
+      const rawMeters = Math.round((targetKm / 1.1) * 1000);
       const mockOrsClient: IOrsClient = {
         calculateRoute: vi.fn().mockResolvedValue({
-          distanceMeters: meters,
+          distanceMeters: rawMeters,
           durationSeconds: 600,
         }),
       };
       return new DeliveryService(mockOrsClient);
     };
 
-    it('exact boundary 5.0 km (5000m): should be Rp 0 (Free) and NOT out of coverage', async () => {
-      const service = createMockService(5000);
+    it('exact boundary 5.0 km: should be Rp 0 (Free) and NOT out of coverage', async () => {
+      const service = createMockService(5.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(5.0);
       expect(res.ongkir).toBe(0);
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 5.01 km (5010m): should be Rp 5,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(5010);
+    it('exact boundary 5.01 km: should be Rp 5,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(5.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(5.01);
       expect(res.normalPrice).toBe(15000);
@@ -169,8 +171,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 7.0 km (7000m): should be Rp 5,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(7000);
+    it('exact boundary 7.0 km: should be Rp 5,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(7.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(7.0);
       expect(res.normalPrice).toBe(15000);
@@ -178,8 +180,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 7.01 km (7010m): should be Rp 10,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(7010);
+    it('exact boundary 7.01 km: should be Rp 10,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(7.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(7.01);
       expect(res.normalPrice).toBe(15000);
@@ -187,8 +189,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 10.0 km (10000m): should be Rp 10,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(10000);
+    it('exact boundary 10.0 km: should be Rp 10,000 promo (Rp 15,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(10.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(10.0);
       expect(res.normalPrice).toBe(15000);
@@ -196,8 +198,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 10.01 km (10010m): should be Rp 15,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(10010);
+    it('exact boundary 10.01 km: should be Rp 15,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(10.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(10.01);
       expect(res.normalPrice).toBe(25000);
@@ -205,8 +207,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 15.0 km (15000m): should be Rp 15,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(15000);
+    it('exact boundary 15.0 km: should be Rp 15,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(15.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(15.0);
       expect(res.normalPrice).toBe(25000);
@@ -214,8 +216,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 15.01 km (15010m): should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(15010);
+    it('exact boundary 15.01 km: should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(15.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(15.01);
       expect(res.normalPrice).toBe(25000);
@@ -223,8 +225,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 20.0 km (20000m): should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(20000);
+    it('exact boundary 20.0 km: should be Rp 20,000 promo (Rp 25,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(20.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(20.0);
       expect(res.normalPrice).toBe(25000);
@@ -232,8 +234,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 20.01 km (20010m): should be Rp 25,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(20010);
+    it('exact boundary 20.01 km: should be Rp 25,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(20.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(20.01);
       expect(res.normalPrice).toBe(35000);
@@ -241,8 +243,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 25.0 km (25000m): should be Rp 25,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(25000);
+    it('exact boundary 25.0 km: should be Rp 25,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(25.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(25.0);
       expect(res.normalPrice).toBe(35000);
@@ -250,8 +252,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 25.01 km (25010m): should be Rp 30,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(25010);
+    it('exact boundary 25.01 km: should be Rp 30,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(25.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(25.01);
       expect(res.normalPrice).toBe(35000);
@@ -259,8 +261,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 30.0 km (30000m): should be Rp 30,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
-      const service = createMockService(30000);
+    it('exact boundary 30.0 km: should be Rp 30,000 promo (Rp 35,000 normal) and NOT out of coverage', async () => {
+      const service = createMockService(30.0);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(30.0);
       expect(res.normalPrice).toBe(35000);
@@ -268,8 +270,8 @@ describe('Delivery & Ongkir Calculation Logic (ORS Integration + Haversine Fallb
       expect(res.isOutOfCoverage).toBe(false);
     });
 
-    it('exact boundary 30.01 km (30010m): should mark as Out of Coverage (isOutOfCoverage = true)', async () => {
-      const service = createMockService(30010);
+    it('exact boundary 30.01 km: should mark as Out of Coverage (isOutOfCoverage = true)', async () => {
+      const service = createMockService(30.01);
       const res = await service.calculateDelivery({ lat: -7.26, lng: 112.74 });
       expect(res.distanceKm).toBe(30.01);
       expect(res.isOutOfCoverage).toBe(true);

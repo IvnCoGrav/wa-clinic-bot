@@ -1077,6 +1077,16 @@ export const LiveChatMonitor: React.FC = () => {
                             </span>
                           )}
 
+                          {/* Traffic Source Legacy Badge */}
+                          {chat.trafficSource === 'legacy' && (
+                            <span
+                              title="Data hasil migrasi arsip WhatsApp lama"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200"
+                            >
+                              Legacy
+                            </span>
+                          )}
+
                           {/* Sandbox Badge */}
                           {chat.isSandboxTest && (
                             <span

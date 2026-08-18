@@ -16,17 +16,28 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/customers',
     async (
       request: FastifyRequest<{
-        Querystring: { search?: string; page?: string; pageSize?: string; mqlOnly?: string };
+        Querystring: {
+          search?: string;
+          page?: string;
+          pageSize?: string;
+          mqlOnly?: string;
+          segment?: 'all' | 'purchased' | 'mql' | 'prospect';
+          sortBy?: string;
+          sortOrder?: 'asc' | 'desc';
+        };
       }>,
       reply: FastifyReply
     ) => {
       try {
-        const { search, page, pageSize, mqlOnly } = request.query || {};
+        const { search, page, pageSize, mqlOnly, segment, sortBy, sortOrder } = request.query || {};
         const result = await customerService.listCustomersWithLtvAndAdClick(DEFAULT_TENANT_ID, {
           search,
           page: parseInt(page || '1', 10) || 1,
           pageSize: parseInt(pageSize || '20', 10) || 20,
           mqlOnly: mqlOnly === 'true',
+          segment,
+          sortBy,
+          sortOrder,
         });
         return reply.status(200).send({ success: true, ...result });
       } catch (err: any) {

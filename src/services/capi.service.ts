@@ -4,6 +4,7 @@ import { ParamBuilder, PII_DATA_TYPE } from 'capi-param-builder-nodejs';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
 import { decryptSecret } from '../utils/encryption';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -179,6 +180,12 @@ export class CapiService {
     eventTime?: number;
   }): Promise<{ success: boolean; message?: string }> {
     const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime } = params;
+
+    // 1. Meta CAPI Sandbox / Dummy Test Guard (Pencegahan pencemaran data conversion pixel)
+    if (customer?.is_sandbox_test || isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test)) {
+      console.log(`[CAPI GUARD] Skipped sending ${eventName} to Meta CAPI for sandbox/dummy contact: ${customer?.phone}`);
+      return { success: false, message: 'Skipped: Sandbox or dummy test contact' };
+    }
 
     const isPaid = !!adClick;
 

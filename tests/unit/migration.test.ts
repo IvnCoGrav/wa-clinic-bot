@@ -145,13 +145,13 @@ describe('WAHA Chat Migration & Legacy Staging Unit Tests', () => {
         })
       );
 
-      // C. Verify historical Reservation created as confirmed
+      // C. Verify historical Reservation created as completed
       expect(reservationCreateSpy).toHaveBeenCalledTimes(1);
       expect(reservationCreateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             customer_id: 'cust_999',
-            status: 'confirmed',
+            status: 'completed',
             treatment_detail: 'Pijat bayi',
           }),
         })

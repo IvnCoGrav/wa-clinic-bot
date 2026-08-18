@@ -52,6 +52,8 @@ export const KnowledgeBase: React.FC = () => {
   // Scraping/Harvesting state
   const [harvestJob, setHarvestJob] = useState<any>(null);
   const [harvestLoading, setHarvestLoading] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ isSyncing: boolean }>({ isSyncing: false });
+  const [localStats, setLocalStats] = useState<{ conversationCount: number }>({ conversationCount: 0 });
 
   // Staging FAQs state
   const [medicalStaging, setMedicalStaging] = useState<any[]>([]);
@@ -96,8 +98,10 @@ export const KnowledgeBase: React.FC = () => {
     if (harvestJob?.status === 'PROCESSING') {
       intervalId = setInterval(async () => {
         try {
-          const stats = await apiRequest('/api/admin/harvest/status');
-          setHarvestJob(stats.data);
+          const res = await apiRequest('/api/admin/harvest/status');
+          if (res?.data) setHarvestJob(res.data);
+          if (res?.syncStatus) setSyncStatus(res.syncStatus);
+          if (res?.localStats) setLocalStats(res.localStats);
         } catch (err) {
           console.error('Failed to poll harvest status:', err);
         }
@@ -112,8 +116,10 @@ export const KnowledgeBase: React.FC = () => {
   useEffect(() => {
     async function loadHarvestStatus() {
       try {
-        const stats = await apiRequest('/api/admin/harvest/status');
-        setHarvestJob(stats.data);
+        const res = await apiRequest('/api/admin/harvest/status');
+        if (res?.data) setHarvestJob(res.data);
+        if (res?.syncStatus) setSyncStatus(res.syncStatus);
+        if (res?.localStats) setLocalStats(res.localStats);
       } catch (err) {
         console.warn('Failed to load harvest status on mount:', err);
       }
@@ -699,15 +705,45 @@ export const KnowledgeBase: React.FC = () => {
         </div>
       ) : activeTab === 'harvesting' ? (
         <div className="space-y-6">
+          {/* Sync Status / Empty State Banners */}
+          {syncStatus.isSyncing && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between text-xs text-amber-800 animate-pulse">
+              <div className="flex items-center space-x-2">
+                <Loader className="animate-spin text-amber-600 shrink-0" size={16} />
+                <span>
+                  <strong>Sinkronisasi riwayat WhatsApp sedang berlangsung di latar belakang...</strong> AI Chat Scraper
+                  dikunci sementara hingga sinkronisasi selesai.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {!syncStatus.isSyncing && localStats.conversationCount === 0 && (
+            <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-sky-900">
+              <div>
+                <p className="font-bold text-sky-950">Database percakapan lokal masih kosong</p>
+                <p className="text-sky-750 mt-0.5">
+                  Jalankan "Sync Riwayat WhatsApp" di Live Chat Monitor terlebih dahulu untuk menyedot chat ke database lokal sebelum melakukan panen FAQ.
+                </p>
+              </div>
+              <a
+                href="/admin/live-chat"
+                className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold transition shadow-xs whitespace-nowrap"
+              >
+                Buka Live Chat Monitor &rarr;
+              </a>
+            </div>
+          )}
+
           <div className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-5 shadow-xs">
             <div className="flex justify-between items-start md:items-center pb-4 border-b border-[#e9edef] flex-col md:flex-row gap-3">
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
                   <Download className="text-[#008069]" size={16} />
-                  <span>AI Chat Scraper & Staging Harvester</span>
+                  <span>AI Chat Scraper & Staging Harvester (Lokal)</span>
                 </h3>
                 <p className="text-xs text-[#667781] max-w-xl">
-                  Scrape riwayat chat WhatsApp dari WAHA, bersihkan PII nomor HP secara otomatis, filter chat tidak relevan, dan staging sebagai kandidat FAQ baru.
+                  Ekstrak dialog tanya-jawab dari database lokal ({localStats.conversationCount} chat), bersihkan PII nomor HP secara otomatis, dan staging sebagai kandidat FAQ baru dengan DeepSeek AI.
                 </p>
               </div>
 
@@ -730,8 +766,15 @@ export const KnowledgeBase: React.FC = () => {
                 </button>
                 <button
                   onClick={handleStartHarvest}
-                  disabled={harvestJob?.status === 'PROCESSING' || harvestLoading}
+                  disabled={harvestJob?.status === 'PROCESSING' || harvestLoading || syncStatus.isSyncing || localStats.conversationCount === 0}
                   className="px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                  title={
+                    syncStatus.isSyncing
+                      ? 'Sinkronisasi WhatsApp sedang berjalan'
+                      : localStats.conversationCount === 0
+                      ? 'Database percakapan lokal masih kosong'
+                      : 'Mulai panen FAQ dari database lokal'
+                  }
                 >
                   {harvestJob?.status === 'PROCESSING' ? (
                     <>

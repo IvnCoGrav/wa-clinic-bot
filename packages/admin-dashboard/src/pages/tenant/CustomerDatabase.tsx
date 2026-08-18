@@ -16,8 +16,23 @@ import {
   Check,
   Tag,
   DollarSign,
+  ShoppingBag,
   AlertCircle,
   Clock,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  Info,
+  Calendar,
+  MapPin,
+  Baby,
+  Home,
+  ExternalLink,
+  UserCheck,
+  ShieldCheck,
+  FileText,
+  Navigation,
 } from 'lucide-react';
 
 interface CustomerItem {
@@ -55,8 +70,30 @@ export const CustomerDatabase: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [mqlOnly, setMqlOnly] = useState(false);
+  const [segment, setSegment] = useState<'all' | 'purchased' | 'mql' | 'prospect'>('all');
+  const [stats, setStats] = useState<{
+    totalCustomers: number;
+    totalPurchasers: number;
+    totalMql: number;
+    totalProspects: number;
+    totalRevenue: number;
+  }>({
+    totalCustomers: 0,
+    totalPurchasers: 0,
+    totalMql: 0,
+    totalProspects: 0,
+    totalRevenue: 0,
+  });
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Sorting State
+  const [sortBy, setSortBy] = useState<string>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Customer Detail Modal State
+  const [activeDetailCustomer, setActiveDetailCustomer] = useState<CustomerItem | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailData, setDetailData] = useState<any | null>(null);
 
   // Chat History Modal State
   const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<CustomerItem | null>(null);
@@ -76,8 +113,10 @@ export const CustomerDatabase: React.FC = () => {
       const query = new URLSearchParams({
         page: String(page),
         pageSize: '15',
+        sortBy,
+        sortOrder,
         ...(search ? { search } : {}),
-        ...(mqlOnly ? { mqlOnly: 'true' } : {}),
+        ...(segment !== 'all' ? { segment } : {}),
       });
 
       const res = await apiRequest(`/api/admin/customers?${query.toString()}`);
@@ -85,6 +124,9 @@ export const CustomerDatabase: React.FC = () => {
         setCustomers(res.customers || []);
         setTotalPages(res.totalPages || 1);
         setTotalCount(res.total || 0);
+        if (res.stats) {
+          setStats(res.stats);
+        }
       }
     } catch (err: any) {
       toast(`Gagal memuat database customer: ${err.message}`, 'error');
@@ -95,7 +137,35 @@ export const CustomerDatabase: React.FC = () => {
 
   useEffect(() => {
     loadCustomers();
-  }, [page, mqlOnly]);
+  }, [page, segment, sortBy, sortOrder]);
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+    setPage(1);
+  };
+
+  const handleOpenDetail = async (customer: CustomerItem) => {
+    setActiveDetailCustomer(customer);
+    setLoadingDetail(true);
+    setDetailData(null);
+    try {
+      const res = await apiRequest(`/api/admin/customers/${customer.id}`);
+      if (res && res.success) {
+        setDetailData(res.data);
+      } else {
+        toast(res?.error || 'Gagal memuat detail data customer', 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal memuat detail customer: ${err.message}`, 'error');
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,6 +254,17 @@ export const CustomerDatabase: React.FC = () => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
   };
 
+  const renderSortIcon = (field: string) => {
+    if (sortBy !== field) {
+      return <ArrowUpDown size={11} className="text-[#8696a0] opacity-40 group-hover:opacity-100" />;
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp size={11} className="text-[#008069] font-bold" />
+    ) : (
+      <ArrowDown size={11} className="text-[#008069] font-bold" />
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -194,53 +275,144 @@ export const CustomerDatabase: React.FC = () => {
             <span>Database Customer</span>
           </h1>
           <p className="text-xs text-[#667781] mt-0.5">
-            Kelola data customer, lihat Tracking Code, nilai LTV, riwayat chat, dan kirim event Meta CAPI secara manual.
+            Kelola data customer, lihat Tracking Code, nilai LTV, riwayat reservasi/anak, riwayat chat, dan kirim event Meta CAPI.
           </p>
         </div>
 
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => setMqlOnly(!mqlOnly)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 border shadow-xs ${
-              mqlOnly
-                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5] hover:text-[#111b21]'
-            }`}
-          >
-            <Zap size={13} className={mqlOnly ? 'text-emerald-700 fill-emerald-700' : 'text-[#8696a0]'} />
-            <span>{mqlOnly ? 'Filter: MQL Only' : 'Semua Customer'}</span>
-          </button>
-
-          <button
             onClick={loadCustomers}
             disabled={loading}
-            className="p-2 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition shadow-xs disabled:opacity-50 flex items-center space-x-1.5 text-xs font-semibold cursor-pointer"
             title="Refresh database"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* Search Bar */}
-      <form onSubmit={handleSearchSubmit} className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-2.5 text-[#8696a0]" size={15} />
-          <input
-            type="text"
-            placeholder="Cari berdasarkan No HP, Nama, atau Tracking Code (TC-XXXXX)..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
-          />
+      {/* Ringkasan Finansial & Statistik Pelanggan */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Pelanggan</span>
+            <Users size={15} className="text-[#008069]" />
+          </div>
+          <p className="text-lg font-bold text-[#111b21] mt-1">{stats.totalCustomers || totalCount}</p>
+          <span className="text-[10px] text-[#667781]">Kontak WhatsApp Aktif</span>
         </div>
-        <button
-          type="submit"
-          className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs"
-        >
-          <span>Cari</span>
-        </button>
-      </form>
+
+        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Pelanggan Pembeli</span>
+            <ShoppingBag size={15} className="text-emerald-600" />
+          </div>
+          <p className="text-lg font-bold text-emerald-700 mt-1">{stats.totalPurchasers} Kontak</p>
+          <span className="text-[10px] text-emerald-600 font-medium">Memiliki Form Reservasi / Paid</span>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Total Omset (LTV)</span>
+            <DollarSign size={15} className="text-[#008069]" />
+          </div>
+          <p className="text-lg font-bold text-[#008069] mt-1">{formatCurrency(stats.totalRevenue)}</p>
+          <span className="text-[10px] text-[#667781]">Akumulasi Transaksi Riil</span>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-[#e9edef] shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">Prospek Tanya-Tanya</span>
+            <MessageSquare size={15} className="text-sky-600" />
+          </div>
+          <p className="text-lg font-bold text-sky-700 mt-1">{stats.totalProspects} Kontak</p>
+          <span className="text-[10px] text-sky-600 font-medium">Konsultasi / Belum Reservasi</span>
+        </div>
+      </div>
+
+      {/* Sub-Filter Segmentasi & Search Bar */}
+      <div className="space-y-2.5">
+        {/* Segment Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] border border-[#e9edef] rounded-xl w-fit">
+          <button
+            onClick={() => {
+              setSegment('all');
+              setPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+              segment === 'all'
+                ? 'bg-white text-[#111b21] shadow-2xs font-bold'
+                : 'text-[#667781] hover:text-[#111b21]'
+            }`}
+          >
+            <Users size={12} />
+            <span>Semua Pelanggan ({stats.totalCustomers || totalCount})</span>
+          </button>
+          <button
+            onClick={() => {
+              setSegment('purchased');
+              setPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+              segment === 'purchased'
+                ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                : 'text-[#667781] hover:text-[#111b21]'
+            }`}
+          >
+            <ShoppingBag size={12} />
+            <span>🎯 Pembeli / Ada Reservasi ({stats.totalPurchasers})</span>
+          </button>
+          <button
+            onClick={() => {
+              setSegment('mql');
+              setPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+              segment === 'mql'
+                ? 'bg-amber-600 text-white shadow-2xs font-bold'
+                : 'text-[#667781] hover:text-[#111b21]'
+            }`}
+          >
+            <Zap size={12} className={segment === 'mql' ? 'fill-white' : ''} />
+            <span>⚡ MQL Aktif ({stats.totalMql})</span>
+          </button>
+          <button
+            onClick={() => {
+              setSegment('prospect');
+              setPage(1);
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer ${
+              segment === 'prospect'
+                ? 'bg-sky-600 text-white shadow-2xs font-bold'
+                : 'text-[#667781] hover:text-[#111b21]'
+            }`}
+          >
+            <MessageSquare size={12} />
+            <span>💬 Prospek Saja ({stats.totalProspects})</span>
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-2.5 text-[#8696a0]" size={15} />
+            <input
+              type="text"
+              placeholder="Cari berdasarkan No HP, Nama, atau Tracking Code (TC-XXXXX)..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
+            />
+          </div>
+          <button
+            type="submit"
+            className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-xs cursor-pointer"
+          >
+            <span>Cari</span>
+          </button>
+        </form>
+      </div>
 
       {/* Customer Table & Mobile Cards */}
       <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
@@ -274,12 +446,25 @@ export const CustomerDatabase: React.FC = () => {
                     </div>
 
                     <div className="text-right flex-shrink-0">
-                      <div className="font-bold text-[#008069] text-sm">
-                        {formatCurrency(customer.ltv)}
-                      </div>
-                      <span className="text-[10px] text-[#667781]">
-                        {customer.reservationCount}x transaksi
-                      </span>
+                      {customer.ltv > 0 ? (
+                        <>
+                          <div className="font-bold text-emerald-700 text-sm">
+                            {formatCurrency(customer.ltv)}
+                          </div>
+                          <span className="text-[10px] text-emerald-600 font-medium">
+                            {customer.reservationCount}x transaksi
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-slate-500 text-xs bg-slate-100 px-1.5 py-0.5 rounded">
+                            Rp 0
+                          </div>
+                          <span className="text-[10px] text-[#8696a0]">
+                            Prospek
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -340,22 +525,30 @@ export const CustomerDatabase: React.FC = () => {
                     </p>
                   )}
 
-                  {/* Action buttons */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  {/* Action buttons (Mobile) */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-1">
+                    <button
+                      onClick={() => handleOpenDetail(customer)}
+                      className="py-2 px-2 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold transition flex items-center justify-center space-x-1 shadow-xs"
+                    >
+                      <Eye size={13} />
+                      <span>Detail</span>
+                    </button>
+
                     <button
                       onClick={() => handleOpenHistory(customer)}
-                      className="py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                      className="py-2 px-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center justify-center space-x-1 shadow-xs"
                     >
-                      <MessageSquare size={14} />
-                      <span>History Chat</span>
+                      <MessageSquare size={13} />
+                      <span>History</span>
                     </button>
 
                     <button
                       onClick={() => setActiveEventCustomer(customer)}
-                      className="py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center justify-center space-x-1.5 shadow-xs"
+                      className="py-2 px-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center justify-center space-x-1 shadow-xs"
                     >
-                      <Send size={14} />
-                      <span>Send Event</span>
+                      <Send size={13} />
+                      <span>Event</span>
                     </button>
                   </div>
                 </div>
@@ -366,12 +559,47 @@ export const CustomerDatabase: React.FC = () => {
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider">
-                    <th className="py-3 px-4">Tracking Code (ID)</th>
-                    <th className="py-3 px-4">No HP / Nama</th>
-                    <th className="py-3 px-4">Status MQL</th>
+                  <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider select-none">
+                    <th className="py-3 px-4">
+                      <span>Tracking Code (ID)</span>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>No HP / Nama</span>
+                        {renderSortIcon('name')}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      onClick={() => handleSort('mqlBubbleCount')}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Status MQL</span>
+                        {renderSortIcon('mqlBubbleCount')}
+                      </div>
+                    </th>
                     <th className="py-3 px-4">Label WA</th>
-                    <th className="py-3 px-4">LTV (Lifetime Value)</th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      onClick={() => handleSort('ltv')}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>LTV (Lifetime Value)</span>
+                        {renderSortIcon('ltv')}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
+                      onClick={() => handleSort('created_at')}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Terdaftar</span>
+                        {renderSortIcon('created_at')}
+                      </div>
+                    </th>
                     <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -454,21 +682,50 @@ export const CustomerDatabase: React.FC = () => {
 
                       {/* LTV */}
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-[#008069] text-xs">
-                          {formatCurrency(customer.ltv)}
-                        </div>
-                        <span className="text-[10px] text-[#667781]">
-                          {customer.reservationCount} transaksi terkonfirmasi
-                        </span>
+                        {customer.ltv > 0 ? (
+                          <div>
+                            <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px] inline-block">
+                              {formatCurrency(customer.ltv)}
+                            </span>
+                            <span className="text-[10px] text-emerald-600 block mt-0.5 font-medium">
+                              {customer.reservationCount}x Transaksi
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="font-semibold text-[#667781] bg-[#f0f2f5] border border-[#e9edef] px-2 py-0.5 rounded text-[10px] inline-block">
+                              Rp 0
+                            </span>
+                            <span className="text-[10px] text-[#8696a0] block mt-0.5">
+                              Prospek
+                            </span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Terdaftar */}
+                      <td className="py-3.5 px-4 text-[#54656f] text-[11px] whitespace-nowrap">
+                        {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
                       </td>
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end space-x-1.5">
+                          {/* Detail Button */}
+                          <button
+                            onClick={() => handleOpenDetail(customer)}
+                            className="px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                            title="Lihat Detail Lengkap Pasien"
+                          >
+                            <Eye size={12} />
+                            <span>Detail</span>
+                          </button>
+
                           {/* Chat History Button */}
                           <button
                             onClick={() => handleOpenHistory(customer)}
                             className="px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                            title="Buka Riwayat Chat"
                           >
                             <MessageSquare size={12} />
                             <span>History</span>
@@ -478,9 +735,10 @@ export const CustomerDatabase: React.FC = () => {
                           <button
                             onClick={() => setActiveEventCustomer(customer)}
                             className="px-2.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                            title="Kirim Event Meta CAPI"
                           >
                             <Send size={12} />
-                            <span>Send Event</span>
+                            <span>Event</span>
                           </button>
                         </div>
                       </td>
@@ -687,6 +945,345 @@ export const CustomerDatabase: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Complete Customer Details Modal */}
+      {activeDetailCustomer && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
+          onClick={() => setActiveDetailCustomer(null)}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-[#e9edef] bg-[#f8fafc] flex justify-between items-start">
+              <div className="flex items-center space-x-3">
+                <div className="h-12 w-12 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-bold text-lg shadow-xs flex-shrink-0">
+                  {(detailData?.name || activeDetailCustomer.name || 'B')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-base text-[#111b21]">
+                      {detailData?.name || activeDetailCustomer.name || 'Bunda Customer'}
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      (detailData?.status || activeDetailCustomer.status) === 'legacy'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : (detailData?.status || activeDetailCustomer.status) === 'blocked'
+                        ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    }`}>
+                      {detailData?.status || activeDetailCustomer.status || 'Active'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#54656f] mt-0.5">
+                    <span className="font-mono flex items-center space-x-1">
+                      <Phone size={12} className="text-[#8696a0]" />
+                      <span>{detailData?.phone || activeDetailCustomer.phone}</span>
+                    </span>
+                    <span>•</span>
+                    <span className="font-mono text-[#008069] font-bold">
+                      {activeDetailCustomer.trackingCode}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setActiveDetailCustomer(null)}
+                className="p-1.5 rounded-xl text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs text-[#111b21]">
+              {loadingDetail ? (
+                <div className="flex flex-col justify-center items-center py-16 space-y-3">
+                  <Loader className="animate-spin text-[#008069]" size={36} />
+                  <p className="text-xs text-[#667781] font-medium">Memuat data lengkap customer...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Grid Top Cards: LTV & MQL Status */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Total LTV</span>
+                      <p className="font-bold text-sm text-[#008069] mt-0.5">
+                        {formatCurrency(detailData?.ltv ?? activeDetailCustomer.ltv)}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Total Transaksi</span>
+                      <p className="font-bold text-sm text-[#111b21] mt-0.5">
+                        {(detailData?.reservations?.length ?? activeDetailCustomer.reservationCount)}x Reservasi
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Status MQL</span>
+                      <div className="mt-0.5">
+                        {activeDetailCustomer.isMql ? (
+                          <span className="inline-flex items-center space-x-1 text-emerald-700 font-bold text-xs">
+                            <Zap size={11} className="fill-emerald-600 text-emerald-600" />
+                            <span>MQL ({activeDetailCustomer.mqlBubbleCount} Bubble)</span>
+                          </span>
+                        ) : (
+                          <span className="text-[#667781] font-semibold text-xs">
+                            Regular ({activeDetailCustomer.mqlBubbleCount} Bubble)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-2xl">
+                      <span className="text-[10px] uppercase font-bold text-[#667781] block">Terdaftar Sejak</span>
+                      <p className="font-semibold text-xs text-[#54656f] mt-0.5 truncate">
+                        {activeDetailCustomer.createdAt
+                          ? new Date(activeDetailCustomer.createdAt).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Section 1: Alamat & Lokasi Rumah */}
+                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
+                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                      <MapPin size={15} />
+                      <span>Alamat Lengkap & Logistik Kunjungan</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] text-[#667781] font-semibold block uppercase">Alamat Pasien</span>
+                        <p className="text-[#111b21] font-medium mt-0.5">
+                          {detailData?.address || detailData?.kelurahan || detailData?.kecamatan
+                            ? [detailData?.address, detailData?.kelurahan, detailData?.kecamatan, detailData?.kota]
+                                .filter(Boolean)
+                                .join(', ')
+                            : 'Alamat belum tercatat lengkap di profil'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-[#667781] font-semibold block uppercase">Patokan / Landmark</span>
+                        <p className="text-[#111b21] font-medium mt-0.5">
+                          {detailData?.address_notes || detailData?.landmark || 'Tidak ada catatan patokan khusus'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Coordinates & Delivery Info */}
+                    <div className="pt-2 border-t border-[#f0f2f5] flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#54656f]">
+                      <div className="flex items-center space-x-2">
+                        {detailData?.latitude && detailData?.longitude ? (
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${detailData.latitude},${detailData.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center space-x-1 text-[#008069] font-bold hover:underline"
+                          >
+                            <Navigation size={12} />
+                            <span>Buka Titik GPS Google Maps</span>
+                            <ExternalLink size={10} />
+                          </a>
+                        ) : (
+                          <span className="text-[#8696a0] italic">Pin GPS belum diset</span>
+                        )}
+                      </div>
+
+                      {(detailData?.delivery_distance_km || detailData?.delivery_fee) && (
+                        <div className="font-semibold text-[#111b21]">
+                          Jarak: <span className="text-[#008069]">{detailData.delivery_distance_km} km</span> • Ongkir: <span className="text-[#008069]">{formatCurrency(detailData.delivery_fee || 0)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section 2: Data Anak / Bayi */}
+                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
+                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                      <Baby size={15} />
+                      <span>Data Anak / Bayi Pasien ({detailData?.children?.length || 0})</span>
+                    </h4>
+
+                    {!detailData?.children || detailData.children.length === 0 ? (
+                      <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center text-xs text-[#8696a0]">
+                        Belum ada data profil anak yang tercatat terpisah.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {detailData.children.map((child: any) => (
+                          <div
+                            key={child.id}
+                            className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl flex items-center justify-between"
+                          >
+                            <div>
+                              <p className="font-bold text-[#111b21] text-xs">{child.name || 'Anak Pasien'}</p>
+                              <p className="text-[11px] text-[#667781] mt-0.5">
+                                Usia: <span className="font-semibold text-[#008069]">{child.current_age || child.raw_age_text || 'Tidak tercatat'}</span>
+                              </p>
+                            </div>
+                            {child.birth_date && (
+                              <span className="text-[10px] text-[#8696a0] font-mono">
+                                Lahir: {new Date(child.birth_date).toLocaleDateString('id-ID')}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 3: Riwayat Reservasi & Layanan */}
+                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
+                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                      <Calendar size={15} />
+                      <span>Riwayat Layanan & Reservasi ({detailData?.reservations?.length || 0})</span>
+                    </h4>
+
+                    {!detailData?.reservations || detailData.reservations.length === 0 ? (
+                      <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center text-xs text-[#8696a0]">
+                        Belum ada riwayat reservasi yang tercatat untuk customer ini.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-[10px] uppercase font-bold">
+                              <th className="py-2 px-3">Tanggal</th>
+                              <th className="py-2 px-3">Kategori</th>
+                              <th className="py-2 px-3">Treatment</th>
+                              <th className="py-2 px-3">Terapis</th>
+                              <th className="py-2 px-3 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#e9edef]">
+                            {detailData.reservations.map((res: any) => (
+                              <tr key={res.id} className="hover:bg-[#f8fafc]">
+                                <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-semibold text-[#111b21]">
+                                  {res.booking_date
+                                    ? new Date(res.booking_date).toLocaleDateString('id-ID', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })
+                                    : 'Tanpa Jadwal'}
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="px-1.5 py-0.5 rounded bg-[#f0f2f5] text-[10px] font-bold text-[#54656f]">
+                                    {res.treatment_category}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-[#54656f] max-w-[180px] truncate" title={res.treatment_detail}>
+                                  {res.treatment_detail || res.raw_text}
+                                </td>
+                                <td className="py-2.5 px-3 text-[#54656f] text-[11px]">
+                                  {res.assigned_staff?.name || <span className="text-[#8696a0] italic">-</span>}
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                    res.status === 'completed'
+                                      ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                      : res.status === 'confirmed'
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : res.status === 'cancelled'
+                                      ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  }`}>
+                                    {res.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Section 4: Atribusi Meta Ads & Label */}
+                  <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-2 shadow-2xs">
+                    <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                      <Tag size={15} />
+                      <span>Atribusi Iklan Meta & Tag</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-[#54656f]">
+                      <div>
+                        <span className="font-semibold text-[#8696a0] block">Campaign Iklan:</span>
+                        <p className="font-medium text-[#111b21] truncate">
+                          {detailData?.adClick?.utmCampaign || activeDetailCustomer.adClick?.utmCampaign || 'Organik / Langsung'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-[#8696a0] block">Source / Medium:</span>
+                        <p className="font-medium text-[#111b21]">
+                          {detailData?.adClick?.utmSource || 'wa'} / {detailData?.adClick?.utmMedium || 'ctwa'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer with Actions */}
+            <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    const cust = activeDetailCustomer;
+                    setActiveDetailCustomer(null);
+                    handleOpenHistory(cust);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                >
+                  <MessageSquare size={13} />
+                  <span>Riwayat Chat</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const cust = activeDetailCustomer;
+                    setActiveDetailCustomer(null);
+                    setActiveEventCustomer(cust);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                >
+                  <Send size={13} />
+                  <span>Kirim Event Meta</span>
+                </button>
+
+                <a
+                  href={`https://wa.me/${(activeDetailCustomer.phone || '').replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                >
+                  <Phone size={13} />
+                  <span>Buka di WhatsApp</span>
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+
+              <button
+                onClick={() => setActiveDetailCustomer(null)}
+                className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,99 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — ELT Architecture Refactor: Local DB as Single Source of Truth & Zero-WAHA Overload
+
+- **Desentralisasi Akses WAHA Menjadi Arsitektur ELT (`migration.service.ts`, `legacy-harvesting.service.ts`, `migration.subroute.ts`)**:
+  - **Single Source of Truth**: Memutus koneksi berulang ke API WAHA dari *Chat Migration* dan *AI Harvesting (Knowledge Base)*. Seluruh ekstraksi form reservasi CRM, perhitungan LTV, dan ekstraksi tanya-jawab FAQ kini murni membaca dari tabel database lokal PostgreSQL (`Conversation` & `Message`) yang telah disinkronkan oleh Live Chat Monitor.
+  - **Eliminasi Risiko Shadow-Ban WhatsApp**: WhatsApp hanya dihubungi 1 kali saat melakukan sinkronisasi di Live Chat Monitor, menghilangkan risiko pemblokiran nomor / error 463 RESTRICT_ALL_COMPANIONS akibat request burst berulang.
+  - **Ekstraksi Instan Berkecepatan Milidetik**: Mengganti loop HTTP WAHA dengan kueri lokal `prisma.conversation.findMany` yang memproses ratusan percakapan dalam hitungan detik.
+  - **Anti-Duplikasi Idempoten**: Proteksi penuh duplikasi data via `upsert` pada `LegacyStaging.phoneNumber` dengan menjaga status review yang sudah ada (`APPROVED`/`COMMITTED`).
+  - **Sync Lock & Empty State Guard**: Menambahkan penguncian otomatis (lock guard) pada backend dan UI jika sinkronisasi WhatsApp sedang berlangsung di latar belakang (`isSyncing: true`), serta banner pemandu interaktif jika database lokal masih kosong (0 percakapan).
+
+- **Perbaikan Timestamp Riwayat Chatlist & Presisi Waktu Pesan Asli (`live-chat.service.ts`, `conversation.service.ts`, `waha-history-sync.service.ts`, `sync-true-transcript-timestamps.ts`)**:
+  - **Sinkronisasi Waktu Asli WhatsApp**: Menyelaraskan seluruh 439 percakapan dan pesan di database ke waktu riil percakapan pelanggan dari transkrip WhatsApp, bukan lagi menampilkan jam saat scraping/sinkronisasi dieksekusi.
+  - **Dinamika `lastMessageAt` Presisi**: `LiveChatService.serialize` kini secara dinamis membaca timestamp pesan terakhir yang sebenarnya (`c.messages[c.messages.length - 1]?.created_at`) sebelum jatuh ke `last_message_at`, memastikan badge waktu selalu mencerminkan chat terakhir.
+  - **Penyaringan Percakapan Kosong (0 Pesan)**: `conversationService.listConversations` kini memfilter `messages: { some: {} }`, mencegah kontak kosong hasil sinkronisasi awal yang belum pernah bertukar pesan muncul di bagian teratas daftar chat dengan timestamp pembuatan database.
+  - **Robust WAHA Timestamp Parser**: Parser sinkronisasi WAHA kini mengekstrak timestamp dari semua varian properti (`timestamp`, `t`, `_data.t`, `messageTimestamp`), sehingga sinkronisasi masa depan selalu mencatat waktu asli chat tanpa fallback ke `new Date()`.
+
+- **Pembaruan Database Customer & Segmentasi Nilai LTV Transaksi (`CustomerDatabase.tsx`, `customer.service.ts`, `customers.subroute.ts`)**:
+  - **Perbaikan Bug Sorting LTV (Batas Query Terpotong)**: Memperbaiki batas `take: pageSize * 10` (150 baris) pada query Prisma saat pengurutan LTV aktif, yang sebelumnya menyebabkan pelanggan bertransaksi terpotong dan hanya menampilkan prospek 0 LTV. Pengurutan LTV kini memindai seluruh data database secara utuh sehingga pelanggan dengan omset tertinggi (`Rp 255.000`, `Rp 230.000`, `Rp 225.000`, dst.) langsung tampil di posisi teratas.
+  - **Penyatuan Filter MQL ke Segment Tabs Terpadu**: Mengintegrasikan filter MQL ke dalam deretan tab segment: **"Semua Pelanggan (504)"**, **"🎯 Pembeli / Ada Reservasi (84)"**, **"⚡ MQL Aktif (42)"**, dan **"💬 Prospek Saja (419)"**.
+  - **Pembersihan Tombol Toggle Ambigu**: Menghapus tombol toggle terpisah di pojok kanan atas yang sebelumnya menyebabkan konflik state filter dan ketidakcocokan jumlah data.
+  - **Ringkasan Finansial & Statistik Header**: Menambahkan 4 kartu statistik di bagian atas halaman: Total Pelanggan (504 kontak), Pelanggan Pembeli (84 kontak), Total Omset Terakumulasi / LTV (Rp 7.065.000), dan Prospek Belum Reservasi (419 kontak).
+  - **Penyederhanaan Sorting (Header Tabel Langsung)**: Menghapus deretan tombol sorting manual agar antarmuka lebih bersih dan ringkas. Pengurutan data dilakukan langsung dengan mengklik judul kolom tabel (*No HP/Nama*, *Status MQL*, *LTV*, atau *Terdaftar*) dengan indikator panah dinamis (🔼 / 🔽).
+  - **Prioritas Nilai Transaksi LTV Riil**: Menghubungkan pembacaan `r.purchase_value` langsung dari database reservasi sebelum jatuh ke fallback estimasi katalog treatment, sehingga nilai transaksi tersaji 100% akurat sesuai omset historis.
+  - **Badge Status Finansial Jelas**: Tampilan kolom LTV kini membedakan secara visual antara pelanggan ber-LTV (badge hijau nominal + jumlah transaksi) dan prospek tanpa reservasi (badge abu-abu `Prospek (Rp 0)`).
+
+- **Pembaruan Antarmuka UI Dashboard, Segmentasi & Sorting Interaktif (`ChatMigration.tsx`, `KnowledgeBase.tsx`, `migration.subroute.ts`)**:
+  - Menghapus dropdown limit pesan manual di *Chat Migration* (ekstraksi kini langsung memindai seluruh percakapan lokal secara instan).
+  - **Fitur Sorting Dinamis Multi-Kolom**: Menambahkan pengurutan data interaktif baik via dropdown selector maupun langsung klik header tabel dengan indikator panah (🔼 / 🔽):
+    - 🕒 **Chat Pertama** (Terkini vs Terlama)
+    - 💰 **Nominal LTV** (Tertinggi vs Terendah)
+    - 🔤 **Nama Kontak** (A $\rightarrow$ Z / Z $\rightarrow$ A)
+    - 💬 **Jumlah Pesan Tercatat** (Terbanyak vs Tersedikit)
+    - 🎯 **Waktu Form Reservasi** (Terkini vs Terlama)
+  - **Kotak Pencarian Cepat (Search Bar)**: Mendukung pencarian instan berdasarkan nama pelanggan, nomor WhatsApp, atau lokasi kelurahan/kecamatan.
+  - **Sub-Filter Segmentasi Pembeli vs Prospek**: Menambahkan tombol filter cepat pada tabel staging: **"Semua Kontak"**, **"🎯 Hanya Pembeli (Ada Reservasi)"**, dan **"💬 Hanya Prospek (Tanya-Tanya Saja)"** untuk kemudahan audit data.
+  - **Bulk Approval Data Pembeli**: Menambahkan tombol aksi massal **"Approve Semua yang Ada Reservasi"** pada tab Pending untuk menyetujui seluruh kontak yang memiliki form reservasi & nilai transaksi sekaligus dalam 1 klik.
+  - Menambahkan banner status sinkronisasi aktif dan banner panduan jika database lokal masih kosong lengkap dengan tombol pintas ke Live Chat Monitor.
+  - Mengunci tombol *Mulai Ekstraksi* dan *Mulai Scraping Chat* secara aman selama proses sinkronisasi WhatsApp berlangsung.
+
+- **Sistem Proteksi Data Dummy, Sandbox & Noise Filter (`dummy-filter.ts`, `migration.service.ts`, `customer.service.ts`, `capi.service.ts`, `waha-history-sync.service.ts`)**:
+  - **Aturan Penyaring Chat Noise Rendah**: Otomatis mengabaikan dan menghapus percakapan yang hanya memiliki $\le 2$ pesan tercatat, tanpa nama pelanggan (kosong / `Bunda Customer`), dan tanpa form reservasi, sehingga antrean staging tidak dipenuhi oleh chat sekadar "p" atau broadcast tak berbalas.
+  - **Auto-Flagging Dummy**: Setiap kontak pengujian/simulasi CLI, nomor berpola test (`628129999...`, `6289999...`, `08571111...`, `ec01`, `mock_`), nama `Test/Dummy/Spammer`, atau nomor tidak valid otomatis ditandai `is_sandbox_test = true` saat dibuat atau ditemukan di database.
+  - **Proteksi Mutlak Meta CAPI**: Menambahkan guard di `CapiService.sendCapiEvent` yang memblokir total pengiriman event konversi (Lead, Purchase, InitiateCheckout) untuk kontak dummy/sandbox guna mencegah pencemaran data Pixel iklan Meta.
+  - **Proteksi Query Database Pelanggan & LTV**: Query daftar pelanggan aktif dan perhitungan LTV kini secara baku memfilter `is_sandbox_test: false`, memastikan data ekspor LTV Meta dan CRM 100% bersih dan steril dari data simulasi.
+  - **Sinkronisasi Bersih WAHA**: Sinkronisasi riwayat WAHA otomatis melewati (skip) nomor-nomor dummy agar tidak masuk ke tabel staging maupun antrean operasional.
+
+### Added & Improved — Historical Chat Precision Transcript Seeding & Multi-Bubble Financial Extraction Engine
+
+- **Mesin Ekstraksi Multi-Bubble Presisi (`conversation-transaction-extractor.ts`, `seed-transcripts-to-db.ts`)**:
+  - **Conversation State Windowing**: Menyambungkan form reservasi yang dikirim oleh pelanggan (*draft tanpa harga*) dengan bubble balasan admin/bot berikutnya yang berisi rincian pembayaran (*Payment Breakdown / Persamaan Ongkir*).
+  - **Dukungan Format Persamaan Finansial (Equation & Line-by-Line)**: Mampu mem-parse otomatis notasi persamaan `Total = 70rb + ongkir 25rb = 95rb`, `Total = 85.000 + ongkir 11km (15.000) = *100.000*`, `Total = 100 + 70 + ongkir 15rb = *185.000*`, serta format standar baris per baris.
+  - **Currency & Unit Normalizer Cerdas**: Mengonversi variasi penulisan `70rb`, `25k`, `145.000`, `95` secara akurat menjadi angka rupiah murni tanpa terdistorsi oleh angka jarak kilometer (misal `11km`).
+  - **Penyaringan Template Kosong & Konsolidasi**: Mengabaikan template form belum terisi dari bot dan menggabungkan draft awal pelanggan dengan konfirmasi pembayaran lunas ke dalam 1 record transaksi bersih.
+  - **Database Seeding Execution**: Sukses menyuntikkan **82 Pelanggan**, **80 Data Anak/Bayi**, dan **82 Reservasi Status `completed`** dengan total nilai transaksi bersih **Rp 7.065.000** dan total ongkir **Rp 1.395.000** ke dalam PostgreSQL Prisma Database.
+  - **Ekspor Data Bersih**: Menyediakan file rekap transaksi terverifikasi di [`exports/Kala_Moms_Transactions_Clean.md`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/exports/Kala_Moms_Transactions_Clean.md).
+
+- **Otomatisasi Live Forward Window Matching & UI LTV (`reservation-text-parser.ts`, `migration.service.ts`, `ChatMigration.tsx`, `migration.subroute.ts`)**:
+  - Memperbarui `ParsedReservation` untuk menyertakan struktur rincian finansial (`treatmentPrice`, `ongkir`, `promo`, `totalPrice`).
+  - Menghubungkan parser teks reservasi dan modul migrasi live untuk menyelaraskan sinkronisasi chat mendatang dengan harga dan riwayat data anak yang presisi.
+  - Memperbarui halaman dashboard **Migrasi & Seeding Riwayat Chat** (`ChatMigration.tsx`): mengganti kolom *Lokasi* menjadi **LTV (Total Belanja)** berformat mata uang `Rp ...` dengan rincian ongkir/lokasi sub-teks, dan meng-enrich data staging di backend `GET /api/admin/migration/staging` dengan LTV riil database pelanggan.
+
+### Added & Improved — Completed Reservations UI, Customer Sorting & Detail Modal, Chat Migration Engine & Manager
+
+- **Fitur Status & Filter Reservasi Selesai (`completed`) (`reservations.subroute.ts`, `Reservations.tsx`)**:
+  - Menambahkan endpoint `PATCH /api/admin/reservation/:id/complete` dan `PATCH /api/admin/reservation/:id/status` di backend untuk mengubah status reservasi menjadi `completed` (*Selesai Treatment*) dengan pencatatan audit log `COMPLETE_RESERVATION`.
+  - Menambahkan bar tab filter status di atas antarmuka tabel reservasi: **Semua**, **Pending (Menunggu)**, **Confirmed (Lunas/Jadwal)**, **Completed (Selesai)**, dan **Cancelled (Batal)** beserta penghitung (*counter*) jumlah data real-time.
+  - Menambahkan tombol aksi **"Tandai Selesai Treatment"** pada Modal Kelola Reservasi dengan badge konfirmasi visual yang elegan.
+
+- **Sorting Multi-Kolom & Modal Detail Lengkap Pasien (`customer.service.ts`, `customers.subroute.ts`, `CustomerDatabase.tsx`)**:
+  - Menambahkan dukungan parameter `sortBy` (`created_at`, `ltv`, `reservations`, `name`, `phone`, `mqlBubbleCount`) dan `sortOrder` (`asc`, `desc`) pada backend service & API customer.
+  - Menambahkan header tabel interaktif yang dapat diklik untuk pengurutan kolom secara dinamis dengan indikator panah arah (`ArrowUpDown`, `ArrowUp`, `ArrowDown`).
+  - Menambahkan tombol **Detail Pasien** pada setiap baris dan kartu customer yang membuka **Modal Detail Lengkap**:
+    - Profil & Identitas Pasien, nomor WhatsApp, dan status keaktifan.
+    - Alamat lengkap, patokan/ancer-ancer rumah, titik pin GPS dengan link Google Maps, jarak tempuh km, dan estimasi ongkir.
+    - Data seluruh anak/bayi pasien (nama, tanggal lahir, usia terkini).
+    - Riwayat seluruh reservasi & treatment masa lalu yang pernah diambil beserta nama terapis bertugas dan status transaksi.
+    - Atribusi iklan Meta (Campaign, Source, Medium, CTWA CLID, Tracking Code) dan tombol cepat akses riwayat chat & WhatsApp.
+
+- **Perbaikan Mesin Parsing & Ketahanan Ekstraksi Chat Historis (`reservation-text-parser.ts`, `migration.service.ts`)**:
+  - **Deteksi Form Toleran (`isReservationFormMessage`)**: Mengganti pengecekan string kaku dengan heuristik cerdas yang mendeteksi berbagai format form pemesanan chat lama.
+  - **Parsing Timestamp Aman (`parseTimestampSafe`)**: Mengatasi anomali timestamp WAHA (detik vs milidetik) agar tidak menghasilkan objek `Date` invalid.
+  - **Error Isolation**: Membungkus pemrosesan per chat dalam blok try-catch sehingga kegagalan satu kontak tidak menghentikan keseluruhan ekstraksi.
+
+- **Halaman Visual Chat Migration & Seeding Manager (`ChatMigration.tsx`, `App.tsx`, `Layout.tsx`, `rolePermissions.ts`)**:
+  - Membangun antarmuka dashboard baru di `/admin/chat-migration` untuk memicu ekstraksi chat dari WhatsApp, mereview data pada antrean staging (`LegacyStaging`), menyetujui/menolak (Approve/Reject), dan menyuntikkan data yang disetujui langsung ke database aktif (`customers` status `legacy` & `reservations` status `confirmed`).
+
+### Added & Improved — ORS Route Distance 1.1x Buffer Factor
+
+- **Faktor Buffer 1.1x untuk Perhitungan Jarak OpenRouteService (ORS) (`delivery.service.ts`, `.env.example`)**:
+  - Mengalikan hasil jarak rute OpenRouteService (ORS Directions API) dengan faktor buffer 1.1x (`ORS_BUFFER_FACTOR = 1.10`) secara otomatis saat menghitung ongkos kirim dan status jangkauan (coverage).
+  - Buffer +10% ini mengakomodasi deviasi rute nyata di lapangan, putar balik jalan searah, dan akses jalan perkampungan/gang sempit yang belum terpetakan sempurna di graf rute.
+  - Nilai faktor buffer dapat dikonfigurasi melalui environment variable `ORS_BUFFER_FACTOR` (default `1.10`).
+  - Memperbarui seluruh suite pengujian otomatis (`delivery.test.ts`, `delivery_circuity.test.ts`) untuk memvalidasi perhitungan jarak dan boundary tier berbasis buffer 1.1x.
+
 ### Added & Improved — Background Full Sync Engine & Real-time Sync Progress
 
 - **Sinkronisasi Riwayat Chat Penuh di Latar Belakang (Non-Blocking Full Sync) (`waha-history-sync.service.ts`, `livechat.subroute.ts`, `LiveChatMonitor.tsx`)**:

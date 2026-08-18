@@ -16,6 +16,12 @@ export interface ParsedReservation {
   bookingDate: Date | null;
   rawText: string;
   babies: BabyDetail[];
+  payment?: {
+    treatmentPrice: number;
+    ongkir: number;
+    promo: number;
+    totalPrice: number;
+  };
 }
 
 export interface ParseResult {
@@ -23,6 +29,41 @@ export interface ParseResult {
   reservation?: ParsedReservation;
   error?: string;
   missingFields?: string[];
+}
+
+/**
+ * Mengecek apakah sebuah pesan WhatsApp merupakan form reservasi / booking layanan
+ * secara toleran terhadap berbagai variasi penulisan.
+ */
+export function isReservationFormMessage(rawText: string): boolean {
+  if (!rawText || typeof rawText !== 'string') return false;
+  const lower = rawText.toLowerCase().replace(/\s+/g, ' ');
+
+  // 1. Explicit Header / Label Signals
+  const hasFormHeader =
+    lower.includes('pilihan treatment') ||
+    lower.includes('list untuk reservasi') ||
+    lower.includes('format reservasi') ||
+    lower.includes('form reservasi') ||
+    lower.includes('form booking') ||
+    lower.includes('format booking') ||
+    lower.includes('berikut list untuk reservasi') ||
+    lower.includes('list reservasi') ||
+    lower.includes('pilihan paket') ||
+    lower.includes('jadwal reservasi');
+
+  if (hasFormHeader) return true;
+
+  // 2. Field Combination Signals (e.g. Nama Bunda + (Alamat or Treatment or Bayi or Anak))
+  const hasName = lower.includes('nama bunda') || lower.includes('nama ibu') || lower.includes('nama pasien') || lower.includes('nama:');
+  const hasAddress = lower.includes('alamat') || lower.includes('shareloc') || lower.includes('kec :') || lower.includes('kota :');
+  const hasTreatment = lower.includes('treatment') || lower.includes('pijat bayi') || lower.includes('pijat hamil') || lower.includes('baby spa') || lower.includes('paket');
+  const hasBaby = lower.includes('nama bayi') || lower.includes('nama anak') || lower.includes('usia bayi') || lower.includes('usia anak');
+
+  const matchCount = (hasName ? 1 : 0) + (hasAddress ? 1 : 0) + (hasTreatment ? 1 : 0) + (hasBaby ? 1 : 0);
+  if (matchCount >= 2) return true;
+
+  return false;
 }
 
 /**
@@ -267,6 +308,13 @@ export function parseReservationText(rawText: string): ParseResult {
     normalizedPhone = '62' + normalizedPhone.substring(1);
   }
 
+  // Ekstrak rincian pembayaran jika ada di dalam teks
+  let payment: { treatmentPrice: number; ongkir: number; promo: number; totalPrice: number } | undefined;
+  if (/payment|pembayaran|total\s*[:=]/i.test(rawText)) {
+    const { parsePaymentSection } = require('./conversation-transaction-extractor');
+    payment = parsePaymentSection(rawText);
+  }
+
   return {
     success: true,
     reservation: {
@@ -280,6 +328,7 @@ export function parseReservationText(rawText: string): ParseResult {
       bookingDate,
       rawText,
       babies,
+      payment,
     },
   };
 }
