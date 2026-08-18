@@ -18,8 +18,13 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Unit test** (`tests/unit/telegram-webhook.test.ts`): akses ditolak dari chat non-paired, penjadwalan + laporan hasil via polling, dan anti-antrean ganda.
 - **Efek di lapangan**: saat deploy pertama, disk server turun dari 31 GB (83%) ke 14 GB (36%) setelah `docker builder prune` membebaskan ~17 GB build cache.
 
-### Fixed — Eliminasi Total Glitch GPU Compositor Sidebar Kanan & Masking Fisik Invisible saat Tertutup
+### Fixed — Eliminasi Total Native iOS Safari Edge Swipe-Back & Glitch GPU Compositor Sidebar
 
+- **Pembersihan History Stack & Penonaktifan Native iOS Safari Edge Swipe-Back (`Layout.tsx` & `LiveChatMonitor.tsx`)**:
+  - Mengidentifikasi bahwa usapan kiri-ke-kanan yang menampilkan halaman sebelumnya (Overview) adalah gestur sistem bawaan iOS Safari (*Interactive Edge Pop Gesture*) akibat penumpukan riwayat rute di React Router (`history.pushState`).
+  - Mengubah seluruh tautan navigasi menu drawer di `Layout.tsx` menjadi mode `replace={true}`, menjaga *history depth* browser tetap 1 (rata) saat pengguna berpindah menu.
+  - Menghilangkan pemanggilan `history.pushState` pada transisi daftar chat ke ruang pesan di `LiveChatMonitor.tsx`, menjadikan pergantian tampilan chat 100% berbasis state lokal React.
+  - Dengan riwayat yang tidak menumpuk, **iOS Safari secara otomatis mematikan gestur *Edge Swipe Back* bawaan sistem**, sehingga usapan kiri-ke-kanan di dalam aplikasi tidak akan pernah memicu *preview* halaman sebelumnya.
 - **Masking Fisik GPU Compositor & Isolasi Sidebar (`Layout.tsx` & `index.css`)**:
   - Mengatasi akar masalah fisik di mana elemen `<aside>` yang berada di posisi `right-0` dengan `translate-x-full` tetap ter-render sebagai texture GPU off-screen. Saat pengguna mengusap layar dari kiri ke kanan dan canvas browser HP mengalami pergeseran elastis (*elastic horizontal overscroll/pan*), texture sidebar di luar layar ikut terseret masuk ke viewport dan memantul keluar lagi saat jari dilepas.
   - Memasang aturan masking mutlak pada `<aside>` saat tertutup: `opacity-0 invisible pointer-events-none` (`visibility: hidden`), sehingga GPU browser secara mutlak tidak menggambar / me-render pixel apa pun dari sidebar saat tertutup.
