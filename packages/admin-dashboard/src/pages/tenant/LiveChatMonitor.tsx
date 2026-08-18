@@ -1477,6 +1477,7 @@ export const LiveChatMonitor: React.FC = () => {
 
           {/* Section 2: Right Panel - Live Chat Messages */}
           <div
+            data-chat-detail="true"
             onTouchStart={handleDetailTouchStart}
             onTouchMove={handleDetailTouchMove}
             onTouchEnd={handleDetailTouchEnd}
