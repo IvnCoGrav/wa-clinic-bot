@@ -4,13 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed — Standardisasi Left-to-Right Swipe Sidebar, Eliminasi Glitch Hilang Pasca-Swipe & Universal Anti-Selection
+### Fixed — Penempatan Sidebar di Sisi Kanan (Right Drawer), Gestur Right-to-Left & Isolasi Backdrop
 
-- **Standardisasi Posisi Drawer di Sisi Kiri & Usapan Left-to-Right (`Layout.tsx`)**:
-  - Menyelaraskan posisi navigasi drawer mobile ke sisi kiri layar (`left-0`, `-translate-x-full` $\rightarrow$ `translate-x-0`).
-  - Mengaktifkan pembukaan menu lewat usapan dari tepi kiri ke kanan (*swipe left-to-right*, `touchStartX <= 40`, `deltaX > 45`), dan menutupnya lewat usapan ke kiri (*swipe right-to-left*).
-  - Menambahkan isolasi `backdropTouchStartRef` dan `justSwipedRef` sehingga saat jari dilepas di akhir usapan, backdrop overlay tidak pernah mencegat event sentuhan dan sidebar tetap terbuka stabil.
-  - Memasang pengecualian `[data-chat-detail]` agar gestur usap kiri di dalam ruang pesan tetap berfungsi khusus untuk kembali (*back*) ke daftar percakapan tanpa membuka drawer menu.
+- **Pengembalian Posisi Mobile Sidebar ke Sisi Kanan (`Layout.tsx`)**:
+  - Memastikan drawer navigasi mobile berada di **sisi kanan layar** (`right-0`, `translate-x-full` $\rightarrow$ `translate-x-0`).
+  - **Membuka Menu**: Hanya dapat dipicu oleh usapan dari tepi kanan layar ke arah kiri (*swipe right-edge to left*, `touchStartX >= window.innerWidth - 30`, `deltaX < -45`).
+  - **Menutup Menu**: Menggeser menu ke arah kanan (*swipe right*, `deltaX > 45`) atau mengetuk backdrop overlay.
+  - **Isolasi Usapan Kiri-ke-Kanan**: Usapan dari kiri ke kanan saat berada di daftar chat ataupun ruang pesan tidak akan pernah memicu pembukaan sidebar, dan ruang pesan chat tetap memiliki gestur kembali (*back*) murni ke daftar chat tanpa konflik.
+  - Menerapkan isolasi sentuhan `backdropTouchStartRef` dan `justSwipedRef` sehingga saat sidebar dibuka, pelepasan jari di akhir usapan tidak akan menutup kembali sidebar secara tidak sengaja.
 - **Universal App-Wide Anti-Selection & Selectstart Blocker (`App.tsx` & `index.css`)**:
   - Menerapkan aturan CSS universal `*, *::before, *::after { user-select: none !important; -webkit-touch-callout: none !important; }` ke seluruh elemen aplikasi dashboard (hanya membuka seleksi pada elemen `input`, `textarea`, dan `.selectable-text`).
   - Memasang listener capture global `document.addEventListener('selectstart', ..., { capture: true })` dan `window.addEventListener('contextmenu', ..., { capture: true })` di root `App.tsx` untuk membatalkan (*e.preventDefault()*) semua event seleksi teks bawaan browser saat menahan sentuhan (*hold press 3+ detik*). Hal ini mengeliminasi 100% munculnya blok biru seleksi dan popup/floating bubble 'Salin / Copy / Share' bawaan OS Android dan iOS.
