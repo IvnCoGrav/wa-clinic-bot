@@ -736,7 +736,7 @@ export class AIRouterLLMClient {
   private async rawLlmCall(input: AIRouterInput): Promise<AIRouterResponse> {
     const store = llmOutageStorage.getStore();
     if (store?.simulateOutage) {
-      throw new Error('SumoPod connection timeout (500 Internal Server Error)');
+      throw new Error('Primary LLM provider connection timeout (500 Internal Server Error)');
     }
 
     const endpoint = getLlmEndpointConfig({ model: this.model });

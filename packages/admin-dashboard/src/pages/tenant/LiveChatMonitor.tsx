@@ -33,9 +33,12 @@ import {
   Sparkles,
   ExternalLink,
   Calendar,
-  DollarSign,
   FileText,
   Phone,
+  Pin,
+  Mail,
+  MailCheck,
+  MoreVertical,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
@@ -74,7 +77,7 @@ interface LiveChatItem {
   escalationReason: string | null;
   lastMessageAt: string | null;
   createdAt: string;
-  lastMessages?: { content: string }[];
+  lastMessages?: { content: string; direction?: string; created_at?: string }[];
   isMql?: boolean;
   mqlBubbleCount?: number;
   isSandboxTest?: boolean;
@@ -83,6 +86,11 @@ interface LiveChatItem {
   ltv?: number;
   customerLabels?: CustomerLabelData[];
   customerProfilePictureUrl?: string | null;
+  unreadCount?: number;
+  isManualUnread?: boolean;
+  isPinned?: boolean;
+  pinnedAt?: string | null;
+  isAwaitingReply?: boolean;
 }
 
 export const LiveChatMonitor: React.FC = () => {
@@ -108,6 +116,8 @@ export const LiveChatMonitor: React.FC = () => {
   const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
+  const longPressTimerRef = useRef<any>(null);
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
@@ -419,11 +429,96 @@ export const LiveChatMonitor: React.FC = () => {
     scrollToBottom(false);
   }, [messages, selectedId]);
 
+  const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
+    return [...list].sort((a, b) => {
+      if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
+      if (!!a.isHumanHandling !== !!b.isHumanHandling) return a.isHumanHandling ? -1 : 1;
+      return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
+    });
+  };
+
+  // Close context menu on outside click or window scroll
+  useEffect(() => {
+    const handleClose = () => setContextMenu(null);
+    window.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+    };
+  }, []);
+
+  const handleTogglePin = async (chat: LiveChatItem) => {
+    setContextMenu(null);
+    const newPinned = !chat.isPinned;
+    try {
+      await apiRequest(`/api/admin/conversations/${chat.conversationId}/pin`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isPinned: newPinned }),
+      });
+      setChats((prev) => {
+        const updated = prev.map((c) =>
+          c.conversationId === chat.conversationId ? { ...c, isPinned: newPinned } : c
+        );
+        const sorted = sortChats(updated);
+        chatsRef.current = sorted;
+        return sorted;
+      });
+      toast(newPinned ? 'Percakapan disematkan di atas.' : 'Sematan percakapan dilepas.', 'success');
+    } catch (err: any) {
+      toast(`Gagal mengubah status sematan: ${err.message}`, 'error');
+    }
+  };
+
+  const handleToggleReadStatus = async (chat: LiveChatItem) => {
+    setContextMenu(null);
+    const isCurrentlyUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
+    const targetEndpoint = isCurrentlyUnread ? 'read' : 'unread';
+    try {
+      await apiRequest(`/api/admin/conversations/${chat.conversationId}/${targetEndpoint}`, {
+        method: 'PATCH',
+      });
+      setChats((prev) => {
+        const updated = prev.map((c) => {
+          if (c.conversationId !== chat.conversationId) return c;
+          if (targetEndpoint === 'read') {
+            return { ...c, unreadCount: 0, isManualUnread: false, isAwaitingReply: false };
+          } else {
+            return { ...c, unreadCount: 1, isManualUnread: true, isAwaitingReply: false };
+          }
+        });
+        chatsRef.current = updated;
+        return updated;
+      });
+      toast(
+        targetEndpoint === 'unread' ? 'Ditandai belum dibaca (Hijau Tua).' : 'Ditandai sudah dibaca.',
+        'success'
+      );
+    } catch (err: any) {
+      toast(`Gagal mengubah status dibaca: ${err.message}`, 'error');
+    }
+  };
+
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
     resetTextareaHeight();
     loadThread(conversationId);
+
+    // Auto mark-as-read jika masih ada unread atau isManualUnread
+    const targetChat = chatsRef.current.find((c) => c.conversationId === conversationId);
+    if (targetChat && ((targetChat.unreadCount || 0) > 0 || targetChat.isManualUnread)) {
+      apiRequest(`/api/admin/conversations/${conversationId}/read`, { method: 'PATCH' }).catch(() => {});
+      setChats((prev) => {
+        const updated = prev.map((c) =>
+          c.conversationId === conversationId
+            ? { ...c, unreadCount: 0, isManualUnread: false, isAwaitingReply: true }
+            : c
+        );
+        chatsRef.current = updated;
+        return updated;
+      });
+    }
   };
 
   // SSE real-time: message.created & conversation.updated
@@ -464,6 +559,10 @@ export const LiveChatMonitor: React.FC = () => {
           const current = chatsRef.current;
           const existing = current.find((c) => c.conversationId === conversationId);
           if (existing) {
+            const isMsgInbound = msg.direction === 'INBOUND';
+            const isCurrentOpen = selectedIdRef.current === conversationId;
+            const nextUnread = isCurrentOpen ? 0 : (existing.unreadCount || 0) + (isMsgInbound ? 1 : 0);
+
             const updated = current.map((c) =>
               c.conversationId !== conversationId
                 ? c
@@ -471,10 +570,14 @@ export const LiveChatMonitor: React.FC = () => {
                     ...c,
                     lastMessageAt: payload.createdAt || payload.created_at || c.lastMessageAt,
                     lastMessages: [...(c.lastMessages || []), msg].slice(-3),
+                    unreadCount: nextUnread,
+                    isAwaitingReply: isCurrentOpen && isMsgInbound,
+                    isManualUnread: false,
                   }
             );
-            setChats(updated);
-            chatsRef.current = updated;
+            const sorted = sortChats(updated);
+            setChats(sorted);
+            chatsRef.current = sorted;
           } else {
             // Percakapan baru muncul → reload daftar dari awal
             loadChats(true);
@@ -490,14 +593,19 @@ export const LiveChatMonitor: React.FC = () => {
               ? {
                   ...c,
                   currentState: payload.currentState ?? c.currentState,
-                  isHumanHandling: !!payload.isHumanHandling,
+                  isHumanHandling: payload.isHumanHandling !== undefined ? !!payload.isHumanHandling : c.isHumanHandling,
                   humanHandlingSince: payload.humanHandlingSince ?? c.humanHandlingSince,
                   escalationReason: payload.escalationReason ?? c.escalationReason,
+                  isPinned: payload.isPinned !== undefined ? !!payload.isPinned : c.isPinned,
+                  pinnedAt: payload.pinnedAt ?? c.pinnedAt,
+                  unreadCount: payload.unreadCount !== undefined ? payload.unreadCount : c.unreadCount,
+                  isManualUnread: payload.isManualUnread !== undefined ? payload.isManualUnread : c.isManualUnread,
                 }
               : c
           );
-          setChats(updated);
-          chatsRef.current = updated;
+          const sorted = sortChats(updated);
+          setChats(sorted);
+          chatsRef.current = sorted;
         } else if (type === 'message.updated' && payload?.messageId) {
           const { messageId, content, isRevoked } = payload;
           if (selectedIdRef.current === payload.conversationId) {
@@ -938,7 +1046,33 @@ export const LiveChatMonitor: React.FC = () => {
                     <div
                       key={chat.conversationId}
                       onClick={() => handleSelect(chat.conversationId)}
-                      className={`bg-white rounded-xl p-2 border transition cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs ${
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setContextMenu({ x: e.clientX, y: e.clientY, chat });
+                      }}
+                      onTouchStart={(e) => {
+                        const touch = e.touches[0];
+                        if (!touch) return;
+                        const x = touch.clientX;
+                        const y = touch.clientY;
+                        longPressTimerRef.current = setTimeout(() => {
+                          setContextMenu({ x, y, chat });
+                        }, 500);
+                      }}
+                      onTouchEnd={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
+                      onTouchMove={() => {
+                        if (longPressTimerRef.current) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
+                      className={`bg-white rounded-xl p-2 border transition cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs relative ${
                         isSelected
                           ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
@@ -946,7 +1080,7 @@ export const LiveChatMonitor: React.FC = () => {
                             : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc]'
                       }`}
                     >
-                      {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon */}
+                      {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
                       <div className="flex justify-between items-start gap-2">
                         <div className="flex items-start space-x-2 min-w-0">
                           <CustomerAvatar
@@ -957,29 +1091,17 @@ export const LiveChatMonitor: React.FC = () => {
                           />
                           <div className="space-y-0.5 min-w-0">
                             <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 truncate">
+                              {chat.isPinned && (
+                                <span title="Percakapan Disematkan (Pin)" className="inline-flex shrink-0">
+                                  <Pin size={11} className="text-[#008069] fill-current" />
+                                </span>
+                              )}
                               <span className="truncate">{chatName}</span>
                               <span className="text-[10px] text-[#667781] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
                             </h4>
 
-                            {/* GRUP 1: Label Pasien & Tag Segmentasi */}
+                            {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) */}
                             <div className="flex flex-wrap items-center gap-1">
-                              {chat.trafficSource === 'legacy' && (
-                                <span
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-600 text-white shadow-2xs"
-                                  title="Pasien Legacy (Riwayat Lama)"
-                                >
-                                  Legacy
-                                </span>
-                              )}
-                              {isMedical && (
-                                <span
-                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
-                                  title="Medical Concern / Emergency"
-                                >
-                                  <AlertTriangle size={8} className="mr-0.5" />
-                                  Medis
-                                </span>
-                              )}
                               {(chat.customerLabels || []).map((lbl) => (
                                 <span
                                   key={lbl.id}
@@ -994,8 +1116,8 @@ export const LiveChatMonitor: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Bot / Release Icon Button */}
-                        <div className="shrink-0">
+                        {/* Right Column: Bot / Release Icon Button + Unread / Awaiting Badge (Di Bawah Icon) */}
+                        <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
                           {chat.isHumanHandling ? (
                             <button
                               onClick={(e) => {
@@ -1024,6 +1146,32 @@ export const LiveChatMonitor: React.FC = () => {
                               <Bot size={12} />
                             </span>
                           )}
+
+                          {/* Badge Unread / Orange Dot (Di Bawah Icon Bot) */}
+                          <div className="flex items-center justify-end mt-1 min-h-[19px]">
+                            {(chat.unreadCount || 0) > 0 ? (
+                              chat.isManualUnread ? (
+                                <span
+                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#005c4b] shadow-2xs ring-1 ring-white/50"
+                                  title="Ditandai belum dibaca (Manual)"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center justify-center min-w-[19px] h-[19px] px-1 text-[10px] font-bold text-white bg-[#25D366] rounded-full shadow-2xs"
+                                  title={`${chat.unreadCount} pesan belum dibaca`}
+                                >
+                                  {chat.unreadCount}
+                                </span>
+                              )
+                            ) : chat.isAwaitingReply ? (
+                              <span
+                                title="Sudah dibaca, menunggu balasan (< 24 jam)"
+                                className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-2xs ring-2 ring-white inline-block animate-pulse"
+                              />
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
@@ -1032,9 +1180,20 @@ export const LiveChatMonitor: React.FC = () => {
                         "{preview || 'Tidak ada pesan'}"
                       </p>
 
-                      {/* GRUP 2: Metrik, Order, Traffic, & Jam (Di Footer Bar) */}
+                      {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) */}
                       <div className="flex justify-between items-center text-[10px] text-[#667781] pt-1.5 border-t border-[#e9edef]">
                         <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+
+                          {/* Medis Badge */}
+                          {isMedical && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
+                              title="Medical Concern / Emergency — Butuh respon medis"
+                            >
+                              <AlertTriangle size={8} className="mr-0.5" />
+                              Medis
+                            </span>
+                          )}
 
                           {/* MQL Badge */}
                           {chat.isMql && (
@@ -1077,11 +1236,11 @@ export const LiveChatMonitor: React.FC = () => {
                             </span>
                           )}
 
-                          {/* Traffic Source Legacy Badge */}
+                          {/* Traffic Source Legacy Badge (Tunggal di footer) */}
                           {chat.trafficSource === 'legacy' && (
                             <span
-                              title="Data hasil migrasi arsip WhatsApp lama"
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200"
+                              title="Pasien Legacy (Data hasil migrasi arsip riwayat WhatsApp lama)"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
                             >
                               Legacy
                             </span>
@@ -1657,6 +1816,63 @@ export const LiveChatMonitor: React.FC = () => {
                 Tutup
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Context Menu Popover */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-white border border-[#d1d7db] rounded-xl shadow-2xl py-1.5 w-60 text-xs text-[#111b21] animate-in fade-in zoom-in-95 duration-100 divide-y divide-[#f0f2f5]"
+          style={{
+            left: Math.min(contextMenu.x, typeof window !== 'undefined' ? window.innerWidth - 250 : 0),
+            top: Math.min(contextMenu.y, typeof window !== 'undefined' ? window.innerHeight - 200 : 0),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 text-[11px] font-bold text-[#667781] truncate">
+            {contextMenu.chat.customerName || contextMenu.chat.customerPhone || 'Opsi Percakapan'}
+          </div>
+          <div className="py-1">
+            <button
+              type="button"
+              onClick={() => handleTogglePin(contextMenu.chat)}
+              className="w-full px-3 py-2 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium"
+            >
+              <Pin size={14} className={contextMenu.chat.isPinned ? 'text-[#008069] fill-current' : 'text-[#54656f]'} />
+              <span>{contextMenu.chat.isPinned ? 'Lepas Sematan (Unpin)' : 'Sematkan Chat (Pin ke Atas)'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleReadStatus(contextMenu.chat)}
+              className="w-full px-3 py-2 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition font-medium"
+            >
+              {(contextMenu.chat.unreadCount || 0) > 0 || contextMenu.chat.isManualUnread ? (
+                <>
+                  <MailCheck size={14} className="text-emerald-600" />
+                  <span>Tandai Sudah Dibaca</span>
+                </>
+              ) : (
+                <>
+                  <Mail size={14} className="text-[#005c4b]" />
+                  <span>Tandai Belum Dibaca (Hijau Tua)</span>
+                </>
+              )}
+            </button>
+          </div>
+          <div className="py-1">
+            <button
+              type="button"
+              onClick={() => {
+                const c = contextMenu.chat;
+                setContextMenu(null);
+                handleRelease(c);
+              }}
+              className="w-full px-3 py-2 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition text-[#54656f] font-medium"
+            >
+              <Bot size={14} />
+              <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+            </button>
           </div>
         </div>
       )}

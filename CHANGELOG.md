@@ -4,6 +4,48 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — WhatsApp-Style Unread Badge, Manual Dark Green Unread, Orange Awaiting-Reply Dot (24h), Context Menu & Pin Chat
+
+- **Skema Indikator Pesan WhatsApp Komprehensif (`schema.prisma`, `message.service.ts`, `live-chat.service.ts`, `LiveChatMonitor.tsx`)**:
+  - **Badge Unread Otomatis (Hijau Terang WhatsApp `#25D366`)**: Pesan inbound baru yang belum dibaca menampilkan badge bulat hijau terang berisi angka count jumlah chat yang belum dibaca. Ditempatkan di sisi kanan bawah ikon Bot AI.
+  - **Tandai Belum Dibaca Manual (Hijau Tua `#005c4b`)**: Opsi *Tandai Belum Dibaca (Mark as Unread)* menampilkan badge bulat warna hijau tua solid dengan dot putih di tengah (skema sistem bot lokal tanpa mengganggu status asli di WhatsApp).
+  - **Dot Oranye Menunggu Balasan (Awaiting Reply — Masa Aktif 24 Jam)**: Setelah percakapan dibaca (`unreadCount === 0`) dan pesan terakhir berasal dari pelanggan (`INBOUND`), badge otomatis berganti menjadi **Dot Oranye Berkedip (`bg-amber-500`)**. Dot ini bertahan selama maksimal 24 jam untuk mengingatkan CS/Bidan agar segera membalas, dan otomatis hilang jika pesan sudah dibalas (`OUTBOUND`) atau setelah 24 jam terlewati.
+  - **Auto Mark as Read**: Saat admin/bidan mengklik atau memilih percakapan di daftar chat, sistem secara otomatis menandai seluruh pesan inbound percakapan tersebut sebagai telah dibaca (`read_at = now()`) dan menyiarkan pembaruan via SSE.
+- **Sematkan Percakapan (Pin Chat) (`schema.prisma`, `conversation.service.ts`, `livechat.subroute.ts`)**:
+  - Menambahkan kolom `is_pinned Boolean @default(false)` dan `pinned_at DateTime?` pada tabel `Conversation`.
+  - Percakapan yang disematkan akan selalu berada di urutan teratas daftar chat di atas antrean *human handling* dan *last_message_at*, serta ditandai dengan ikon 📌 pin di sebelah nama pelanggan.
+- **Custom Context Menu & Mobile Long Press (`LiveChatMonitor.tsx`)**:
+  - **Desktop**: Klik kanan (`onContextMenu`) pada kartu chat membuka popover menu kontekstual dengan opsi cepat: *Sematkan / Lepas Sematan Chat*, *Tandai Belum Dibaca / Tandai Sudah Dibaca*, dan *Kembalikan ke Bot AI / Ambil Alih Manual*.
+  - **Mobile**: Mendukung *hold press* (tekan tahan selama 500ms) untuk memunculkan context menu di perangkat layar sentuh / smartphone.
+  - Ditutup otomatis saat pengguna mengklik atau menggulir layar di luar area context menu.
+- **REST Endpoints & SSE Real-time Broadcasting**:
+  - `PATCH /api/admin/conversations/:id/read` — Menandai pesan telah dibaca.
+  - `PATCH /api/admin/conversations/:id/unread` — Menandai pesan manual belum dibaca (hijau tua).
+  - `PATCH /api/admin/conversations/:id/pin` — Menyematkan / melepas sematan chat.
+  - Terintegrasi penuh dengan `LiveChatHub` SSE broadcast (`conversation.updated`) untuk pembaruan multi-device instan.
+- **Unit Testing**:
+  - Menambahkan `tests/unit/chat-unread-and-pin.test.ts` (4/4 tests passed 100%).
+
+### Added & Improved — Chat Card Label Grouping Refactor & Badge Deduplication
+
+- **Refaktor Pengelompokan Label Kartu Percakapan (`LiveChatMonitor.tsx`)**:
+  - **Pembersihan Baris Header (Bawah Nama & Nomor)**: Memindahkan badge status sistem (`Medis` dan `Legacy`) dari baris atas ke baris footer bawah kartu, sehingga area di bawah nama dan nomor telepon kini khusus dan bersih didedikasikan untuk **Custom Customer CRM Labels** (tag warna-warni yang dikelola oleh admin/bidan seperti VIP, Follow Up, Komplain, dsb).
+  - **Relokasi Badge Medis**: Badge `Medis` (merah rose + ikon AlertTriangle) kini tampil rapi dan jelas di baris metrik footer (Grup 2).
+  - **Eliminasi Duplikasi Badge Legacy**: Menghapus duplikasi label `Legacy` yang sebelumnya muncul tumpang tindih 2 kali (warna ungu di atas dan warna abu-abu di bawah) menjadi **1 badge `Legacy` tunggal** yang elegan di baris footer kartu.
+
+### Added & Improved — Multi-Tier LLM Gateway Architecture Migration & Fallback Telemetry Refactor
+
+- **Migrasi Model Primer & Rantai Fallback Terstruktur (`ai-models.config.ts`, `cost-calculator.ts`, `.env.example`)**:
+  - **Tier 1 (SumoPod Primary)**: Mengganti default model chat, intent, NLU, phrasing, dan medical check menjadi **`qwen3.7-flash-2026-07-15`** (Alibaba Qwen). Menghadirkan konteks 1.000.000 token, pemahaman Bahasa Indonesia sangat luwes, output JSON terstruktur yang stabil, dan efisiensi biaya luar biasa (\$0.03 input / \$0.006 cache hit / \$0.13 output per 1M token).
+  - **Tier 2 (SumoPod Internal Failover)**: Mengatur rantai fallback internal ke `gpt-5-nano` dan `deepseek-v4-flash` via endpoint SumoPod yang sama jika Qwen mengalami gangguan latency atau rate limit.
+  - **Tier 3 (DeepSeek Direct Official as Last Resort)**: Menetapkan `deepseek-chat` via `https://api.deepseek.com` sebagai penyelamat terakhir independen di luar proxy SumoPod.
+  - **Pembaruan Kalkulator Biaya Finansial**: Memperbarui tabel tarif `MODEL_PRICING_MAP` dengan model-model generasi terbaru (Qwen 3.7, GPT-5-nano, Mimo v2.5, Gemini 3.1 Flash Lite, dan tarif peak/off-peak DeepSeek Direct).
+
+- **Perbaikan Presisi Pelaporan Audit Log & Telemetri Fallback (`live-chat.service.ts`, `geocoding.ts`, `legacy-harvesting.service.ts`, `cost-calculator.ts`)**:
+  - **Resolusi Provider Riil**: Memperbaiki pemetaan provider di telemetri copilot `live-chat.service.ts` agar membaca `callResult.baseUrl` dan `callResult.model` aktual (bukan config awal), sehingga ketika fallback DeepSeek Direct aktif, transaksi tercatat 100% akurat sebagai `DeepSeek Direct` di audit log dan dashboard admin.
+  - **Audit Telemetri Geocoding & Knowledge Harvesting**: Menghubungkan modul `geocoding.ts` dan `legacy-harvesting.service.ts` ke pipeline `auditLlmCall` dan `callChatCompletionsWithFallback`, memastikan setiap token ekstraksi lokasi dan ekstraksi FAQ historis tercatat di database `llm_audit_logs`.
+  - **Pembersihan Log Outage**: Menstandarisasi pesan error simulasi outage LLM menjadi format generik `Primary LLM provider connection timeout (500 Internal Server Error)` di seluruh service.
+
 ### Added & Improved — ELT Architecture Refactor: Local DB as Single Source of Truth & Zero-WAHA Overload
 
 - **Desentralisasi Akses WAHA Menjadi Arsitektur ELT (`migration.service.ts`, `legacy-harvesting.service.ts`, `migration.subroute.ts`)**:

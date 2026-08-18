@@ -877,26 +877,59 @@ OUTPUT JSON:
   "kota": "nama kota/kabupaten atau null"
 }`;
 
-      const callResult = await measure('LLM_GEOCODE_API_CALL', () =>
-        callChatCompletionsWithFallback({
-          baseUrl,
-          apiKey,
-          model,
-          fallbackModel: getFallbackModel(),
-          timeoutMs: Number(process.env.LLM_TIMEOUT_GEOCODE_MS || process.env.LLM_TIMEOUT_NLU_MS || 120000),
-          payload: {
-            temperature: 0.1,
-            max_tokens: 512,
-            response_format: { type: 'json_object' },
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Lokasi: "${locationText}"` },
-            ],
-          },
-        })
-      );
+      const startedAt = Date.now();
+      let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+      try {
+        callResult = await measure('LLM_GEOCODE_API_CALL', () =>
+          callChatCompletionsWithFallback({
+            baseUrl,
+            apiKey,
+            model,
+            fallbackModel: getFallbackModel(),
+            timeoutMs: Number(process.env.LLM_TIMEOUT_GEOCODE_MS || process.env.LLM_TIMEOUT_NLU_MS || 120000),
+            payload: {
+              temperature: 0.1,
+              max_tokens: 512,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Lokasi: "${locationText}"` },
+              ],
+            },
+          })
+        );
+      } catch (err: any) {
+        try {
+          const { auditLlmCall } = await import('../llm/../llm/model-fallback').then(() => import('../../utils/llm-audit-buffer'));
+          auditLlmCall({
+            customer_phone: 'geocode-audit',
+            task_type: 'GEOCODE_RESOLVER',
+            model_name: model,
+            baseUrl,
+            startedAt,
+            error: err,
+          });
+        } catch {
+          // Fire-and-forget
+        }
+        throw err;
+      }
 
       const responseData = callResult.data;
+      try {
+        const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
+        auditLlmCall({
+          customer_phone: 'geocode-audit',
+          task_type: 'GEOCODE_RESOLVER',
+          model_name: callResult.model,
+          baseUrl: callResult.baseUrl,
+          startedAt,
+          usage: responseData?.usage,
+        });
+      } catch {
+        // Fire-and-forget
+      }
+
       let content = responseData?.choices?.[0]?.message?.content?.trim();
       const reasoning = responseData?.choices?.[0]?.message?.reasoning_content || '';
 
