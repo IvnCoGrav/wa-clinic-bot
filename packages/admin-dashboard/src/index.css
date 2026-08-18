@@ -258,3 +258,45 @@ textarea,
   animation: slideInFromLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Mobile Smooth Fluid Navigation & View Transitions */
+@keyframes mobileSlideInRight {
+  0% {
+    opacity: 0.7;
+    transform: translate3d(24px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mobileFadeInList {
+  0% {
+    opacity: 0.8;
+    transform: translate3d(-16px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-mobile-chat-enter {
+  animation: mobileSlideInRight 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-mobile-list-enter {
+  animation: mobileFadeInList 0.20s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@media (min-width: 1024px) {
+  .animate-mobile-chat-enter,
+  .animate-mobile-list-enter {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+

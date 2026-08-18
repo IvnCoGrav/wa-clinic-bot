@@ -18,8 +18,12 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Unit test** (`tests/unit/telegram-webhook.test.ts`): akses ditolak dari chat non-paired, penjadwalan + laporan hasil via polling, dan anti-antrean ganda.
 - **Efek di lapangan**: saat deploy pertama, disk server turun dari 31 GB (83%) ke 14 GB (36%) setelah `docker builder prune` membebaskan ~17 GB build cache.
 
-### Fixed — Eliminasi Total Native iOS Safari Edge Swipe-Back & Glitch GPU Compositor Sidebar
+### Added & Improved — Animasi Transisi Halus (Fluid Navigation) Mobile & Eliminasi Total Native iOS Safari Edge Swipe-Back
 
+- **Animasi Transisi Halus (*Fluid Mobile View Transitions*) (`LiveChatMonitor.tsx` & `index.css`)**:
+  - Menambahkan keyframes transisi mobile `animate-mobile-chat-enter` (slide halus 24px dari kanan dengan kurva Bézier alami) saat membuka ruang chat, dan `animate-mobile-list-enter` (slide halus 16px dari kiri) saat kembali ke daftar chat.
+  - Menambahkan *micro-feedback tactile interaction* pada kartu percakapan (`active:scale-[0.985] duration-150`) sehingga respons sentuhan terasa empuk, modern, dan tidak kaku di smartphone.
+  - Memastikan animasi transisi hanya aktif pada layar mobile (< 1024px) dan tetap statis di desktop view agar efisien.
 - **Pembersihan History Stack & Penonaktifan Native iOS Safari Edge Swipe-Back (`Layout.tsx` & `LiveChatMonitor.tsx`)**:
   - Mengidentifikasi bahwa usapan kiri-ke-kanan yang menampilkan halaman sebelumnya (Overview) adalah gestur sistem bawaan iOS Safari (*Interactive Edge Pop Gesture*) akibat penumpukan riwayat rute di React Router (`history.pushState`).
   - Mengubah seluruh tautan navigasi menu drawer di `Layout.tsx` menjadi mode `replace={true}`, menjaga *history depth* browser tetap 1 (rata) saat pengguna berpindah menu.
