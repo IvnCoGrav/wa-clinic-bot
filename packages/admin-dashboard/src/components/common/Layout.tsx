@@ -184,10 +184,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       const target = e.target as HTMLElement | null;
 
-      // Guard: Abaikan jika menyentuh area detail chat room
-      if (target?.closest('[data-chat-detail]')) {
-        isTracking = false;
-        return;
+      // Guard: Abaikan jika menyentuh area live chat kecuali jika benar-benar di zona tepi kanan 30px
+      if (target?.closest('[data-no-swipe-menu]') || target?.closest('[data-chat-detail]')) {
+        const touch = e.touches[0];
+        if (!touch || touch.clientX < window.innerWidth - 30) {
+          isTracking = false;
+          return;
+        }
       }
 
       // Guard: Abaikan jika menyentuh elemen interaktif / form

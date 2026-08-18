@@ -4,13 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed — Penempatan Sidebar di Sisi Kanan (Right Drawer), Gestur Right-to-Left & Isolasi Backdrop
+### Fixed — Sinkronisasi Total History Stack, Pencegahan Native OS Back pada Chat List & Isolasi Sidebar Kanan
 
+- **Sinkronisasi Sempurna History Stack & Penanganan Back (`LiveChatMonitor.tsx`)**:
+  - Memperbarui fungsi `handleBackToList()` untuk memanggil `window.history.back()` secara simetris jika `liveChatView === 'chat'`, membersihkan *dangling history state* sehingga history stack browser selalu bersih saat berada di daftar chat.
+  - Memasang handler `handleListTouchMove` dengan `e.preventDefault()` pada area tepi kiri Section 1 (Chat List), mengeliminasi gangguan di mana browser smartphone (Android Chrome / Safari) memicu gestur *Native Back Preview* saat pengguna mengusap kanan di daftar chat.
+  - Menambahkan atribut `data-no-swipe-menu="true"` pada container live chat untuk mengisolasi `Layout.tsx` dari seluruh sentuhan di luar zona 30px tepi kanan.
 - **Pengembalian Posisi Mobile Sidebar ke Sisi Kanan (`Layout.tsx`)**:
   - Memastikan drawer navigasi mobile berada di **sisi kanan layar** (`right-0`, `translate-x-full` $\rightarrow$ `translate-x-0`).
   - **Membuka Menu**: Hanya dapat dipicu oleh usapan dari tepi kanan layar ke arah kiri (*swipe right-edge to left*, `touchStartX >= window.innerWidth - 30`, `deltaX < -45`).
   - **Menutup Menu**: Menggeser menu ke arah kanan (*swipe right*, `deltaX > 45`) atau mengetuk backdrop overlay.
-  - **Isolasi Usapan Kiri-ke-Kanan**: Usapan dari kiri ke kanan saat berada di daftar chat ataupun ruang pesan tidak akan pernah memicu pembukaan sidebar, dan ruang pesan chat tetap memiliki gestur kembali (*back*) murni ke daftar chat tanpa konflik.
   - Menerapkan isolasi sentuhan `backdropTouchStartRef` dan `justSwipedRef` sehingga saat sidebar dibuka, pelepasan jari di akhir usapan tidak akan menutup kembali sidebar secara tidak sengaja.
 - **Universal App-Wide Anti-Selection & Selectstart Blocker (`App.tsx` & `index.css`)**:
   - Menerapkan aturan CSS universal `*, *::before, *::after { user-select: none !important; -webkit-touch-callout: none !important; }` ke seluruh elemen aplikasi dashboard (hanya membuka seleksi pada elemen `input`, `textarea`, dan `.selectable-text`).

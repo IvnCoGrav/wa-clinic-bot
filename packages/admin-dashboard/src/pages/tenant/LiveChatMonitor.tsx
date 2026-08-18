@@ -122,8 +122,51 @@ export const LiveChatMonitor: React.FC = () => {
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
   const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
+  const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
   const handleBackToList = () => {
-    setMobileView('list');
+    if (window.history.state?.liveChatView === 'chat') {
+      window.history.back();
+    } else {
+      setMobileView('list');
+    }
+  };
+
+  const handleListTouchStart = (e: React.TouchEvent) => {
+    if (mobileView !== 'list' || e.touches.length !== 1) return;
+    const target = e.target as HTMLElement | null;
+    if (target && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
+      target.tagName === 'BUTTON' ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('textarea')
+    )) {
+      listTouchStartRef.current = null;
+      return;
+    }
+    const touch = e.touches[0];
+    // Zona tepi kiri (<= 45px dari tepi kiri layar)
+    if (touch && touch.clientX <= 45) {
+      listTouchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+    }
+  };
+
+  const handleListTouchMove = (e: React.TouchEvent) => {
+    if (!listTouchStartRef.current || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - listTouchStartRef.current.x;
+    const deltaY = touch.clientY - listTouchStartRef.current.y;
+    // Mencegah OS Android/iOS mencegat gestur tepi kiri menjadi history back preview
+    if (deltaX > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      if (e.cancelable) e.preventDefault();
+    }
   };
 
   const handleDetailTouchStart = (e: React.TouchEvent) => {
@@ -1099,9 +1142,15 @@ export const LiveChatMonitor: React.FC = () => {
           <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 overflow-hidden">
+        <div data-no-swipe-menu="true" className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 overflow-hidden">
           {/* Section 1: Conversations List */}
-          <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}>
+          <div
+            onTouchStart={handleListTouchStart}
+            onTouchMove={handleListTouchMove}
+            onTouchEnd={() => { listTouchStartRef.current = null; }}
+            onTouchCancel={() => { listTouchStartRef.current = null; }}
+            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}
+          >
             {/* Header Toolbar Daftar Percakapan: Source Filter & Label Dropdown */}
             <div className="space-y-1.5 pb-2 border-b border-[#f0f2f5] shrink-0">
               <div className="flex justify-between items-center gap-1.5">
