@@ -48,6 +48,13 @@ export const ALL_MODULES: ModuleDefinition[] = [
     category: 'DASHBOARD & PELANGGAN',
     description: 'Konfigurasi nomor WhatsApp CS, nama CS, dan tombol CTA',
   },
+  {
+    id: 'chat-migration',
+    path: '/admin/chat-migration',
+    name: 'Migrasi & Seeding Chat',
+    category: 'DASHBOARD & PELANGGAN',
+    description: 'Ekstraksi histori chat WhatsApp dan seeding layanan ke database aktif',
+  },
 
   // 2. Operasional & Jadwal
   {
@@ -204,6 +211,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
     allowedPaths: [
       '/admin/overview',
       '/admin/customers',
+      '/admin/chat-migration',
       '/admin/labels',
       '/admin/customer-service',
       '/admin/reservations',

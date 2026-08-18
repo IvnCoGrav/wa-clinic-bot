@@ -439,6 +439,108 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/admin/reservation/:id/complete
+   * Menandai reservasi telah selesai treatment (status: 'completed')
+   */
+  fastify.patch(
+    '/api/admin/reservation/:id/complete',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: {
+            status: 'completed',
+          },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'COMPLETE_RESERVATION',
+          targetId: id,
+          payload: { status: 'completed' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.status = 'completed';
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation/:id/status
+   * Mengubah status reservasi secara fleksibel ('pending' | 'confirmed' | 'completed' | 'cancelled')
+   */
+  fastify.patch(
+    '/api/admin/reservation/:id/status',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { status: 'pending' | 'confirmed' | 'completed' | 'cancelled' };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { status } = request.body || {};
+
+      if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(status)) {
+        return reply.status(400).send({ error: 'Status tidak valid. Pilihan: pending, confirmed, completed, cancelled.' });
+      }
+
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: { status },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_RESERVATION_STATUS',
+          targetId: id,
+          payload: { status },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.status = status;
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
    * PATCH /api/admin/reservation/:id/set-date
    */
   fastify.patch(

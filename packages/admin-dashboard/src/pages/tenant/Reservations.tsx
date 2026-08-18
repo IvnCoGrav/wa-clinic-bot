@@ -30,6 +30,8 @@ import {
   Compass,
   Camera,
   PenLine,
+  CheckCircle,
+  CheckCheck,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
@@ -188,6 +190,46 @@ export const Reservations: React.FC = () => {
       loadReservations();
     } catch (err: any) {
       toast(`Error confirming reservation: ${err.message}`, 'error');
+      setLoading(false);
+    }
+  };
+
+  // Complete Reservation (Selesai Treatment)
+  const handleComplete = async (id: string) => {
+    const ok = await confirm({
+      title: 'Tandai Selesai Treatment?',
+      message: 'Apakah reservasi ini sudah selesai dilakukan penanganan/treatment oleh terapis?',
+      confirmText: 'Ya, Selesai',
+    });
+    if (!ok) return;
+
+    try {
+      setLoading(true);
+      await apiRequest(`/api/admin/reservation/${id}/complete`, {
+        method: 'PATCH',
+      });
+      toast('Reservasi berhasil ditandai Selesai Treatment!', 'success');
+      setSelectedRes(null);
+      loadReservations();
+    } catch (err: any) {
+      toast(`Gagal menyelesaikan reservasi: ${err.message}`, 'error');
+      setLoading(false);
+    }
+  };
+
+  // Generic Status Change
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      setLoading(true);
+      await apiRequest(`/api/admin/reservation/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      toast(`Status reservasi diubah menjadi ${newStatus}.`, 'success');
+      setSelectedRes(null);
+      loadReservations();
+    } catch (err: any) {
+      toast(`Gagal mengubah status: ${err.message}`, 'error');
       setLoading(false);
     }
   };
@@ -631,8 +673,42 @@ export const Reservations: React.FC = () => {
 
       {/* Main Calendar Pane (pure calendar) */}
       <div className="space-y-4">
-        {/* Search bar */}
-        <div className="relative">
+        {/* Status Filter Tabs & Search bar */}
+        <div className="space-y-2.5">
+          {/* Status Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl w-fit">
+            {[
+              { key: 'all', label: 'Semua Status', count: reservations.length },
+              { key: 'pending', label: 'Pending', count: reservations.filter((r) => r.status === 'pending').length },
+              { key: 'confirmed', label: 'Confirmed (Lunas)', count: reservations.filter((r) => r.status === 'confirmed').length },
+              { key: 'completed', label: 'Completed (Selesai)', count: reservations.filter((r) => r.status === 'completed').length },
+              { key: 'cancelled', label: 'Cancelled (Batal)', count: reservations.filter((r) => r.status === 'cancelled').length },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setFilterState((prev) => ({ ...prev, status: tab.key as any }))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+                  filterState.status === tab.key
+                    ? 'bg-white text-[#111b21] shadow-xs'
+                    : 'text-[#54656f] hover:text-[#111b21]'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                    filterState.status === tab.key
+                      ? 'bg-[#e8f5f2] text-[#008069]'
+                      : 'bg-[#e9edef] text-[#667781]'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Search bar */}
+          <div className="relative">
             <input
               type="text"
               value={filterState.searchQuery}
@@ -652,6 +728,7 @@ export const Reservations: React.FC = () => {
               </button>
             )}
           </div>
+        </div>
 
           {/* View rendering */}
           {viewMode === 'week' && (
@@ -1189,7 +1266,7 @@ export const Reservations: React.FC = () => {
             </div>
 
             {/* Actions button footer */}
-            <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 justify-between">
+            <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 justify-between items-center">
               <button
                 onClick={() => handleDelete(selectedRes.id)}
                 className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition text-xs font-semibold flex items-center space-x-1.5"
@@ -1198,29 +1275,57 @@ export const Reservations: React.FC = () => {
                 <span>Batalkan Reservasi</span>
               </button>
 
-              {selectedRes.status === 'pending' && (() => {
-                const purchaseSentAt = selectedRes.purchase_event_sent_at ? new Date(selectedRes.purchase_event_sent_at) : null;
-                const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
-                return (
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                {selectedRes.status === 'pending' && (() => {
+                  const purchaseSentAt = selectedRes.purchase_event_sent_at ? new Date(selectedRes.purchase_event_sent_at) : null;
+                  const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
+                  return (
+                    <button
+                      onClick={() => handleConfirm(selectedRes.id)}
+                      disabled={!!purchaseWindowOpen}
+                      title={
+                        purchaseWindowOpen
+                          ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count.`
+                          : undefined
+                      }
+                      className={`w-full sm:w-auto justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
+                        purchaseWindowOpen
+                          ? 'bg-[#e9edef] text-[#8696a0] cursor-not-allowed'
+                          : 'bg-[#008069] text-white hover:bg-[#00a884] shadow-xs'
+                      }`}
+                    >
+                      <Check size={14} />
+                      <span>{purchaseWindowOpen ? 'Purchase Sudah Dikirim' : 'Tandai Lunas'}</span>
+                    </button>
+                  );
+                })()}
+
+                {selectedRes.status === 'confirmed' && (
                   <button
-                    onClick={() => handleConfirm(selectedRes.id)}
-                    disabled={!!purchaseWindowOpen}
-                    title={
-                      purchaseWindowOpen
-                        ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count.`
-                        : undefined
-                    }
-                    className={`w-full sm:w-auto justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
-                      purchaseWindowOpen
-                        ? 'bg-[#e9edef] text-[#8696a0] cursor-not-allowed'
-                        : 'bg-[#008069] text-white hover:bg-[#00a884] shadow-xs'
-                    }`}
+                    onClick={() => handleComplete(selectedRes.id)}
+                    className="w-full sm:w-auto justify-center px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs"
                   >
-                    <Check size={14} />
-                    <span>{purchaseWindowOpen ? 'Purchase Sudah Dikirim' : 'Tandai Lunas'}</span>
+                    <CheckCircle size={14} />
+                    <span>Tandai Selesai Treatment</span>
                   </button>
-                );
-              })()}
+                )}
+
+                {selectedRes.status === 'completed' && (
+                  <div className="flex items-center space-x-2">
+                    <span className="px-3 py-1.5 rounded-xl bg-sky-100 border border-sky-200 text-sky-800 text-xs font-bold flex items-center space-x-1">
+                      <CheckCheck size={14} className="text-sky-600" />
+                      <span>Treatment Telah Selesai</span>
+                    </span>
+                    <button
+                      onClick={() => handleStatusChange(selectedRes.id, 'confirmed')}
+                      className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition"
+                      title="Kembalikan ke status Terkonfirmasi / Lunas"
+                    >
+                      Ubah Status
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

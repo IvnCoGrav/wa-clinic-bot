@@ -3,6 +3,7 @@ import { wahaClient } from '../integrations/waha/client';
 import { MedicalDetectionService } from './medical-detection.service';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { parseReservationText } from '../utils/reservation-text-parser';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 
@@ -201,10 +202,33 @@ export class LegacyHarvestingService {
           fs.mkdirSync(storageDir, { recursive: true });
         }
 
-        // STEP 1: Scrape chats & dump into 1 consolidated JSON file
-        const chats = await wahaClient.getChats();
-        const chatLimit = Math.min(chats.length, maxChats);
-        activeHarvestingJob.totalChatsScanned = chatLimit || 1;
+        // STEP 1: Fetch conversations & messages from local PostgreSQL database
+        const conversations = await prisma.conversation.findMany({
+          where: { tenant_id: tenantId },
+          include: {
+            customer: true,
+            messages: {
+              orderBy: { created_at: 'asc' },
+            },
+          },
+        });
+
+        if (conversations.length === 0) {
+          console.log('[HARVESTING ENGINE] Local conversation database is empty. Please run Live Chat Sync first.');
+          activeHarvestingJob = {
+            status: 'COMPLETED',
+            progressPercent: 100,
+            totalChatsScanned: 0,
+            totalMessagesScanned: 0,
+            medicalStagedCount: 0,
+            generalStagedCount: 0,
+            legacyLeadsExtractedCount: 0,
+          };
+          return;
+        }
+
+        const chatLimit = maxChats && maxChats > 0 ? Math.min(conversations.length, maxChats) : conversations.length;
+        activeHarvestingJob.totalChatsScanned = chatLimit;
         activeHarvestingJob.progressPercent = 20;
 
         const consolidatedTranscripts: Array<{
@@ -214,23 +238,39 @@ export class LegacyHarvestingService {
         }> = [];
 
         for (let i = 0; i < chatLimit; i++) {
-          const chat = chats[i];
-          const rawMessages = await wahaClient.getMessages(chat.id, maxMessagesPerChat);
-          activeHarvestingJob.totalMessagesScanned += rawMessages.length;
+          const conv = conversations[i];
+          const phone = conv.customer?.phone || conv.id;
+          const customerName = conv.customer?.name;
 
-          // Sort messages chronologically (ASCENDING: oldest message first, newest message last)
-          const messages = [...rawMessages].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          // Abaikan nomor test, sandbox simulator, spammer, dan LID tidak valid
+          if (isDummyOrTestContact(phone, customerName, conv.customer?.is_sandbox_test)) {
+            continue;
+          }
+
+          const rawMessages = conv.messages;
+
+          // Abaikan percakapan noise <= 2 pesan tanpa nama pelanggan
+          const hasRealName = customerName && customerName.trim() !== '' && customerName.trim().toLowerCase() !== 'bunda customer';
+          if (!hasRealName && rawMessages.length <= 2) {
+            continue;
+          }
+          activeHarvestingJob.totalMessagesScanned += rawMessages.length;
 
           const chatDialogue: Array<{ sender: 'CUSTOMER' | 'BIDAN_ADMIN'; message: string }> = [];
 
-          for (let j = 0; j < messages.length - 1; j++) {
-            const currentMsg = messages[j];
-            const nextMsg = messages[j + 1];
+          for (let j = 0; j < rawMessages.length - 1; j++) {
+            const currentMsg = rawMessages[j];
+            const nextMsg = rawMessages[j + 1];
 
             // Match Inbound question from customer -> Outbound answer from admin/bidan
-            if (!currentMsg.fromMe && nextMsg.fromMe && currentMsg.body && nextMsg.body) {
-              const rawQ = currentMsg.body;
-              const rawA = nextMsg.body;
+            if (
+              currentMsg.direction === 'INBOUND' &&
+              nextMsg.direction === 'OUTBOUND' &&
+              currentMsg.content &&
+              nextMsg.content
+            ) {
+              const rawQ = currentMsg.content;
+              const rawA = nextMsg.content;
 
               // Pre-AI Junk Filter & Schedule/Form Exclusion
               if (this.isJunkMessage(rawQ)) continue;
@@ -239,9 +279,9 @@ export class LegacyHarvestingService {
                 const reservationDetails = parseReservationText(`${rawQ}\n${rawA}`);
                 if (reservationDetails.success && reservationDetails.reservation) {
                   try {
-                    const phoneNum = chat.id.replace(/@.*$/, '');
+                    const phoneNum = phone;
                     const existingLead = await prisma.legacyStaging.findUnique({
-                      where: { phoneNumber: phoneNum }
+                      where: { phoneNumber: phoneNum },
                     });
                     if (!existingLead) {
                       await prisma.legacyStaging.create({
@@ -250,24 +290,29 @@ export class LegacyHarvestingService {
                           phoneNumber: phoneNum,
                           name: reservationDetails.reservation.name || 'Customer Lama',
                           extractedLocation: reservationDetails.reservation.address || null,
-                          leadCreatedAt: new Date(),
+                          leadCreatedAt: currentMsg.created_at,
                           extractedReservationJson: JSON.parse(JSON.stringify(reservationDetails.reservation)),
                           status: 'PENDING',
                           rawMessagesCount: 2,
-                          rawMessagesJson: JSON.parse(JSON.stringify([currentMsg, nextMsg])),
+                          rawMessagesJson: JSON.parse(
+                            JSON.stringify([
+                              {
+                                id: currentMsg.wa_message_id || currentMsg.id,
+                                body: currentMsg.content,
+                                fromMe: false,
+                                timestamp: currentMsg.created_at.toISOString(),
+                              },
+                              {
+                                id: nextMsg.wa_message_id || nextMsg.id,
+                                body: nextMsg.content,
+                                fromMe: true,
+                                timestamp: nextMsg.created_at.toISOString(),
+                              },
+                            ])
+                          ),
                         },
                       });
                       activeHarvestingJob.legacyLeadsExtractedCount++;
-                      // Best-effort: addLabel 'legacy' + set Customer.is_legacy_source = true
-                      wahaClient.addLabel(chat.id, 'legacy').catch((err: any) =>
-                        console.warn('[LEGACY LABEL] addLabel "legacy" failed:', err.message)
-                      );
-                      try {
-                        await prisma.customer.updateMany({
-                          where: { phone: phoneNum, tenant_id: tenantId },
-                          data: { is_legacy_source: true },
-                        });
-                      } catch (e: any) {}
                     }
                   } catch (err: any) {}
                 }
@@ -285,8 +330,8 @@ export class LegacyHarvestingService {
 
           if (chatDialogue.length > 0) {
             consolidatedTranscripts.push({
-              chatId: chat.id,
-              customerPhone: chat.id.replace(/@.*$/, ''),
+              chatId: conv.id,
+              customerPhone: phone,
               dialogue: chatDialogue,
             });
           }

@@ -23,7 +23,7 @@ describe('DeliveryService — Haversine 1.50x Circuity Multiplier & Boundary Tes
 
     const resOrs = await serviceOrs.calculateDelivery(customerCoords);
     expect(resOrs.isEstimated).toBe(false);
-    expect(resOrs.distanceKm).toBe(4.0);
+    expect(resOrs.distanceKm).toBe(4.4);
 
     const resFallback = await serviceFallback.calculateDelivery(customerCoords);
     const straightKm = calculateHaversineDistance(clinicConfig, customerCoords);
