@@ -168,11 +168,13 @@ async function main() {
                 sender_name: msg.sender_name,
                 payload_raw: msg.payload_raw,
                 created_at: new Date(msg.created_at),
+                read_at: msg.read_at ? new Date(msg.read_at) : new Date(msg.created_at || Date.now()),
               },
               update: {
                 direction: msg.direction,
                 content: msg.content,
                 payload_raw: msg.payload_raw,
+                read_at: msg.read_at ? new Date(msg.read_at) : new Date(msg.created_at || Date.now()),
               },
             });
             importedMessages++;
