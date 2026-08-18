@@ -4,6 +4,7 @@ import { hasAccess } from '../config/rolePermissions';
 import { connectLiveChatSse } from '../services/liveChatSse';
 import {
   initAudioUnlock,
+  unlockAudioContext,
   playIncomingMessageSound,
   showBrowserNotification,
   isSoundEnabled,
@@ -38,10 +39,19 @@ export function useLiveChatNotification(currentRole: string) {
     const next = !soundActive;
     setSoundActive(next);
     setSoundEnabled(next);
+    unlockAudioContext();
     if (next) {
-      playIncomingMessageSound(); // Play test tone when enabling
+      playIncomingMessageSound();
     }
   }, [soundActive]);
+
+  // Test sound generator explicitly
+  const playTestSound = useCallback(() => {
+    unlockAudioContext();
+    setSoundActive(true);
+    setSoundEnabled(true);
+    playIncomingMessageSound();
+  }, []);
 
   // Request browser desktop/mobile push notification permission
   const requestPushPermission = useCallback(async () => {
@@ -169,6 +179,7 @@ export function useLiveChatNotification(currentRole: string) {
     openChatFromToast,
     soundActive,
     toggleSound,
+    playTestSound,
     requestPushPermission,
     unreadLiveChatCount,
     canAccessLiveChat,
