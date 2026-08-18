@@ -43,6 +43,8 @@ html, body, #root {
   /* Prevent browser native horizontal edge swipe navigation reload */
   overscroll-behavior-x: none;
   touch-action: pan-y pinch-zoom;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {

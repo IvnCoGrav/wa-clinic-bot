@@ -1068,7 +1068,7 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col min-h-0 space-y-1 sm:space-y-1.5">
+    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-1 sm:space-y-1.5">
       {/* Top Header */}
       <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0`}>
         <div className="flex items-center space-x-2.5">
