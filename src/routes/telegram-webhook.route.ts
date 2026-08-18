@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { telegramService } from '../services/telegram.service';
+import { parsePositiveInt } from '../utils/env-numeric';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -456,6 +457,116 @@ _Semua infrastruktur server beroperasi optimal._`,
     }
 
     // -----------------------------------------------------------------------------------------
+    // 6b. Command: /clean (atau /clean_server / /server_clean)
+    // Task pembersihan server: bot menulis request file di storage/, cron host
+    // (clean-trigger.sh) menjalankan server-clean.sh, lalu bot polling hasilnya.
+    // HANYA dari chat yang sudah ter-pair dengan tenant (aman — bukan sembarang chat).
+    // -----------------------------------------------------------------------------------------
+    if (/^\/(?:clean|clean_server|server_clean)(?:@\w+)?$/i.test(text)) {
+      const cleanEnabled = (process.env.TELEGRAM_CLEAN_ENABLED || 'true').toLowerCase();
+      if (cleanEnabled === 'false') {
+        await telegramService.sendMessage({
+          chatId,
+          messageThreadId,
+          text: `🔒 *Perintah Pembersihan Server Dinonaktifkan*
+
+Admin menonaktifkan perintah ini (env \`TELEGRAM_CLEAN_ENABLED=false\`).`,
+        });
+        return reply.status(200).send({ ok: true });
+      }
+
+      const tenant = await findTenantForChat();
+      if (!tenant) {
+        await telegramService.sendMessage({
+          chatId,
+          messageThreadId,
+          text: `⚠️ *Akses Ditolak*
+
+Perintah \`/clean\` hanya bisa dijalankan dari chat yang sudah terhubung ke klinik melalui Admin Dashboard.`,
+        });
+        return reply.status(200).send({ ok: true });
+      }
+
+      const path = await import('path');
+      const fs = await import('fs');
+      const cleanStorageDir = process.env.CLEAN_STORAGE_DIR || path.join(process.cwd(), 'storage');
+      const requestFile = path.join(cleanStorageDir, '.clean-request');
+      const resultFile = path.join(cleanStorageDir, '.clean-result');
+
+      // Anti antrean ganda: masih ada request yang belum diproses cron
+      if (fs.existsSync(requestFile)) {
+        await telegramService.sendMessage({
+          chatId,
+          messageThreadId,
+          text: `⏳ *Pembersihan Server Masih Diproses*
+
+Permintaan sebelumnya belum selesai (cron memproses ≤ 1 menit). Coba lagi sebentar lagi.`,
+        });
+        return reply.status(200).send({ ok: true });
+      }
+
+      try {
+        fs.mkdirSync(cleanStorageDir, { recursive: true });
+        fs.writeFileSync(requestFile, JSON.stringify({ chatId, messageThreadId, requestedAt: new Date().toISOString(), requestedBy: senderName }), 'utf-8');
+      } catch (err: any) {
+        console.error('[TELEGRAM /CLEAN] Gagal menulis request file:', err.message);
+        await telegramService.sendMessage({
+          chatId,
+          messageThreadId,
+          text: `⚠️ *Gagal Menjadwalkan Pembersihan Server*
+
+${err.message}`,
+        });
+        return reply.status(200).send({ ok: true });
+      }
+
+      const startTime = Date.now();
+      await telegramService.sendMessage({
+        chatId,
+        messageThreadId,
+        text: `🧹 *Pembersihan Server Dijadwalkan!*
+🏥 *${tenant.name || 'Klinik'}*
+
+Permintaan diterima — cron host akan memproses dalam ≤ 1 menit (build cache Docker, image dangling, log, dan temp).
+
+Hasil akan dikirim otomatis ke chat ini setelah selesai.`,
+      });
+
+      // Polling hasil (background, tidak memblokir webhook response)
+      const pollMs = parsePositiveInt(process.env.CLEAN_POLL_MS, 5000);
+      const pollTimeoutMs = parsePositiveInt(process.env.CLEAN_POLL_TIMEOUT_MS, 120000);
+      const pollInterval = setInterval(async () => {
+        try {
+          if (!fs.existsSync(resultFile)) return;
+          const resultText = fs.readFileSync(resultFile, 'utf-8').slice(0, 3500);
+          fs.unlinkSync(resultFile);
+          clearInterval(pollInterval);
+          const elapsedSec = Math.round((Date.now() - startTime) / 1000);
+          await telegramService.sendMessage({
+            chatId,
+            messageThreadId,
+            text: `✅ *Pembersihan Server Selesai*
+⏱️ *Durasi:* ${elapsedSec} detik
+
+\`\`\`
+${resultText}
+\`\`\``,
+          });
+        } catch (pollErr: any) {
+          clearInterval(pollInterval);
+          console.error('[TELEGRAM /CLEAN] Polling result error:', pollErr.message);
+        }
+      }, pollMs);
+
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        console.warn('[TELEGRAM /CLEAN] Polling result timeout — cron mungkin tidak aktif.');
+      }, pollTimeoutMs);
+
+      return reply.status(200).send({ ok: true, cleanScheduled: true });
+    }
+
+    // -----------------------------------------------------------------------------------------
     // 7. Command: /help
     // -----------------------------------------------------------------------------------------
     if (/^\/(?:help)(?:@\w+)?$/i.test(text)) {
@@ -465,6 +576,7 @@ _Semua infrastruktur server beroperasi optimal._`,
         text: `🤖 *Daftar Perintah Bot Telegram:*
 
 • \`/server\` (atau \`/status_server\`) — Cek beban total CPU, RAM, Harddisk & status koneksi
+• \`/clean\` (atau \`/clean_server\`) — Pembersihan server (build cache Docker, log, temp) — hanya dari chat terhubung
 • \`/set_daily_report\` — Daftarkan topik aktif untuk Laporan Harian
 • \`/set_error_alerts\` — Daftarkan topik aktif untuk Notifikasi Error Server
 • \`/set_medical_alerts\` — Daftarkan topik aktif untuk Eskalasi Medis Bidan
