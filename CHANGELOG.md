@@ -18,6 +18,13 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Unit test** (`tests/unit/telegram-webhook.test.ts`): akses ditolak dari chat non-paired, penjadwalan + laporan hasil via polling, dan anti-antrean ganda.
 - **Efek di lapangan**: saat deploy pertama, disk server turun dari 31 GB (83%) ke 14 GB (36%) setelah `docker builder prune` membebaskan ~17 GB build cache.
 
+### Fixed — Pemulihan Total Event Stream Real-Time Live Chat SSE (Redis Pub/Sub Local Delivery)
+
+- **Perbaikan Krusial Distribusi Event Real-Time (`live-chat-hub.service.ts`)**:
+  - Menemukan dan memperbaiki akar penyebab hilangnya update real-time di Live Chat Monitor: Pada `LiveChatHubService.publish()`, saat Redis aktif (kondisi produksi), event langsung di-publish ke Redis dan langsung mengembalikan eksekusi (`return`) tanpa memancarkan event ke `localBus` instance. Di sisi lain, listener Redis subscriber sengaja menolak (*drop/loopback-skip*) event yang berasal dari instance-nya sendiri (`_instanceId`).
+  - Akibatnya, pada server produksi dengan 1 instance aktif, seluruh event `message.created` dan `conversation.updated` tertelan dan tidak pernah terkirim ke klien SSE browser (`/api/admin/live-chat/events`).
+  - **Solusi**: `publish()` kini selalu memancarkan event secara langsung ke `this.localBus.emit()` (sehingga subscriber SSE di instance lokal menerima pesan instan tanpa jeda) dan secara simultan mem-broadcast ke Redis untuk instance lain. Unit test diperbarui dan lulus 100%.
+
 ### Added — Sistem Notifikasi Real-time Chat Masuk WhatsApp-Style (Audio Chime, Getaran, In-App Banner & Web Push)
 
 - **Sistem Notifikasi Pesan Masuk Real-Time Berbasis RBAC (`useLiveChatNotification.ts` & `notificationSound.ts`)**:
