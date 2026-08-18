@@ -4,12 +4,11 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Fixed — 100% Eliminasi Popup 'Copy / Salin' Android & Anti-Reload Edge Swipe Back
+### Fixed — Universal App-Wide Anti-Selection, Global Selectstart Interception & 100% Copy Popup Elimination
 
-- **Isolasi Hit-Testing & Pointer-Events pada Teks Anak (`index.css` & `LiveChatMonitor.tsx`)**:
-  - Mengatur `pointer-events: none` pada elemen teks anak (`span`, `p`, `h4`, `h5`, `h6`, `div`) di dalam kartu chat `[data-no-select]` sehingga sentuhan *hold press* selalu diterima oleh kartu induk dan tidak pernah menyentuh node teks. Hal ini sepenuhnya mencegah mesin Android Chrome mengaktifkan *text-selection assist* dan memunculkan *Action Bar* bawaan OS (Salin / Copy / Share).
-  - Menambahkan listener `window.addEventListener('contextmenu', ..., { capture: true })` untuk mencegat event menu konteks native pada fase *capture* paling awal sebelum browser merender popup native.
-  - Menambahkan listener real-time `selectionchange` untuk membersihkan selection range seketika (`selection.removeAllRanges()`).
+- **Universal App-Wide Anti-Selection & Selectstart Blocker (`App.tsx` & `index.css`)**:
+  - Menerapkan aturan CSS universal `*, *::before, *::after { user-select: none !important; -webkit-touch-callout: none !important; }` ke seluruh elemen aplikasi dashboard (hanya membuka seleksi pada elemen `input`, `textarea`, dan `.selectable-text`).
+  - Memasang listener capture global `document.addEventListener('selectstart', ..., { capture: true })` dan `window.addEventListener('contextmenu', ..., { capture: true })` di root `App.tsx` untuk membatalkan (*e.preventDefault()*) semua event seleksi teks bawaan browser saat menahan sentuhan (*hold press 3+ detik*). Hal ini mengeliminasi 100% munculnya blok biru seleksi dan popup/floating bubble 'Salin / Copy / Share' bawaan OS Android dan iOS.
 - **Pencegahan Native Browser Edge Reload pada Slide Back (`index.css` & `LiveChatMonitor.tsx`)**:
   - Menerapkan `overscroll-behavior-x: none` dan `touch-action: pan-y pinch-zoom` pada elemen root `html, body, #root` untuk mencegah browser mobile (Chrome/Safari) mencegat usapan tepi kiri sebagai navigasi *hard reload* halaman web.
   - Menambahkan handler `handleDetailTouchMove` dengan `e.preventDefault()` saat usapan horizontal terdeteksi dari tepi kiri, memastikan SPA tidak pernah memuat ulang komponen booting (*"Menyiapkan tampilan…"*) saat pengguna kembali ke daftar chat.
