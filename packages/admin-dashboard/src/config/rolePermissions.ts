@@ -186,7 +186,7 @@ export const ALL_MODULES: ModuleDefinition[] = [
 
 export const ALL_PATHS = ALL_MODULES.map((m) => m.path);
 
-export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
+export const CORE_SYSTEM_ROLES: Record<string, RoleConfig> = {
   super_admin: {
     key: 'super_admin',
     label: 'Super Admin',
@@ -203,94 +203,6 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
     allowedPaths: [...ALL_PATHS],
     defaultRedirect: '/admin/overview',
   },
-  admin_cs: {
-    key: 'admin_cs',
-    label: 'Admin CS & Reservasi',
-    description: 'Akses operasional harian: kalender reservasi, database pasien, katalog layanan, follow-up, dan live chat.',
-    isSystem: false,
-    allowedPaths: [
-      '/admin/overview',
-      '/admin/customers',
-      '/admin/chat-migration',
-      '/admin/labels',
-      '/admin/customer-service',
-      '/admin/reservations',
-      '/admin/staff-management',
-      '/admin/services',
-      '/admin/delivery',
-      '/admin/follow-ups',
-      '/admin/follow-up-templates',
-      '/admin/knowledge-base',
-      '/admin/live-chat',
-    ],
-    defaultRedirect: '/admin/overview',
-  },
-  spv_cs: {
-    key: 'spv_cs',
-    label: 'Supervisor CS & Reservasi',
-    description: 'Akses operasional & supervisi: kalender reservasi, database pasien, katalog layanan, follow-up, live chat, dan manajemen staf.',
-    isSystem: false,
-    allowedPaths: [
-      '/admin/overview',
-      '/admin/customers',
-      '/admin/chat-migration',
-      '/admin/labels',
-      '/admin/customer-service',
-      '/admin/reservations',
-      '/admin/staff-management',
-      '/admin/services',
-      '/admin/delivery',
-      '/admin/follow-ups',
-      '/admin/follow-up-templates',
-      '/admin/knowledge-base',
-      '/admin/live-chat',
-      '/admin/persona',
-      '/admin/ai-evaluations',
-      '/admin/settings',
-      '/admin/chat-export',
-    ],
-    defaultRedirect: '/admin/overview',
-  },
-  spvcs: {
-    key: 'spvcs',
-    label: 'Supervisor CS & Reservasi',
-    description: 'Akses operasional & supervisi: kalender reservasi, database pasien, katalog layanan, follow-up, live chat, dan manajemen staf.',
-    isSystem: false,
-    allowedPaths: [
-      '/admin/overview',
-      '/admin/customers',
-      '/admin/chat-migration',
-      '/admin/labels',
-      '/admin/customer-service',
-      '/admin/reservations',
-      '/admin/staff-management',
-      '/admin/services',
-      '/admin/delivery',
-      '/admin/follow-ups',
-      '/admin/follow-up-templates',
-      '/admin/knowledge-base',
-      '/admin/live-chat',
-      '/admin/persona',
-      '/admin/ai-evaluations',
-      '/admin/settings',
-      '/admin/chat-export',
-    ],
-    defaultRedirect: '/admin/overview',
-  },
-  advertiser: {
-    key: 'advertiser',
-    label: 'Advertiser / Media Buyer',
-    description: 'Akses modul periklanan: overview analitik, landing page, tracking Meta Click, antrean CAPI, dan evaluasi AI.',
-    isSystem: false,
-    allowedPaths: [
-      '/admin/overview',
-      '/admin/landing',
-      '/admin/meta-click-catcher',
-      '/admin/meta-capi-queue',
-      '/admin/ai-evaluations',
-    ],
-    defaultRedirect: '/admin/overview',
-  },
   therapist: {
     key: 'therapist',
     label: 'Staff Terapis',
@@ -301,10 +213,14 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
   },
 };
 
+export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
+  ...CORE_SYSTEM_ROLES,
+};
+
 import { apiRequest } from '../services/api';
 
 const STORAGE_KEY = 'kala_custom_roles_v1';
-let inMemoryRolesCache: Record<string, RoleConfig> = { ...DEFAULT_ROLE_CONFIGS };
+let inMemoryRolesCache: Record<string, RoleConfig> = { ...CORE_SYSTEM_ROLES };
 
 export function getCustomRoles(): Record<string, RoleConfig> {
   if (typeof window === 'undefined') return inMemoryRolesCache;
@@ -312,7 +228,7 @@ export function getCustomRoles(): Record<string, RoleConfig> {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return inMemoryRolesCache;
     const parsed = JSON.parse(raw);
-    inMemoryRolesCache = { ...DEFAULT_ROLE_CONFIGS, ...parsed };
+    inMemoryRolesCache = { ...CORE_SYSTEM_ROLES, ...parsed };
     return inMemoryRolesCache;
   } catch {
     return inMemoryRolesCache;
@@ -323,7 +239,7 @@ export async function fetchRolesFromApi(): Promise<Record<string, RoleConfig>> {
   try {
     const res = await apiRequest('/api/admin/roles');
     if (res && res.success && Array.isArray(res.data)) {
-      const merged: Record<string, RoleConfig> = { ...DEFAULT_ROLE_CONFIGS };
+      const merged: Record<string, RoleConfig> = { ...CORE_SYSTEM_ROLES };
       for (const r of res.data) {
         merged[r.key] = {
           key: r.key,
@@ -375,7 +291,7 @@ export async function saveRoleConfig(role: RoleConfig): Promise<boolean> {
 }
 
 export async function deleteCustomRole(roleKey: string): Promise<boolean> {
-  if (DEFAULT_ROLE_CONFIGS[roleKey]?.isSystem) return false;
+  if (CORE_SYSTEM_ROLES[roleKey]?.isSystem) return false;
 
   delete inMemoryRolesCache[roleKey];
   if (typeof window !== 'undefined') {
@@ -410,11 +326,7 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ROLE_MENU_ACCESS: Record<string, string[]> = {
   super_admin: [...ALL_PATHS],
   tenant_admin: [...ALL_PATHS],
-  spv_cs: DEFAULT_ROLE_CONFIGS.spv_cs.allowedPaths,
-  spvcs: DEFAULT_ROLE_CONFIGS.spvcs.allowedPaths,
-  admin_cs: DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths,
-  advertiser: DEFAULT_ROLE_CONFIGS.advertiser.allowedPaths,
-  therapist: DEFAULT_ROLE_CONFIGS.therapist.allowedPaths,
+  therapist: ['/admin/staff/today'],
 };
 
 /**
