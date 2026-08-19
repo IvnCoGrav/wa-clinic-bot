@@ -82,24 +82,21 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       });
     }
 
-    // --- TAHAP B: Verifikasi Staff (Phone + Bcrypt Password di tabel Staff) ---
+    // --- TAHAP B: Verifikasi Staff (Phone/Username + Bcrypt Password di tabel Staff) ---
     if (identifier && inputKey) {
-      const normalizedPhone = identifier.replace(/\D/g, '');
+      const cleanPhone = identifier.trim().replace(/^(\+62|62)/, '0');
       try {
         const staff = await prisma.staff.findFirst({
           where: {
-            phone: normalizedPhone.length > 0 ? normalizedPhone : identifier,
-            tenant_id: DEFAULT_TENANT_ID,
-            active: true,
+            OR: [
+              { phone: cleanPhone, tenant_id: DEFAULT_TENANT_ID, active: true },
+              { phone: identifier.trim(), tenant_id: DEFAULT_TENANT_ID, active: true },
+              { name: identifier.trim(), tenant_id: DEFAULT_TENANT_ID, active: true },
+            ],
           },
         });
 
         if (staff && (await verifyPassword(inputKey, staff.password_hash))) {
-          if (staff.role !== 'THERAPIST') {
-            return reply.status(403).send({
-              error: `Akun "${staff.name}" adalah Staf Admin (${staff.role}) dan tidak boleh login memakai nomor HP. Gunakan email super admin, atau minta pengelola mengubah peran akun menjadi Terapis.`,
-            });
-          }
           loginAttemptsMap.delete(ip);
 
           const result = await StaffAuthService.login(staff.phone, inputKey, DEFAULT_TENANT_ID);
@@ -109,12 +106,34 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
             }`;
             reply.header('Set-Cookie', cookieValue);
 
-            const staffRole: string = staff.role; // 'THERAPIST' | 'ADMIN_CS' | 'ADVERTISER' | Custom
-            const redirectTo = staffRole === 'THERAPIST' ? '/admin/staff/today' : '/admin/overview';
+            const staffRole: string = staff.role; // 'THERAPIST' | 'SPV_CS' | 'ADMIN_CS' | 'ADVERTISER' | Custom
             const frontendRole =
               staffRole === 'THERAPIST'
                 ? 'therapist'
                 : staffRole.toLowerCase();
+
+            // Resolve dynamic redirect based on assigned role permissions
+            let redirectTo = staffRole === 'THERAPIST' ? '/admin/staff/today' : '/admin/overview';
+            try {
+              const customRole = await prisma.customRole.findFirst({
+                where: {
+                  tenant_id: DEFAULT_TENANT_ID,
+                  OR: [
+                    { key: frontendRole },
+                    { key: staffRole },
+                    { key: frontendRole.replace(/_/g, '') },
+                  ],
+                },
+              });
+              if (customRole) {
+                const allowed = Array.isArray(customRole.allowed_paths) ? customRole.allowed_paths : [];
+                if (customRole.default_redirect && allowed.includes(customRole.default_redirect)) {
+                  redirectTo = customRole.default_redirect;
+                } else if (allowed.length > 0) {
+                  redirectTo = allowed[0];
+                }
+              }
+            } catch (_) {}
 
             return reply.status(200).send({
               success: true,

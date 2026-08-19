@@ -311,6 +311,51 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PUT /api/staff/conversations/:id/messages/:messageId/edit
+   * Staff mengedit pesan WhatsApp yang sudah terkirim (maksimal 15 menit).
+   * Dibatasi hanya untuk percakapan customer yang aktif hari ini.
+   */
+  fastify.put(
+    '/api/staff/conversations/:id/messages/:messageId/edit',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string; messageId: string };
+        Body: { text: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const { id, messageId } = request.params;
+      const { text } = request.body || {};
+
+      if (!text || !text.trim()) {
+        return reply.status(400).send({ success: false, error: 'Teks pesan baru tidak boleh kosong.' });
+      }
+
+      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId);
+      if (!owned) {
+        return reply.status(403).send({ error: 'Anda tidak memiliki akses ke percakapan ini.' });
+      }
+
+      const result = await liveChatService.editMessage({
+        conversationId: id,
+        messageId,
+        newContent: text.trim(),
+        tenantId,
+        adminName: staffName,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({ success: true, message: 'Pesan berhasil diperbarui di WhatsApp.' });
+    }
+  );
+
+  /**
    * GET /api/staff/live-chat/events
    * Server-Sent Events (SSE) stream khusus staff.
    * Melakukan filter server-side: hanya mem-broadcast event percakapan milik staff tersebut hari ini.

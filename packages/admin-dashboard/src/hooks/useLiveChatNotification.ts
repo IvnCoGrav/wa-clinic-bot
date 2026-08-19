@@ -53,10 +53,22 @@ export function useLiveChatNotification(currentRole: string) {
     playIncomingMessageSound();
   }, []);
 
-  // Request browser desktop/mobile push notification permission
+  // Request browser desktop/mobile push notification permission & register VAPID Web Push
   const requestPushPermission = useCallback(async () => {
-    return await requestNotificationPermission();
-  }, []);
+    const { subscribeToPushNotifications } = await import('../services/pushNotification');
+    const result = await subscribeToPushNotifications(currentRole || 'ADMIN');
+    return result.success ? 'granted' : 'denied';
+  }, [currentRole]);
+
+  // Auto-subscribe to Web Push if permission was previously granted
+  useEffect(() => {
+    if (!canAccessLiveChat) return;
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      import('../services/pushNotification').then(({ subscribeToPushNotifications }) => {
+        subscribeToPushNotifications(currentRole || 'ADMIN').catch(() => {});
+      });
+    }
+  }, [canAccessLiveChat, currentRole]);
 
   // Fetch initial unread count on mount if authorized
   useEffect(() => {
@@ -103,8 +115,8 @@ export function useLiveChatNotification(currentRole: string) {
             payload.senderType === 'CUSTOMER' ||
             payload.sender_type === 'CUSTOMER';
 
-          // Abaikan pesan outbound yang dikirim oleh sistem / CS sendiri
-          if (!isCustomer) return;
+          // Abaikan pesan outbound CS dan pesan riwayat masa lalu (historical sync)
+          if (!isCustomer || payload.isHistorical) return;
 
           // Anti-duplicate protection (10 seconds window per message ID)
           if (recentMessageIdsRef.current.has(msgId)) return;
@@ -120,15 +132,18 @@ export function useLiveChatNotification(currentRole: string) {
           // 1. Play realistic WhatsApp two-tone audio chime & haptic vibration
           playIncomingMessageSound();
 
-          // 2. Show HTML5 Native Browser Notification (useful when tab is in background / screen locked)
-          showBrowserNotification({
-            title: `💬 Pesan Baru: ${customerName}`,
-            body: content,
-            conversationId,
-            onClick: () => {
-              navigate('/admin/live-chat');
-            },
-          });
+          // 2. Show HTML5 Native Browser Notification (only fallback if service worker is not active)
+          const isDocHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+          if (isDocHidden && !('serviceWorker' in navigator)) {
+            showBrowserNotification({
+              title: customerName,
+              body: content,
+              conversationId,
+              onClick: () => {
+                navigate('/admin/live-chat');
+              },
+            });
+          }
 
           // 3. Increment sidebar unread badge
           setUnreadLiveChatCount((prev) => prev + 1);

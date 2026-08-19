@@ -52,7 +52,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations',
     async (
       request: FastifyRequest<{
-        Querystring: { limit?: string; offset?: string; mode?: string };
+        Querystring: { limit?: string; offset?: string; mode?: string; search?: string };
       }>,
       reply
     ) => {
@@ -62,7 +62,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         const modeRaw = request.query.mode || 'all';
         const mode: 'all' | 'real' | 'sandbox' =
           modeRaw === 'real' || modeRaw === 'sandbox' ? modeRaw : 'all';
-        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode);
+        const search = request.query.search?.trim();
+        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode, search);
         return reply.status(200).send({ success: true, count: items.length, hasMore, mode, data: items });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
@@ -242,6 +243,68 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/conversations/:id/typing & POST /api/admin/live-chat/conversations/:id/typing
+   * Indikator status mengetik admin ("sedang mengetik...") & read receipt (sendSeen) ke WhatsApp.
+   */
+  const typingHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: { isTyping?: boolean };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id } = request.params;
+    const { isTyping } = request.body || {};
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+
+    try {
+      const conversation = await conversationService.getConversationById(id, tenantId);
+      if (!conversation || !conversation.customer) {
+        return reply.status(404).send({ success: false, error: 'Percakapan tidak ditemukan.' });
+      }
+
+      // Jangan kirim sinyal typing/seen untuk sandbox test chat
+      if ((conversation.customer as any).is_sandbox_test) {
+        return reply.status(200).send({ success: true, sandbox: true });
+      }
+
+      const phone = conversation.customer.phone;
+      const { getGateway } = await import('../../integrations/whatsapp');
+      const gateway = await getGateway(tenantId);
+
+      if (isTyping) {
+        console.log(`[LIVE CHAT TYPING] Admin started typing -> conversation: ${id}, phone: ${phone}`);
+        // 1. Kirim sinyal markAsRead (sendSeen / centang biru)
+        if (typeof gateway.markAsRead === 'function') {
+          await gateway.markAsRead(phone).catch((err: any) => console.warn('[TYPING ERROR] markAsRead failed:', err.message));
+        }
+        // 2. Mulai status typing ("sedang mengetik...")
+        if (gateway.providerType === 'WAHA') {
+          const { wahaClient } = await import('../../integrations/waha/client');
+          await wahaClient.startTyping(phone).catch((err: any) => console.warn('[TYPING ERROR] startTyping failed:', err.message));
+        } else if (typeof gateway.sendTypingIndicator === 'function') {
+          await gateway.sendTypingIndicator(phone, undefined, 4000).catch(() => {});
+        }
+      } else {
+        console.log(`[LIVE CHAT TYPING] Admin stopped typing -> conversation: ${id}, phone: ${phone}`);
+        // Hentikan status typing
+        if (gateway.providerType === 'WAHA') {
+          const { wahaClient } = await import('../../integrations/waha/client');
+          await wahaClient.stopTyping(phone).catch((err: any) => console.warn('[TYPING ERROR] stopTyping failed:', err.message));
+        }
+      }
+
+      return reply.status(200).send({ success: true, isTyping: !!isTyping });
+    } catch (err: any) {
+      console.warn(`[LIVE CHAT TYPING ERROR] Handler error:`, err.message);
+      return reply.status(200).send({ success: false, error: err.message });
+    }
+  };
+
+  fastify.post('/api/admin/conversations/:id/typing', typingHandler);
+  fastify.post('/api/admin/live-chat/conversations/:id/typing', typingHandler);
+
+  /**
    * GET /api/admin/gateway-capability
    * Mengambil informasi provider gateway WhatsApp aktif dan kapabilitasnya (seperti kemampuan revoke/hapus pesan).
    */
@@ -279,6 +342,44 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       return reply.status(200).send({ success: true, message: 'Pesan berhasil ditarik dari WhatsApp.' });
+    }
+  );
+
+  /**
+   * PUT /api/admin/conversations/:id/messages/:messageId/edit
+   * Mengedit teks pesan WhatsApp yang sudah terkirim (maksimal 15 menit).
+   */
+  fastify.put(
+    '/api/admin/conversations/:id/messages/:messageId/edit',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string; messageId: string };
+        Body: { text: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id, messageId } = request.params;
+      const { text } = request.body || {};
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const adminName = (request as any).adminIdentity || 'Admin';
+
+      if (!text || !text.trim()) {
+        return reply.status(400).send({ success: false, error: 'Teks pesan baru tidak boleh kosong.' });
+      }
+
+      const result = await liveChatService.editMessage({
+        conversationId: id,
+        messageId,
+        newContent: text.trim(),
+        tenantId,
+        adminName,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+
+      return reply.status(200).send({ success: true, message: 'Pesan berhasil diperbarui di WhatsApp.' });
     }
   );
 

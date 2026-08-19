@@ -34,9 +34,10 @@ import {
   Database,
   QrCode,
   Loader,
+  RefreshCw,
 } from 'lucide-react';
 
-import { ROLE_LABELS, hasAccess } from '../../config/rolePermissions';
+import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { useLiveChatNotification } from '../../hooks/useLiveChatNotification';
 import { useUiFeedback } from './UiFeedback';
@@ -48,6 +49,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const currentRole = user?.role || 'super_admin';
+  const [customRoles, setCustomRoles] = useState(() => getCustomRoles());
+
+  useEffect(() => {
+    const handleRolesUpdate = () => {
+      setCustomRoles({ ...getCustomRoles() });
+    };
+    window.addEventListener('roles-updated', handleRolesUpdate);
+    return () => window.removeEventListener('roles-updated', handleRolesUpdate);
+  }, []);
 
   // Global Real-time Live Chat Notification & Sound Hook (RBAC Filtered)
   const {
@@ -57,6 +67,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     soundActive,
     toggleSound,
     playTestSound,
+    requestPushPermission,
     unreadLiveChatCount,
     canAccessLiveChat,
   } = useLiveChatNotification(currentRole);
@@ -66,6 +77,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     emitBootPhase('mount');
+    emitBootPhase('done');
   }, []);
 
   useEffect(() => {
@@ -293,10 +305,106 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, [mobileMenuOpen]);
 
+  // 🔄 Mobile Pull-to-Refresh (Swipe Down to Reload)
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const pullStartRef = useRef<{ y: number; x: number } | null>(null);
+
+  useEffect(() => {
+    if (window.innerWidth >= 768) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest('input') ||
+        target?.closest('textarea') ||
+        target?.closest('select') ||
+        target?.closest('[data-no-ptr]')
+      ) {
+        return;
+      }
+
+      const scrollable = target?.closest('.overflow-y-auto') as HTMLElement | null;
+      const isTop = scrollable ? scrollable.scrollTop <= 0 : window.scrollY <= 0;
+      if (isTop) {
+        pullStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!pullStartRef.current || isPullRefreshing) return;
+      const touch = e.touches[0];
+      const deltaY = touch.clientY - pullStartRef.current.y;
+      const deltaX = touch.clientX - pullStartRef.current.x;
+
+      if (deltaY > 8 && deltaY > Math.abs(deltaX) * 1.2) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        const distance = Math.min(deltaY * 0.35, 60);
+        setPullDistance(distance);
+      } else if (deltaY < 0) {
+        setPullDistance(0);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (pullDistance >= 45 && !isPullRefreshing) {
+        setIsPullRefreshing(true);
+        setPullDistance(45);
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try {
+            navigator.vibrate(40);
+          } catch (_) {}
+        }
+        setTimeout(() => {
+          window.location.reload();
+        }, 350);
+      } else {
+        setPullDistance(0);
+      }
+      pullStartRef.current = null;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [pullDistance, isPullRefreshing]);
+
   const isLiveChat = location.pathname.includes('/live-chat');
 
   return (
     <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
+      {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
+      {(pullDistance > 0 || isPullRefreshing) && (
+        <div
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none transition-all duration-100 ease-out flex items-center justify-center"
+          style={{
+            transform: `translate(-50%, ${pullDistance}px) scale(${Math.min(0.7 + pullDistance / 100, 1)})`,
+            opacity: Math.min(pullDistance / 20, 1),
+          }}
+        >
+          <div className="bg-white border border-[#008069]/30 rounded-full p-2.5 shadow-2xl text-[#008069] flex items-center justify-center backdrop-blur-md">
+            <RefreshCw
+              size={20}
+              className={`${isPullRefreshing ? 'animate-spin' : ''}`}
+              style={{
+                transform: isPullRefreshing ? undefined : `rotate(${pullDistance * 5}deg)`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 🔔 Floating In-App WhatsApp-Style Incoming Chat Notification Banner */}
       {incomingToast && (
         <div
@@ -379,18 +487,41 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </button>
         </div>
 
-        {/* Navigation Items (Grouped with Section Headers) */}
+        {/* Navigation Items (Grouped with Section Headers & Dynamic Role-Based Sorting) */}
         <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
-          {navGroups.map((group) => {
-            const visibleItems = group.items.filter((item) => hasAccess(currentRole, item.path));
-            if (visibleItems.length === 0) return null;
+          {(() => {
+            const formattedRole = (currentRole || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const activeRoleConfig =
+              customRoles[formattedRole] ||
+              customRoles[(currentRole || '').toLowerCase()] ||
+              customRoles[currentRole] ||
+              customRoles[formattedRole.replace(/_/g, '')];
 
-            return (
+            const roleAllowedOrder = activeRoleConfig?.allowedPaths || [];
+
+            const getPathOrderIndex = (path: string) => {
+              const idx = roleAllowedOrder.indexOf(path);
+              return idx >= 0 ? idx : 999;
+            };
+
+            const sortedNavGroups = navGroups
+              .map((group) => {
+                const items = group.items
+                  .filter((item) => hasAccess(currentRole, item.path))
+                  .sort((a, b) => getPathOrderIndex(a.path) - getPathOrderIndex(b.path));
+                const minIndex =
+                  items.length > 0 ? Math.min(...items.map((i) => getPathOrderIndex(i.path))) : 999;
+                return { ...group, items, minIndex };
+              })
+              .filter((group) => group.items.length > 0)
+              .sort((a, b) => a.minIndex - b.minIndex);
+
+            return sortedNavGroups.map((group) => (
               <div key={group.title} className="space-y-1">
                 <div className="px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#8696a0]">
                   {group.title}
                 </div>
-                {visibleItems.map((item) => {
+                {group.items.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.path;
                   return (
@@ -420,8 +551,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   );
                 })}
               </div>
-            );
-          })}
+            ));
+          })()}
         </nav>
 
         {/* User profile / Logout */}
@@ -511,15 +642,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {/* Live Chat Notification Sound Mute/Unmute Toggle (RBAC Filtered) */}
             {canAccessLiveChat && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   toggleSound();
                   if (!soundActive) {
-                    toast('🔊 Suara notifikasi WhatsApp aktif! Jika di iPhone/HP, pastikan saklar Silent di samping HP nonaktif.', 'success');
+                    toast('🔊 Suara notifikasi aktif! Memeriksa izin push background...', 'info');
+                    try {
+                      const perm = await requestPushPermission();
+                      if (perm === 'granted') {
+                        toast('🔔 Web Push Background Aktif! Notifikasi akan muncul saat aplikasi tertutup.', 'success');
+                      } else {
+                        toast('⚠️ Izin notifikasi browser belum diberikan. Silakan izinkan notifikasi di browser/HP Anda.', 'info');
+                      }
+                    } catch (e: any) {
+                      toast(`⚠️ Gagal mendaftarkan push: ${e.message}`, 'error');
+                    }
                   } else {
                     toast('🔇 Suara notifikasi chat dimatikan (Mute).', 'info');
                   }
                 }}
-                title={soundActive ? 'Suara Notifikasi Chat: Aktif (Klik untuk Mute)' : 'Suara Notifikasi Chat: Mati (Klik untuk Aktifkan)'}
+                title={soundActive ? 'Suara & Push Notifikasi: Aktif (Klik untuk Mute)' : 'Suara & Push Notifikasi: Mati (Klik untuk Aktifkan)'}
                 className={`p-1.5 sm:p-2 rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs ${
                   soundActive
                     ? 'bg-emerald-50 border-emerald-200 text-[#008069] hover:bg-emerald-100'
@@ -605,7 +746,29 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     )}
                   </div>
 
-                  <div className="pt-1">
+                  <div className="pt-1 space-y-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { sendTestPush, subscribeToPushNotifications } = await import('../../services/pushNotification');
+                          toast('Mendaftarkan & mengirim notifikasi uji coba...', 'info');
+                          await subscribeToPushNotifications(currentRole);
+                          const res = await sendTestPush();
+                          if (res.success) {
+                            toast('✅ Notifikasi uji coba berhasil dikirim dari server!', 'success');
+                          } else {
+                            toast('⚠️ Gagal mengirim notifikasi uji coba.', 'error');
+                          }
+                        } catch (err: any) {
+                          toast(`⚠️ Error: ${err.message}`, 'error');
+                        }
+                      }}
+                      className="w-full text-center py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs transition border border-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Volume2 size={13} />
+                      Kirim Notifikasi Uji Coba (Test Push)
+                    </button>
                     <Link
                       to="/admin/settings"
                       replace={true}
@@ -626,7 +789,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           className={`flex-1 ${
             isLiveChat
               ? 'p-0.5 sm:p-1.5 md:p-2 overflow-hidden flex flex-col min-h-0'
-              : 'p-4 sm:p-5 md:p-7 space-y-6 overflow-y-auto'
+              : 'p-4 sm:p-5 md:p-7 space-y-6'
           } bg-[#f0f2f5]`}
         >
           {children}

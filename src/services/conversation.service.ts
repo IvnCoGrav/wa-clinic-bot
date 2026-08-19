@@ -158,7 +158,8 @@ export class ConversationService {
     tenantId: string,
     take = 50,
     offset = 0,
-    mode: 'all' | 'real' | 'sandbox' = 'all'
+    mode: 'all' | 'real' | 'sandbox' = 'all',
+    search?: string
   ): Promise<any[]> {
     try {
       const where: any = {
@@ -167,6 +168,15 @@ export class ConversationService {
       };
       if (mode !== 'all') {
         where.customer = { is_sandbox_test: mode === 'sandbox' };
+      }
+      if (search && search.trim()) {
+        const query = search.trim();
+        const cleanDigits = query.replace(/\D/g, '');
+        where.OR = [
+          { customer: { name: { contains: query, mode: 'insensitive' } } },
+          { customer: { phone: { contains: cleanDigits.length > 2 ? cleanDigits : query } } },
+          { messages: { some: { content: { contains: query, mode: 'insensitive' } } } },
+        ];
       }
       const convs = await prisma.conversation.findMany({
         where,
@@ -411,6 +421,18 @@ export class ConversationService {
     } catch (err: any) {
       console.warn(`[GROUP ALERT ERROR] Failed to send group alert:`, err.message);
     }
+
+    // 3. Kirim Web Push Notification darurat ke seluruh dashboard/HP admin
+    try {
+      const { webPushService } = await import('./web-push.service');
+      const customerName = conversation.customer?.name || 'Pelanggan';
+      void webPushService.sendPushToTenant(tenantId, {
+        title: `🚨 Eskalasi CS: ${customerName}`,
+        body: reason || 'Pelanggan membutuhkan penanganan admin',
+        url: `/admin/#/live-chat?conversationId=${conversation.id}`,
+        tag: `escalation-${conversation.id}`,
+      });
+    } catch {}
 
     return await this.updateConversationState(
       conversation.id,

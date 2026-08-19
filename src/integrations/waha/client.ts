@@ -71,6 +71,7 @@ export interface IWahaClient {
   getProfilePicture?(phone: string, session?: string): Promise<string | null>;
   downloadMedia(messageId: string, chatId: string): Promise<Buffer | null>;
   deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<boolean>;
+  editMessage(chatId: string, messageId: string, newText: string): Promise<boolean>;
 }
 
 /**
@@ -1111,7 +1112,8 @@ export class WahaClient implements IWahaClient {
 
   /**
    * Mengunduh media (gambar) pesan masuk dari WAHA.
-   * Endpoint: GET /api/{session}/chats/{chatId}/messages/{messageId}/media.
+   * Endpoint: GET /api/{session}/chats/{chatId}/messages/{messageId}/media
+   * Fallback: GET /api/{session}/chats/{chatId}/messages/{messageId}/download
    * Mengembalikan Buffer binary atau null bila gagal / tak tersedia.
    */
   public async downloadMedia(messageId: string, chatId: string): Promise<Buffer | null> {
@@ -1119,27 +1121,94 @@ export class WahaClient implements IWahaClient {
       // PNG 1x1 transparan sebagai deterministik mock agar alur inbound bisa diuji.
       return Buffer.from(MOCK_QR_BASE64, 'base64');
     }
+
+    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId);
+    const sessionName = this.session;
+
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        const encodedChat = encodeURIComponent(cId);
+        const encodedMsg = encodeURIComponent(mId);
+        const endpoints = [
+          `${this.baseUrl}/api/${sessionName}/chats/${encodedChat}/messages/${encodedMsg}/media`,
+          `${this.baseUrl}/api/${sessionName}/chats/${encodedChat}/messages/${encodedMsg}/download`,
+        ];
+
+        for (const url of endpoints) {
+          try {
+            const response = await axios.get(url, {
+              headers: {
+                'X-Api-Key': this.apiKey || undefined,
+              },
+              responseType: 'arraybuffer',
+              timeout: 15000,
+            });
+
+            if (response.status >= 200 && response.status < 300 && response.data) {
+              if (Buffer.isBuffer(response.data)) return response.data;
+              if (response.data instanceof ArrayBuffer) return Buffer.from(response.data);
+              if (typeof response.data === 'object' && typeof (response.data as any).data === 'string') {
+                return Buffer.from((response.data as any).data, 'base64');
+              }
+              return Buffer.from(response.data as any);
+            }
+          } catch {
+            // Lanjut ke kombinasi URL/kandidat berikutnya
+          }
+        }
+      }
+    }
+
+    console.warn(`[WAHA API ERROR] downloadMedia failed for chat=${chatId}, msg=${messageId}`);
+    return null;
+  }
+
+  /**
+   * Mengambil file langsung dari file store WAHA (/api/files/:session/:file).
+   */
+  public async fetchFile(session: string, file: string): Promise<{ data: Buffer; contentType: string } | null> {
+    if (this.shouldMock) {
+      return { data: Buffer.from(MOCK_QR_BASE64, 'base64'), contentType: 'image/jpeg' };
+    }
     try {
-      const encodedChat = encodeURIComponent(chatId);
-      const encodedMsg = encodeURIComponent(messageId);
       const response = await axios.get(
-        `${this.baseUrl}/api/${this.session}/chats/${encodedChat}/messages/${encodedMsg}/media`,
+        `${this.baseUrl}/api/files/${encodeURIComponent(session)}/${encodeURIComponent(file)}`,
         {
-          headers: {
-            'X-Api-Key': this.apiKey || undefined,
-          },
+          headers: { 'X-Api-Key': this.apiKey || undefined },
           responseType: 'arraybuffer',
           timeout: 15000,
         }
       );
-      if (Buffer.isBuffer(response.data)) return response.data;
-      if (response.data instanceof ArrayBuffer) return Buffer.from(response.data);
-      if (response.data && typeof response.data === 'object') {
-        return Buffer.from(JSON.stringify(response.data));
+      if (response.status >= 200 && response.status < 300 && response.data) {
+        const ct = String(response.headers['content-type'] || 'image/jpeg');
+        return { data: Buffer.from(response.data), contentType: ct };
       }
-      return Buffer.from(response.data as any);
-    } catch (error: any) {
-      console.warn(`[WAHA API ERROR] downloadMedia failed for ${chatId}/${messageId}:`, error?.response?.data || error.message);
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Mengambil buffer langsung dari URL / path file WAHA.
+   */
+  public async fetchUrl(relativeOrFullUrl: string): Promise<Buffer | null> {
+    if (this.shouldMock) {
+      return Buffer.from(MOCK_QR_BASE64, 'base64');
+    }
+    try {
+      const cleanPath = relativeOrFullUrl.replace(/^https?:\/\/[^/]+/, '');
+      const targetUrl = cleanPath.startsWith('http') ? cleanPath : `${this.baseUrl}${cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`}`;
+      const response = await axios.get(targetUrl, {
+        headers: { 'X-Api-Key': this.apiKey || undefined },
+        responseType: 'arraybuffer',
+        timeout: 15000,
+      });
+      if (response.status >= 200 && response.status < 300 && response.data) {
+        return Buffer.from(response.data);
+      }
+      return null;
+    } catch {
       return null;
     }
   }
@@ -1352,6 +1421,63 @@ export class WahaClient implements IWahaClient {
   }
 
   /**
+   * Helper untuk mengekstrak dan membangun variasi chatId & messageId
+   * (e.g. jika messageId formatnya true_79770444427299@lid_3A5B... atau short key 3A5B...).
+   */
+  private buildWahaMessageCandidates(chatId: string, messageId: string): { chatIds: string[]; msgIds: string[] } {
+    const chatCandidates = new Set<string>();
+    const msgCandidates = new Set<string>();
+
+    const cleanNum = chatId.replace(/@(c\.us|s\.whatsapp\.net|lid|g\.us)$/, '');
+
+    if (chatId.includes('@g.us')) {
+      chatCandidates.add(chatId);
+    } else if (chatId.includes('@lid')) {
+      chatCandidates.add(chatId);
+      chatCandidates.add(`${cleanNum}@c.us`);
+      chatCandidates.add(`${cleanNum}@s.whatsapp.net`);
+    } else {
+      chatCandidates.add(`${cleanNum}@c.us`);
+      chatCandidates.add(`${cleanNum}@s.whatsapp.net`);
+      chatCandidates.add(cleanNum);
+    }
+
+    // Cek jika messageId adalah serialized format: (true|false)_(JID)_(KEY)
+    const match = messageId.match(/^(?:true|false)_(.+?)_([A-Za-z0-9]+)$/);
+    if (match) {
+      const embeddedChat = match[1];
+      const keyId = match[2];
+      const embeddedClean = embeddedChat.replace(/@(c\.us|s\.whatsapp\.net|lid|g\.us)$/, '');
+
+      chatCandidates.add(embeddedChat);
+      chatCandidates.add(`${embeddedClean}@c.us`);
+      chatCandidates.add(`${embeddedClean}@s.whatsapp.net`);
+
+      // Serialized candidates FIRST!
+      msgCandidates.add(messageId);
+      msgCandidates.add(`true_${embeddedClean}@c.us_${keyId}`);
+      msgCandidates.add(`true_${embeddedClean}@s.whatsapp.net_${keyId}`);
+      msgCandidates.add(`true_${cleanNum}@c.us_${keyId}`);
+      msgCandidates.add(`true_${cleanNum}@s.whatsapp.net_${keyId}`);
+      msgCandidates.add(`false_${embeddedClean}@c.us_${keyId}`);
+      msgCandidates.add(`false_${embeddedClean}@s.whatsapp.net_${keyId}`);
+      msgCandidates.add(keyId);
+    } else {
+      // messageId adalah raw key (e.g. 3EB09F...) -> Serialized candidates FIRST!
+      msgCandidates.add(`true_${cleanNum}@c.us_${messageId}`);
+      msgCandidates.add(`true_${cleanNum}@s.whatsapp.net_${messageId}`);
+      msgCandidates.add(`false_${cleanNum}@c.us_${messageId}`);
+      msgCandidates.add(`false_${cleanNum}@s.whatsapp.net_${messageId}`);
+      msgCandidates.add(messageId);
+    }
+
+    return {
+      chatIds: Array.from(chatCandidates),
+      msgIds: Array.from(msgCandidates),
+    };
+  }
+
+  /**
    * Menghapus / menarik pesan WhatsApp (Delete for Everyone / Revoke).
    * Mendukung parameter everyone=true untuk menarik pesan dari perangkat customer.
    */
@@ -1361,40 +1487,148 @@ export class WahaClient implements IWahaClient {
       return true;
     }
 
+    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId);
     const sessionName = this.session;
-    try {
-      // 1. Coba DELETE /api/{session}/chats/{chatId}/messages/{messageId}
-      const response = await axios.delete(
-        `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`,
-        {
-          params: { everyone },
-          headers: this.headers,
-          timeout: this.timeoutMs,
-        }
-      );
-      return response.status >= 200 && response.status < 300;
-    } catch (err: any) {
-      // 2. Fallback ke POST /api/messages/delete jika endpoint DELETE berbeda versi
-      try {
-        const response = await axios.post(
-          `${this.baseUrl}/api/messages/delete`,
-          {
-            session: sessionName,
-            chatId,
-            messageId,
-            everyone,
-          },
-          {
-            headers: this.headers,
-            timeout: this.timeoutMs,
+    let lastErr: any = null;
+
+    // 1. Coba kombinasi DELETE /api/{session}/chats/{chatId}/messages/{messageId}
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('deleteMessage', () =>
+              axios.delete(
+                `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}`,
+                {
+                  params: { everyone },
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
           }
-        );
-        return response.status >= 200 && response.status < 300;
-      } catch (postErr: any) {
-        console.error(`[WAHA API ERROR] deleteMessage failed:`, postErr?.response?.data || postErr.message);
-        throw postErr;
+        } catch (err: any) {
+          lastErr = err;
+        }
       }
     }
+
+    // 2. Fallback ke POST /api/messages/delete jika endpoint DELETE berbeda versi
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('deleteMessageFallback', () =>
+              axios.post(
+                `${this.baseUrl}/api/messages/delete`,
+                {
+                  session: sessionName,
+                  chatId: cId,
+                  messageId: mId,
+                  everyone,
+                },
+                {
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
+          }
+        } catch (postErr: any) {
+          lastErr = postErr;
+        }
+      }
+    }
+
+    console.error(`[WAHA API ERROR] deleteMessage failed for chat=${chatId}, msg=${messageId}:`, lastErr?.response?.data || lastErr?.message);
+    if (lastErr?.response?.status === 404 || lastErr?.response?.status === 500) {
+      throw new Error('Pesan tidak ditemukan di server WhatsApp (kemungkinan sudah ditarik atau tersinkron dari sesi lama).');
+    }
+    throw lastErr || new Error('Gagal menghapus pesan di WhatsApp.');
+  }
+
+  /**
+   * Mengedit teks pesan WhatsApp yang sudah terkirim (hanya outbound <= 15 menit).
+   * Endpoint WAHA: PUT /api/{session}/chats/{chatId}/messages/{messageId}
+   */
+  public async editMessage(chatId: string, messageId: string, newText: string): Promise<boolean> {
+    const normalizedText = normalizeWhatsAppFormat(newText);
+
+    if (this.shouldMock) {
+      console.log(`[WAHA MOCK] editMessage: chat=${chatId}, msgId=${messageId}, text="${normalizedText}"`);
+      return true;
+    }
+
+    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId);
+    const sessionName = this.session;
+    let lastErr: any = null;
+
+    // 1. Coba kombinasi PUT /api/{session}/chats/{chatId}/messages/{messageId}
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('editMessage', () =>
+              axios.put(
+                `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}`,
+                { text: normalizedText },
+                {
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
+          }
+        } catch (err: any) {
+          lastErr = err;
+        }
+      }
+    }
+
+    // 2. Fallback ke POST /api/messages/edit jika endpoint berbeda versi
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('editMessageFallback', () =>
+              axios.post(
+                `${this.baseUrl}/api/messages/edit`,
+                {
+                  session: sessionName,
+                  chatId: cId,
+                  messageId: mId,
+                  text: normalizedText,
+                },
+                {
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
+          }
+        } catch (postErr: any) {
+          lastErr = postErr;
+        }
+      }
+    }
+
+    console.error(`[WAHA API ERROR] editMessage failed for chat=${chatId}, msg=${messageId}:`, lastErr?.response?.data || lastErr?.message);
+    if (lastErr?.response?.status === 404 || lastErr?.response?.status === 500) {
+      throw new Error('Pesan tidak ditemukan di server WhatsApp atau sudah melewati batas waktu pengeditan (15 menit).');
+    }
+    throw lastErr || new Error('Gagal mengedit pesan di WhatsApp.');
   }
 }
 

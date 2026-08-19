@@ -99,7 +99,22 @@ interface ChatMessage {
 
 function extractMedia(msg: any): ChatMediaData | undefined {
   const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
-  if (m && (m.url || m.hdUrl)) return m;
+  if (m && (m.url || m.hdUrl)) {
+    const rawUrl = m.url || m.hdUrl;
+    const rawHdUrl = m.hdUrl || m.url;
+    const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+    const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
+    return {
+      ...m,
+      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
+      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
+    };
+  }
+  if (msg?.payload_raw?.imageUrl) return { url: msg.payload_raw.imageUrl, hdUrl: msg.payload_raw.imageUrl };
+  if (typeof msg?.content === 'string' && (msg.content.startsWith('/media/') || msg.content.startsWith('/api/files/') || msg.content.startsWith('http://') || msg.content.startsWith('https://')) && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.content)) {
+    const clean = msg.content.replace(/^https?:\/\/[^/]+/, '');
+    return { url: clean.startsWith('/') ? clean : `/${clean}`, hdUrl: clean.startsWith('/') ? clean : `/${clean}` };
+  }
   return undefined;
 }
 
@@ -164,6 +179,9 @@ export const StaffToday: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [sendingOtwId, setSendingOtwId] = useState<string | null>(null);
+  const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [isEditingSaving, setIsEditingSaving] = useState(false);
 
   // Staff Profile Drawer State
   const [showStaffProfileModal, setShowStaffProfileModal] = useState(false);
@@ -195,8 +213,8 @@ export const StaffToday: React.FC = () => {
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
   const locHouseFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Gateway capability (WAHA supportsRevoke=true vs WABA supportsRevoke=false)
-  const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean } | null>(null);
+  // Gateway capability (WAHA supportsRevoke=true, supportsEdit=true vs WABA supportsRevoke=false)
+  const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean; supportsEdit?: boolean } | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const selectedTaskRef = useRef<StaffTask | null>(null);
@@ -857,6 +875,48 @@ export const StaffToday: React.FC = () => {
       toast(`Gagal menarik pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const handleStartEdit = (msg: ChatMessage) => {
+    setEditingMsg({ id: msg.id, content: msg.content });
+    setEditContent(msg.content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMsg || !selectedTask?.conversationId || isEditingSaving) return;
+    if (!editContent.trim()) {
+      toast('Teks pesan tidak boleh kosong.', 'error');
+      return;
+    }
+
+    setIsEditingSaving(true);
+    try {
+      const res = await apiRequest(
+        `/api/staff/conversations/${selectedTask.conversationId}/messages/${editingMsg.id}/edit`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ text: editContent.trim() }),
+        }
+      );
+
+      if (res?.success) {
+        toast('Pesan berhasil diperbarui di WhatsApp!', 'success');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingMsg.id
+              ? { ...m, content: editContent.trim(), is_edited: true }
+              : m
+          )
+        );
+        setEditingMsg(null);
+      } else {
+        toast(`Gagal mengedit pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal mengedit pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setIsEditingSaving(false);
     }
   };
 
@@ -1933,17 +1993,16 @@ export const StaffToday: React.FC = () => {
                                   : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs border border-[#00a884]/20'
                               }`}
                             >
-                              {/* Media Attachment Thumbnail Preview */}
+                              {/* Media Attachment Preview */}
                               {media && (
                                 <div
                                   onLoad={() => scrollToBottom(false)}
-                                  className="mb-2 rounded-xl overflow-hidden border border-black/5 bg-black/5"
+                                  className="mb-2 rounded-xl overflow-hidden"
                                 >
                                   <MediaImage
                                     src={media.url || media.hdUrl}
                                     downloadSrc={media.hdUrl || media.url}
                                     caption={media.caption}
-                                    blur={isInbound}
                                   />
                                 </div>
                               )}
@@ -1953,11 +2012,25 @@ export const StaffToday: React.FC = () => {
 
                               {/* Meta Info & Double Blue Ticks / Delete Button */}
                               <div className="flex items-center justify-end space-x-1.5 mt-1 pt-0.5 text-[10px] text-[#667781]">
+                                {((msg as any).is_edited || (msg as any).payload_raw?.is_edited) && (
+                                  <span className="text-[9px] text-[#667781] italic">diedit</span>
+                                )}
                                 <span>{timeStr}</span>
                                 {!isInbound && (
                                   <span title="Terkirim ke WhatsApp">
                                     <CheckCheck size={13} className="text-[#53bdeb]" />
                                   </span>
+                                )}
+
+                                {/* Edit message button (for Staff Outbound Messages within 15 mins) */}
+                                {isStaff && !media && (msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false) && (gatewayCapability?.supportsEdit ?? true) && (
+                                  <button
+                                    onClick={() => handleStartEdit(msg)}
+                                    className="opacity-0 group-hover:opacity-100 hover:text-[#008069] transition-opacity p-0.5 ml-1"
+                                    title="Edit pesan ini (maksimal 15 menit)"
+                                  >
+                                    <PenLine size={11} />
+                                  </button>
                                 )}
 
                                 {/* Revoke message button (for Staff Outbound Messages) */}
@@ -3502,6 +3575,84 @@ export const StaffToday: React.FC = () => {
             />
             <div className="mt-2 text-xs text-white/80 font-medium">
               🏠 Foto Panduan Tampak Depan Rumah Pasien
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL EDIT PESAN WHATSAPP */}
+      {/* ========================================================================= */}
+      {editingMsg && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-[#e8f5f2] text-[#008069]">
+                  <PenLine size={16} />
+                </div>
+                <h3 className="text-sm font-bold text-[#111b21]">Edit Pesan WhatsApp</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMsg(null)}
+                disabled={isEditingSaving}
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Info size={13} className="text-amber-600 shrink-0" />
+                  Batas Waktu Edit WhatsApp: 15 Menit
+                </p>
+                <p className="text-amber-700 leading-relaxed">
+                  WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-[#111b21]">Isi Pesan Baru</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={4}
+                  placeholder="Ketik perbaikan teks pesan..."
+                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] transition shadow-xs leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+                <button
+                  type="button"
+                  onClick={() => setEditingMsg(null)}
+                  disabled={isEditingSaving}
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isEditingSaving || !editContent.trim()}
+                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                >
+                  {isEditingSaving ? (
+                    <>
+                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

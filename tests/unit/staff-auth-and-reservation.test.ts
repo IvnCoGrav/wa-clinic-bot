@@ -70,31 +70,26 @@ describe('Staff Auth & Reservation Services', () => {
       expect(result?.token).toBeDefined();
       expect(result?.staff.id).toBe('staff-1');
       expect(prisma.staffSession.create).toHaveBeenCalled();
-      // Gate THERAPIST: query login harus memfilter role
-      expect(prisma.staff.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ role: 'THERAPIST' }) })
-      );
+      expect(prisma.staff.findFirst).toHaveBeenCalled();
     });
 
-    it('should only allow THERAPIST role on login (query gate role=THERAPIST)', async () => {
+    it('should allow active staff roles to login via StaffAuthService', async () => {
       const hashed = await hashPassword('correct_pass');
       const fakeStaffDb = [
         { id: 'staff-1', name: 'Bidan Dewi', phone: '08123456789', password_hash: hashed, active: true, role: 'THERAPIST' },
         { id: 'staff-cs', name: 'Staf Admin', phone: '088235780990', password_hash: hashed, active: true, role: 'ADMIN_CS' },
       ];
-      (prisma.staff.findFirst as any).mockImplementation((args: any) =>
-        fakeStaffDb.find((s) => s.phone === args?.where?.phone && s.role === args?.where?.role) ?? null
-      );
+      (prisma.staff.findFirst as any).mockImplementation((args: any) => {
+        const query = args?.where?.OR?.[0]?.phone || args?.where?.phone;
+        return fakeStaffDb.find((s) => s.phone === query) ?? null;
+      });
       (prisma.staffSession.create as any).mockResolvedValue({ id: 'session-1' });
 
-      const rejected = await StaffAuthService.login('088235780990', 'correct_pass', 'default-tenant');
-      expect(rejected).toBeNull();
+      const adminCsLogin = await StaffAuthService.login('088235780990', 'correct_pass', 'default-tenant');
+      expect(adminCsLogin).toBeDefined();
 
-      const accepted = await StaffAuthService.login('08123456789', 'correct_pass', 'default-tenant');
-      expect(accepted).toBeDefined();
-      expect(prisma.staff.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ role: 'THERAPIST' }) })
-      );
+      const therapistLogin = await StaffAuthService.login('08123456789', 'correct_pass', 'default-tenant');
+      expect(therapistLogin).toBeDefined();
     });
 
     it('should validate active session correctly', async () => {
@@ -119,8 +114,8 @@ describe('Staff Auth & Reservation Services', () => {
       expect(session?.staff.name).toBe('Bidan Dewi');
     });
 
-    it('should return null for session of staff with non-THERAPIST role', async () => {
-      const token = 'non-therapist-token';
+    it('should validate session for active staff with custom roles', async () => {
+      const token = 'cs-token';
 
       (prisma.staffSession.findUnique as any).mockResolvedValue({
         id: 'session-cs',
@@ -136,7 +131,8 @@ describe('Staff Auth & Reservation Services', () => {
       });
 
       const session = await StaffAuthService.validateSession(token);
-      expect(session).toBeNull();
+      expect(session).toBeDefined();
+      expect(session?.staff.role).toBe('ADMIN_CS');
     });
 
     it('should return null if session is expired or staff inactive', async () => {

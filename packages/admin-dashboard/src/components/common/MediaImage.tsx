@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ImageOff, Download, Loader } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ImageOff, Loader, X } from 'lucide-react';
 
 export interface ChatMediaData {
   url?: string;
@@ -9,114 +9,107 @@ export interface ChatMediaData {
 }
 
 /**
- * MediaImage — menampilkan gambar Live Chat dalam resolusi rendah (low-res)
- * dengan mengompresi via <canvas> di sisi client.
- *
- * - Outbound: memakai url (thumbnail low-res bawaan server) atau menurunkan skala
- *   dari URL HD. Tombol download membuka versi HD.
- * - Inbound: ditampilkan blur + tombol download di tengah ke versi asli (hdUrl).
- * - Bila file sudah dihapus (kadaluarsa), tampil placeholder "Gambar kadaluarsa".
+ * MediaImage — menampilkan gambar Live Chat secara langsung, bersih, dan tajam.
+ * - Klik/tap gambar untuk melihat resolusi asli (Full-View Lightbox Modal).
+ * - Tanpa tombol download / watermark yang menutupi gambar.
+ * - Mendukung tombol Esc dan klik background untuk menutup preview.
  */
 export const MediaImage: React.FC<{
   src?: string;
   downloadSrc?: string;
   caption?: string;
   blur?: boolean;
-}> = ({ src, downloadSrc, caption, blur }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+}> = ({ src, downloadSrc, caption }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
 
+  const previewSrc = src || downloadSrc;
+  const originalFullSrc = downloadSrc || src || '';
+
+  // Tutup viewer saat menekan tombol Escape
   useEffect(() => {
-    if (!src) {
-      setError(true);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    setThumbUrl(null);
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.addEventListener('load', () => {
-      try {
-        const maxDim = 480;
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        if (!canvasRef.current) {
-          canvasRef.current = document.createElement('canvas');
-        }
-        const canvas = canvasRef.current;
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('no ctx');
-        ctx.drawImage(img, 0, 0, w, h);
-        if (!cancelled) setThumbUrl(canvas.toDataURL('image/jpeg', 0.7));
-      } catch {
-        // gagal proses canvas → pakai src asli sebagai fallback tampilan
-        if (!cancelled) setThumbUrl(src);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    });
-    img.addEventListener('error', () => {
-      if (!cancelled) {
-        setLoading(false);
-        setError(true);
-      }
-    });
-    img.src = src;
-    return () => {
-      cancelled = true;
+    if (!isViewerOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsViewerOpen(false);
     };
-  }, [src]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isViewerOpen]);
 
-  if (error) {
+  if (!previewSrc || error) {
     return (
-      <div className="w-56 h-40 rounded-xl bg-slate-800/80 border border-white/10 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-2 px-3 text-center">
-        <ImageOff size={18} />
-        <span>Gambar tidak tersedia (mungkin sudah dihapus setelah masa retensi)</span>
+      <div className="w-56 h-36 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-1.5 px-3 text-center">
+        <ImageOff size={18} className="text-slate-400" />
+        <span className="font-medium text-slate-500 leading-tight">
+          Gambar tidak tersedia
+        </span>
       </div>
     );
   }
 
-  const rendered = thumbUrl || src;
   return (
-    <div className="relative group">
-      {loading && (
-        <div className="absolute inset-0 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-400">
-          <Loader size={16} className="animate-spin" />
+    <>
+      <div className="relative inline-block overflow-hidden rounded-xl group">
+        {loading && (
+          <div className="absolute inset-0 rounded-xl bg-slate-100/90 flex items-center justify-center text-slate-400 z-10">
+            <Loader size={16} className="animate-spin text-[#008069]" />
+          </div>
+        )}
+        <img
+          src={previewSrc}
+          alt={caption || 'Gambar'}
+          loading="lazy"
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setError(true);
+          }}
+          onClick={() => setIsViewerOpen(true)}
+          title="Klik / tap untuk melihat resolusi asli"
+          className="w-full max-w-[220px] sm:max-w-[260px] h-auto max-h-64 object-cover rounded-lg border border-black/10 transition-transform duration-200 hover:opacity-95 hover:scale-[1.01] cursor-pointer"
+        />
+
+        {caption && (
+          <span className="block mt-1 text-[11px] text-slate-700 font-normal">
+            {caption}
+          </span>
+        )}
+      </div>
+
+      {/* Full-Screen Original Resolution Modal */}
+      {isViewerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 select-none animate-in fade-in duration-150"
+          onClick={() => setIsViewerOpen(false)}
+        >
+          {/* Close Button */}
+          <button
+            type="button"
+            onClick={() => setIsViewerOpen(false)}
+            title="Tutup (Esc)"
+            className="absolute top-3 right-3 sm:top-5 sm:right-5 p-2 rounded-full bg-white/15 hover:bg-white/30 text-white transition cursor-pointer z-50 shadow-lg"
+          >
+            <X size={22} />
+          </button>
+
+          <div
+            className="relative max-w-full max-h-full flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={originalFullSrc || previewSrc}
+              alt={caption || 'Gambar resolusi asli'}
+              className="max-w-[95vw] max-h-[88vh] object-contain rounded-lg shadow-2xl transition-all"
+            />
+            {caption && (
+              <p className="mt-2.5 text-white/90 text-xs sm:text-sm font-medium text-center max-w-xl bg-black/60 px-4 py-1.5 rounded-full backdrop-blur">
+                {caption}
+              </p>
+            )}
+          </div>
         </div>
       )}
-      <img
-        src={rendered}
-        alt={caption || 'Gambar'}
-        className={`w-56 h-40 object-cover rounded-xl border border-white/10 ${blur ? 'blur-[10px]' : ''}`}
-      />
-      {downloadSrc && (
-        <a
-          href={downloadSrc}
-          target="_blank"
-          rel="noreferrer"
-          title="Lihat / unduh resolusi penuh"
-          className="absolute inset-0 flex items-center justify-center group"
-        >
-          <span className="p-2.5 rounded-full bg-black/60 border border-white/20 text-white shadow-lg hover:bg-[#008069] transition group-hover:scale-105">
-            <Download size={16} />
-          </span>
-        </a>
-      )}
-      {caption && (
-        <span className="absolute bottom-1.5 left-2 right-2 text-[9px] text-white/90 font-sans bg-slate-900/60 rounded px-2 py-0.5 backdrop-blur truncate">
-          {caption}
-        </span>
-      )}
-      <canvas ref={canvasRef} className="hidden" width="1" height="1" />
-    </div>
+    </>
   );
 };

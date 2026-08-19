@@ -98,13 +98,13 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
       },
     });
 
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.error).toContain('Staf Admin');
-    expect(body.error).toContain('nomor HP');
+    expect(body.success).toBe(true);
+    expect(body.role).toBe('admin_cs');
   });
 
-  it('blocks Advertiser from phone login with 403 notification', async () => {
+  it('allows Advertiser staff to login and receive appropriate role', async () => {
     vi.spyOn(prisma.staff, 'findFirst').mockResolvedValue({
       id: 'staff-adv-1',
       tenant_id: 'default-tenant',
@@ -128,10 +128,10 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
       },
     });
 
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.error).toContain('Staf Admin');
-    expect(body.error).toContain('nomor HP');
+    expect(body.success).toBe(true);
+    expect(body.role).toBe('advertiser');
   });
 
   it('returns 401 when neither super admin key nor staff credentials match', async () => {

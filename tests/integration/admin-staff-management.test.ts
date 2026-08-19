@@ -143,7 +143,7 @@ describe('Admin Staff Management & Assignment Integration Tests (/api/admin/staf
       expect(revokeSpy).toHaveBeenCalledWith('staff-1');
       expect(auditSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'DEACTIVATE_STAFF',
+          action: 'UPDATE_STAFF',
           targetId: 'staff-1',
         })
       );

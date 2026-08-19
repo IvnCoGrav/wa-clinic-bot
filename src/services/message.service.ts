@@ -155,7 +155,7 @@ export class MessageService {
           content: data.content,
           wa_message_id: data.waMessageId || null,
           payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
-          sender_type: data.senderType ?? undefined,
+          sender_type: data.senderType ?? (data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND ? 'CUSTOMER' : 'BOT'),
           sender_name: data.senderName ?? undefined,
           delivery_status: data.deliveryStatus ?? undefined,
           meta_error_code: data.metaErrorCode ?? undefined,
@@ -215,9 +215,55 @@ export class MessageService {
             messageId: saved?.id || null,
             createdAt: saved?.created_at || new Date(),
             media: extractMediaFromPayload(data.payloadRaw),
+            isHistorical: !!data.isHistorical,
           },
         })
         .catch(() => {});
+
+      // Web Push Background Notification: kirim ke perangkat yang sedang offline/background (hanya pesan live real-time, bukan riwayat)
+      if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical) {
+        void (async () => {
+          try {
+            const { webPushService } = await import('./web-push.service');
+            const { customerService } = await import('./customer.service');
+            const { conversationService } = await import('./conversation.service');
+
+            let senderName = data.senderName || 'Pelanggan';
+            let customerId = '';
+            try {
+              const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
+              if (conv?.customer_id) {
+                customerId = conv.customer_id;
+                const customer = await customerService.getCustomerById(conv.customer_id, data.tenantId);
+                if (customer) {
+                  if (customer.name) senderName = customer.name;
+                }
+              }
+            } catch {}
+
+            const avatarUrl = customerId
+              ? `/media/avatar/${customerId}.jpg`
+              : `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=008069&color=fff&size=256&bold=true`;
+
+            const snippet = data.content
+              ? (data.content.length > 120 ? data.content.slice(0, 117) + '...' : data.content)
+              : '📷 Mengirim lampiran gambar / media';
+
+            const media = extractMediaFromPayload(data.payloadRaw);
+            const imageUrl = media?.url || avatarUrl;
+
+            await webPushService.sendPushToTenant(data.tenantId, {
+              title: senderName,
+              body: snippet,
+              icon: avatarUrl,
+              badge: '/admin/favicon.ico',
+              image: imageUrl,
+              url: `/admin/#/live-chat?conversationId=${data.conversationId}`,
+              tag: `chat-${data.conversationId}`,
+            });
+          } catch {}
+        })();
+      }
     }
   }
 
@@ -290,16 +336,78 @@ export class MessageService {
     if (metaErrorDesc !== undefined) data.meta_error_desc = metaErrorDesc;
     if (metaPricingCategory !== undefined) data.meta_pricing_category = metaPricingCategory;
 
+    const suffix = waMessageId.includes('_') ? waMessageId.split('_').pop() : waMessageId;
+
+    let matchedMessageId: string | null = null;
+    let matchedConversationId: string | null = null;
+
+    // 1. Update memory store fallback
+    for (const mem of memoryMessages) {
+      if (
+        mem.wa_message_id === waMessageId ||
+        mem.id === waMessageId ||
+        (suffix && mem.wa_message_id && (mem.wa_message_id.endsWith(suffix) || waMessageId.endsWith(mem.wa_message_id)))
+      ) {
+        mem.delivery_status = status;
+        if (status === 'delivered') mem.delivered_at = ts;
+        if (status === 'read') mem.read_at = ts;
+        matchedMessageId = mem.id;
+        matchedConversationId = mem.conversation_id;
+      }
+    }
+
+    let isMatched = false;
     try {
+      let whereClause: any = { wa_message_id: waMessageId, tenant_id: tenantId };
+      if (suffix && suffix !== waMessageId) {
+        whereClause = {
+          OR: [
+            { wa_message_id: waMessageId, tenant_id: tenantId },
+            { wa_message_id: suffix, tenant_id: tenantId },
+            { id: waMessageId, tenant_id: tenantId },
+          ],
+        };
+      }
+
+      try {
+        const existing = await (prisma.message as any).findFirst?.({
+          where: whereClause,
+          select: { id: true, conversation_id: true },
+        });
+        if (existing) {
+          matchedMessageId = existing.id;
+          matchedConversationId = existing.conversation_id;
+        }
+      } catch (_) {}
+
       const result = await (prisma.message as any).updateMany({
-        where: { wa_message_id: waMessageId, tenant_id: tenantId },
+        where: whereClause,
         data,
       });
-      return { matched: result.count > 0 };
+      isMatched = result.count > 0;
     } catch (error) {
       console.warn('DB updateDeliveryStatus error (using fallback):', (error as Error).message);
-      return { matched: false };
     }
+
+    // 3. Publish real-time SSE event ke Live Chat Monitor
+    try {
+      getLiveChatHub()
+        .publish({
+          type: 'message.status_updated',
+          tenantId,
+          payload: {
+            messageId: matchedMessageId,
+            waMessageId,
+            conversationId: matchedConversationId,
+            status,
+            deliveredAt: data.delivered_at || null,
+            readAt: data.read_at || null,
+          },
+        })
+        .catch(() => {});
+    } catch {}
+
+    return { matched: isMatched || !!matchedMessageId };
   }
 
   /**
@@ -403,6 +511,78 @@ export class MessageService {
           messageId,
           content: revokedContent,
           isRevoked: true,
+        },
+      });
+    } catch (hubErr: any) {
+      console.warn('[HUB] Failed to publish message.updated event:', hubErr.message);
+    }
+
+    return true;
+  }
+
+  /**
+   * Update konten pesan yang diedit (Edit Message).
+   * Memperbarui tabel messages (payload_raw.is_edited = true, edited_at), memory fallback, dan broadcast event SSE 'message.updated'.
+   */
+  public async updateMessageContent(
+    messageId: string,
+    newContent: string,
+    tenantId: string
+  ): Promise<boolean> {
+    let conversationId = '';
+
+    try {
+      let msg = await prisma.message.findFirst({
+        where: {
+          id: messageId,
+          tenant_id: tenantId,
+        },
+      });
+
+      if (!msg) {
+        msg = await prisma.message.findFirst({
+          where: { wa_message_id: messageId, tenant_id: tenantId },
+        });
+      }
+
+      if (msg) {
+        conversationId = msg.conversation_id;
+        await prisma.message.update({
+          where: { id: msg.id },
+          data: {
+            content: newContent,
+            payload_raw: {
+              ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? msg.payload_raw : {}),
+              is_edited: true,
+              edited_at: new Date().toISOString(),
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.warn('DB updateMessageContent error (using memory fallback):', (error as Error).message);
+      const inMem = memoryMessages.find(
+        (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
+      );
+      if (inMem) {
+        inMem.content = newContent;
+        inMem.payload_raw = { ...inMem.payload_raw, is_edited: true, edited_at: new Date().toISOString() };
+        conversationId = inMem.conversation_id;
+      }
+    }
+
+    // Broadcast update via LiveChatHub
+    try {
+      const hub = getLiveChatHub();
+      await hub.publish({
+        type: 'message.updated',
+        tenantId,
+        payload: {
+          conversationId,
+          messageId,
+          content: newContent,
+          isEdited: true,
+          editedAt: new Date().toISOString(),
         },
       });
     } catch (hubErr: any) {
