@@ -37,11 +37,29 @@
   }
 }
 
-html, body {
+html {
   background-color: #f0f2f5;
   color: #111b21;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: #f0f2f5;
+  color: #111b21;
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
-  max-width: 100vw;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-contenteditable:empty:before {
@@ -49,25 +67,6 @@ html, body {
   color: #8696a0;
   pointer-events: none;
   display: block;
-}
-
-#root {
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-@media (max-width: 768px) {
-  html, body {
-    overscroll-behavior-y: none;
-    touch-action: pan-y pinch-zoom;
-  }
-}
-
-body {
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-tap-highlight-color: transparent;
 }
 
 /* UI Selection Control: Prevent text highlight on interactive buttons & nav controls only */
