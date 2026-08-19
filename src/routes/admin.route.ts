@@ -152,18 +152,26 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
     }
 
-    if (urlPath.endsWith('/pwa-icon.svg') || urlPath.endsWith('/favicon.ico')) {
+    if (/\.(svg|ico|png|jpg|jpeg|webp)$/i.test(urlPath)) {
       const filename = urlPath.split('/').pop() || '';
       try {
         const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist', filename);
         const content = await fs.readFile(filePath);
-        reply.type(filename.endsWith('.svg') ? 'image/svg+xml' : 'image/x-icon');
+        if (filename.endsWith('.svg')) reply.type('image/svg+xml');
+        else if (filename.endsWith('.ico')) reply.type('image/x-icon');
+        else if (filename.endsWith('.png')) reply.type('image/png');
+        else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) reply.type('image/jpeg');
+        else if (filename.endsWith('.webp')) reply.type('image/webp');
         return reply.send(content);
       } catch {
         try {
           const filePath = path.join(__dirname, '../../packages/admin-dashboard/public', filename);
           const content = await fs.readFile(filePath);
-          reply.type(filename.endsWith('.svg') ? 'image/svg+xml' : 'image/x-icon');
+          if (filename.endsWith('.svg')) reply.type('image/svg+xml');
+          else if (filename.endsWith('.ico')) reply.type('image/x-icon');
+          else if (filename.endsWith('.png')) reply.type('image/png');
+          else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) reply.type('image/jpeg');
+          else if (filename.endsWith('.webp')) reply.type('image/webp');
           return reply.send(content);
         } catch {
           return reply.status(404).send({ error: 'Not Found' });
@@ -175,13 +183,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
       try {
         const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/manifest.json');
         const content = await fs.readFile(filePath);
-        reply.type('application/json');
+        reply.type('application/manifest+json');
         return reply.send(content);
       } catch {
         try {
           const filePath = path.join(__dirname, '../../packages/admin-dashboard/public/manifest.json');
           const content = await fs.readFile(filePath);
-          reply.type('application/json');
+          reply.type('application/manifest+json');
           return reply.send(content);
         } catch {
           return reply.status(404).send({ error: 'Not Found' });
