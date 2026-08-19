@@ -126,9 +126,9 @@ export async function landingRoutes(fastify: FastifyInstance) {
 
     const pixelId = query.p || content.meta_pixel_id || process.env.FB_PIXEL_ID || '';
     
-    // PERBAIKAN: Selalu gunakan nomor WA dari pengaturan Tenant (Single Source of Truth).
+    // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth).
     // Parameter 'phone' dari URL diabaikan sebagai tujuan redirect untuk mencegah penyalahgunaan.
-    const phone = content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '6287751148065';
+    const phone = content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '';
     
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
