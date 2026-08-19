@@ -4,6 +4,25 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Fixed — PWA Ultra HD Vector Branding, Role Management Cleanup & Database Schema Sync (2026-08-19)
+
+- **PWA Ultra HD Vector Icon Generation (`Master Logo Kala.svg`)**:
+  - Mengintegrasikan logo vektor resmi Kala Moms & Baby Spa (`Master Logo Kala.svg` viewBox `0 0 100 100`, warna `#fbb697`).
+  - Menggunakan engine rasterisasi vektor Rust (`resvg`) untuk merender seluruh ukuran icon secara native dengan ketajaman antialiasing maksimal tanpa pecah/pixelate:
+    - `pwa-512x512.png` (512x512 px, format `any` untuk Android & desktop splash screen).
+    - `pwa-maskable-512x512.png` (512x512 px, safe-area margin 18% untuk icon adaptive Android).
+    - `pwa-192x192.png` (192x192 px untuk Homescreen Android).
+    - `apple-touch-icon.png` (180x180 px dengan background solid bersih untuk iPhone/iPad Safari).
+    - `favicon.ico` (multi-resolution 16, 32, 48, 64) & `favicon.png` (32x32 px).
+  - Memperbarui `manifest.json` dan `index.html` dengan konfigurasi manifest PWA lengkap.
+  - Memperbaiki static routing di `src/routes/admin.route.ts` agar seluruh format gambar (`.png`, `.ico`, `.svg`, `.webp`) dan `manifest.json` di bawah `/admin/` di-serve dengan MIME type yang benar (`image/png`, `application/manifest+json`).
+- **Perbaikan Penghapusan Custom Roles (`rolePermissions.ts`)**:
+  - Memisahkan `CORE_SYSTEM_ROLES` (`super_admin`, `tenant_admin`, `therapist`) yang dikunci sistem dari role preset yang dapat dihapus/diedit.
+  - Role `spv_cs` (*Supervisor CS & Reservasi*) kini dapat dihapus secara permanen dari UI dan database tanpa mengalami *auto-resurrect*.
+- **Database Schema Sync**:
+  - Menjalankan migrasi skema database di server live untuk tabel `custom_roles` dan `push_subscriptions`.
+  - Mengonversi tipe kolom `role` pada tabel `staff` menjadi `String` dinamis untuk mencegah error konversi enum.
+
 ### Added & Fixed — Real-Time Typing Sync, Message Delivery & Read Receipts (Centang Biru), Optimistic Instant Send, Smart Polling Sync, Admin-Labeled Chat Ingestion, & WhatsApp Media Bubble Polish
 
 - **Latar Belakang & Masalah**:
