@@ -14,7 +14,9 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     process.env.TRACKING_API_KEY = 'test_tracking_key_serving';
     process.env.TRACKING_API_BASE_URL = '';
     process.env.FB_PIXEL_ID = '';
-    process.env.DEFAULT_WHATSAPP_PHONE = '6287751148065';
+    process.env.DEFAULT_WHATSAPP_PHONE = '6281234567890';
+    vi.mocked(prisma.tenant.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue(null);
   });
 
   const rawHtml = '<html><head><title>Promo</title></head><body><a id="wa-cta" href="#">Chat</a></body></html>';
