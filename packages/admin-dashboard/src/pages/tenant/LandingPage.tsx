@@ -212,8 +212,8 @@ export const LandingPage: React.FC = () => {
       title: formTitle,
       slug: normalizeSlug(formSlug),
       html: formUseCustomHtml ? formHtml : null,
-      metaPixelId: formMetaPixelId.trim() || undefined,
-      whatsappNumber: formWhatsappNumber.trim() || undefined,
+      metaPixelId: formMetaPixelId.trim() ? formMetaPixelId.trim() : null,
+      whatsappNumber: formWhatsappNumber.trim() ? formWhatsappNumber.trim() : null,
       events: formEvents,
       isActive: formIsActive,
     };
