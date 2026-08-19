@@ -215,12 +215,48 @@ export const CORE_SYSTEM_ROLES: Record<string, RoleConfig> = {
 
 export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
   ...CORE_SYSTEM_ROLES,
+  admin_cs: {
+    key: 'admin_cs',
+    label: 'Admin CS & Reservasi',
+    description: 'Akses operasional harian: kalender reservasi, database pasien, katalog layanan, follow-up, dan live chat.',
+    isSystem: false,
+    allowedPaths: [
+      '/admin/overview',
+      '/admin/customers',
+      '/admin/chat-migration',
+      '/admin/labels',
+      '/admin/customer-service',
+      '/admin/reservations',
+      '/admin/staff-management',
+      '/admin/services',
+      '/admin/delivery',
+      '/admin/follow-ups',
+      '/admin/follow-up-templates',
+      '/admin/knowledge-base',
+      '/admin/live-chat',
+    ],
+    defaultRedirect: '/admin/overview',
+  },
+  advertiser: {
+    key: 'advertiser',
+    label: 'Advertiser / Media Buyer',
+    description: 'Akses modul periklanan: overview analitik, landing page, tracking Meta Click, antrean CAPI, dan evaluasi AI.',
+    isSystem: false,
+    allowedPaths: [
+      '/admin/overview',
+      '/admin/landing',
+      '/admin/meta-click-catcher',
+      '/admin/meta-capi-queue',
+      '/admin/ai-evaluations',
+    ],
+    defaultRedirect: '/admin/overview',
+  },
 };
 
 import { apiRequest } from '../services/api';
 
 const STORAGE_KEY = 'kala_custom_roles_v1';
-let inMemoryRolesCache: Record<string, RoleConfig> = { ...CORE_SYSTEM_ROLES };
+let inMemoryRolesCache: Record<string, RoleConfig> = { ...DEFAULT_ROLE_CONFIGS };
 
 export function getCustomRoles(): Record<string, RoleConfig> {
   if (typeof window === 'undefined') return inMemoryRolesCache;
@@ -228,7 +264,7 @@ export function getCustomRoles(): Record<string, RoleConfig> {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return inMemoryRolesCache;
     const parsed = JSON.parse(raw);
-    inMemoryRolesCache = { ...CORE_SYSTEM_ROLES, ...parsed };
+    inMemoryRolesCache = { ...DEFAULT_ROLE_CONFIGS, ...parsed };
     return inMemoryRolesCache;
   } catch {
     return inMemoryRolesCache;
@@ -315,8 +351,6 @@ export async function deleteCustomRole(roleKey: string): Promise<boolean> {
 export const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
   tenant_admin: 'Admin Utama',
-  spv_cs: 'Supervisor CS & Reservasi',
-  spvcs: 'Supervisor CS & Reservasi',
   admin_cs: 'Admin CS & Reservasi',
   advertiser: 'Advertiser / Media Buyer',
   therapist: 'Staff Terapis',
@@ -326,6 +360,8 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ROLE_MENU_ACCESS: Record<string, string[]> = {
   super_admin: [...ALL_PATHS],
   tenant_admin: [...ALL_PATHS],
+  admin_cs: DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths,
+  advertiser: DEFAULT_ROLE_CONFIGS.advertiser.allowedPaths,
   therapist: ['/admin/staff/today'],
 };
 
