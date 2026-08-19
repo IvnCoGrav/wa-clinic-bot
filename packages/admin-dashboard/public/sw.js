@@ -48,8 +48,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Kala Clinic';
   const options = {
     body: data.body || 'Pesan baru dari pelanggan',
-    icon: resolveUrl(data.icon) || resolveUrl('/admin/favicon.ico'),
-    badge: resolveUrl(data.badge) || resolveUrl('/admin/favicon.ico'),
+    icon: resolveUrl(data.icon) || resolveUrl('/admin/pwa-192x192.png'),
+    badge: resolveUrl(data.badge) || resolveUrl('/admin/pwa-192x192.png'),
     image: resolveUrl(data.image) || resolveUrl(data.icon),
     tag: data.tag || 'chat-notification',
     renotify: true,
