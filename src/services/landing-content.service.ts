@@ -122,6 +122,21 @@ export async function resolveLandingContent(slug: string): Promise<LandingConten
         raw_html_content: true,
       },
     });
+
+    if (!tenant) {
+      tenant = await prisma.tenant.findFirst({
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          whatsapp_number: true,
+          meta_pixel_id: true,
+          landing_type: true,
+          landing_content: true,
+          raw_html_content: true,
+        },
+      });
+    }
   } catch (err: any) {
     console.warn(`[LANDING SLUG RESOLVE] Tenant legacy lookup gagal: ${err.message}`);
   }
