@@ -4,6 +4,147 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Fixed — Real-Time Typing Sync, Message Delivery & Read Receipts (Centang Biru), Optimistic Instant Send, Smart Polling Sync, Admin-Labeled Chat Ingestion, & WhatsApp Media Bubble Polish
+
+- **Latar Belakang & Masalah**:
+  - Sebelumnya, chat dari nomor dengan label "Admin" diabaikan sepenuhnya di awal webhook (`IGNORED_ADMIN`) sebelum dicatat, sehingga pesan tidak pernah masuk ke dashboard Live Chat.
+  - Saat admin mengirim balasan di Live Chat, terjadi jeda (*delay* 1–3 detik) antara tombol ditekan dan pesan baru muncul di layar karena sistem menunggu respons jaringan WAHA/API selesai sebelum memperbarui antarmuka.
+  - Di lingkungan proxy/tunnel seperti ngrok atau saat browser membatasi SSE di latar belakang, pesan masuk baru dan daftar chat tidak ter-update otomatis secara real-time dan menuntut reload halaman manual.
+  - Rute endpoint typing di dashboard (`/api/admin/live-chat/conversations/:id/typing`) mengalami *path mismatch* dengan backend (`/api/admin/conversations/:id/typing`) sehingga return 404 saat admin mengetik di Live Chat.
+  - Payload WAHA `message.ack` yang membungkus ID sebagai objek (`{ id: { _serialized: '...' } }`) tidak ter-unwrap dengan baik dan pencocokan ID pesan di database memerlukan dukungan pencocokan suffix ID mentah WhatsApp.
+  - Bubble pesan gambar (*media image*) keluar dari admin membentang lebar ke sisi kiri dengan bingkai hijau tebal dan label teks "Admin" yang kaku di atasnya, sehingga merusak kerapian antarmuka mobile.
+- **Implementasi Fitur & Perbaikan**:
+  - **Pengiriman Balasan Instan Tanpa Delay / *Optimistic UI Updates* (`LiveChatMonitor.tsx`)**:
+    - Saat admin menekan tombol "Kirim" atau tombol `Enter`, pesan **langsung muncul seketika (0ms delay)** di bubble chat dengan status terkirim dan kolom input langsung bersih (*auto-clear*).
+    - Preview percakapan pada daftar chat di sebelah kiri langsung terbarui secara instan tanpa menunggu respons jaringan.
+    - Permintaan API ke backend berjalan di background; saat ID resmi pesan diterima dari WhatsApp, ID sementara (`temp_`) otomatis digantikan tanpa menyebabkan *re-render* atau kedipan layar.
+  - **Sinkronisasi Real-Time Dua Lapis (*SSE + Smart Polling Engine*) (`liveChatSse.ts` & `LiveChatMonitor.tsx`)**:
+    - Dilengkapi *watchdog timer* pada koneksi EventSource untuk mendeteksi jaringan macet/silent dan melakukan *auto-reconnect* otomatis.
+    - Menambahkan *Smart Background Polling Engine* (interval 3,5 detik saat tab aktif) sebagai jaring pengaman (*fallback*) yang menjamin daftar percakapan dan pesan masuk baru **selalu terbarui secara otomatis** meskipun koneksi SSE terputus atau tertahan oleh ngrok.
+  - **Dukungan Chat Masuk untuk Nomor Berlabel Admin (`webhook.route.ts`)**:
+    - Pesan masuk dari nomor berlabel "Admin" kini **tetap dicatat ke database dan disiarkan ke Live Chat Monitor** via `messageService.logMessage` & SSE `LiveChatHub`.
+    - Percakapan otomatis dialihkan ke status `is_human_handling = true` (*Manual Handling*) sehingga bot AI tetap diam (*silent*) dan staf/admin dapat leluasa berbalas pesan langsung di Live Chat Monitor.
+  - **Fitur Typing Presence & Read-on-Typing Synchronizer (`livechat.subroute.ts`)**:
+    - Menghubungkan rute `/api/admin/live-chat/conversations/:id/typing` & `/api/admin/conversations/:id/typing`.
+    - Admin bebas membuka dan mengintip riwayat percakapan di Live Chat tanpa memicu tanda centang biru ke WhatsApp customer.
+    - Saat admin mulai mengetik balasan di kolom chat, sistem mendeteksi ketikan (*input debouncer*) dan memicu `sendSeen` (menandai pesan telah dibaca dengan centang biru di WhatsApp customer) sekaligus mengaktifkan status presensi `startTyping` (*"sedang mengetik..."* di HP customer).
+    - Jika admin berhenti mengetik selama 3 detik, menghapus teks, berpindah chat, atau mengirimkan balasan, sistem otomatis mengirimkan `stopTyping` untuk mematikan status mengetik.
+    - Dilengkapi proteksi chat sandbox (*QA Test Guard*) agar tidak mengirim sinyal presensi ke nomor dummy.
+  - **Real-Time WhatsApp Message ACK Handler & Delivery Status (`message.ack` & `message.service.ts`)**:
+    - Menangkap event webhook `message.ack` dari WAHA dan meng-unwrap ID baik bertipe string maupun object serialized.
+    - Menyimpan status delivery (`sent`, `delivered`, `read`, `failed`) dengan multi-matching (ID mentah, serialized ID, dan suffix ID WhatsApp) ke database PostgreSQL dan in-memory fallback.
+    - Menyelesaikan `conversation_id` secara dinamis dan memancarkan event SSE real-time `message.status_updated` via `LiveChatHub`.
+  - **Visual Status Centang WhatsApp di Live Chat Monitor**:
+    - Menampilkan ikon status WhatsApp di setiap bubble pesan keluar (Outbound) di samping jam pesan:
+      - `✓` (Centang satu abu-abu `#8696a0`): Pesan terkirim (*Sent*).
+      - `✓✓` (Centang dua abu-abu `#8696a0`): Pesan tersampaikan di perangkat customer (*Delivered*).
+      - `✓✓` (Centang dua biru terang `#53bdeb`): Pesan telah dibaca oleh customer (*Read*).
+      - `⚠` (Ikon segitiga merah): Pesan gagal terkirim (*Failed*).
+  - **Penyempurnaan Bubble Pesan Gambar Khas WhatsApp (`MediaImage.tsx` & `LiveChatMonitor.tsx`)**:
+    - Merampingkan ukuran bubble gambar (`w-full max-w-[240px] sm:max-w-[280px]`) dengan padding tipis `p-1 sm:p-1.5` khas WhatsApp native.
+    - Menghilangkan bingkai hijau raksasa dan label teks "Admin" yang menonjol di atas gambar murni.
+    - Menempelkan bubble gambar keluar dari admin secara rapi di sebelah kanan (`justify-end`).
+    - Jam pengiriman dan ikon centang status menyatu proporsional di sudut bawah bubble gambar.
+  - **Pengujian & Keamanan**:
+    - Seluruh unit & integration test (`waha-webhook.test.ts`, `typing-sync.test.ts`, `message-delivery-status.test.ts`, `webhook-non-personal-filter.test.ts`, `production_edge_cases.test.ts`) lulus 100% (163 test files, 1463 tests passing).
+
+### Added — Web Push Notification (VAPID + PWA Background Push untuk Mobile & Desktop)
+
+- **Latar Belakang**: Sebelumnya notifikasi hanya mengandalkan event stream SSE di dalam browser aktif. Saat aplikasi diminimize, layar HP terkunci, atau browser ditutup, sistem operasi HP (iOS Safari & Android) membekukan proses JS di background sehingga notifikasi tidak masuk.
+- **Implementasi Fitur**:
+  - **Arsitektur Web Push Standar VAPID (`src/services/web-push.service.ts`)**:
+    - Backend terintegrasi dengan modul `web-push` untuk mengirimkan payload push langsung ke gateway Apple (APNs) dan Google (FCM).
+    - Otomatisasi pembuatan & penyimpanan VAPID keys (*Public/Private*) di environment / database.
+    - Mekanisme *auto-prune* untuk menghapus langganan yang sudah kadaluarsa (HTTP 410 Gone / 404).
+  - **Model Database `PushSubscription` (`prisma/schema.prisma`)**:
+    - Menyimpan endpoint perangkat, `p256dh`, dan `auth` token dengan isolasi tenant (`tenant_id`) serta pemisahan tipe user (`ADMIN` vs `STAFF`).
+    - Dilengkapi *in-memory fallback store* agar tetap berjalan saat database offline.
+  - **API Subroutes (`src/routes/admin/push.subroute.ts`)**:
+    - `GET /api/admin/push/public-key`: Pengambilan VAPID public key untuk browser.
+    - `POST /api/admin/push/subscribe`: Pendaftaran langganan push dari browser.
+    - `POST /api/admin/push/unsubscribe`: Pembatalan langganan push.
+    - `POST /api/admin/push/test`: Pengujian pengiriman notifikasi instan ke perangkat aktif.
+  - **Pemicu Notifikasi Background Otomatis & Rich Notification Layout**:
+    - `media.route.ts`: Endpoint CDN proxy baru `GET /media/avatar/:customerId` untuk menyajikan foto profil WhatsApp customer dan meng-cache secara lokal, sehingga Apple APNs & Google FCM dapat mengunduh foto profil tanpa terkena blokir hotlink 403 dari Meta.
+    - `message.service.ts`: Memicu Web Push otomatis saat ada pesan masuk dari customer (`direction = INBOUND`). Menampilkan **Foto Profil Customer** (atau avatar inisial berwarna dinamis), **Logo Aplikasi / Badge**, **Nama Customer** sebagai judul notifikasi, dan **Isi Chat Pesan Masuk** (serta thumbnail foto jika customer mengirimkan gambar).
+    - `useLiveChatNotification.ts`: Mencegah duplikasi notifikasi (menghindari double banner saat tab dan Web Push berjalan bersamaan).
+    - `conversation.service.ts`: Memicu Web Push berprioritas tinggi saat terjadi eskalasi CS (*Human Handoff*).
+  - **Mobile Pull-to-Refresh & Live Chat Alignment Fix (`Layout.tsx` & `message.service.ts`)**:
+    - `Layout.tsx`: Mengimplementasikan gesture *Pull-to-Refresh* (geser/swipe layar ke bawah saat di posisi atas) pada dashboard admin mobile dengan visual floating spinner melingkar, feedback getaran haptic, dan auto-reload tanpa menggeser layout latar.
+    - `BootProgress.tsx` & `App.tsx`: Menghapus overlay layar penuh (*full-screen blocking modal*) yang sebelumnya menampilkan teks "Memuat halaman…", dan menggantinya dengan **Slim Top Progress Bar modern (ala YouTube/GitHub)** yang *non-blocking* dengan *hard safety auto-dismiss* (1 detik). Memastikan antarmuka tidak pernah terkunci (*freeze*) saat transisi halaman atau pengecekan sesi.
+    - `LiveChatMonitor.tsx` & `livechat.subroute.ts`: Menambahkan fitur **Kolom Pencarian (*Search Bar*) Universal** di daftar percakapan Live Chat yang mendukung pencarian *multi-parameter*:
+      - **Nama Pasien / Customer** (misal: "Ivan", "Siti", "Disu").
+      - **Nomor HP / WhatsApp** (misal: "088235780925", "0925", "628...").
+      - **Keyword Isi Pesan / Chat** (mencari kata kunci spesifik di seluruh riwayat percakapan).
+      - Dilengkapi *real-time instant client filtering*, *debounced backend search* langsung ke database PostgreSQL, tombol reset pencarian instan `X`, dan *empty state* informatif.
+    - `LiveChatMonitor.tsx`: Mengganti tombol panjang "Sync Semua (Background)" menjadi tombol ikon ringkas `RefreshCw` yang rapi di toolbar mobile, serta menambahkan modal konfirmasi interaktif yang merinci apa yang dilakukan sistem, data apa saja yang di-scrape/disinkronkan, dan estimasi waktu berjalan di background (~1-3 menit).
+    - `waha-history-sync.service.ts` & `message.service.ts`: Menambahkan **Silent Bypass 100%** saat sinkronisasi riwayat chat lama (`isHistorical = true`), mem-bypass seluruh Web Push, dering notifikasi audio, counter MQL, dan auto follow-up agar HP admin tidak ter-spam notifikasi saat backfill chat WhatsApp.
+    - `StaffManagement` & Dynamic Database RBAC (`prisma/schema.prisma` & `roles.subroute.ts`):
+      - Menambahkan model database `CustomRole` (`custom_roles` table) per-tenant (`tenant_id`) untuk menyimpan konfigurasi custom role, daftar hak akses modul (`allowed_paths`), dan redirect default secara dinamis di PostgreSQL.
+      - Menambahkan REST API endpoint `/api/admin/roles` (GET, POST, DELETE) dengan audit logging dan in-memory fallback.
+      - Mengintegrasikan sinkronisasi client `rolePermissions.ts` langsung ke database backend saat login dan perubahan peran.
+      - Mengizinkan pengelola klinik menambahkan posisi/jabatan baru kapan saja tanpa batasan hardcode, dan langsung aktif di seluruh perangkat (desktop, HP, tablet).
+      - Menambahkan fitur **Pilihan Halaman Awal Masuk (Landing Page Selector)** per-role di modal manajemen peran, sehingga admin dapat menentukan modul mana yang langsung dibuka otomatis saat staf login (misal: *Live Chat Monitor* untuk SPVCS, *Kalender Reservasi* untuk resepsionis, dll).
+      - Menambahkan fitur **Pengaturan Urutan Menu Sidebar (Interactive Menu Reordering)** dengan tombol ▲ Naik dan ▼ Turun, memungkinkan urutan navigasi sidebar disesuaikan per-role secara dinamis dan tersimpan langsung di PostgreSQL.
+      - Memperbaiki penanganan `getDefaultRedirect` dan `auth.subroute.ts` login redirect agar otomatis mengarahkan staf ke rute pertama yang diizinkan sesuai database hak akses (mencegah redirect salah ke halaman Overview yang memicu `Access Unauthorized`).
+    - `CreateReservationModal.tsx` & `Reservations.tsx`:
+      - **Multi-Treatment Multi-Anak & Stepper Kuantitas**: Mengganti sistem checkbox tunggal dengan kontrol kuantitas stepper `[ - ] [ Qty ] [ + ]` dan tombol `[+ Duplikat Anak]`, memungkinkan pemilihan perlakuan yang sama berulang kali (misal: 2x *Pijat Bayi* untuk 2 anak / kembar / kakak-adik) serta pemetaan treatment ke masing-masing anak (`Ditujukan untuk: Anak #1 / Anak #2`).
+      - **Kalkulasi Buffer Cerdas (Add-on Tanpa Buffer)**: Durasi jadwal dihitung otomatis di mana setiap layanan utama (*Main Service*) mendapatkan buffer jeda **+20 menit**, sedangkan layanan tambahan / *Add-on* (seperti *Moksa*, *Kinesio Taping*, *Ear Candle*, *Nebulizer*) **tidak menambahkan buffer jeda (0 menit)**.
+      - **Tombol Checklist / Selesai Memilih Layanan**: Menambahkan tombol konfirmasi `[✓ Selesai Memilih]` di bagian bawah dropdown katalog layanan untuk mempermudah penutupan popover pada layar sentuh.
+      - **Isolasi Input Pencarian Layanan Mobile**: Mengonfigurasi `enterKeyHint="search"`, `inputMode="search"`, dan isolasi atribut form untuk mencegah munculnya tombol navigasi keyboard atas/bawah yang mengganggu di layar HP.
+      - **Tombol & Modal "Lihat Jadwal Terisi"**: Tombol di samping input tanggal kunjungan untuk melihat pratinjau instan (*calendar peek*) seluruh jadwal terapis yang sudah terisi dan slot yang masih kosong pada tanggal tersebut.
+      - **Fitur Cerdas "Rekomendasikan Jam Kunjungan & Kedatangan Bidan"**: Menghitung ketersediaan jadwal terapis dengan pembulatan rapi ke kelipatan **30 menit** (`09:30`, `10:00`, `13:30`, dst), memperhitungkan waktu perjalanan dari lokasi pasien sebelumnya / klinik, serta **mengkalkulasikan estimasi waktu keberangkatan bidan dan kedatangan bidan di rumah pasien 10 menit sebelum treatment dimulai** untuk persiapan & sterilisasi.
+      - **Filter Khusus Peran Terapis (`THERAPIST`)**: Mengoreksi generator rekomendasi agar hanya memfilter staf dengan peran `THERAPIST` (seperti *Bidan Disu*) dan mengecualikan staf manajemen/kantor (*SPV_CS*, *ADMIN_CS*).
+      - **Dropdown Pemilih Tampilan Ringkas di Mobile (`Reservations.tsx`)**: Opsi tampilan dibuat bersih tanpa teks panjang atau emoji (`List`, `Hari`, `Minggu`, `Bulan`).
+      - **Dropdown Filter Status Mobile (`Reservations.tsx`)**: Mengubah deretan tombol status menjadi dropdown ringkas di mobile (`Semua Status`, `Pending`, `Confirmed / Lunas`, `Completed / Selesai`, `Cancelled / Batal`).
+      - **Header Navigasi Kalender Ringkas (`Reservations.tsx`)**: Tombol navigasi `< Hari Ini >` diletakkan tepat di samping kanan judul bulan (misal: *Agustus 2026*), dan sub-judul dipersingkat menjadi **"Jadwal Reservasi"** untuk menghemat ruang vertikal.
+      - **Tampilan Bulan Bersih & Label Penuh (`MonthScheduleGrid.tsx`)**: Menghilangkan teks "N treatment", tombol cek individual, dan ikon. Menampilkan label treatment penuh (*full-width strip*) bersih dengan jam dan nama customer di mana klik pada cell otomatis membuka Tampilan Hari.
+      - **Auto-Switch Bulan ke Hari (`MonthScheduleGrid.tsx` & `Reservations.tsx`)**: Mengklik cell tanggal pada tampilan Bulan (*Month View*) otomatis membuka rincian jadwal pada tanggal tersebut di tampilan Hari (*Day View*).
+      - **Freeze Sempurna Kolom Jam Minggu (`WeekScheduleGrid.tsx`)**: Menerapkan container `min-w-[1050px]` dan `sticky left-0 shadow-md` sehingga label jam di sisi kiri terkunci kokoh saat tabel digeser ke arah kanan di layar HP.
+      - **Soliditas Modal Buat Jadwal (`CreateReservationModal.tsx`)**: Mengunci form di tengah dengan `touch-action: pan-y`, `overscroll-behavior: contain`, dan `overflow-x: hidden` untuk mencegah form bergoyang atau bergeser saat di-swipe.
+    - `LiveChatMonitor.tsx`:
+      - **Filter Ikon Ringkas & Press-Hold Tooltip**: Mengubah filter sumber percakapan menjadi ikon minimalis (`Smartphone`, `Layers`, `FlaskConical`) dilengkapi fitur *press-and-hold* (tekan & tahan pada layar sentuh) yang memunculkan popover label info penjelas ikon dengan haptic feedback.
+      - **Penataan Toolbar Sejajar**: Meletakkan dropdown filter label pasien tepat di samping tombol filter ikon.
+      - **Badge Jumlah Percakapan di Header**: Memindahkan angka jumlah percakapan langsung ke samping judul "Live Chat Monitor" sebagai badge angka ringkas (`Live Chat Monitor (N)`).
+      - **Optimasi Bilah Aksesori Keyboard iOS & Auto-Scroll Viewport (`LiveChatMonitor.tsx`)**:
+        - Mengunmount elemen form di panel list (`<select>` filter label dan `<input>` pencarian) dari DOM secara kondisional saat berada di tampilan chat mobile (`mobileView === 'chat'`), sehingga Safari hanya mendeteksi 1 elemen input tunggal di seluruh DOM (mengeliminasi tombol navigasi formulir `∧` Prev dan `∨` Next).
+        - Mengintegrasikan **Visual Viewport API** (`window.visualViewport`) untuk mendeteksi pemunculan keyboard iOS secara presisi dan otomatis melakukan smooth scroll ke pesan terbaru tanpa tertutup oleh keyboard.
+        - Memperbarui `index.css` dengan selektor `[contenteditable="plaintext-only"]` untuk memastikan pemilihan teks dan kursor pengetikan native berjalan mulus di iOS.
+    - `message.service.ts`: Memperbaiki bug penentuan `sender_type` pesan inbound agar otomatis terset sebagai `'CUSTOMER'` (bukan default `'BOT'`), serta mengoreksi 3.062 baris pesan inbound terdahulu di database agar bubble chat customer tetap berada di sisi kiri pada Live Chat.
+  - **Service Worker PWA & Client Hook (`public/sw.js` & `src/services/pushNotification.ts`)**:
+    - Menambahkan listener event `push` dan `notificationclick` di Service Worker untuk menampilkan banner notifikasi asli di layar kunci HP dan membuka chat saat di-tap.
+    - Integrasi otomatis pendaftaran push pada hook `useLiveChatNotification.ts`.
+  - **Unit Test Komprehensif (`tests/unit/web-push.service.test.ts`)**:
+    - 4 test cases offline covering key generation, subscription upsert/prune, dan error status handling.
+
+### Fixed — Pemulihan Tampilan Gambar Masuk (Inbound Customer Media) di Live Chat
+
+- **Penyebab Ditemukan**:
+  1. WAHA NOWEB menyimpan media masuk ke direktori file store `/api/files/:session/:file`, namun menyertakan host lokal pada URL payload. Ketika dashboard mencoba memuat file, request ke server Fastify menghasilkan HTTP 404 (karena Fastify sebelumnya belum memiliki handler proxy untuk `/api/files/*`).
+  2. Fungsi `downloadMedia` sebelumnya gagal karena format JID LID / Serialized ID, dan `MediaImage.tsx` memuat gambar dengan `crossOrigin = 'anonymous'` yang menghapus cookie sesi browser.
+- **Perbaikan yang Dilakukan**:
+  - **Reverse Proxy `/api/files/:session/:file` (`src/routes/media.route.ts`)**: Fastify kini menyediakan endpoint proxy transparan ke WAHA file store sehingga file gambar yang sudah tercatat di database dapat langsung di-stream tanpa error 404.
+  - **Direct File Fetch & Thumbnail Fallback (`src/routes/webhook.route.ts` & `src/integrations/waha/client.ts`)**: Webhook inbound kini mencoba mengunduh file langsung dari endpoint URL WAHA (`wahaClient.fetchUrl`), dilanjutkan dengan multi-candidate `downloadMedia`, dan fallback otomatis ke `jpegThumbnail` base64 jika file belum sempat terunduh dari server WhatsApp.
+  - **Normalisasi URL Media di UI (`LiveChatMonitor.tsx`, `StaffToday.tsx`)**: Fungsi `extractMedia` kini otomatis menormalkan URL host penuh (seperti `http://localhost:3000/...` atau ngrok) menjadi relative path `/api/files/...` atau `/media/...` agar kompatibel di semua lingkungan (lokal, ngrok, produksi).
+  - **Tap-to-View Resolusi Asli (`MediaImage.tsx`)**: Menampilkan gambar secara langsung dan bersih di dalam bubble chat. Saat gambar di-tap / diklik, otomatis membuka modal penampil resolusi penuh (resolusi asli dari customer) dengan backdrop gelap, tombol tutup (Esc), dan caption tanpa tombol download/watermark yang mengganggu.
+
+### Added & Improved — Fitur Edit Pesan WhatsApp Terkirim (Batas 15 Menit) & Live Chat Real-Time
+
+- **Fitur Edit Pesan WhatsApp Terkirim (`LiveChatMonitor.tsx`, `StaffToday.tsx`, `live-chat.service.ts`, `waha.driver.ts`)**:
+  - **Integrasi Endpoint WAHA Edit**: Menambahkan metode `editMessage(chatId, messageId, newText)` ke `IWahaClient` dan `WahaClient` (`PUT /api/{session}/chats/{chatId}/messages/{messageId}`) dengan payload `{ text: newText }` serta fallback endpoint `/api/messages/edit`.
+  - **Abstraksi Multi-Provider WhatsApp Gateway**: Menambahkan flag `supportsEdit` pada `WhatsAppGateway` (`waha.driver.ts` $\rightarrow$ `true`, `waba.driver.ts` $\rightarrow$ `false` dengan handling penolakan ramah).
+  - **Validasi Batas Waktu 15 Menit**: Server dan UI secara ketat memverifikasi bahwa pengeditan hanya dapat dilakukan untuk pesan keluar (*outbound*) dalam jangka waktu maksimal 15 menit pertama sejak pesan terkirim (`Date.now() - msg.created_at <= 15 * 60 * 1000`) sesuai kebijakan resmi WhatsApp.
+  - **Pembaruan Data & Broadcast Real-Time**: Pesan yang diedit diperbarui di database Prisma (`messages.content` dan `payload_raw.is_edited = true`, `edited_at`), memory store fallback, dan dipancarkan ke event stream SSE `message.updated` via `LiveChatHub`.
+  - **Modal Interaktif & Label "(Diedit)" di UI**:
+    - Tombol ikon pensil (`PenLine`) muncul di samping tombol hapus pesan (*trash*) untuk pesan outbound $\le 15$ menit.
+    - Modal interaktif lengkap dengan konfirmasi, input textarea, serta panduan batas waktu 15 menit WhatsApp.
+    - Menampilkan badge italic *(diedit)* di samping jam pesan pada bubble chat Live Chat Monitor dan Portal Staf Bidan.
+  - **Subroute API Fastify**:
+    - `PUT /api/admin/conversations/:id/messages/:messageId/edit` (Admin Live Chat)
+    - `PUT /api/staff/conversations/:id/messages/:messageId/edit` (Staff Portal dengan pembatasan kepemilikan percakapan)
+- **Unit Test Komprehensif (`tests/unit/live-chat.service.test.ts`)**:
+  - Menambahkan test case untuk skenario sukses edit pesan outbound $\le 15$ menit, penolakan otomatis pesan $> 15$ menit, pencegahan edit pesan inbound customer, dan proteksi provider non-edit (WABA).
+
 ### Added — Command Telegram `/clean`: Task Pembersihan Server via Cron Host
 
 - **Perintah `/clean` (alias `/clean_server` / `/server_clean`) di bot Telegram (`src/routes/telegram-webhook.route.ts`)**:

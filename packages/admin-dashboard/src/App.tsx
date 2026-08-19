@@ -9,6 +9,7 @@ import { StaffProtectedRoute } from './components/staff/StaffProtectedRoute';
 import { Login } from './pages/auth/Login';
 import { BootProgress } from './components/common/BootProgress';
 import { emitBootPhase } from './lib/bootProgress';
+import { getDefaultRedirect } from './config/rolePermissions';
 
 // Lazy load pages for fast initial bundle sizes (code-splitting rationale)
 const Overview = lazy(() => import('./pages/tenant/Overview').then(m => ({ default: m.Overview })));
@@ -50,7 +51,8 @@ const IndexRedirect: React.FC = () => {
       </div>
     );
   }
-  return <Navigate to={user?.role === 'therapist' ? '/admin/staff/today' : '/admin/overview'} replace />;
+  const targetPath = getDefaultRedirect(user?.role || '');
+  return <Navigate to={targetPath} replace />;
 };
 
 export const App: React.FC = () => {

@@ -52,7 +52,7 @@ export interface WahaLabelChatPayload {
 }
 
 export interface WahaWebhookEvent {
-  event: 'message' | 'message.any' | 'state.change' | 'label.chat.added' | 'label.chat.deleted';
+  event: 'message' | 'message.any' | 'message.ack' | 'state.change' | 'label.chat.added' | 'label.chat.deleted' | (string & {});
   session: string;
-  payload: WahaMessagePayload & Partial<WahaLabelChatPayload>;
+  payload: WahaMessagePayload & Partial<WahaLabelChatPayload> & Record<string, any>;
 }

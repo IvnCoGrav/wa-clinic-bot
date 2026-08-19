@@ -632,9 +632,11 @@ model LlmAuditLog {
 }
 
 enum StaffRole {
-  THERAPIST
+  SUPER_ADMIN
+  TENANT_ADMIN
   ADMIN_CS
   ADVERTISER
+  THERAPIST
 }
 
 model Staff {
@@ -643,7 +645,7 @@ model Staff {
   name          String
   phone         String         @unique
   password_hash String
-  role                   StaffRole      @default(THERAPIST)
+  role                   String         @default("THERAPIST")
   active                 Boolean        @default(true)
   telegram_chat_id       String?
   telegram_pairing_token String?        @unique
@@ -697,5 +699,40 @@ model CustomerLabel {
   @@index([label_id])
   @@map("customer_labels")
 }
+
+model PushSubscription {
+  id         String   @id @default(uuid())
+  tenant_id  String   @default("default-tenant")
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  user_type  String   @default("ADMIN") // ADMIN | STAFF
+  user_id    String?
+  user_agent String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([tenant_id, user_type])
+  @@map("push_subscriptions")
+}
+
+model CustomRole {
+  id               String   @id @default(uuid())
+  tenant_id        String   @default("default-tenant")
+  key              String
+  label            String
+  description      String?
+  allowed_paths    String[] @default([])
+  default_redirect String   @default("/admin/overview")
+  is_system        Boolean  @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@unique([tenant_id, key])
+  @@index([tenant_id])
+  @@map("custom_roles")
+}
+
+
 
 

@@ -10,15 +10,22 @@ export function hashToken(token: string): string {
 
 export class StaffAuthService {
   /**
-   * Login: verifikasi nomor HP + password staff, buat sesi baru di database.
-   * Hanya role THERAPIST yang boleh mengakses portal staff (terapis lapangan).
+   * Login: verifikasi nomor HP/username + password staff, buat sesi baru di database.
+   * Mendukung semua peran staff (THERAPIST, SPVCS, ADMIN_CS, ADVERTISER, dll).
    */
   static async login(phone: string, password: string, tenantId: string) {
     if (!phone || !password) return null;
 
     try {
+      const cleanPhone = phone.trim().replace(/^(\+62|62)/, '0');
       const staff = await prisma.staff.findFirst({
-        where: { phone, tenant_id: tenantId, active: true, role: 'THERAPIST' },
+        where: {
+          OR: [
+            { phone: cleanPhone, tenant_id: tenantId, active: true },
+            { phone: phone.trim(), tenant_id: tenantId, active: true },
+            { name: phone.trim(), tenant_id: tenantId, active: true },
+          ],
+        },
       });
       if (!staff) return null;
 
@@ -36,7 +43,7 @@ export class StaffAuthService {
         },
       });
 
-      console.log(`[STAFF AUTH] Staff '${staff.name}' (${staff.phone}) logged in successfully.`);
+      console.log(`[STAFF AUTH] Staff '${staff.name}' (${staff.phone}, role: ${staff.role}) logged in successfully.`);
       return { token, staff, expiresAt };
     } catch (err: any) {
       console.error('[STAFF AUTH] Error during staff login:', err.message);
@@ -47,7 +54,7 @@ export class StaffAuthService {
   /**
    * Validasi token sesi dari cookie.
    * Return null jika token tidak ada, sesi tidak ditemukan, expired, direvoke,
-   * akun staff dinonaktifkan, atau role staff bukan THERAPIST.
+   * atau akun staff dinonaktifkan.
    */
   static async validateSession(token: string) {
     if (!token || typeof token !== 'string') return null;
@@ -61,7 +68,6 @@ export class StaffAuthService {
       if (!session || session.revoked_at) return null;
       if (session.expires_at < new Date()) return null;
       if (!session.staff || !session.staff.active) return null;
-      if (session.staff.role !== 'THERAPIST') return null;
 
       return session;
     } catch (err: any) {

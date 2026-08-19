@@ -556,49 +556,65 @@ export const Reservations: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Top Header Bar */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] shadow-xs">
         {/* Title & Month Navigation */}
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-[#111b21] capitalize">
-              {headerDateTitle}
-            </h2>
-            <p className="text-xs text-[#667781] mt-0.5">
-              Jadwal reservasi & kunjungan terapis klinik
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-[#111b21] capitalize">
+                {headerDateTitle}
+              </h2>
+
+              {/* Date Navigation group placed right next to Month text */}
+              {viewMode !== 'table' && (
+                <div className="flex items-center space-x-1 bg-[#f0f2f5] p-0.5 rounded-lg border border-[#e9edef]">
+                  <button
+                    onClick={handlePrevDate}
+                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors"
+                    title="Sebelumnya"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    onClick={handleToday}
+                    className="px-2 py-0.5 rounded-md bg-white hover:bg-gray-100 text-[11px] font-bold text-[#111b21] shadow-2xs transition-colors"
+                  >
+                    Hari Ini
+                  </button>
+                  <button
+                    onClick={handleNextDate}
+                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors"
+                    title="Berikutnya"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-[11px] text-[#667781] mt-0.5">
+              Jadwal Reservasi
             </p>
           </div>
-
-          {/* Date Navigation group (hanya untuk mode kalender; tabel menampilkan semua data) */}
-          {viewMode !== 'table' && (
-          <div className="flex items-center space-x-1.5 ml-0 sm:ml-4 bg-[#f0f2f5] p-1 rounded-xl">
-            <button
-              onClick={handlePrevDate}
-              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-[#111b21] shadow-xs transition-colors"
-              title="Sebelumnya"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <button
-              onClick={handleToday}
-              className="px-3 py-1 rounded-lg bg-white hover:bg-gray-100 text-xs font-bold text-[#111b21] shadow-xs transition-colors"
-            >
-              Hari Ini
-            </button>
-            <button
-              onClick={handleNextDate}
-              className="p-1.5 rounded-lg bg-white hover:bg-gray-100 text-[#111b21] shadow-xs transition-colors"
-              title="Berikutnya"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-          )}
         </div>
 
         {/* View mode switcher & Actions */}
         <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-end">
-          {/* View Switcher Tabs */}
-          <div className="flex space-x-1 p-1 bg-[#f0f2f5] rounded-xl shadow-inner text-xs">
+          {/* Mobile View Mode Dropdown */}
+          <div className="block sm:hidden flex-1 min-w-[110px]">
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value as CalendarViewMode)}
+              className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            >
+              <option value="table">List</option>
+              <option value="day">Hari</option>
+              <option value="week">Minggu</option>
+              <option value="month">Bulan</option>
+            </select>
+          </div>
+
+          {/* Desktop View Switcher Tabs */}
+          <div className="hidden sm:flex space-x-1 p-1 bg-[#f0f2f5] rounded-xl shadow-inner text-xs">
             <button
               onClick={() => setViewMode('table')}
               className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
@@ -675,8 +691,25 @@ export const Reservations: React.FC = () => {
       <div className="space-y-4">
         {/* Status Filter Tabs & Search bar */}
         <div className="space-y-2.5">
-          {/* Status Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl w-fit">
+          {/* Mobile Status Dropdown */}
+          <div className="block sm:hidden w-full">
+            <select
+              value={filterState.status}
+              onChange={(e) =>
+                setFilterState((prev) => ({ ...prev, status: e.target.value as any }))
+              }
+              className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            >
+              <option value="all">Semua Status ({reservations.length})</option>
+              <option value="pending">Pending ({reservations.filter((r) => r.status === 'pending').length})</option>
+              <option value="confirmed">Confirmed / Lunas ({reservations.filter((r) => r.status === 'confirmed').length})</option>
+              <option value="completed">Completed / Selesai ({reservations.filter((r) => r.status === 'completed').length})</option>
+              <option value="cancelled">Cancelled / Batal ({reservations.filter((r) => r.status === 'cancelled').length})</option>
+            </select>
+          </div>
+
+          {/* Desktop Status Tabs */}
+          <div className="hidden sm:flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl w-fit">
             {[
               { key: 'all', label: 'Semua Status', count: reservations.length },
               { key: 'pending', label: 'Pending', count: reservations.filter((r) => r.status === 'pending').length },
@@ -753,7 +786,10 @@ export const Reservations: React.FC = () => {
           {viewMode === 'month' && (
             <MonthScheduleGrid
               selectedDate={selectedDate}
-              onSelectDate={(d) => setSelectedDate(d)}
+              onSelectDate={(d) => {
+                setSelectedDate(d);
+                setViewMode('day');
+              }}
               reservations={filteredReservations}
               onSelectReservation={(r) => setSelectedRes(r)}
               onQuickAdd={handleQuickAdd}
@@ -1621,6 +1657,7 @@ export const Reservations: React.FC = () => {
         }}
         staffList={staffList}
         initialSlotTarget={quickSlotTarget}
+        existingReservations={reservations}
       />
     </div>
   );

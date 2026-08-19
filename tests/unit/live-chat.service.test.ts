@@ -305,4 +305,135 @@ describe('LiveChatService — monitor & balas admin', () => {
     if (prev === undefined) delete process.env.PUBLIC_BASE_URL;
     else process.env.PUBLIC_BASE_URL = prev;
   });
+
+  it('editMessage: berhasil mengedit pesan outbound dalam rentang 15 menit', async () => {
+    const fake = {
+      ...makeFakeGateway('WAHA'),
+      supportsEdit: true,
+      editMessage: vi.fn().mockResolvedValue({ success: true }),
+    };
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628600${Date.now()}`, 'Bunda Edit', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const loggedMsg = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.OUTBOUND,
+      content: 'Teks awal sebelum diedit',
+      senderType: 'ADMIN',
+      senderName: 'Admin Klinik',
+    });
+
+    const editRes = await liveChatService.editMessage({
+      conversationId: conversation.id,
+      messageId: loggedMsg.id,
+      newContent: 'Teks perbaikan setelah diedit',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Admin Klinik',
+    });
+
+    expect(editRes.success).toBe(true);
+    expect(fake.editMessage).toHaveBeenCalledTimes(1);
+    expect(fake.editMessage).toHaveBeenCalledWith(customer.phone, loggedMsg.id, 'Teks perbaikan setelah diedit');
+
+    const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
+    const target = messages.find((m) => m.id === loggedMsg.id);
+    expect(target).toBeTruthy();
+    expect(target.content).toBe('Teks perbaikan setelah diedit');
+    expect(target.payload_raw?.is_edited).toBe(true);
+  });
+
+  it('editMessage: menolak pengeditan pesan yang sudah lebih dari 15 menit', async () => {
+    const fake = {
+      ...makeFakeGateway('WAHA'),
+      supportsEdit: true,
+      editMessage: vi.fn().mockResolvedValue({ success: true }),
+    };
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628610${Date.now()}`, 'Bunda ExpiredEdit', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const loggedMsg = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.OUTBOUND,
+      content: 'Pesan sudah 20 menit lalu',
+      senderType: 'ADMIN',
+    });
+
+    // Manipulasi created_at menjadi 20 menit lalu
+    loggedMsg.created_at = new Date(Date.now() - 20 * 60 * 1000);
+
+    const editRes = await liveChatService.editMessage({
+      conversationId: conversation.id,
+      messageId: loggedMsg.id,
+      newContent: 'Coba edit pesan lama',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(editRes.success).toBe(false);
+    expect(editRes.error).toContain('15 menit');
+    expect(fake.editMessage).not.toHaveBeenCalled();
+  });
+
+  it('editMessage: menolak pengeditan pesan masuk (inbound) dari customer', async () => {
+    const fake = {
+      ...makeFakeGateway('WAHA'),
+      supportsEdit: true,
+      editMessage: vi.fn().mockResolvedValue({ success: true }),
+    };
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628620${Date.now()}`, 'Bunda CustomerMsg', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const loggedMsg = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.INBOUND,
+      content: 'Pesan dari customer',
+    });
+
+    const editRes = await liveChatService.editMessage({
+      conversationId: conversation.id,
+      messageId: loggedMsg.id,
+      newContent: 'Coba edit pesan customer',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(editRes.success).toBe(false);
+    expect(editRes.error).toContain('Hanya pesan keluar');
+    expect(fake.editMessage).not.toHaveBeenCalled();
+  });
+
+  it('editMessage: gagal bila provider gateway tidak mendukung edit (misal WABA)', async () => {
+    const fake = {
+      ...makeFakeGateway('WABA'),
+      supportsEdit: false,
+    };
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const customer = await customerService.getOrCreateCustomer(`628630${Date.now()}`, 'Bunda WabaEdit', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const loggedMsg = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.OUTBOUND,
+      content: 'Pesan WABA',
+    });
+
+    const editRes = await liveChatService.editMessage({
+      conversationId: conversation.id,
+      messageId: loggedMsg.id,
+      newContent: 'Edit pesan WABA',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(editRes.success).toBe(false);
+    expect(editRes.error).toContain('tidak mendukung fitur edit pesan');
+  });
 });

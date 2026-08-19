@@ -21,6 +21,7 @@ export interface TemplateComponent {
 export interface WhatsAppGateway {
   readonly providerType: WhatsAppProvider;
   readonly supportsRevoke: boolean;
+  readonly supportsEdit: boolean;
 
   sendTextMessage(to: string, text: string): Promise<SendResult>;
 
@@ -38,6 +39,7 @@ export interface WhatsAppGateway {
   markAsRead(chatId: string, messageId?: string): Promise<void>;
 
   deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<{ success: boolean; error?: string }>;
+  editMessage(chatId: string, messageId: string, newText: string): Promise<{ success: boolean; error?: string }>;
   getProfilePicture?(phone: string): Promise<string | null>;
 }
 

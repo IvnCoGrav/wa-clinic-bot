@@ -37,14 +37,30 @@
   }
 }
 
-html, body, #root {
+html, body {
   background-color: #f0f2f5;
   color: #111b21;
-  /* Prevent browser native horizontal edge swipe navigation reload */
-  overscroll-behavior-x: none;
-  touch-action: pan-y pinch-zoom;
   overflow-x: hidden;
   max-width: 100vw;
+}
+
+.chat-contenteditable:empty:before {
+  content: attr(data-placeholder);
+  color: #8696a0;
+  pointer-events: none;
+  display: block;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@media (max-width: 768px) {
+  html, body {
+    overscroll-behavior-y: none;
+    touch-action: pan-y pinch-zoom;
+  }
 }
 
 body {
@@ -79,7 +95,9 @@ p,
 span,
 input,
 textarea,
+[contenteditable],
 [contenteditable="true"],
+[contenteditable="plaintext-only"],
 .selectable-text,
 .selectable-text * {
   -webkit-user-select: text;

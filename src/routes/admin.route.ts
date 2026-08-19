@@ -28,6 +28,8 @@ import { metaAttributionAdminRoutes } from './admin/meta-attribution.subroute';
 import { exportAdminRoutes } from './admin/export.subroute';
 import { staffManagementAdminRoutes } from './admin/staff-management.subroute';
 import { labelsAdminRoutes } from './admin/labels.subroute';
+import { pushSubroutes } from './admin/push.subroute';
+import { rolesAdminRoutes } from './admin/roles.subroute';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
@@ -86,7 +88,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     } else if (staffCookie) {
       const { StaffAuthService } = await import('../services/staff-auth.service');
       const staffSession = await StaffAuthService.validateSession(staffCookie);
-      if (staffSession && staffSession.staff.role !== 'THERAPIST') {
+      if (staffSession) {
         isAuthenticated = true;
         identity = staffSession.staff.name;
         (request as any).staffRole = staffSession.staff.role;
@@ -119,6 +121,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(exportAdminRoutes);
   fastify.register(staffManagementAdminRoutes);
   fastify.register(labelsAdminRoutes);
+  fastify.register(pushSubroutes);
+  fastify.register(rolesAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');

@@ -31,11 +31,40 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'Not Found' });
     }
 
-    // Folder inbound privat → verifikasi session admin cookie.
+    // Folder inbound privat → verifikasi session admin/staff atau API key
     if (SCOPE_IS_PRIVATE[scope]) {
+      const isDev = process.env.NODE_ENV !== 'production';
       const cookieHeader = request.headers['cookie'] || '';
       const sessionCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
-      const valid = sessionCookie ? AdminSessionService.validateSession(sessionCookie) : false;
+      const staffCookie = cookieHeader.match(/staff_session=([^;]+)/)?.[1];
+      const apiKey = request.headers['x-api-key'] || request.headers['x-admin-api-key'] || (request.query as any)?.apiKey || (request.query as any)?.key;
+      const authHeader = request.headers['authorization'];
+      const queryToken = (request.query as any)?.token;
+
+      let valid = false;
+      if (sessionCookie && AdminSessionService.validateSession(sessionCookie)) {
+        valid = true;
+      } else if (staffCookie) {
+        const { StaffAuthService } = await import('../services/staff-auth.service');
+        const staff = await StaffAuthService.validateSession(staffCookie);
+        if (staff) valid = true;
+      } else if (queryToken) {
+        if (AdminSessionService.validateSession(queryToken)) {
+          valid = true;
+        } else {
+          const { StaffAuthService } = await import('../services/staff-auth.service');
+          const staff = await StaffAuthService.validateSession(queryToken);
+          if (staff) valid = true;
+        }
+      } else if (apiKey && process.env.ADMIN_API_KEY && apiKey === process.env.ADMIN_API_KEY) {
+        valid = true;
+      } else if (authHeader && authHeader.startsWith('Bearer ') && process.env.ADMIN_API_KEY && authHeader.slice(7) === process.env.ADMIN_API_KEY) {
+        valid = true;
+      } else if (isDev) {
+        // Pada mode development/lokal izinkan preview tanpa blokir
+        valid = true;
+      }
+
       if (!valid) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
@@ -47,8 +76,104 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     }
 
     const ext = (path.extname(abs) || '').replace(/^\./, '').toLowerCase();
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Cache-Control', 'public, max-age=86400');
     reply.type(MIME_MAP[ext] || 'application/octet-stream');
     const stream = fs.createReadStream(abs);
     return reply.send(stream);
+  });
+
+  /**
+   * GET /api/files/:session/:file
+   * Proxy transparan ke file store WAHA
+   * Memastikan gambar dari webhook WAHA tetap dapat ditampilkan di dashboard tanpa 404.
+   */
+  fastify.get('/api/files/:session/:file', async (request: FastifyRequest<{
+    Params: { session: string; file: string };
+  }>, reply: FastifyReply) => {
+    const { session, file } = request.params;
+    const { wahaClient } = await import('../integrations/waha/client');
+
+    const result = await wahaClient.fetchFile(session, file);
+    if (!result) {
+      return reply.status(404).send({ error: 'File tidak ditemukan di server WAHA' });
+    }
+
+    const ext = (path.extname(file) || '').replace(/^\./, '').toLowerCase();
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Cache-Control', 'public, max-age=86400');
+    reply.type(result.contentType || MIME_MAP[ext] || 'image/jpeg');
+    return reply.send(result.data);
+  });
+
+  /**
+   * GET /media/avatar/:customerId
+   * Endpoint publik foto profil customer (atau avatar inisial).
+   * Menjadi CDN avatar lokal agar Apple APNs & Google FCM dapat mengunduh foto tanpa terkena blokir hotlinking 403 Meta.
+   */
+  fastify.get('/media/avatar/:customerId', async (request: FastifyRequest<{
+    Params: { customerId: string };
+  }>, reply: FastifyReply) => {
+    const rawId = request.params.customerId.replace(/\.(jpg|jpeg|png|webp|svg)$/i, '');
+    const { prisma } = await import('../db/client');
+    const { customerService } = await import('../services/customer.service');
+    const axios = (await import('axios')).default;
+
+    let customer: any = null;
+    try {
+      customer = await customerService.getCustomerById(rawId, 'default-tenant');
+      if (!customer) {
+        customer = await prisma.customer.findUnique({ where: { id: rawId } });
+      }
+    } catch {}
+
+    const avatarDir = path.join(process.cwd(), 'storage', 'media', 'avatars');
+    const localAvatarPath = path.join(avatarDir, `${rawId}.jpg`);
+
+    // 1. Ambil dari cache lokal jika sudah ada
+    if (fs.existsSync(localAvatarPath) && fs.statSync(localAvatarPath).isFile()) {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Cache-Control', 'public, max-age=86400');
+      reply.type('image/jpeg');
+      return reply.send(fs.createReadStream(localAvatarPath));
+    }
+
+    // 2. Unduh dari customer.profile_picture_url jika ada
+    if (customer?.profile_picture_url) {
+      try {
+        const picRes = await axios.get(customer.profile_picture_url, {
+          responseType: 'arraybuffer',
+          timeout: 5000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
+        if (picRes.status === 200 && picRes.data && picRes.data.length > 0) {
+          try {
+            if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
+            fs.writeFileSync(localAvatarPath, Buffer.from(picRes.data));
+          } catch {}
+          reply.header('Access-Control-Allow-Origin', '*');
+          reply.header('Cache-Control', 'public, max-age=86400');
+          reply.type('image/jpeg');
+          return reply.send(Buffer.from(picRes.data));
+        }
+      } catch (err: any) {
+        console.warn(`[AVATAR PROXY] Failed to fetch profile picture for customer ${rawId}:`, err.message);
+      }
+    }
+
+    // 3. Fallback: generate dynamic avatar dari UI Avatars
+    const name = customer?.name || 'Pelanggan';
+    const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=008069&color=fff&size=256&bold=true`;
+    try {
+      const fallbackRes = await axios.get(fallbackUrl, { responseType: 'arraybuffer', timeout: 5000 });
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Cache-Control', 'public, max-age=86400');
+      reply.type('image/png');
+      return reply.send(Buffer.from(fallbackRes.data));
+    } catch {
+      return reply.redirect(fallbackUrl);
+    }
   });
 }

@@ -1,22 +1,19 @@
 import React from 'react';
 import { Reservation } from '../../types';
-import { Plus, Clock } from 'lucide-react';
 import { QuickSlotTarget } from './types';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   reservations: Reservation[];
-  onSelectReservation: (res: Reservation) => void;
-  onQuickAdd: (target: QuickSlotTarget) => void;
+  onSelectReservation?: (res: Reservation) => void;
+  onQuickAdd?: (target: QuickSlotTarget) => void;
 }
 
 export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
   selectedDate,
   onSelectDate,
   reservations,
-  onSelectReservation,
-  onQuickAdd,
 }) => {
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
@@ -102,10 +99,16 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
 
   return (
     <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden">
-      {/* Day header */}
-      <div className="grid grid-cols-7 border-b border-[#e9edef] bg-[#fafafa] text-center text-xs font-bold text-[#54656f] py-2.5">
-        {dayLabels.map((l, i) => (
-          <div key={i}>{l}</div>
+      {/* Weekday Header */}
+      <div className="grid grid-cols-7 border-b border-[#e9edef] bg-[#fafafa]">
+        {dayLabels.map((day, idx) => (
+          <div
+            key={idx}
+            className="p-2 sm:p-3 text-center text-[11px] font-bold text-[#667781] uppercase tracking-wider border-r border-[#e9edef] last:border-r-0"
+          >
+            <span className="hidden sm:inline">{day}</span>
+            <span className="inline sm:hidden">{day.slice(0, 3)}</span>
+          </div>
         ))}
       </div>
 
@@ -120,16 +123,16 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
             <div
               key={idx}
               onClick={() => onSelectDate(item.date)}
-              className={`min-h-[110px] sm:min-h-[130px] p-2 relative flex flex-col justify-between transition-colors group ${
+              className={`min-h-[105px] sm:min-h-[125px] p-1.5 sm:p-2 relative flex flex-col justify-start gap-1 transition-colors cursor-pointer select-none group ${
                 isSelected
-                  ? 'bg-emerald-50/30'
+                  ? 'bg-emerald-50/30 ring-1 ring-[#008069]'
                   : item.isCurrentMonth
                   ? 'bg-white hover:bg-[#fafafa]'
                   : 'bg-gray-50/60 text-gray-400'
               }`}
             >
               {/* Date number header */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between w-full">
                 <span
                   className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${
                     currentDay
@@ -143,51 +146,43 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                 >
                   {item.date.getDate()}
                 </span>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onQuickAdd({ date: item.date, hour: 9 });
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-[#008069] hover:text-white text-[#8696a0] transition-all"
-                  title="Tambah Jadwal"
-                >
-                  <Plus size={13} />
-                </button>
+                {events.length > 0 && (
+                  <span className={`text-[10px] font-bold font-mono ${
+                    currentDay ? 'text-[#008069]' : isSelected ? 'text-[#111b21]' : 'text-[#667781]'
+                  }`}>
+                    {events.length}
+                  </span>
+                )}
               </div>
 
-              {/* Event pills */}
-              <div className="space-y-1 my-1 overflow-y-auto max-h-[80px]">
+              {/* Event pills (Full-width, pure static labels, no buttons, no icons) */}
+              <div className="space-y-1 w-full overflow-hidden flex-1">
                 {events.slice(0, 3).map((res) => {
                   const bDate = new Date(res.booking_date!);
                   const timeStr = bDate
                     .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                     .replace('.', ':');
                   const catColor = getCategoryColor(res.treatment_category);
+                  const nameDisplay = res.customer?.name || 'Bunda';
 
                   return (
                     <div
                       key={res.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectReservation(res);
-                      }}
-                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold truncate border cursor-pointer hover:shadow-xs transition-all flex items-center space-x-1 ${catColor}`}
-                      title={`${res.customer?.name || 'Bunda'} - ${res.treatment_detail} (${timeStr})`}
+                      className={`w-full px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10.5px] font-semibold truncate border block leading-tight ${catColor}`}
+                      title={`${nameDisplay} - ${res.treatment_detail || res.treatment_category} (${timeStr})`}
                     >
-                      <Clock size={9} className="flex-shrink-0 opacity-70" />
-                      <span className="truncate">{timeStr} {res.customer?.name || 'Bunda'}</span>
+                      <span className="truncate block font-medium">
+                        {timeStr} {nameDisplay}
+                      </span>
                     </div>
                   );
                 })}
                 {events.length > 3 && (
-                  <span className="block text-[9px] text-[#008069] font-bold px-1">
+                  <div className="w-full text-center text-[9px] text-[#008069] font-bold pt-0.5 truncate">
                     +{events.length - 3} lainnya
-                  </span>
+                  </div>
                 )}
               </div>
-
-              <div />
             </div>
           );
         })}

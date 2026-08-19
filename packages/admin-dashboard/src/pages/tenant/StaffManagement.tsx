@@ -20,12 +20,17 @@ import {
   ChevronRight,
   Info,
   CheckCircle2,
+  Compass,
+  ListOrdered,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import {
   ROLE_LABELS,
   ALL_MODULES,
   RoleConfig,
   getCustomRoles,
+  fetchRolesFromApi,
   saveRoleConfig,
   deleteCustomRole,
 } from '../../config/rolePermissions';
@@ -104,7 +109,7 @@ export const StaffManagement: React.FC = () => {
 
   useEffect(() => {
     fetchStaff();
-    refreshRoles();
+    fetchRolesFromApi().then(() => refreshRoles());
 
     const handleRolesUpdate = () => {
       refreshRoles();
@@ -286,7 +291,7 @@ export const StaffManagement: React.FC = () => {
     setShowRoleModal(true);
   };
 
-  const handleSaveRole = (e: React.FormEvent) => {
+  const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roleLabel.trim()) {
       toast('Nama role wajib diisi.', 'error');
@@ -316,13 +321,14 @@ export const StaffManagement: React.FC = () => {
       defaultRedirect: roleDefaultRedirect,
     };
 
-    saveRoleConfig(newConfig);
+    await saveRoleConfig(newConfig);
+    await fetchRolesFromApi();
     refreshRoles();
     setShowRoleModal(false);
     toast(
       roleModalMode === 'CREATE'
-        ? `Role baru "${newConfig.label}" berhasil dibuat!`
-        : `Hak akses untuk role "${newConfig.label}" berhasil diperbarui!`,
+        ? `Role baru "${newConfig.label}" berhasil dibuat & disimpan ke database!`
+        : `Hak akses untuk role "${newConfig.label}" berhasil diperbarui di database!`,
       'success'
     );
   };
@@ -341,7 +347,7 @@ export const StaffManagement: React.FC = () => {
 
     const confirmed = await confirm({
       title: 'Hapus Custom Role',
-      message: `Apakah Anda yakin ingin menghapus role "${cfg.label}"? Peran ini akan dihapus dari daftar hak akses.`,
+      message: `Apakah Anda yakin ingin menghapus role "${cfg.label}"? Peran ini akan dihapus dari database.`,
       confirmText: 'Hapus Role',
       cancelText: 'Batal',
       danger: true,
@@ -349,10 +355,11 @@ export const StaffManagement: React.FC = () => {
 
     if (!confirmed) return;
 
-    const success = deleteCustomRole(cfg.key);
+    const success = await deleteCustomRole(cfg.key);
     if (success) {
+      await fetchRolesFromApi();
       refreshRoles();
-      toast(`Role "${cfg.label}" telah dihapus.`, 'success');
+      toast(`Role "${cfg.label}" telah dihapus dari database.`, 'success');
     } else {
       toast('Gagal menghapus role.', 'error');
     }
@@ -1088,6 +1095,124 @@ export const StaffManagement: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Landing Page Selector */}
+              <div className="space-y-1.5 pt-2 border-t border-[#e9edef]">
+                <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                  <Compass size={14} className="text-[#008069]" />
+                  <span>Halaman Awal Masuk Setelah Login (Landing Page)</span>
+                </label>
+                <p className="text-[11px] text-[#667781]">
+                  Pilih menu utama yang langsung dibuka otomatis ketika staf dengan peran ini masuk ke dashboard.
+                </p>
+                <select
+                  value={roleDefaultRedirect}
+                  onChange={(e) => setRoleDefaultRedirect(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+                >
+                  {roleAllowedPaths.map((p) => {
+                    const mod = ALL_MODULES.find((m) => m.path === p);
+                    return (
+                      <option key={p} value={p}>
+                        {mod ? `${mod.name} (${p})` : p}
+                      </option>
+                    );
+                  })}
+                  {!roleAllowedPaths.includes(roleDefaultRedirect) && (
+                    <option value={roleDefaultRedirect}>
+                      {roleDefaultRedirect} (Kustom)
+                    </option>
+                  )}
+                </select>
+              </div>
+
+              {/* Sidebar Menu Sequence / Order Selector */}
+              {roleAllowedPaths.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-[#e9edef]">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                      <ListOrdered size={14} className="text-[#008069]" />
+                      <span>Urutan Menu di Sidebar ({roleAllowedPaths.length} Menu)</span>
+                    </label>
+                    <span className="text-[10px] text-[#8696a0]">
+                      Klik ▲ atau ▼ untuk memindahkan urutan
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 max-h-48 overflow-y-auto p-2 bg-[#f8fafc] rounded-xl border border-[#e9edef]">
+                    {roleAllowedPaths.map((p, idx) => {
+                      const mod = ALL_MODULES.find((m) => m.path === p);
+                      const isLanding = roleDefaultRedirect === p;
+
+                      const moveUp = (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        if (idx === 0) return;
+                        const copy = [...roleAllowedPaths];
+                        const temp = copy[idx - 1];
+                        copy[idx - 1] = copy[idx];
+                        copy[idx] = temp;
+                        setRoleAllowedPaths(copy);
+                      };
+
+                      const moveDown = (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        if (idx === roleAllowedPaths.length - 1) return;
+                        const copy = [...roleAllowedPaths];
+                        const temp = copy[idx + 1];
+                        copy[idx + 1] = copy[idx];
+                        copy[idx] = temp;
+                        setRoleAllowedPaths(copy);
+                      };
+
+                      return (
+                        <div
+                          key={p}
+                          className={`flex items-center justify-between px-3 py-1.5 rounded-lg border transition-colors ${
+                            isLanding
+                              ? 'bg-[#e8f5f2] border-[#008069]/40 text-[#111b21]'
+                              : 'bg-white border-[#e9edef] text-[#54656f]'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span className="h-5 w-5 rounded-md bg-[#e9edef] text-[#111b21] flex items-center justify-center text-[10px] font-bold">
+                              #{idx + 1}
+                            </span>
+                            <span className="text-xs font-semibold truncate">
+                              {mod?.name || p}
+                            </span>
+                            {isLanding && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#008069] text-white">
+                                Landing Page
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-1">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={moveUp}
+                              title="Pindah ke Atas"
+                              className="p-1 rounded-md text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21] disabled:opacity-30"
+                            >
+                              <ArrowUp size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === roleAllowedPaths.length - 1}
+                              onClick={moveDown}
+                              title="Pindah ke Bawah"
+                              className="p-1 rounded-md text-[#54656f] hover:bg-[#e9edef] hover:text-[#111b21] disabled:opacity-30"
+                            >
+                              <ArrowDown size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="pt-3 border-t border-[#e9edef] flex items-center justify-end space-x-2 flex-shrink-0">
                 <button

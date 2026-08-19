@@ -4,11 +4,17 @@ import App from './App.tsx'
 import './index.css'
 
 if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
-  window.addEventListener('load', () => {
+  const registerSW = () => {
     navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin/' })
       .then((reg) => console.log('[PWA] Service Worker registered with scope:', reg.scope))
       .catch((err) => console.warn('[PWA] Service Worker registration failed:', err));
-  });
+  };
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    registerSW();
+  } else {
+    window.addEventListener('load', registerSW);
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
