@@ -30,6 +30,8 @@ import {
   Tag,
   Plus,
   Check,
+  CheckCheck,
+  AlertCircle,
   Sparkles,
   ExternalLink,
   Calendar,
@@ -38,24 +40,49 @@ import {
   Pin,
   Mail,
   MailCheck,
+  Search,
   MoreVertical,
+  PenLine,
+  Smartphone,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
+import { emitBootPhase } from '../../lib/bootProgress';
 
 interface ChatMessage {
   id: string;
+  wa_message_id?: string | null;
   direction: 'INBOUND' | 'OUTBOUND';
   content: string;
   sender_type?: string | null;
   sender_name?: string | null;
+  delivery_status?: 'sent' | 'delivered' | 'read' | 'failed' | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
   created_at: string;
   media?: ChatMediaData;
+  is_revoked?: boolean;
+  is_edited?: boolean;
 }
 
 function extractMedia(msg: any): ChatMediaData | undefined {
   const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
-  if (m && (m.url || m.hdUrl)) return m;
+  if (m && (m.url || m.hdUrl)) {
+    const rawUrl = m.url || m.hdUrl;
+    const rawHdUrl = m.hdUrl || m.url;
+    const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+    const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
+    return {
+      ...m,
+      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
+      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
+    };
+  }
+  if (msg?.payload_raw?.imageUrl) return { url: msg.payload_raw.imageUrl, hdUrl: msg.payload_raw.imageUrl };
+  if (typeof msg?.content === 'string' && (msg.content.startsWith('/media/') || msg.content.startsWith('/api/files/') || msg.content.startsWith('http://') || msg.content.startsWith('https://')) && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.content)) {
+    const clean = msg.content.replace(/^https?:\/\/[^/]+/, '');
+    return { url: clean.startsWith('/') ? clean : `/${clean}`, hdUrl: clean.startsWith('/') ? clean : `/${clean}` };
+  }
   return undefined;
 }
 
@@ -108,12 +135,18 @@ export const LiveChatMonitor: React.FC = () => {
   const [customerDetailData, setCustomerDetailData] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatInputRef = useRef<HTMLDivElement>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
+  const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [isEditingSaving, setIsEditingSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
+  const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchDebounceTimerRef = useRef<any>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
@@ -121,6 +154,62 @@ export const LiveChatMonitor: React.FC = () => {
   const longPressTriggeredRef = useRef(false);
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
   const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  // Press-and-Hold Tooltip for filter icons on mobile
+  const [iconTooltip, setIconTooltip] = useState<string | null>(null);
+  const iconTooltipTimerRef = useRef<any>(null);
+
+  const handleIconTouchStart = (title: string) => {
+    if (iconTooltipTimerRef.current) clearTimeout(iconTooltipTimerRef.current);
+    iconTooltipTimerRef.current = setTimeout(() => {
+      setIconTooltip(title);
+      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+        try { navigator.vibrate(25); } catch {}
+      }
+    }, 280);
+  };
+
+  const handleIconTouchEnd = () => {
+    if (iconTooltipTimerRef.current) {
+      clearTimeout(iconTooltipTimerRef.current);
+      iconTooltipTimerRef.current = null;
+    }
+    setTimeout(() => {
+      setIconTooltip(null);
+    }, 1500);
+  };
+
+  // ✍️ WhatsApp Typing Presence & Seen Notification
+  const typingTimerRef = useRef<any>(null);
+  const isTypingActiveRef = useRef(false);
+
+  const notifyTyping = (isTyping: boolean) => {
+    if (!selectedIdRef.current) return;
+    if (isTypingActiveRef.current === isTyping && isTyping) return;
+    isTypingActiveRef.current = isTyping;
+
+    apiRequest(`/api/admin/live-chat/conversations/${selectedIdRef.current}/typing`, {
+      method: 'POST',
+      body: JSON.stringify({ isTyping }),
+    }).catch(() => {});
+  };
+
+  const handleInputChange = (text: string) => {
+    setReplyText(text);
+    if (!selectedIdRef.current) return;
+
+    if (text.trim().length > 0) {
+      notifyTyping(true);
+
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        notifyTyping(false);
+      }, 3000);
+    } else {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      notifyTyping(false);
+    }
+  };
 
   const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
@@ -239,7 +328,7 @@ export const LiveChatMonitor: React.FC = () => {
     totalChats: 0,
     currentOffset: 0,
   });
-  const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean } | null>(null);
+  const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean; supportsEdit?: boolean } | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const chatsRef = useRef<LiveChatItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
@@ -337,27 +426,21 @@ export const LiveChatMonitor: React.FC = () => {
     };
   }, []);
 
-  const resetTextareaHeight = () => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '38px';
-    }
-  };
-
-  const handleReplyTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setReplyText(e.target.value);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      const nextHeight = Math.min(textareaRef.current.scrollHeight, 220);
-      textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
+  const resetChatInput = () => {
+    setReplyText('');
+    if (chatInputRef.current) {
+      chatInputRef.current.innerText = '';
     }
   };
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
+    resetChatInput();
   }, [selectedId]);
 
   // Load gateway capability & available customer labels on mount
   useEffect(() => {
+    emitBootPhase('done');
     apiRequest('/api/admin/gateway-capability')
       .then((res) => {
         if (res?.success && res.data) setGatewayCapability(res.data);
@@ -436,7 +519,16 @@ export const LiveChatMonitor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFilter]);
 
-  const loadChats = async (reset = false) => {
+  const triggerDebouncedSearch = (q: string) => {
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
+    }
+    searchDebounceTimerRef.current = setTimeout(() => {
+      loadChats(true, q);
+    }, 350);
+  };
+
+  const loadChats = async (reset = false, search = searchQuery) => {
     if (reset) setLoading(true);
     if (loadingMoreRef.current && !reset) return;
     if (reset) {
@@ -447,7 +539,8 @@ export const LiveChatMonitor: React.FC = () => {
     }
     try {
       const offset = reset ? 0 : chatsRef.current.length;
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}`);
+      const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}${searchParam}`);
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
       if (reset) {
@@ -513,6 +606,15 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const scrollToBottom = (smooth = false) => {
     if (chatContainerRef.current) {
@@ -522,6 +624,23 @@ export const LiveChatMonitor: React.FC = () => {
       });
     }
   };
+
+  // 📱 Visual Viewport API: Saat keyboard iOS muncul/berubah ukuran, auto-scroll chat agar tidak tertutup
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const handleViewportChange = () => {
+      if (mobileView === 'chat') {
+        scrollToBottom(true);
+      }
+    };
+    const vp = window.visualViewport;
+    vp.addEventListener('resize', handleViewportChange);
+    vp.addEventListener('scroll', handleViewportChange);
+    return () => {
+      vp.removeEventListener('resize', handleViewportChange);
+      vp.removeEventListener('scroll', handleViewportChange);
+    };
+  }, [mobileView]);
 
   useEffect(() => {
     // Auto scroll down to latest message when messages change or new chat opened
@@ -624,7 +743,7 @@ export const LiveChatMonitor: React.FC = () => {
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
-    resetTextareaHeight();
+    resetChatInput();
     loadThread(conversationId);
 
     // Auto mark-as-read jika masih ada unread atau isManualUnread
@@ -699,22 +818,37 @@ export const LiveChatMonitor: React.FC = () => {
             sender_type: payload.senderType || payload.sender_type || null,
             sender_name: payload.senderName || payload.sender_name || null,
             created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
+            delivery_status: payload.deliveryStatus || 'sent',
             media: extractMedia(payload),
           };
 
-          // Append ke thread yang sedang dibuka (hindari duplikat by id / timestamp & content dalam rentang 30 detik)
+          // Append ke thread yang sedang dibuka / replace optimistic message
           if (selectedIdRef.current === conversationId) {
-            setMessages((prev) =>
-              prev.some(
+            setMessages((prev) => {
+              // Cek apakah ada optimistic message (temp_) yang cocok
+              const tempIndex = prev.findIndex(
+                (m) =>
+                  m.id.startsWith('temp_') &&
+                  m.content === msg.content &&
+                  m.direction === msg.direction
+              );
+              if (tempIndex !== -1) {
+                const next = [...prev];
+                next[tempIndex] = { ...msg, media: msg.media || next[tempIndex].media };
+                return next;
+              }
+
+              const isDuplicate = prev.some(
                 (m) =>
                   m.id === msg.id ||
                   (m.content === msg.content &&
                     m.direction === msg.direction &&
-                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000)
-              )
-                ? prev
-                : [...prev, msg]
-            );
+                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 15000)
+              );
+              if (isDuplicate) return prev;
+              return [...prev, msg];
+            });
+            setTimeout(() => scrollToBottom(true), 50);
           }
 
           // Update preview daftar
@@ -777,6 +911,26 @@ export const LiveChatMonitor: React.FC = () => {
               )
             );
           }
+        } else if (type === 'message.status_updated' && (payload?.messageId || payload?.waMessageId)) {
+          const { messageId, waMessageId, conversationId, status, deliveredAt, readAt } = payload;
+          if (!conversationId || selectedIdRef.current === conversationId) {
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (
+                  (messageId && m.id === messageId) ||
+                  (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId))
+                ) {
+                  return {
+                    ...m,
+                    delivery_status: status,
+                    delivered_at: deliveredAt || m.delivered_at,
+                    read_at: readAt || m.read_at,
+                  };
+                }
+                return m;
+              })
+            );
+          }
         } else if (type === ('sync.progress' as any) || payload?.status) {
           const syncData = payload.payload || payload;
           if (syncData && typeof syncData.syncedChats === 'number') {
@@ -789,7 +943,43 @@ export const LiveChatMonitor: React.FC = () => {
       },
     });
 
-    return () => unsubscribe();
+    // 🔄 Smart Background Polling (Fallback and Instant Re-sync every 3.5 seconds)
+    const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadChats(false);
+        if (selectedIdRef.current) {
+          const activeId = selectedIdRef.current;
+          apiRequest(`/api/admin/live-chat/conversations/${activeId}/messages`)
+            .then((res) => {
+              if (selectedIdRef.current !== activeId) return;
+              const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
+              const mapped = list.map((m) => ({ ...m, media: extractMedia(m) }));
+              setMessages((prev) => {
+                const hasTemp = prev.some((m) => m.id.startsWith('temp_'));
+                if (hasTemp) return prev;
+                if (
+                  prev.length !== mapped.length ||
+                  mapped.some(
+                    (nm, idx) =>
+                      prev[idx]?.id !== nm.id ||
+                      prev[idx]?.delivery_status !== nm.delivery_status ||
+                      prev[idx]?.is_revoked !== nm.is_revoked
+                  )
+                ) {
+                  return mapped;
+                }
+                return prev;
+              });
+            })
+            .catch(() => {});
+        }
+      }
+    }, 3500);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -827,6 +1017,48 @@ export const LiveChatMonitor: React.FC = () => {
       toast(`Gagal menarik pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
     } finally {
       setRevokingId(null);
+    }
+  };
+
+  const handleStartEdit = (msg: ChatMessage) => {
+    setEditingMsg({ id: msg.id, content: msg.content });
+    setEditContent(msg.content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMsg || !selectedChat?.conversationId || isEditingSaving) return;
+    if (!editContent.trim()) {
+      toast('Teks pesan tidak boleh kosong.', 'error');
+      return;
+    }
+
+    setIsEditingSaving(true);
+    try {
+      const res = await apiRequest(
+        `/api/admin/conversations/${selectedChat.conversationId}/messages/${editingMsg.id}/edit`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ text: editContent.trim() }),
+        }
+      );
+
+      if (res?.success) {
+        toast('Pesan berhasil diperbarui di WhatsApp!', 'success');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingMsg.id
+              ? { ...m, content: editContent.trim(), is_edited: true }
+              : m
+          )
+        );
+        setEditingMsg(null);
+      } else {
+        toast(`Gagal mengedit pesan: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal mengedit pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
+    } finally {
+      setIsEditingSaving(false);
     }
   };
 
@@ -871,13 +1103,9 @@ export const LiveChatMonitor: React.FC = () => {
       });
       if (res?.data?.draftText) {
         setReplyText(res.data.draftText);
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            const nextHeight = Math.min(textareaRef.current.scrollHeight, 220);
-            textareaRef.current.style.height = `${Math.max(nextHeight, 38)}px`;
-          }
-        }, 50);
+        if (chatInputRef.current) {
+          chatInputRef.current.innerText = res.data.draftText;
+        }
         toast('Draf jawaban AI berhasil dibuat! Anda dapat mengedit sebelum mengirim.', 'success');
       } else {
         toast('Gagal mendapatkan saran balasan AI.', 'error');
@@ -923,13 +1151,55 @@ export const LiveChatMonitor: React.FC = () => {
 
   const handleSendReply = async () => {
     const image = selectedImage;
-    if (!selectedId || (!replyText.trim() && !image)) return;
+    const text = replyText.trim();
+    if (!selectedId || (!text && !image)) return;
+
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    notifyTyping(false);
+
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      direction: 'OUTBOUND',
+      content: text || (image ? '[GAMBAR]' : ''),
+      sender_type: 'ADMIN',
+      sender_name: user?.email || 'Admin',
+      created_at: new Date().toISOString(),
+      delivery_status: 'sent',
+      media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.file.type } : undefined,
+    };
+
+    // 1. Instan tampil di thread pesan (0ms delay)
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    // 2. Instan update preview teks di daftar chat list
+    setChats((prev) => {
+      const updated = prev.map((c) =>
+        c.conversationId === selectedId
+          ? {
+              ...c,
+              lastMessageAt: optimisticMsg.created_at,
+              lastMessages: [...(c.lastMessages || []), optimisticMsg].slice(-3),
+              isAwaitingReply: false,
+            }
+          : c
+      );
+      const sorted = sortChats(updated);
+      chatsRef.current = sorted;
+      return sorted;
+    });
+
+    // 3. Instan kosongkan form input & pratinjau gambar
+    resetChatInput();
+    setSelectedImage(null);
+    setTimeout(() => scrollToBottom(true), 50);
+
     setSending(true);
     try {
       const body: Record<string, any> = {
         adminName: user?.email || 'Admin',
       };
-      if (replyText.trim()) body.text = replyText.trim();
+      if (text) body.text = text;
       if (image) {
         const imageB64 = await fileToDataUrl(image.file);
         const thumbB64 = await makeThumbnail(imageB64);
@@ -938,16 +1208,32 @@ export const LiveChatMonitor: React.FC = () => {
         body.mimeType = image.file.type || 'image/jpeg';
         body.fileName = image.file.name;
       }
-      await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/reply`, {
+
+      const res = await apiRequest(`/api/admin/live-chat/conversations/${selectedId}/reply`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      setReplyText('');
-      resetTextareaHeight();
-      setSelectedImage(null);
-      toast('Balasan admin terkirim.', 'success');
+
+      const actualMsg = res?.data?.message || res?.data;
+      if (actualMsg?.id) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...m,
+                  id: actualMsg.id,
+                  wa_message_id: actualMsg.wa_message_id || m.wa_message_id,
+                  delivery_status: 'sent',
+                }
+              : m
+          )
+        );
+      }
     } catch (err: any) {
       toast(`Gagal mengirim balasan: ${err.message}`, 'error');
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, delivery_status: 'failed' } : m))
+      );
     } finally {
       setSending(false);
     }
@@ -1010,9 +1296,31 @@ export const LiveChatMonitor: React.FC = () => {
     return 'all';
   };
 
-  const filteredChats = chats.filter(
-    (chat) => labelFilter === 'all' || getChatLabel(chat) === labelFilter
-  );
+  const filteredChats = chats.filter((chat) => {
+    // 1. Filter label
+    if (labelFilter !== 'all' && getChatLabel(chat) !== labelFilter) {
+      return false;
+    }
+
+    // 2. Filter search query (Nama, Nomor HP, atau Keyword Pesan)
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const cleanDigits = q.replace(/\D/g, '');
+      const nameMatch = (chat.customerName || '').toLowerCase().includes(q);
+      const phoneMatch = cleanDigits.length >= 2
+        ? (chat.customerPhone || '').includes(cleanDigits)
+        : (chat.customerPhone || '').toLowerCase().includes(q);
+      const messageMatch = (chat.lastMessages || []).some((m) =>
+        (m.content || '').toLowerCase().includes(q)
+      );
+
+      if (!nameMatch && !phoneMatch && !messageMatch) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
@@ -1052,11 +1360,15 @@ export const LiveChatMonitor: React.FC = () => {
     <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-1 sm:space-y-1.5">
       {/* Top Header */}
       <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0`}>
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-2">
           <h1 className="text-sm sm:text-base font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
             <MessageSquare className="text-[#008069]" size={18} />
             <span>Live Chat Monitor</span>
           </h1>
+          {/* Total Conversations Badge directly next to Title */}
+          <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]" title="Total percakapan aktif">
+            {filteredChats.length}
+          </span>
           {/* Real-time Status Icon Indicator */}
           <div
             className="flex items-center space-x-1 px-2 py-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-full text-[10px] font-semibold text-[#54656f]"
@@ -1069,15 +1381,14 @@ export const LiveChatMonitor: React.FC = () => {
 
         {/* Sync Controls */}
         <div className="flex items-center space-x-1.5">
-          {/* Background Full Sync Button */}
+          {/* Background Full Sync Icon Button */}
           <button
-            onClick={handleStartBackgroundFullSync}
+            onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
-            className="px-2.5 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-bold shadow-2xs transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
-            title="Ambil seluruh riwayat chat WhatsApp di latar belakang (tanpa batas waktu)"
+            className="p-1.5 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+            title="Sinkronisasi Seluruh Chat WhatsApp (Background)"
           >
-            <RefreshCw size={12} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
-            <span>{bgSyncProgress.isSyncing ? 'Sync Background...' : 'Sync Semua (Background)'}</span>
+            <RefreshCw size={14} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
@@ -1132,79 +1443,147 @@ export const LiveChatMonitor: React.FC = () => {
             onTouchCancel={() => { listTouchStartRef.current = null; }}
             className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}
           >
-            {/* Header Toolbar Daftar Percakapan: Source Filter & Label Dropdown */}
+            {/* Header Toolbar Daftar Percakapan: Source Filter (Icons) + Label Dropdown Side-by-Side */}
             <div className="space-y-1.5 pb-2 border-b border-[#f0f2f5] shrink-0">
-              <div className="flex justify-between items-center gap-1.5">
-                <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider">
-                  Percakapan ({filteredChats.length})
-                </span>
+              <div className="flex items-center justify-between gap-1.5">
+                {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
+                <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
+                  {[
+                    { value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone },
+                    { value: 'all', title: 'Semua Percakapan', icon: Layers },
+                    { value: 'sandbox', title: 'Sandbox QA Test', icon: FlaskConical },
+                  ].map((opt) => {
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setSourceFilter(opt.value as any)}
+                        onTouchStart={() => handleIconTouchStart(opt.title)}
+                        onTouchEnd={handleIconTouchEnd}
+                        onTouchCancel={handleIconTouchEnd}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setIconTooltip(opt.title);
+                          setTimeout(() => setIconTooltip(null), 2000);
+                        }}
+                        title={opt.title}
+                        className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
+                          sourceFilter === opt.value
+                            ? opt.value === 'sandbox'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs'
+                              : opt.value === 'real'
+                                ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
+                                : 'bg-[#111b21] text-white shadow-2xs'
+                            : 'text-[#667781] hover:text-[#111b21]'
+                        }`}
+                      >
+                        <Icon size={13} />
+                      </button>
+                    );
+                  })}
 
-                {/* Filter sumber percakapan: WhatsApp Asli vs Sandbox (Khusus Daftar Chat) */}
-                <div className="flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg">
-                  {(
-                    [
-                      { value: 'real', label: 'WhatsApp Asli' },
-                      { value: 'all', label: 'Semua' },
-                      { value: 'sandbox', label: 'Sandbox' },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setSourceFilter(opt.value)}
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition flex items-center space-x-1 cursor-pointer ${
-                        sourceFilter === opt.value
-                          ? opt.value === 'sandbox'
-                            ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs'
-                            : opt.value === 'real'
-                              ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
-                              : 'bg-[#111b21] text-white shadow-2xs'
-                          : 'text-[#667781] hover:text-[#111b21]'
-                      }`}
+                  {/* Press-Hold Floating Tooltip */}
+                  {iconTooltip && (
+                    <div className="absolute top-full left-0 mt-1 z-50 px-2 py-1 bg-[#111b21] text-white text-[10px] font-bold rounded-lg shadow-lg animate-fadeIn whitespace-nowrap pointer-events-none flex items-center space-x-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]" />
+                      <span>{iconTooltip}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Label Filter Dropdown & Mark All Read (Disampingnya) */}
+                <div className="flex items-center space-x-1 flex-1 min-w-0">
+                  {(isDesktop || mobileView === 'list') && (
+                    <select
+                      value={labelFilter}
+                      onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
+                      className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
                     >
-                      {opt.value === 'sandbox' && <FlaskConical size={10} />}
-                      {opt.value === 'real' && <CheckCircle size={10} />}
-                      <span>{opt.label}</span>
-                    </button>
-                  ))}
+                      <option value="all">Semua Label</option>
+                      <option value="human_request">Human Request</option>
+                      <option value="medical_concern">Medical Emergency</option>
+                      <option value="unresolved_faq">Unresolved FAQ</option>
+                    </select>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleMarkAllAsRead}
+                    tabIndex={mobileView === 'chat' ? -1 : 0}
+                    title="Tandai semua percakapan sebagai telah dibaca"
+                    className="p-1 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#c2e7e0] text-[#54656f] hover:text-[#008069] rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <MailCheck size={14} className="text-[#008069]" />
+                  </button>
                 </div>
               </div>
 
-              {/* Label Filter Dropdown & Mark All Read */}
-              <div className="flex items-center space-x-1.5">
-                <select
-                  value={labelFilter}
-                  onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
-                  className="flex-1 px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs"
-                >
-                  <option value="all">Semua Label Pasien</option>
-                  <option value="human_request">Human Request</option>
-                  <option value="medical_concern">Medical Emergency</option>
-                  <option value="unresolved_faq">Unresolved FAQ</option>
-                </select>
-
-                <button
-                  type="button"
-                  onClick={handleMarkAllAsRead}
-                  title="Tandai semua percakapan sebagai telah dibaca"
-                  className="px-2 py-1 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#c2e7e0] text-[#54656f] hover:text-[#008069] rounded-lg text-[11px] font-semibold transition flex items-center space-x-1 shrink-0 cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <MailCheck size={13} className="text-[#008069]" />
-                  <span className="hidden sm:inline">Tandai Dibaca</span>
-                </button>
-              </div>
+              {/* 🔍 Search Bar Input: Cari Nama, No. HP, atau Keyword Pesan */}
+              {(isDesktop || mobileView === 'list') && (
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                    <Search size={13} />
+                  </span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      triggerDebouncedSearch(e.target.value);
+                    }}
+                    placeholder="Cari nama, no. HP, atau keyword chat..."
+                    className="w-full pl-8 pr-7 py-1 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        loadChats(true, '');
+                      }}
+                      className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
+                      title="Hapus pencarian"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {filteredChats.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-[#667781] text-xs">
-                <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
-                <p className="font-bold text-[#111b21]">
-                  {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
-                </p>
-                <p className="text-[#667781] text-[10px] mt-0.5">
-                  {chats.length === 0
-                    ? 'Percakapan baru akan muncul secara real-time.'
-                    : 'Ganti filter sumber atau label untuk melihat lainnya.'}
-                </p>
+                {searchQuery ? (
+                  <>
+                    <Search className="mx-auto text-[#8696a0] mb-2 opacity-50" size={24} />
+                    <p className="font-bold text-[#111b21]">Tidak ada hasil pencarian</p>
+                    <p className="text-[#667781] text-[10px] mt-0.5">
+                      Tidak ditemukan chat dengan kata kunci &quot;{searchQuery}&quot;
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        loadChats(true, '');
+                      }}
+                      className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#008069] text-[11px] font-semibold transition cursor-pointer"
+                    >
+                      Reset Pencarian
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
+                    <p className="font-bold text-[#111b21]">
+                      {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
+                    </p>
+                    <p className="text-[#667781] text-[10px] mt-0.5">
+                      {chats.length === 0
+                        ? 'Percakapan baru akan muncul secara real-time.'
+                        : 'Ganti filter sumber atau label untuk melihat lainnya.'}
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div
@@ -1683,40 +2062,83 @@ export const LiveChatMonitor: React.FC = () => {
                       const senderTypeUpper = (msg.sender_type || '').toUpperCase();
                       const isAdmin = msg.direction === 'OUTBOUND' && (senderTypeUpper === 'ADMIN' || senderTypeUpper === 'HUMAN' || senderTypeUpper === 'STAFF');
                       const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || (msg as any).is_revoked || (msg as any).payload_raw?.is_revoked;
+                      const isEdited = !!(msg as any).is_edited || !!(msg as any).payload_raw?.is_edited;
                       const canRevoke = !isCustomer && !isRevoked && !!gatewayCapability?.supportsRevoke;
+                      const isWithin15Mins = msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false;
+                      const canEdit = !isCustomer && !isRevoked && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
+                      const hasMedia = !!msg.media;
+                      const hasMediaOnly = hasMedia && (!msg.content || /^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content));
 
                       return (
                         <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
-                          <div className={`max-w-[88%] sm:max-w-[75%] md:max-w-[70%] rounded-lg px-2.5 sm:px-3 py-1.5 text-xs leading-relaxed shadow-2xs ${
+                          <div className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs ${
                             isCustomer
                               ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
                               : isAdmin
                                 ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
                                 : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                           }`}>
-                            <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
-                              isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
-                            }`}>
-                              {!isCustomer && !isAdmin && <Bot size={10} />}
-                              <span>{senderLabel(msg)}</span>
-                            </span>
+                            {(!hasMediaOnly || (!isCustomer && !isAdmin)) && (
+                              <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
+                                isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
+                              }`}>
+                                {!isCustomer && !isAdmin && <Bot size={10} />}
+                                <span>{senderLabel(msg)}</span>
+                              </span>
+                            )}
                             {msg.media && (
-                              <div className="mb-1.5">
+                              <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
                                 <MediaImage
                                   src={msg.media.url || msg.media.hdUrl}
-                                  downloadSrc={msg.media.hdUrl}
+                                  downloadSrc={msg.media.hdUrl || msg.media.url}
                                   caption={msg.media.caption || undefined}
-                                  blur={isCustomer}
                                 />
                               </div>
                             )}
                             {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && (
                               <p className={`font-sans whitespace-pre-wrap ${isRevoked ? 'italic text-[#667781]' : ''}`}>{msg.content}</p>
                             )}
-                            <div className="flex items-center justify-end space-x-1.5 mt-0.5 text-right select-none text-[10px] text-[#667781]">
+                            <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
+                              {isEdited && !isRevoked && (
+                                <span className="text-[9px] text-[#667781] italic mr-0.5">diedit</span>
+                              )}
                               <span>
                                 {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.') : ''}
                               </span>
+                              {!isCustomer && (
+                                <span
+                                  className="inline-flex items-center ml-0.5"
+                                  title={
+                                    msg.delivery_status === 'read'
+                                      ? `Dibaca ${msg.read_at ? new Date(msg.read_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                                      : msg.delivery_status === 'delivered'
+                                      ? `Diterima di HP ${msg.delivered_at ? new Date(msg.delivered_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                                      : msg.delivery_status === 'failed'
+                                      ? 'Gagal terkirim'
+                                      : 'Terkirim'
+                                  }
+                                >
+                                  {msg.delivery_status === 'read' ? (
+                                    <CheckCheck size={13} className="text-[#53bdeb] stroke-[2.5]" />
+                                  ) : msg.delivery_status === 'delivered' ? (
+                                    <CheckCheck size={13} className="text-[#8696a0]" />
+                                  ) : msg.delivery_status === 'failed' ? (
+                                    <AlertCircle size={12} className="text-rose-500" />
+                                  ) : (
+                                    <Check size={12} className="text-[#8696a0]" />
+                                  )}
+                                </span>
+                              )}
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(msg)}
+                                  className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                  title="Edit pesan (maksimal 15 menit)"
+                                >
+                                  <PenLine size={11} />
+                                </button>
+                              )}
                               {canRevoke && (
                                 <button
                                   type="button"
@@ -1754,29 +2176,29 @@ export const LiveChatMonitor: React.FC = () => {
                       <img
                         src={selectedImage.preview}
                         alt="Preview"
-                        className="w-20 h-16 object-cover rounded-xl border border-[#d1d7db]"
+                        className="w-20 h-20 object-cover rounded-lg border border-[#e9edef]"
                       />
                       <button
-                        onClick={() => {
-                          setSelectedImage(null);
-                        }}
-                        className="absolute -top-1.5 -right-1.5 p-1 rounded-full bg-rose-500 text-white shadow-xs hover:bg-rose-600 transition"
-                        title="Hapus lampiran"
+                        onClick={() => setSelectedImage(null)}
+                        className="absolute -top-1.5 -right-1.5 p-0.5 bg-rose-500 text-white rounded-full hover:bg-rose-600 transition"
                       >
-                        <X size={11} />
+                        <X size={12} />
                       </button>
                     </div>
                   )}
-                  <div className="flex items-end space-x-1 sm:space-x-1.5 md:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 rounded-xl border border-[#e9edef] w-full">
+
+                  <div className="flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 rounded-xl border border-[#e9edef] w-full">
                     <input
                       ref={fileInputRef}
                       type="file"
+                      tabIndex={-1}
+                      aria-hidden="true"
                       accept="image/*"
                       onChange={handlePickImage}
                       className="hidden"
                     />
 
-                    {/* Tools Button with Dropdown Menu (AI Copilot + Lampirkan Gambar) */}
+                    {/* Tools Button */}
                     <div className="relative shrink-0" ref={toolsMenuRef}>
                       <button
                         type="button"
@@ -1842,20 +2264,26 @@ export const LiveChatMonitor: React.FC = () => {
                       )}
                     </div>
 
-                    <textarea
-                      ref={textareaRef}
-                      value={replyText}
-                      onChange={handleReplyTextChange}
+                    <div
+                      ref={chatInputRef}
+                      contentEditable="plaintext-only"
+                      role="textbox"
+                      aria-multiline="true"
+                      data-placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
+                      onFocus={() => {
+                        setTimeout(() => scrollToBottom(true), 200);
+                      }}
+                      onInput={(e) => {
+                        handleInputChange(e.currentTarget.innerText || '');
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                           e.preventDefault();
                           handleSendReply();
                         }
                       }}
-                      rows={1}
-                      placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
-                      className="flex-1 w-full min-w-0 resize-none rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] placeholder-[#8696a0] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[220px] leading-relaxed"
-                      style={{ fontSize: '16px' }}
+                      className="chat-contenteditable flex-1 w-full min-w-0 rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[220px] overflow-y-auto leading-relaxed outline-none"
+                      style={{ fontSize: '16px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
                     />
                     <button
                       onClick={handleSendReply}
@@ -2180,6 +2608,177 @@ export const LiveChatMonitor: React.FC = () => {
               >
                 <Bot size={14} />
                 <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Message Modal */}
+      {editingMsg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-[#e8f5f2] text-[#008069]">
+                  <PenLine size={16} />
+                </div>
+                <h3 className="text-sm font-bold text-[#111b21]">Edit Pesan WhatsApp</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMsg(null)}
+                disabled={isEditingSaving}
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <Info size={13} className="text-amber-600 shrink-0" />
+                  Batas Waktu Edit WhatsApp: 15 Menit
+                </p>
+                <p className="text-amber-700 leading-relaxed">
+                  WhatsApp hanya mengizinkan pengeditan pesan dalam 15 menit pertama. Pesan yang diedit akan otomatis memiliki label <i>(Diedit)</i> di HP penerima.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-[#111b21]">Isi Pesan Baru</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={4}
+                  placeholder="Ketik perbaikan teks pesan..."
+                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] transition shadow-xs leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+                <button
+                  type="button"
+                  onClick={() => setEditingMsg(null)}
+                  disabled={isEditingSaving}
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isEditingSaving || !editContent.trim()}
+                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                >
+                  {isEditingSaving ? (
+                    <>
+                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📋 Modal Informasi & Konfirmasi Sinkronisasi WhatsApp */}
+      {showSyncInfoModal && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-[#e9edef] space-y-4 animate-scaleUp">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#f0f2f5]">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-[#e8f5f2] text-[#008069]">
+                  <RefreshCw size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#111b21]">Sinkronisasi WhatsApp</h3>
+                  <p className="text-[11px] text-[#667781]">Penyelarasan Riwayat Chat di Background</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSyncInfoModal(false)}
+                className="p-1 text-[#8696a0] hover:text-[#111b21] rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Konten Penjelasan */}
+            <div className="space-y-3 text-xs text-[#54656f]">
+              {/* Apa yang dilakukan */}
+              <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl space-y-1">
+                <p className="font-bold text-[#111b21] flex items-center space-x-1.5">
+                  <span>⚙️</span>
+                  <span>Apa yang dilakukan?</span>
+                </p>
+                <p className="leading-relaxed text-[11px]">
+                  Sistem akan menarik dan menyelaraskan seluruh percakapan dari server WhatsApp (WAHA) langsung ke database bot secara otomatis tanpa mengganggu chat yang sedang aktif.
+                </p>
+              </div>
+
+              {/* Data yang disinkronkan */}
+              <div className="space-y-1.5">
+                <p className="font-bold text-[#111b21] flex items-center space-x-1.5">
+                  <span>📥</span>
+                  <span>Data yang disinkronkan (Scrape):</span>
+                </p>
+                <ul className="space-y-1 text-[11px] pl-1">
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#008069] font-bold">✓</span>
+                    <span><strong>Daftar Kontak & Customer:</strong> Deteksi nomor baru dan update nama pelanggan.</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#008069] font-bold">✓</span>
+                    <span><strong>Riwayat Percakapan:</strong> Pesan teks, lampiran media (foto/gambar), dan status kirim/baca.</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <span className="text-[#008069] font-bold">✓</span>
+                    <span><strong>Foto Profil WhatsApp:</strong> Cache foto profil customer untuk notifikasi mobile & avatar.</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Estimasi Waktu */}
+              <div className="p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl space-y-1 text-amber-900">
+                <p className="font-bold flex items-center space-x-1.5 text-[11px]">
+                  <span>⏱️</span>
+                  <span>Estimasi Waktu Bekerja di Background:</span>
+                </p>
+                <p className="text-[11px] leading-relaxed text-amber-800">
+                  Estimasi <strong>~1 - 3 menit</strong> (tergantung banyaknya riwayat chat WhatsApp). Anda dapat tetap menggunakan dashboard dan membuka percakapan seperti biasa tanpa menunggu.
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#f0f2f5]">
+              <button
+                type="button"
+                onClick={() => setShowSyncInfoModal(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-[#54656f] hover:text-[#111b21] hover:bg-[#f0f2f5] rounded-xl transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSyncInfoModal(false);
+                  handleStartBackgroundFullSync();
+                }}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-[#008069] hover:bg-[#00a884] rounded-xl shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <RefreshCw size={12} />
+                <span>Mulai Sinkronisasi Sekarang</span>
               </button>
             </div>
           </div>

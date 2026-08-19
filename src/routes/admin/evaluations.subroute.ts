@@ -111,6 +111,9 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             public async deleteMessage(chatId: string, messageId: string, everyone = true): Promise<boolean> {
               return true;
             }
+            public async editMessage(chatId: string, messageId: string, newText: string): Promise<boolean> {
+              return true;
+            }
             public async getMessages(chatId: string, limit?: number): Promise<any[]> {
               return [];
             }

@@ -62,6 +62,11 @@ export class MockWAHAClient implements IWahaClient {
     return true;
   }
 
+  public async editMessage(chatId: string, messageId: string, newText: string): Promise<boolean> {
+    process.stdout.write(`\x1b[90m[✏️ Pesan ${messageId} diedit: "${newText}"]\x1b[0m\n`);
+    return true;
+  }
+
   public async addLabel(chatId: string, labelId: string): Promise<boolean> {
     return true;
   }

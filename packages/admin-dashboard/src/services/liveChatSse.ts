@@ -10,37 +10,82 @@ export interface LiveChatSseOptions {
 
 export function connectLiveChatSse(options: LiveChatSseOptions): () => void {
   let es: EventSource | null = null;
+  let watchdogTimer: any = null;
+  let isClosed = false;
+
+  const resetWatchdog = () => {
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    // Jika tidak ada ping/event dari server dalam 35 detik, reconnect
+    watchdogTimer = setTimeout(() => {
+      if (!isClosed) {
+        console.warn('[LIVE CHAT SSE] Watchdog timeout (35s silent), reconnecting...');
+        reconnect();
+      }
+    }, 35000);
+  };
+
+  const cleanupEs = () => {
+    if (es) {
+      es.onopen = null;
+      es.onerror = null;
+      es.close();
+      es = null;
+    }
+  };
+
+  const reconnect = () => {
+    cleanupEs();
+    if (!isClosed) {
+      options.onStatusChange?.(false);
+      open();
+    }
+  };
 
   const open = () => {
-    es = new EventSource('/api/admin/live-chat/events');
+    if (isClosed) return;
+    try {
+      es = new EventSource('/api/admin/live-chat/events');
 
-    es.onopen = () => options.onStatusChange?.(true);
+      es.onopen = () => {
+        options.onStatusChange?.(true);
+        resetWatchdog();
+      };
 
-    es.onerror = () => {
-      // EventSource auto-reconnect; status pulih lewat onopen berikutnya
-      options.onStatusChange?.(false);
-    };
+      es.onerror = () => {
+        options.onStatusChange?.(false);
+        // EventSource will auto-reconnect, but if it stays errored, watchdog will trigger
+      };
 
-    es.addEventListener('message.created', (e) => {
-      try {
-        options.onEvent('message.created', JSON.parse((e as MessageEvent).data));
-      } catch (_) {
-        // payload korup — abaikan
-      }
-    });
+      const handleEvent = (type: string, e: Event) => {
+        resetWatchdog();
+        try {
+          const dataStr = (e as MessageEvent).data;
+          if (!dataStr || dataStr === ': ping') return;
+          const parsed = JSON.parse(dataStr);
+          options.onEvent(type, parsed);
+        } catch (_) {
+          // payload korup — abaikan
+        }
+      };
 
-    es.addEventListener('conversation.updated', (e) => {
-      try {
-        options.onEvent('conversation.updated', JSON.parse((e as MessageEvent).data));
-      } catch (_) {
-        // payload korup — abaikan
-      }
-    });
+      es.addEventListener('message.created', (e) => handleEvent('message.created', e));
+      es.addEventListener('message.updated', (e) => handleEvent('message.updated', e));
+      es.addEventListener('message.status_updated', (e) => handleEvent('message.status_updated', e));
+      es.addEventListener('conversation.updated', (e) => handleEvent('conversation.updated', e));
+      es.addEventListener('ping', () => resetWatchdog());
+      es.addEventListener('open', () => resetWatchdog());
+
+      resetWatchdog();
+    } catch (err) {
+      console.warn('[LIVE CHAT SSE] Gagal inisialisasi EventSource:', err);
+    }
   };
 
   open();
 
   return () => {
-    es?.close();
+    isClosed = true;
+    if (watchdogTimer) clearTimeout(watchdogTimer);
+    cleanupEs();
   };
 }

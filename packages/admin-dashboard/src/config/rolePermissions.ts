@@ -225,6 +225,58 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
     ],
     defaultRedirect: '/admin/overview',
   },
+  spv_cs: {
+    key: 'spv_cs',
+    label: 'Supervisor CS & Reservasi',
+    description: 'Akses operasional & supervisi: kalender reservasi, database pasien, katalog layanan, follow-up, live chat, dan manajemen staf.',
+    isSystem: false,
+    allowedPaths: [
+      '/admin/overview',
+      '/admin/customers',
+      '/admin/chat-migration',
+      '/admin/labels',
+      '/admin/customer-service',
+      '/admin/reservations',
+      '/admin/staff-management',
+      '/admin/services',
+      '/admin/delivery',
+      '/admin/follow-ups',
+      '/admin/follow-up-templates',
+      '/admin/knowledge-base',
+      '/admin/live-chat',
+      '/admin/persona',
+      '/admin/ai-evaluations',
+      '/admin/settings',
+      '/admin/chat-export',
+    ],
+    defaultRedirect: '/admin/overview',
+  },
+  spvcs: {
+    key: 'spvcs',
+    label: 'Supervisor CS & Reservasi',
+    description: 'Akses operasional & supervisi: kalender reservasi, database pasien, katalog layanan, follow-up, live chat, dan manajemen staf.',
+    isSystem: false,
+    allowedPaths: [
+      '/admin/overview',
+      '/admin/customers',
+      '/admin/chat-migration',
+      '/admin/labels',
+      '/admin/customer-service',
+      '/admin/reservations',
+      '/admin/staff-management',
+      '/admin/services',
+      '/admin/delivery',
+      '/admin/follow-ups',
+      '/admin/follow-up-templates',
+      '/admin/knowledge-base',
+      '/admin/live-chat',
+      '/admin/persona',
+      '/admin/ai-evaluations',
+      '/admin/settings',
+      '/admin/chat-export',
+    ],
+    defaultRedirect: '/admin/overview',
+  },
   advertiser: {
     key: 'advertiser',
     label: 'Advertiser / Media Buyer',
@@ -249,43 +301,97 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
   },
 };
 
+import { apiRequest } from '../services/api';
+
 const STORAGE_KEY = 'kala_custom_roles_v1';
+let inMemoryRolesCache: Record<string, RoleConfig> = { ...DEFAULT_ROLE_CONFIGS };
 
 export function getCustomRoles(): Record<string, RoleConfig> {
-  if (typeof window === 'undefined') return DEFAULT_ROLE_CONFIGS;
+  if (typeof window === 'undefined') return inMemoryRolesCache;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_ROLE_CONFIGS;
+    if (!raw) return inMemoryRolesCache;
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_ROLE_CONFIGS, ...parsed };
+    inMemoryRolesCache = { ...DEFAULT_ROLE_CONFIGS, ...parsed };
+    return inMemoryRolesCache;
   } catch {
-    return DEFAULT_ROLE_CONFIGS;
+    return inMemoryRolesCache;
   }
 }
 
-export function saveRoleConfig(role: RoleConfig): void {
-  if (typeof window === 'undefined') return;
+export async function fetchRolesFromApi(): Promise<Record<string, RoleConfig>> {
   try {
+    const res = await apiRequest('/api/admin/roles');
+    if (res && res.success && Array.isArray(res.data)) {
+      const merged: Record<string, RoleConfig> = { ...DEFAULT_ROLE_CONFIGS };
+      for (const r of res.data) {
+        merged[r.key] = {
+          key: r.key,
+          label: r.label,
+          description: r.description || '',
+          isSystem: !!r.isSystem,
+          allowedPaths: Array.isArray(r.allowedPaths) ? r.allowedPaths : [],
+          defaultRedirect: r.defaultRedirect || '/admin/overview',
+        };
+      }
+      inMemoryRolesCache = merged;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        window.dispatchEvent(new Event('roles-updated'));
+      }
+      return merged;
+    }
+  } catch (err) {
+    console.warn('Could not fetch custom roles from server:', err);
+  }
+  return getCustomRoles();
+}
+
+export async function saveRoleConfig(role: RoleConfig): Promise<boolean> {
+  inMemoryRolesCache[role.key] = role;
+  if (typeof window !== 'undefined') {
     const current = getCustomRoles();
     current[role.key] = role;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
     window.dispatchEvent(new Event('roles-updated'));
+  }
+
+  try {
+    await apiRequest('/api/admin/roles', {
+      method: 'POST',
+      body: JSON.stringify({
+        key: role.key,
+        label: role.label,
+        description: role.description,
+        allowedPaths: role.allowedPaths,
+        defaultRedirect: role.defaultRedirect,
+      }),
+    });
+    return true;
   } catch (err) {
-    console.error('Failed to save custom role:', err);
+    console.error('Failed to save custom role to database:', err);
+    return false;
   }
 }
 
-export function deleteCustomRole(roleKey: string): boolean {
-  if (typeof window === 'undefined') return false;
+export async function deleteCustomRole(roleKey: string): Promise<boolean> {
   if (DEFAULT_ROLE_CONFIGS[roleKey]?.isSystem) return false;
-  try {
+
+  delete inMemoryRolesCache[roleKey];
+  if (typeof window !== 'undefined') {
     const current = getCustomRoles();
     delete current[roleKey];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
     window.dispatchEvent(new Event('roles-updated'));
+  }
+
+  try {
+    await apiRequest(`/api/admin/roles/${roleKey}`, {
+      method: 'DELETE',
+    });
     return true;
   } catch (err) {
-    console.error('Failed to delete custom role:', err);
+    console.error('Failed to delete custom role from database:', err);
     return false;
   }
 }
@@ -293,6 +399,8 @@ export function deleteCustomRole(roleKey: string): boolean {
 export const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
   tenant_admin: 'Admin Utama',
+  spv_cs: 'Supervisor CS & Reservasi',
+  spvcs: 'Supervisor CS & Reservasi',
   admin_cs: 'Admin CS & Reservasi',
   advertiser: 'Advertiser / Media Buyer',
   therapist: 'Staff Terapis',
@@ -302,6 +410,8 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ROLE_MENU_ACCESS: Record<string, string[]> = {
   super_admin: [...ALL_PATHS],
   tenant_admin: [...ALL_PATHS],
+  spv_cs: DEFAULT_ROLE_CONFIGS.spv_cs.allowedPaths,
+  spvcs: DEFAULT_ROLE_CONFIGS.spvcs.allowedPaths,
   admin_cs: DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths,
   advertiser: DEFAULT_ROLE_CONFIGS.advertiser.allowedPaths,
   therapist: DEFAULT_ROLE_CONFIGS.therapist.allowedPaths,
@@ -312,17 +422,35 @@ export const ROLE_MENU_ACCESS: Record<string, string[]> = {
  */
 export function hasAccess(role: string, path: string): boolean {
   if (!role) return false;
-  const formattedRole = role.toLowerCase();
+  if (path === '/admin/login' || path === '/admin/unauthorized') return true;
+  const formattedRole = role.toLowerCase().replace(/[^a-z0-9]/g, '_');
   if (formattedRole === 'super_admin' || formattedRole === 'tenant_admin') return true;
 
   const roles = getCustomRoles();
-  const config = roles[formattedRole] || roles[role];
-  if (config) {
+  const config =
+    roles[formattedRole] ||
+    roles[role.toLowerCase()] ||
+    roles[role] ||
+    roles[formattedRole.replace(/_/g, '')];
+
+  if (config && Array.isArray(config.allowedPaths)) {
     return config.allowedPaths.includes(path);
   }
 
-  const fallback = ROLE_MENU_ACCESS[formattedRole];
-  return fallback ? fallback.includes(path) : false;
+  const fallback =
+    ROLE_MENU_ACCESS[formattedRole] ||
+    ROLE_MENU_ACCESS[role.toLowerCase()] ||
+    ROLE_MENU_ACCESS[formattedRole.replace(/_/g, '')];
+
+  if (fallback) return fallback.includes(path);
+
+  // Jika custom role belum tersimpan di localStorage perangkat ini,
+  // berikan default akses operasional agar staf tidak terblokir di unauthorized
+  if (formattedRole !== 'therapist') {
+    return DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths.includes(path);
+  }
+
+  return path === '/admin/staff/today';
 }
 
 /**
@@ -330,13 +458,32 @@ export function hasAccess(role: string, path: string): boolean {
  */
 export function getDefaultRedirect(role: string): string {
   if (!role) return '/admin/login';
-  const formattedRole = role.toLowerCase();
+  const formattedRole = role.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  if (formattedRole === 'super_admin' || formattedRole === 'tenant_admin') return '/admin/overview';
   if (formattedRole === 'therapist') return '/admin/staff/today';
 
   const roles = getCustomRoles();
-  const config = roles[formattedRole] || roles[role];
-  if (config && config.defaultRedirect) {
-    return config.defaultRedirect;
+  const config =
+    roles[formattedRole] ||
+    roles[role.toLowerCase()] ||
+    roles[role] ||
+    roles[formattedRole.replace(/_/g, '')];
+
+  if (config && Array.isArray(config.allowedPaths) && config.allowedPaths.length > 0) {
+    if (config.defaultRedirect && config.allowedPaths.includes(config.defaultRedirect)) {
+      return config.defaultRedirect;
+    }
+    return config.allowedPaths[0];
+  }
+
+  const fallback =
+    ROLE_MENU_ACCESS[formattedRole] ||
+    ROLE_MENU_ACCESS[role.toLowerCase()] ||
+    ROLE_MENU_ACCESS[formattedRole.replace(/_/g, '')];
+
+  if (fallback && fallback.length > 0) {
+    if (fallback.includes('/admin/overview')) return '/admin/overview';
+    return fallback[0];
   }
 
   return '/admin/overview';

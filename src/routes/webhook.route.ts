@@ -94,6 +94,36 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'LABEL_EVENT_PROCESSED' });
       }
 
+      // --- EVENT MESSAGE.ACK (WAHA Message Delivery & Read Receipts) ---
+      if (event.event === 'message.ack') {
+        const ackPayload: any = event.payload;
+        if (ackPayload) {
+          const rawId = typeof ackPayload.id === 'object'
+            ? ackPayload.id?._serialized || ackPayload.id?.id
+            : ackPayload.id || ackPayload.messageId || ackPayload.key?.id;
+
+          if (rawId && ackPayload.ack !== undefined) {
+            const ackNum = Number(ackPayload.ack);
+            let deliveryStatus: 'sent' | 'delivered' | 'read' | 'failed' = 'sent';
+            if (ackNum === 2) {
+              deliveryStatus = 'delivered';
+            } else if (ackNum === 3 || ackNum === 4) {
+              deliveryStatus = 'read';
+            } else if (ackNum < 0) {
+              deliveryStatus = 'failed';
+            }
+            console.log(`[MESSAGE ACK WEBHOOK] msgId=${rawId}, ack=${ackNum} (${deliveryStatus}), ts=${ackPayload.timestamp}`);
+            await messageService.updateDeliveryStatus(
+              String(rawId),
+              DEFAULT_TENANT_ID,
+              deliveryStatus,
+              ackPayload.timestamp ? Number(ackPayload.timestamp) : undefined
+            );
+          }
+        }
+        return reply.status(200).send({ status: 'ACK_PROCESSED' });
+      }
+
       // Filter hanya event "message" atau "message.any"
       if (event.event !== 'message' && event.event !== 'message.any') {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
@@ -223,37 +253,36 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_OUTBOUND' });
       }
 
+      // Inbound message (dari customer ke bot)
+      const from = payload.from;
+      const chatId = payload.chatId || from || '';
 
       // --- FILTER CHAT GRUP & NON-PERSONAL (Abaikan group/broadcast/status/newsletter) ---
-      // status@broadcast & newsletter JID bukan chat 1-on-1: tanpa filter, normalizeWahaJid
-      // menghasilkan phone palsu (mis. "status") dan mencemari DB dengan customer sampah.
       const isGroup = (payload.from && payload.from.endsWith('@g.us')) || 
-                      (payload.chatId && payload.chatId.endsWith('@g.us'));
+                      (payload.chatId && payload.chatId.endsWith('@g.us')) ||
+                      chatId.endsWith('@g.us');
       if (isGroup) {
         return reply.status(200).send({ status: 'IGNORED_GROUP_MESSAGE' });
       }
+
       const fromJid = payload.from || payload.chatId || '';
       if (fromJid.includes('@broadcast') || fromJid.includes('@newsletter') || fromJid.includes('status@')) {
         return reply.status(200).send({ status: 'IGNORED_NON_PERSONAL' });
       }
 
-      const waMessageId = payload.id;
+      const resolvedJid = await wahaClient.resolvePrimaryJid(chatId);
 
-      // --- REVISI USER #3: IDEMPOTENCY CHECK ---
+      const waMessageId = payload.id;
+      if (!waMessageId) {
+        return reply.status(200).send({ status: 'IGNORED_NO_ID' });
+      }
+
+      // --- IDEMPOTENCY CHECK ---
       const isDuplicate = await messageService.isDuplicateMessage(waMessageId, DEFAULT_TENANT_ID);
       if (isDuplicate) {
         console.log(`[IDEMPOTENCY SKIP] WAHA Message ID ${waMessageId} has already been processed. Skipping retry.`);
         return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
       }
-
-      // Extrak nomor HP internasional dari JID WAHA (misal "79903991054369@lid" -> "6285794210526")
-      const chatId = payload.from;
-
-      // Resolve LID→JID primer (@c.us) SEKALI di awal handler; hasilnya dipakai
-      // untuk menurunkan phone DAN menjadi cache key label (getChatLabels di bawah
-      // memakai hasil resolve yang sama via label-cache, sehingga /lids/* dan
-      // /labels/chats/* hanya di-hit maks 1x per chat dalam window TTL 15 detik).
-      const resolvedJid = await wahaClient.resolvePrimaryJid(chatId);
 
       // --- REVISI USER: BYPASS EMPLOYEE/ADMIN CHATS ---
       // Fast path: baca Customer.is_admin_labeled dari DB (nol HTTP ke WAHA).
@@ -301,12 +330,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
       const existingCustomer = await customerService.getCustomerByPhone(phone, DEFAULT_TENANT_ID);
       let labels: string[] | null = null;
+      let isAdminChat = false;
 
       if (existingCustomer && existingCustomer.labels_synced_at !== null && existingCustomer.is_admin_labeled === true) {
-        console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
-        return reply.status(200).send({ status: 'IGNORED_ADMIN' });
-      }
-      if (!existingCustomer || existingCustomer.labels_synced_at === null) {
+        isAdminChat = true;
+      } else if (!existingCustomer || existingCustomer.labels_synced_at === null) {
         labels = await wahaClient.getChatLabelsOrNull(chatId);
         if (labels !== null) {
           const isAdmin = labels.some(l => l.toLowerCase() === 'admin');
@@ -315,33 +343,61 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             customerService.setLabelFlags(phone, { isAdminLabeled: isAdmin, isHoldLabeled: isHold }).catch(() => {});
           }
           if (isAdmin) {
-            console.log(`[ADMIN BYPASS] Chat ${chatId} is labeled as "Admin". Ignoring message to allow employee manually chatting.`);
-            return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+            isAdminChat = true;
           }
         }
       }
-
-
 
       // --- MEDIA INBOUND (gambar customer) ---
       // Deteksi image, unduh file dari WAHA, simpan ke storage/media/inbound/<tenantId>,
       // dan lampirkan metadata media ke payload_raw agar bisa dirender di Live Chat
       // (blur + download). Konten teks bot tetap seperti sebelumnya agar state machine
       // & classifier TIDAK berubah. Best-effort: gagal unduh tidak menghentikan alur.
-      const isInboundImage = payload.type === 'image' || !!(payload.message && payload.message.imageMessage);
-      const imageCaption = (payload.message?.imageMessage?.caption) || payload.caption || '';
+      const pAny = payload as any;
+      const isInboundImage =
+        pAny.type === 'image' ||
+        !!(pAny.message && pAny.message.imageMessage) ||
+        !!(pAny.hasMedia && pAny.media?.mimetype?.startsWith('image/'));
+      const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || '';
       let inboundMedia: any = null;
       if (isInboundImage) {
         try {
           const { mediaService } = await import('../services/media.service');
-          const buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+          let buffer: Buffer | null = null;
+          const mimeType = pAny.message?.imageMessage?.mimetype || pAny.media?.mimetype || 'image/jpeg';
+
+          // 1. Coba download langsung dari pAny.media.url jika ada
+          if (pAny.media?.url) {
+            buffer = await wahaClient.fetchUrl(String(pAny.media.url));
+          }
+
+          // 2. Fallback ke wahaClient.downloadMedia
+          if (!buffer || buffer.length === 0) {
+            buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+          }
+
+          // 3. Fallback ke base64 jpegThumbnail jika download gagal
+          if ((!buffer || buffer.length === 0) && (pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail)) {
+            const thumbB64 = pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail;
+            buffer = Buffer.from(thumbB64, 'base64');
+          }
+
           if (buffer && buffer.length > 0) {
-            const mimeType = payload.message?.imageMessage?.mimetype || 'image/jpeg';
             const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
             inboundMedia = {
               url: saved.thumbUrl || saved.hdUrl,
               hdUrl: saved.hdUrl,
               thumbUrl: saved.thumbUrl,
+              mimeType,
+              caption: imageCaption || null,
+            };
+          } else if (pAny.media?.url) {
+            // Minimal simpan URL yang sudah dinormalisasi menjadi relative path /api/files/...
+            const rawUrl = String(pAny.media.url);
+            const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+            inboundMedia = {
+              url: urlPath,
+              hdUrl: urlPath,
               mimeType,
               caption: imageCaption || null,
             };
@@ -390,6 +446,34 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
         : (payload.body || '[LOCATION/MEDIA]');
       const mergeMediaIntoPayload = (p: any) => (inboundMedia ? { ...p, media: inboundMedia } : p);
+
+      if (isAdminChat) {
+        console.log(`[ADMIN CHAT] Chat ${chatId} is labeled as "Admin". Logging to Live Chat and bypassing bot auto-reply.`);
+        const adminCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+        const adminConversation = await conversationService.getOrCreateConversation(adminCustomer.id, DEFAULT_TENANT_ID);
+
+        await messageService.logMessage({
+          tenantId: DEFAULT_TENANT_ID,
+          conversationId: adminConversation.id,
+          direction: 'INBOUND',
+          content: inboundContent,
+          waMessageId,
+          payloadRaw: mergeMediaIntoPayload(payload),
+          skipMqlEvaluation: true,
+        });
+
+        if (!adminConversation.is_human_handling) {
+          await conversationService.escalateToHumanHandling(
+            adminConversation,
+            phone,
+            'Nomor berlabel Admin / Karyawan (Manual Handling)',
+            DEFAULT_TENANT_ID,
+            'admin_labeled'
+          ).catch(() => {});
+        }
+
+        return reply.status(200).send({ status: 'IGNORED_ADMIN' });
+      }
 
       // --- LEGACY PER-CONTACT SCRAPE TRIGGER (Task 2 / flag: ENABLE_LEGACY_LABEL_SCRAPE_TRIGGER) ---
       // Posisi: SETELAH admin bypass, SEBELUM getOrCreateCustomer utama. Jika chat

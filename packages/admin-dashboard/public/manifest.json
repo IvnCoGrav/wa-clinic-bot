@@ -1,6 +1,6 @@
 {
-  "name": "Kala Spa Admin Dashboard",
-  "short_name": "Kala Admin",
+  "name": "Kala Clinic",
+  "short_name": "Kala Clinic",
   "scope": "/admin/",
   "start_url": "/admin/",
   "display": "standalone",

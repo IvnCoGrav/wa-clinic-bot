@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { apiRequest } from '../services/api';
-import { getDefaultRedirect } from '../config/rolePermissions';
+import { getDefaultRedirect, fetchRolesFromApi } from '../config/rolePermissions';
 import { emitBootPhase, setBootMessage } from '../lib/bootProgress';
 
 interface LoginResult {
@@ -115,6 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role: data.user.role || 'super_admin',
             tenantId: data.user.tenantId || 'default-tenant',
           });
+          fetchRolesFromApi().catch(() => {});
         } else {
           setUser(null);
         }
@@ -177,6 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (data.success && data.user) {
         if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+        await fetchRolesFromApi().catch(() => {});
         setUser({
           id: data.user.id,
           email: data.user.email || '',

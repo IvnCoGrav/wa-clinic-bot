@@ -4,7 +4,6 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { hashPassword } from '../../utils/bcrypt';
 import { StaffAuthService } from '../../services/staff-auth.service';
 import { auditService } from '../../services/audit.service';
-import { StaffRole } from '@prisma/client';
 
 export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -32,16 +31,23 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         orderBy: { created_at: 'desc' },
       });
 
-      return reply.status(200).send({ success: true, data: staffList });
+      return reply.status(200).send({
+        success: true,
+        count: staffList.length,
+        data: staffList,
+      });
     } catch (err: any) {
-      console.error('[ADMIN STAFF API] Error fetching staff list:', err.message);
-      return reply.status(500).send({ success: false, error: 'Gagal mengambil data staff.' });
+      console.error('[ADMIN STAFF API] Error fetching staff:', err.message);
+      return reply.status(500).send({
+        success: false,
+        error: 'Gagal mengambil daftar staff.',
+      });
     }
   });
 
   /**
    * POST /api/admin/staff
-   * Membuat akun staff baru (nama, nomor HP, password awal).
+   * Membuat akun staff baru (Terapis, Admin CS, Advertiser, SPVCS, atau custom role lainnya).
    */
   fastify.post(
     '/api/admin/staff',
@@ -51,7 +57,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           name?: string;
           phone?: string;
           password?: string;
-          role?: StaffRole;
+          role?: string;
         };
       }>,
       reply: FastifyReply
@@ -65,9 +71,17 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const cleanPhone = phone.trim().replace(/^(\+62|62)/, '0');
+      const finalRole = (role ? String(role).trim().toUpperCase() : 'THERAPIST');
+
       try {
         const existing = await prisma.staff.findFirst({
-          where: { phone, tenant_id: DEFAULT_TENANT_ID },
+          where: {
+            OR: [
+              { phone: cleanPhone, tenant_id: DEFAULT_TENANT_ID },
+              { phone: phone.trim(), tenant_id: DEFAULT_TENANT_ID },
+            ],
+          },
         });
 
         if (existing) {
@@ -83,9 +97,9 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           data: {
             tenant_id: DEFAULT_TENANT_ID,
             name: name.trim(),
-            phone: phone.trim(),
+            phone: cleanPhone,
             password_hash,
-            role,
+            role: finalRole,
             active: true,
           },
           select: {
@@ -113,15 +127,18 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         return reply.status(201).send({ success: true, data: newStaff });
       } catch (err: any) {
         console.error('[ADMIN STAFF API] Error creating staff:', err.message);
-        return reply.status(500).send({ success: false, error: 'Gagal membuat akun staff.' });
+        return reply.status(500).send({
+          success: false,
+          error: err.message || 'Gagal membuat akun staff.',
+        });
       }
     }
   );
 
   /**
    * PATCH /api/admin/staff/:id
-   * Mengupdate profil staff, password, atau status keaktifan (aktif/nonaktif).
-   * Jika dinonaktifkan (active = false), otomatis membatalkan seluruh sesi aktif staff.
+   * Mengupdate profil staff, password, role, atau status keaktifan (aktif/nonaktif).
+   * Jika dinonaktifkan (active = false) atau role diubah, otomatis membatalkan seluruh sesi aktif staff.
    */
   fastify.patch(
     '/api/admin/staff/:id',
@@ -132,7 +149,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           name?: string;
           phone?: string;
           password?: string;
-          role?: StaffRole;
+          role?: string;
           active?: boolean;
         };
       }>,
@@ -152,8 +169,8 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
 
         const updateData: any = {};
         if (name !== undefined) updateData.name = name.trim();
-        if (phone !== undefined) updateData.phone = phone.trim();
-        if (role !== undefined) updateData.role = role;
+        if (phone !== undefined) updateData.phone = phone.trim().replace(/^(\+62|62)/, '0');
+        if (role !== undefined) updateData.role = String(role).trim().toUpperCase();
         if (active !== undefined) updateData.active = active;
         if (password && password.trim()) {
           updateData.password_hash = await hashPassword(password);
@@ -175,7 +192,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         });
 
         // Jika role diubah, akun dinonaktifkan, atau password direset,
-        // putuskan seluruh sesi aktif staff seketika (role lain tidak boleh akses portal terapis)
+        // putuskan seluruh sesi aktif staff seketika
         if (role !== undefined || active === false || updateData.password_hash) {
           await StaffAuthService.revokeAllSessions(id);
         }
@@ -183,7 +200,7 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
-          action: active === false ? 'DEACTIVATE_STAFF' : 'UPDATE_STAFF',
+          action: 'UPDATE_STAFF',
           targetId: id,
           payload: { changes: Object.keys(updateData) },
           ipAddress: request.ip,
@@ -193,7 +210,10 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: updatedStaff });
       } catch (err: any) {
         console.error('[ADMIN STAFF API] Error updating staff:', err.message);
-        return reply.status(500).send({ success: false, error: 'Gagal memperbarui data staff.' });
+        return reply.status(500).send({
+          success: false,
+          error: err.message || 'Gagal memperbarui data staff.',
+        });
       }
     }
   );
