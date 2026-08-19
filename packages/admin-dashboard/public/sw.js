@@ -1,8 +1,21 @@
-// Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support
-const CACHE_NAME = 'kala-admin-v4';
+// Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support & Offline Caching
+const CACHE_NAME = 'kala-admin-v5';
+const PRECACHE_ASSETS = [
+  '/admin/',
+  '/admin/manifest.json',
+  '/admin/pwa-192x192.png',
+  '/admin/pwa-512x512.png',
+  '/admin/favicon.ico',
+];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
+        console.warn('[PWA SW] Precache warning:', err);
+      });
+    }).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -16,11 +29,22 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass-through network request to satisfy Chrome PWA installability criteria
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          const fallbackShell = await caches.match('/admin/');
+          if (fallbackShell) return fallbackShell;
+        }
+        return new Response('Offline', { status: 503, statusText: 'Offline' });
+      })
   );
 });
 
@@ -78,7 +102,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // 1. Jika tab admin sudah terbuka, fokuskan tab tersebut
       for (const client of clientList) {
         if (client.url.includes('/admin') && 'focus' in client) {
           if ('navigate' in client) {
@@ -87,7 +110,6 @@ self.addEventListener('notificationclick', (event) => {
           return client.focus();
         }
       }
-      // 2. Jika belum ada tab terbuka, buka window baru
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
