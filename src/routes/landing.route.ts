@@ -126,9 +126,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
 
     const pixelId = query.p || content.meta_pixel_id || process.env.FB_PIXEL_ID || '';
     
-    // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth).
-    // Parameter 'phone' dari URL diabaikan sebagai tujuan redirect untuk mencegah penyalahgunaan.
-    const phone = content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '';
+    // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth), dengan fallback query.phone & env.
+    const phone = content.whatsapp_number || query.phone || process.env.DEFAULT_WHATSAPP_PHONE || '';
     
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
