@@ -134,7 +134,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
     if (!rawMsg) {
       const { prisma } = await import('../db/client');
       const tenantRec = await prisma.tenant.findFirst({ where: { slug: tenantSlug } });
-      rawMsg = tenantRec?.format_visit || 'Halo Bunda, saya tertarik dengan layanan home-treatment';
+      rawMsg = (tenantRec as any)?.greetings_text || tenantRec?.format_visit || 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
     }
 
     // Capture attribution & generate tracking code if needed

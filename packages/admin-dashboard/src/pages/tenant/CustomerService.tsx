@@ -79,7 +79,14 @@ export const CustomerService: React.FC = () => {
     }
   };
 
-  // Generate CTA Link
+  // Generate Dynamic Clean CTA Link (Recommended)
+  const generatedDynamicCtaLink = React.useMemo(() => {
+    const baseUrl = subdomain.replace(/\/$/, '');
+    const cleanDivisi = encodeURIComponent(divisi.toLowerCase().replace(/\s+/g, '-'));
+    return cleanDivisi ? `${baseUrl}/cta?divisi=${cleanDivisi}` : `${baseUrl}/cta`;
+  }, [subdomain, divisi]);
+
+  // Generate Full Manual CTA Link (Legacy)
   const generatedCtaLink = React.useMemo(() => {
     const baseUrl = subdomain.replace(/\/$/, '');
     const cleanDivisi = encodeURIComponent(divisi.toLowerCase().replace(/\s+/g, '-'));
@@ -89,10 +96,10 @@ export const CustomerService: React.FC = () => {
     return `${baseUrl}/cta?divisi=${cleanDivisi}&phone=${cleanPhone}&msg=${encodedMsg}`;
   }, [subdomain, divisi, greetingsText, formatVisit, whatsappNumber]);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(generatedCtaLink);
+  const handleCopyLink = (textToCopy: string, label: string = 'CTA') => {
+    navigator.clipboard.writeText(textToCopy);
     setCopied(true);
-    toast('CTA Link berhasil disalin ke clipboard!', 'success');
+    toast(`Link ${label} berhasil disalin ke clipboard!`, 'success');
     setTimeout(() => setCopied(false), 3000);
   };
 
@@ -246,13 +253,31 @@ export const CustomerService: React.FC = () => {
                 type="text"
                 value={subdomain}
                 onChange={(e) => setSubdomain(e.target.value)}
-                placeholder="https://klinik.id"
+                placeholder="https://app.kalababyspa.online"
                 className="w-full bg-white border border-[#d1d7db] rounded-xl px-3.5 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
             </div>
 
+            {/* Dynamic Clean Link (Recommended) */}
+            <div className="space-y-1 bg-[#f0fdf4] p-3 rounded-xl border border-[#bbf7d0]">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-[#15803d]">✨ Link Dinamis Singkat (Rekomendasi)</label>
+                <span className="text-[10px] text-[#166534] font-medium">Otomatis Sync No CS & Pesan</span>
+              </div>
+              <textarea
+                readOnly
+                rows={2}
+                value={generatedDynamicCtaLink}
+                className="w-full bg-white border border-[#86efac] rounded-lg p-2 text-xs font-mono text-[#15803d] focus:outline-none resize-none select-all"
+              />
+              <p className="text-[10px] text-[#166534]">
+                💡 Pakai link ini di landing page. Jika Anda ganti Nomor CS / Pesan di admin, semua landing page langsung ter-update otomatis tanpa ubah HTML.
+              </p>
+            </div>
+
+            {/* Full Manual Link */}
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Generated CTA Link</label>
+              <label className="block text-[11px] font-bold text-[#111b21]">Link Manual (Hardcoded Phone/Msg)</label>
               <textarea
                 readOnly
                 rows={3}
@@ -261,13 +286,22 @@ export const CustomerService: React.FC = () => {
               />
             </div>
 
-            <button
-              onClick={handleCopyLink}
-              className="w-full flex items-center justify-center space-x-2 py-2.5 bg-[#008069] hover:bg-[#00a884] font-semibold text-xs text-white rounded-xl shadow-xs transition"
-            >
-              {copied ? <Check size={14} className="text-white" /> : <Copy size={14} />}
-              <span>{copied ? 'Tersalin ke Clipboard!' : 'Salin CTA Link'}</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleCopyLink(generatedDynamicCtaLink, 'Dinamis')}
+                className="flex items-center justify-center space-x-1.5 py-2.5 bg-[#15803d] hover:bg-[#166534] font-semibold text-xs text-white rounded-xl shadow-xs transition"
+              >
+                {copied ? <Check size={14} className="text-white" /> : <Copy size={14} />}
+                <span>Salin Link Dinamis</span>
+              </button>
+              <button
+                onClick={() => handleCopyLink(generatedCtaLink, 'Manual')}
+                className="flex items-center justify-center space-x-1.5 py-2.5 bg-[#008069] hover:bg-[#00a884] font-semibold text-xs text-white rounded-xl shadow-xs transition"
+              >
+                {copied ? <Check size={14} className="text-white" /> : <Copy size={14} />}
+                <span>Salin Link Manual</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
