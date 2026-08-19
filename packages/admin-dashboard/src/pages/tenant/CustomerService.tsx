@@ -16,7 +16,7 @@ export const CustomerService: React.FC = () => {
 
   // Settings State
   const [csName, setCsName] = useState('Cs Yusi');
-  const [whatsappNumber, setWhatsappNumber] = useState('6287751148065');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [formatVisit, setFormatVisit] = useState('Promo [%ID%]');
   const [formatCheckout, setFormatCheckout] = useState('list untuk reservasi :');
   const [formatPurchase, setFormatPurchase] = useState('Payment');
@@ -37,7 +37,7 @@ export const CustomerService: React.FC = () => {
       const res = await apiRequest('/api/admin/customer-service');
       if (res.data) {
         setCsName(res.data.csName || 'Cs Yusi');
-        setWhatsappNumber(res.data.whatsappNumber || '6287751148065');
+        setWhatsappNumber(res.data.whatsappNumber || '');
         setFormatVisit(res.data.formatVisit || 'Promo[%ID%]');
         setGreetingsText(res.data.greetingsText || res.data.formatVisit || 'Promo [%ID%]');
         setFormatCheckout(res.data.formatCheckout || 'list untuk reservasi :');

@@ -290,7 +290,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       success: true,
       data: {
         csName: tenant?.cs_name || 'Cs Yusi',
-        whatsappNumber: tenant?.whatsapp_number || '6287751148065',
+        whatsappNumber: tenant?.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
         formatVisit: tenant?.format_visit || 'Promo[%ID%]',
         greetingsText: (tenant as any)?.greetings_text || tenant?.format_visit || 'Promo [%ID%]',
         formatCheckout: tenant?.format_checkout || 'list untuk reservasi :',

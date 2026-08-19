@@ -495,7 +495,7 @@ model Tenant {
   id                        String           @id @default(uuid())
   slug                      String           @unique
   name                      String
-  whatsapp_number           String           @default("6287751148065")
+  whatsapp_number           String?
   meta_pixel_id             String?
   meta_capi_access_token    String?
   landing_type              LandingType      @default(STRUCTURED_JSON)
