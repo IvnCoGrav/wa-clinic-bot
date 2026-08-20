@@ -195,7 +195,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
   s.parentNode.insertBefore(t,s)}(window, document,'script',
   'https://connect.facebook.net/en_US/fbevents.js');
   fbq('init', '${pixelId}');
-  fbq('track', 'AddToCart');`
+  fbq('track', 'AddToCart', { content_name: 'WhatsApp CTA', content_category: 'CTWA' }${trackingCode ? `, { eventID: '${trackingCode}' }` : ''});`
       : '';
 
     const html = `<!DOCTYPE html>
