@@ -152,10 +152,15 @@ export const MetaClickCatcher: React.FC = () => {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<CapiTestResult | null>(null);
 
-  const loadSummary = useCallback(async (sDate: string, eDate: string) => {
+  const loadSummary = useCallback(async (sDate: string, eDate: string, campaign?: string, qSearch?: string) => {
     setLoadingSummary(true);
     try {
-      const res = await fetchMetaSummary({ startDate: sDate, endDate: eDate });
+      const res = await fetchMetaSummary({
+        startDate: sDate,
+        endDate: eDate,
+        utmCampaign: campaign || undefined,
+        search: qSearch || undefined,
+      });
       if (res && res.data) setSummary(res.data);
     } catch (err: any) {
       toast(`Gagal memuat ringkasan Meta: ${err.message}`, 'error');
@@ -189,8 +194,8 @@ export const MetaClickCatcher: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadSummary(startDate, endDate);
-  }, [startDate, endDate, loadSummary]);
+    loadSummary(startDate, endDate, utmCampaign, search);
+  }, [startDate, endDate, utmCampaign, search, loadSummary]);
 
   useEffect(() => {
     loadClicks({ startDate, endDate, status, search, utmCampaign, page });
@@ -204,7 +209,7 @@ export const MetaClickCatcher: React.FC = () => {
 
   // Paksa reload kedua sumber data pakai filter yang sedang berlaku.
   const handleRefresh = () => {
-    loadSummary(startDate, endDate);
+    loadSummary(startDate, endDate, utmCampaign, search);
     loadClicks({ startDate, endDate, status, search, utmCampaign, page });
   };
 
@@ -448,9 +453,6 @@ export const MetaClickCatcher: React.FC = () => {
                   <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">{fmtTime(e.createdAt)}</td>
                   <td className="py-2.5 px-3">
                     <StatusBadge entry={e} />
-                    {e.status === 'MATCHED' && e.matchedAt && (
-                      <span className="block text-[10px] text-emerald-700 mt-0.5 font-medium">terhubung {fmtTime(e.matchedAt)}</span>
-                    )}
                   </td>
                   <td className="py-2.5 px-3">
                     {e.customer ? (
@@ -459,28 +461,22 @@ export const MetaClickCatcher: React.FC = () => {
                           {e.customer.name || 'Pelanggan WhatsApp'}
                         </p>
                         {e.customer.phone && (
-                          <a
-                            href={`https://wa.me/${e.customer.phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[#008069] hover:underline font-mono text-[11px] font-semibold inline-flex items-center gap-1"
-                            title="Buka Chat WhatsApp Pasien"
-                          >
-                            <span>📱</span> {e.customer.phone}
-                          </a>
+                          <p className="text-[#667781] font-mono text-[11px]">
+                            {e.customer.phone}
+                          </p>
                         )}
+                        <a
+                          href="/admin/chats"
+                          className="text-[#008069] hover:underline text-[11px] font-semibold inline-flex items-center gap-1 mt-0.5"
+                          title="Buka di Panel Live Chat"
+                        >
+                          <span>💬</span> Buka Live Chat
+                        </a>
                       </div>
                     ) : e.phone ? (
                       <div className="space-y-0.5">
                         <p className="text-[#667781] font-semibold text-[11px]">Nomor Terdeteksi</p>
-                        <a
-                          href={`https://wa.me/${e.phone.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#008069] hover:underline font-mono text-[11px]"
-                        >
-                          {e.phone}
-                        </a>
+                        <p className="text-[#111b21] font-mono text-[11px]">{e.phone}</p>
                       </div>
                     ) : (
                       <span className="text-[#8696a0] text-[11px] italic flex items-center gap-1">

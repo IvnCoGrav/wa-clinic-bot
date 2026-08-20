@@ -26,10 +26,12 @@ export function fetchMetaClicks<T = any>(params: MetaClicksParams = {}): Promise
 }
 
 /** Ringkasan KPI atribusi & kesehatan CAPI (GET /api/admin/debug/meta-summary). */
-export function fetchMetaSummary<T = any>(params: { startDate?: string; endDate?: string } = {}): Promise<T> {
+export function fetchMetaSummary<T = any>(params: { startDate?: string; endDate?: string; utmCampaign?: string; search?: string } = {}): Promise<T> {
   const q = new URLSearchParams();
   if (params.startDate) q.set('startDate', params.startDate);
   if (params.endDate) q.set('endDate', params.endDate);
+  if (params.utmCampaign) q.set('utmCampaign', params.utmCampaign);
+  if (params.search) q.set('search', params.search);
   const qs = q.toString();
   return apiRequest(`/api/admin/debug/meta-summary${qs ? `?${qs}` : ''}`);
 }
