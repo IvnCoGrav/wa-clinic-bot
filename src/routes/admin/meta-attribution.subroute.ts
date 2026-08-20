@@ -404,29 +404,70 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
+        const fullAuditPayload = {
+          eventName,
+          status: result.success ? 'SUCCESS' : 'FAILED',
+          metaPixelId: (result as any).pixelId || '1465457801784141',
+          httpStatus: (result as any).status || 200,
+          customer: {
+            id: effectiveCustomer.id,
+            phone: cleanPhone,
+            name: effectiveCustomer.name || name || 'Customer',
+          },
+          conversionData: {
+            value: value !== undefined && value !== null && !isNaN(Number(value)) ? Number(value) : null,
+            currency: currency || 'IDR',
+            testEventCode: testEventCode ? testEventCode.trim() : null,
+          },
+          attribution: {
+            trackingCode: customer?.adClick?.trackingCode || null,
+            utmSource: customer?.adClick?.utmSource || null,
+            utmCampaign: customer?.adClick?.utmCampaign || null,
+            fbp: customer?.adClick?.fbp || null,
+            fbc: customer?.adClick?.fbc || null,
+          },
+          metaGraphApiResponse: (result as any).metaResponse || {
+            events_received: result.success ? 1 : 0,
+            fbtrace_id: (result as any).fbtrace_id || null,
+          },
+          sentPayloadToMeta: (result as any).sentPayload || {
+            data: [
+              {
+                event_name: eventName,
+                action_source: 'chat',
+                user_data: {
+                  ph: ['[SHA-256 Hashed Phone]'],
+                  fn: effectiveCustomer.name ? ['[SHA-256 Hashed Name]'] : undefined,
+                },
+                custom_data: {
+                  value: value || null,
+                  currency: currency || 'IDR',
+                  source: 'MANUAL_DASHBOARD_SEND',
+                },
+              },
+            ],
+          },
+          sender: {
+            adminIdentity: (request as any).adminIdentity || 'Admin CS',
+            apiKey: (request as any).adminKeyUsed || 'admin-dashboard',
+            ipAddress: request.ip,
+          },
+          timestamp: new Date().toISOString(),
+        };
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'admin-dashboard',
           adminIdentity: (request as any).adminIdentity || 'Admin CS',
           action: 'MANUAL_SEND_META_EVENT',
           targetId: effectiveCustomer.id,
-          payload: {
-            phone: cleanPhone,
-            name: effectiveCustomer.name || name || 'Customer',
-            eventName,
-            value: value || null,
-            currency: currency || 'IDR',
-            testEventCode: testEventCode ? testEventCode.trim() : null,
-            success: result.success,
-            message: result.message || (result.success ? 'Delivered to Meta Graph API' : 'Failed'),
-            timestamp: new Date().toISOString(),
-          },
+          payload: fullAuditPayload,
           ipAddress: request.ip,
         });
 
         return reply.status(200).send({
           success: result.success,
           message: result.success ? `Event ${eventName} berhasil dikirim ke Meta CAPI.` : (result.message || 'Gagal mengirim event'),
-          data: result,
+          data: fullAuditPayload,
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
@@ -457,20 +498,72 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           parsedPayload = { raw: log.payload };
         }
 
+        const phone = parsedPayload.customer?.phone || parsedPayload.phone || parsedPayload.targetPhone || '-';
+        const name = parsedPayload.customer?.name || parsedPayload.name || '-';
+        const eventName = parsedPayload.eventName || (log.action === 'APPROVE_PURCHASE_EVENT' ? 'Purchase' : 'Contact');
+        const value = parsedPayload.conversionData?.value ?? parsedPayload.value ?? null;
+        const currency = parsedPayload.conversionData?.currency || parsedPayload.currency || 'IDR';
+        const status = parsedPayload.status || (parsedPayload.success === false ? 'FAILED' : 'SUCCESS');
+
+        // Bentuk payload detail lengkap untuk modal JSON inspect
+        const detailedJson = {
+          action: log.action,
+          adminIdentity: log.admin_identity || 'Admin CS',
+          timestamp: log.created_at,
+          eventName,
+          status,
+          metaPixelId: parsedPayload.metaPixelId || '1465457801784141',
+          customer: {
+            phone,
+            name,
+            id: parsedPayload.customer?.id || log.target_id,
+          },
+          conversionData: {
+            value,
+            currency,
+            testEventCode: parsedPayload.conversionData?.testEventCode || parsedPayload.testEventCode || null,
+          },
+          attribution: parsedPayload.attribution || {
+            source: 'Meta Conversions API Direct',
+            traffic: 'Direct Send',
+          },
+          metaGraphApiResponse: parsedPayload.metaGraphApiResponse || {
+            events_received: status === 'SUCCESS' ? 1 : 0,
+            status: status === 'SUCCESS' ? 'DELIVERED (HTTP 200)' : 'FAILED',
+            message: parsedPayload.message || 'Delivered to Meta Conversions API',
+          },
+          sentPayloadToMeta: parsedPayload.sentPayloadToMeta || parsedPayload.sentPayload || {
+            data: [
+              {
+                event_name: eventName,
+                action_source: 'chat',
+                user_data: {
+                  ph: ['[SHA-256 Hashed Phone]'],
+                  fn: name !== '-' ? ['[SHA-256 Hashed Name]'] : undefined,
+                },
+                custom_data: {
+                  value,
+                  currency,
+                },
+              },
+            ],
+          },
+        };
+
         return {
           id: log.id,
           action: log.action,
           adminIdentity: log.admin_identity || 'Admin',
           createdAt: log.created_at,
-          phone: parsedPayload.phone || parsedPayload.targetPhone || '-',
-          name: parsedPayload.name || '-',
-          eventName: parsedPayload.eventName || (log.action === 'APPROVE_PURCHASE_EVENT' ? 'Purchase' : 'Contact'),
-          value: parsedPayload.value || null,
-          currency: parsedPayload.currency || 'IDR',
-          status: parsedPayload.success === false ? 'FAILED' : 'SUCCESS',
+          phone,
+          name,
+          eventName,
+          value,
+          currency,
+          status,
           message: parsedPayload.message || 'Delivered to Meta Graph API',
           testEventCode: parsedPayload.testEventCode || null,
-          rawPayload: parsedPayload,
+          rawPayload: detailedJson,
         };
       });
 

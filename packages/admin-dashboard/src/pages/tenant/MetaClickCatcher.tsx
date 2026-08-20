@@ -985,7 +985,11 @@ export const MetaClickCatcher: React.FC = () => {
             <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
               <h4 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
                 <Target size={16} className="text-[#008069]" />
-                <span>Meta Attribution Payload [{selectedItem.trackingCode || 'Direct'}]</span>
+                <span>
+                  {selectedItem.eventName
+                    ? `Meta CAPI Event Payload [${selectedItem.eventName} — Pixel: ${selectedItem.metaPixelId || '1465457801784141'}]`
+                    : `Meta Attribution Payload [${selectedItem.trackingCode || 'Direct'}]`}
+                </span>
               </h4>
               <button
                 onClick={() => setSelectedItem(null)}
