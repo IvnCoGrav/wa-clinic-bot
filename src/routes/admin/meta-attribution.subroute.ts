@@ -344,4 +344,139 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * POST /api/admin/debug/meta-manual-send
+   * Mengirimkan event CAPI manual ke Meta dengan nomor HP customer, nama, eventName, nominal value, dsb.
+   */
+  fastify.post(
+    '/api/admin/debug/meta-manual-send',
+    async (
+      request: FastifyRequest<{
+        Body: { phone: string; name?: string; eventName: string; value?: number; currency?: string; testEventCode?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const body = request.body || ({} as any);
+      const { phone, name, eventName, value, currency, testEventCode } = body;
+
+      if (!phone || !phone.trim()) {
+        return reply.status(400).send({ success: false, error: 'Nomor WhatsApp wajib diisi.' });
+      }
+      if (!eventName) {
+        return reply.status(400).send({ success: false, error: 'Nama event wajib dipilih.' });
+      }
+
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone.length < 9) {
+        return reply.status(400).send({ success: false, error: 'Format nomor WhatsApp tidak valid.' });
+      }
+
+      try {
+        // Cari customer di DB jika ada untuk ambil PII & adClick
+        let customer = await prisma.customer.findFirst({
+          where: { phone: { contains: cleanPhone.slice(-9) } },
+          include: { adClick: true },
+        });
+
+        const effectiveCustomer = customer || ({
+          id: `temp_${Date.now()}`,
+          phone: cleanPhone,
+          name: name || 'Manual Customer',
+          tenant_id: DEFAULT_TENANT_ID,
+        } as any);
+
+        if (name && customer && !customer.name) {
+          customer.name = name;
+        }
+
+        const result = await capiService.sendCapiEvent({
+          eventName,
+          customer: effectiveCustomer,
+          adClick: customer?.adClick || undefined,
+          value: value !== undefined && value !== null && !isNaN(Number(value)) ? Number(value) : undefined,
+          currency: currency || 'IDR',
+          tenantId: DEFAULT_TENANT_ID,
+          customData: {
+            source: 'MANUAL_DASHBOARD_SEND',
+            testEventCode: testEventCode ? testEventCode.trim() : undefined,
+            adminSender: (request as any).adminIdentity || 'Admin CS',
+          },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'admin-dashboard',
+          adminIdentity: (request as any).adminIdentity || 'Admin CS',
+          action: 'MANUAL_SEND_META_EVENT',
+          targetId: effectiveCustomer.id,
+          payload: {
+            phone: cleanPhone,
+            name: effectiveCustomer.name || name || 'Customer',
+            eventName,
+            value: value || null,
+            currency: currency || 'IDR',
+            testEventCode: testEventCode ? testEventCode.trim() : null,
+            success: result.success,
+            message: result.message || (result.success ? 'Delivered to Meta Graph API' : 'Failed'),
+            timestamp: new Date().toISOString(),
+          },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: result.success,
+          message: result.success ? `Event ${eventName} berhasil dikirim ke Meta CAPI.` : (result.message || 'Gagal mengirim event'),
+          data: result,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/debug/meta-manual-history
+   * Mengambil riwayat pengiriman event manual dari AuditLog.
+   */
+  fastify.get('/api/admin/debug/meta-manual-history', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const logs = await prisma.auditLog.findMany({
+        where: {
+          tenant_id: DEFAULT_TENANT_ID,
+          action: { in: ['MANUAL_SEND_META_EVENT', 'TEST_SEND_CAPI_EVENT', 'APPROVE_PURCHASE_EVENT'] },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 30,
+      });
+
+      const items = logs.map((log: any) => {
+        let parsedPayload: any = {};
+        try {
+          parsedPayload = typeof log.payload === 'string' ? JSON.parse(log.payload) : (log.payload || {});
+        } catch {
+          parsedPayload = { raw: log.payload };
+        }
+
+        return {
+          id: log.id,
+          action: log.action,
+          adminIdentity: log.admin_identity || 'Admin',
+          createdAt: log.created_at,
+          phone: parsedPayload.phone || parsedPayload.targetPhone || '-',
+          name: parsedPayload.name || '-',
+          eventName: parsedPayload.eventName || (log.action === 'APPROVE_PURCHASE_EVENT' ? 'Purchase' : 'Contact'),
+          value: parsedPayload.value || null,
+          currency: parsedPayload.currency || 'IDR',
+          status: parsedPayload.success === false ? 'FAILED' : 'SUCCESS',
+          message: parsedPayload.message || 'Delivered to Meta Graph API',
+          testEventCode: parsedPayload.testEventCode || null,
+          rawPayload: parsedPayload,
+        };
+      });
+
+      return reply.status(200).send({ success: true, data: items });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, data: [] });
+    }
+  });
 }

@@ -49,6 +49,26 @@ export function testCapiEvent<T = any>(body: {
   });
 }
 
+/** Kirim manual event CAPI dengan nomor HP dan data customer (POST /api/admin/debug/meta-manual-send). */
+export function sendManualCapiEvent<T = any>(body: {
+  phone: string;
+  name?: string;
+  eventName: string;
+  value?: number;
+  currency?: string;
+  testEventCode?: string;
+}): Promise<T> {
+  return apiRequest('/api/admin/debug/meta-manual-send', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** Riwayat manual event yang dikirimkan (GET /api/admin/debug/meta-manual-history). */
+export function fetchManualCapiHistory<T = any>(): Promise<T> {
+  return apiRequest('/api/admin/debug/meta-manual-history');
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit & { timeoutMs?: number } = {}
