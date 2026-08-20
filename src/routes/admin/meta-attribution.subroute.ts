@@ -50,9 +50,22 @@ function buildDateRange(startDate?: string, endDate?: string): { createdAt?: { g
   return range;
 }
 
+import { isBotOrCrawler } from '../tracking.route';
+
+const BOT_EXCLUDE_CLAUSE = {
+  NOT: [
+    { userAgent: { contains: 'facebookexternalhit', mode: 'insensitive' } },
+    { userAgent: { contains: 'facebot', mode: 'insensitive' } },
+    { userAgent: { contains: 'meta-externalagent', mode: 'insensitive' } },
+    { userAgent: { contains: 'googlebot', mode: 'insensitive' } },
+    { userAgent: { contains: 'bingbot', mode: 'insensitive' } },
+    { userAgent: { contains: 'twitterbot', mode: 'insensitive' } },
+  ],
+};
+
 /** Fallback in-memory saat DB offline — ambil dari memoryAdClicks (tracking.route) dengan filter & pagination. */
 function fallbackMemoryClicks(filters: ClickFilters): { entries: any[]; total: number } {
-  let rows = Array.from(memoryAdClicks.values()) as any[];
+  let rows = Array.from(memoryAdClicks.values()).filter((r) => !isBotOrCrawler(r.userAgent)) as any[];
   if (filters.search) rows = rows.filter((r) => (r.trackingCode || '').toLowerCase().includes(filters.search!.toLowerCase()));
   if (filters.utmCampaign) rows = rows.filter((r) => (r.utmCampaign || '').toLowerCase().includes(filters.utmCampaign!.toLowerCase()));
   if (filters.startDate) rows = rows.filter((r) => new Date(r.createdAt).getTime() >= new Date(filters.startDate!).getTime());
@@ -105,7 +118,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       const { page, pageSize } = filters;
 
       try {
-        const where: any = { tenant_id: DEFAULT_TENANT_ID, ...buildDateRange(filters.startDate, filters.endDate) };
+        const where: any = { tenant_id: DEFAULT_TENANT_ID, ...buildDateRange(filters.startDate, filters.endDate), ...BOT_EXCLUDE_CLAUSE };
         if (filters.search) where.trackingCode = { contains: filters.search, mode: 'insensitive' };
         if (filters.utmCampaign) where.utmCampaign = { contains: filters.utmCampaign, mode: 'insensitive' };
         if (filters.status === 'matched') where.matchedAt = { not: null };
@@ -206,7 +219,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       let purchaseEvents = 0;
 
       try {
-        const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange };
+        const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
         if (search) adClickWhere.trackingCode = { contains: search, mode: 'insensitive' };
         if (utmCampaign) adClickWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
 
