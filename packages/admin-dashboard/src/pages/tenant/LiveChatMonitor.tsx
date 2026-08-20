@@ -825,25 +825,35 @@ export const LiveChatMonitor: React.FC = () => {
           // Append ke thread yang sedang dibuka / replace optimistic message
           if (selectedIdRef.current === conversationId) {
             setMessages((prev) => {
+              const isImagePlaceholder = (c?: string) => !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)\]/i.test(c.trim());
+              
               // Cek apakah ada optimistic message (temp_) yang cocok
               const tempIndex = prev.findIndex(
                 (m) =>
                   m.id.startsWith('temp_') &&
-                  m.content === msg.content &&
-                  m.direction === msg.direction
+                  m.direction === msg.direction &&
+                  (m.content === msg.content ||
+                    (isImagePlaceholder(m.content) && isImagePlaceholder(msg.content)) ||
+                    (!!m.media && !!msg.media))
               );
               if (tempIndex !== -1) {
                 const next = [...prev];
-                next[tempIndex] = { ...msg, media: msg.media || next[tempIndex].media };
+                next[tempIndex] = {
+                  ...msg,
+                  id: msg.id || next[tempIndex].id,
+                  media: msg.media || next[tempIndex].media,
+                };
                 return next;
               }
 
               const isDuplicate = prev.some(
                 (m) =>
                   m.id === msg.id ||
-                  (m.content === msg.content &&
-                    m.direction === msg.direction &&
-                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 15000)
+                  (m.direction === msg.direction &&
+                    (m.content === msg.content ||
+                      (isImagePlaceholder(m.content) && isImagePlaceholder(msg.content)) ||
+                      (!!m.media && !!msg.media)) &&
+                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 20000)
               );
               if (isDuplicate) return prev;
               return [...prev, msg];
@@ -1161,7 +1171,7 @@ export const LiveChatMonitor: React.FC = () => {
     const optimisticMsg: ChatMessage = {
       id: tempId,
       direction: 'OUTBOUND',
-      content: text || (image ? '[GAMBAR]' : ''),
+      content: text || (image ? '[IMAGE]' : ''),
       sender_type: 'ADMIN',
       sender_name: user?.email || 'Admin',
       created_at: new Date().toISOString(),
@@ -1215,14 +1225,15 @@ export const LiveChatMonitor: React.FC = () => {
       });
 
       const actualMsg = res?.data?.message || res?.data;
-      if (actualMsg?.id) {
+      const actualId = actualMsg?.id || actualMsg?.messageId;
+      if (actualId) {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId
               ? {
                   ...m,
-                  id: actualMsg.id,
-                  wa_message_id: actualMsg.wa_message_id || m.wa_message_id,
+                  id: actualId,
+                  wa_message_id: actualMsg.messageId || actualMsg.wa_message_id || m.wa_message_id,
                   delivery_status: 'sent',
                 }
               : m
