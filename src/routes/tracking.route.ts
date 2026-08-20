@@ -8,6 +8,33 @@ import crypto from 'crypto';
 export const memoryAdClicks = new Map<string, any>();
 
 /**
+ * Mendeteksi crawler/bot otomatis (Meta link preview bot, Googlebot, Twitterbot, dsb.)
+ * agar tidak mengotori tabel AdClick di database dan tidak merusak kalkulasi grafik konversi.
+ */
+export function isBotOrCrawler(ua?: string | null): boolean {
+  if (!ua) return false;
+  const lower = ua.toLowerCase();
+  return (
+    lower.includes('facebookexternalhit') ||
+    lower.includes('facebot') ||
+    lower.includes('meta-externalagent') ||
+    lower.includes('meta-externalfetcher') ||
+    lower.includes('googlebot') ||
+    lower.includes('bingbot') ||
+    lower.includes('twitterbot') ||
+    lower.includes('whatsapp/') ||
+    lower.includes('telegrambot') ||
+    lower.includes('ahrefsbot') ||
+    lower.includes('semrushbot') ||
+    lower.includes('mj12bot') ||
+    lower.includes('bytespider') ||
+    lower.includes('petalbot') ||
+    lower.includes('headlesschrome') ||
+    lower.includes('phantomjs')
+  );
+}
+
+/**
  * Prunes in-memory map stores if size exceeds maxLimit (FIFO deletion) to prevent memory leaks when DB is offline long-term.
  */
 export function pruneMemoryMap(map: Map<string, any>, maxLimit = 1000): void {
@@ -179,6 +206,12 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       const ipAddress = cookieIp || request.ip || (request.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || null;
       const userAgent = request.headers['user-agent'] || null;
 
+      // 3b. BOT / CRAWLER FILTER: Abaikan bot Meta / crawler agar tidak mencemari database & grafik
+      const isTestMode = body.is_test === true || body.is_test === 'true' || body.test === '1' || body.utmSource === 'test' || utmSource === 'test';
+      if (!isTestMode && isBotOrCrawler(userAgent)) {
+        return reply.status(200).send({ trackingCode: null, ignored: true, reason: 'bot_crawler_ignored' });
+      }
+
       const clickData = {
         fbclid,
         fbp,
@@ -186,7 +219,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
         ipAddress,
         userAgent,
         landingUrl,
-        utmSource,
+        utmSource: isTestMode && !utmSource ? 'test' : utmSource,
         utmMedium,
         utmCampaign,
         phone,
