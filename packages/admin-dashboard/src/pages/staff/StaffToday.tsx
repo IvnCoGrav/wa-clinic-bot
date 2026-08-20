@@ -1281,9 +1281,9 @@ export const StaffToday: React.FC = () => {
   const totalRevenueCompleted = completedTasks.reduce((sum, t) => sum + (t.pricing?.totalFee || 0), 0);
 
   return (
-    <div className="min-h-[100dvh] bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none overflow-hidden antialiased">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
       {/* WhatsApp Web Minimalist Clean Top Bar */}
-      <header className="bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs">
+      <header className="bg-white border-b border-[#e9edef] px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0">
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
           <div className="flex items-center space-x-2.5 min-w-0">
             {mobileView === 'chat' && activeTab === 'today' && (
