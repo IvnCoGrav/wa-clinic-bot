@@ -304,23 +304,64 @@ export class WahaClient implements IWahaClient {
     const cached = getCachedLidPhone(lid);
     if (cached) return cached;
 
+    const encodedLid = encodeURIComponent(lid);
+
+    // 1. Coba WAHA /contacts?contactId={lid}
     try {
-      const encodedLid = encodeURIComponent(lid);
-      const response = await this.withRetry('getPhoneNumberFromLid', () =>
+      const response = await this.withRetry('getPhoneNumberFromLidContactsQuery', () =>
+        axios.get(
+          `${this.baseUrl}/api/${this.session}/contacts?contactId=${encodedLid}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
+      );
+      const d = response.data;
+      const rawNum = d?.number || d?.phoneNumber || d?.phone || d?.pn || (d?.id && !d.id.includes('@lid') ? d.id.replace(/@.*$/, '') : null);
+      if (rawNum) {
+        const cleaned = String(rawNum).replace(/\D/g, '');
+        if (cleaned.length >= 8) {
+          setCachedLidPhone(lid, cleaned);
+          return cleaned;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Coba WAHA /contacts/{lid}
+    try {
+      const response = await this.withRetry('getPhoneNumberFromLidContactsPath', () =>
+        axios.get(
+          `${this.baseUrl}/api/${this.session}/contacts/${encodedLid}`,
+          { headers: this.headers, timeout: this.timeoutMs }
+        )
+      );
+      const d = response.data;
+      const rawNum = d?.number || d?.phoneNumber || d?.phone || d?.pn || (d?.id && !d.id.includes('@lid') ? d.id.replace(/@.*$/, '') : null);
+      if (rawNum) {
+        const cleaned = String(rawNum).replace(/\D/g, '');
+        if (cleaned.length >= 8) {
+          setCachedLidPhone(lid, cleaned);
+          return cleaned;
+        }
+      }
+    } catch (_) {}
+
+    // 3. Coba WAHA /lids/{lid}
+    try {
+      const response = await this.withRetry('getPhoneNumberFromLidLegacy', () =>
         axios.get(
           `${this.baseUrl}/api/${this.session}/lids/${encodedLid}`,
           { headers: this.headers, timeout: this.timeoutMs }
         )
       );
-      const pn = response.data?.pn;
+      const pn = response.data?.pn || response.data?.number || response.data?.phoneNumber;
       if (pn) {
-        const cleaned = pn.replace(/@.*$/, '');
-        setCachedLidPhone(lid, cleaned);
-        return cleaned;
+        const cleaned = String(pn).replace(/@.*$/, '').replace(/\D/g, '');
+        if (cleaned.length >= 8) {
+          setCachedLidPhone(lid, cleaned);
+          return cleaned;
+        }
       }
-    } catch (err) {
-      // Abaikan error, fallback ke user part
-    }
+    } catch (_) {}
+
     return lid.replace(/@.*$/, '');
   }
 
@@ -1037,19 +1078,30 @@ export class WahaClient implements IWahaClient {
    */
   public async getContact(phone: string): Promise<WahaContact | null> {
     if (this.shouldMock) return null;
+    const encoded = encodeURIComponent(phone);
     try {
       const response = await axios.get(
-        `${this.baseUrl}/api/${this.session}/contacts/${encodeURIComponent(phone)}`,
+        `${this.baseUrl}/api/${this.session}/contacts/${encoded}`,
         {
           headers: this.headers,
           timeout: this.timeoutMs,
         }
       );
-      return response.data || null;
-    } catch (error: any) {
-      console.warn(`[WAHA API ERROR] getContact failed for ${phone}:`, error?.response?.data || error.message);
-      return null;
-    }
+      if (response.data) return response.data;
+    } catch (_) {}
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/api/${this.session}/contacts?contactId=${encoded}`,
+        {
+          headers: this.headers,
+          timeout: this.timeoutMs,
+        }
+      );
+      if (response.data) return response.data;
+    } catch (_) {}
+
+    return null;
   }
 
   /**

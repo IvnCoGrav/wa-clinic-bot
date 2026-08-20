@@ -299,7 +299,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const msgObj = payload.message as any;
       const inboundTextPreview = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || (payload.type === 'image' ? '[GAMBAR]' : '[MEDIA]');
       stageLog('INCOMING', `Customer: "${inboundTextPreview.slice(0, 50).replace(/\n/g, ' ')}${inboundTextPreview.length > 50 ? '...' : ''}"`, phone);
-      const contactName = payload._data?.notifyName;
+      let contactName = payload._data?.notifyName;
+      if (!contactName) {
+        try {
+          const cObj = await wahaClient.getContact(chatId);
+          contactName = cObj?.pushname || cObj?.name || undefined;
+        } catch (_) {}
+      }
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
       // Dievaluasi SEDINI MUNGKIN SEBELUM API eksternal (Google Contacts, WAHA Label, Unduh Media, State Machine).
@@ -616,6 +622,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         tenantId: DEFAULT_TENANT_ID,
       });
 
+      // Simpan teks asli (lengkap dengan Promo[xx]) untuk Live Chat & DB audit trail
+      incomingMessage.originalText = bodyText;
       if (incomingMessage.text && attributionResult.strippedText) {
         incomingMessage.text.body = attributionResult.strippedText;
       }
