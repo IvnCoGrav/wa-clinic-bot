@@ -53,6 +53,7 @@ export interface AdminReplyResult {
   success: boolean;
   conversationId?: string;
   messageId?: string;
+  id?: string;
   provider?: string;
   conversation?: any;
   error?: { code: string; message?: string };
