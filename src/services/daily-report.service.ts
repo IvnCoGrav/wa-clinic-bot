@@ -82,7 +82,7 @@ export class DailyReportService {
       // Format Markdown
       const markdownMessage = this.formatForTelegram(tenantName, reportData);
 
-      // Send via AlertService (Telegram fallback)
+      // Send via AlertService (Telegram)
       const result = await alertService.notifyAlert({
         type: AlertType.DAILY_OPS_REPORT,
         severity: AlertSeverity.INFO,
@@ -92,21 +92,6 @@ export class DailyReportService {
         chatId: tenant?.telegram_chat_id || undefined,
         metadata: reportData
       });
-
-      // Send to WA Group (Kala Rekap) with humanizer typing simulation (no LLM phrasing)
-      const dailyGroupJid = process.env.DAILY_REPORT_GROUP_JID || '120363428393473712@g.us';
-      if (dailyGroupJid) {
-        try {
-          const { wahaClient } = await import('../integrations/waha/client');
-          await wahaClient.sendSeen(dailyGroupJid).catch(() => {});
-          // Simulasi waktu mengetik natural (2 detik)
-          await new Promise(r => setTimeout(r, 2000));
-          await wahaClient.sendText(dailyGroupJid, markdownMessage);
-          console.log(`[DailyReport] Sent report to WA Group ${dailyGroupJid}`);
-        } catch (waErr: any) {
-          console.warn(`[DailyReport] Failed to send report to WA Group ${dailyGroupJid}:`, waErr.message);
-        }
-      }
 
       // Upsert DB Log
       const status = result.sent ? 'sent' : 'failed';

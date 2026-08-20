@@ -403,23 +403,29 @@ export class ConversationService {
       console.log(`[LABEL SKIP] Skipping WAHA hold label mutation (feature flag disabled / UI-managed).`);
     }
 
-    // 2. Kirim notifikasi teks ke grup WhatsApp koordinasi tim (selalu aktif via sendText standar)
+    // 2. Kirim notifikasi alert eskalasi ke Telegram Admin (selalu aktif via alertService)
     try {
-      const groupJidStr = process.env.ESCALATION_GROUP_JID || '120363428465130209@g.us';
-      if (groupJidStr) {
-        const { wahaClient } = await import('../integrations/waha/client');
-        const groupJids = groupJidStr.split(',').map(j => j.trim()).filter(Boolean);
-        const customerName = conversation.customer?.name || 'Pelanggan';
-        const cleanPhone = phone.replace(/\D/g, '');
-        const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-        const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: HUMAN_HANDLING\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
-        
-        for (const gJid of groupJids) {
-          wahaClient.sendText(gJid, alertText).catch((err: any) => console.warn(`[GROUP ALERT ERROR] Failed to send group alert to ${gJid}:`, err.message));
-        }
-      }
+      const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+      const customerName = conversation.customer?.name || 'Pelanggan';
+      const cleanPhone = phone.replace(/\D/g, '');
+      const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+      const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: HUMAN_HANDLING\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
+
+      void alertService.notifyAlert({
+        type: AlertType.CS_ESCALATION,
+        severity: AlertSeverity.WARNING,
+        message: alertText,
+        rawMessage: true,
+        tenantId,
+        metadata: {
+          conversationId: conversation.id,
+          customerPhone: cleanPhone,
+          customerName,
+          reason,
+        },
+      });
     } catch (err: any) {
-      console.warn(`[GROUP ALERT ERROR] Failed to send group alert:`, err.message);
+      console.warn(`[TELEGRAM ESCALATION ALERT ERROR] Failed to send escalation alert:`, err.message);
     }
 
     // 3. Kirim Web Push Notification darurat ke seluruh dashboard/HP admin
