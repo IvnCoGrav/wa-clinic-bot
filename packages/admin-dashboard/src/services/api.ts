@@ -65,8 +65,13 @@ export async function apiRequest<T = any>(
   if (needsJsonBody && body === undefined && !headers['Content-Type']) {
     body = JSON.stringify({});
     headers['Content-Type'] = 'application/json';
-  } else if (body !== undefined && body !== null && !headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json';
+  } else if (body !== undefined && body !== null) {
+    if (typeof body === 'object' && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof ArrayBuffer)) {
+      body = JSON.stringify(body);
+    }
+    if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
   }
 
   const controller = new AbortController();

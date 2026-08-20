@@ -345,7 +345,10 @@ export const Settings: React.FC = () => {
           body.aiScopeCutoffAt = dt.toISOString();
         }
       }
-      const res = await apiRequest('/api/admin/ai-rollout-scope', { method: 'PATCH', body });
+      const res = await apiRequest('/api/admin/ai-rollout-scope', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
       const d = res?.data;
       if (d?.ai_scope_cutoff_at) {
         const dt = new Date(d.ai_scope_cutoff_at);
