@@ -240,6 +240,33 @@ export const MetaClickCatcher: React.FC = () => {
     }
   };
 
+  const setDatePreset = (preset: 'today' | '7days' | '30days' | 'thisMonth' | 'allTime') => {
+    const now = new Date();
+    const todayStr = toDateInput(now);
+    let startStr = todayStr;
+
+    if (preset === 'today') {
+      startStr = todayStr;
+    } else if (preset === '7days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      startStr = toDateInput(d);
+    } else if (preset === '30days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      startStr = toDateInput(d);
+    } else if (preset === 'thisMonth') {
+      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      startStr = toDateInput(d);
+    } else if (preset === 'allTime') {
+      startStr = '2024-01-01';
+    }
+
+    setStartDate(startStr);
+    setEndDate(todayStr);
+    setPage(1);
+  };
+
   const capi = summary?.capiHealth;
   const circuitOk = capi?.circuitState === 'CLOSED';
 
@@ -270,30 +297,93 @@ export const MetaClickCatcher: React.FC = () => {
 
       {/* ---------------- 1. Summary KPI Cards ---------------- */}
       <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard label="Total Ad Clicks" value={summary?.totalClicks ?? '-'} sub="klik iklan Meta tercatat" />
-        <StatCard label="Matched WA Chats" value={summary?.matchedChats ?? '-'} tone="ok" sub="klik → chat ter-link tracking code" />
-        <StatCard label="WA Conversion Rate" value={summary ? fmtPct(summary.conversionRate) : '-'} tone="ok" sub={`${summary?.matchedChats ?? 0} / ${summary?.totalClicks ?? 0} klik jadi chat`} />
-        <StatCard label="CAPI Events Delivered" value={summary?.capiEventsDelivered ?? '-'} tone="warn" sub={`Contact ${summary?.matchedChats ?? 0} + Purchase ${summary?.purchaseEvents ?? 0}`} />
-        <StatCard label="Unmatched Drain" value={summary?.unmatchedDrain ?? '-'} tone={summary && summary.unmatchedDrain > 0 ? 'err' : 'default'} sub="klik tanpa kirim pesan WA" />
+        <StatCard
+          label="Total Page View / Kunjungan"
+          value={summary?.totalClicks ?? '-'}
+          sub="pengunjung buka link/LP"
+        />
+        <StatCard
+          label="Total Klik CTA"
+          value={summary?.totalClicks ?? '-'}
+          sub="klik tombol chat / redirect WA"
+        />
+        <StatCard
+          label="Chat WA Masuk (Matched)"
+          value={summary?.matchedChats ?? '-'}
+          tone="ok"
+          sub={`${summary ? fmtPct(summary.conversionRate) : '0%'} dari Klik CTA`}
+        />
+        <StatCard
+          label="Drop-off (Batal Kirim WA)"
+          value={summary?.unmatchedDrain ?? '-'}
+          tone={summary && summary.unmatchedDrain > 0 ? 'warn' : 'default'}
+          sub={`${summary && summary.totalClicks > 0 ? fmtPct((summary.unmatchedDrain / summary.totalClicks) * 100) : '0%'} klik tanpa kirim chat`}
+        />
+        <StatCard
+          label="CAPI Events Delivered"
+          value={summary?.capiEventsDelivered ?? '-'}
+          tone="ok"
+          sub={`Contact ${summary?.matchedChats ?? 0} + Purchase ${summary?.purchaseEvents ?? 0}`}
+        />
       </section>
 
       {/* ---------------- 2. Filter Bar ---------------- */}
-      <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs">
+      <section className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3">
+        {/* Preset Shortcuts */}
+        <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[#f0f2f5]">
+          <span className="text-[11px] font-bold text-[#667781] uppercase mr-1">Shortcut Tanggal:</span>
+          <button
+            type="button"
+            onClick={() => setDatePreset('today')}
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+          >
+            Hari Ini
+          </button>
+          <button
+            type="button"
+            onClick={() => setDatePreset('7days')}
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+          >
+            7 Hari Terakhir
+          </button>
+          <button
+            type="button"
+            onClick={() => setDatePreset('30days')}
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+          >
+            30 Hari Terakhir
+          </button>
+          <button
+            type="button"
+            onClick={() => setDatePreset('thisMonth')}
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+          >
+            Bulan Ini
+          </button>
+          <button
+            type="button"
+            onClick={() => setDatePreset('allTime')}
+            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] transition shadow-2xs"
+          >
+            Semua Waktu
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Dari</label>
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+            <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
           </div>
           <div className="space-y-1">
             <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><CalendarDays size={12} className="text-[#008069]" /> Sampai</label>
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
+            <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs" />
           </div>
           <div className="space-y-1">
             <label className="text-[11px] uppercase font-bold text-[#667781] flex items-center gap-1"><Activity size={12} className="text-[#008069]" /> Status</label>
             <select value={status} onChange={(e) => { setStatus(e.target.value as any); setPage(1); }} className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs">
-              <option value="all">Semua</option>
-              <option value="matched">MATCHED</option>
-              <option value="unmatched">PENDING</option>
+              <option value="all">Semua Status</option>
+              <option value="matched">MATCHED (Chat Masuk)</option>
+              <option value="unmatched">PENDING (Batal / Belum Chat)</option>
             </select>
           </div>
           <div className="flex-1 min-w-[180px] space-y-1">
@@ -303,7 +393,7 @@ export const MetaClickCatcher: React.FC = () => {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
-              placeholder="Cari kode tracking (mis. a7) atau campaign..."
+              placeholder="Cari kode tracking (mis. mh) atau campaign..."
               className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
@@ -322,32 +412,32 @@ export const MetaClickCatcher: React.FC = () => {
       <section className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
-            <MousePointerClick size={16} className="text-[#008069]" /> <span>Log Klik Iklan (Atribusi)</span>
+            <MousePointerClick size={16} className="text-[#008069]" /> <span>Log Klik Iklan &amp; Atribusi Pasien</span>
           </h3>
-          <span className="text-xs text-[#8696a0]">{total} klik · halaman {page}/{totalPages}</span>
+          <span className="text-xs text-[#8696a0]">{total} klik tercatat · halaman {page}/{totalPages}</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
-                <th className="py-2.5 px-3">Tracking</th>
+                <th className="py-2.5 px-3">Tracking Code</th>
                 <th className="py-2.5 px-3">Waktu Klik</th>
                 <th className="py-2.5 px-3">Status Atribusi</th>
-                <th className="py-2.5 px-3">Pasien</th>
-                <th className="py-2.5 px-3">UTM</th>
-                <th className="py-2.5 px-3">Meta / Browser</th>
+                <th className="py-2.5 px-3">Data Pasien (Nama &amp; WhatsApp)</th>
+                <th className="py-2.5 px-3">UTM Campaign / Sumber</th>
+                <th className="py-2.5 px-3">Meta Tracking Data</th>
               </tr>
             </thead>
             <tbody>
               {entries.length === 0 && !loadingClicks && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-[#8696a0]">Belum ada klik iklan pada rentang/filter ini.</td>
+                  <td colSpan={6} className="py-8 text-center text-[#8696a0]">Belum ada data klik iklan pada rentang tanggal/filter ini.</td>
                 </tr>
               )}
               {loadingClicks && entries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-[#8696a0]"><Loader size={14} className="inline animate-spin mr-2 text-[#008069]" />Memuat...</td>
+                  <td colSpan={6} className="py-8 text-center text-[#8696a0]"><Loader size={14} className="inline animate-spin mr-2 text-[#008069]" />Memuat log klik...</td>
                 </tr>
               )}
               {entries.map((e) => (
@@ -359,27 +449,56 @@ export const MetaClickCatcher: React.FC = () => {
                   <td className="py-2.5 px-3">
                     <StatusBadge entry={e} />
                     {e.status === 'MATCHED' && e.matchedAt && (
-                      <span className="block text-[10px] text-emerald-700 mt-0.5 font-medium">matched {fmtTime(e.matchedAt)}</span>
+                      <span className="block text-[10px] text-emerald-700 mt-0.5 font-medium">terhubung {fmtTime(e.matchedAt)}</span>
                     )}
                   </td>
                   <td className="py-2.5 px-3">
                     {e.customer ? (
-                      <div>
-                        <p className="text-[#111b21] font-semibold">{e.customer.name || 'Tanpa nama'}</p>
-                        <p className="text-[#667781] font-mono text-[11px]">{e.customer.phone}</p>
+                      <div className="space-y-0.5">
+                        <p className="text-[#111b21] font-bold text-xs">
+                          {e.customer.name || 'Pelanggan WhatsApp'}
+                        </p>
+                        {e.customer.phone && (
+                          <a
+                            href={`https://wa.me/${e.customer.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#008069] hover:underline font-mono text-[11px] font-semibold inline-flex items-center gap-1"
+                            title="Buka Chat WhatsApp Pasien"
+                          >
+                            <span>📱</span> {e.customer.phone}
+                          </a>
+                        )}
                       </div>
                     ) : e.phone ? (
-                      <p className="text-[#667781] font-mono text-[11px]">{e.phone}</p>
+                      <div className="space-y-0.5">
+                        <p className="text-[#667781] font-semibold text-[11px]">Nomor Terdeteksi</p>
+                        <a
+                          href={`https://wa.me/${e.phone.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#008069] hover:underline font-mono text-[11px]"
+                        >
+                          {e.phone}
+                        </a>
+                      </div>
                     ) : (
-                      <span className="text-[#8696a0]">-</span>
+                      <span className="text-[#8696a0] text-[11px] italic flex items-center gap-1">
+                        <Activity size={11} className="text-slate-400" /> Belum kirim chat WA
+                      </span>
                     )}
                   </td>
                   <td className="py-2.5 px-3">
                     {e.utmCampaign ? (
                       <div className="text-[11px] space-y-0.5">
-                        <p className="text-[#008069] font-semibold">@{e.utmCampaign}</p>
-                        {e.utmSource && <p className="text-[#667781]">{e.utmSource}{e.utmMedium ? ` / ${e.utmMedium}` : ''}</p>}
-                        {e.landingUrl && <p className="text-[#8696a0] truncate max-w-[160px]" title={e.landingUrl}><Globe size={10} className="inline mr-0.5 text-[#008069]" />{e.landingUrl}</p>}
+                        <p className="text-[#008069] font-bold">@{e.utmCampaign}</p>
+                        {e.utmSource && <p className="text-[#667781]"><span className="font-semibold text-[#111b21]">Source:</span> {e.utmSource}{e.utmMedium ? ` / ${e.utmMedium}` : ''}</p>}
+                        {e.landingUrl && <p className="text-[#8696a0] truncate max-w-[180px]" title={e.landingUrl}><Globe size={10} className="inline mr-0.5 text-[#008069]" />{e.landingUrl}</p>}
+                      </div>
+                    ) : e.utmSource || e.landingUrl ? (
+                      <div className="text-[11px] space-y-0.5">
+                        {e.utmSource && <p className="text-[#667781]"><span className="font-semibold text-[#111b21]">Source:</span> {e.utmSource}</p>}
+                        {e.landingUrl && <p className="text-[#8696a0] truncate max-w-[180px]" title={e.landingUrl}><Globe size={10} className="inline mr-0.5 text-[#008069]" />{e.landingUrl}</p>}
                       </div>
                     ) : (
                       <span className="text-[#8696a0]">-</span>
