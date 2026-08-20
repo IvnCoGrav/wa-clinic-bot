@@ -48,8 +48,6 @@ html {
   -webkit-text-size-adjust: 100%;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
-  overflow-x: clip;
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -63,7 +61,6 @@ body {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  overflow-x: clip;
   overscroll-behavior-x: none;
   touch-action: pan-y;
   position: relative;
@@ -79,10 +76,33 @@ body {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  overflow-x: clip;
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+/* 🔒 Background Scroll Lock saat Modal / Sidebar Aktif */
+body.body-scroll-locked {
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
+/* Modal & Sidebar Backdrop overscroll isolation */
+.modal-backdrop,
+.backdrop-blur-xs,
+.backdrop-blur-sm,
+[role="dialog"],
+[data-modal-backdrop] {
+  overscroll-behavior: contain !important;
+}
+
+/* Memastikan konten modal & sidebar tetap dapat di-scroll lancar */
+.modal-scrollable,
+.overflow-y-auto,
+aside nav {
+  touch-action: pan-y !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
 }
 
 /* iOS Safe Area Helper Utilities */

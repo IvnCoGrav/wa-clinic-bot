@@ -38,8 +38,10 @@ import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
 import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
 import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const Reservations: React.FC = () => {
+  const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
   const [loading, setLoading] = useState(true);
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -1252,7 +1254,19 @@ export const Reservations: React.FC = () => {
 
                 {/* Staff Assignment */}
                 <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Penugasan Staff / Terapis</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[#667781] font-bold block uppercase">Penugasan Staff / Terapis</span>
+                    {user?.id && selectedRes.assigned_staff_id !== user.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleAssignStaff(selectedRes.id, user.id)}
+                        disabled={assigningStaff}
+                        className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
+                      >
+                        <span>⚡ Tugaskan ke Saya</span>
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={selectedRes.assigned_staff_id || ''}
                     onChange={(e) => handleAssignStaff(selectedRes.id, e.target.value || null)}

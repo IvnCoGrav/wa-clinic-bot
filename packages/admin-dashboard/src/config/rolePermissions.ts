@@ -1,11 +1,11 @@
 // Single Source of Truth untuk RBAC (Role-Based Access Control)
-export type AppRole = 'super_admin' | 'tenant_admin' | 'admin_cs' | 'advertiser' | 'therapist' | string;
+export type AppRole = 'super_admin' | 'tenant_admin' | 'admin_cs' | 'spv_cs' | 'advertiser' | 'therapist' | string;
 
 export interface ModuleDefinition {
   id: string;
   path: string;
   name: string;
-  category: 'DASHBOARD & PELANGGAN' | 'OPERASIONAL & JADWAL' | 'CRM & KOMUNIKASI' | 'MARKETING & ADS' | 'AI ENGINE & SISTEM';
+  category: 'DASHBOARD & PELANGGAN' | 'OPERASIONAL & JADWAL' | 'CRM & KOMUNIKASI' | 'MARKETING & ADS' | 'AI ENGINE & SISTEM' | 'PORTAL LAPANGAN & TERAPIS';
   description: string;
 }
 
@@ -63,6 +63,13 @@ export const ALL_MODULES: ModuleDefinition[] = [
     name: 'Kalender & Reservasi',
     category: 'OPERASIONAL & JADWAL',
     description: 'Kalender janji temu modern (Bulan/Minggu/Hari) dan buat reservasi',
+  },
+  {
+    id: 'today-treatments',
+    path: '/admin/today-treatments',
+    name: 'Treatment Hari Ini',
+    category: 'OPERASIONAL & JADWAL',
+    description: 'Monitoring & pengerjaan tugas kunjungan pasien hari ini, live chat, GPS, dan pencatatan lunas',
   },
   {
     id: 'staff-management',
@@ -182,6 +189,22 @@ export const ALL_MODULES: ModuleDefinition[] = [
     category: 'AI ENGINE & SISTEM',
     description: 'Diagnostik server, cache redis, log error, dan gateway status',
   },
+
+  // 6. Portal Lapangan & Terapis
+  {
+    id: 'staff-today',
+    path: '/admin/staff/today',
+    name: 'Portal Tugas Terapis (Hari Ini)',
+    category: 'PORTAL LAPANGAN & TERAPIS',
+    description: 'Akses tugas kunjungan hari ini, peta rute, update titik GPS, status lunas, dan chat pasien',
+  },
+  {
+    id: 'staff-schedule',
+    path: '/admin/staff/schedule',
+    name: 'Jadwal Mendatang Terapis',
+    category: 'PORTAL LAPANGAN & TERAPIS',
+    description: 'Kalender jadwal treatment terapis untuk hari-hari berikutnya',
+  },
 ];
 
 export const ALL_PATHS = ALL_MODULES.map((m) => m.path);
@@ -208,13 +231,36 @@ export const CORE_SYSTEM_ROLES: Record<string, RoleConfig> = {
     label: 'Staff Terapis',
     description: 'Akses portal penugasan mobile-first harian, navigasi Google Maps rute berantai, dan live chat pasien hari ini.',
     isSystem: true,
-    allowedPaths: ['/admin/staff/today'],
+    allowedPaths: ['/admin/staff/today', '/admin/staff/schedule'],
     defaultRedirect: '/admin/staff/today',
   },
 };
 
 export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
   ...CORE_SYSTEM_ROLES,
+  spv_cs: {
+    key: 'spv_cs',
+    label: 'Supervisor CS & Terapis',
+    description: 'Akses hybrid: portal penugasan terapis lapangan, delegasi kalender reservasi, database pasien, live chat WhatsApp, dan CS.',
+    isSystem: false,
+    allowedPaths: [
+      '/admin/today-treatments',
+      '/admin/staff/today',
+      '/admin/staff/schedule',
+      '/admin/overview',
+      '/admin/live-chat',
+      '/admin/reservations',
+      '/admin/customers',
+      '/admin/staff-management',
+      '/admin/customer-service',
+      '/admin/labels',
+      '/admin/services',
+      '/admin/follow-ups',
+      '/admin/follow-up-templates',
+      '/admin/knowledge-base',
+    ],
+    defaultRedirect: '/admin/overview',
+  },
   admin_cs: {
     key: 'admin_cs',
     label: 'Admin CS & Reservasi',
@@ -222,6 +268,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
     isSystem: false,
     allowedPaths: [
       '/admin/overview',
+      '/admin/today-treatments',
       '/admin/customers',
       '/admin/chat-migration',
       '/admin/labels',
@@ -351,6 +398,7 @@ export async function deleteCustomRole(roleKey: string): Promise<boolean> {
 export const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
   tenant_admin: 'Admin Utama',
+  spv_cs: 'Supervisor CS & Terapis',
   admin_cs: 'Admin CS & Reservasi',
   advertiser: 'Advertiser / Media Buyer',
   therapist: 'Staff Terapis',
@@ -360,6 +408,7 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ROLE_MENU_ACCESS: Record<string, string[]> = {
   super_admin: [...ALL_PATHS],
   tenant_admin: [...ALL_PATHS],
+  spv_cs: DEFAULT_ROLE_CONFIGS.spv_cs.allowedPaths,
   admin_cs: DEFAULT_ROLE_CONFIGS.admin_cs.allowedPaths,
   advertiser: DEFAULT_ROLE_CONFIGS.advertiser.allowedPaths,
   therapist: ['/admin/staff/today'],

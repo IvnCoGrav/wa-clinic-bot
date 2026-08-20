@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
 import { Reservation } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CLINIC_COORDS = {
   lat: -7.34886,
@@ -111,6 +112,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   initialSlotTarget,
   existingReservations = [],
 }) => {
+  const { user } = useAuth();
   const { toast } = useUiFeedback();
   const [submitting, setSubmitting] = useState(false);
 
@@ -1205,10 +1207,21 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Staff */}
             <div className="space-y-1">
-              <label className="text-[11px] font-bold text-[#667781] uppercase tracking-wider block flex items-center space-x-1">
-                <UserCheck size={12} />
-                <span>Penugasan Terapis</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-[#667781] uppercase tracking-wider block flex items-center space-x-1">
+                  <UserCheck size={12} />
+                  <span>Penugasan Terapis</span>
+                </label>
+                {user?.id && (
+                  <button
+                    type="button"
+                    onClick={() => setAssignedStaffId(user.id)}
+                    className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
+                  >
+                    <span>⚡ Saya Sendiri</span>
+                  </button>
+                )}
+              </div>
               <select
                 value={assignedStaffId}
                 onChange={(e) => setAssignedStaffId(e.target.value)}
