@@ -494,6 +494,22 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         take: 30,
       });
 
+      // Kumpulkan target_id untuk resolusi data customer/reservasi
+      const targetIds = logs.map((l: any) => l.target_id).filter(Boolean);
+      const [customers, reservations] = await Promise.all([
+        prisma.customer.findMany({
+          where: { id: { in: targetIds } },
+          include: { adClick: true },
+        }),
+        prisma.reservation.findMany({
+          where: { id: { in: targetIds } },
+          include: { customer: { include: { adClick: true } } },
+        }),
+      ]);
+
+      const customerMap = new Map(customers.map((c: any) => [c.id, c]));
+      const reservationMap = new Map(reservations.map((r: any) => [r.id, r]));
+
       const items = logs.map((log: any) => {
         let parsedPayload: any = {};
         try {
@@ -502,14 +518,22 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           parsedPayload = { raw: log.payload };
         }
 
-        const phone = parsedPayload.customer?.phone || parsedPayload.phone || parsedPayload.targetPhone || '-';
-        const name = parsedPayload.customer?.name || parsedPayload.name || '-';
+        // Resolusi fallback dari target_id jika data di payload kosong
+        const matchedCust = customerMap.get(log.target_id);
+        const matchedRes = reservationMap.get(log.target_id);
+        const effectiveCust = matchedCust || matchedRes?.customer;
+
+        const phone = parsedPayload.customer?.phone || parsedPayload.phone || parsedPayload.targetPhone || effectiveCust?.phone || '-';
+        const name = parsedPayload.customer?.name || parsedPayload.name || effectiveCust?.name || (phone !== '-' ? 'Pelanggan WhatsApp' : '-');
+        const treatment = parsedPayload.conversionData?.treatment || parsedPayload.treatment || matchedRes?.treatment_detail || null;
         const eventName = parsedPayload.eventName || (log.action === 'APPROVE_PURCHASE_EVENT' ? 'Purchase' : 'Contact');
-        const value = parsedPayload.conversionData?.value ?? parsedPayload.value ?? null;
+        const value = parsedPayload.conversionData?.value ?? parsedPayload.value ?? matchedRes?.total_price ?? null;
         const currency = parsedPayload.conversionData?.currency || parsedPayload.currency || 'IDR';
         const status = parsedPayload.status || (parsedPayload.success === false ? 'FAILED' : 'SUCCESS');
 
-        // Bentuk payload detail lengkap untuk modal JSON inspect
+        const adClick = effectiveCust?.adClick;
+
+        // Bentuk payload detail lengkap untuk modal inspect
         const detailedJson = {
           action: log.action,
           adminIdentity: log.admin_identity || 'Admin CS',
@@ -523,14 +547,21 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             id: parsedPayload.customer?.id || log.target_id,
           },
           conversionData: {
+            treatment,
             value,
             currency,
             testEventCode: parsedPayload.conversionData?.testEventCode || parsedPayload.testEventCode || null,
           },
-          attribution: parsedPayload.attribution || {
+          attribution: parsedPayload.attribution || (adClick ? {
+            trackingCode: adClick.trackingCode,
+            utmSource: adClick.utmSource,
+            utmCampaign: adClick.utmCampaign,
+            fbp: adClick.fbp,
+            fbc: adClick.fbc,
+          } : {
             source: 'Meta Conversions API Direct',
             traffic: 'Direct Send',
-          },
+          }),
           metaGraphApiResponse: parsedPayload.metaGraphApiResponse || {
             events_received: status === 'SUCCESS' ? 1 : 0,
             status: status === 'SUCCESS' ? 'DELIVERED (HTTP 200)' : 'FAILED',
@@ -542,12 +573,13 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
                 event_name: eventName,
                 action_source: 'chat',
                 user_data: {
-                  ph: ['[SHA-256 Hashed Phone]'],
+                  ph: phone !== '-' ? ['[SHA-256 Hashed Phone]'] : undefined,
                   fn: name !== '-' ? ['[SHA-256 Hashed Name]'] : undefined,
                 },
                 custom_data: {
                   value,
                   currency,
+                  content_name: treatment || undefined,
                 },
               },
             ],
@@ -561,6 +593,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           createdAt: log.created_at,
           phone,
           name,
+          treatment,
           eventName,
           value,
           currency,
