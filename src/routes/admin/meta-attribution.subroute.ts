@@ -193,6 +193,9 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         dateRange.createdAt = { gte: since };
       }
 
+      const search = typeof query.search === 'string' && query.search.trim() ? query.search.trim() : undefined;
+      const utmCampaign = typeof query.utmCampaign === 'string' && query.utmCampaign.trim() ? query.utmCampaign.trim() : undefined;
+
       let dbNote: string | undefined;
       let totalClicks = 0;
       let matchedChats = 0;
@@ -203,9 +206,13 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       let purchaseEvents = 0;
 
       try {
+        const adClickWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange };
+        if (search) adClickWhere.trackingCode = { contains: search, mode: 'insensitive' };
+        if (utmCampaign) adClickWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
+
         const [clicks, matched, mqlCount, pendingCount, approvedCount, rejectedCount] = await Promise.all([
-          prisma.adClick.count({ where: { tenant_id: DEFAULT_TENANT_ID, ...dateRange } }),
-          prisma.adClick.count({ where: { tenant_id: DEFAULT_TENANT_ID, ...dateRange, matchedAt: { not: null } } }),
+          prisma.adClick.count({ where: adClickWhere }),
+          prisma.adClick.count({ where: { ...adClickWhere, matchedAt: { not: null } } }),
           prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID, is_mql: true } }),
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'pending' } }),
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'approved' } }),
