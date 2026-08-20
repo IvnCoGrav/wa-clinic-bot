@@ -260,11 +260,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const absY = Math.abs(deltaY);
 
       // Case 1: When sidebar was CLOSED at start -> Swipe from RIGHT edge towards LEFT to open
-      if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - 30) {
-        if (deltaX < -15 && absX > absY * 2.0) {
-          if (e.cancelable) e.preventDefault();
-        }
-        if (deltaX < -45 && absX > absY * 2.0) {
+      if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - 24) {
+        if (deltaX < -45 && absX > absY * 2.2) {
           justSwipedRef.current = true;
           setMobileMenuOpen(true);
           isTracking = false;
@@ -274,10 +271,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       // Case 2: When sidebar was OPEN at start -> Swipe RIGHT to close
       if (wasOpenAtTouchStart) {
-        if (deltaX > 15 && absX > absY * 2.0) {
-          if (e.cancelable) e.preventDefault();
-        }
-        if (deltaX > 45 && absX > absY * 2.0) {
+        if (deltaX > 45 && absX > absY * 2.2) {
           justSwipedRef.current = true;
           setMobileMenuOpen(false);
           isTracking = false;
@@ -292,8 +286,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       }, 400);
     };
 
-    window.addEventListener('touchstart', onTouchStart, { passive: false });
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
     window.addEventListener('touchend', onTouchEnd, { passive: true });
     window.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
@@ -383,11 +377,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isLiveChat = location.pathname.includes('/live-chat');
 
   return (
-    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
+    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} w-full max-w-full overflow-x-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
         <div
-          className="fixed top-3 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none transition-all duration-100 ease-out flex items-center justify-center"
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[99999] pointer-events-none transition-all duration-100 ease-out flex items-center justify-center pt-[env(safe-area-inset-top,0px)]"
           style={{
             transform: `translate(-50%, ${pullDistance}px) scale(${Math.min(0.7 + pullDistance / 100, 1)})`,
             opacity: Math.min(pullDistance / 20, 1),
@@ -409,7 +403,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {incomingToast && (
         <div
           onClick={() => openChatFromToast(incomingToast.conversationId)}
-          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-white border border-[#008069]/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-[#f8fafc] transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md"
+          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-white border border-[#008069]/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-[#f8fafc] transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
         >
           <div className="h-10 w-10 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 font-bold shadow-xs">
             <MessageSquare size={20} />
@@ -464,7 +458,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       />
 
       {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right with total GPU masking when closed) */}
-      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white border-l md:border-l-0 md:border-r border-[#e9edef] flex flex-col transform ${
+      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white border-l md:border-l-0 md:border-r border-[#e9edef] flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
         mobileMenuOpen
           ? 'translate-x-0 opacity-100 visible pointer-events-auto'
           : 'translate-x-full opacity-0 invisible pointer-events-none md:opacity-100 md:visible md:pointer-events-auto md:translate-x-0'
@@ -581,10 +575,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content Area */}
-      <div className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
+      <div className={`flex-1 md:pl-64 flex flex-col w-full max-w-full overflow-x-hidden ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
         
         {/* Top Header */}
-        <header className="h-16 border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs shrink-0">
+        <header className="border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs shrink-0 pt-[env(safe-area-inset-top,0px)] min-h-[calc(4rem+env(safe-area-inset-top,0px))] md:pt-0 md:min-h-[4rem] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]">
           <div className="flex items-center space-x-3">
             <h1 className="text-sm font-bold md:text-base text-[#111b21] truncate max-w-[200px] sm:max-w-none">
               {BRAND.panelName}

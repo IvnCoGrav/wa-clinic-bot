@@ -176,9 +176,9 @@ export const StaffSchedule: React.FC = () => {
   }, {});
 
   return (
-    <div className="min-h-[100dvh] bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none overflow-hidden antialiased">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col font-sans select-none antialiased">
       {/* WhatsApp Web Minimalist Clean Top Header */}
-      <header className="h-14 bg-[#f0f2f5] border-b border-[#e9edef] px-4 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <header className="bg-[#f0f2f5] border-b border-[#e9edef] px-4 flex items-center justify-between sticky top-0 z-30 shadow-xs pt-[env(safe-area-inset-top,0px)] min-h-[calc(3.5rem+env(safe-area-inset-top,0px))] md:pt-0 md:min-h-[3.5rem] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] shrink-0">
         <div className="flex items-center space-x-2.5 min-w-0">
           <button
             onClick={() => navigate('/admin/staff/today')}

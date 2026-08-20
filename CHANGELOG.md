@@ -4,8 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Added & Fixed — Live Chat Image Reconciliation & JSON Fix (2026-08-20)
+### Added & Fixed — iOS Safe Area Notch, Rigid Viewport Locking & Live Chat Image Fix (2026-08-20)
 
+- **Perbaikan iOS iPhone Safe Area Insets & Rigid Viewport Locking (`index.css`, `Layout.tsx`, `StaffToday.tsx`, `StaffSchedule.tsx`)**:
+  - **Mengatasi Header Tertutup Notch / Status Bar iPhone**: Menambahkan padding `env(safe-area-inset-top)` dinamis pada header utama admin, sidebar drawer, dan portal staff (`StaffToday` & `StaffSchedule`). Konten header (judul, tombol menu, ikon status) kini selalu turun rapi di bawah area status bar, jam, sinyal, dan Dynamic Island iPhone.
+  - **Mengeliminasi Horizontal Wobble / Rubber-Banding (*Rigid Viewport Lock*)**: Menetapkan aturan ketat `overflow-x: clip`, `overscroll-behavior-x: none`, dan `touch-action: pan-y` pada `html`, `body`, dan `#root`. Seluruh visual antarmuka kini terkunci rigid di satu tempat saat di-scroll ke atas/bawah tanpa goyang ke kiri/kanan.
+  - **Optimasi Touch Gestures**: Mengubah touch listener gesture menjadi `passive: true` untuk memastikan scrolling native 120Hz di iOS Safari berjalan mulus tanpa lag atau konflik gesture.
 - **Perbaikan Duplikasi Gambar di Live Chat (`LiveChatMonitor.tsx`, `StaffToday.tsx`, `live-chat.service.ts`)**:
   - Memperbaiki bug duplikasi pesan gambar (tampil 2 bubble gambar) saat admin/staf mengirim foto di Live Chat.
   - Menyelaraskan teks placeholder gambar optimistik menjadi `[IMAGE]` (sebelumnya `[GAMBAR]` vs `[IMAGE]`), sehingga pencocokan pesan optimistik (`temp_`) dengan event SSE `message.created` berjalan sempurna.
