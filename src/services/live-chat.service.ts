@@ -347,7 +347,7 @@ export class LiveChatService {
     }
 
     // Audit Trail + Live Chat publish (message.created)
-    await messageService.logMessage({
+    const logged = await messageService.logMessage({
       tenantId,
       conversationId,
       direction: Direction.OUTBOUND,
@@ -404,6 +404,7 @@ export class LiveChatService {
       success: true,
       conversationId,
       messageId: sendResult.messageId,
+      id: logged?.id,
       provider: gateway.providerType,
       conversation: updated ? buildConversationUpdatedPayload(updated) : undefined,
     };
