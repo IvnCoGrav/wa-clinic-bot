@@ -15,14 +15,21 @@ import {
   ShieldAlert,
   Cpu,
   Terminal,
+  Target,
+  Search,
+  ExternalLink,
+  Copy,
+  Check,
+  Globe,
   type LucideIcon,
 } from 'lucide-react';
 
-type TabId = 'system' | 'router' | 'logs' | 'messages' | 'conversations';
+type TabId = 'system' | 'router' | 'meta' | 'logs' | 'messages' | 'conversations';
 
 const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: 'system', label: 'System Overview', icon: Server },
   { id: 'router', label: 'AI Router', icon: BrainCircuit },
+  { id: 'meta', label: 'Meta Events Log', icon: Target },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'messages', label: 'Message Trace', icon: MessageSquare },
   { id: 'conversations', label: 'Conversations', icon: Phone },
@@ -637,6 +644,309 @@ function ConversationsSection() {
   );
 }
 
+// ---------------------------------------------------------------- Meta Events Log
+interface MetaClickEntry {
+  id: string;
+  trackingCode: string;
+  fbclid: string | null;
+  fbp: string | null;
+  fbc: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  landingUrl: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  phone: string | null;
+  matchedAt: string | null;
+  createdAt: string;
+  customer: { id: string; name: string | null; phone: string } | null;
+}
+
+interface MetaSummary {
+  totalClicks: number;
+  totalMatched: number;
+  conversionRatePercent: number;
+  activeToday: number;
+  circuitBreaker: { state: string; failures: number };
+}
+
+function MetaEventsSection() {
+  const [data, setData] = useState<{ entries: MetaClickEntry[]; total: number; dbNote?: string }>({ entries: [], total: 0 });
+  const [summary, setSummary] = useState<MetaSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
+  const [dateFilter, setDateFilter] = useState<'today' | '7d' | 'all'>('today');
+  const [selectedItem, setSelectedItem] = useState<MetaClickEntry | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const now = new Date();
+      let startDate: string | undefined;
+      if (dateFilter === 'today') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      } else if (dateFilter === '7d') {
+        const past = new Date();
+        past.setDate(past.getDate() - 7);
+        startDate = past.toISOString();
+      }
+
+      const params = new URLSearchParams({
+        pageSize: '50',
+        status: statusFilter,
+        ...(search ? { search } : {}),
+        ...(startDate ? { startDate } : {}),
+      });
+
+      const [clicksRes, summaryRes] = await Promise.all([
+        apiRequest(`/api/admin/debug/meta-clicks?${params.toString()}`),
+        apiRequest(`/api/admin/debug/meta-summary${startDate ? `?startDate=${startDate}` : ''}`).catch(() => null),
+      ]);
+
+      setData(clicksRes.data || { entries: [], total: 0 });
+      if (summaryRes?.data) setSummary(summaryRes.data);
+    } catch (err: any) {
+      setData({ entries: [], total: 0, dbNote: 'Gagal memuat log event Meta' });
+    } finally {
+      setLoading(false);
+    }
+  }, [search, statusFilter, dateFilter]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const copyText = (txt: string, id: string) => {
+    navigator.clipboard.writeText(txt);
+    setCopiedCode(id);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader title="Meta Ads CAPI & Click Attribution Trace" onRefresh={loadData} loading={loading} />
+      {data.dbNote && <ErrNote note={data.dbNote} />}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard
+          label="Total Click Catcher"
+          value={summary?.totalClicks ?? data.total}
+          tone="default"
+          sub={dateFilter === 'today' ? 'Klik hari ini' : 'Sesuai rentang filter'}
+        />
+        <StatCard
+          label="Event Contact (Chat WA)"
+          value={summary?.totalMatched ?? data.entries.filter((e) => e.matchedAt).length}
+          tone="ok"
+          sub="Terkirim ke Meta CAPI"
+        />
+        <StatCard
+          label="Conversion Rate"
+          value={pct(summary?.conversionRatePercent ?? (data.total > 0 ? (data.entries.filter((e) => e.matchedAt).length / data.total) * 100 : null))}
+          tone="ok"
+          sub="Klik ➔ Chat WhatsApp"
+        />
+        <StatCard
+          label="CAPI Circuit Breaker"
+          value={summary?.circuitBreaker?.state || 'CLOSED'}
+          tone={summary?.circuitBreaker?.state === 'OPEN' ? 'err' : 'ok'}
+          sub="Koneksi Graph API Meta"
+        />
+      </div>
+
+      {/* Filter Bar */}
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0]" />
+            <input
+              type="text"
+              placeholder="Cari kode, nama, No WA, campaign..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-[#f0f2f5] border-0 rounded-xl text-xs text-[#111b21] focus:ring-1 focus:ring-[#008069] focus:outline-none"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+          >
+            <option value="all">Semua Status</option>
+            <option value="matched">🟢 Matched (Contact Sent)</option>
+            <option value="unmatched">⚪ Unmatched (Pending Chat)</option>
+          </select>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as any)}
+            className="px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
+          >
+            <option value="today">Hari Ini</option>
+            <option value="7d">7 Hari Terakhir</option>
+            <option value="all">Semua Waktu</option>
+          </select>
+        </div>
+        <span className="text-xs text-[#8696a0] font-medium">{data.entries.length} baris log</span>
+      </div>
+
+      {/* Table Log */}
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 overflow-x-auto shadow-xs">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left uppercase font-bold text-[#667781] border-b border-[#e9edef] bg-[#f8fafc]">
+              <th className="py-2.5 px-3">Waktu</th>
+              <th className="py-2.5 px-3">Event CAPI</th>
+              <th className="py-2.5 px-3">Kode</th>
+              <th className="py-2.5 px-3">Data Customer</th>
+              <th className="py-2.5 px-3">Kampanye / Source</th>
+              <th className="py-2.5 px-3">Meta Parameter</th>
+              <th className="py-2.5 px-3 text-right">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.entries.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-[#8696a0]">
+                  Belum ada aktivitas event Meta pada rentang waktu ini.
+                </td>
+              </tr>
+            )}
+            {data.entries.map((item) => {
+              const isMatched = Boolean(item.matchedAt);
+              return (
+                <tr key={item.id} className="border-b border-[#e9edef] last:border-0 hover:bg-[#f8fafc] transition-colors align-top">
+                  <td className="py-2.5 px-3 whitespace-nowrap text-[#667781]">
+                    <span className="font-semibold text-[#111b21] block">{fmtTime(item.matchedAt || item.createdAt)}</span>
+                    {isMatched && <span className="text-[10px] text-[#8696a0]">Klik: {fmtTime(item.createdAt)}</span>}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    {isMatched ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <CheckCircle2 size={11} className="text-emerald-600" /> Contact
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                        <Clock size={11} className="text-slate-400" /> Clicked
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <span className="px-2 py-0.5 rounded-md bg-[#e8f5f2] text-[#008069] font-mono font-bold text-xs border border-[#008069]/20">
+                      [{item.trackingCode}]
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3">
+                    {item.customer ? (
+                      <div className="space-y-0.5">
+                        <p className="text-[#111b21] font-bold text-xs">{item.customer.name || 'Pelanggan WhatsApp'}</p>
+                        <p className="text-[#667781] font-mono text-[11px]">{item.customer.phone}</p>
+                        <a
+                          href="/admin/chats"
+                          className="text-[#008069] hover:underline text-[11px] font-semibold inline-flex items-center gap-1"
+                        >
+                          💬 Buka Live Chat
+                        </a>
+                      </div>
+                    ) : item.phone ? (
+                      <div className="space-y-0.5">
+                        <p className="text-[#667781] font-semibold text-[11px]">Nomor Terdeteksi</p>
+                        <p className="text-[#111b21] font-mono text-[11px]">{item.phone}</p>
+                      </div>
+                    ) : (
+                      <span className="text-[#8696a0] text-[11px] italic">Belum kirim chat WA</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <div className="space-y-0.5">
+                      {item.utmCampaign ? (
+                        <p className="text-[#008069] font-bold font-mono text-[11px]">@{item.utmCampaign}</p>
+                      ) : (
+                        <p className="text-[#8696a0] text-[11px]">Direct / Organik</p>
+                      )}
+                      {item.utmSource && (
+                        <p className="text-[#667781] text-[11px]">
+                          <span className="font-semibold text-[#111b21]">Src:</span> {item.utmSource}
+                          {item.utmMedium ? ` / ${item.utmMedium}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 max-w-[200px]">
+                    <div className="space-y-0.5 text-[11px]">
+                      {item.fbclid ? (
+                        <p className="font-mono text-[#111b21] truncate" title={item.fbclid}>
+                          <span className="text-[#667781] font-semibold">fbclid:</span> {item.fbclid}
+                        </p>
+                      ) : (
+                        <p className="text-[#8696a0] italic">No fbclid</p>
+                      )}
+                      {item.ipAddress && (
+                        <p className="font-mono text-[#8696a0] text-[10px]">
+                          IP: {item.ipAddress}
+                        </p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 text-right">
+                    <button
+                      onClick={() => setSelectedItem(item)}
+                      className="px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-[11px] font-semibold transition"
+                    >
+                      JSON
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* JSON Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
+              <h4 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+                <Target size={16} className="text-[#008069]" />
+                <span>Meta Attribution Payload [{selectedItem.trackingCode}]</span>
+              </h4>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="text-[#8696a0] hover:text-[#111b21] p-1 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 bg-[#1e293b] text-emerald-400 p-3 rounded-xl font-mono text-[11px] whitespace-pre-wrap">
+              {JSON.stringify(selectedItem, null, 2)}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#e9edef]">
+              <button
+                onClick={() => copyText(JSON.stringify(selectedItem, null, 2), 'modal')}
+                className="px-3 py-1.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-xs font-semibold text-[#111b21] flex items-center gap-1.5 transition"
+              >
+                {copiedCode === 'modal' ? <Check size={13} className="text-[#008069]" /> : <Copy size={13} />}
+                <span>{copiedCode === 'modal' ? 'Tersalin' : 'Salin JSON'}</span>
+              </button>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="px-4 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00705a] text-white text-xs font-bold transition"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Page
 export const Debug: React.FC = () => {
   const [tab, setTab] = useState<TabId>('system');
@@ -675,6 +985,7 @@ export const Debug: React.FC = () => {
 
       {tab === 'system' && <SystemSection />}
       {tab === 'router' && <RouterSection />}
+      {tab === 'meta' && <MetaEventsSection />}
       {tab === 'logs' && <LogsSection />}
       {tab === 'messages' && <MessagesSection />}
       {tab === 'conversations' && <ConversationsSection />}
