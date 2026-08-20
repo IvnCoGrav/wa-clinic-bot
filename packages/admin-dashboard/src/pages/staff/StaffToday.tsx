@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { apiRequest } from '../../services/api';
 import { useStaffAuth } from '../../contexts/StaffAuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import {
   MessageSquare,
@@ -35,6 +36,8 @@ import {
   Maximize2,
   Crosshair,
   PenLine,
+  LayoutDashboard,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
@@ -85,6 +88,7 @@ interface StaffTask {
   pricing: StaffTaskPricing;
   shareLocationText: string | null;
   customerProfilePictureUrl?: string | null;
+  assignedStaff?: { id: string; name: string; role?: string } | null;
 }
 
 interface ChatMessage {
@@ -146,8 +150,12 @@ function playNotificationSound() {
 }
 
 export const StaffToday: React.FC = () => {
-  const { staff, logout } = useStaffAuth();
+  const { staff, logout: staffLogout } = useStaffAuth();
+  const { user, logout: adminLogout } = useAuth();
   const { toast, confirm } = useUiFeedback();
+
+  const logout = staff ? staffLogout : adminLogout;
+  const currentStaff = staff || (user ? { id: user.id, name: user.name, role: user.role, phone: user.phone } : null);
   
   // Navigation Tabs: 'today' (Hari Ini & Live Chat) vs 'upcoming' (Jadwal Mendatang) vs 'completed' (Treatment Selesai)
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'completed'>('today');
@@ -192,6 +200,17 @@ export const StaffToday: React.FC = () => {
     telegramChatId: string | null;
   } | null>(null);
   const [loadingTelegramInfo, setLoadingTelegramInfo] = useState(false);
+
+  const userRole = (currentStaff?.role || '').toLowerCase();
+  const isSupervisor =
+    userRole === 'spv_cs' || userRole === 'super_admin' || userRole === 'tenant_admin' || userRole === 'admin_cs';
+
+  // Supervisor Delegation & Team Scope State
+  const [scopeFilter, setScopeFilter] = useState<'mine' | 'all'>('mine');
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; role?: string }[]>([]);
+  const [reassignModalTask, setReassignModalTask] = useState<StaffTask | null>(null);
+  const [reassignSelectedStaffId, setReassignSelectedStaffId] = useState<string>('');
+  const [submittingReassign, setSubmittingReassign] = useState(false);
 
   // Customer Detail Modal State (Privacy Safe - No Phone Leak)
   const [detailModalTask, setDetailModalTask] = useState<StaffTask | null>(null);
@@ -324,41 +343,58 @@ export const StaffToday: React.FC = () => {
   }, []);
 
   // Fetch today tasks, upcoming schedule, and completed tasks
-  const fetchTasks = useCallback(async (isPolling = false) => {
-    if (!isPolling) setLoading(true);
-    try {
-      const [todayRes, upcomingRes, completedRes] = await Promise.all([
-        apiRequest('/api/staff/today-tasks'),
-        apiRequest('/api/staff/upcoming-schedule'),
-        apiRequest('/api/staff/completed-tasks'),
-      ]);
+  const fetchTasks = useCallback(
+    async (isPolling = false, currentScope?: 'mine' | 'all') => {
+      if (!isPolling) setLoading(true);
+      const scopeToUse = currentScope || scopeFilter;
+      try {
+        const [todayRes, upcomingRes, completedRes] = await Promise.all([
+          apiRequest(`/api/staff/today-tasks?scope=${scopeToUse}`),
+          apiRequest('/api/staff/upcoming-schedule'),
+          apiRequest('/api/staff/completed-tasks'),
+        ]);
 
-      if (todayRes.success && Array.isArray(todayRes.data)) {
-        setTasks(todayRes.data);
-        if (selectedTaskRef.current) {
-          const updated = todayRes.data.find(
-            (t: StaffTask) => t.reservationId === selectedTaskRef.current?.reservationId
-          );
-          if (updated) setSelectedTask(updated);
+        if (todayRes.success && Array.isArray(todayRes.data)) {
+          setTasks(todayRes.data);
+          if (selectedTaskRef.current) {
+            const updated = todayRes.data.find(
+              (t: StaffTask) => t.reservationId === selectedTaskRef.current?.reservationId
+            );
+            if (updated) setSelectedTask(updated);
+          }
+        }
+
+        if (upcomingRes.success && Array.isArray(upcomingRes.data)) {
+          setUpcomingTasks(upcomingRes.data);
+        }
+
+        if (completedRes?.success && Array.isArray(completedRes.data)) {
+          setCompletedTasks(completedRes.data);
+        }
+      } catch (err: any) {
+        if (!isPolling) setErrorMessage(err.message || 'Gagal memuat jadwal tugas.');
+      } finally {
+        if (!isPolling) {
+          setLoading(false);
+          emitBootPhase('data');
         }
       }
+    },
+    [scopeFilter]
+  );
 
-      if (upcomingRes.success && Array.isArray(upcomingRes.data)) {
-        setUpcomingTasks(upcomingRes.data);
-      }
-
-      if (completedRes?.success && Array.isArray(completedRes.data)) {
-        setCompletedTasks(completedRes.data);
-      }
-    } catch (err: any) {
-      if (!isPolling) setErrorMessage(err.message || 'Gagal memuat jadwal tugas.');
-    } finally {
-      if (!isPolling) {
-        setLoading(false);
-        emitBootPhase('data');
-      }
+  // Load team members for supervisor delegation dropdown
+  useEffect(() => {
+    if (isSupervisor) {
+      apiRequest('/api/staff/team-members')
+        .then((res) => {
+          if (res?.success && Array.isArray(res.data)) {
+            setTeamMembers(res.data);
+          }
+        })
+        .catch(() => {});
     }
-  }, []);
+  }, [isSupervisor]);
 
   // Auto-poll tasks every 20s
   useEffect(() => {
@@ -1309,7 +1345,7 @@ export const StaffToday: React.FC = () => {
 
             <div className="min-w-0">
               <h1 className="font-bold text-sm sm:text-base text-[#111b21] tracking-tight truncate">
-                {staff?.name || 'Terapis'}
+                {currentStaff?.name || 'Terapis'}
               </h1>
               <p className="text-[11px] text-[#667781] truncate flex items-center gap-1">
                 <span>{tasks.length} Hari Ini • {upcomingTasks.length} Mendatang</span>
@@ -1549,6 +1585,42 @@ export const StaffToday: React.FC = () => {
                     </button>
                   )}
                 </div>
+
+                {/* Supervisor Scope Filter: Tugas Saya vs Semua Terapis Tim */}
+                {isSupervisor && (
+                  <div className="flex items-center p-1 bg-[#f0f2f5] rounded-xl border border-[#e9edef] gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScopeFilter('mine');
+                        fetchTasks(false, 'mine');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        scopeFilter === 'mine'
+                          ? 'bg-white text-[#008069] shadow-xs'
+                          : 'text-[#54656f] hover:text-[#111b21]'
+                      }`}
+                    >
+                      <span>🛵</span>
+                      <span>Tugas Saya</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScopeFilter('all');
+                        fetchTasks(false, 'all');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        scopeFilter === 'all'
+                          ? 'bg-[#008069] text-white shadow-xs'
+                          : 'text-[#54656f] hover:text-[#111b21]'
+                      }`}
+                    >
+                      <span>👥</span>
+                      <span>Semua Terapis</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Task cards scroll area with proper background & space-y-3 spacing between cards */}
@@ -1802,6 +1874,31 @@ export const StaffToday: React.FC = () => {
                             )}
                           </button>
                         </div>
+
+                        {/* Bar Terapis Penanggung Jawab & Delegasi (Khusus Supervisor / Mode Tim) */}
+                        {isSupervisor && (
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#e9edef] text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[10px] text-[#667781] font-semibold flex-shrink-0">Terapis:</span>
+                              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 text-[10px] font-bold border border-purple-200 truncate">
+                                {task.assignedStaff?.name || 'Belum Ditugaskan'}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReassignModalTask(task);
+                                setReassignSelectedStaffId(task.assignedStaff?.id || '');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white hover:bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200 shadow-2xs transition-all active:scale-95 flex items-center gap-1 flex-shrink-0"
+                              title="Ganti / Delegasikan terapis penanggung jawab"
+                            >
+                              <ArrowRightLeft size={11} />
+                              <span>Delegasikan</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -2811,6 +2908,20 @@ export const StaffToday: React.FC = () => {
 
             {/* Drawer Footer Actions */}
             <div className="p-3 border-t border-[#e9edef] bg-[#f0f2f5] space-y-1.5">
+              {isSupervisor && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMenuDrawer(false);
+                    window.location.href = '/admin/overview';
+                  }}
+                  className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-[11px] font-bold text-white shadow-xs transition-all active:scale-95"
+                >
+                  <LayoutDashboard size={13} className="flex-shrink-0" />
+                  <span className="truncate">Buka Portal Admin / CS</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -2878,13 +2989,13 @@ export const StaffToday: React.FC = () => {
             {/* Staff Info */}
             <div className="space-y-1">
               <h3 className="font-bold text-lg text-[#111b21]">
-                {staff?.name || 'Terapis'}
+                {currentStaff?.name || 'Terapis'}
               </h3>
               <p className="text-xs text-[#667781] font-mono">
-                {staff?.phone || 'Akun Terapis'}
+                {currentStaff?.phone || 'Akun Sistem'}
               </p>
               <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 mt-1">
-                Staff Terapis Lapangan
+                {isSupervisor ? 'Supervisor CS & Terapis' : 'Staff Terapis Lapangan'}
               </span>
             </div>
 
@@ -3657,6 +3768,118 @@ export const StaffToday: React.FC = () => {
                     <>
                       <CheckCircle2 size={14} />
                       <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL DELEGASI JADWAL TERAPIS (KHUSUS SUPERVISOR / SPV CS) */}
+      {/* ========================================================================= */}
+      {reassignModalTask && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
+          onClick={() => setReassignModalTask(null)}
+        >
+          <div
+            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center px-4 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-purple-50 text-purple-700">
+                  <ArrowRightLeft size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#111b21]">Delegasikan Jadwal</h3>
+                  <p className="text-[10px] text-[#667781] truncate max-w-[200px]">
+                    Pasien: {reassignModalTask.customerName || 'Bunda'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReassignModalTask(null)}
+                disabled={submittingReassign}
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3.5">
+              <div className="p-2.5 bg-[#f0f2f5] rounded-xl text-xs space-y-1">
+                <p className="text-[11px] text-[#667781]">
+                  Treatment: <span className="font-semibold text-[#111b21]">{reassignModalTask.treatmentDetail || 'Spa Homecare'}</span>
+                </p>
+                <p className="text-[11px] text-[#667781]">
+                  Terapis Saat Ini: <span className="font-bold text-purple-700">{reassignModalTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#111b21]">Pilih Terapis Pengganti / Baru:</label>
+                <select
+                  value={reassignSelectedStaffId}
+                  onChange={(e) => setReassignSelectedStaffId(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#f0f2f5] border-0 text-xs font-semibold text-[#111b21] focus:outline-none focus:ring-2 focus:ring-[#008069]"
+                >
+                  <option value="" disabled>-- Pilih Terapis Tim --</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.role || 'Staff'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+                <button
+                  type="button"
+                  onClick={() => setReassignModalTask(null)}
+                  disabled={submittingReassign}
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={submittingReassign || !reassignSelectedStaffId}
+                  onClick={async () => {
+                    setSubmittingReassign(true);
+                    try {
+                      const res = await apiRequest(`/api/staff/reservations/${reassignModalTask.reservationId}/reassign`, {
+                        method: 'POST',
+                        body: JSON.stringify({ targetStaffId: reassignSelectedStaffId }),
+                      });
+                      if (res.success) {
+                        toast('Tugas berhasil didelegasikan ke terapis baru.', 'success');
+                        setReassignModalTask(null);
+                        fetchTasks(false);
+                      } else {
+                        toast(res.error || 'Gagal mendelegasikan tugas.', 'error');
+                      }
+                    } catch (err: any) {
+                      toast(err.message || 'Gagal mendelegasikan tugas.', 'error');
+                    } finally {
+                      setSubmittingReassign(false);
+                    }
+                  }}
+                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                >
+                  {submittingReassign ? (
+                    <>
+                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Simpan Delegasi</span>
                     </>
                   )}
                 </button>

@@ -47,6 +47,7 @@ export interface StaffTaskItem {
   pricing: StaffTaskPricing;
   shareLocationText: string | null;
   customerProfilePictureUrl?: string | null;
+  assignedStaff?: { id: string; name: string; role?: string } | null;
 }
 
 function buildAddressText(c: {
@@ -95,7 +96,12 @@ export class StaffReservationService {
    * dan perhitungan jarak berantai sekuensial (Klinik -> Pasien 1 -> Pasien 2) via Haversine.
    * Catatan keamanan: Nomor HP customer SENGAJA TIDAK di-select dari database (masking layer).
    */
-  static async getTodayTasks(staffId: string, tenantId = DEFAULT_TENANT_ID): Promise<StaffTaskItem[]> {
+  static async getTodayTasks(
+    staffId: string,
+    tenantId = DEFAULT_TENANT_ID,
+    scope: 'mine' | 'all' = 'mine',
+    isSupervisor = false
+  ): Promise<StaffTaskItem[]> {
     if (!staffId) return [];
 
     const startOfDay = new Date();
@@ -104,12 +110,17 @@ export class StaffReservationService {
     endOfDay.setHours(23, 59, 59, 999);
 
     try {
+      const whereCondition: any = {
+        tenant_id: tenantId,
+        booking_date: { gte: startOfDay, lte: endOfDay },
+      };
+
+      if (scope !== 'all' || !isSupervisor) {
+        whereCondition.assigned_staff_id = staffId;
+      }
+
       const rows = await prisma.reservation.findMany({
-        where: {
-          tenant_id: tenantId,
-          assigned_staff_id: staffId,
-          booking_date: { gte: startOfDay, lte: endOfDay },
-        },
+        where: whereCondition,
         select: {
           id: true,
           treatment_detail: true,
@@ -118,6 +129,13 @@ export class StaffReservationService {
           status: true,
           purchase_value: true,
           purchase_occurred_at: true,
+          assigned_staff: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+            },
+          },
           customer: {
             select: {
               name: true,
@@ -266,6 +284,13 @@ export class StaffReservationService {
             pricing
           ),
           customerProfilePictureUrl: cust?.profile_picture_url || null,
+          assignedStaff: (r as any).assigned_staff
+            ? {
+                id: (r as any).assigned_staff.id,
+                name: (r as any).assigned_staff.name,
+                role: (r as any).assigned_staff.role,
+              }
+            : null,
         };
       });
     } catch (err: any) {
@@ -795,11 +820,13 @@ export class StaffReservationService {
   /**
    * Guard kepemilikan: Memastikan bahwa percakapan yang diakses staff memang terhubung
    * ke customer yang memiliki reservasi tugas aktif hari ini yang ditugaskan ke staff tsb.
+   * Khusus peran supervisor (SPV CS / Admin), diperbolehkan memantau semua percakapan aktif hari ini.
    */
   static async assertConversationOwnedByStaffToday(
     conversationId: string,
     staffId: string,
-    tenantId = DEFAULT_TENANT_ID
+    tenantId = DEFAULT_TENANT_ID,
+    isSupervisor = false
   ): Promise<boolean> {
     if (!conversationId || !staffId) return false;
 
@@ -816,6 +843,18 @@ export class StaffReservationService {
 
       if (!conv || conv.tenant_id !== tenantId) return false;
 
+      if (isSupervisor) {
+        const anyToday = await prisma.reservation.findFirst({
+          where: {
+            tenant_id: tenantId,
+            customer_id: conv.customer_id,
+            booking_date: { gte: startOfDay, lte: endOfDay },
+          },
+          select: { id: true },
+        });
+        if (anyToday) return true;
+      }
+
       const owns = await prisma.reservation.findFirst({
         where: {
           tenant_id: tenantId,
@@ -830,6 +869,74 @@ export class StaffReservationService {
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error asserting conversation ownership:', err.message);
       return false;
+    }
+  }
+
+  /**
+   * Mendelegasikan / mengganti staf terapis penanggung jawab tugas reservasi.
+   * Hanya dapat dipanggil oleh role supervisor (SPV CS / Admin).
+   */
+  static async reassignTask(params: {
+    reservationId: string;
+    targetStaffId: string;
+    supervisorStaffId: string;
+    tenantId?: string;
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    const {
+      reservationId,
+      targetStaffId,
+      supervisorStaffId,
+      tenantId = DEFAULT_TENANT_ID,
+    } = params;
+
+    if (!reservationId || !targetStaffId) {
+      return { success: false, error: 'reservationId dan targetStaffId wajib diisi.' };
+    }
+
+    try {
+      // Validasi staf target aktif
+      const targetStaff = await prisma.staff.findFirst({
+        where: { id: targetStaffId, tenant_id: tenantId, active: true },
+        select: { id: true, name: true, role: true },
+      });
+
+      if (!targetStaff) {
+        return { success: false, error: 'Staff terapis yang dituju tidak ditemukan atau tidak aktif.' };
+      }
+
+      const updated = await prisma.reservation.update({
+        where: { id: reservationId },
+        data: {
+          assigned_staff_id: targetStaffId,
+        },
+        select: {
+          id: true,
+          assigned_staff_id: true,
+          customer: {
+            select: { name: true },
+          },
+        },
+      });
+
+      // Kirim notifikasi push ke staf terapis yang baru ditugaskan (jika ada layanan notifikasi)
+      try {
+        const { staffNotificationService } = await import('./staff-notification.service');
+        await staffNotificationService.sendReservationAssignmentNotification(reservationId, targetStaffId);
+      } catch (notifErr: any) {
+        console.warn('[STAFF RESERVATION] Warning: could not send reassign notification:', notifErr.message);
+      }
+
+      return {
+        success: true,
+        data: {
+          reservationId: updated.id,
+          assignedStaff: targetStaff,
+          customerName: updated.customer?.name || null,
+        },
+      };
+    } catch (err: any) {
+      console.error('[STAFF RESERVATION] Error reassigning task:', err.message);
+      return { success: false, error: err.message || 'Gagal mendelegasikan tugas.' };
     }
   }
 

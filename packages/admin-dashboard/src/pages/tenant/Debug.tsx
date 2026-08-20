@@ -384,20 +384,31 @@ function LogsSection() {
 
   const load = useCallback(async () => {
     try {
-      const res = await apiRequest(`/api/admin/debug/logs?limit=300&level=${level}`);
-      setEntries(res.data.entries || []);
-      setInstalled(res.data.installed !== false);
-      setStats(res.data.stats || {});
-      setLoading(false);
-    } catch (err) {
+      const res = await apiRequest(`/api/admin/debug/logs?limit=150&level=${level}`, { timeoutMs: 6000 });
+      if (res && res.data) {
+        setEntries(res.data.entries || []);
+        setInstalled(res.data.installed !== false);
+        setStats(res.data.stats || {});
+      }
+    } catch {
+      // Degrade gracefully
+    } finally {
       setLoading(false);
     }
   }, [level]);
 
   useEffect(() => {
+    let mounted = true;
     load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    const t = setInterval(() => {
+      if (mounted && document.visibilityState === 'visible') {
+        load();
+      }
+    }, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(t);
+    };
   }, [load]);
 
   const levelColor = (l: string) =>

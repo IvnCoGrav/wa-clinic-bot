@@ -14,6 +14,7 @@ import { getDefaultRedirect } from './config/rolePermissions';
 // Lazy load pages for fast initial bundle sizes (code-splitting rationale)
 const Overview = lazy(() => import('./pages/tenant/Overview').then(m => ({ default: m.Overview })));
 const Reservations = lazy(() => import('./pages/tenant/Reservations').then(m => ({ default: m.Reservations })));
+const TodayTreatments = lazy(() => import('./pages/tenant/TodayTreatments').then(m => ({ default: m.TodayTreatments })));
 const KnowledgeBase = lazy(() => import('./pages/tenant/KnowledgeBase').then(m => ({ default: m.KnowledgeBase })));
 const AiSandbox = lazy(() => import('./pages/tenant/AiSandbox').then(m => ({ default: m.AiSandbox })));
 const LiveChatMonitor = lazy(() => import('./pages/tenant/LiveChatMonitor').then(m => ({ default: m.LiveChatMonitor })));
@@ -109,6 +110,14 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/today-treatments" element={
+              <ProtectedRoute>
+                <Layout>
+                  <TodayTreatments />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/today" element={<Navigate to="/admin/today-treatments" replace />} />
             <Route path="/admin/staff-management" element={
               <ProtectedRoute>
                 <Layout>

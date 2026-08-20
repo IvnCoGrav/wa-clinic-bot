@@ -4,19 +4,88 @@ import { liveChatService } from '../../services/live-chat.service';
 import { auditService } from '../../services/audit.service';
 import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { prisma } from '../../db/client';
 
 export async function staffTodayRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/staff/today-tasks
    * Mengambil daftar reservasi & tugas lapangan milik staff yang sedang login untuk hari ini.
+   * Khusus supervisor (SPV CS / Admin) dapat memfilter scope='all' untuk melihat seluruh tugas tim.
    */
-  fastify.get('/api/staff/today-tasks', async (request: FastifyRequest, reply: FastifyReply) => {
-    const staffId = (request as any).staffId;
-    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+  fastify.get(
+    '/api/staff/today-tasks',
+    async (request: FastifyRequest<{ Querystring: { scope?: string } }>, reply: FastifyReply) => {
+      const staffId = (request as any).staffId;
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+      const scope = request.query.scope === 'all' && isSupervisor ? 'all' : 'mine';
 
-    const tasks = await StaffReservationService.getTodayTasks(staffId, tenantId);
-    return reply.status(200).send({ success: true, data: tasks });
+      const tasks = await StaffReservationService.getTodayTasks(staffId, tenantId, scope, isSupervisor);
+      return reply.status(200).send({ success: true, data: tasks, isSupervisor });
+    }
+  );
+
+  /**
+   * GET /api/staff/team-members
+   * Mengambil daftar staf terapis aktif untuk dropdown delegasi jadwal.
+   */
+  fastify.get('/api/staff/team-members', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    try {
+      const members = await prisma.staff.findMany({
+        where: { tenant_id: tenantId, active: true },
+        select: { id: true, name: true, role: true },
+        orderBy: { name: 'asc' },
+      });
+      return reply.status(200).send({ success: true, data: members });
+    } catch (err: any) {
+      return reply.status(200).send({ success: true, data: [] });
+    }
   });
+
+  /**
+   * POST /api/staff/reservations/:id/reassign
+   * Mendelegasikan tugas terapis ke staf lain (khusus supervisor / SPV CS / Admin).
+   */
+  fastify.post(
+    '/api/staff/reservations/:id/reassign',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { targetStaffId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+
+      if (!isSupervisor) {
+        return reply.status(403).send({ error: 'Hanya supervisor/admin yang dapat mendelegasikan tugas terapis.' });
+      }
+
+      const { id } = request.params;
+      const body = request.body as any || {};
+      const targetStaffId = body.targetStaffId || body.staffId;
+
+      const result = await StaffReservationService.reassignTask({
+        reservationId: id,
+        targetStaffId,
+        supervisorStaffId: staffId,
+        tenantId,
+      });
+
+      if (!result.success) {
+        return reply.status(400).send({ error: result.error || 'Gagal mendelegasikan tugas.' });
+      }
+
+      return reply.status(200).send({ success: true, data: result.data });
+    }
+  );
 
   /**
    * GET /api/staff/upcoming-schedule
@@ -55,7 +124,16 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
       const { id } = request.params;
 
-      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId);
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+
+      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(
+        id,
+        staffId,
+        tenantId,
+        isSupervisor
+      );
       if (!owned) {
         return reply.status(403).send({ error: 'Anda tidak memiliki akses ke percakapan ini. Akses chat hanya terbuka saat jadwal treatment aktif hari ini.' });
       }
@@ -93,7 +171,16 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
       const { text, imageB64, thumbB64, mimeType, fileName } = request.body || {};
 
-      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId);
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
+
+      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(
+        id,
+        staffId,
+        tenantId,
+        isSupervisor
+      );
       if (!owned) {
         return reply.status(403).send({ error: 'Anda tidak memiliki akses ke percakapan ini.' });
       }
@@ -362,7 +449,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/staff/live-chat/events', async (request: FastifyRequest, reply: FastifyReply) => {
     const staffId = (request as any).staffId;
+    const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
     const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+    const isSupervisor =
+      role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
 
     reply.hijack();
 
@@ -385,12 +475,13 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           event.payload?.conversation_id ||
           event.payload?.id;
 
-        // Server-side filter: hanya kirim event percakapan yang dimiliki staff hari ini
+        // Server-side filter: hanya kirim event percakapan yang dimiliki staff hari ini (atau semua jika supervisor)
         if (conversationId) {
           const isOwned = await StaffReservationService.assertConversationOwnedByStaffToday(
             conversationId,
             staffId,
-            tenantId
+            tenantId,
+            isSupervisor
           );
           if (!isOwned) return;
         }

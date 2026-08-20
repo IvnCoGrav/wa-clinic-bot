@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle, AlertCircle, XCircle, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 /**
  * UI Feedback Kit — Pengganti window.confirm() / window.alert()
@@ -44,6 +45,8 @@ const UiFeedbackContext = createContext<UiFeedbackContextValue | null>(null);
 export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toastState, setToastState] = useState<ToastState | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+
+  useBodyScrollLock(confirmState !== null);
 
   const toast = useCallback((text: string, type: ToastType = 'info') => {
     setToastState({ type, text });

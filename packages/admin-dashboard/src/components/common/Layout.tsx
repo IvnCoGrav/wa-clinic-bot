@@ -35,12 +35,14 @@ import {
   QrCode,
   Loader,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { useLiveChatNotification } from '../../hooks/useLiveChatNotification';
 import { useUiFeedback } from './UiFeedback';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
@@ -50,6 +52,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const currentRole = user?.role || 'super_admin';
   const [customRoles, setCustomRoles] = useState(() => getCustomRoles());
+
+  useBodyScrollLock(mobileMenuOpen);
 
   useEffect(() => {
     const handleRolesUpdate = () => {
@@ -141,6 +145,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
         { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare, badge: unreadLiveChatCount > 0 ? unreadLiveChatCount : undefined },
         { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
+        { name: 'Treatment Hari Ini', path: '/admin/today-treatments', icon: Sparkles },
         { name: 'Customer Database', path: '/admin/customers', icon: Users },
         { name: 'Chat Migration & Seeding', path: '/admin/chat-migration', icon: Database },
         { name: 'Customer Labels', path: '/admin/labels', icon: Tag },
@@ -152,7 +157,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     {
       title: 'Staff & Layanan',
       items: [
-        { name: 'Staff & Terapis', path: '/admin/staff-management', icon: UserCheck },
+        { name: 'Staff & Terapis', path: '/admin/staff-management', icon: Users },
         { name: 'Clinic Services', path: '/admin/services', icon: Activity },
       ],
     },
@@ -377,7 +382,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isLiveChat = location.pathname.includes('/live-chat');
 
   return (
-    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} w-full max-w-full overflow-x-hidden bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
+    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
         <div
@@ -441,6 +446,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <div
         onTouchStart={() => {
           backdropTouchStartRef.current = true;
+        }}
+        onTouchMove={(e) => {
+          if (e.cancelable) e.preventDefault();
         }}
         onTouchEnd={() => {
           if (backdropTouchStartRef.current && !justSwipedRef.current) {
@@ -575,7 +583,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content Area */}
-      <div className={`flex-1 md:pl-64 flex flex-col w-full max-w-full overflow-x-hidden ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
+      <div className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
         
         {/* Top Header */}
         <header className="border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs shrink-0 pt-[env(safe-area-inset-top,0px)] min-h-[calc(4rem+env(safe-area-inset-top,0px))] md:pt-0 md:min-h-[4rem] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]">
