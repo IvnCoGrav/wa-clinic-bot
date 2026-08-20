@@ -316,7 +316,11 @@ export const Settings: React.FC = () => {
       if (d) {
         setAiScope(d.ai_customer_scope === 'ALL' ? 'ALL' : 'NEW_ONLY');
         if (d.ai_scope_cutoff_at) {
-          setAiScopeCutoffAt(new Date(d.ai_scope_cutoff_at).toISOString().slice(0, 16));
+          const dt = new Date(d.ai_scope_cutoff_at);
+          const y = dt.getFullYear();
+          const m = String(dt.getMonth() + 1).padStart(2, '0');
+          const day = String(dt.getDate()).padStart(2, '0');
+          setAiScopeCutoffAt(`${y}-${m}-${day}`);
         }
       }
       if (res?.summary) setAiScopeSummary(res.summary);
@@ -325,22 +329,34 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleSaveAiScope = async () => {
+  const handleUpdateAiScope = async (newScope?: 'NEW_ONLY' | 'ALL', newCutoffDate?: string) => {
+    const targetScope = newScope !== undefined ? newScope : aiScope;
+    const targetCutoff = newCutoffDate !== undefined ? newCutoffDate : aiScopeCutoffAt;
+
+    if (newScope !== undefined) setAiScope(newScope);
+    if (newCutoffDate !== undefined) setAiScopeCutoffAt(newCutoffDate);
+
     setSavingAiScope(true);
     try {
-      const body: any = { aiCustomerScope: aiScope };
-      if (aiScopeCutoffAt) {
-        const dt = new Date(aiScopeCutoffAt);
-        if (!isNaN(dt.getTime())) body.aiScopeCutoffAt = dt.toISOString();
+      const body: any = { aiCustomerScope: targetScope };
+      if (targetCutoff) {
+        const dt = new Date(`${targetCutoff}T00:00:00`);
+        if (!isNaN(dt.getTime())) {
+          body.aiScopeCutoffAt = dt.toISOString();
+        }
       }
       const res = await apiRequest('/api/admin/ai-rollout-scope', { method: 'PATCH', body });
       const d = res?.data;
       if (d?.ai_scope_cutoff_at) {
-        setAiScopeCutoffAt(new Date(d.ai_scope_cutoff_at).toISOString().slice(0, 16));
+        const dt = new Date(d.ai_scope_cutoff_at);
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        setAiScopeCutoffAt(`${y}-${m}-${day}`);
       }
       if (res?.summary) setAiScopeSummary(res.summary);
       toast(res?.message || 'AI Rollout Scope tersimpan.', 'success');
-      if (aiScope === 'ALL') {
+      if (targetScope === 'ALL') {
         toast('Semua customer kini eligible AI. Conversation legacy yang tersenyap tetap di HUMAN_HANDLING — release manual via panel per-customer.', 'info');
       }
     } catch (err: any) {
@@ -713,12 +729,10 @@ export const Settings: React.FC = () => {
         savingAiRouter={savingAiRouter}
         handleToggleAiRouter={handleToggleAiRouter}
         aiScope={aiScope}
-        setAiScope={setAiScope}
         aiScopeCutoffAt={aiScopeCutoffAt}
-        setAiScopeCutoffAt={setAiScopeCutoffAt}
         aiScopeSummary={aiScopeSummary}
         savingAiScope={savingAiScope}
-        handleSaveAiScope={handleSaveAiScope}
+        handleUpdateAiScope={handleUpdateAiScope}
       />
 
       {/* Meta Pixel & CAPI Settings */}
