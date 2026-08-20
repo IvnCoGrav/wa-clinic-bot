@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent } from '../../services/api';
+import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent, sendManualCapiEvent, fetchManualCapiHistory } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import {
@@ -20,6 +20,10 @@ import {
   Copy,
   Check,
   Target,
+  User,
+  Phone,
+  DollarSign,
+  Clock,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------- Types
@@ -40,6 +44,22 @@ interface ClickEntry {
   createdAt: string;
   status: 'MATCHED' | 'PENDING';
   customer: { id: string; name: string | null; phone: string | null } | null;
+}
+
+interface ManualHistoryItem {
+  id: string;
+  action: string;
+  adminIdentity: string;
+  createdAt: string;
+  phone: string;
+  name: string;
+  eventName: string;
+  value: number | null;
+  currency: string;
+  status: 'SUCCESS' | 'FAILED';
+  message: string;
+  testEventCode?: string | null;
+  rawPayload: any;
 }
 
 interface MetaSummary {
@@ -79,29 +99,56 @@ const fmtTime = (iso?: string | null) => {
   return d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
 };
 
-function toDateInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+const toDateInput = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
+/**
+ * Menganalisis string User-Agent menjadi ringkasan perangkat yang informatif bagi pengguna.
+ */
 function parseDeviceSummary(ua?: string | null): string {
-  if (!ua) return 'Perangkat Tidak Dikenal';
-  if (ua.includes('facebookexternalhit')) return 'Meta Review Bot';
-  if (ua.includes('Instagram')) {
-    if (ua.includes('Android')) return 'Instagram App (Android)';
-    if (ua.includes('iPhone')) return 'Instagram App (iPhone)';
-    return 'Instagram App';
+  if (!ua) return 'Perangkat Tidak Diketahui';
+  const lower = ua.toLowerCase();
+
+  if (lower.includes('facebookexternalhit') || lower.includes('facebot') || lower.includes('meta-externalagent')) {
+    return 'Meta Review Bot';
   }
-  if (ua.includes('FBAN') || ua.includes('FBAV')) {
-    if (ua.includes('Android')) return 'Facebook App (Android)';
-    if (ua.includes('iPhone')) return 'Facebook App (iPhone)';
-    return 'Facebook App';
+  if (lower.includes('googlebot')) return 'Googlebot';
+  if (lower.includes('bytespider') || lower.includes('bingbot')) return 'Search Bot / Crawler';
+
+  let appWrapper = '';
+  if (lower.includes('fban') || lower.includes('fbav') || lower.includes('fb_iab')) appWrapper = 'Facebook App';
+  else if (lower.includes('instagram')) appWrapper = 'Instagram App';
+  else if (lower.includes('tiktok')) appWrapper = 'TikTok App';
+  else if (lower.includes('whatsapp')) appWrapper = 'WhatsApp In-App';
+
+  let os = '';
+  if (lower.includes('iphone')) os = 'iPhone';
+  else if (lower.includes('ipad')) os = 'iPad';
+  else if (lower.includes('android')) {
+    const androidMatch = ua.match(/Android\s([0-9\.]+)/i);
+    os = androidMatch ? `Android ${androidMatch[1]}` : 'Android';
+  } else if (lower.includes('windows')) os = 'Windows PC';
+  else if (lower.includes('macintosh') || lower.includes('mac os')) os = 'macOS';
+  else if (lower.includes('linux')) os = 'Linux';
+
+  let browser = '';
+  if (!appWrapper) {
+    if (lower.includes('chrome') && !lower.includes('edg') && !lower.includes('opr')) browser = 'Chrome';
+    else if (lower.includes('safari') && !lower.includes('chrome')) browser = 'Safari';
+    else if (lower.includes('firefox')) browser = 'Firefox';
+    else if (lower.includes('edg')) browser = 'Edge';
+    else if (lower.includes('samsungbrowser')) browser = 'Samsung Internet';
+    else browser = 'Web Browser';
   }
-  if (ua.includes('iPhone')) return 'Mobile Safari (iPhone)';
-  if (ua.includes('Android')) return 'Mobile Chrome (Android)';
-  if (ua.includes('Windows')) return 'Desktop (Windows)';
-  if (ua.includes('Macintosh')) return 'Desktop (Mac)';
-  return 'Mobile Browser';
+
+  if (appWrapper && os) return `${appWrapper} (${os})`;
+  if (appWrapper) return appWrapper;
+  if (browser && os) return `${browser} (${os})`;
+  return os || browser || 'Web Browser';
 }
 
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: React.ReactNode }) {
@@ -175,8 +222,18 @@ export const MetaClickCatcher: React.FC = () => {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<CapiTestResult | null>(null);
 
+  // Manual Event Sender & History State
+  const [manualPhone, setManualPhone] = useState('087751148065');
+  const [manualName, setManualName] = useState('');
+  const [manualEvent, setManualEvent] = useState('Purchase');
+  const [manualValue, setManualValue] = useState('250000');
+  const [manualTestCode, setManualTestCode] = useState('');
+  const [sendingManual, setSendingManual] = useState(false);
+  const [manualHistory, setManualHistory] = useState<ManualHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
   // JSON modal inspector
-  const [selectedItem, setSelectedItem] = useState<ClickEntry | null>(null);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const copyText = (txt: string, id: string) => {
@@ -240,10 +297,59 @@ export const MetaClickCatcher: React.FC = () => {
     setPage(1);
   };
 
-  // Paksa reload kedua sumber data pakai filter yang sedang berlaku.
+  const loadManualHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await fetchManualCapiHistory();
+      if (res?.success && Array.isArray(res.data)) {
+        setManualHistory(res.data);
+      }
+    } catch (err: any) {
+      console.warn('Gagal memuat riwayat manual CAPI:', err.message);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadManualHistory();
+  }, [loadManualHistory]);
+
+  const handleSendManualEvent = async () => {
+    if (!manualPhone.trim()) {
+      toast('Nomor WhatsApp wajib diisi.', 'error');
+      return;
+    }
+    setSendingManual(true);
+    try {
+      const res = await sendManualCapiEvent({
+        phone: manualPhone.trim(),
+        name: manualName.trim() || undefined,
+        eventName: manualEvent,
+        value: manualValue ? Number(manualValue) : undefined,
+        currency: 'IDR',
+        testEventCode: manualTestCode.trim() || undefined,
+      });
+
+      if (res?.success) {
+        toast(`Event ${manualEvent} untuk ${manualPhone} berhasil dikirim ke Meta CAPI!`, 'success');
+        loadManualHistory();
+        loadSummary(startDate, endDate, utmCampaign, search);
+      } else {
+        toast(`Gagal mengirim event: ${res?.message || 'Meta CAPI menolak request'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Error kirim event: ${err.message}`, 'error');
+    } finally {
+      setSendingManual(false);
+    }
+  };
+
+  // Paksa reload seluruh sumber data pakai filter yang sedang berlaku.
   const handleRefresh = () => {
     loadSummary(startDate, endDate, utmCampaign, search);
     loadClicks({ startDate, endDate, status, search, utmCampaign, page });
+    loadManualHistory();
   };
 
   const handleResetFilters = () => {
@@ -560,7 +666,219 @@ export const MetaClickCatcher: React.FC = () => {
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} loading={loadingClicks} totalItems={total} loadedItems={entries.length} />
       </section>
 
-      {/* ---------------- 4. CAPI Health & Live Tester ---------------- */}
+      {/* ---------------- 4. Manual CAPI Event Sender & History (2 Cards Side-by-Side) ---------------- */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Card 1: Kirim Manual Event (5 cols) */}
+        <div className="lg:col-span-5 bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-[#f0f2f5] pb-2.5">
+              <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+                <Send size={16} className="text-[#008069]" />
+                <span>Kirim Manual Event CAPI</span>
+              </h3>
+              <span className="text-[10px] font-bold text-[#008069] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Direct Hash PII
+              </span>
+            </div>
+            <p className="text-xs text-[#667781]">
+              Kirimkan event konversi (Purchase, Contact, Lead, dll.) secara langsung ke Meta Conversion API untuk nomor WhatsApp tertentu.
+            </p>
+
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                  Nomor WhatsApp Pelanggan <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8696a0]">
+                    <Phone size={13} />
+                  </span>
+                  <input
+                    type="text"
+                    value={manualPhone}
+                    onChange={(e) => setManualPhone(e.target.value)}
+                    placeholder="mis. 087751148065 atau 628..."
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl pl-8 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                    Nama Pasien (Opsional)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                      <User size={13} />
+                    </span>
+                    <input
+                      type="text"
+                      value={manualName}
+                      onChange={(e) => setManualName(e.target.value)}
+                      placeholder="mis. Bunda Siti"
+                      className="w-full bg-white border border-[#d1d7db] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                    Nama Event <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={manualEvent}
+                    onChange={(e) => setManualEvent(e.target.value)}
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  >
+                    <option value="Purchase">Purchase (Pembayaran)</option>
+                    <option value="Contact">Contact (Chat Masuk)</option>
+                    <option value="Lead">Lead (MQL / Minat)</option>
+                    <option value="InitiateCheckout">InitiateCheckout</option>
+                    <option value="AddToCart">AddToCart (Klik CTA)</option>
+                    <option value="ViewContent">ViewContent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                    Nilai / Value (Rp)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                      <DollarSign size={13} />
+                    </span>
+                    <input
+                      type="number"
+                      value={manualValue}
+                      onChange={(e) => setManualValue(e.target.value)}
+                      placeholder="mis. 250000"
+                      className="w-full bg-white border border-[#d1d7db] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                    Test Event Code
+                  </label>
+                  <input
+                    type="text"
+                    value={manualTestCode}
+                    onChange={(e) => setManualTestCode(e.target.value)}
+                    placeholder="TESTxxxx (opsional)"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-[#f0f2f5]">
+            <button
+              onClick={handleSendManualEvent}
+              disabled={sendingManual || !manualPhone.trim()}
+              className="w-full py-2.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
+            >
+              {sendingManual ? <Loader size={14} className="animate-spin" /> : <Send size={14} />}
+              <span>{sendingManual ? 'Mengirim ke Meta CAPI...' : 'Kirim Event ke Meta CAPI'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 2: Tabel Riwayat Manual Event (7 cols) */}
+        <div className="lg:col-span-7 bg-white border border-[#e9edef] rounded-2xl p-5 space-y-3 shadow-xs flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-[#f0f2f5] pb-2.5">
+              <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+                <Activity size={16} className="text-[#008069]" />
+                <span>Riwayat Manual Event Terkirim</span>
+              </h3>
+              <button
+                onClick={loadManualHistory}
+                className="text-[#008069] hover:text-[#00a884] text-xs font-semibold flex items-center gap-1"
+                title="Segarkan Riwayat"
+              >
+                <RefreshCw size={12} className={loadingHistory ? 'animate-spin' : ''} />
+                <span>Segarkan</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto min-h-[220px] max-h-[290px] overflow-y-auto">
+              {loadingHistory ? (
+                <div className="py-12 text-center text-xs text-[#667781] flex flex-col items-center gap-2">
+                  <Loader size={18} className="animate-spin text-[#008069]" />
+                  <span>Memuat riwayat pengiriman...</span>
+                </div>
+              ) : manualHistory.length === 0 ? (
+                <div className="py-12 text-center text-xs text-[#8696a0] italic">
+                  Belum ada riwayat manual event yang dikirimkan.
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#f0f2f5] text-[#667781] text-[10px] uppercase font-bold sticky top-0 bg-white">
+                      <th className="py-1.5 px-2">Waktu</th>
+                      <th className="py-1.5 px-2">Event</th>
+                      <th className="py-1.5 px-2">WhatsApp / Customer</th>
+                      <th className="py-1.5 px-2">Nominal</th>
+                      <th className="py-1.5 px-2">Status</th>
+                      <th className="py-1.5 px-2 text-right">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f0f2f5]">
+                    {manualHistory.map((h) => (
+                      <tr key={h.id} className="hover:bg-[#f8f9fa] transition">
+                        <td className="py-2 px-2 text-[11px] text-[#667781] whitespace-nowrap">
+                          {fmtTime(h.createdAt)}
+                        </td>
+                        <td className="py-2 px-2">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            h.eventName === 'Purchase' ? 'bg-purple-100 text-purple-800' :
+                            h.eventName === 'Lead' ? 'bg-emerald-100 text-emerald-800' :
+                            h.eventName === 'Contact' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            {h.eventName}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-[11px]">
+                          <p className="font-mono text-[#111b21] font-semibold">{h.phone}</p>
+                          {h.name && h.name !== '-' && <p className="text-[10px] text-[#8696a0]">{h.name}</p>}
+                        </td>
+                        <td className="py-2 px-2 text-[11px] font-medium text-[#111b21]">
+                          {h.value ? `Rp ${Number(h.value).toLocaleString('id-ID')}` : '-'}
+                        </td>
+                        <td className="py-2 px-2">
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            h.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}>
+                            {h.status === 'SUCCESS' ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
+                            <span>{h.status}</span>
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-right">
+                          <button
+                            onClick={() => setSelectedItem(h.rawPayload || h)}
+                            className="px-2 py-0.5 rounded bg-[#f0f2f5] hover:bg-[#e9edef] text-[10px] font-bold text-[#111b21] transition"
+                            title="Lihat Detail Payload"
+                          >
+                            JSON
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+          <p className="text-[11px] text-[#8696a0] pt-1">
+            * Riwayat audit pengiriman event konversi langsung ke Pixel Meta: 1465457801784141.
+          </p>
+        </div>
+      </section>
+
+      {/* ---------------- 5. CAPI Health & Live Tester ---------------- */}
       <section className="bg-white border border-[#e9edef] rounded-2xl p-5 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
