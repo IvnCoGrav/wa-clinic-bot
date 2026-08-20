@@ -136,27 +136,33 @@ export async function landingRoutes(fastify: FastifyInstance) {
       rawMsg = (tenantRec as any)?.greetings_text || tenantRec?.format_visit || 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment';
     }
 
-    // Capture attribution & generate tracking code if needed
+    // Capture attribution & generate tracking code if needed (BOT diabaikan kecuali test eksplisit)
     let trackingCode = '';
+    const ua = request.headers['user-agent'] || '';
+    const isTest = query.is_test === 'true' || query.test === '1' || query.debug === 'true' || query.utm_source === 'test' || query.divisi === 'test';
+    
     try {
-      const { generateTrackingCode, memoryAdClicks } = await import('./tracking.route');
-      const ip = (request.headers['x-forwarded-for'] as string) || request.ip || '';
-      const ua = request.headers['user-agent'] || '';
-      const { trackingCode: tc, record } = await generateTrackingCode({
-        fbclid: query.fbclid || null,
-        fbp: query.fbp || null,
-        fbc: query.fbc || null,
-        ipAddress: ip.split(',')[0].trim(),
-        userAgent: ua,
-        landingUrl: request.url,
-        utmSource: query.utm_source || query.divisi || null,
-        utmMedium: query.utm_medium || null,
-        utmCampaign: query.utm_campaign || null,
-        phone: query.phone || null, // URL parameter 'phone' hanya dipakai sebagai metadata atribusi di AdClick
-        tenant_id: content.tenant_id,
-      });
-      trackingCode = tc;
-      memoryAdClicks.set(trackingCode, record);
+      const { generateTrackingCode, memoryAdClicks, isBotOrCrawler } = await import('./tracking.route');
+      const isBot = !isTest && isBotOrCrawler(ua);
+
+      if (!isBot) {
+        const ip = (request.headers['x-forwarded-for'] as string) || request.ip || '';
+        const { trackingCode: tc, record } = await generateTrackingCode({
+          fbclid: query.fbclid || null,
+          fbp: query.fbp || null,
+          fbc: query.fbc || null,
+          ipAddress: ip.split(',')[0].trim(),
+          userAgent: ua,
+          landingUrl: request.url,
+          utmSource: isTest ? (query.utm_source || 'test') : (query.utm_source || query.divisi || null),
+          utmMedium: query.utm_medium || null,
+          utmCampaign: query.utm_campaign || null,
+          phone: query.phone || null, // URL parameter 'phone' hanya dipakai sebagai metadata atribusi di AdClick
+          tenant_id: content.tenant_id,
+        });
+        trackingCode = tc;
+        memoryAdClicks.set(trackingCode, record);
+      }
     } catch (err: any) {
       request.log.warn(`[CTA TRACKING ERROR] ${err.message}`);
     }
