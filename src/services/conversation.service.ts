@@ -409,7 +409,7 @@ export class ConversationService {
       const customerName = conversation.customer?.name || 'Pelanggan';
       const cleanPhone = phone.replace(/\D/g, '');
       const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-      const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: HUMAN_HANDLING\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
+      const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: Human Handling (CS Takeover)\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
 
       void alertService.notifyAlert({
         type: AlertType.CS_ESCALATION,

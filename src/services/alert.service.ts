@@ -181,11 +181,21 @@ export class AlertService {
           bodyPayload.message_thread_id = messageThreadId;
         }
 
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        let response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bodyPayload),
         });
+
+        // Fallback retry tanpa parse_mode jika terjadi entity parsing error (HTTP 400)
+        if (!response.ok && response.status === 400 && bodyPayload.parse_mode) {
+          delete bodyPayload.parse_mode;
+          response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyPayload),
+          });
+        }
 
         if (response.ok) {
           return { sent: true, throttled: false, channel: 'telegram' };
