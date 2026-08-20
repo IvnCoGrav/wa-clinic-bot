@@ -4,8 +4,11 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Added & Improved — Simplified AI Rollout Scope Date Picker with Instant Auto-Sync (2026-08-20)
+### Added & Fixed — Simplified AI Rollout Scope Date Picker & Auto-Serialize JSON Fix (2026-08-20)
 
+- **Perbaikan JSON Serialization pada Client Admin API (`api.ts` & `Settings.tsx`)**:
+  - Memperbaiki `apiRequest` agar secara otomatis melakukan `JSON.stringify(body)` jika argumen `body` berupa objek JavaScript murni dan bukan `FormData`/`Blob`.
+  - Mencegah error `is not valid JSON` (`[object Object]`) saat melakukan auto-save pengaturan AI Rollout Scope.
 - **Penyederhanaan Input Tanggal Cutoff Pelanggan Baru (`AiRouterPanel.tsx` & `Settings.tsx`)**:
   - Mengubah input teks ISO / datetime yang rumit menjadi input tanggal kalender native (`<input type="date">`), sehingga user cukup memilih tanggal tanpa perlu mengetik jam atau format string ISO manual.
   - **Sinkronisasi Instan Langsung ke Server (*Instant Auto-Sync*)**: Perubahan pilihan radio (`NEW_ONLY` vs `ALL`) maupun penggantian tanggal cutoff langsung disimpan secara otomatis ke server tanpa perlu menekan tombol submit terpisah.
