@@ -84,6 +84,26 @@ function toDateInput(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function parseDeviceSummary(ua?: string | null): string {
+  if (!ua) return 'Perangkat Tidak Dikenal';
+  if (ua.includes('facebookexternalhit')) return 'Meta Review Bot';
+  if (ua.includes('Instagram')) {
+    if (ua.includes('Android')) return 'Instagram App (Android)';
+    if (ua.includes('iPhone')) return 'Instagram App (iPhone)';
+    return 'Instagram App';
+  }
+  if (ua.includes('FBAN') || ua.includes('FBAV')) {
+    if (ua.includes('Android')) return 'Facebook App (Android)';
+    if (ua.includes('iPhone')) return 'Facebook App (iPhone)';
+    return 'Facebook App';
+  }
+  if (ua.includes('iPhone')) return 'Mobile Safari (iPhone)';
+  if (ua.includes('Android')) return 'Mobile Chrome (Android)';
+  if (ua.includes('Windows')) return 'Desktop (Windows)';
+  if (ua.includes('Macintosh')) return 'Desktop (Mac)';
+  return 'Mobile Browser';
+}
+
 function StatCard({ label, value, tone = 'default', sub }: { label: string; value: React.ReactNode; tone?: 'ok' | 'warn' | 'err' | 'default'; sub?: React.ReactNode }) {
   const toneCls =
     tone === 'ok' ? 'text-[#008069]' : tone === 'warn' ? 'text-amber-700' : tone === 'err' ? 'text-rose-600' : 'text-[#111b21]';
@@ -444,7 +464,7 @@ export const MetaClickCatcher: React.FC = () => {
                 <th className="py-2.5 px-3">Status Atribusi</th>
                 <th className="py-2.5 px-3">Data Pasien (Nama &amp; WhatsApp)</th>
                 <th className="py-2.5 px-3">UTM Campaign / Sumber</th>
-                <th className="py-2.5 px-3">Meta Tracking Data</th>
+                <th className="py-2.5 px-3">Perangkat &amp; IP</th>
                 <th className="py-2.5 px-3 text-right">Detail</th>
               </tr>
             </thead>
@@ -515,11 +535,12 @@ export const MetaClickCatcher: React.FC = () => {
                     )}
                   </td>
                   <td className="py-2.5 px-3">
-                    <MetaTiny label="fbclid" value={e.fbclid} />
-                    <MetaTiny label="fbp" value={e.fbp} />
-                    <MetaTiny label="fbc" value={e.fbc} />
-                    {e.ipAddress && <p className="text-[10px]"><span className="text-[#8696a0] uppercase font-bold">IP:</span> <span className="text-[#111b21] font-mono">{e.ipAddress}</span></p>}
-                    {e.userAgent && <p className="text-[10px] text-[#8696a0] truncate max-w-[220px]" title={e.userAgent}>{e.userAgent}</p>}
+                    <p className="text-[#111b21] font-medium text-[11px]">{parseDeviceSummary(e.userAgent)}</p>
+                    {e.ipAddress && (
+                      <p className="text-[10px] text-[#8696a0] font-mono mt-0.5">
+                        <span className="font-semibold text-[#667781]">IP:</span> {e.ipAddress}
+                      </p>
+                    )}
                   </td>
                   <td className="py-2.5 px-3 text-right">
                     <button
