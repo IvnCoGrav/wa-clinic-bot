@@ -178,7 +178,16 @@ export class CapiService {
     tenantId?: string;
     customData?: Record<string, any>;
     eventTime?: number;
-  }): Promise<{ success: boolean; message?: string }> {
+  }): Promise<{
+    success: boolean;
+    message?: string;
+    status?: number;
+    fbtrace_id?: string;
+    events_received?: number;
+    metaResponse?: any;
+    sentPayload?: any;
+    pixelId?: string;
+  }> {
     const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime } = params;
 
     // 1. Meta CAPI Sandbox / Dummy Test Guard (Pencegahan pencemaran data conversion pixel)
@@ -376,10 +385,25 @@ export class CapiService {
 
       if (response && response.status === 200) {
         console.log(`[CAPI SUCCESS] Successfully sent event ${eventName} to Meta CAPI.`);
-        return { success: true };
+        return {
+          success: true,
+          status: response.status,
+          fbtrace_id: response.data?.fbtrace_id,
+          events_received: response.data?.events_received,
+          metaResponse: response.data,
+          sentPayload: payload,
+          pixelId,
+        };
       } else {
         console.error(`[CAPI FAILURE] Meta responded with status ${response?.status || 'unknown'}:`, response?.data);
-        return { success: false, message: `Status code ${response?.status || 'unknown'}` };
+        return {
+          success: false,
+          status: response?.status,
+          message: `Status code ${response?.status || 'unknown'}`,
+          metaResponse: response?.data,
+          sentPayload: payload,
+          pixelId,
+        };
       }
     } catch (error: any) {
       // 6. SILENT FAIL: Log error tetapi jangan throw Exception agar tidak merusak critical path caller
