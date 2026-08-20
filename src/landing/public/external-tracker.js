@@ -1,54 +1,102 @@
 /*!
  * external-tracker.js
- * Jembatan Landing Page Eksternal -> endpoint /cta wa-clinic-bot (Skema 2: URL Redirect).
+ * Jembatan Landing Page Eksternal (Scalev, Berdu, WordPress, HTML) -> Meta Pixel & endpoint /cta wa-clinic-bot.
  *
- * Skema kerja:
- *   1. Landing Page Eksternal (WordPress / Elementor / HTML polos) memakai tombol CTA
- *      yang mengarah ke endpoint /cta bot:  https://<domain-bot>.com/cta?slug=SLUG_ANDA
- *   2. Skrip ini menyalin parameter atribusi dari address bar (fbclid, gclid, utm_*, dll)
- *      ke query string link CTA tersebut secara otomatis.
- *   3. Endpoint /cta yang memproses atribusi itu (generate trackingCode + event Meta
- *      Pixel saat redirect ke WhatsApp) — jadi tetap berfungsi penuh tanpa perlu
- *      mengubah manual tombol CTA di setiap LP Eksternal.
- *
- * Petunjuk pemasangan lengkap: docs/INTEGRASI_LANDING_EXTERNAL.md
- *
- * Sifat skrip:
- *   - READ-ONLY dan fail-open: hanya MENAMBAH query string pada link ber-arah /cta;
- *     tidak mengubah DOM lain, tidak menimpa event handler, tidak menambah listener.
- *     Error apa pun (mis. `URL`/`URLSearchParams` tidak tersedia) di-swallow —
- *     tombol CTA tetap berfungsi normal.
- *   - Idempoten: link yang sudah diproses diberi atribut `data-external-tracker-applied`.
- *     Parameter yang SUDAH ada di href tidak ditimpa (contoh: ?slug= di link tetap aman).
- *   - Auto-scan ulang via MutationObserver untuk menangkap tombol CTA yang baru dirender
- *     oleh Elementor / WP Builder setelah DOMContentLoaded.
+ * Fitur Utama:
+ *   1. Auto Meta Pixel: Otomatis memuat library Meta Pixel (fbevents.js), inisialisasi Pixel ID,
+ *      dan menembakkan event PageView di domain eksternal secara non-intrusif & idempoten.
+ *   2. Auto UTM & FBCLID Transfer: Menyalin parameter atribusi (fbclid, fbp, fbc, utm_*) dari
+ *      address bar ke semua tombol CTA yang mengarah ke endpoint /cta bot.
+ *   3. Fail-open & Idempoten: Tidak akan pernah menghentikan alur kerja halaman bila terjadi error jaringan.
  */
 (function () {
   'use strict';
 
-  // Whitelist parameter atribusi yang disalin dari address bar ke link CTA.
-  // Parameter skema sistem (slug, p, phone, msg, greetings, dll.) sengaja TIDAK
-  // ikut: itu bagian dari link CTA itu sendiri (di-set oleh pemilik LP) — tidak
-  // boleh tertimpa oleh param acak yang kebetulan muncul di URL LP.
+  // Default Pixel ID Klinik (Kala Baby Spa)
+  var DEFAULT_PIXEL_ID = '1465457801784141';
+
+  // Whitelist parameter atribusi yang disalin dari address bar ke link CTA
   var TRACKED_PARAMS = [
-    // Meta / Facebook & Instagram ads
     'fbclid', 'fbp', 'fbc',
-    // Google Ads
     'gclid', 'gclsrc', 'wbraid', 'gbraid',
-    // Microsoft / Bing ads
     'msclkid',
-    // TikTok ads
     'ttclid',
-    // UTM standar
     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id',
-    // Lainnya (IG story / share)
     'igshid'
   ];
 
-  // Path endpoint tujuan terdapat. Harus sesuai dengan rute `/cta` milik bot.
   var CTA_PATH = '/cta';
 
-  // Membaca semua param atribusi dari address bar (search + bagian hash bila dipakai).
+  // -------------------------------------------------------------------------
+  // 1. AUTO META PIXEL LOADER & PAGEVIEW
+  // -------------------------------------------------------------------------
+  function getScriptPixelId() {
+    try {
+      var currentScript = document.currentScript;
+      if (!currentScript) {
+        var scripts = document.getElementsByTagName('script');
+        for (var i = scripts.length - 1; i >= 0; i--) {
+          if (scripts[i].src && scripts[i].src.indexOf('external-tracker.js') !== -1) {
+            currentScript = scripts[i];
+            break;
+          }
+        }
+      }
+      if (currentScript && currentScript.src) {
+        var qIdx = currentScript.src.indexOf('?');
+        if (qIdx !== -1) {
+          var sp = new URLSearchParams(currentScript.src.slice(qIdx + 1));
+          var p = sp.get('pixel') || sp.get('p') || sp.get('pixel_id');
+          if (p && /^\d+$/.test(p)) return p;
+        }
+      }
+    } catch (_) {}
+    return DEFAULT_PIXEL_ID;
+  }
+
+  function initMetaPixel() {
+    var pixelId = getScriptPixelId();
+    if (!pixelId) return;
+
+    // Load Meta Base Code jika window.fbq belum ada
+    if (typeof window.fbq === 'undefined') {
+      (function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = true;
+        n.version = '2.0';
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = true;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        if (s && s.parentNode) {
+          s.parentNode.insertBefore(t, s);
+        } else {
+          document.head.appendChild(t);
+        }
+      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    }
+
+    // Inisialisasi Pixel & Kirim PageView (hanya 1x per lifecycle halaman)
+    if (!window._kala_pixel_initialized) {
+      window._kala_pixel_initialized = true;
+      try {
+        window.fbq('init', pixelId);
+        window.fbq('track', 'PageView');
+      } catch (err) {
+        /* fail-open */
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 2. AUTO UTM & ATTRIBUTION TO CTA BUTTONS
+  // -------------------------------------------------------------------------
   function collectUrlParams() {
     if (typeof window.URLSearchParams === 'undefined') return {};
     var raw = window.location.search || '';
@@ -65,13 +113,10 @@
           params[TRACKED_PARAMS[i]] = value;
         }
       }
-    } catch (e) {
-      /* fail-open: URLSearchParams gagal parse -> tidak ada yang disalin */
-    }
+    } catch (e) {}
     return params;
   }
 
-  // Salin atribusi ke satu link. Gagal diam-diam untuk link non-/cta.
   function applyToAnchor(anchor, params) {
     var href = anchor.getAttribute('href');
     if (!href || typeof URL === 'undefined') return;
@@ -81,8 +126,9 @@
     } catch (e) {
       return;
     }
-    // Hanya link path exact /cta (apapun origin / domainnya).
-    if (url.pathname !== CTA_PATH) return;
+    
+    // Cocokkan link yang mengarah ke endpoint /cta
+    if (url.pathname !== CTA_PATH && !url.pathname.endsWith('/cta')) return;
 
     var changed = false;
     for (var key in params) {
@@ -105,20 +151,22 @@
   }
 
   function boot() {
-    var params = collectUrlParams();
-    if (!Object.keys(params).length) return; // tak ada atribusi -> selesai
+    // 1. Jalankan Auto Meta Pixel
+    initMetaPixel();
 
+    // 2. Scan & salin param URL ke CTA
+    var params = collectUrlParams();
     function scanNow() {
-      scan(document.querySelectorAll('a[href]'), params);
+      if (Object.keys(params).length) {
+        scan(document.querySelectorAll('a[href]'), params);
+      }
     }
     scanNow();
 
-    // Pantau skenario konten dinamis (Elementor, WP, SPA) yang menambahkan CTA.
+    // Pantau konten dinamis (Elementor, Scalev, Nuxt SPA)
     if (typeof window.MutationObserver === 'function') {
       var debounceId = null;
       var observer = new MutationObserver(function () {
-        // Throttle (debounce) 250 ms: skrip tidak mengubah atribut (hanya query link),
-        // dan observer hanya memantau childList -> tidak ada loop umpan balik.
         if (debounceId) return;
         debounceId = setTimeout(function () {
           debounceId = null;
@@ -129,7 +177,7 @@
     }
   }
 
-  // Jalankan segera bila DOM sudah siap; kalau belum, tunggu DOMContentLoaded.
+  // Eksekusi segera
   if (document.body) {
     boot();
   } else if (document.addEventListener) {
