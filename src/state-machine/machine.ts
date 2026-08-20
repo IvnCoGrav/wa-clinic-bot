@@ -108,7 +108,8 @@ export class ConversationStateMachine {
     // 1. Audit Log Pesan Inbound (Masuk)
     // Skip jika pesan sudah di-log oleh BurstCoalesceService (_preLogged) — pesan asli
     // tercatat realtime saat diterima, job hasil merge tidak perlu mencatat ulang.
-    const inboundContent = incomingMessage.text?.body
+    const inboundContent = (incomingMessage as any).originalText
+      || incomingMessage.text?.body
       || (incomingMessage.location ? `[LOCATION SHARE: Lat ${incomingMessage.location.latitude}, Lng ${incomingMessage.location.longitude}]`
         : (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : incomingMessage.media ? '[MEDIA]' : '[MEDIA/UNKNOWN]'));
     if (!(incomingMessage as any)._preLogged) {
