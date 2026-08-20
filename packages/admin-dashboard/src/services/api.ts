@@ -53,6 +53,7 @@ export function testCapiEvent<T = any>(body: {
 export function sendManualCapiEvent<T = any>(body: {
   phone: string;
   name?: string;
+  treatment?: string;
   eventName: string;
   value?: number;
   currency?: string;

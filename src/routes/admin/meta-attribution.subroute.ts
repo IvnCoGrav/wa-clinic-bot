@@ -353,12 +353,12 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/debug/meta-manual-send',
     async (
       request: FastifyRequest<{
-        Body: { phone: string; name?: string; eventName: string; value?: number; currency?: string; testEventCode?: string };
+        Body: { phone: string; name?: string; treatment?: string; eventName: string; value?: number; currency?: string; testEventCode?: string };
       }>,
       reply: FastifyReply
     ) => {
       const body = request.body || ({} as any);
-      const { phone, name, eventName, value, currency, testEventCode } = body;
+      const { phone, name, treatment, eventName, value, currency, testEventCode } = body;
 
       if (!phone || !phone.trim()) {
         return reply.status(400).send({ success: false, error: 'Nomor WhatsApp wajib diisi.' });
@@ -399,6 +399,9 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           tenantId: DEFAULT_TENANT_ID,
           customData: {
             source: 'MANUAL_DASHBOARD_SEND',
+            treatment: treatment ? treatment.trim() : undefined,
+            content_name: treatment ? treatment.trim() : undefined,
+            content_type: 'product',
             testEventCode: testEventCode ? testEventCode.trim() : undefined,
             adminSender: (request as any).adminIdentity || 'Admin CS',
           },
@@ -415,6 +418,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             name: effectiveCustomer.name || name || 'Customer',
           },
           conversionData: {
+            treatment: treatment ? treatment.trim() : null,
             value: value !== undefined && value !== null && !isNaN(Number(value)) ? Number(value) : null,
             currency: currency || 'IDR',
             testEventCode: testEventCode ? testEventCode.trim() : null,

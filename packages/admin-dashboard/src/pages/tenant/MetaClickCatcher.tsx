@@ -24,6 +24,7 @@ import {
   Phone,
   DollarSign,
   Clock,
+  Eye,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------- Types
@@ -225,6 +226,7 @@ export const MetaClickCatcher: React.FC = () => {
   // Manual Event Sender & History State
   const [manualPhone, setManualPhone] = useState('087751148065');
   const [manualName, setManualName] = useState('');
+  const [manualTreatment, setManualTreatment] = useState('Baby Spa & Massage');
   const [manualEvent, setManualEvent] = useState('Purchase');
   const [manualValue, setManualValue] = useState('250000');
   const [manualTestCode, setManualTestCode] = useState('');
@@ -232,8 +234,9 @@ export const MetaClickCatcher: React.FC = () => {
   const [manualHistory, setManualHistory] = useState<ManualHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
-  // JSON modal inspector
+  // Detail modal inspector
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const copyText = (txt: string, id: string) => {
@@ -325,6 +328,7 @@ export const MetaClickCatcher: React.FC = () => {
       const res = await sendManualCapiEvent({
         phone: manualPhone.trim(),
         name: manualName.trim() || undefined,
+        treatment: manualTreatment.trim() || undefined,
         eventName: manualEvent,
         value: manualValue ? Number(manualValue) : undefined,
         currency: 'IDR',
@@ -651,10 +655,11 @@ export const MetaClickCatcher: React.FC = () => {
                   <td className="py-2.5 px-3 text-right">
                     <button
                       onClick={() => setSelectedItem(e)}
-                      className="px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-[11px] font-semibold transition"
-                      title="Lihat Raw JSON Payload"
+                      className="px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] hover:text-[#008069] text-[11px] font-semibold transition inline-flex items-center gap-1"
+                      title="Lihat Detail Koneksi Meta"
                     >
-                      JSON
+                      <Eye size={13} />
+                      <span>Detail</span>
                     </button>
                   </td>
                 </tr>
@@ -737,6 +742,24 @@ export const MetaClickCatcher: React.FC = () => {
                     <option value="AddToCart">AddToCart (Klik CTA)</option>
                     <option value="ViewContent">ViewContent</option>
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase font-bold text-[#111b21] block mb-1">
+                  Treatment / Layanan (Opsional)
+                </label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                    <Tag size={13} />
+                  </span>
+                  <input
+                    type="text"
+                    value={manualTreatment}
+                    onChange={(e) => setManualTreatment(e.target.value)}
+                    placeholder="mis. Baby Spa Hydrotherapy / Pijat Bayi"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl pl-7 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                  />
                 </div>
               </div>
 
@@ -859,10 +882,11 @@ export const MetaClickCatcher: React.FC = () => {
                         <td className="py-2 px-2 text-right">
                           <button
                             onClick={() => setSelectedItem(h.rawPayload || h)}
-                            className="px-2 py-0.5 rounded bg-[#f0f2f5] hover:bg-[#e9edef] text-[10px] font-bold text-[#111b21] transition"
-                            title="Lihat Detail Payload"
+                            className="px-2 py-1 rounded bg-[#f0f2f5] hover:bg-[#e9edef] text-[11px] font-semibold text-[#111b21] hover:text-[#008069] transition inline-flex items-center gap-1"
+                            title="Lihat Detail Koneksi Meta"
                           >
-                            JSON
+                            <Eye size={12} />
+                            <span>Detail</span>
                           </button>
                         </td>
                       </tr>
@@ -978,40 +1002,211 @@ export const MetaClickCatcher: React.FC = () => {
         </div>
       </section>
 
-      {/* ---------------- 5. JSON Modal Inspector ---------------- */}
+      {/* ---------------- 5. Human-Friendly Detail Modal Inspector ---------------- */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-xl space-y-4 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-              <h4 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
-                <Target size={16} className="text-[#008069]" />
-                <span>
-                  {selectedItem.eventName
-                    ? `Meta CAPI Event Payload [${selectedItem.eventName} — Pixel: ${selectedItem.metaPixelId || '1465457801784141'}]`
-                    : `Meta Attribution Payload [${selectedItem.trackingCode || 'Direct'}]`}
-                </span>
-              </h4>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col border border-[#e9edef]">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-[#e9edef] pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-[#008069]">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-[#111b21]">
+                      Detail Koneksi Meta CAPI &amp; Atribusi
+                    </h4>
+                    <p className="text-xs text-[#667781]">
+                      Verifikasi data terhubung antara WhatsApp, Layanan / Treatment, dan Pixel Meta
+                    </p>
+                  </div>
+                </div>
+              </div>
               <button
-                onClick={() => setSelectedItem(null)}
-                className="text-[#8696a0] hover:text-[#111b21] p-1 text-sm font-bold"
+                onClick={() => { setSelectedItem(null); setShowRawJson(false); }}
+                className="w-8 h-8 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#667781] hover:text-[#111b21] flex items-center justify-center text-sm font-bold transition"
               >
                 ✕
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 bg-[#1e293b] text-emerald-400 p-3 rounded-xl font-mono text-[11px] whitespace-pre-wrap">
-              {JSON.stringify(selectedItem, null, 2)}
+
+            {/* Modal Content / Cards */}
+            <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+              {/* Status Header Banner */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#f8f9fa] rounded-xl border border-[#e9edef]">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#667781]">Status Pengiriman:</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    (selectedItem.status === 'SUCCESS' || selectedItem.status === 'MATCHED')
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : 'bg-amber-100 text-amber-800 border border-amber-200'
+                  }`}>
+                    {(selectedItem.status === 'SUCCESS' || selectedItem.status === 'MATCHED') ? <CheckCircle2 size={12} /> : <Activity size={12} />}
+                    <span>{selectedItem.status === 'SUCCESS' ? 'Terkirim ke Meta CAPI (HTTP 200)' : selectedItem.status === 'MATCHED' ? 'Terhubung dengan Chat WA' : 'Menunggu Chat Pasien'}</span>
+                  </span>
+                </div>
+                <div className="text-xs text-[#667781]">
+                  <span className="font-semibold text-[#111b21]">Target Pixel:</span>{' '}
+                  <span className="font-mono font-bold text-[#008069]">{selectedItem.metaPixelId || '1465457801784141'}</span>
+                </div>
+              </div>
+
+              {/* Grid: 2 Columns */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {/* 1. Data Pelanggan */}
+                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                  <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
+                    <User size={14} /> <span>1. Data Pelanggan (Customer)</span>
+                  </h5>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Nomor WhatsApp:</span>
+                      <span className="font-mono font-bold text-[#111b21] text-sm">
+                        {selectedItem.customer?.phone || selectedItem.phone || '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Nama Pasien:</span>
+                      <span className="font-semibold text-[#111b21]">
+                        {selectedItem.customer?.name || selectedItem.name || 'Pelanggan WhatsApp'}
+                      </span>
+                    </div>
+                    <div className="pt-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        <ShieldCheck size={11} /> PII Ter-Hash SHA-256 (Aman &amp; Standar Meta)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Detail Layanan & Konversi */}
+                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                  <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
+                    <DollarSign size={14} /> <span>2. Konversi &amp; Layanan</span>
+                  </h5>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Nama Event:</span>
+                      <span className={`inline-block font-bold text-xs px-2 py-0.5 rounded-md ${
+                        (selectedItem.eventName === 'Purchase' || selectedItem.status === 'MATCHED') ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {selectedItem.eventName || (selectedItem.status === 'MATCHED' ? 'Contact / Visit' : 'Ad Click')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Treatment / Layanan:</span>
+                      <span className="font-semibold text-[#111b21]">
+                        {selectedItem.conversionData?.treatment || selectedItem.treatment || 'Treatment Klinik (Reservasi)'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Nominal Transaksi:</span>
+                      <span className="font-mono font-bold text-emerald-700 text-sm">
+                        {selectedItem.conversionData?.value || selectedItem.value
+                          ? `Rp ${Number(selectedItem.conversionData?.value || selectedItem.value).toLocaleString('id-ID')}`
+                          : '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Koneksi Atribusi Iklan */}
+                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                  <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
+                    <Target size={14} /> <span>3. Koneksi Atribusi Iklan</span>
+                  </h5>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Tracking Code:</span>
+                      <span className="font-mono font-bold text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] px-2 py-0.5 rounded-md">
+                        {selectedItem.attribution?.trackingCode || selectedItem.trackingCode || 'Direct'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Sumber Trafik:</span>
+                      <span className="font-semibold text-[#111b21]">
+                        {selectedItem.attribution?.utmSource || selectedItem.utmSource || 'Instagram / Facebook Ads'}
+                        {(selectedItem.attribution?.utmMedium || selectedItem.utmMedium) ? ` / ${selectedItem.attribution?.utmMedium || selectedItem.utmMedium}` : ''}
+                      </span>
+                    </div>
+                    {(selectedItem.attribution?.utmCampaign || selectedItem.utmCampaign) && (
+                      <div>
+                        <span className="text-[#8696a0] block text-[11px]">Campaign ID:</span>
+                        <span className="font-mono font-semibold text-[#111b21]">
+                          {selectedItem.attribution?.utmCampaign || selectedItem.utmCampaign}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Perangkat Pasien:</span>
+                      <span className="text-[#111b21]">
+                        {parseDeviceSummary(selectedItem.userAgent || selectedItem.attribution?.userAgent)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Respon Meta & Audit */}
+                <div className="bg-white border border-[#e9edef] rounded-xl p-4 space-y-2.5 shadow-2xs">
+                  <h5 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-[#008069]">
+                    <Clock size={14} /> <span>4. Waktu &amp; Pengiriman</span>
+                  </h5>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Waktu Pengiriman:</span>
+                      <span className="font-medium text-[#111b21]">
+                        {fmtTime(selectedItem.timestamp || selectedItem.createdAt || selectedItem.matchedAt)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Channel Event:</span>
+                      <span className="font-medium text-[#111b21]">
+                        WhatsApp In-App / Chat Commerce
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#8696a0] block text-[11px]">Operator Pengirim:</span>
+                      <span className="font-medium text-[#111b21]">
+                        {selectedItem.adminIdentity || 'Sistem Otomatis / Admin CS'}
+                      </span>
+                    </div>
+                    {selectedItem.metaGraphApiResponse?.fbtrace_id && (
+                      <div>
+                        <span className="text-[#8696a0] block text-[11px]">Meta Trace ID:</span>
+                        <span className="font-mono text-[10px] text-[#667781] truncate block">
+                          {selectedItem.metaGraphApiResponse.fbtrace_id}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Optional Collapsible Raw JSON for Developer Debugging */}
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowRawJson(!showRawJson)}
+                  className="text-[11px] font-semibold text-[#667781] hover:text-[#008069] flex items-center gap-1 transition"
+                >
+                  <span>{showRawJson ? '▼ Sembunyikan Data Teknis Mentah' : '▶ Tampilkan Data Teknis Mentah (Opsional)'}</span>
+                </button>
+                {showRawJson && (
+                  <div className="mt-2 p-3 bg-[#1e293b] text-emerald-400 rounded-xl font-mono text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto animate-in fade-in">
+                    {JSON.stringify(selectedItem, null, 2)}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#e9edef]">
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-[#e9edef]">
+              <span className="text-xs text-[#8696a0] flex items-center gap-1">
+                <ShieldCheck size={13} className="text-[#008069]" /> Terverifikasi terkirim ke Meta Conversions API
+              </span>
               <button
-                onClick={() => copyText(JSON.stringify(selectedItem, null, 2), 'modal')}
-                className="px-3 py-1.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-xs font-semibold text-[#111b21] flex items-center gap-1.5 transition"
-              >
-                {copiedCode === 'modal' ? <Check size={13} className="text-[#008069]" /> : <Copy size={13} />}
-                <span>{copiedCode === 'modal' ? 'Tersalin' : 'Salin JSON'}</span>
-              </button>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="px-4 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00705a] text-white text-xs font-bold transition"
+                onClick={() => { setSelectedItem(null); setShowRawJson(false); }}
+                className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00705a] text-white text-xs font-bold transition shadow-xs"
               >
                 Tutup
               </button>
