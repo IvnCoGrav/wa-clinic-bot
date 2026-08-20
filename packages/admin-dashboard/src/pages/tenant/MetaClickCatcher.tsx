@@ -17,6 +17,9 @@ import {
   CalendarDays,
   Globe,
   Tag,
+  Copy,
+  Check,
+  Target,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------- Types
@@ -151,6 +154,16 @@ export const MetaClickCatcher: React.FC = () => {
   const [testEventCode, setTestEventCode] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<CapiTestResult | null>(null);
+
+  // JSON modal inspector
+  const [selectedItem, setSelectedItem] = useState<ClickEntry | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const copyText = (txt: string, id: string) => {
+    navigator.clipboard.writeText(txt);
+    setCopiedCode(id);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
 
   const loadSummary = useCallback(async (sDate: string, eDate: string, campaign?: string, qSearch?: string) => {
     setLoadingSummary(true);
@@ -432,17 +445,18 @@ export const MetaClickCatcher: React.FC = () => {
                 <th className="py-2.5 px-3">Data Pasien (Nama &amp; WhatsApp)</th>
                 <th className="py-2.5 px-3">UTM Campaign / Sumber</th>
                 <th className="py-2.5 px-3">Meta Tracking Data</th>
+                <th className="py-2.5 px-3 text-right">Detail</th>
               </tr>
             </thead>
             <tbody>
               {entries.length === 0 && !loadingClicks && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-[#8696a0]">Belum ada data klik iklan pada rentang tanggal/filter ini.</td>
+                  <td colSpan={7} className="py-8 text-center text-[#8696a0]">Belum ada data klik iklan pada rentang tanggal/filter ini.</td>
                 </tr>
               )}
               {loadingClicks && entries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-[#8696a0]"><Loader size={14} className="inline animate-spin mr-2 text-[#008069]" />Memuat log klik...</td>
+                  <td colSpan={7} className="py-8 text-center text-[#8696a0]"><Loader size={14} className="inline animate-spin mr-2 text-[#008069]" />Memuat log klik...</td>
                 </tr>
               )}
               {entries.map((e) => (
@@ -506,6 +520,15 @@ export const MetaClickCatcher: React.FC = () => {
                     <MetaTiny label="fbc" value={e.fbc} />
                     {e.ipAddress && <p className="text-[10px]"><span className="text-[#8696a0] uppercase font-bold">IP:</span> <span className="text-[#111b21] font-mono">{e.ipAddress}</span></p>}
                     {e.userAgent && <p className="text-[10px] text-[#8696a0] truncate max-w-[220px]" title={e.userAgent}>{e.userAgent}</p>}
+                  </td>
+                  <td className="py-2.5 px-3 text-right">
+                    <button
+                      onClick={() => setSelectedItem(e)}
+                      className="px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-[11px] font-semibold transition"
+                      title="Lihat Raw JSON Payload"
+                    >
+                      JSON
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -615,6 +638,44 @@ export const MetaClickCatcher: React.FC = () => {
           )}
         </div>
       </section>
+
+      {/* ---------------- 5. JSON Modal Inspector ---------------- */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
+              <h4 className="text-sm font-bold text-[#111b21] flex items-center gap-2">
+                <Target size={16} className="text-[#008069]" />
+                <span>Meta Attribution Payload [{selectedItem.trackingCode || 'Direct'}]</span>
+              </h4>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="text-[#8696a0] hover:text-[#111b21] p-1 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 bg-[#1e293b] text-emerald-400 p-3 rounded-xl font-mono text-[11px] whitespace-pre-wrap">
+              {JSON.stringify(selectedItem, null, 2)}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#e9edef]">
+              <button
+                onClick={() => copyText(JSON.stringify(selectedItem, null, 2), 'modal')}
+                className="px-3 py-1.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-xs font-semibold text-[#111b21] flex items-center gap-1.5 transition"
+              >
+                {copiedCode === 'modal' ? <Check size={13} className="text-[#008069]" /> : <Copy size={13} />}
+                <span>{copiedCode === 'modal' ? 'Tersalin' : 'Salin JSON'}</span>
+              </button>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="px-4 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00705a] text-white text-xs font-bold transition"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
