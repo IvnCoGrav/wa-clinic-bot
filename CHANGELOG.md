@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Improved — Simplified AI Rollout Scope Date Picker with Instant Auto-Sync (2026-08-20)
+
+- **Penyederhanaan Input Tanggal Cutoff Pelanggan Baru (`AiRouterPanel.tsx` & `Settings.tsx`)**:
+  - Mengubah input teks ISO / datetime yang rumit menjadi input tanggal kalender native (`<input type="date">`), sehingga user cukup memilih tanggal tanpa perlu mengetik jam atau format string ISO manual.
+  - **Sinkronisasi Instan Langsung ke Server (*Instant Auto-Sync*)**: Perubahan pilihan radio (`NEW_ONLY` vs `ALL`) maupun penggantian tanggal cutoff langsung disimpan secara otomatis ke server tanpa perlu menekan tombol submit terpisah.
+  - **Preset Tanggal Cepat**: Menambahkan tombol pintasan satu-klik (*"Hari Ini"*, *"Kemarin"*, *"Awal Bulan Ini"*).
+  - **Indikator Status Penyimpanan Realtime**: Dilengkapi indikator badge spinner saat menyimpan ke server dan ikon centang hijau saat data telah tersimpan aman.
+  - **Penjelasan Bahasa Indonesia**: Menampilkan pratinjau kalimat penjelas dinamis dengan format tanggal Indonesia yang ramah dibaca (contoh: *"Pelanggan yang pertama kali chat mulai 1 Agustus 2026 akan otomatis dilayani bot AI..."*).
+
 ### Added & Fixed — PWA Ultra HD Vector Branding, Role Management Cleanup & Database Schema Sync (2026-08-19)
 
 - **PWA Ultra HD Vector Icon Generation (`Master Logo Kala.svg`)**:
