@@ -37,12 +37,12 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const res = await apiRequest('/api/staff/auth/restore', {
         method: 'POST',
         body: JSON.stringify({ token }),
+        timeoutMs: 3000,
       });
       return res && res.success ? 'ok' : 'invalid';
-    } catch (err: any) {
-      const status = (err as any)?.status;
-      if (status === 401 || status === 403) return 'invalid';
-      return 'network';
+    } catch {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      return 'invalid';
     }
   }
 
@@ -53,6 +53,14 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     let onlineHandler: (() => void) | null = null;
     let attempts = 0;
     let inFlight = false;
+
+    // Hard Safety Timeout: Maksimal 2.5 detik loading auth HARUS selesai agar user tidak stuck di spinner
+    const hardSafetyTimer = setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        emitBootPhase('auth');
+      }
+    }, 2500);
 
     const clearPendingRetry = () => {
       if (retryTimer) clearTimeout(retryTimer);
@@ -65,6 +73,11 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const scheduleRetry = (delayMs: number) => {
       if (cancelled) return;
+      if (attempts >= 3) {
+        setLoading(false);
+        emitBootPhase('auth');
+        return;
+      }
       if (!navigator.onLine) {
         // Radio seluler belum siap — tunggu event online, fallback timer supaya tidak macet
         onlineHandler = () => {
@@ -79,7 +92,7 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             onlineHandler = null;
           }
           checkAuth();
-        }, Math.max(delayMs, 10000));
+        }, Math.max(delayMs, 5000));
         return;
       }
       retryTimer = setTimeout(checkAuth, delayMs);
@@ -89,10 +102,11 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (inFlight || cancelled) return;
       inFlight = true;
       try {
-        const data = await apiRequest('/api/staff/auth/me');
+        const data = await apiRequest('/api/staff/auth/me', { timeoutMs: 4000 });
         if (cancelled) return;
         attempts = 0;
         clearPendingRetry();
+        clearTimeout(hardSafetyTimer);
         if (data.authenticated && data.staff) {
           setStaff({
             id: data.staff.id,
@@ -115,25 +129,26 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           if (cancelled) return;
           if (restoreResult === 'ok') {
             clearPendingRetry();
-            retryTimer = setTimeout(checkAuth, 500);
-            return;
-          }
-          if (restoreResult === 'network') {
-            scheduleRetry(RETRY_BACKOFF_MS[Math.min(attempts, RETRY_BACKOFF_MS.length - 1)]);
+            retryTimer = setTimeout(checkAuth, 300);
             return;
           }
           clearPendingRetry();
+          clearTimeout(hardSafetyTimer);
           localStorage.removeItem(TOKEN_STORAGE_KEY);
           setStaff(null);
           setLoading(false);
           emitBootPhase('auth');
           return;
         }
-        // Error jaringan/timeout/server: jangan kick user (app mungkin sedang restart/deploy).
-        // Tetap di state loading & retry di latar belakang sampai server pulih.
+        // Error jaringan/timeout/server
         attempts += 1;
-        if (attempts >= 3) setBootMessage('Koneksi bermasalah — mencoba lagi…');
-        scheduleRetry(RETRY_BACKOFF_MS[Math.min(attempts - 1, RETRY_BACKOFF_MS.length - 1)]);
+        if (attempts >= 2) {
+          clearTimeout(hardSafetyTimer);
+          setLoading(false);
+          emitBootPhase('auth');
+        } else {
+          scheduleRetry(RETRY_BACKOFF_MS[Math.min(attempts - 1, RETRY_BACKOFF_MS.length - 1)]);
+        }
       } finally {
         inFlight = false;
       }
@@ -149,6 +164,7 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       cancelled = true;
       clearPendingRetry();
+      clearTimeout(hardSafetyTimer);
       window.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);

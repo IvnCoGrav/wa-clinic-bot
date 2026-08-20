@@ -181,4 +181,43 @@ describe('Unified Login Endpoint (/api/admin/auth/login)', () => {
     expect(body.user.role).toBe('admin_cs');
     expect(body.user.name).toBe('CS Sarah');
   });
+
+  it('GET /api/staff/auth/me and /api/staff/today-tasks resolve admin_session cookie seamlessly', async () => {
+    // 1. Login sebagai super_admin untuk mendapatkan admin_session token
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/auth/login',
+      payload: {
+        identifier: 'admin@kalamomsspa.com',
+        password: 'super_secret_admin_key',
+      },
+    });
+
+    expect(loginRes.statusCode).toBe(200);
+    const cookie = loginRes.headers['set-cookie'] as string;
+
+    // 2. Akses GET /api/staff/auth/me dengan admin_session
+    const staffMeRes = await app.inject({
+      method: 'GET',
+      url: '/api/staff/auth/me',
+      headers: { cookie },
+    });
+
+    expect(staffMeRes.statusCode).toBe(200);
+    const meBody = JSON.parse(staffMeRes.body);
+    expect(meBody.authenticated).toBe(true);
+    expect(meBody.staff).toBeDefined();
+
+    // 3. Akses GET /api/staff/today-tasks dengan admin_session
+    const tasksRes = await app.inject({
+      method: 'GET',
+      url: '/api/staff/today-tasks?scope=all',
+      headers: { cookie },
+    });
+
+    expect(tasksRes.statusCode).toBe(200);
+    const tasksBody = JSON.parse(tasksRes.body);
+    expect(tasksBody.success).toBe(true);
+    expect(tasksBody.isSupervisor).toBe(true);
+  });
 });

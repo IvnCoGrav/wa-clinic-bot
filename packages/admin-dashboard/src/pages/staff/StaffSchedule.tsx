@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useStaffAuth } from '../../contexts/StaffAuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import {
   Calendar,
@@ -23,6 +24,7 @@ import {
   User,
   UserCheck,
   X,
+  LayoutDashboard,
 } from 'lucide-react';
 
 interface StaffTaskChild {
@@ -69,9 +71,14 @@ function formatRupiah(amount: number): string {
 }
 
 export const StaffSchedule: React.FC = () => {
-  const { staff, logout } = useStaffAuth();
+  const { staff, logout: staffLogout } = useStaffAuth();
+  const { user, logout: adminLogout } = useAuth();
   const { confirm } = useUiFeedback();
   const navigate = useNavigate();
+
+  const logout = staff ? staffLogout : adminLogout;
+  const currentStaff = staff || (user ? { id: user.id, name: user.name, role: user.role, phone: user.phone } : null);
+
   const [loading, setLoading] = useState(true);
   const [scheduleList, setScheduleList] = useState<StaffScheduleItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -201,7 +208,7 @@ export const StaffSchedule: React.FC = () => {
 
           <div className="min-w-0">
             <h1 className="font-bold text-sm sm:text-base text-[#111b21] tracking-tight truncate">
-              {staff?.name || 'Terapis'}
+              {currentStaff?.name || 'Terapis'}
             </h1>
             <p className="text-[11px] text-[#667781] truncate">
               {scheduleList.length} Jadwal Mendatang
@@ -433,13 +440,15 @@ export const StaffSchedule: React.FC = () => {
 
             <div className="space-y-1">
               <h3 className="font-bold text-lg text-[#111b21]">
-                {staff?.name || 'Terapis'}
+                {currentStaff?.name || 'Terapis'}
               </h3>
               <p className="text-xs text-[#667781] font-mono">
-                {staff?.phone || 'Akun Terapis'}
+                {currentStaff?.phone || 'Akun Sistem'}
               </p>
               <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 mt-1">
-                Staff Terapis Lapangan
+                {currentStaff?.role && currentStaff.role.toLowerCase() !== 'therapist'
+                  ? 'Supervisor CS & Terapis'
+                  : 'Staff Terapis Lapangan'}
               </span>
             </div>
 

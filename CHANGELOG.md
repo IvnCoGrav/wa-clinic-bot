@@ -4,8 +4,93 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Added & Fixed — iOS Safe Area Notch, Rigid Viewport Locking & Live Chat Image Fix (2026-08-20)
+### Refactored & Polished — Micro UX Refinements on Today Treatments (2026-08-20)
 
+- **7 Penyesuaian Mikro UI/UX pada Modul Treatment Hari Ini (`TodayTreatments.tsx`)**:
+  1. **Dropdown Filter Penugasan Terapis**: Mengganti toggle button lama menjadi dropdown `<select>` yang rapi dengan opsi default `🛵 Tugas Saya`, `👥 Semua Terapis`, dan daftar terapis individual spesifik.
+  2. **Tombol Rekap Metrik Icon-Only**: Tombol rekapitulasi disederhanakan menjadi ikon bar chart elegan `<BarChart3 size={16} />` dengan tooltip tanpa teks label panjang.
+  3. **Modal Detail Lengkap Customer & Treatment**: Mengklik kartu treatment (atau bagian header/body card) kini membuka modal pop-up detail lengkap (profil WhatsApp, telepon, rincian paket, daftar anak, patokan rumah, koordinat GPS, rincian biaya & bukti bayar).
+  4. **Pembersihan Durasi Per-Item**: Seluruh teks durasi (`(60 menit)`, `30m`, dll.) dihilangkan dari teks nama layanan dan disatukan menjadi satu badge **`⏱️ Total Durasi: X Menit`**.
+  5. **Format Waktu Bersih**: Menghilangkan embel-embel teks `WIB` pada kartu, menyisakan format jam `HH:mm` yang bersih.
+  6. **Ikon Penanggung Jawab**: Teks label *"Penanggung Jawab:"* digantikan dengan ikon terapis `<UserCheck size={13} />`.
+  7. **Ikon Kategori Bersih**: Badge teks kategori (*Baby Spa*, *Moms Spa*, dll.) digantikan dengan ikon visual kategori layanan yang minimalis dan elegan.
+
+### Refactored & Polished — Refined Focus & Clean Metrics for Today Treatments (2026-08-20)
+
+- **Penyederhanaan & Fokus Navigasi Treatment Hari Ini (`TodayTreatments.tsx`)**:
+  - **Default Scope 'Tugas Saya'**: Default scope tampilan kini langsung mengarah ke `mine` (Tugas Saya) sehingga terapis/CS langsung melihat jadwal relevan masing-masing tanpa perlu klik toggle.
+  - **Fokus Tanpa Tab Ganda**: Menghapus sub-tab hari ini/mendatang/selesai yang memakan ruang, mengembalikan fokus langsung ke daftar kunjungan hari ini.
+  - **Modal Detail Rekap Metrik**: 4 kartu ringkasan KPI (Total, Selesai, OTW, Tagihan) disederhanakan menjadi satu tombol **`[📊 Detail Rekap]`** yang membuka modal rekapitulasi elegan.
+  - **Numbering List Layanan & Total Durasi Terpadu**:
+    - Nama-nama treatment ditampilkan dengan penomoran berurutan bersih (`1. Layanan A`, `2. Layanan B`) tanpa waktu per item.
+    - Total durasi waktu layanan dihitung dan disatukan menjadi satu badge ringkas (`⏱️ Total Durasi: X Menit`).
+
+### Added & Enhanced — Full Feature Parity from StaffToday to TodayTreatments (2026-08-20)
+
+- **Penyerapan Fitur Lengkap `StaffToday.tsx` ke dalam `TodayTreatments.tsx`**:
+  - **Category Color Accents & Badges (`getCategoryIcon`)**: Border aksen kiri warna-warni dan badge khas untuk *Baby Spa* (Sky), *Moms Spa* (Purple), dan *Moms & Baby* (Emerald).
+  - **OTW Safety Gate Time-Lock (`isOtwAllowed`)**: Tombol *Kirim OTW* hanya dapat diaktifkan dalam jendela ≤ 2 jam sebelum waktu janji temu (`bookingDate`) untuk mencegah kesalahan klik prematur.
+  - **Indikator Cerdas Rute Berantai (`distanceSource`)**: Menampilkan jarak tempuh yang dihitung dari *Pasien Sebelumnya* (rute berantai beserta nama pasien asal) atau dari *Klinik* lengkap dengan estimasi menit.
+  - **Modal Full-Screen Zoom Foto HD (`zoomImageUrl`)**: Preview foto tampak depan rumah pasien dan foto bukti transfer dalam resolusi penuh dengan tombol download instan.
+  - **Quick Chat Kaya (Template Cepat & Lampiran Kamera)**: Menambahkan baris tombol template balasan WhatsApp (*"👋 Sapa Pasien"*, *"🛵 Meluncur OTW"*, *"🏠 Sudah Sampai"*) dan integrasi pengunggahan gambar/foto langsung dari ruang chat.
+  - **Sub-Tab Navigasi 3 Fase**: Menambahkan navigasi sub-tab `🛵 Hari Ini (Today)`, `📅 Jadwal Mendatang (Upcoming)`, dan `✅ Riwayat Selesai (Completed)` dengan penghitung counter aktif.
+  - **Audio & Haptic Feedback (`playNotificationSound`)**: Suara chime dan getaran haptic mobile saat aksi status berhasil dijalankan.
+
+### Improved & Fixed — Comprehensive UI/UX Polish, iOS Safari Viewport & Mobile-First Controls (2026-08-20)
+
+- **Optimasi Viewport Safari iOS & Rigid Sticky Header (`index.css`, `Layout.tsx`)**:
+  - **Eliminasi Breakage Sticky Header**: Menghapus `overflow-x: clip` di level `html` yang merusak konteks `position: sticky` pada WebKit Safari iPhone. Header kini menempel rigid dan tidak melompat saat elastic bounce scroll.
+  - **Isolasi Notch / Dynamic Island**: Memastikan background header solid `bg-white/98 backdrop-blur-md` dengan `pt-[env(safe-area-inset-top)]` sehingga logo sinyal dan baterai HP tidak lagi menembus teks header.
+- **Penyempurnaan Mobile-First "Treatment Hari Ini" (`TodayTreatments.tsx`)**:
+  - **Avatar WhatsApp Pasien**: Menampilkan foto profil WhatsApp pasien asli (dengan fallback inisial bulat yang elegan) untuk pengenalan pasien instan.
+  - **Grid Tombol Aksi Ramah Jempol**: Di layar HP (< 640px), tombol aksi disusun dalam **Grid 2x2 yang besar (min-height 42px)** dengan target sentuh tebal dan transisi aktif (*active:scale-95*) tanpa bertumpuk acak.
+  - **Pintasan Live Chat Penuh**: Menambahkan tombol lompat langsung ke antarmuka Live Chat lengkap (`/admin/live-chat`) dari header modal quick chat.
+
+### Added & Refactored — Seamless "Treatment Hari Ini" Module & Single-Shell Admin Flow (2026-08-20)
+
+- **Integrasi Modul "Treatment Hari Ini" ke Layout Admin Standar (`TodayTreatments.tsx`, `App.tsx`, `Layout.tsx`, `rolePermissions.ts`)**:
+  - **Single Shell Architecture Tanpa Layout Switcher**: Menghapus tombol switcher yang membingungkan (`[🛵 Tugas Lapangan]` dan `[📊 Portal CS & Kalender]`). Menghadirkan modul baru **`🛵 Treatment Hari Ini`** (`/admin/today-treatments`) yang tertanam langsung di sidebar menu admin (grup *Operasional & Jadwal*, tepat setelah *Kalender & Reservasi*).
+  - **Navigasi Konsisten**: Pengguna (Admin/Supervisor/CS) dapat berpindah antar menu (*Live Chat*, *Kalender Reservasi*, *Treatment Hari Ini*, *Database Pelanggan*) secara mulus dengan sidebar dan header admin yang tetap stay di tempatnya.
+  - **Fungsionalitas Mikro Lengkap**:
+    - **Filter Segmentasi**: Toggle `[🛵 Tugas Saya]` vs `[👥 Semua Terapis]` untuk memantau tugas pribadi maupun tim.
+    - **Aksi Cepat & Navigasi**: Tombol integrasi *Google Maps rute berantai*, *Kirim Notifikasi OTW*, dan *Live Chat WhatsApp* pasien hari H.
+    - **Lokasi & Bukti Rumah**: Modal kunci titik GPS akurat (≤10m) serta pengambilan foto tampak depan rumah pasien.
+    - **Pencatatan Keuangan**: Modal catat pembayaran lunas (Tunai / Transfer / QRIS) beserta upload bukti pembayaran.
+    - **Delegasi Penugasan (Reassign)**: Memindahkan jadwal treatment ke staf lain secara instan dengan notifikasi otomatis.
+  - **Daftar Modul Dinamis di RBAC**: Mendaftarkan `/admin/today-treatments` ke dalam `ALL_MODULES` agar izin akses dapat diatur secara dinamis per-role melalui UI.
+
+### Fixed — Elimination of Infinite MutationObserver Loop & "Page Unresponsive" Freeze (2026-08-20)
+
+- **Eliminasi Total Infinite Mutation Loop & Freeze Browser (`App.tsx`, `useBodyScrollLock.ts`, `UiFeedback.tsx`, `Layout.tsx`)**:
+  - **Akar Masalah (*Root Cause*)**: Komponen `GlobalModalScrollLock` sebelumnya memasang `MutationObserver` pada `document.body` dengan `attributes: ['class', 'style']`, sementara callback observer mengubah `classList` pada `document.body`. Ini memicu infinite loop rekursif pada microtask event loop JavaScript (100% CPU lockup) yang memunculkan pop-up browser *"Page Unresponsive"*.
+  - **Solusi Bersih & Deklaratif (`useBodyScrollLock`)**: Menghapus `GlobalModalScrollLock` dan `MutationObserver` dari `App.tsx`. Menggantikannya dengan custom hook deklaratif `useBodyScrollLock(isLocked)` yang murni berbasis state React tanpa pemantauan mutasi DOM global.
+  - **Integrasi Feedback & Sidebar**: Mengaktifkan penguncian scroll aman pada `UiFeedback.tsx` saat dialog konfirmasi terbuka dan pada `Layout.tsx` saat drawer navigasi mobile aktif.
+  - **Optimasi Tab Debug (`Debug.tsx`)**: Mengatur interval refresh log menjadi 10s dengan batasan buffer 150 baris dan auto-pause saat tab browser tidak aktif (*visibilitychange*).
+  - **Pendaftaran Dinamis Portal Terapis ke Matriks RBAC (`rolePermissions.ts`)**: Mendaftarkan modul `/admin/staff/today` (*Portal Tugas Terapis Hari Ini*) dan `/admin/staff/schedule` (*Jadwal Mendatang*) ke dalam `ALL_MODULES` (kategori *PORTAL LAPANGAN & TERAPIS*). Kini hak akses portal terapis dapat dicentang/dihapus secara dinamis untuk peran kustom apapun via UI dashboard tanpa perlu hardcode.
+
+### Added & Improved — SPV CS Hybrid Role, Dual Mode Workflow & Team Delegation (2026-08-20)
+
+- **Peran Hibrida SPV CS & Dual-Mode UI Workflow (`rolePermissions.ts`, `Layout.tsx`, `StaffToday.tsx`, `StaffSchedule.tsx`)**:
+  - **Dukungan Role Baru `spv_cs` (Supervisor CS & Field Therapist)**: Mengimplementasikan hak akses terintegrasi untuk peran SPV CS yang mencakup modul manajerial (Live Chat, Kalender Reservasi, Pelanggan, Manajemen Staff, dsb.) sekaligus akses penuh ke modul operasional lapangan (*Portal Terapis* `/admin/staff/today` dan `/admin/staff/schedule`).
+  - **Pintasan 1-Klik Mode Switcher (*Quick Switcher*)**:
+    - Menambahkan tombol pintasan `[🛵 Tugas Lapangan]` pada navbar desktop dan mobile header saat berada di portal manajerial/CS.
+    - Menambahkan tombol pintasan `[📊 Portal CS & Kalender]` pada header dan drawer menu `StaffToday` serta `StaffSchedule` saat berada di portal terapis.
+  - **Monitoring Tim & Delegasi Jadwal Terapis Lapangan (`StaffToday.tsx` & `today.subroute.ts`)**:
+    - **Filter Segmentasi `[🛵 Tugas Saya]` vs `[👥 Semua Terapis]`**: Supervisor dapat berpindah antara jadwal kunjungan pribadi dan seluruh tim lapangan pada hari ini secara realtime.
+    - **Delegasi Penugasan Instan (*Reassign Modal*)**: Supervisor dapat memindahkan atau mendelegasikan jadwal pasien ke terapis lain langsung dari kartu tugas mobile/lapangan via `POST /api/staff/reservations/:id/reassign`.
+    - **Bypass Otorisasi Chat Supervisor**: Mengizinkan supervisor melihat dan membalas percakapan pasien manapun pada hari H tanpa batasan isolasi terapis tunggal.
+  - **Pintasan 1-Tap *"⚡ Tugaskan ke Saya Sendiri"* di Kalender & Reservasi (`CreateReservationModal.tsx`, `Reservations.tsx`)**:
+    - Mempermudah SPV CS yang sedang bertindak sebagai terapis lapangan untuk langsung menetapkan dirinya sendiri pada saat membuat reservasi atau mengedit penugasan tanpa perlu mencari namanya di dropdown panjang.
+  - **Penyelarasan Autentikasi Sesi Terpadu & Hard Safety Timeout (`staff.route.ts`, `StaffProtectedRoute.tsx`, `AuthContext.tsx`, `StaffAuthContext.tsx`)**:
+    - Mengintegrasikan validasi `admin_session` pada rute `staff.route.ts` dan `StaffProtectedRoute` sehingga akun supervisor yang login via email/password admin dapat langsung berpindah membuka `/admin/staff/today` tanpa tertahan di loop loading spinner atau terlempar ke login terapis terpisah.
+    - Menambahkan **Hard Safety Timeout (2.5s)** pada `AuthContext` dan `StaffAuthContext` serta pembersihan token stale otomatis agar status loading di browser tidak pernah terkunci (*hang*) saat inisialisasi sesi awal.
+
+### Added & Fixed — Sticky Header Restore, Modal Background Scroll Lock & iOS Viewport Fix (2026-08-20)
+
+- **Pemulihan Sticky Header & Penguncian Scroll Background Modal/Sidebar (`index.css`, `Layout.tsx`, `App.tsx`)**:
+  - **Mengembalikan Fungsi Sticky Header (`top: 0`)**: Menghapus deklarasi `overflow-x: hidden` pada container pembungkus yang sebelumnya memutus context `position: sticky` browser, menggantikannya dengan `overflow-x: clip` pada root. Header kini kembali menempel kokoh di atas layar saat scrolling.
+  - **Penguncian Scroll Background Otomatis (*Body Scroll Lock*)**: Menambahkan `GlobalModalScrollLock` di `App.tsx` dan listener `body-scroll-locked` di `Layout.tsx`. Saat menu sidebar drawer atau modal dialog apapun terbuka (Konfirmasi, Detail Pasien, Kalender, Media, dsb.), scrolling di background layar otomatis dibekukan total sehingga jari hanya menggulir isi modal/sidebar tanpa menggeser halaman latar belakang.
+  - **Isolasi Touch Backdrop**: Menerapkan `touch-action: none` dan `overscroll-behavior: contain` pada backdrop gelap modal & sidebar.
 - **Perbaikan iOS iPhone Safe Area Insets & Rigid Viewport Locking (`index.css`, `Layout.tsx`, `StaffToday.tsx`, `StaffSchedule.tsx`)**:
   - **Mengatasi Header Tertutup Notch / Status Bar iPhone**: Menambahkan padding `env(safe-area-inset-top)` dinamis pada header utama admin, sidebar drawer, dan portal staff (`StaffToday` & `StaffSchedule`). Konten header (judul, tombol menu, ikon status) kini selalu turun rapi di bawah area status bar, jam, sinyal, dan Dynamic Island iPhone.
   - **Mengeliminasi Horizontal Wobble / Rubber-Banding (*Rigid Viewport Lock*)**: Menetapkan aturan ketat `overflow-x: clip`, `overscroll-behavior-x: none`, dan `touch-action: pan-y` pada `html`, `body`, dan `#root`. Seluruh visual antarmuka kini terkunci rigid di satu tempat saat di-scroll ke atas/bawah tanpa goyang ke kiri/kanan.
