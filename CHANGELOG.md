@@ -4,8 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Added & Fixed — Simplified AI Rollout Scope Date Picker & Auto-Serialize JSON Fix (2026-08-20)
+### Added & Fixed — Live Chat Image Reconciliation & JSON Fix (2026-08-20)
 
+- **Perbaikan Duplikasi Gambar di Live Chat (`LiveChatMonitor.tsx`, `StaffToday.tsx`, `live-chat.service.ts`)**:
+  - Memperbaiki bug duplikasi pesan gambar (tampil 2 bubble gambar) saat admin/staf mengirim foto di Live Chat.
+  - Menyelaraskan teks placeholder gambar optimistik menjadi `[IMAGE]` (sebelumnya `[GAMBAR]` vs `[IMAGE]`), sehingga pencocokan pesan optimistik (`temp_`) dengan event SSE `message.created` berjalan sempurna.
+  - Menambahkan rekonsiliasi ID pesan instan pada HTTP reply handler dan handler SSE dengan dukungan pencocokan fallback berbasis media dan timestamp.
 - **Perbaikan JSON Serialization pada Client Admin API (`api.ts` & `Settings.tsx`)**:
   - Memperbaiki `apiRequest` agar secara otomatis melakukan `JSON.stringify(body)` jika argumen `body` berupa objek JavaScript murni dan bukan `FormData`/`Blob`.
   - Mencegah error `is not valid JSON` (`[object Object]`) saat melakukan auto-save pengaturan AI Rollout Scope.

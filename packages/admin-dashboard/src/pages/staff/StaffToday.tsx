@@ -610,19 +610,27 @@ export const StaffToday: React.FC = () => {
           // Append/reconcile message if matches currently open conversation (Maksimal 10 bubble)
           if (selectedTaskRef.current?.conversationId === convId) {
             setMessages((prev) => {
-              if (
-                prev.some(
-                  (m) =>
-                    m.id === msg.id ||
-                    (m.content === msg.content &&
-                      m.direction === msg.direction &&
-                      Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000)
-                )
-              ) {
+              const isImagePlaceholder = (c?: string) => !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)\]/i.test(c.trim());
+
+              const isDuplicate = prev.some(
+                (m) =>
+                  m.id === msg.id ||
+                  (m.direction === msg.direction &&
+                    (m.content === msg.content ||
+                      (isImagePlaceholder(m.content) && isImagePlaceholder(msg.content)) ||
+                      (!!m.media && !!msg.media)) &&
+                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 30000)
+              );
+
+              if (isDuplicate) {
                 // Reconcile: jika ada pesan sementara (temp-), ganti id-nya dengan id resmi dari server
                 return prev.map((m) =>
-                  m.content === msg.content && m.direction === msg.direction && m.id.startsWith('temp-')
-                    ? { ...m, id: msg.id }
+                  m.direction === msg.direction &&
+                  m.id.startsWith('temp-') &&
+                  (m.content === msg.content ||
+                    (isImagePlaceholder(m.content) && isImagePlaceholder(msg.content)) ||
+                    (!!m.media && !!msg.media))
+                    ? { ...m, id: msg.id, media: msg.media || m.media }
                     : m
                 );
               }
@@ -726,7 +734,7 @@ export const StaffToday: React.FC = () => {
     const hasText = !!textToSend;
     const optimisticContent = hasText
       ? textToSend.endsWith(signature) ? textToSend : `${textToSend}\n\n${signature}`
-      : '[Image]';
+      : '[IMAGE]';
 
     setSending(true);
     setErrorMessage(null);
