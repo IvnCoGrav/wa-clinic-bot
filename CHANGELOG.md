@@ -4,6 +4,101 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Refined — Dynamic Tenant-Aware Meta CAPI Funnel Triggers & Zero-Hardcode Value Parser (2026-08-21)
+
+- **Dynamic Value Parser for Pure Treatment Revenue (`capi.service.ts`, `purchase-detection.service.ts`)**:
+  - Menghilangkan asumsi ekstraksi angka acak / total tagihan yang tercampur ongkir dengan mengimplementasikan parser regex dinamis `extractValueByFormat(text, formatValueTemplate)`.
+  - Mengambil template `format_value` per-tenant (default `"Treatment = %VALUE%"`, mendukung format custom seperti `"Biaya Layanan : %VALUE%"`, `"Paket = %VALUE%"` maupun sufiks `rb`/`ribu`).
+  - Menjamin nilai konversi yang dikirimkan ke Meta CAPI murni adalah **Gross Merchandise Value (GMV) / Harga Jasa Treatment**, sehingga ROAS iklan Meta tidak terdistorsi biaya ongkir jarak.
+  - Memperbarui `getTenantCapiFormats` untuk memuat `formatValue` langsung dari database per-tenant.
+
+- **Omnichannel `InitiateCheckout` CAPI Trigger (`interest.ts`, `webhook.route.ts`, `live-chat.service.ts`)**:
+  - Menutup celah di mana pengiriman form reservasi terisi oleh customer sebelumnya belum mentrigger event Meta: kini saat customer mengirimkan formulir (`isFormSubmission` di `interest.ts`), event CAPI `InitiateCheckout` otomatis ditembakkan (`source: 'CUSTOMER_FORM_SUBMITTED'`).
+  - Menambahkan deteksi `format_checkout` dan `format_purchase` pada pesan keluar WhatsApp HP (`payload.fromMe` di `webhook.route.ts`), sehingga saat Admin membagikan form reservasi atau menerima pembayaran via WhatsApp HP, event `InitiateCheckout` dan `Purchase` tetap tertangkap dan terkirim ke Meta CAPI.
+  - Memperbarui CAPI Moderation Queue (`reservations.subroute.ts`) agar nilai estimasi treatment pada antrian moderasi selalu mencerminkan nilai murni layanan via `extractValueByFormat`.
+
+- **Meta CAPI Queue UI Overhaul & JSON Viewer Modal (`MetaCapiQueue.tsx`, `App.tsx`)**:
+  - Menyederhanakan tampilan kolom Treatment: membersihkan durasi `[90m]` dan sub-detail `(Bayi: ...)` menjadi daftar treatment bersih bernomor (`1. Pijat Bayi Ceria`).
+  - Menampilkan badge Event CAPI (`Purchase` / `Lead`) dengan nilai GMV diletakkan tepat di bawah badge event tanpa label "IDR".
+  - Menambahkan badge Jarak (`📍 13 km`) di bawah detail Customer.
+  - Menambahkan tombol **"View JSON"** interaktif untuk melihat payload Meta Graph API persis seperti yang akan dikirim, lengkap dengan syntax highlighting dan tombol **"Salin JSON"**.
+  - Memperbaiki `event_source_url` agar hanya dikirim jika pelanggan berasal dari Paid Ads dengan `landingUrl`, serta mengatur `action_source: 'chat'` untuk kontak organik tanpa dummy URL.
+  - Menambahkan routing alias `/admin/capi-queue`, `/admin/capi`, dan `/admin/meta-capi` agar halaman queue selalu mudah diakses dari URL manapun.
+
+- **Comprehensive Unit Testing & Verification (`tests/unit/dynamic-capi-formats.test.ts`, `tests/unit/role-permissions.test.ts`)**:
+  - Menambahkan unit test untuk memvalidasi parser nilai dinamis, template kustom per-tenant, prioritas ekstraksi, treatment cleaner, dan perizinan rute RBAC. Seluruh pengujian lulus 100%.
+
+### Added & Fixed — LiveChat Share Location Card Widget & Google Maps Direct Link (2026-08-21)
+
+- **LiveChat Message Bubble Location Card (`LiveChatMonitor.tsx`)**:
+  - Memperbaiki rendering pesan LiveChat yang sebelumnya menyembunyikan (*suppressed*) seluruh pesan teks lokasi yang berawalan `[LOCATION SHARE: Lat ...]` tanpa menampilkan bubble isi.
+  - Menambahkan kartu interaktif **Share Location**:
+    - Ikon Pin Lokasi (`MapPin`).
+    - Teks koordinat Latitude & Longitude (`-7.34886, 112.751677`).
+    - Tombol aksi **"Peta"** yang langsung membuka titik lokasi pelanggan di Google Maps (`https://www.google.com/maps/search/?api=1&query=lat,lng`) pada tab baru.
+
+### Fixed & Refined — Meta Click Catcher Attribution for Returning Contacts, CAPI Queue Moderation & MQL Lead Event Automation (2026-08-21)
+
+- **Meta CAPI Moderation Queue Fix (`reservations.subroute.ts`)**:
+  - Memperbaiki query antrian `GET /api/admin/capi-queue`: menghapus filter kaku `purchase_occurred_at: { not: null }` yang sebelumnya menyebabkan seluruh reservasi baru/pending tidak muncul di antrian.
+  - Menampilkan seluruh reservasi non-cancelled dengan fallback waktu kejadian transaksi ke `created_at` dan kalkulasi nilai treatment otomatis (`resolveTreatmentValue`), sehingga Admin dapat meninjau dan menyetujui pengiriman event Purchase ke Meta CAPI.
+  - Memperbaiki handler `POST /api/admin/reservation/:id/approve-purchase`: otomatis menginisialisasi `purchase_occurred_at` jika sebelumnya kosong dan mencatat log tindakan ke tabel `AuditLog`.
+
+- **MQL Lead Automation & CAPI Service Hardening (`customer.service.ts`, `capi.service.ts`)**:
+  - Menambahkan pemuatan otomatis relasi `adClick` saat event `Lead` terpicu pada `customer.service.ts` agar parameter atribusi iklan (fbp, fbc, fbclid, trackingCode) tidak hilang saat dikirim ke Meta.
+  - Menambahkan fallback pencarian otomatis `adClick` di database pada `capiService.sendCapiEvent` bila tidak dioper secara eksplisit.
+  - Menambahkan pencatatan audit log `MQL_LEAD_EVENT_SENT` ke tabel `AuditLog` database setiap kali event Lead sukses terkirim ke Meta CAPI.
+  - Memperbaiki fungsi `testCapiConnection` di `capi.service.ts` dengan menyertakan format data user valid (`user_data`) sehingga tombol live test koneksi di dashboard mengembalikan status 200 OK tanpa error subcode `2804050`.
+
+- **Meta Click Catcher Attribution for All Contacts (`ad-attribution.service.ts`)**:
+  - Menghapus pembatasan `isNewCustomerRecord` pada pencocokan kode tracking `Promo [code]` dan `ctwaClid`.
+  - Pelanggan lama atau nomor yang sudah tersimpan di database kini tetap dapat teratribusi ke data iklan (`AdClick`) saat mengklik iklan baru dan mengirim pesan ke bot.
+  - Menembakkan event CAPI `Contact` secara akurat pada setiap touchpoint iklan baru.
+
+### Added, Fixed & Refined — WAHA Internal Outbound Cut-Off Switch (Emergency Kill-Switch) & Settings UI Integration (2026-08-21)
+
+- **Internal Outbound Cut-Off Driver Guard (`whatsapp-provider.service.ts`, `waha.driver.ts`, `factory.ts`)**:
+  - Mengimplementasikan fitur **Saklar Pemutus Internal (*Emergency Outbound Kill-Switch*)** untuk memutus aliran pengiriman pesan keluar dari Bot Engine ke WAHA secara aman di level driver bot.
+  - Sesi WhatsApp Web di server WAHA **tetap aktif dan terhubung (login)** sehingga tidak perlu scan ulang QR dan pesan masuk (*inbound*) tetap terpantau.
+  - Setiap upaya pengiriman pesan teks (`sendTextMessage`), gambar (`sendImageMessage`), dan indikator mengetik (`sendTypingIndicator`) saat mode Cut-Off aktif otomatis diblokir dengan error code `WAHA_INTERNAL_CUTOFF` dan warning log.
+
+- **Endpoint API Cut-Off & Schema Database (`schema.prisma`, `src/routes/admin/waba.subroute.ts`)**:
+  - Menambahkan kolom `waha_outbound_cutoff Boolean @default(false)` pada model `Tenant` di database.
+  - Menambahkan field `wahaOutboundCutoff` pada endpoint `GET /api/admin/whatsapp-provider`.
+  - Menambahkan endpoint `PATCH /api/admin/whatsapp-provider/cutoff` untuk mengubah status cut-off per-tenant dengan audit logging.
+
+- **Panel WhatsApp Gateway di Operational Settings (`WhatsAppProviderPanel.tsx`, `Settings.tsx`)**:
+  - Menambahkan kartu kontrol interaktif **"Internal Outbound Cut-Off (Emergency Kill-Switch)"**:
+    - Status Badge: `🟢 TERHUBUNG (NORMAL)` vs `🔴 CUT-OFF AKTIF (TERPUTUS)`.
+    - Tombol Aksi: `⚡ Putuskan Aliran Internal` / `🔌 Sambungkan Aliran Internal`.
+    - Dialog konfirmasi aman (*no-native alert*) sebelum mengeksekusi tindakan.
+  - Memperbarui build produksi frontend React dashboard (`npm run build`).
+
+### Added, Fixed & Refined — Follow-Up Manual Approval Policy, Queue API Endpoints, Sandbox Filtering & Database Backlog Cleanup (2026-08-21)
+
+- **Manual Approval Policy & Safety Guard Pengiriman Follow-Up (`follow-up.service.ts`, `cron.service.ts`)**:
+  - Mengubah kebijakan pengiriman follow-up agar **TIDAK MENGIRIMKAN PESAN OTOMATIS** secara default (`AUTO_FOLLOWUP_ENABLED` wajib `'true'` jika ingin auto-send).
+  - Pesan follow-up baru tetap dijadwalkan dan masuk ke antrian database (*Follow-Up Queue*) dengan status `PENDING`, namun hanya dieksekusi kirim ke WhatsApp jika disetujui manual oleh Admin di Dashboard.
+  - Menambahkan **Overdue Spam Protection**: jika jadwal follow-up terlewat >48 jam saat auto-send aktif, pesan otomatis ditandai `SKIPPED` untuk mencegah ledakan blast pesan basi/kadaluarsa.
+
+- **Dedicated Admin API Subroute Antrian Follow-Up (`src/routes/admin/follow-up.subroute.ts`, `admin.route.ts`)**:
+  - Mengimplementasikan endpoint API backend lengkap untuk manajemen antrian:
+    - `GET /api/admin/follow-ups`: Mendukung filter status (`PENDING`, `SENT`, `CANCELLED`, `SKIPPED`, `FAILED`), filter tipe, pencarian nama/HP, dan pagination.
+    - `POST /api/admin/follow-ups/:id/send-now`: Eksekusi pengiriman manual (Approve & Kirim Sekarang) oleh Admin dengan audit logging.
+    - `PATCH /api/admin/follow-ups/:id/cancel`: Pembatalan item follow-up tertentu.
+    - `POST /api/admin/follow-ups/bulk-cancel`: Pembatalan massal seluruh antrian pending.
+    - `PATCH /api/admin/follow-ups/:id/reschedule`: Penjadwalan ulang tanggal/jam kirim.
+    - `GET|POST|PUT|DELETE /api/admin/follow-up-templates`: Manajemen kustomisasi template teks follow-up per tenant.
+
+- **Penyelarasan UI Admin Dashboard Follow-Up Queue (`FollowUpQueue.tsx`)**:
+  - Menghubungkan seluruh antrian data secara real-time dengan backend API.
+  - Menambahkan banner informatif *"Mode Manual Approval Aktif"*, tombol **"Batalkan Semua Pending"**, tombol **"Kirim Sekarang"**, dan badge status yang jelas.
+  - Memperbarui bundle produksi dashboard (`npm run build`).
+
+- **Pembersihan Database Backlog & Filter Kontak Sandbox (`customer.service.ts`, `follow-up.service.ts`)**:
+  - Membatalkan seluruh sisa antrian `PENDING` lama dan menghapus follow-up kontak sandbox/dummy test.
+  - Menerapkan guard ganda `is_sandbox_test: false` dan `isDummyOrTestContact` agar data testing tidak pernah masuk antrian follow-up.
+
 ### Added, Fixed & Refined — Time Range Display, Clickable Treatment Cards, Customer LTV/Treatment Stats, Background Reservation Auto-Capture & Follow-Up Queue Worker Activation (2026-08-21)
 
 - **Rentang Jam Kunjungan Lengkap (`Reservations.tsx`, `TodayTreatments.tsx`)**:

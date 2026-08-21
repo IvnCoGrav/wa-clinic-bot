@@ -104,12 +104,14 @@ export async function getTenantCapiFormats(tenantId?: string): Promise<{
   formatPurchase: string;
   formatVisit: string;
   greetingsText: string;
+  formatValue: string;
 }> {
   const defaults = {
     formatCheckout: 'list untuk reservasi :',
     formatPurchase: 'Payment',
     formatVisit: 'Promo[%ID%]',
     greetingsText: 'Promo [%ID%]',
+    formatValue: 'Treatment = %VALUE%',
   };
   if (!tenantId) return defaults;
   try {
@@ -120,10 +122,74 @@ export async function getTenantCapiFormats(tenantId?: string): Promise<{
       formatPurchase: tenant?.format_purchase?.trim() || defaults.formatPurchase,
       formatVisit: tenant?.format_visit?.trim() || defaults.formatVisit,
       greetingsText: (tenant as any)?.greetings_text?.trim() || tenant?.format_visit?.trim() || defaults.greetingsText,
+      formatValue: (tenant as any)?.format_value?.trim() || defaults.formatValue,
     };
   } catch {
     return defaults;
   }
+}
+
+/**
+ * Ekstrak nominal rupiah murni dari teks berdasarkan template formatValue tenant (misal: "Treatment = %VALUE%").
+ * Mengubah formatValue menjadi regex dinamis yang menangkap angka di sekitar %VALUE%.
+ */
+export function extractValueByFormat(text: string, formatValueTemplate?: string): number | undefined {
+  if (!text) return undefined;
+  const template = (formatValueTemplate && formatValueTemplate.includes('%VALUE%'))
+    ? formatValueTemplate.trim()
+    : 'Treatment = %VALUE%';
+
+  // Pisahkan prefix dan suffix di sekitar %VALUE%
+  const parts = template.split('%VALUE%');
+  const rawPrefix = parts[0] || '';
+  const rawSuffix = parts[1] || '';
+
+  // Escape karakter khusus regex
+  const escapeRegex = (s: string) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+  // Buat pola prefix fleksibel
+  const flexiblePrefix = escapeRegex(rawPrefix.trim())
+    .replace(/\s+/g, '\\s*')
+    .replace(/\\:|\\=/g, '[:=]?');
+
+  const flexibleSuffix = escapeRegex(rawSuffix.trim()).replace(/\s+/g, '\\s*');
+
+  // Pola penangkapan angka rupiah di posisi %VALUE%
+  const regexStr = `${flexiblePrefix ? flexiblePrefix + '\\s*' : ''}(?:Rp[\\s.]?)?([\\d.,]+(?:\\s*(?:rb|ribu))?)${flexibleSuffix ? '\\s*' + flexibleSuffix : ''}`;
+  const regex = new RegExp(regexStr, 'i');
+
+  const match = text.match(regex);
+  if (match && match[1]) {
+    const rawVal = match[1];
+    let numStr = rawVal.replace(/[^\d]/g, '');
+    if (!numStr) return undefined;
+    let val = parseInt(numStr, 10);
+    const lower = rawVal.toLowerCase();
+    if (lower.includes('rb') || lower.includes('ribu')) {
+      val = val * 1000;
+    }
+    if (val >= 5000 && val <= 100_000_000) {
+      return val;
+    }
+  }
+
+  // Fallback: cari pola umum "Treatment = 70.000" atau "Layanan = 70.000"
+  const genericMatch = text.match(/(?:Treatment|Layanan|Paket)\s*[:=]?\s*(?:Rp[\s.]?)?([\d.,]+(?:\s*(?:rb|ribu))?)/i);
+  if (genericMatch && genericMatch[1]) {
+    const rawVal = genericMatch[1];
+    let numStr = rawVal.replace(/[^\d]/g, '');
+    if (!numStr) return undefined;
+    let val = parseInt(numStr, 10);
+    const lower = rawVal.toLowerCase();
+    if (lower.includes('rb') || lower.includes('ribu')) {
+      val = val * 1000;
+    }
+    if (val >= 5000 && val <= 100_000_000) {
+      return val;
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -196,7 +262,18 @@ export class CapiService {
       return { success: false, message: 'Skipped: Sandbox or dummy test contact' };
     }
 
-    const isPaid = !!adClick;
+    let effectiveAdClick = adClick || (customer as any)?.adClick;
+    if (!effectiveAdClick && customer?.id) {
+      try {
+        const { prisma } = await import('../db/client');
+        effectiveAdClick = await prisma.adClick.findFirst({
+          where: { customerId: customer.id },
+          orderBy: { matchedAt: 'desc' },
+        });
+      } catch {}
+    }
+
+    const isPaid = !!effectiveAdClick;
 
     // 2. Tenant-aware credentials (DB menang, env fallback)
     let pixelId = process.env.FB_PIXEL_ID;
@@ -230,14 +307,14 @@ export class CapiService {
     try {
       // 2. NORMALIZE & HASH PII (Nomor HP, Nama, External ID, Kota, Zipcode, Country) menggunakan Meta ParamBuilder
       const builder = new ParamBuilder();
-      const rawPhone = customer.phone || adClick?.phone || '';
+      const rawPhone = customer.phone || effectiveAdClick?.phone || '';
       const normalizedPhone = normalizePhoneToE164(rawPhone);
       const hashedPhone = builder.getNormalizedAndHashedPII(normalizedPhone, PII_DATA_TYPE.PHONE);
 
       // Advanced Matching: Nama Depan & Nama Belakang dari Customer / AdClick
       let hashedFn: string | undefined;
       let hashedLn: string | undefined;
-      const rawName = (customer.name || customer.pushName || adClick?.name || '').trim();
+      const rawName = (customer.name || customer.pushName || effectiveAdClick?.name || '').trim();
       if (rawName) {
         const parts = rawName.split(/\s+/);
         const firstName = parts[0];
@@ -273,17 +350,17 @@ export class CapiService {
 
       // Gunakan server-side ParamBuilder untuk memproses parameter browser/IP & menambahkan appendix
       const mockCookies: Record<string, string> = {};
-      if (adClick?.fbp) mockCookies._fbp = adClick.fbp;
-      if (adClick?.fbc) mockCookies._fbc = adClick.fbc;
-      if (adClick?.ipAddress) mockCookies._fbi = adClick.ipAddress;
+      if (effectiveAdClick?.fbp) mockCookies._fbp = effectiveAdClick.fbp;
+      if (effectiveAdClick?.fbc) mockCookies._fbc = effectiveAdClick.fbc;
+      if (effectiveAdClick?.ipAddress) mockCookies._fbi = effectiveAdClick.ipAddress;
 
       const mockQueries: Record<string, string> = {};
-      if (adClick?.fbclid) mockQueries.fbclid = adClick.fbclid;
+      if (effectiveAdClick?.fbclid) mockQueries.fbclid = effectiveAdClick.fbclid;
 
       let host = 'localhost';
       try {
-        if (adClick?.landingUrl) {
-          host = new URL(adClick.landingUrl).hostname;
+        if (effectiveAdClick?.landingUrl) {
+          host = new URL(effectiveAdClick.landingUrl).hostname;
         }
       } catch {}
 
@@ -292,13 +369,13 @@ export class CapiService {
         mockQueries,
         mockCookies,
         null, // referer
-        adClick?.ipAddress || null, // xForwardedFor
-        adClick?.ipAddress || null // remoteAddress
+        effectiveAdClick?.ipAddress || null, // xForwardedFor
+        effectiveAdClick?.ipAddress || null // remoteAddress
       );
 
-      const fbc = builder.getFbc() || adClick?.fbc;
-      const fbp = builder.getFbp() || adClick?.fbp;
-      const clientIp = builder.getClientIpAddress() || adClick?.ipAddress;
+      const fbc = builder.getFbc() || effectiveAdClick?.fbc;
+      const fbp = builder.getFbp() || effectiveAdClick?.fbp;
+      const clientIp = builder.getClientIpAddress() || effectiveAdClick?.ipAddress;
 
       // 3. CONSTRUCT USER DATA (Meta specs: hash phone/name/external_id/city/zip/country, keep IP/UA/Cookies clean)
       const userData: any = {};
@@ -326,8 +403,8 @@ export class CapiService {
       if (clientIp) {
         userData.client_ip_address = clientIp;
       }
-      if (adClick?.userAgent) {
-        userData.client_user_agent = adClick.userAgent;
+      if (effectiveAdClick?.userAgent) {
+        userData.client_user_agent = effectiveAdClick.userAgent;
       }
       if (fbc) {
         userData.fbc = fbc;
@@ -343,19 +420,19 @@ export class CapiService {
         // eventTime opsional (Unix seconds) → dipakai moderator saat mengirim
         // event Purchase historis; default = waktu saat ini.
         event_time: eventTime ?? Math.floor(Date.now() / 1000),
-        event_source_url: adClick?.landingUrl || undefined,
+        event_source_url: effectiveAdClick?.landingUrl || undefined,
         action_source: 'chat',
         user_data: userData,
         custom_data: {
           ...(customData || {}),
           traffic_source: isPaid ? 'paid' : 'organic',
-          ...(adClick?.utmSource ? { utm_source: adClick.utmSource } : {}),
-          ...(adClick?.utmMedium ? { utm_medium: adClick.utmMedium } : {}),
-          ...(adClick?.utmCampaign ? { utm_campaign: adClick.utmCampaign } : {}),
+          ...(effectiveAdClick?.utmSource ? { utm_source: effectiveAdClick.utmSource } : {}),
+          ...(effectiveAdClick?.utmMedium ? { utm_medium: effectiveAdClick.utmMedium } : {}),
+          ...(effectiveAdClick?.utmCampaign ? { utm_campaign: effectiveAdClick.utmCampaign } : {}),
         },
       };
-      if (adClick?.trackingCode) {
-        eventData.event_id = adClick.trackingCode;
+      if (effectiveAdClick?.trackingCode) {
+        eventData.event_id = effectiveAdClick.trackingCode;
       } else {
         eventData.event_id = `org_${customer.id}_${eventName.toLowerCase()}_${Math.floor(Date.now() / 1000)}`;
       }
@@ -485,21 +562,31 @@ export class CapiService {
 
     // 2. Bangun payload event test minimal (event_id unik agar tidak bertabrakan dengan event riil)
     const eventName = params.eventName || 'Contact';
+    const builder = new ParamBuilder();
+    const testNormalizedPhone = '6288888888888';
+    const hashedPhone = builder.getNormalizedAndHashedPII(testNormalizedPhone, PII_DATA_TYPE.PHONE);
+    const hashedFn = builder.getNormalizedAndHashedPII('Tester', PII_DATA_TYPE.FIRST_NAME);
+    const hashedCountry = builder.getNormalizedAndHashedPII('id', PII_DATA_TYPE.COUNTRY);
+
     const eventData: any = {
       event_name: eventName,
       event_time: Math.floor(Date.now() / 1000),
       event_id: `capi_test_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
-      action_source: 'website',
+      action_source: 'chat',
       user_data: {
-        client_ip_address: params.ipAddress || undefined,
-        client_user_agent: params.userAgent || 'Admin CAPI Test',
+        ph: hashedPhone ? [hashedPhone] : undefined,
+        fn: hashedFn ? [hashedFn] : undefined,
+        country: hashedCountry ? [hashedCountry] : undefined,
+        client_ip_address: params.ipAddress || '127.0.0.1',
+        client_user_agent: params.userAgent || 'Admin CAPI Test Connection',
+      },
+      custom_data: {
+        traffic_source: 'test',
       },
     };
     if (params.value !== undefined && params.value !== null && !Number.isNaN(Number(params.value))) {
-      eventData.custom_data = {
-        value: Number(params.value),
-        currency: params.currency || 'IDR',
-      };
+      eventData.custom_data.value = Number(params.value);
+      eventData.custom_data.currency = params.currency || 'IDR';
     }
     if (params.testEventCode && params.testEventCode.trim()) {
       eventData.test_event_code = params.testEventCode.trim();

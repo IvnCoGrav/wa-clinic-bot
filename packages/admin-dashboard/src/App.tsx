@@ -222,6 +222,8 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             } />
             <Route path="/admin/meta-capi" element={<Navigate to="/admin/meta-capi-queue" replace />} />
+            <Route path="/admin/capi-queue" element={<Navigate to="/admin/meta-capi-queue" replace />} />
+            <Route path="/admin/capi" element={<Navigate to="/admin/meta-capi-queue" replace />} />
 
             <Route path="/admin/settings" element={
               <ProtectedRoute>

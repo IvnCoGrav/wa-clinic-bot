@@ -503,6 +503,7 @@ model Tenant {
   raw_html_content          String?
   whatsapp_provider         WhatsappProvider @default(WAHA)
   waha_session_id           String?          @default("default")
+  waha_outbound_cutoff      Boolean          @default(false)
   waba_phone_number_id      String?
   waba_business_account_id  String?
   waba_access_token         String?

@@ -7,6 +7,7 @@ import { TEMPLATES } from '../../src/config/persona';
 describe('Broadcast Throttling & Queue Constraint Tests', () => {
   beforeAll(() => {
     process.env.HUMANIZER_ENABLED = 'false';
+    process.env.ENABLE_FOLLOWUP_WORKER = 'true';
   });
 
   let setTimeoutSpy: any;

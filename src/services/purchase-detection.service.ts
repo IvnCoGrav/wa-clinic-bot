@@ -4,6 +4,7 @@ import {
   fireCapiEvent,
   getTenantCapiFormats,
   getTenantAutoSendPurchaseCapi,
+  extractValueByFormat,
 } from './capi.service';
 
 /**
@@ -12,8 +13,8 @@ import {
  * UX funnel: setelah form reservasi terkonfirmasi, customer mengirim pesan bayar
  * yang berisi label payment (format_purchase tenant, default "Payment") beserta
  * nominal rupiah, misal "Payment 250000". Saat terdeteksi → fire event CAPI
- * 'Purchase' (value di-parse dari pesan, fallback ke katalog treatment) dan tandai
- * purchase_event_sent_at pada reservasi terakhir customer agar tombol "Tandai
+ * 'Purchase' (value di-parse dari pesan via format_value tenant, fallback ke katalog treatment)
+ * dan tandai purchase_event_sent_at pada reservasi terakhir customer agar tombol "Tandai
  * Lunas" di dashboard nonaktif selama 7 hari (cegah double-count & cover repeat order).
  *
  * Moderasi outlier (default ON): event TIDAK langsung dikirim. purchase_occurred_at
@@ -25,9 +26,13 @@ import {
 
 const PURCHASE_DEDUP_WINDOW_MS = 1000 * 60 * 60 * 24 * 7; // 7 hari
 
-/** Ekstrak nominal rupiah terbesar dari teks. Kembalikan number | undefined. */
-export function extractRupiahAmount(text: string): number | undefined {
+/** Ekstrak nominal rupiah dari teks (prioritaskan formatValue jika ada, lalu pola umum terbesar). */
+export function extractRupiahAmount(text: string, formatValueTemplate?: string): number | undefined {
   if (!text) return undefined;
+  if (formatValueTemplate) {
+    const formattedVal = extractValueByFormat(text, formatValueTemplate);
+    if (formattedVal !== undefined) return formattedVal;
+  }
   // Pola: "Rp 250.000", "Rp250000", "250.000", "250000", "250 rb"/"ribu"
   const patterns = [
     /Rp[\s.]?([\d.,]+)\s*(rb|ribu)?/gi,
@@ -71,8 +76,8 @@ export async function maybeFirePurchaseEvent(params: {
     return false;
   }
 
-  // Anti false-positive: wajib ada nominal rupiah.
-  const amount = extractRupiahAmount(text);
+  // Anti false-positive: wajib ada nominal rupiah (utamakan formatValue tenant).
+  const amount = extractRupiahAmount(text, formats.formatValue);
   if (amount === undefined) {
     return false;
   }
@@ -101,8 +106,9 @@ export async function maybeFirePurchaseEvent(params: {
       Date.now() - new Date(reservation.purchase_event_sent_at).getTime() < PURCHASE_DEDUP_WINDOW_MS;
     if (alreadySentRecently) return false;
 
-    // Nilai definitif: nominal dari pesan customer (lebih akurat), fallback katalog.
-    const value = amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
+    // Nilai definitif: nominal murni dari formatValue tenant, lalu amount, fallback katalog.
+    const pureTreatmentVal = extractValueByFormat(text, formats.formatValue);
+    const value = pureTreatmentVal ?? amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
 
     // Kebijakan moderasi: default tahan (false = moderasi manual aktif) sampai
     // admin approve/reject di dashboard. Hanya true → kirim langsung.

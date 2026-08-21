@@ -731,6 +731,9 @@ export class CustomerService {
           is_mql: current.is_mql || shouldQualifyMql,
           mql_triggered_at: shouldQualifyMql ? new Date() : current.mql_triggered_at,
         },
+        include: {
+          adClick: true,
+        },
       });
 
       // Update memory store fallback if exists
@@ -744,12 +747,15 @@ export class CustomerService {
       }
 
       // 3. Jika baru saja memenuhi MQL dan auto lead aktif, picu event CAPI 'Lead'
-      if (newlyTriggeredMql && mqlAutoLead) {
+      if (shouldQualifyMql && mqlAutoLead) {
         try {
           const { capiService } = await import('./capi.service');
-          await capiService.sendCapiEvent({
+          const { auditService } = await import('./audit.service');
+
+          const capiResult = await capiService.sendCapiEvent({
             eventName: 'Lead',
             customer: updatedCustomer,
+            adClick: (updatedCustomer as any)?.adClick || undefined,
             tenantId,
             customData: {
               mql_bubble_count: newCount,
@@ -757,7 +763,25 @@ export class CustomerService {
               triggered_reason: 'MQL_BUBBLE_THRESHOLD_REACHED',
             },
           });
-          console.log(`[MQL AUTOMATION] Customer ${customerId} (${updatedCustomer.phone}) reached ${newCount} bubbles (threshold: ${mqlThreshold}). Lead event triggered.`);
+
+          if (capiResult.success) {
+            console.log(`[MQL AUTOMATION] Customer ${customerId} (${updatedCustomer.phone}) reached ${newCount} bubbles (threshold: ${mqlThreshold}). Lead event sent to Meta CAPI.`);
+            await auditService.logAdminAction({
+              apiKey: 'SYSTEM_MQL_WORKER',
+              adminIdentity: 'System (MQL Automation)',
+              action: 'MQL_LEAD_EVENT_SENT',
+              targetId: customerId,
+              payload: {
+                phone: updatedCustomer.phone,
+                mql_bubble_count: newCount,
+                mql_threshold: mqlThreshold,
+                fbtrace_id: capiResult.fbtrace_id,
+                hasAdClick: !!(updatedCustomer as any)?.adClick,
+              },
+            });
+          } else {
+            console.warn(`[MQL AUTOMATION] Lead event skipped or failed for customer ${customerId}: ${capiResult.message}`);
+          }
         } catch (capiErr: any) {
           console.error(`[MQL AUTOMATION] Failed to send Lead CAPI event for customer ${customerId}:`, capiErr.message);
         }

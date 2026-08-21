@@ -74,6 +74,22 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
           chatId: ctx.incomingMessage.chatId || `${customer.phone}@c.us`,
           babies: parsed.babies || [],
         });
+
+        // CAPI InitiateCheckout: Customer mengirimkan formulir reservasi yang sudah diisi
+        try {
+          const { fireCapiEvent } = await import('../../services/capi.service');
+          fireCapiEvent({
+            eventName: 'InitiateCheckout',
+            customer,
+            tenantId,
+            customData: {
+              source: 'CUSTOMER_FORM_SUBMITTED',
+              treatment: parsed.treatmentDetail,
+            },
+          });
+        } catch (capiErr) {
+          console.warn('[CAPI] InitiateCheckout (customer form submit) skipped:', (capiErr as Error).message);
+        }
       } catch (dbErr) {
         // Abaikan error DB untuk in-memory fallback
       }

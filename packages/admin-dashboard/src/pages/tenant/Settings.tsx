@@ -74,6 +74,8 @@ export const Settings: React.FC = () => {
   }>>([]);
   const [savingProvider, setSavingProvider] = useState(false);
   const [providerTab, setProviderTab] = useState<'WAHA' | 'WABA'>('WAHA');
+  const [wahaOutboundCutoff, setWahaOutboundCutoff] = useState(false);
+  const [togglingCutoff, setTogglingCutoff] = useState(false);
 
   // Fitur 1: Konek WhatsApp via QR (Admin UI)
   const [qrData, setQrData] = useState<{ mimetype: string; data: string } | null>(null);
@@ -411,6 +413,7 @@ export const Settings: React.FC = () => {
         setProvider(d.provider || 'WAHA');
         setWahaStatus(d.wahaStatus || 'UNKNOWN');
         setWahaSessionId(d.wahaSessionId || 'default');
+        setWahaOutboundCutoff(Boolean(d.wahaOutboundCutoff));
         setWabaConfigured(!!d.waba?.configured);
         setWabaPhoneNumberId(d.waba?.phoneNumberId || '');
         setWabaBusinessAccountId(d.waba?.businessAccountId || '');
@@ -419,6 +422,34 @@ export const Settings: React.FC = () => {
       }
     } catch (err) {
       console.warn('Failed to load WhatsApp provider config:', err);
+    }
+  };
+
+  const handleToggleOutboundCutoff = async (newVal: boolean) => {
+    const isConfirm = await confirm({
+      title: newVal ? 'Putuskan Aliran Internal?' : 'Sambungkan Aliran Internal?',
+      message: newVal
+        ? 'Putuskan aliran pengiriman pesan keluar bot ke WAHA? Sesi WhatsApp di HP tetap aktif dan login, namun bot tidak akan mengirim pesan keluar apa pun sampai disambungkan kembali.'
+        : 'Sambungkan kembali aliran pengiriman pesan keluar bot ke WAHA?',
+      confirmText: newVal ? 'Ya, Putuskan Cut-Off' : 'Ya, Sambungkan',
+      danger: newVal,
+    });
+    if (!isConfirm) return;
+
+    setTogglingCutoff(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/cutoff', {
+        method: 'PATCH',
+        body: JSON.stringify({ cutOff: newVal }),
+      });
+      if (res && res.success) {
+        setWahaOutboundCutoff(Boolean(res.wahaOutboundCutoff));
+        toast(res.message || 'Status cut-off internal berhasil diperbarui.', 'success');
+      }
+    } catch (err: any) {
+      toast(`Gagal mengubah status cut-off: ${err.message}`, 'error');
+    } finally {
+      setTogglingCutoff(false);
     }
   };
 
@@ -698,6 +729,9 @@ export const Settings: React.FC = () => {
         loadWhatsAppProvider={loadWhatsAppProvider}
         wahaStatus={wahaStatus}
         wahaSessionId={wahaSessionId}
+        wahaOutboundCutoff={wahaOutboundCutoff}
+        togglingCutoff={togglingCutoff}
+        handleToggleOutboundCutoff={handleToggleOutboundCutoff}
         qrData={qrData}
         qrStatus={qrStatus}
         qrMessage={qrMessage}

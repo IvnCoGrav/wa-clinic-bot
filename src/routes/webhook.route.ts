@@ -301,6 +301,46 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               } catch (adminCaptureErr: any) {
                 console.warn('[ADMIN OUTBOUND AUTO-CAPTURE ERROR]', adminCaptureErr.message);
               }
+
+              // 6. CAPI Event Trigger dari Pesan Outbound WhatsApp HP (InitiateCheckout & Purchase)
+              try {
+                const { getTenantCapiFormats, fireCapiEvent } = await import('../services/capi.service');
+                const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+                const replyLower = adminReplyText.toLowerCase();
+
+                // A. InitiateCheckout jika pesan memuat format_checkout
+                const checkoutKeyword = formats.formatCheckout.toLowerCase().replace(/\s+/g, ' ').trim();
+                if (checkoutKeyword.length > 0 && replyLower.includes(checkoutKeyword)) {
+                  let adClick: any;
+                  try {
+                    adClick = await prisma.adClick.findUnique({ where: { customerId: customer.id } });
+                  } catch (_) {
+                    adClick = undefined;
+                  }
+                  fireCapiEvent({
+                    eventName: 'InitiateCheckout',
+                    customer,
+                    adClick: adClick || undefined,
+                    tenantId: DEFAULT_TENANT_ID,
+                    customData: { source: 'ADMIN_HP_FORM_SENT' },
+                  });
+                  console.log(`[CAPI] InitiateCheckout triggered from WhatsApp HP outbound message (${customer.phone}).`);
+                }
+
+                // B. Purchase detection jika pesan memuat format_purchase
+                const purchaseKeyword = formats.formatPurchase.toLowerCase().trim();
+                if (purchaseKeyword.length > 0 && replyLower.includes(purchaseKeyword)) {
+                  const { maybeFirePurchaseEvent } = await import('../services/purchase-detection.service');
+                  await maybeFirePurchaseEvent({
+                    customer,
+                    conversation,
+                    text: adminReplyText,
+                    tenantId: DEFAULT_TENANT_ID,
+                  });
+                }
+              } catch (capiErr: any) {
+                console.warn('[CAPI OUTBOUND ERROR]', capiErr.message);
+              }
             }
           }
         }

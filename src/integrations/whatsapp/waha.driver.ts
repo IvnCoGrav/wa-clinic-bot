@@ -11,12 +11,25 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   readonly supportsRevoke = true;
   readonly supportsEdit = true;
   private client: IWahaClient;
+  private tenantId: string;
 
-  constructor(client?: IWahaClient) {
+  constructor(client?: IWahaClient, tenantId: string = 'default-tenant') {
     this.client = client || wahaClient;
+    this.tenantId = tenantId;
   }
 
   async sendTextMessage(to: string, text: string): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WAHA CUT-OFF ACTIVE] Outbound text message to ${to} blocked by internal safety cut-off. Real WAHA session remains active.`);
+      return {
+        success: false,
+        provider: 'WAHA',
+        error: { code: 'WAHA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WAHA sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     const chatId = this.toChatId(to);
     try {
       if (typeof this.client.sendTextDetailed === 'function') {
@@ -65,6 +78,17 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WAHA CUT-OFF ACTIVE] Outbound image message to ${to} blocked by internal safety cut-off.`);
+      return {
+        success: false,
+        provider: 'WAHA',
+        error: { code: 'WAHA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WAHA sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     const chatId = this.toChatId(to);
     try {
       if (typeof this.client.sendImageDetailed === 'function') {
@@ -83,6 +107,10 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendTypingIndicator(to: string, _incomingMessageId?: string, durationMs?: number): Promise<void> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) return;
+
     const chatId = this.toChatId(to);
     const delay = Math.max(0, durationMs ?? 3000);
     try {

@@ -6,6 +6,7 @@ import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { wabaTemplateService } from './waba-template.service';
 import { wabaConsentService } from './waba-consent.service';
 import { parsePositiveInt } from '../utils/env-numeric';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 // Parameter batch/throttle follow-up — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
@@ -98,35 +99,154 @@ export class FollowUpService {
   }
 
   /**
+   * Mengambil daftar antrian follow-up dengan pagination, filter, dan search.
+   */
+  public async listFollowUps(
+    tenantId: string = DEFAULT_TENANT_ID,
+    options: {
+      status?: string;
+      type?: string;
+      search?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ): Promise<{
+    data: any[];
+    pagination: {
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    };
+  }> {
+    const page = Math.max(1, options.page || 1);
+    const pageSize = Math.min(100, Math.max(1, options.pageSize || 20));
+    const skip = (page - 1) * pageSize;
+
+    const where: any = {
+      tenant_id: tenantId,
+    };
+
+    if (options.status && options.status !== 'all') {
+      where.status = options.status;
+    }
+
+    if (options.type && options.type !== 'all') {
+      where.type = options.type;
+    }
+
+    if (options.search) {
+      const q = options.search.trim();
+      where.customer = {
+        OR: [
+          { phone: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    try {
+      const [total, data] = await Promise.all([
+        prisma.followUp.count({ where }),
+        prisma.followUp.findMany({
+          where,
+          include: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                kelurahan: true,
+                kecamatan: true,
+                kota: true,
+                status: true,
+                is_sandbox_test: true,
+              },
+            },
+          },
+          orderBy: [{ scheduled_at: 'desc' }, { created_at: 'desc' }],
+          skip,
+          take: pageSize,
+        }),
+      ]);
+
+      return {
+        data,
+        pagination: {
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 1,
+        },
+      };
+    } catch (err: any) {
+      console.error('[FollowUp Service] Failed to list follow-ups:', err.message);
+      return {
+        data: [],
+        pagination: {
+          total: 0,
+          page: 1,
+          pageSize,
+          totalPages: 1,
+        },
+      };
+    }
+  }
+
+  /**
    * Dipanggil saat customer baru terdaftar di database.
-   * Membuat 3 row follow-up PENDING tipe NO_PURCHASE (+3, +7, +14 hari).
+   * Membuat 3 row follow-up PENDING tipe NO_PURCHASE (+3, +7, +14 hari) di antrian.
    */
   public async createNoPurchaseFollowUps(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
-    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
-      return;
-    }
     try {
+      // 1. Verifikasi customer bukan akun sandbox/dummy test (offline-safe)
+      try {
+        const customer = await prisma.customer?.findUnique?.({ where: { id: customerId } });
+        if (customer && (customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name))) {
+          return;
+        }
+      } catch (_) {}
+
+      // 2. Cek apakah sudah ada antrian NO_PURCHASE aktif (idempoten)
+      let existing = null;
+      try {
+        existing = await prisma.followUp?.findFirst?.({
+          where: {
+            customer_id: customerId,
+            type: 'NO_PURCHASE',
+            tenant_id: tenantId,
+            status: { in: ['PENDING', 'QUEUED'] },
+          },
+        });
+      } catch (_) {}
+
+      if (existing) {
+        return;
+      }
+
       const stages = [1, 2, 3];
       const days = [3, 7, 14];
       
       await Promise.all(
-        stages.map((stage, idx) => {
+        stages.map(async (stage, idx) => {
           const scheduledAt = new Date();
           scheduledAt.setDate(scheduledAt.getDate() + days[idx]);
           
-          return prisma.followUp.create({
-            data: {
-              tenant_id: tenantId,
-              customer_id: customerId,
-              type: 'NO_PURCHASE',
-              stage,
-              scheduled_at: scheduledAt,
-              status: 'PENDING',
-            },
-          });
+          try {
+            await prisma.followUp?.create?.({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                type: 'NO_PURCHASE',
+                stage,
+                scheduled_at: scheduledAt,
+                status: 'PENDING',
+              },
+            });
+          } catch (_) {}
         })
       );
-      console.log(`[FollowUp Service] Created NO_PURCHASE follow-ups for customer: ${customerId}`);
+      console.log(`[FollowUp Service] Queued NO_PURCHASE follow-ups for customer: ${customerId}`);
     } catch (err) {
       console.error('[FollowUp Service] Failed to create NO_PURCHASE follow-ups:', err);
     }
@@ -139,28 +259,35 @@ export class FollowUpService {
    */
   public async onReservationCreated(customerId: string, reservationId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
-      const activeFollowUps = await prisma.followUp.findMany({
-        where: {
-          customer_id: customerId,
-          status: { in: ['PENDING', 'QUEUED'] },
-          tenant_id: tenantId
-        }
-      });
+      let activeFollowUps: any[] = [];
+      try {
+        activeFollowUps = (await prisma.followUp?.findMany?.({
+          where: {
+            customer_id: customerId,
+            status: { in: ['PENDING', 'QUEUED'] },
+            tenant_id: tenantId,
+          },
+        })) || [];
+      } catch (_) {}
 
-      if (activeFollowUps.length > 0) {
+      if (activeFollowUps && activeFollowUps.length > 0) {
         // Tandai reservasi ini sebagai repeat order
-        await prisma.reservation.update({
-          where: { id: reservationId },
-          data: { is_repeat_order: true }
-        });
+        try {
+          await prisma.reservation?.update?.({
+            where: { id: reservationId },
+            data: { is_repeat_order: true },
+          });
+        } catch (_) {}
 
         // Batalkan semua follow-up aktif tersebut
-        await prisma.followUp.updateMany({
-          where: {
-            id: { in: activeFollowUps.map(f => f.id) }
-          },
-          data: { status: 'CANCELLED' }
-        });
+        try {
+          await prisma.followUp?.updateMany?.({
+            where: {
+              id: { in: activeFollowUps.map(f => f.id) },
+            },
+            data: { status: 'CANCELLED' },
+          });
+        } catch (_) {}
         console.log(`[FollowUp Service] Cancelled ${activeFollowUps.length} active follow-ups for customer: ${customerId}. Set is_repeat_order = true.`);
       }
     } catch (err) {
@@ -170,23 +297,30 @@ export class FollowUpService {
 
   /**
    * Dipanggil saat reservasi dikonfirmasi/rescheduled/selesai.
-   * Membuat 3 row follow-up PENDING tipe NEXT_TREATMENT (+1, +2, +3 bulan).
+   * Membuat 3 row follow-up PENDING tipe NEXT_TREATMENT (+1, +2, +3 bulan) di antrian.
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
-    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
-      return;
-    }
     try {
-      // Idempotensi: jika sudah ada row NEXT_TREATMENT aktif (belum terkirim) untuk
-      // customer ini, jangan buat duplikat (pemanggilan ganda / retry cron).
-      const existing = await prisma.followUp.findFirst({
-        where: {
-          customer_id: customerId,
-          type: 'NEXT_TREATMENT',
-          tenant_id: tenantId,
-          status: { in: ['PENDING', 'QUEUED'] },
-        },
-      });
+      // 1. Verifikasi customer bukan akun sandbox/dummy test (offline-safe)
+      try {
+        const customer = await prisma.customer?.findUnique?.({ where: { id: customerId } });
+        if (customer && (customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name))) {
+          return;
+        }
+      } catch (_) {}
+
+      // Idempotensi: jika sudah ada row NEXT_TREATMENT aktif untuk customer ini, jangan buat duplikat
+      let existing = null;
+      try {
+        existing = await prisma.followUp?.findFirst?.({
+          where: {
+            customer_id: customerId,
+            type: 'NEXT_TREATMENT',
+            tenant_id: tenantId,
+            status: { in: ['PENDING', 'QUEUED'] },
+          },
+        });
+      } catch (_) {}
 
       if (existing) {
         console.log(`[FollowUp Service] NEXT_TREATMENT follow-ups already exist for customer: ${customerId}. Skipping (idempotent).`);
@@ -197,38 +331,116 @@ export class FollowUpService {
       const stages = [1, 2, 3];
       
       await Promise.all(
-        stages.map((stage) => {
+        stages.map(async (stage) => {
           const scheduledAt = new Date(bookingDate);
           scheduledAt.setMonth(scheduledAt.getMonth() + stage);
           
-          return prisma.followUp.create({
-            data: {
-              tenant_id: tenantId,
-              customer_id: customerId,
-              type: 'NEXT_TREATMENT',
-              stage,
-              scheduled_at: scheduledAt,
-              status: 'PENDING',
-            },
-          });
+          try {
+            await prisma.followUp?.create?.({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                type: 'NEXT_TREATMENT',
+                stage,
+                scheduled_at: scheduledAt,
+                status: 'PENDING',
+              },
+            });
+          } catch (_) {}
         })
       );
-      console.log(`[FollowUp Service] Created NEXT_TREATMENT follow-ups for customer: ${customerId}`);
+      console.log(`[FollowUp Service] Queued NEXT_TREATMENT follow-ups for customer: ${customerId}`);
     } catch (err) {
       console.error('[FollowUp Service] Failed to create NEXT_TREATMENT follow-ups:', err);
     }
   }
 
   /**
+   * Manual Send (Approve & Send Now) — dipanggil dari Admin Dashboard.
+   */
+  public async sendNow(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const fu = await prisma.followUp.findFirst({
+      where: { id, tenant_id: tenantId },
+      include: {
+        customer: {
+          include: {
+            children: true,
+          },
+        },
+      },
+    });
+
+    if (!fu) {
+      throw new Error(`Follow-up #${id} tidak ditemukan.`);
+    }
+
+    if (fu.status === 'SENT') {
+      throw new Error('Follow-up ini sudah pernah dikirim sebelumnya.');
+    }
+
+    console.log(`[FollowUp Service] Manual Send Triggered by Admin for Follow-Up #${id} (${fu.customer?.phone})`);
+    const success = await this.executeFollowUp(fu, tenantId);
+    return success;
+  }
+
+  /**
+   * Cancel single follow-up
+   */
+  public async cancelFollowUp(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const res = await prisma.followUp.updateMany({
+      where: { id, tenant_id: tenantId },
+      data: { status: 'CANCELLED' },
+    });
+    return res.count > 0;
+  }
+
+  /**
+   * Bulk cancel follow-ups (misal semua PENDING)
+   */
+  public async bulkCancelFollowUps(tenantId: string = DEFAULT_TENANT_ID, status: string = 'PENDING'): Promise<number> {
+    const res = await prisma.followUp.updateMany({
+      where: { tenant_id: tenantId, status: status as any },
+      data: { status: 'CANCELLED' },
+    });
+    console.log(`[FollowUp Service] Bulk cancelled ${res.count} follow-ups with status ${status}.`);
+    return res.count;
+  }
+
+  /**
+   * Reschedule follow-up
+   */
+  public async rescheduleFollowUp(id: string, newDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
+    return prisma.followUp.update({
+      where: { id },
+      data: {
+        scheduled_at: newDate,
+        status: 'PENDING',
+      },
+      include: {
+        customer: true,
+      },
+    });
+  }
+
+  /**
    * Dipanggil oleh CronWorker (misal setiap 15 menit) untuk mencari & mengeksekusi
-   * follow-up PENDING yang waktunya sudah tiba (scheduled_at <= NOW()).
+   * follow-up PENDING yang waktunya sudah tiba.
+   * 
+   * KEBIJAKAN KEAMANAN (MANUAL APPROVAL POLICY):
+   * Pengiriman pesan otomatis HANYA berjalan jika AUTO_FOLLOWUP_ENABLED === 'true'.
+   * Secara default (tanpa env atau false), worker hanya me-refresh status antrian
+   * dan TIDAK mengirimkan pesan otomatis ke WhatsApp tanpa persetujuan Admin di Dashboard.
    */
   public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
-    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
+    // 1. Guard Manual Approval
+    if (process.env.AUTO_FOLLOWUP_ENABLED !== 'true') {
       return 0;
     }
+
     try {
       const now = new Date();
+      const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
       const dueFollowUps = await prisma.followUp.findMany({
         where: {
           tenant_id: tenantId,
@@ -236,6 +448,7 @@ export class FollowUpService {
           scheduled_at: { lte: now },
           customer: {
             status: { not: 'blocked' },
+            is_sandbox_test: false,
           },
         },
         include: {
@@ -245,21 +458,28 @@ export class FollowUpService {
             },
           },
         },
-        // Order deterministik (anti-starvation): paling lama jatuh tempo diproses
-        // lebih dulu; tanpa orderBy, subset arbitrer tiap run bisa membuat customer
-        // tertentu kelaparan selamanya.
         orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
-        take: FOLLOWUP_BATCH_LIMIT, // Batch limit per execution (env FOLLOWUP_BATCH_LIMIT)
+        take: FOLLOWUP_BATCH_LIMIT,
       });
 
       if (dueFollowUps.length === 0) {
         return 0;
       }
 
-      console.log(`[FollowUp Worker] Found ${dueFollowUps.length} due follow-ups to process.`);
+      console.log(`[FollowUp Worker] Found ${dueFollowUps.length} due follow-ups to process (Auto-send mode).`);
       let processed = 0;
 
       for (const fu of dueFollowUps) {
+        // Anti-blast overdue protection: jika jadwal sudah terlewat lebih dari 48 jam, tandai SKIPPED
+        if (fu.scheduled_at < fortyEightHoursAgo) {
+          console.warn(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is overdue (>48h). Marked as SKIPPED to prevent spam blast.`);
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: { status: 'SKIPPED' },
+          });
+          continue;
+        }
+
         const success = await this.executeFollowUp(fu, tenantId);
         if (success) processed++;
       }
@@ -449,8 +669,6 @@ export class FollowUpService {
       }
 
       // 2. Consent gatekeeper: MARKETING wajib opt-in.
-      // Kategori diambil dari mapping DB (kategori template yang benar-benar
-      // di-approve Meta), bukan dari tipe follow-up.
       if (mapping.category === 'MARKETING') {
         const consent = await wabaConsentService.canSendMarketing(fu.customer);
         if (!consent.allowed) {
@@ -481,7 +699,6 @@ export class FollowUpService {
         return true;
       }
 
-      // Error 131026: di luar 24h window / teks bebas ditolak → sudah pakai HSM, tetap gagal
       console.error(`[FollowUp WABA] Send failed ${fu.id}:`, result.error?.message);
       await prisma.followUp.update({
         where: { id: fu.id },
@@ -501,8 +718,7 @@ export class FollowUpService {
   }
 
   /**
-   * Notifikasi admin saat template HSM belum APPROVED (PENDING/REJECTED/PAUSED),
-   * sehingga admin segera submit/verifikasi template di Meta.
+   * Notifikasi admin saat template HSM belum APPROVED (PENDING/REJECTED/PAUSED)
    */
   private async notifyTemplateNotApproved(tenantId: string, templateType: string, status: string): Promise<void> {
     try {
@@ -522,14 +738,12 @@ export class FollowUpService {
   /**
    * Mengecek customer yang statusnya 'active' dan telah dikirimi follow-up NEXT_TREATMENT Stage 3
    * lebih dari LOST_CUSTOMER_GRACE_DAYS hari yang lalu, serta tidak melakukan booking baru sejak saat itu.
-   * Mengubah status mereka menjadi 'lost'.
    */
   public async checkAndSetLostCustomers(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
     try {
       const thresholdDate = new Date();
       thresholdDate.setDate(thresholdDate.getDate() - LOST_CUSTOMER_GRACE_DAYS);
 
-      // Cari follow-up NEXT_TREATMENT stage 3 yang SENT dan sent_at <= thresholdDate
       const sentStage3FollowUps = await prisma.followUp.findMany({
         where: {
           type: 'NEXT_TREATMENT',
@@ -539,6 +753,7 @@ export class FollowUpService {
           tenant_id: tenantId,
           customer: {
             status: 'active',
+            is_sandbox_test: false,
           },
         },
         include: {
@@ -546,9 +761,6 @@ export class FollowUpService {
         },
       });
 
-      // Batch anti-N+1: satu query reservasi dengan batas waktu paling tua dari semua
-      // follow-up terpilih (created_at > min(sent_at)), lalu filter in-memory per customer
-      // (created_at > sent_at follow-up-nya) supaya semantiknya PERSIS seperti per-row query.
       const minSentAt = sentStage3FollowUps
         .map((f) => f.sent_at)
         .filter((d): d is Date => !!d)
@@ -575,10 +787,8 @@ export class FollowUpService {
       }
 
       for (const f of sentStage3FollowUps) {
-        // Cek apakah customer membuat reservasi baru setelah sent_at (semantik per follow-up dipertahankan)
         const hasNewReservation = hasReservationAfterSentAt.get(f.id) === true;
 
-        // Jika tidak ada reservasi baru, ubah status customer ke 'lost'
         if (!hasNewReservation) {
           await prisma.customer.update({
             where: { id: f.customer_id },
