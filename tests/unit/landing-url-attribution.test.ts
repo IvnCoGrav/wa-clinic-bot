@@ -219,4 +219,34 @@ describe('Meta Full-Funnel Attribution & Landing URL Preservation', () => {
     const resolvedE = resolveCanonicalLandingUrl(cleanUrl, 'https://kalababyspa.online/reservasionline');
     expect(resolvedE).toBe(cleanUrl);
   });
+
+  it('6. extractValueByFormat accurately extracts pure Treatment GMV (70.000) instead of Total including shipping (85.000)', async () => {
+    const { extractValueByFormat } = await import('../../src/services/capi.service');
+
+    const reservationMsg = `Berikut reservasi 
+
+Hari dan tanggal :  jumat, 21/8/26 jam 12.00-12.30
+Nama Bunda:  Mery 
+Alamat & Shareloc :Natura Residence Cluster Summerland C2 - 3A buduran 
+Kec : Buduran
+Kota : Sidoarjo
+No. Hp : 089667285350
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi : Hansen
+Usia Bayi/Anak : 1 tahun 
+Treatment : pijat bayi pulih ceria 
+
+Payment :
+Treatment = 70.000
+Ongkir 13km = 25.000
+Promo ongkir = - 10.000
+*Total = 85.000*
+
+Terimakasih.`;
+
+    const pureValue = extractValueByFormat(reservationMsg, 'Treatment = %VALUE%');
+    expect(pureValue).toBe(70000);
+  });
 });

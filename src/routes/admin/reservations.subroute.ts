@@ -842,6 +842,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
    * (purchase_review_status='pending'). Event dikirim ke Meta CAPI dengan
    * event_time HISTORIS (purchase_occurred_at) agar attribution akurat.
    * Event >7 hari ditolak — Meta akan drop event yang terlalu lama.
+  /**
+   * POST /api/admin/reservation/:id/approve-purchase
+   * Moderasi outlier: admin menyetujui event Purchase yang ditahan queue
+   * (purchase_review_status='pending'). Event dikirim ke Meta CAPI dengan
+   * event_time HISTORIS (purchase_occurred_at) agar attribution akurat.
+   * Event >7 hari ditolak — Meta akan drop event yang terlalu lama.
    */
   fastify.post(
     '/api/admin/reservation/:id/approve-purchase',
@@ -911,7 +917,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // Tentukan waktu terjadi transaksi (occurredAt) fallback ke created_at jika belum ada
         const occurredDate = existing.purchase_occurred_at || existing.created_at || new Date();
         const occurredAt = new Date(occurredDate);
         const daysOld = Math.floor((Date.now() - occurredAt.getTime()) / (24 * 60 * 60 * 1000));
@@ -922,8 +927,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
         const resolvedVal =
-          existing.purchase_value ??
           extractValueByFormat(existing.raw_text || '', formats.formatValue) ??
+          existing.purchase_value ??
           extractRupiahAmount(existing.raw_text || '', formats.formatValue) ??
           (await resolveTreatmentValue(existing.treatment_detail || existing.raw_text));
 
@@ -954,7 +959,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const reservation = await prisma.reservation.update({
           where: { id },
           data: {
-            purchase_occurred_at: existing.purchase_occurred_at || occurredDate,
+            purchase_occurred_at: occurredDate,
             purchase_value: resolvedVal ?? undefined,
             purchase_review_status: 'approved',
             purchase_event_sent_at: new Date(),
@@ -985,8 +990,6 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
     }
   );
 
-
-
   /**
    * POST /api/admin/reservation/:id/reject-purchase
    * Moderasi outlier: admin menandai transaksi sebagai outlier / dibatalkan
@@ -1008,11 +1011,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             payload: { reason: 'ADMIN_MANUAL_OUTLIER_REJECT' },
             ipAddress: request.ip,
           });
+
           return reply.status(200).send({ success: true, message: 'Lead event diabaikan' });
         }
 
         const existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: DEFAULT_TENANT_ID },
+          include: {
+            customer: {
+              include: { adClick: true },
+            },
+          },
         });
         if (!existing) {
           throw new Error('Reservation not found');
@@ -1091,10 +1100,20 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
           const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
           const value =
-            r.purchase_value ??
             extractValueByFormat(r.raw_text || '', formats.formatValue) ??
+            r.purchase_value ??
             extractRupiahAmount(r.raw_text || '', formats.formatValue) ??
             (await resolveTreatmentValue(r.treatment_detail || ''));
+
+          // Self-heal purchase_value in DB if previously stored as total price (including ongkir)
+          if (r.id && value !== undefined && r.purchase_value !== value) {
+            prisma.reservation
+              .update({
+                where: { id: r.id },
+                data: { purchase_value: value },
+              })
+              .catch(() => {});
+          }
 
           let distanceKm = r.customer?.distance_km ? `${r.customer.distance_km} km` : null;
           if (!distanceKm && r.raw_text) {
