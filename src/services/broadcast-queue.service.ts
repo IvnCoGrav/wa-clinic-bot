@@ -90,6 +90,9 @@ export class BroadcastQueueService {
    * Cron job harian (jam 08:30) memasukkan semua follow_ups pending yang jatuh tempo
    */
   public async enqueuePendingFollowUps(): Promise<void> {
+    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
+      return;
+    }
     try {
       const now = new Date();
       const today0900 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0, 0);

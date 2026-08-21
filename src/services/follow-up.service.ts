@@ -102,6 +102,9 @@ export class FollowUpService {
    * Membuat 3 row follow-up PENDING tipe NO_PURCHASE (+3, +7, +14 hari).
    */
   public async createNoPurchaseFollowUps(customerId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
+      return;
+    }
     try {
       const stages = [1, 2, 3];
       const days = [3, 7, 14];
@@ -170,6 +173,9 @@ export class FollowUpService {
    * Membuat 3 row follow-up PENDING tipe NEXT_TREATMENT (+1, +2, +3 bulan).
    */
   public async createNextTreatmentFollowUps(customerId: string, bookingDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
+      return;
+    }
     try {
       // Idempotensi: jika sudah ada row NEXT_TREATMENT aktif (belum terkirim) untuk
       // customer ini, jangan buat duplikat (pemanggilan ganda / retry cron).
@@ -218,6 +224,9 @@ export class FollowUpService {
    * follow-up PENDING yang waktunya sudah tiba (scheduled_at <= NOW()).
    */
   public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
+    if (process.env.ENABLE_FOLLOWUP_WORKER !== 'true') {
+      return 0;
+    }
     try {
       const now = new Date();
       const dueFollowUps = await prisma.followUp.findMany({
