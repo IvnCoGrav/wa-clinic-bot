@@ -147,13 +147,17 @@ export async function landingRoutes(fastify: FastifyInstance) {
 
       if (!isBot) {
         const ip = (request.headers['x-forwarded-for'] as string) || request.ip || '';
+        const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'kalababyspa.online';
+        const proto = (request.headers['x-forwarded-proto'] as string) || 'https';
+        const fullLandingUrl = query.landing_url || (request.url.startsWith('http') ? request.url : `${proto}://${host}${request.url}`);
+
         const { trackingCode: tc, record } = await generateTrackingCode({
           fbclid: query.fbclid || null,
           fbp: query.fbp || null,
           fbc: query.fbc || null,
           ipAddress: ip.split(',')[0].trim(),
           userAgent: ua,
-          landingUrl: request.url,
+          landingUrl: fullLandingUrl,
           utmSource: isTest ? (query.utm_source || 'test') : (query.utm_source || query.divisi || null),
           utmMedium: query.utm_medium || null,
           utmCampaign: query.utm_campaign || null,
