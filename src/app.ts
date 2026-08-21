@@ -251,6 +251,35 @@ if (require.main === module) {
       }, 30 * 60 * 1000);
       console.log(`📈 Daily Ops Report cron background worker started (checking every 30m WIB)`);
     }).catch(e => console.error('[DAILY REPORT START ERROR]', e));
+
+    // Start Follow-Up Queue Worker & Morning Jobs (setiap 15 menit & pagi 06:00 WIB)
+    import('./services/cron.service').then(({ CronService }) => {
+      const cron = new CronService();
+      
+      // 1. Follow-Up worker: jalankan setiap 15 menit
+      const followUpIntervalMinutes = parseInt(process.env.FOLLOWUP_WORKER_INTERVAL_MINUTES || '15', 10);
+      setInterval(() => cron.runFollowUpWorker(), followUpIntervalMinutes * 60 * 1000);
+      console.log(`⏱️ Follow-Up Queue worker started (every ${followUpIntervalMinutes}m)`);
+
+      // 2. Morning Jobs (Pengingat H-0 & Review H+1 pada 06:00 WIB)
+      let lastMorningRunDate = '';
+      setInterval(async () => {
+        try {
+          const nowUtc = new Date();
+          const wibTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
+          const wibHour = wibTime.getUTCHours();
+          const todayDateStr = wibTime.toISOString().slice(0, 10);
+
+          if (wibHour === 6 && lastMorningRunDate !== todayDateStr) {
+            lastMorningRunDate = todayDateStr;
+            await cron.runMorningJobs();
+          }
+        } catch (err: any) {
+          console.error('[MORNING JOBS CRON ERROR]', err.message);
+        }
+      }, 15 * 60 * 1000);
+      console.log(`🌅 Morning Jobs cron registered (checking for 06:00 WIB daily)`);
+    }).catch(e => console.error('[CRON SERVICE START ERROR]', e));
   });
 }
 

@@ -141,12 +141,34 @@ export const Reservations: React.FC = () => {
     if (page < totalPages) loadReservations(page + 1, true);
   };
 
-  const formatBookingDate = (dateStr: string | null | undefined) => {
+  const extractDurationMinutes = (detail?: string | null): number => {
+    if (!detail) return 60;
+    const totalMatch = detail.match(/=\s*(\d+)\s*m/i);
+    if (totalMatch && totalMatch[1]) {
+      const parsed = parseInt(totalMatch[1], 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    const match = detail.match(/(\d+)\s*(?:menit|mins|m)\b/i);
+    if (match && match[1]) {
+      const parsed = parseInt(match[1], 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 60;
+  };
+
+  const formatBookingDate = (dateStr: string | null | undefined, detail?: string | null) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
-    const dayMonth = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-    const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
-    return `${dayMonth} ${time}`;
+    try {
+      const d = new Date(dateStr);
+      const dayMonth = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+      const startTime = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
+      const duration = extractDurationMinutes(detail);
+      const endD = new Date(d.getTime() + duration * 60 * 1000);
+      const endTime = endD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':');
+      return `${dayMonth} ${startTime} - ${endTime}`;
+    } catch {
+      return '';
+    }
   };
 
   // Date Navigation Handlers
@@ -987,11 +1009,27 @@ export const Reservations: React.FC = () => {
                   </div>
                 ) : (
                   filteredReservations.map((res) => (
-                    <div key={res.id} className="bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs space-y-3">
+                    <div
+                      key={res.id}
+                      onClick={() => setSelectedRes(res)}
+                      className="bg-white rounded-2xl p-4 border border-[#e9edef] shadow-xs space-y-3 cursor-pointer hover:border-[#008069] hover:shadow-md transition"
+                    >
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className="font-bold text-[#111b21] text-sm">{res.customer?.name || 'Bunda'}</h4>
+                          <h4 className="font-bold text-[#111b21] text-sm group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</h4>
                           <p className="text-xs text-[#667781] font-mono mt-0.5">{res.customer?.phone}</p>
+                          {res.customer && (
+                            <div className="flex items-center gap-1.5 mt-1 text-[10px]">
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                                {(res.customer.totalTreatments ?? 1) > 1 ? `${res.customer.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
+                              </span>
+                              {res.customer.ltv !== undefined && (
+                                <span className="text-[#8696a0] font-mono">
+                                  LTV: Rp {res.customer.ltv.toLocaleString('id-ID')}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div>{getStatusBadge(res.status)}</div>
                       </div>
@@ -1001,7 +1039,7 @@ export const Reservations: React.FC = () => {
                           {res.treatment_category}
                         </span>
                         <span className="font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded border border-[#c2e7e0] text-xs">
-                          {res.booking_date ? formatBookingDate(res.booking_date) : 'Belum ada jadwal'}
+                          {res.booking_date ? formatBookingDate(res.booking_date, res.treatment_detail) : 'Belum ada jadwal'}
                         </span>
                       </div>
 
@@ -1020,16 +1058,22 @@ export const Reservations: React.FC = () => {
                       <div className="pt-2 flex justify-end space-x-2">
                         {res.status === 'completed' && res.proof_url && (
                           <button
-                            onClick={() => setProofModal(res)}
-                            className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProofModal(res);
+                            }}
+                            className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center cursor-pointer"
                             title={`Lihat Bukti Bayar (${getPaymentMethodLabel(res.payment_method)})`}
                           >
                             <Eye size={15} />
                           </button>
                         )}
                         <button
-                          onClick={() => setSelectedRes(res)}
-                          className="px-3 py-1.5 bg-[#f0f2f5] hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl transition-all font-semibold text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedRes(res);
+                          }}
+                          className="px-3 py-1.5 bg-[#f0f2f5] hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl transition-all font-semibold text-xs cursor-pointer"
                         >
                           Manage
                         </button>
@@ -1116,10 +1160,26 @@ export const Reservations: React.FC = () => {
                         </tr>
                       ) : (
                         filteredReservations.map((res) => (
-                          <tr key={res.id} className="hover:bg-[#f8fafc] transition-all">
+                          <tr
+                            key={res.id}
+                            onClick={() => setSelectedRes(res)}
+                            className="hover:bg-[#f0f2f5] transition-all cursor-pointer group"
+                          >
                             <td className="py-3.5 px-5 font-medium">
-                              <p className="font-bold text-[#111b21]">{res.customer?.name || 'Bunda'}</p>
+                              <p className="font-bold text-[#111b21] group-hover:text-[#008069] transition">{res.customer?.name || 'Bunda'}</p>
                               <p className="text-xs text-[#667781] font-mono">{res.customer?.phone}</p>
+                              {res.customer && (
+                                <div className="flex items-center gap-1.5 mt-0.5 text-[10px]">
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                                    {(res.customer.totalTreatments ?? 1) > 1 ? `${res.customer.totalTreatments}x` : 'Baru (1x)'}
+                                  </span>
+                                  {res.customer.ltv !== undefined && (
+                                    <span className="text-[#8696a0] font-mono">
+                                      LTV: Rp {res.customer.ltv.toLocaleString('id-ID')}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             <td className="py-3.5 px-5">
                               <span className="px-2 py-0.5 rounded bg-[#f0f2f5] text-[11px] text-[#54656f] font-semibold">
@@ -1131,11 +1191,14 @@ export const Reservations: React.FC = () => {
                             </td>
                             <td className="py-3.5 px-5 font-semibold text-[#008069] whitespace-nowrap">
                               {res.booking_date ? (
-                                formatBookingDate(res.booking_date)
+                                formatBookingDate(res.booking_date, res.treatment_detail)
                               ) : (
                                 <button
-                                  onClick={() => setSelectedRes(res)}
-                                  className="px-2 py-1 rounded-lg bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold transition-all"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedRes(res);
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] hover:bg-[#c2e7e0] text-xs font-semibold transition-all cursor-pointer"
                                 >
                                   + Atur Jadwal
                                 </button>
@@ -1154,8 +1217,11 @@ export const Reservations: React.FC = () => {
                             <td className="py-3.5 px-5 whitespace-nowrap">
                               {res.status === 'completed' && res.proof_url ? (
                                 <button
-                                  onClick={() => setProofModal(res)}
-                                  className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setProofModal(res);
+                                  }}
+                                  className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center cursor-pointer"
                                   title={`Lihat Bukti Bayar — ${getPaymentMethodLabel(res.payment_method)}`}
                                 >
                                   <Eye size={15} />
@@ -1170,8 +1236,11 @@ export const Reservations: React.FC = () => {
                             </td>
                             <td className="py-3.5 px-5">
                               <button
-                                onClick={() => setSelectedRes(res)}
-                                className="px-3 py-1.5 bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl text-xs transition-all font-semibold shadow-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedRes(res);
+                                }}
+                                className="px-3 py-1.5 bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl text-xs transition-all font-semibold shadow-xs cursor-pointer"
                               >
                                 Manage
                               </button>

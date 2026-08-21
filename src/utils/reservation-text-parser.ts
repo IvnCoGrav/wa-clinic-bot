@@ -48,8 +48,10 @@ export function isReservationFormMessage(rawText: string): boolean {
     lower.includes('form booking') ||
     lower.includes('format booking') ||
     lower.includes('berikut list untuk reservasi') ||
+    lower.includes('berikut reservasi') ||
     lower.includes('list reservasi') ||
     lower.includes('pilihan paket') ||
+    lower.includes('jadwal treatment') ||
     lower.includes('jadwal reservasi');
 
   if (hasFormHeader) return true;

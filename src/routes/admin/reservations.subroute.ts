@@ -39,7 +39,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             where,
             include: {
               customer: {
-                include: { children: true },
+                include: {
+                  children: true,
+                  reservations: {
+                    where: { status: { notIn: ['cancelled', 'rejected'] } },
+                    select: { id: true, purchase_value: true },
+                  },
+                },
               },
               assigned_staff: {
                 select: { id: true, name: true, phone: true },
@@ -61,6 +67,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           customer: r.customer
             ? {
                 ...r.customer,
+                totalTreatments: ((r.customer as any).reservations?.length ?? 0) > 0 ? (r.customer as any).reservations.length : 1,
+                ltv: ((r.customer as any).reservations || []).reduce((acc: number, curr: any) => acc + (curr.purchase_value || 0), 0) || (r.purchase_value || 0),
                 children:
                   (r.customer as any).children?.map((c: any) => ({
                     id: c.id,
