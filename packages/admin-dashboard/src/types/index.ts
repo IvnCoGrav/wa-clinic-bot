@@ -38,6 +38,8 @@ export interface Reservation {
     distance_km: number | null;
     preferences?: any;
     children?: ChildInfo[];
+    totalTreatments?: number;
+    ltv?: number;
   };
   treatment_category: 'BABY' | 'MOMS' | 'BOTH';
   treatment_detail: string;

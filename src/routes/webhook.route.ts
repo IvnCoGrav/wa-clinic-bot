@@ -247,6 +247,60 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               } else {
                 console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded.`);
               }
+
+              // 5. Background Auto-Capture Reservasi dari Konfirmasi Admin
+              try {
+                const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
+                if (isReservationFormMessage(adminReplyText)) {
+                  const parseResult = parseReservationText(adminReplyText);
+                  if (parseResult.success && parseResult.reservation) {
+                    const parsed = parseResult.reservation;
+                    const recentExisting = await prisma.reservation.findFirst({
+                      where: {
+                        customer_id: customer.id,
+                        tenant_id: DEFAULT_TENANT_ID,
+                        created_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+                        treatment_detail: parsed.treatmentDetail,
+                      },
+                    });
+
+                    if (!recentExisting) {
+                      const reservation = await prisma.reservation.create({
+                        data: {
+                          tenant_id: DEFAULT_TENANT_ID,
+                          customer_id: customer.id,
+                          treatment_category: parsed.treatmentCategory,
+                          treatment_detail: parsed.treatmentDetail,
+                          booking_date: parsed.bookingDate,
+                          raw_text: adminReplyText,
+                          status: 'pending',
+                          purchase_value: parsed.payment?.totalPrice || undefined,
+                        },
+                      });
+
+                      console.log(`[ADMIN OUTBOUND AUTO-CAPTURE] Created reservation ${reservation.id} for customer ${customer.phone} (${parsed.name})`);
+
+                      const { reservationLifecycleService } = await import('../services/reservation-lifecycle.service');
+                      await reservationLifecycleService.onReservationCreated({
+                        customerId: customer.id,
+                        reservationId: reservation.id,
+                        tenantId: DEFAULT_TENANT_ID,
+                        chatId: customerJid,
+                        babies: parsed.babies || [],
+                      });
+
+                      const customerName = parsed.name?.trim();
+                      if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
+                        const kecamatan = customer.kecamatan || '';
+                        const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+                        await customerService.updateCustomerName(customer.id, contactName, DEFAULT_TENANT_ID).catch(() => {});
+                      }
+                    }
+                  }
+                }
+              } catch (adminCaptureErr: any) {
+                console.warn('[ADMIN OUTBOUND AUTO-CAPTURE ERROR]', adminCaptureErr.message);
+              }
             }
           }
         }

@@ -34,7 +34,68 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
     }
   }
 
-  // 3. Jika MASIH dalam Human Handling (< 6 jam):
+  // 3. BACKGROUND AUTO-CAPTURE: Tangkap jika customer mengirimkan form reservasi lengkap saat mode Human Handling
+  const userText = ctx.incomingMessage.text?.body || '';
+  if (userText.trim()) {
+    try {
+      const { isReservationFormMessage, parseReservationText } = await import('../../utils/reservation-text-parser');
+      if (isReservationFormMessage(userText)) {
+        const parseResult = parseReservationText(userText);
+        if (parseResult.success && parseResult.reservation) {
+          const parsed = parseResult.reservation;
+          const { prisma } = await import('../../db/client');
+
+          // Idempotency: hindari duplikasi record reservasi dalam 24 jam untuk customer & detail yang sama
+          const recentExisting = await prisma.reservation.findFirst({
+            where: {
+              customer_id: customer.id,
+              tenant_id: tenantId,
+              created_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+              treatment_detail: parsed.treatmentDetail,
+            },
+          });
+
+          if (!recentExisting) {
+            const reservation = await prisma.reservation.create({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customer.id,
+                treatment_category: parsed.treatmentCategory,
+                treatment_detail: parsed.treatmentDetail,
+                booking_date: parsed.bookingDate,
+                raw_text: userText,
+                status: 'pending',
+              },
+            });
+
+            console.log(`[HUMAN HANDLER AUTO-CAPTURE] Created reservation ${reservation.id} for customer ${customer.phone} (${parsed.name})`);
+
+            const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
+            await reservationLifecycleService.onReservationCreated({
+              customerId: customer.id,
+              reservationId: reservation.id,
+              tenantId,
+              chatId: ctx.incomingMessage.chatId || `${customer.phone}@c.us`,
+              babies: parsed.babies || [],
+            });
+
+            // Update nama kontak jika terisi
+            const customerName = parsed.name?.trim();
+            if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
+              const kecamatan = customer.kecamatan || '';
+              const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+              const { customerService } = await import('../../services/customer.service');
+              await customerService.updateCustomerName(customer.id, contactName, tenantId).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch (captureErr: any) {
+      console.warn('[HUMAN HANDLER AUTO-CAPTURE ERROR]', captureErr.message);
+    }
+  }
+
+  // 4. Jika MASIH dalam Human Handling (< 6 jam):
   // BOT TIDAK BOLEH MEMBALAS OTOMATIS KE THREAD INI!
   console.log(`[HUMAN HANDLING ACTIVE] Conversation ${conversation.id} is managed by human agent. Bot stays silent.`);
 

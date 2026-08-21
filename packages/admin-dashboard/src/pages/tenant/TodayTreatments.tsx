@@ -86,6 +86,10 @@ interface TreatmentTask {
     phone: string;
     role?: string;
   } | null;
+  customerStats?: {
+    totalTreatments: number;
+    ltv: number;
+  };
 }
 
 function formatRupiah(amount: number): string {
@@ -298,12 +302,26 @@ export const TodayTreatments: React.FC = () => {
     year: 'numeric',
   }).format(new Date());
 
-  // Point 5: Tidak perlu ada tulisan WIB (hanya format jam:menit)
+  // Format jam:menit dan rentang jam mulai - jam selesai
   const formatTime = (isoString: string | null) => {
     if (!isoString) return '--:--';
     try {
       const d = new Date(isoString);
       return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch {
+      return '--:--';
+    }
+  };
+
+  const formatTimeRange = (isoString: string | null, totalDurationMinutes?: number) => {
+    if (!isoString) return '--:--';
+    try {
+      const start = new Date(isoString);
+      const startStr = start.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const duration = (totalDurationMinutes && totalDurationMinutes > 0) ? totalDurationMinutes : 60;
+      const end = new Date(start.getTime() + duration * 60 * 1000);
+      const endStr = end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+      return `${startStr} - ${endStr}`;
     } catch {
       return '--:--';
     }
@@ -720,9 +738,9 @@ export const TodayTreatments: React.FC = () => {
                           {(task.customerName || 'P').charAt(0).toUpperCase()}
                         </div>
                       )}
-                      {/* Point 5: Waktu tanpa kata WIB */}
-                      <span className="absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-md bg-[#111b21] text-white text-[9px] font-mono font-bold shadow-xs">
-                        {formatTime(task.bookingDate)}
+                      {/* Point 5: Waktu dengan rentang jam mulai - jam selesai */}
+                      <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md bg-[#111b21] text-white text-[9px] font-mono font-bold shadow-xs whitespace-nowrap">
+                        {formatTimeRange(task.bookingDate, parsedTreatments.totalMinutes)}
                       </span>
                     </div>
 
@@ -744,6 +762,18 @@ export const TodayTreatments: React.FC = () => {
                         <UserCheck size={13} className="text-[#008069] shrink-0" />
                         <span className="font-bold text-[#008069] truncate">{task.assignedStaff?.name || 'Belum Ditugaskan'}</span>
                       </div>
+
+                      {/* Brief LTV and Treatment Count */}
+                      {task.customerStats && (
+                        <div className="flex items-center gap-1.5 mt-1 text-[10px]">
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                            {task.customerStats.totalTreatments > 1 ? `${task.customerStats.totalTreatments}x Treatment` : 'Pasien Baru (1x)'}
+                          </span>
+                          <span className="text-[#8696a0] font-mono">
+                            LTV: {formatRupiah(task.customerStats.ltv)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -992,8 +1022,26 @@ export const TodayTreatments: React.FC = () => {
                       </span>
                     </h3>
                     <p className="text-xs text-[#667781] mt-0.5">
-                      Jam Kunjungan: <span className="font-bold text-[#111b21]">{formatTime(detailModalTask.bookingDate)}</span>
+                      Jam Kunjungan:{' '}
+                      <span className="font-bold text-[#111b21]">
+                        {formatTimeRange(
+                          detailModalTask.bookingDate,
+                          parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes
+                        )}
+                      </span>
                     </p>
+                    {detailModalTask.customerStats && (
+                      <div className="flex items-center gap-2 mt-1 text-[11px]">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#e8f5f2] text-[#008069] font-bold">
+                          {detailModalTask.customerStats.totalTreatments > 1
+                            ? `${detailModalTask.customerStats.totalTreatments}x Treatment`
+                            : 'Pasien Baru (1x)'}
+                        </span>
+                        <span className="text-[#667781] font-mono">
+                          LTV: <strong className="text-[#111b21]">{formatRupiah(detailModalTask.customerStats.ltv)}</strong>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
