@@ -161,13 +161,30 @@ export async function landingRoutes(fastify: FastifyInstance) {
           } catch {}
         }
 
-        const fullLandingUrl = query.landing_url || (
+        let fullLandingUrl = query.landing_url || (
           request.url.startsWith('http') 
             ? request.url 
             : (tenantDomain ? `${tenantDomain}${request.url}` : (host ? `${proto}://${host}${request.url}` : request.url))
         );
 
-        const { trackingCode: tc, record } = await generateTrackingCode({
+        // Jika landing_url diberikan tanpa query string tetapi request /cta membawa parameter tracking, gabungkan agar utuh
+        if (query.landing_url && !query.landing_url.includes('?')) {
+          const ctaQueryIdx = request.url.indexOf('?');
+          if (ctaQueryIdx !== -1) {
+            const rawParams = new URLSearchParams(request.url.slice(ctaQueryIdx + 1));
+            rawParams.delete('landing_url');
+            rawParams.delete('slug');
+            rawParams.delete('p');
+            rawParams.delete('msg');
+            rawParams.delete('greetings');
+            const remainingQuery = rawParams.toString();
+            if (remainingQuery) {
+              fullLandingUrl = `${query.landing_url}?${remainingQuery}`;
+            }
+          }
+        }
+
+        const clickData = {
           fbclid: query.fbclid || null,
           fbp: query.fbp || null,
           fbc: query.fbc || null,
@@ -179,9 +196,30 @@ export async function landingRoutes(fastify: FastifyInstance) {
           utmCampaign: query.utm_campaign || null,
           phone: query.phone || null, // URL parameter 'phone' hanya dipakai sebagai metadata atribusi di AdClick
           tenant_id: content.tenant_id,
-        });
-        trackingCode = tc;
-        memoryAdClicks.set(trackingCode, record);
+        };
+
+        try {
+          const { trackingCode: tc, record } = await generateTrackingCode(clickData);
+          trackingCode = tc;
+          memoryAdClicks.set(trackingCode, record);
+        } catch (dbErr: any) {
+          // DB offline fallback ke in-memory store
+          const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+          let tc = '';
+          for (let i = 0; i < 2; i++) {
+            tc += chars.charAt(crypto.randomInt(chars.length));
+          }
+          const clickRecord = {
+            id: `cuid_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            trackingCode: tc,
+            ...clickData,
+            matchedAt: null,
+            customerId: null,
+            createdAt: new Date(),
+          };
+          trackingCode = tc;
+          memoryAdClicks.set(trackingCode, clickRecord);
+        }
       }
     } catch (err: any) {
       request.log.warn(`[CTA TRACKING ERROR] ${err.message}`);

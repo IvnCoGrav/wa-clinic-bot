@@ -12,14 +12,14 @@ Satu sumber atribusi adalah **`AdClick`** (dibuat dari `POST /api/tracking/click
 
 | Langkah | Alur |
 |---|---|
-| 1. Klik iklan Meta | `fbclid`/UTM/`_fbp`/`_fbc` dipertahankan (same-origin). |
-| 2. Landing page (`/{slug}` atau `/go`) | `PageView` (klien, selalu) → `ViewContent`/`Search` (onload) → klik CTA → `AddToCart`. |
-| 3. `POST /api/tracking/click` | Buat `AdClick` + `tracking_id` (initiate). |
-| 4. Customer buka WhatsApp & kirim "Promo[a7] halo" | [webhook.route.ts] a) attribution link `AdClick`→customer; b) event `Contact` (first contact); c) strip "Promo[xx]" dari body. |
-| 5. State machine `AWAITING_LOCATION → AWAITING_INTEREST` | Customer jadi MQL (memenuhi kualifikasi) → event **`Lead`** (MQL) di [customer.service.ts]. |
-| 6. Bot kirim form reservasi (`RESERVATION_SENT`) | → event **`InitiateCheckout`** di [interest.ts]. |
+| 1. Klik iklan Meta | `fbclid`/UTM/`_fbp`/`_fbc` dipertahankan di address bar landing page awal (misal `kalababyspa.online/reservasionline`). |
+| 2. Landing page (`/{slug}`, `/go`, atau LP eksternal) | `PageView` (klien, selalu) → `ViewContent`/`Search` (onload). Saat klik CTA: `external-tracker.js` otomatis menyalin seluruh UTM, `fbclid`, dan `landing_url = window.location.href` ke tombol CTA `/cta`. |
+| 3. Endpoint `/cta` / `POST /api/tracking/click` | Tembak Pixel klien `AddToCart` (eventID: trackingCode) → simpan `AdClick` dengan `landingUrl = URL LP Asli` + `tracking_id` (initiate) → redirect WA. |
+| 4. Customer buka WhatsApp & kirim "Promo[a7] halo" | [webhook.route.ts] a) attribution link `AdClick`→customer; b) event CAPI `Contact` (first contact + SHA-256 hash no HP & nama); c) strip "Promo[xx]" dari body. |
+| 5. State machine `AWAITING_LOCATION → AWAITING_INTEREST` | Customer jadi MQL (memenuhi kualifikasi area) → event CAPI **`Lead`** (MQL) di [customer.service.ts]. |
+| 6. Bot kirim form reservasi (`RESERVATION_SENT`) | → event CAPI **`InitiateCheckout`** di [interest.ts]. |
 | 7. Customer isi & kirim form reservasi | → status reservasi `pending`. |
-| 8. Pembayaran terdeteksi (admin `Tandai Lunas` ATAU customer kirim pesan "Payment <nominal>") | → event **`Purchase`** (value IDR; window 7 hari). |
+| 8. Pembayaran terdeteksi (admin `Tandai Lunas` ATAU customer kirim pesan "Payment <nominal>") | → event CAPI **`Purchase`** (value IDR; window 7 hari; `event_source_url` konsisten dari LP asli). |
 
 **Ringkasan event CAPI:**
 

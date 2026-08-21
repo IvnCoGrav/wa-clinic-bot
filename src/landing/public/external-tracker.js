@@ -22,7 +22,8 @@
     'msclkid',
     'ttclid',
     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id',
-    'igshid'
+    'igshid',
+    'landing_url'
   ];
 
   var CTA_PATH = '/cta';
@@ -137,6 +138,13 @@
         changed = true;
       }
     }
+
+    // Selalu sertakan landing_url (URL landing page asli pengunjung saat ini) jika belum ada
+    if (!url.searchParams.has('landing_url') && typeof window !== 'undefined' && window.location && window.location.href) {
+      url.searchParams.set('landing_url', window.location.href);
+      changed = true;
+    }
+
     if (changed) {
       anchor.setAttribute('href', url.toString());
     }

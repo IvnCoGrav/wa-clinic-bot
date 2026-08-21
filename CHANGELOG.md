@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Fixed — Meta Full-Funnel Attribution & Initial Landing URL Preservation (2026-08-21)
+
+- **CAPI Queue & Database Self-Healing URL Normalizer (`src/services/capi.service.ts`, `src/routes/admin/reservations.subroute.ts`, `MetaCapiQueue.tsx`)**:
+  - Mengimplementasikan helper `resolveCanonicalLandingUrl()` terpadu yang secara otomatis mengekstrak nested `landing_url` dan memetakan URL redirect `/cta` lama ke domain landing page aktif (`Tenant.landing_domain`) dengan tetap mempertahankan 100% parameter query iklan (`fbclid`, `utm_*`).
+  - Menambahkan auto-self-healing pada `GET /api/admin/capi-queue`: data reservasi dan lead historis yang masih memuat URL redirect `/cta` di database PostgreSQL otomatis diperbaiki menjadi URL landing page asli saat dimuat.
+  - Menambahkan endpoint batch fix `POST /api/admin/capi-queue/repair-urls` dan tombol **"Normalisasikan URL"** di UI Admin Dashboard Meta CAPI Queue.
+  - Menyempurnakan JSON Viewer modal di `MetaCapiQueue.tsx` agar preview `event_source_url` selalu presisi dan selaras dengan format CAPI yang dikirim ke Meta.
+
+- **External Landing Page URL Preservation (`src/landing/public/external-tracker.js`, `docs/INTEGRASI_LANDING_EXTERNAL.md`)**:
+  - Memperbarui script jembatan `external-tracker.js` agar secara otomatis menyisipkan parameter `landing_url = window.location.href` ke seluruh tombol CTA WhatsApp yang mengarah ke endpoint `/cta`.
+  - Menjamin URL awal tempat event `PageView` pertama kali ditembakkan di browser (misal: `https://kalababyspa.online/reservasionline`) selalu diteruskan ke server bot secara utuh, mencegah terpotongnya rantai atribusi URL di tengah jalan.
+  - Menambahkan `landing_url` ke dalam whitelist parameter atribusi `TRACKED_PARAMS`.
+
+- **Enhanced `/cta` Full Landing URL Resolution & Offline Failover (`src/routes/landing.route.ts`)**:
+  - Menyempurnakan parsing `fullLandingUrl` pada endpoint `/cta`: memprioritaskan `query.landing_url` dan menggabungkan parameter query string (`fbclid`, `utm_*`) secara cerdas bila landing URL diberikan dalam bentuk base URL bersih.
+  - Menambahkan in-memory fallback store (`memoryAdClicks`) pada endpoint `/cta` saat database PostgreSQL offline agar penanganan tracking code dan pengalihan ke WhatsApp tetap 100% andal tanpa memutus alur pengguna.
+
+- **Meta Funnel Architecture Documentation & Comprehensive Unit Testing (`docs/META_FUNNEL.md`, `tests/unit/landing-url-attribution.test.ts`)**:
+  - Memperbarui dokumentasi arsitektur `META_FUNNEL.md` untuk merinci alur end-to-end 7 tahap (`PageView` $\rightarrow$ `ViewContent` $\rightarrow$ `AddToCart` $\rightarrow$ `Contact` $\rightarrow$ `Lead` $\rightarrow$ `InitiateCheckout` $\rightarrow$ `Purchase`).
+  - Menambahkan unit test komprehensif `tests/unit/landing-url-attribution.test.ts` untuk memvalidasi penangkapan landing URL, penggabungan query parameter, pembentukan payload CAPI `Contact` dan `Purchase` beserta hashing PII Meta ParamBuilder (100% pass).
+
 ### Added & Refined — Zero-Hardcoding Admin Configurable Landing Domain & Funnel Architecture (2026-08-21)
 
 - **Zero-Hardcoding Tenant Landing Domain (`schema.prisma`, `settings.subroute.ts`, `CustomerService.tsx`, `capi.service.ts`, `landing.route.ts`)**:

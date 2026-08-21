@@ -96,6 +96,101 @@ export function decryptCapiToken(raw: string): string | null {
 }
 
 /**
+ * Menormalkan landingUrl agar merefleksikan URL landing page asli (First-Touch URL)
+ * dengan mengekstrak nested query `landing_url` bila ada atau memetakan domain backend /cta
+ * ke domain landing page tenant yang aktif di database secara dinamis.
+ */
+export function resolveCanonicalLandingUrl(
+  rawLandingUrl?: string | null,
+  tenantLandingDomain?: string | null
+): string | undefined {
+  if (!rawLandingUrl || typeof rawLandingUrl !== 'string') {
+    return undefined;
+  }
+
+  let url = rawLandingUrl.trim();
+  if (!url) return undefined;
+
+  // 1. Jika di dalam URL terdapat parameter `landing_url` (contoh: https://app.../cta?landing_url=https%3A%2F%2F...), ekstrak landing_url aslinya
+  try {
+    if (url.includes('landing_url=')) {
+      const parsed = new URL(url.startsWith('http') ? url : `https://localhost${url.startsWith('/') ? '' : '/'}${url}`);
+      const nested = parsed.searchParams.get('landing_url');
+      if (nested && (nested.startsWith('http://') || nested.startsWith('https://'))) {
+        return nested;
+      }
+    }
+  } catch {}
+
+  const domain = (tenantLandingDomain || '').trim().replace(/\/+$/, '');
+
+  // 2. Jika URL adalah URL absolut (atau diawali http)
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const parsed = new URL(url);
+
+      // Jika URL mengarah ke endpoint backend /cta
+      if (parsed.pathname === '/cta' || parsed.pathname.endsWith('/cta')) {
+        let targetProtocol = parsed.protocol;
+        let targetHost = parsed.host.replace(/^app\./i, ''); // Strip subdomain 'app.' backend bot
+        let targetPath = '/reservasionline';
+
+        if (domain) {
+          try {
+            const parsedDomain = new URL(domain.startsWith('http') ? domain : `https://${domain}`);
+            targetProtocol = parsedDomain.protocol;
+            targetHost = parsedDomain.host;
+            if (parsedDomain.pathname && parsedDomain.pathname !== '/') {
+              targetPath = parsedDomain.pathname;
+            }
+          } catch {}
+        }
+
+        // Ambil slug dari query parameter bila ada
+        const explicitSlug = parsed.searchParams.get('slug') || parsed.searchParams.get('p');
+        if (explicitSlug && explicitSlug !== 'cta') {
+          targetPath = `/${explicitSlug.replace(/^\/+/, '')}`;
+        }
+
+        // Hapus query internal bot yang tidak relevan dengan Meta (slug, p, msg, greetings, divisi internal bot)
+        parsed.searchParams.delete('landing_url');
+        parsed.searchParams.delete('slug');
+        parsed.searchParams.delete('p');
+        parsed.searchParams.delete('msg');
+        parsed.searchParams.delete('greetings');
+        parsed.searchParams.delete('divisi');
+
+        const queryStr = parsed.searchParams.toString();
+        return `${targetProtocol}//${targetHost}${targetPath}${queryStr ? `?${queryStr}` : ''}`;
+      }
+    } catch {}
+
+    return url;
+  }
+
+  // 3. Jika URL adalah path relatif (misal: /reservasionline atau /cta?fbclid=...)
+  if (domain) {
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    if (cleanPath.startsWith('/cta')) {
+      try {
+        const parsedDomain = new URL(domain.startsWith('http') ? domain : `https://${domain}`);
+        const targetPath = (parsedDomain.pathname && parsedDomain.pathname !== '/') ? parsedDomain.pathname : '/reservasionline';
+        const qIdx = cleanPath.indexOf('?');
+        const query = qIdx !== -1 ? cleanPath.slice(qIdx) : '';
+        return `${parsedDomain.origin}${targetPath}${query}`;
+      } catch {}
+    }
+    return `${domain}${cleanPath}`;
+  } else if (url.startsWith('/cta')) {
+    const qIdx = url.indexOf('?');
+    const query = qIdx !== -1 ? url.slice(qIdx) : '';
+    return `https://kalababyspa.online/reservasionline${query}`;
+  }
+
+  return url;
+}
+
+/**
  * Format kata kunci funnel CAPI per tenant (format_checkout / format_purchase).
  * Tenant-aware: dibaca dari kolom tenant DB, fallback ke nilai default bila
  * tenant tidak punya config / DB offline (konsisten dengan pola credentials CAPI).
@@ -416,19 +511,18 @@ export class CapiService {
 
       // 4. CONSTRUCT EVENT DATA payload
       //    event_id = trackingCode ad click (auto-derive) atau synthetic ID untuk organic
-      let eventSourceUrl = effectiveAdClick?.landingUrl || undefined;
-      if (eventSourceUrl && !eventSourceUrl.startsWith('http://') && !eventSourceUrl.startsWith('https://')) {
-        let tenantDomain = '';
+      let tenantDomain = '';
+      if (tenantId) {
         try {
+          const { prisma } = await import('../db/client');
           const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
           if ((tenant as any)?.landing_domain) {
-            tenantDomain = (tenant as any).landing_domain.trim().replace(/\/$/, '');
+            tenantDomain = (tenant as any).landing_domain.trim();
           }
         } catch {}
-        if (tenantDomain) {
-          eventSourceUrl = `${tenantDomain}${eventSourceUrl.startsWith('/') ? '' : '/'}${eventSourceUrl}`;
-        }
       }
+
+      const eventSourceUrl = resolveCanonicalLandingUrl(effectiveAdClick?.landingUrl, tenantDomain);
 
       const eventData: any = {
         event_name: eventName,
