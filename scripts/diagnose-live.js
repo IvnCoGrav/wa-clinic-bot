@@ -14,10 +14,10 @@ async function diagnose() {
     console.log(`- telegram_chat_id: ${t.telegram_chat_id || 'NOT SET'}`);
   }
 
-  const aiConfigs = await prisma.aiModelConfig.findMany();
+  const aiConfigs = await prisma.tenantAiConfig.findMany();
   console.log('\n--- 🤖 AI MODEL CONFIGS ---');
   for (const c of aiConfigs) {
-    console.log(`Task: ${c.task.padEnd(20)} | Provider: ${c.provider.padEnd(10)} | Model: ${c.model.padEnd(25)} | Active: ${c.is_active}`);
+    console.log(`Task: ${c.task.padEnd(25)} | Provider: ${c.provider.padEnd(10)} | Model: ${c.model_name.padEnd(25)}`);
   }
 
   console.log('\n--- 💬 RECENT 20 CONVERSATIONS & HUMAN HANDLING REASONS ---');
