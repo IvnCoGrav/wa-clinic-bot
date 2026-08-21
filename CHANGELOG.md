@@ -4,7 +4,90 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Refactored & Polished — Micro UX Refinements on Today Treatments (2026-08-20)
+### Added, Fixed & Refined — React Portal Viewport Modal Centering, Dynamic Therapist Delegation Button & Known Issues Mandate (2026-08-21)
+
+- **Migrasi Modal ke React Portal `createPortal(..., document.body)` (`TodayTreatments.tsx`)**:
+  - Mengisolasi seluruh modal dialog (Modal Quick Chat, Modal Update Lokasi & Foto Rumah, Modal Detail Pasien, Modal Delegasi & Ganti Terapis, Modal Catat Pembayaran, dan Modal Rekap Metrik) langsung ke `document.body` melalui React Portal.
+  - Membebaskan posisi modal dari hierarki DOM komponen halaman yang menyebabkan modal bergeser ke atas/bawah saat halaman panjang di-scroll pada tampilan mobile.
+  - Menggunakan `fixed inset-0 z-[9999] h-[100dvh] w-[100dvw] flex items-center justify-center` dengan tinggi modal responsif terhadap dynamic viewport bar mobile (`max-h-[85dvh]`).
+
+- **Dinamisasi Tombol & Dialog Delegasi Terapis (`TodayTreatments.tsx`)**:
+  - Tombol operasional kini secara otomatis menampilkan teks **"Ganti Terapis"** jika jadwal reservasi sudah memiliki staf terapis yang ditugaskan (`task.assignedStaff`).
+  - Menampilkan teks **"Delegasikan"** jika jadwal reservasi belum memiliki terapis (`unassigned`).
+  - Dialog modal dan tombol submit juga menyesuaikan judul secara kontekstual (*"Ganti Terapis Jadwal"* / *"Simpan Ganti Terapis"*).
+
+- **Dokumentasi Known Issues Mandate & Catatan Masalah Kalender**:
+  - Menambahkan **Known Issues Mandate** pada `.agents/AGENTS.md` dan root `AGENTS.md` yang mewajibkan seluruh temuan issue/kendala/tech-debt yang belum terselesaikan untuk dicatat secara terpusat di `docs/KNOWN_ISSUES.md`.
+  - Mendokumentasikan permasalahan gestur drag-to-scroll horizontal kalender mingguan pada [docs/KNOWN_ISSUES.md](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/docs/KNOWN_ISSUES.md) (Issue #11).
+
+### Added, Fixed & Refined — 2D Calendar Drag Panning, Dynamic Time Navigator, Therapist Filter Fix, Detail Treatment Spanning & Chat List Bot Icon Cleanup (2026-08-21)
+
+- **2D Drag-to-Scroll & Touch Drag Panning Kalender (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`)**:
+  - Mengintegrasikan interaksi *pointer drag panning* (`onPointerDown`, `onPointerMove`, `onPointerUp`) dan `touchAction: pan-x pan-y` dengan kursor `cursor-grab / active:cursor-grabbing`.
+  - Pengguna di perangkat sentuh (touchscreen) maupun desktop kini dapat menggeser kalender secara bebas ke arah horizontal dan vertikal secara simultan (2D) tanpa hambatan locking sumbu native browser.
+
+- **Navigasi Tanggal Dinamis: Hari Ini / Minggu Ini / Bulan Ini (`Reservations.tsx`)**:
+  - Teks tombol "Hari Ini" kini otomatis menyesuaikan mode tampilan yang sedang aktif:
+    - Mode **Minggu**: Menjadi **"Minggu Ini"**.
+    - Mode **Bulan**: Menjadi **"Bulan Ini"**.
+    - Mode **Hari / List**: Menjadi **"Hari Ini"**.
+
+- **Perbaikan Dropdown Filter "Semua Terapis" (`Reservations.tsx`)**:
+  - Memperbaiki pencocokan identitas terapis pada `filteredReservations`: mengecek relasi `res.assigned_staff_id === filterState.staffId || res.assigned_staff?.id === filterState.staffId` dan penanganan akurat untuk status `unassigned` (`!res.assigned_staff_id && !res.assigned_staff?.id`), sehingga filter terapis di tabel mingguan berfungsi sempurna.
+
+- **Detail Treatment Adaptif pada Kartu Kalender Mingguan (`WeekScheduleGrid.tsx`)**:
+  - Jika kartu memiliki tinggi yang cukup (`heightPx >= 68`, misalnya durasi 60m, 90m, 120m), detail nama treatment (misal: *Pijat Bayi + Cukur Rambut*) otomatis ditampilkan di antara nama pasien dan nama terapis.
+  - Jika kartu pendek (< 68px), detail treatment otomatis disembunyikan agar kartu tetap rapi dan tidak meluap (*overflow*).
+
+- **Penyelarasan Kartu Tampilan Harian (`DayScheduleGrid.tsx`)**:
+  - Memperbarui kartu tampilan harian dengan nama pasien bersih tanpa sapaan ganda, badge terapis yang konsisten, rentang jam akurat, dan dukungan interaksi 2D drag panning.
+
+- **Pembersihan Ikon Bot pada Daftar Chat (`LiveChatMonitor.tsx`)**:
+  - Menghilangkan badge abu-abu berikon bot (`<Bot size={12} />`) pada baris chat yang sedang ditangani otomatis oleh Bot AI.
+  - Ikon bot kini hanya muncul sebagai tombol aksi *"Kembalikan ke Bot"* saat percakapan sedang ditangani manual oleh CS / Manusia (`isHumanHandling`).
+
+- **Filter Status Cerdas Berbasis View-Mode (`Reservations.tsx`)**:
+  - Tampilan **Tabel / List (`table`)**: Default otomatis ke `upcoming` (*📅 Aktif & Mendatang*).
+  - Tampilan **Hari, Minggu, dan Bulan (`day`, `week`, `month`)**: Default otomatis ke `all` (*Semua Status*), sehingga saat berpindah hari/minggu/bulan seluruh agenda yang terjadwal di tanggal tersebut tampil utuh tanpa tersembunyi.
+
+- **Ekspansi Animasi Swipe-Back ke 100% (`Layout.tsx`)**:
+  - Meningkatkan jangkauan pergerakan maksimal indikator swipe-back ke `100px` (100%) dengan kurva resistensi peredam elastis: `dist = 100 * (1 - Math.exp(-deltaX / 100))`.
+  - Threshold aktivasi diatur pada `50px` (50%), memberikan tarikan yang panjang, mantap, dan natural saat ditarik ke kanan.
+
+- **Isolasi Sticky Searchbar Murni & Mobile Header Scroll-Off (`LiveChatMonitor.tsx`)**:
+  - Memasukkan judul halaman *Live Chat Monitor* dan toolbar filter (sumber & label) langsung ke dalam kontainer scroll pada tampilan mobile.
+  - Saat daftar percakapan di-scroll ke bawah di smartphone, header dan barisan filter otomatis tergulung ke atas dan menghilang, menyisakan **hanya kotak pencarian (*Searchbar*)** yang menempel secara *sticky* di puncak layar (`sticky top-0 z-20 bg-white shadow-xs`).
+  - **Quick-Add Button Tetap Terjaga**: Slot kosong di belakang kartu tetap dapat diklik untuk menambah jadwal baru secara instan.
+
+- **Default Sort Jadwal Kunjungan Terdekat dari Hari & Jam Sekarang (`Reservations.tsx`)**:
+  - Menetapkan default pengurutan tabel reservasi murni berdasarkan jadwal kunjungan (`booking_date`) yang paling dekat dengan hari dan jam sekarang (jadwal 30 menit lagi $\rightarrow$ 2 jam lagi $\rightarrow$ besok $\rightarrow$ minggu depan, lalu riwayat masa lalu, dan janji temu tanpa jadwal di urutan paling bawah).
+  - Menyederhanakan antarmuka mobile dengan menghapus dropdown sorting mobile (fitur sorting khusus untuk versi web/desktop melalui header kolom `<th>` yang dapat diklik dengan ikon panah dinamis `ArrowUpDown`, `ArrowUp`, `ArrowDown`).
+
+- **Dedicated LLM Execution & Reasoning Log Feed (`llm-execution-logger.ts`, `evaluations.subroute.ts`, `Debug.tsx`)**:
+  - **In-Memory Ring Buffer (150 Entri)**: Modul logging khusus untuk merekam proses inferensi LLM tanpa bercampur dengan log sistem umum.
+  - **Endpoint API Dedicated**: `GET /api/admin/debug/llm-logs?limit=100&flow=all` untuk menyuplai feed log inferensi real-time.
+  - **Tab UI `🧠 LLM Execution Logs` pada System Debug**: Menampilkan kartu ringkasan visual dengan 4 blok terstruktur:
+    1. 💬 *Input Pasien*
+    2. 📚 *Ground Truth Injected* (fakta database profil, anak, reservasi, & katalog)
+    3. 🔍 *AI Reasoning & Chain-of-Thought* (penalaran terstruktur model AI)
+    4. ✉️ *Final AI Auto-Reply / Draft* (balasan akhir yang dikirim atau disiapkan)
+
+- **Penyelarasan AI Copilot Draft dengan Pipeline LLM Utama (`generator.ts`, `live-chat.service.ts`)**:
+  - Menghubungkan pembuatan draft saran balasan Bidan/CS di Live Chat ke generator `LLMResponseGenerator.generateCopilotDraft()`.
+  - Menginjeksi database Ground Truth, pencarian RAG katalog/SOP klinik, format penalaran `<reasoning>`, dan audit log telemetry biaya token.
+
+### Fixed & Refined — Button Sound/Haptic Elimination, Seamless Searchbar & In-Place Bot Release (2026-08-21)
+
+- **Eliminasi Total Suara & Haptik pada Tombol/Aksi (`TodayTreatments.tsx`, `StaffToday.tsx`, `Layout.tsx`, `LiveChatMonitor.tsx`, `notificationSound.ts`)**:
+  - **Tombol & Aksi Hening 100%**: Menghapus pemanggilan audio sintetis dan getaran haptik (`navigator.vibrate`) dari semua tombol aksi di *Today Treatments* (`handleUpdateStatus`, `handleLockLocation`, `handleUploadPayment`, `handleQuickChatSend`, `handleReassign`), portal staf (*StaffToday*), sentuhan tooltip filter ikon (*LiveChatMonitor*), dan gesture *pull-to-refresh* (*Layout*).
+  - **Inisialisasi Audio Senyap (Silent Unlock Blessing)**: Memperbaiki `unlockAudioContext()` agar mematikan volume/mute saat pre-blessing HTML5 Audio pada sentuhan pertama di mobile, sehingga tap pertama pengguna di layar smartphone tidak lagi menimbulkan bunyi klik/pop yang mengganggu.
+  - **Penyempurnaan Nada Notifikasi Pesan Masuk (`playIncomingMessageSound`)**: Menghasilkan nada chime kristal yang lembut dan jernih (*A5 880Hz $\rightarrow$ E6 1318.5Hz*) dengan decay halus, khusus dan hanya dibunyikan saat ada pesan WhatsApp baru masuk dari pelanggan di Live Chat.
+- **Pencarian Real-Time Tanpa Kedipan / Reload Layar Penuh (`LiveChatMonitor.tsx`)**:
+  - **Akar Masalah**: Pengetikan pada searchbar sebelumnya memicu debounce `loadChats(true)` yang mengubah `loading = true`, menyebabkan seluruh komponen halaman (termasuk kolom chat aktif dan searchbar itu sendiri) di-unmount dan digantikan loader spinner penuh.
+  - **Solusi Seamless**: Memisahkan inisialisasi awal (`loading && chats.length === 0`) dengan pemuatan data latar belakang. Pencarian kini memfilter daftar chat secara instan di memori (*client-side* 0ms), dan sinkronisasi server berjalan senyap dengan mini-spinner halus di dalam searchbar (`isSearching`) tanpa pernah mencopot layout atau me-reset fokus pengetikan.
+- **Transisi 'Kembalikan ke Bot' In-Place Tanpa Reset / Reload (`LiveChatMonitor.tsx`)**:
+  - **Akar Masalah**: Mengklik *"Kembalikan ke Bot"* sebelumnya memanggil `loadChats(true)` (memicu full-page loader) serta mengeksekusi `setSelectedId(null)` dan `setMessages([])`, yang memaksa keluar dari chat aktif dan menutup percakapan.
+  - **Solusi Optimistic**: Melakukan *in-place optimistic update* pada percakapan aktif (`isHumanHandling = false`, `status = 'active'`, `lastHandledBy = 'bot'`) sehingga obrolan yang sedang dibuka tetap terbuka dan utuh. Tombol header berubah mulus menjadi badge **"🤖 Bot"**, dan sinkronisasi server berjalan senyap di latar belakang.
 
 - **7 Penyesuaian Mikro UI/UX pada Modul Treatment Hari Ini (`TodayTreatments.tsx`)**:
   1. **Dropdown Filter Penugasan Terapis**: Mengganti toggle button lama menjadi dropdown `<select>` yang rapi dengan opsi default `🛵 Tugas Saya`, `👥 Semua Terapis`, dan daftar terapis individual spesifik.

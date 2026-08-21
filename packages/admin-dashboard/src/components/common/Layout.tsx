@@ -36,6 +36,7 @@ import {
   Loader,
   RefreshCw,
   Sparkles,
+  ChevronLeft,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
@@ -352,11 +353,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (pullDistance >= 45 && !isPullRefreshing) {
         setIsPullRefreshing(true);
         setPullDistance(45);
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-          try {
-            navigator.vibrate(40);
-          } catch (_) {}
-        }
         setTimeout(() => {
           window.location.reload();
         }, 350);
@@ -379,10 +375,85 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
   }, [pullDistance, isPullRefreshing]);
 
+  // ⬅️ Mobile Edge Swipe-Back Gesture Navigation (Left to Right from Edge)
+  const [swipeBackDistance, setSwipeBackDistance] = useState(0);
+  const swipeBackStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (window.innerWidth >= 768) return;
+
+    const handleEdgeTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest('input') ||
+        target?.closest('textarea') ||
+        target?.closest('select') ||
+        target?.closest('[data-no-swipe-back]') ||
+        target?.closest('[data-horizontal-scroll]')
+      ) {
+        return;
+      }
+
+      // Trigger only when touch starts within 35px of left screen edge
+      const touch = e.touches[0];
+      if (touch.clientX <= 35) {
+        swipeBackStartRef.current = { x: touch.clientX, y: touch.clientY };
+      }
+    };
+
+    const handleEdgeTouchMove = (e: TouchEvent) => {
+      if (!swipeBackStartRef.current) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - swipeBackStartRef.current.x;
+      const deltaY = touch.clientY - swipeBackStartRef.current.y;
+
+      if (deltaX > 8 && deltaX > Math.abs(deltaY) * 1.2) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        // Kurva peredam (resistance curve / rubber-band damping):
+        // Maksimal range 100px (100%), semakin ke kanan pergerakan semakin berkurang/lambat
+        const maxRangePx = 100;
+        const dist = maxRangePx * (1 - Math.exp(-deltaX / 100));
+        setSwipeBackDistance(dist);
+      } else if (deltaX < 0) {
+        setSwipeBackDistance(0);
+      }
+    };
+
+    const handleEdgeTouchEnd = () => {
+      // Threshold aktivasi (mencapai 50% dari kurva maksimum 100px)
+      if (swipeBackDistance >= 50) {
+        const backEvent = new CustomEvent('app-swipe-back', { cancelable: true });
+        const notHandled = window.dispatchEvent(backEvent);
+        if (notHandled) {
+          if (window.history.length > 1) {
+            window.history.back();
+          }
+        }
+      }
+      setSwipeBackDistance(0);
+      swipeBackStartRef.current = null;
+    };
+
+    window.addEventListener('touchstart', handleEdgeTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleEdgeTouchMove, { passive: false });
+    window.addEventListener('touchend', handleEdgeTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleEdgeTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleEdgeTouchStart);
+      window.removeEventListener('touchmove', handleEdgeTouchMove);
+      window.removeEventListener('touchend', handleEdgeTouchEnd);
+      window.removeEventListener('touchcancel', handleEdgeTouchEnd);
+    };
+  }, [swipeBackDistance]);
+
   const isLiveChat = location.pathname.includes('/live-chat');
 
   return (
-    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative`}>
+    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative overscroll-y-contain`}>
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
         <div
@@ -399,6 +470,30 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               style={{
                 transform: isPullRefreshing ? undefined : `rotate(${pullDistance * 5}deg)`,
               }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
+      {swipeBackDistance > 0 && (
+        <div
+          className="fixed left-2 top-1/2 -translate-y-1/2 z-[99999] pointer-events-none transition-all duration-75 ease-out flex items-center justify-center"
+          style={{
+            transform: `translate(${swipeBackDistance}px, -50%) scale(${0.8 + (swipeBackDistance / 100) * 0.35})`,
+            opacity: Math.min(swipeBackDistance / 20, 1),
+          }}
+        >
+          <div
+            className={`p-3 rounded-full shadow-2xl backdrop-blur-md border transition-all flex items-center justify-center ${
+              swipeBackDistance >= 50
+                ? 'bg-[#008069] text-white border-white/40 ring-4 ring-[#008069]/25 shadow-[#008069]/30'
+                : 'bg-white/95 text-[#008069] border-[#008069]/30 shadow-lg'
+            }`}
+          >
+            <ChevronLeft
+              size={22}
+              className={`transition-transform duration-100 ${swipeBackDistance >= 50 ? 'scale-115 stroke-[2.5]' : ''}`}
             />
           </div>
         </div>

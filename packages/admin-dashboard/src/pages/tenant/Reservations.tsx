@@ -32,6 +32,9 @@ import {
   PenLine,
   CheckCircle,
   CheckCheck,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
@@ -68,7 +71,7 @@ export const Reservations: React.FC = () => {
     searchQuery: '',
     category: 'all',
     staffId: 'all',
-    status: 'all',
+    status: 'upcoming',
   });
 
   const [googleCalendarMockActive, setGoogleCalendarMockActive] = useState(true);
@@ -325,11 +328,40 @@ export const Reservations: React.FC = () => {
     return extractBabiesFromRawText(res.raw_text, res.treatment_detail).map((b) => ({ name: b.name, age: b.age }));
   };
 
-  // Filtered reservations based on global sidebar & search filter
+  // Table sorting state (Default: sort by jadwal kunjungan ascending / nearest upcoming first)
+  const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('booking_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'booking_date' | 'customer' | 'category' | 'status' | 'created_at') => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  // Filtered & Sorted reservations based on global sidebar, search filter, and sorting
   const filteredReservations = useMemo(() => {
-    return reservations.filter((res) => {
-      // Status filter
-      if (filterState.status !== 'all' && res.status !== filterState.status) {
+    const now = Date.now();
+    const isOverdue = (r: Reservation) => {
+      if (!r.booking_date) return false;
+      const time = new Date(r.booking_date).getTime();
+      return time < now - 3 * 3600 * 1000 && r.status !== 'completed' && r.status !== 'cancelled';
+    };
+    const isUpcomingOrToday = (r: Reservation) => {
+      if (!r.booking_date) return true;
+      const time = new Date(r.booking_date).getTime();
+      return time >= now - 3 * 3600 * 1000;
+    };
+
+    const list = reservations.filter((res) => {
+      // Status & verification filter
+      if (filterState.status === 'upcoming') {
+        if (!isUpcomingOrToday(res)) return false;
+      } else if (filterState.status === 'overdue') {
+        if (!isOverdue(res)) return false;
+      } else if (filterState.status !== 'all' && res.status !== filterState.status) {
         return false;
       }
       // Category filter
@@ -337,8 +369,15 @@ export const Reservations: React.FC = () => {
         return false;
       }
       // Staff filter
-      if (filterState.staffId !== 'all' && res.assigned_staff_id !== filterState.staffId) {
-        return false;
+      if (filterState.staffId !== 'all') {
+        if (filterState.staffId === 'unassigned') {
+          if (res.assigned_staff_id || res.assigned_staff?.id) return false;
+        } else {
+          const match =
+            res.assigned_staff_id === filterState.staffId ||
+            res.assigned_staff?.id === filterState.staffId;
+          if (!match) return false;
+        }
       }
       // Search query
       if (filterState.searchQuery.trim()) {
@@ -352,7 +391,50 @@ export const Reservations: React.FC = () => {
       }
       return true;
     });
-  }, [reservations, filterState]);
+
+    return list.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'booking_date') {
+        const now = Date.now();
+        const getScore = (dateStr?: string | null) => {
+          if (!dateStr) return Number.MAX_SAFE_INTEGER;
+          const targetTime = new Date(dateStr).getTime();
+          if (isNaN(targetTime)) return Number.MAX_SAFE_INTEGER;
+          const diffMs = targetTime - now;
+          // Jadwal hari ini & mendatang (toleransi 3 jam lalu hari ini):
+          // Diberi prioritas utama (terdekat dari hari dan jam sekarang)
+          if (diffMs >= -3 * 3600 * 1000) {
+            return diffMs;
+          }
+          // Jadwal masa lalu yang sudah selesai: ditaruh setelah jadwal aktif
+          return 10_000_000_000_000 + Math.abs(diffMs);
+        };
+
+        const scoreA = getScore(a.booking_date);
+        const scoreB = getScore(b.booking_date);
+        comparison = scoreA - scoreB;
+      } else if (sortField === 'customer') {
+        const nameA = a.customer?.name || 'Bunda';
+        const nameB = b.customer?.name || 'Bunda';
+        comparison = nameA.localeCompare(nameB);
+      } else if (sortField === 'category') {
+        const catA = a.treatment_category || '';
+        const catB = b.treatment_category || '';
+        comparison = catA.localeCompare(catB);
+      } else if (sortField === 'status') {
+        const statusOrder: Record<string, number> = { confirmed: 1, pending: 2, completed: 3, cancelled: 4 };
+        const orderA = statusOrder[a.status] || 99;
+        const orderB = statusOrder[b.status] || 99;
+        comparison = orderA - orderB;
+      } else if (sortField === 'created_at') {
+        const tA = new Date(a.created_at || 0).getTime();
+        const tB = new Date(b.created_at || 0).getTime();
+        comparison = tA - tB;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [reservations, filterState, sortField, sortOrder]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -572,24 +654,47 @@ export const Reservations: React.FC = () => {
                 <div className="flex items-center space-x-1 bg-[#f0f2f5] p-0.5 rounded-lg border border-[#e9edef]">
                   <button
                     onClick={handlePrevDate}
-                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors"
+                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors cursor-pointer"
                     title="Sebelumnya"
                   >
                     <ChevronLeft size={14} />
                   </button>
                   <button
                     onClick={handleToday}
-                    className="px-2 py-0.5 rounded-md bg-white hover:bg-gray-100 text-[11px] font-bold text-[#111b21] shadow-2xs transition-colors"
+                    className="px-2 py-0.5 rounded-md bg-white hover:bg-gray-100 text-[11px] font-bold text-[#111b21] shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    Hari Ini
+                    {viewMode === 'week' ? 'Minggu Ini' : viewMode === 'month' ? 'Bulan Ini' : 'Hari Ini'}
                   </button>
                   <button
                     onClick={handleNextDate}
-                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors"
+                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors cursor-pointer"
                     title="Berikutnya"
                   >
                     <ChevronRight size={14} />
                   </button>
+                  {/* 📅 Date Picker Quick Jump Button */}
+                  <div className="relative flex items-center">
+                    <input
+                      type="date"
+                      value={selectedDate.toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const [y, m, d] = e.target.value.split('-').map(Number);
+                          const newD = new Date(y, m - 1, d);
+                          setSelectedDate(newD);
+                        }
+                      }}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                      title="Pilih Tanggal Spesifik"
+                    />
+                    <button
+                      type="button"
+                      className="p-1 rounded-md bg-white hover:bg-[#e8f5f2] text-[#54656f] hover:text-[#008069] shadow-2xs transition-colors cursor-pointer"
+                      title="Pilih Tanggal Spesifik"
+                    >
+                      <CalendarIcon size={13} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -605,7 +710,17 @@ export const Reservations: React.FC = () => {
           <div className="block sm:hidden flex-1 min-w-[110px]">
             <select
               value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as CalendarViewMode)}
+              onChange={(e) => {
+                const newMode = e.target.value as CalendarViewMode;
+                setViewMode(newMode);
+                setFilterState((prev) => {
+                  if (newMode === 'table') {
+                    return prev.status === 'all' ? { ...prev, status: 'upcoming' } : prev;
+                  } else {
+                    return prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev;
+                  }
+                });
+              }}
               className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
             >
               <option value="table">List</option>
@@ -618,8 +733,11 @@ export const Reservations: React.FC = () => {
           {/* Desktop View Switcher Tabs */}
           <div className="hidden sm:flex space-x-1 p-1 bg-[#f0f2f5] rounded-xl shadow-inner text-xs">
             <button
-              onClick={() => setViewMode('table')}
-              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+              onClick={() => {
+                setViewMode('table');
+                setFilterState((prev) => (prev.status === 'all' ? { ...prev, status: 'upcoming' } : prev));
+              }}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'table'
                   ? 'bg-white text-[#111b21] shadow-xs'
                   : 'text-[#54656f] hover:text-[#111b21]'
@@ -629,8 +747,11 @@ export const Reservations: React.FC = () => {
               <span>Tabel</span>
             </button>
             <button
-              onClick={() => setViewMode('day')}
-              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+              onClick={() => {
+                setViewMode('day');
+                setFilterState((prev) => (prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev));
+              }}
+              className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'day'
                   ? 'bg-white text-[#111b21] shadow-xs'
                   : 'text-[#54656f] hover:text-[#111b21]'
@@ -640,8 +761,11 @@ export const Reservations: React.FC = () => {
               <span>Hari</span>
             </button>
             <button
-              onClick={() => setViewMode('week')}
-              className={`hidden sm:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+              onClick={() => {
+                setViewMode('week');
+                setFilterState((prev) => (prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev));
+              }}
+              className={`hidden sm:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'week'
                   ? 'bg-white text-[#111b21] shadow-xs'
                   : 'text-[#54656f] hover:text-[#111b21]'
@@ -651,8 +775,11 @@ export const Reservations: React.FC = () => {
               <span>Minggu</span>
             </button>
             <button
-              onClick={() => setViewMode('month')}
-              className={`hidden md:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all ${
+              onClick={() => {
+                setViewMode('month');
+                setFilterState((prev) => (prev.status === 'upcoming' ? { ...prev, status: 'all' } : prev));
+              }}
+              className={`hidden md:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'month'
                   ? 'bg-white text-[#111b21] shadow-xs'
                   : 'text-[#54656f] hover:text-[#111b21]'
@@ -693,76 +820,121 @@ export const Reservations: React.FC = () => {
       <div className="space-y-4">
         {/* Status Filter Tabs & Search bar */}
         <div className="space-y-2.5">
-          {/* Mobile Status Dropdown */}
-          <div className="block sm:hidden w-full">
+          {/* Mobile Status & Staff Dropdowns */}
+          <div className="flex sm:hidden items-center gap-2 w-full">
             <select
               value={filterState.status}
               onChange={(e) =>
                 setFilterState((prev) => ({ ...prev, status: e.target.value as any }))
               }
-              className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs truncate"
             >
               <option value="all">Semua Status ({reservations.length})</option>
+              <option value="upcoming">📅 Aktif &amp; Mendatang ({reservations.filter((r) => !r.booking_date || new Date(r.booking_date).getTime() >= Date.now() - 3 * 3600 * 1000).length})</option>
+              <option value="overdue">⚠️ Perlu Verifikasi ({reservations.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < Date.now() - 3 * 3600 * 1000 && r.status !== 'completed' && r.status !== 'cancelled').length})</option>
               <option value="pending">Pending ({reservations.filter((r) => r.status === 'pending').length})</option>
               <option value="confirmed">Confirmed / Lunas ({reservations.filter((r) => r.status === 'confirmed').length})</option>
               <option value="completed">Completed / Selesai ({reservations.filter((r) => r.status === 'completed').length})</option>
               <option value="cancelled">Cancelled / Batal ({reservations.filter((r) => r.status === 'cancelled').length})</option>
             </select>
+
+            <select
+              value={filterState.staffId}
+              onChange={(e) => setFilterState((prev) => ({ ...prev, staffId: e.target.value }))}
+              className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs truncate"
+            >
+              <option value="all">👥 Semua Terapis</option>
+              <option value="unassigned">⚠️ Belum Ada Terapis</option>
+              {staffList.map((st) => (
+                <option key={st.id} value={st.id}>
+                  🛵 {st.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Desktop Status Tabs */}
-          <div className="hidden sm:flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl w-fit">
-            {[
-              { key: 'all', label: 'Semua Status', count: reservations.length },
-              { key: 'pending', label: 'Pending', count: reservations.filter((r) => r.status === 'pending').length },
-              { key: 'confirmed', label: 'Confirmed (Lunas)', count: reservations.filter((r) => r.status === 'confirmed').length },
-              { key: 'completed', label: 'Completed (Selesai)', count: reservations.filter((r) => r.status === 'completed').length },
-              { key: 'cancelled', label: 'Cancelled (Batal)', count: reservations.filter((r) => r.status === 'cancelled').length },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setFilterState((prev) => ({ ...prev, status: tab.key as any }))}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
-                  filterState.status === tab.key
-                    ? 'bg-white text-[#111b21] shadow-xs'
-                    : 'text-[#54656f] hover:text-[#111b21]'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+          {/* Desktop Status Tabs & Staff Dropdown */}
+          <div className="hidden sm:flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl">
+              {[
+                { key: 'all', label: 'Semua', count: reservations.length },
+                { key: 'upcoming', label: '📅 Aktif & Mendatang', count: reservations.filter((r) => !r.booking_date || new Date(r.booking_date).getTime() >= Date.now() - 3 * 3600 * 1000).length },
+                { key: 'overdue', label: '⚠️ Perlu Verifikasi', count: reservations.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < Date.now() - 3 * 3600 * 1000 && r.status !== 'completed' && r.status !== 'cancelled').length, isAlert: true },
+                { key: 'pending', label: 'Pending', count: reservations.filter((r) => r.status === 'pending').length },
+                { key: 'confirmed', label: 'Confirmed (Lunas)', count: reservations.filter((r) => r.status === 'confirmed').length },
+                { key: 'completed', label: 'Completed (Selesai)', count: reservations.filter((r) => r.status === 'completed').length },
+                { key: 'cancelled', label: 'Cancelled (Batal)', count: reservations.filter((r) => r.status === 'cancelled').length },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setFilterState((prev) => ({ ...prev, status: tab.key as any }))}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
                     filterState.status === tab.key
-                      ? 'bg-[#e8f5f2] text-[#008069]'
-                      : 'bg-[#e9edef] text-[#667781]'
+                      ? tab.isAlert
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs'
+                        : 'bg-white text-[#111b21] shadow-xs'
+                      : 'text-[#54656f] hover:text-[#111b21]'
                   }`}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                      filterState.status === tab.key
+                        ? tab.isAlert
+                          ? 'bg-amber-200 text-amber-900 font-bold'
+                          : 'bg-[#e8f5f2] text-[#008069]'
+                        : tab.isAlert && tab.count > 0
+                        ? 'bg-amber-200 text-amber-800 font-bold animate-pulse'
+                        : 'bg-[#e9edef] text-[#667781]'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Staff Selector Dropdown next to Status Tabs */}
+            <div className="flex items-center">
+              <select
+                value={filterState.staffId}
+                onChange={(e) => setFilterState((prev) => ({ ...prev, staffId: e.target.value }))}
+                className="px-3 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+              >
+                <option value="all">👥 Semua Terapis</option>
+                <option value="unassigned">⚠️ Belum Ada Terapis</option>
+                {staffList.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    🛵 {st.name} ({st.role || 'Staff'})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Search bar */}
-          <div className="relative">
-            <input
-              type="text"
-              value={filterState.searchQuery}
-              onChange={(e) =>
-                setFilterState((prev) => ({ ...prev, searchQuery: e.target.value }))
-              }
-              placeholder="Cari pasien, nomor telepon, atau jenis treatment..."
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
-            />
-            <Search size={14} className="absolute left-3 top-3 text-[#8696a0]" />
-            {filterState.searchQuery && (
-              <button
-                onClick={() => setFilterState((prev) => ({ ...prev, searchQuery: '' }))}
-                className="absolute right-3 top-3 text-[#8696a0] hover:text-[#111b21]"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
+          {/* Search bar (Hanya muncul di Tampilan Tabel / List, tidak muncul di Hari, Minggu, dan Bulan) */}
+          {viewMode === 'table' && (
+            <div className="relative">
+              <input
+                type="text"
+                value={filterState.searchQuery}
+                onChange={(e) =>
+                  setFilterState((prev) => ({ ...prev, searchQuery: e.target.value }))
+                }
+                placeholder="Cari pasien, nomor telepon, atau jenis treatment..."
+                className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+              />
+              <Search size={14} className="absolute left-3 top-3 text-[#8696a0]" />
+              {filterState.searchQuery && (
+                <button
+                  onClick={() => setFilterState((prev) => ({ ...prev, searchQuery: '' }))}
+                  className="absolute right-3 top-3 text-[#8696a0] hover:text-[#111b21]"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
           {/* View rendering */}
@@ -802,6 +974,13 @@ export const Reservations: React.FC = () => {
             <div className="space-y-4">
               {/* Mobile Card List */}
               <div className="block md:hidden space-y-3">
+                {/* Mobile Count Bar */}
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <span className="text-[#667781] font-bold text-xs">
+                    {filteredReservations.length} Data Reservasi
+                  </span>
+                </div>
+
                 {filteredReservations.length === 0 ? (
                   <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-[#667781] text-xs shadow-xs">
                     Tidak ada data reservasi yang sesuai.
@@ -865,13 +1044,65 @@ export const Reservations: React.FC = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-xs uppercase tracking-wider font-bold">
-                        <th className="py-3.5 px-5">Customer</th>
-                        <th className="py-3.5 px-5">Kategori</th>
+                      <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] text-xs uppercase tracking-wider font-bold select-none">
+                        <th 
+                          onClick={() => handleSort('customer')} 
+                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          title="Klik untuk mengurutkan nama customer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Customer</span>
+                            {sortField === 'customer' ? (
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-40" />
+                            )}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => handleSort('category')} 
+                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          title="Klik untuk mengurutkan kategori layanan"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Kategori</span>
+                            {sortField === 'category' ? (
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-40" />
+                            )}
+                          </div>
+                        </th>
                         <th className="py-3.5 px-5">Detail Layanan</th>
-                        <th className="py-3.5 px-5">Jadwal Kunjungan</th>
+                        <th 
+                          onClick={() => handleSort('booking_date')} 
+                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors bg-[#e8f5f2]/40"
+                          title="Klik untuk mengurutkan jadwal kunjungan"
+                        >
+                          <div className="flex items-center gap-1.5 text-[#008069]">
+                            <span>Jadwal Kunjungan</span>
+                            {sortField === 'booking_date' ? (
+                              sortOrder === 'asc' ? <ArrowUp size={14} className="text-[#008069] font-bold" /> : <ArrowDown size={14} className="text-[#008069] font-bold" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-60" />
+                            )}
+                          </div>
+                        </th>
                         <th className="py-3.5 px-5">Terapis</th>
-                        <th className="py-3.5 px-5">Status</th>
+                        <th 
+                          onClick={() => handleSort('status')} 
+                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
+                          title="Klik untuk mengurutkan status"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Status</span>
+                            {sortField === 'status' ? (
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-40" />
+                            )}
+                          </div>
+                        </th>
                         <th className="py-3.5 px-5">Bukti Bayar</th>
                         <th className="py-3.5 px-5">Aksi</th>
                       </tr>
