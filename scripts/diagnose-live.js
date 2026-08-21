@@ -1,4 +1,4 @@
-const { prisma } = require('./dist/src/db/client');
+const { prisma } = require('./dist/db/client');
 
 async function diagnose() {
   console.log('='.repeat(80));
