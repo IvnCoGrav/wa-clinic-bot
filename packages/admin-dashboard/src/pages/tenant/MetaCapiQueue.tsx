@@ -144,12 +144,17 @@ const buildCapiJsonPayload = (item: QueueItem) => {
     ? Math.floor(new Date(item.purchase_occurred_at).getTime() / 1000)
     : Math.floor(Date.now() / 1000);
 
+  let landingUrl = item.attribution.landingUrl || undefined;
+  if (landingUrl && !landingUrl.startsWith('http://') && !landingUrl.startsWith('https://')) {
+    landingUrl = `https://kalababyspa.online${landingUrl.startsWith('/') ? '' : '/'}${landingUrl}`;
+  }
+
   return {
     event_name: eventName,
     event_time: occurredTimestamp,
-    event_id: item.attribution.trackingCode || `${eventName.toLowerCase()}_${item.id.slice(0, 8)}`,
-    event_source_url: item.attribution.landingUrl || 'https://kalamomsspa.com',
-    action_source: 'system_generated',
+    event_id: item.attribution.trackingCode || `${eventName.toLowerCase()}_${item.id.replace('lead_', '').slice(0, 8)}`,
+    event_source_url: landingUrl,
+    action_source: 'chat',
     user_data: {
       ph: item.customer.phone ? `sha256(${item.customer.phone})` : undefined,
       fn: item.customer.name ? `sha256(${item.customer.name.split(' ')[0]})` : undefined,
