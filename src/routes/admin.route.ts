@@ -30,6 +30,7 @@ import { staffManagementAdminRoutes } from './admin/staff-management.subroute';
 import { labelsAdminRoutes } from './admin/labels.subroute';
 import { pushSubroutes } from './admin/push.subroute';
 import { rolesAdminRoutes } from './admin/roles.subroute';
+import { followUpAdminRoutes } from './admin/follow-up.subroute';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
@@ -123,6 +124,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(labelsAdminRoutes);
   fastify.register(pushSubroutes);
   fastify.register(rolesAdminRoutes);
+  fastify.register(followUpAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');

@@ -107,4 +107,30 @@ describe('Fitur 1 — WhatsApp Provider QR API', () => {
     expect(wahaClient.createSession).toHaveBeenCalled();
     expect(wahaClient.startSession).toHaveBeenCalled();
   });
+
+  it('7. PATCH /api/admin/whatsapp-provider/cutoff toggles internal outbound cut-off', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/whatsapp-provider/cutoff',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+      payload: { cutOff: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.wahaOutboundCutoff).toBe(true);
+    expect(body.message).toContain('Cut-Off Darurat Aktif');
+
+    // Reconnect
+    const resReconnect = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/whatsapp-provider/cutoff',
+      headers: { 'x-api-key': 'test_admin_key_999' },
+      payload: { cutOff: false },
+    });
+    expect(resReconnect.statusCode).toBe(200);
+    const body2 = JSON.parse(resReconnect.body);
+    expect(body2.wahaOutboundCutoff).toBe(false);
+  });
 });

@@ -4,7 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { customerService } from '../../services/customer.service';
 import { googleCalendarService } from '../../services/google-calendar.service';
-import { capiService, resolveTreatmentValue } from '../../services/capi.service';
+import { capiService, resolveTreatmentValue, extractValueByFormat, getTenantCapiFormats } from '../../services/capi.service';
 import { extractRupiahAmount } from '../../services/purchase-detection.service';
 import { parseReservationText, extractBabyDetails } from '../../utils/reservation-text-parser';
 import { memoryReservations } from './stores';
@@ -848,6 +848,51 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
+        if (id.startsWith('lead_')) {
+          const customerId = id.replace('lead_', '');
+          const customer = await prisma.customer.findFirst({
+            where: { id: customerId, tenant_id: DEFAULT_TENANT_ID },
+            include: { adClick: true },
+          });
+          if (!customer) {
+            return reply.status(404).send({ success: false, error: 'Customer not found' });
+          }
+          const occurredDate = customer.mql_triggered_at || customer.created_at || new Date();
+          const occurredAt = new Date(occurredDate);
+
+          capiService
+            .sendCapiEvent({
+              eventName: 'Lead',
+              customer,
+              adClick: customer.adClick || undefined,
+              tenantId: DEFAULT_TENANT_ID,
+              eventTime: Math.floor(occurredAt.getTime() / 1000),
+              customData: {
+                source: 'ADMIN_MODERATION_APPROVE_LEAD',
+                mql_bubble_count: customer.mql_bubble_count || 5,
+              },
+            })
+            .then((result) => {
+              if (!result.success) {
+                console.error(`[CAPI ERROR] Approved Lead send failed for ${id}: ${result.message}`);
+              }
+            })
+            .catch((err) => {
+              console.error('[CAPI ERROR] Failed to send approved Lead event:', err.message);
+            });
+
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'MQL_LEAD_EVENT_SENT',
+            targetId: customerId,
+            payload: { mql_triggered_at: occurredAt.toISOString() },
+            ipAddress: request.ip,
+          });
+
+          return reply.status(200).send({ success: true, message: 'Lead event disetujui & dikirim ke Meta CAPI' });
+        }
+
         const existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: DEFAULT_TENANT_ID },
           include: {
@@ -865,36 +910,37 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}).`,
           });
         }
-        if (!existing.purchase_occurred_at) {
-          return reply.status(400).send({
-            success: false,
-            error: 'purchase_occurred_at kosong — event ini tidak masuk queue moderasi.',
-          });
+
+        // Tentukan waktu terjadi transaksi (occurredAt) fallback ke created_at jika belum ada
+        const occurredDate = existing.purchase_occurred_at || existing.created_at || new Date();
+        const occurredAt = new Date(occurredDate);
+        const daysOld = Math.floor((Date.now() - occurredAt.getTime()) / (24 * 60 * 60 * 1000));
+        let warning: string | undefined;
+        if (daysOld > 7) {
+          warning = `Event terjadi ${daysOld} hari lalu (>7 hari). Meta CAPI kemungkinan akan mengabaikan event ini.`;
         }
 
-        // Meta drop event lebih tua dari ~7 hari -> beri peringatan (warning) tapi tetap izinkan pengiriman.
-        const occurredAt = new Date(existing.purchase_occurred_at);
-        const isOlderThan7Days = Date.now() - occurredAt.getTime() > 7 * 24 * 60 * 60 * 1000;
-        const warning = isOlderThan7Days
-          ? 'Event pembayaran ini terjadi lebih dari 7 hari yang lalu. Meta CAPI mungkin akan mengabaikan event historis lama ini.'
-          : undefined;
+        const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+        const resolvedVal =
+          existing.purchase_value ??
+          extractValueByFormat(existing.raw_text || '', formats.formatValue) ??
+          extractRupiahAmount(existing.raw_text || '', formats.formatValue) ??
+          (await resolveTreatmentValue(existing.treatment_detail || existing.raw_text));
 
-        resolveTreatmentValue(existing.treatment_detail || existing.raw_text)
-          .then((value) => {
-            return capiService.sendCapiEvent({
-              eventName: 'Purchase',
-              customer: existing.customer,
-              adClick: existing.customer?.adClick || undefined,
-              value,
-              currency: 'IDR',
-              tenantId: DEFAULT_TENANT_ID,
-              eventTime: Math.floor(occurredAt.getTime() / 1000),
-              customData: {
-                source: 'ADMIN_MODERATION_APPROVE',
-                reservationId: existing.id,
-                purchaseOccurredAt: existing.purchase_occurred_at?.toISOString(),
-              },
-            });
+        capiService
+          .sendCapiEvent({
+            eventName: 'Purchase',
+            customer: existing.customer,
+            adClick: existing.customer?.adClick || undefined,
+            value: resolvedVal,
+            currency: 'IDR',
+            tenantId: DEFAULT_TENANT_ID,
+            eventTime: Math.floor(occurredAt.getTime() / 1000),
+            customData: {
+              source: 'ADMIN_MODERATION_APPROVE',
+              reservationId: existing.id,
+              purchaseOccurredAt: occurredAt.toISOString(),
+            },
           })
           .then((result) => {
             if (!result.success) {
@@ -908,6 +954,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const reservation = await prisma.reservation.update({
           where: { id },
           data: {
+            purchase_occurred_at: existing.purchase_occurred_at || occurredDate,
+            purchase_value: resolvedVal ?? undefined,
             purchase_review_status: 'approved',
             purchase_event_sent_at: new Date(),
           },
@@ -918,7 +966,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'APPROVE_PURCHASE_EVENT',
           targetId: id,
-          payload: { purchase_occurred_at: existing.purchase_occurred_at.toISOString() },
+          payload: { purchase_occurred_at: occurredAt.toISOString(), value: resolvedVal },
           ipAddress: request.ip,
         });
 
@@ -939,14 +987,223 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/admin/reservation/:id/reject-purchase
-   * Moderasi outlier: admin menandai event Purchase sebagai outlier.
-   * TIDAK menembakkan CAPI; data keuangan internal tetap aman tercatat.
+   * Moderasi outlier: admin menandai transaksi sebagai outlier / dibatalkan
+   * (purchase_review_status='ignored_outlier'). Event TIDAK dikirim ke Meta CAPI
+   * agar tidak mencemari data optimasi Ads Manager.
    */
   fastify.post(
     '/api/admin/reservation/:id/reject-purchase',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
+        if (id.startsWith('lead_')) {
+          const customerId = id.replace('lead_', '');
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'MQL_LEAD_EVENT_REJECTED',
+            targetId: customerId,
+            payload: { reason: 'ADMIN_MANUAL_OUTLIER_REJECT' },
+            ipAddress: request.ip,
+          });
+          return reply.status(200).send({ success: true, message: 'Lead event diabaikan' });
+        }
+
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+        });
+          targetId: id,
+          payload: { status: 'cancelled' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.status = 'cancelled';
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/reservation/:id/approve-purchase
+   * Moderasi outlier: admin menyetujui event Purchase yang ditahan queue
+   * (purchase_review_status='pending'). Event dikirim ke Meta CAPI dengan
+   * event_time HISTORIS (purchase_occurred_at) agar attribution akurat.
+   * Event >7 hari ditolak — Meta akan drop event yang terlalu lama.
+   */
+  fastify.post(
+    '/api/admin/reservation/:id/approve-purchase',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        if (id.startsWith('lead_')) {
+          const customerId = id.replace('lead_', '');
+          const customer = await prisma.customer.findFirst({
+            where: { id: customerId, tenant_id: DEFAULT_TENANT_ID },
+            include: { adClick: true },
+          });
+          if (!customer) {
+            return reply.status(404).send({ success: false, error: 'Customer not found' });
+          }
+          const occurredDate = customer.mql_triggered_at || customer.created_at || new Date();
+          const occurredAt = new Date(occurredDate);
+
+          capiService
+            .sendCapiEvent({
+              eventName: 'Lead',
+              customer,
+              adClick: customer.adClick || undefined,
+              tenantId: DEFAULT_TENANT_ID,
+              eventTime: Math.floor(occurredAt.getTime() / 1000),
+              customData: {
+                source: 'ADMIN_MODERATION_APPROVE_LEAD',
+                mql_bubble_count: customer.mql_bubble_count || 5,
+              },
+            })
+            .then((result) => {
+              if (!result.success) {
+                console.error(`[CAPI ERROR] Approved Lead send failed for ${id}: ${result.message}`);
+              }
+            })
+            .catch((err) => {
+              console.error('[CAPI ERROR] Failed to send approved Lead event:', err.message);
+            });
+
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'MQL_LEAD_EVENT_SENT',
+            targetId: customerId,
+            payload: { mql_triggered_at: occurredAt.toISOString() },
+            ipAddress: request.ip,
+          });
+
+          return reply.status(200).send({ success: true, message: 'Lead event disetujui & dikirim ke Meta CAPI' });
+        }
+
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          include: {
+            customer: {
+              include: { adClick: true },
+            },
+          },
+        });
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+        if (existing.purchase_review_status !== 'pending') {
+          return reply.status(400).send({
+            success: false,
+            error: `Purchase event sudah diproses (status: ${existing.purchase_review_status}).`,
+          });
+        }
+
+        // Tentukan waktu terjadi transaksi (occurredAt) fallback ke created_at jika belum ada
+        const occurredDate = existing.purchase_occurred_at || existing.created_at || new Date();
+        const occurredAt = new Date(occurredDate);
+        const daysOld = Math.floor((Date.now() - occurredAt.getTime()) / (24 * 60 * 60 * 1000));
+        let warning: string | undefined;
+        if (daysOld > 7) {
+          warning = `Event terjadi ${daysOld} hari lalu (>7 hari). Meta CAPI kemungkinan akan mengabaikan event ini.`;
+        }
+
+        const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
+        const resolvedVal =
+          existing.purchase_value ??
+          extractValueByFormat(existing.raw_text || '', formats.formatValue) ??
+          extractRupiahAmount(existing.raw_text || '', formats.formatValue) ??
+          (await resolveTreatmentValue(existing.treatment_detail || existing.raw_text));
+
+        capiService
+          .sendCapiEvent({
+            eventName: 'Purchase',
+            customer: existing.customer,
+            adClick: existing.customer?.adClick || undefined,
+            value: resolvedVal,
+            currency: 'IDR',
+            tenantId: DEFAULT_TENANT_ID,
+            eventTime: Math.floor(occurredAt.getTime() / 1000),
+            customData: {
+              source: 'ADMIN_MODERATION_APPROVE',
+              reservationId: existing.id,
+              purchaseOccurredAt: occurredAt.toISOString(),
+            },
+          })
+          .then((result) => {
+            if (!result.success) {
+              console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${result.message}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[CAPI ERROR] Failed to send approved Purchase event:', err.message);
+          });
+
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: {
+            purchase_occurred_at: existing.purchase_occurred_at || occurredDate,
+            purchase_value: resolvedVal ?? undefined,
+            purchase_review_status: 'approved',
+            purchase_event_sent_at: new Date(),
+          },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'APPROVE_PURCHASE_EVENT',
+          targetId: id,
+          payload: { purchase_occurred_at: occurredAt.toISOString(), value: resolvedVal },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: reservation, warning });
+      } catch (error) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          mock.purchase_review_status = 'approved';
+          mock.purchase_event_sent_at = new Date();
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/reservation/:id/reject-purchase
+   * Moderasi outlier: admin menandai transaksi sebagai outlier / dibatalkan
+   * (purchase_review_status='ignored_outlier'). Event TIDAK dikirim ke Meta CAPI
+   * agar tidak mencemari data optimasi Ads Manager.
+   */
+  fastify.post(
+    '/api/admin/reservation/:id/reject-purchase',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        if (id.startsWith('lead_')) {
+          const customerId = id.replace('lead_', '');
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'MQL_LEAD_EVENT_REJECTED',
+            targetId: customerId,
+            payload: { reason: 'ADMIN_MANUAL_OUTLIER_REJECT' },
+            ipAddress: request.ip,
+          });
+          return reply.status(200).send({ success: true, message: 'Lead event diabaikan' });
+        }
+
         const existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: DEFAULT_TENANT_ID },
         });
@@ -968,9 +1225,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
-          action: 'REJECT_PURCHASE_EVENT',
+          action: 'REJECT_PURCHASE_OUTLIER',
           targetId: id,
-          payload: { reason: 'ignored_outlier' },
+          payload: { reason: 'ADMIN_MANUAL_OUTLIER_REJECT' },
           ipAddress: request.ip,
         });
 
@@ -990,18 +1247,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/capi-queue
-   * Meja kerja Advertiser (Meta CAPI Queue): daftar reservasi yang pernah
-   * terdeteksi pembayaran (purchase_occurred_at ter-set) beserta data atribusi
-   * (paid/organic + UTM) dan estimasi sisa usia event sebelum Meta drop (7 hari).
+   * Meja kerja Advertiser (Meta CAPI Queue): daftar reservasi & lead yang masuk ke sistem
+   * beserta data atribusi (paid/organic + UTM) dan estimasi sisa usia event sebelum Meta drop (7 hari).
    */
   fastify.get('/api/admin/capi-queue', async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
       const rows = await prisma.reservation.findMany({
         where: {
           tenant_id: DEFAULT_TENANT_ID,
-          purchase_occurred_at: { not: null },
+          status: { not: 'cancelled' },
         },
-        orderBy: { purchase_occurred_at: 'desc' },
+        orderBy: { created_at: 'desc' },
         include: {
           customer: {
             include: { adClick: true },
@@ -1009,52 +1265,147 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         },
       });
 
+      const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
       const now = Date.now();
-      const data = rows.map((r) => {
-        const occurredAt = r.purchase_occurred_at ? new Date(r.purchase_occurred_at).getTime() : 0;
-        const ageMs = Math.max(0, now - occurredAt);
-        const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
-        const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
-        return {
-          id: r.id,
-          status: r.status,
-          treatment_detail: r.treatment_detail,
-          raw_text: r.raw_text,
-          purchase_occurred_at: r.purchase_occurred_at,
-          purchase_event_sent_at: r.purchase_event_sent_at,
-          purchase_review_status: r.purchase_review_status,
-          value: r.purchase_value ?? extractRupiahAmount(r.raw_text || ''),
-          customer: {
-            name: r.customer?.name || 'Bunda',
-            phone: r.customer?.phone || '',
-          },
-          attribution: {
-            isPaid: !!r.customer?.adClick,
-            trackingCode: r.customer?.adClick?.trackingCode || null,
-            landingUrl: r.customer?.adClick?.landingUrl || null,
-          },
-          utm: {
-            campaign: r.customer?.adClick?.utmCampaign || null,
-            source: r.customer?.adClick?.utmSource || null,
-            medium: r.customer?.adClick?.utmMedium || null,
-          },
-          ageHours,
-          daysOld,
-          expiresInDays: Math.max(0, 7 - daysOld),
-          metaDropRisk: daysOld > 7,
-        };
-      });
+      const reservationData = await Promise.all(
+        rows.map(async (r) => {
+          const occurredDate = r.purchase_occurred_at || r.created_at || new Date();
+          const occurredAt = new Date(occurredDate).getTime();
+          const ageMs = Math.max(0, now - occurredAt);
+          const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
+          const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+          const value =
+            r.purchase_value ??
+            extractValueByFormat(r.raw_text || '', formats.formatValue) ??
+            extractRupiahAmount(r.raw_text || '', formats.formatValue) ??
+            (await resolveTreatmentValue(r.treatment_detail || ''));
 
+          let distanceKm = r.customer?.distance_km ? `${r.customer.distance_km} km` : null;
+          if (!distanceKm && r.raw_text) {
+            const m = r.raw_text.match(/ongkir\s*([\d.,]+)\s*km/i);
+            if (m && m[1]) distanceKm = `${m[1]} km`;
+          }
+
+          return {
+            id: r.id,
+            status: r.status,
+            eventType: 'Purchase',
+            treatment_detail: r.treatment_detail,
+            raw_text: r.raw_text,
+            purchase_occurred_at: r.purchase_occurred_at || r.created_at,
+            purchase_event_sent_at: r.purchase_event_sent_at,
+            purchase_review_status: r.purchase_review_status || 'pending',
+            value: value ?? 0,
+            distanceKm,
+            customer: {
+              name: r.customer?.name || 'Bunda',
+              phone: r.customer?.phone || '',
+            },
+            attribution: {
+              isPaid: !!r.customer?.adClick,
+              trackingCode: r.customer?.adClick?.trackingCode || null,
+              landingUrl: r.customer?.adClick?.landingUrl || null,
+            },
+            utm: {
+              campaign: r.customer?.adClick?.utmCampaign || null,
+              source: r.customer?.adClick?.utmSource || null,
+              medium: r.customer?.adClick?.utmMedium || null,
+            },
+            ageHours,
+            daysOld,
+            expiresInDays: Math.max(0, 7 - daysOld),
+            metaDropRisk: daysOld > 7,
+          };
+        })
+      );
+
+      // Unsent MQL Leads
+      let mqlLeadItems: any[] = [];
+      try {
+        const leadAuditLogs = await prisma.auditLog.findMany({
+          where: {
+            tenant_id: DEFAULT_TENANT_ID,
+            action: { in: ['MQL_LEAD_EVENT_SENT', 'MQL_LEAD_EVENT_REJECTED'] },
+          },
+          select: { target_id: true },
+        });
+        const processedCustomerIds: string[] = Array.from(
+          new Set(
+            leadAuditLogs
+              .map((a) => a.target_id)
+              .filter((id): id is string => typeof id === 'string' && id.length > 0)
+          )
+        );
+
+        const unsentMqlCustomers = await prisma.customer.findMany({
+          where: {
+            tenant_id: DEFAULT_TENANT_ID,
+            OR: [
+              { is_mql: true },
+              { mql_bubble_count: { gte: 5 } },
+            ],
+            id: { notIn: processedCustomerIds },
+          },
+          include: {
+            adClick: true,
+          },
+          orderBy: { created_at: 'desc' },
+          take: 20,
+        });
+
+        mqlLeadItems = unsentMqlCustomers.map((c: any) => {
+          const occurredDate = c.mql_triggered_at || c.created_at || new Date();
+          const occurredAt = new Date(occurredDate).getTime();
+          const ageMs = Math.max(0, now - occurredAt);
+          const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
+          const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+
+          return {
+            id: `lead_${c.id}`,
+            status: 'mql_lead',
+            eventType: 'Lead',
+            treatment_detail: 'Lead Prospek MQL (Percakapan Aktif)',
+            raw_text: `Customer teridentifikasi MQL (${c.mql_bubble_count || 5}+ pesan)`,
+            purchase_occurred_at: occurredDate,
+            purchase_event_sent_at: null,
+            purchase_review_status: 'pending',
+            value: 0,
+            distanceKm: c.distance_km ? `${c.distance_km} km` : null,
+            customer: {
+              name: c.name || 'Bunda',
+              phone: c.phone || '',
+            },
+            attribution: {
+              isPaid: !!c.adClick,
+              trackingCode: c.adClick?.trackingCode || null,
+              landingUrl: c.adClick?.landingUrl || null,
+            },
+            utm: {
+              campaign: c.adClick?.utmCampaign || null,
+              source: c.adClick?.utmSource || null,
+              medium: c.adClick?.utmMedium || null,
+            },
+            ageHours,
+            daysOld,
+            expiresInDays: Math.max(0, 7 - daysOld),
+            metaDropRisk: daysOld > 7,
+          };
+        });
+      } catch (leadErr) {
+        console.warn('[CAPI QUEUE] Could not fetch unsent MQL leads:', leadErr);
+      }
+
+      const data = [...reservationData, ...mqlLeadItems];
       const pending = data.filter((d) => d.purchase_review_status === 'pending').length;
 
       return reply.status(200).send({ success: true, data, total: data.length, pending });
     } catch (err: any) {
-      const rows = Array.from(memoryReservations.values()).filter((r) => r.purchase_occurred_at);
+      const rows = Array.from(memoryReservations.values()).filter((r) => r.status !== 'cancelled');
       return reply.status(200).send({
         success: true,
         data: rows,
         total: rows.length,
-        pending: rows.filter((r) => r.purchase_review_status === 'pending').length,
+        pending: rows.filter((r) => (r.purchase_review_status || 'pending') === 'pending').length,
         note: 'Fallback in-memory mode (DB offline)',
       });
     }

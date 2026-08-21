@@ -49,8 +49,13 @@ describe('ad-attribution.service Unit Tests', () => {
     );
   });
 
-  it('should NOT update DB or fire CAPI Contact for existing customer with promo code', async () => {
-    vi.spyOn(prisma.adClick, 'updateMany').mockResolvedValue({ count: 0 } as any);
+  it('should match promo code and fire CAPI Contact for existing customer clicking ad', async () => {
+    vi.spyOn(prisma.adClick, 'updateMany').mockResolvedValue({ count: 1 } as any);
+    vi.spyOn(prisma.adClick, 'findFirst').mockResolvedValue({
+      id: 'click_2',
+      trackingCode: 'a7',
+      customerId: 'cust_existing',
+    } as any);
 
     const result = await matchAdClickAndFireContact({
       bodyText: 'Promo[a7] halo min',
@@ -59,9 +64,35 @@ describe('ad-attribution.service Unit Tests', () => {
       tenantId: 'default-tenant',
     });
 
-    expect(result.matched).toBe(false);
+    expect(result.matched).toBe(true);
+    expect(result.trackingCode).toBe('a7');
     expect(result.strippedText).toBe('halo min');
-    expect(prisma.adClick.updateMany).not.toHaveBeenCalled();
+    expect(prisma.adClick.updateMany).toHaveBeenCalledWith({
+      where: { trackingCode: 'a7', matchedAt: null },
+      data: { matchedAt: expect.any(Date), customerId: 'cust_existing' },
+    });
+    expect(capiService.sendCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'Contact',
+        tenantId: 'default-tenant',
+        customData: expect.objectContaining({
+          trackingCode: 'a7',
+          source: 'WHATSAPP_INBOUND_CTA',
+        }),
+      })
+    );
+  });
+
+  it('should NOT fire organic CAPI Contact for existing customer WITHOUT promo code', async () => {
+    const result = await matchAdClickAndFireContact({
+      bodyText: 'Halo min, mau tanya lagi',
+      isNewCustomerRecord: false,
+      customer: { id: 'cust_existing', phone: '628123456789' },
+      tenantId: 'default-tenant',
+    });
+
+    expect(result.matched).toBe(false);
+    expect(result.strippedText).toBe('Halo min, mau tanya lagi');
     expect(capiService.sendCapiEvent).not.toHaveBeenCalled();
   });
 

@@ -14,6 +14,8 @@ import {
   User,
   Sparkles,
   Edit2,
+  ShieldCheck,
+  Trash2,
 } from 'lucide-react';
 
 interface Customer {
@@ -32,7 +34,7 @@ interface FollowUpItem {
   stage: number;
   scheduled_at: string;
   sent_at: string | null;
-  status: string; // PENDING | QUEUED | SENT | CANCELLED | FAILED
+  status: string; // PENDING | QUEUED | SENT | CANCELLED | FAILED | SKIPPED
   customer: Customer | null;
 }
 
@@ -47,7 +49,7 @@ export const FollowUpQueue: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send'; id: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send' | 'bulk-cancel'; id?: string } | null>(null);
 
   // Reschedule Modal
   const [rescheduleModal, setRescheduleModal] = useState<{ open: boolean; item?: FollowUpItem; newDate?: string }>({ open: false });
@@ -91,7 +93,7 @@ export const FollowUpQueue: React.FC = () => {
     setActionLoading(id);
     try {
       await apiRequest(`follow-ups/${id}/send-now`, { method: 'POST' });
-      setToastMsg({ type: 'success', text: 'Follow-up berhasil dikirim!' });
+      setToastMsg({ type: 'success', text: 'Follow-up berhasil disetujui & dikirim ke WhatsApp!' });
       loadFollowUps();
     } catch (err: any) {
       setToastMsg({ type: 'error', text: `Gagal mengirim: ${err.message}` });
@@ -113,6 +115,22 @@ export const FollowUpQueue: React.FC = () => {
     }
   };
 
+  const handleBulkCancel = async () => {
+    setActionLoading('bulk-cancel');
+    try {
+      const res = await apiRequest('follow-ups/bulk-cancel', {
+        method: 'POST',
+        body: JSON.stringify({ status: 'PENDING' }),
+      });
+      setToastMsg({ type: 'success', text: res.message || 'Semua antrian pending berhasil dibatalkan.' });
+      loadFollowUps();
+    } catch (err: any) {
+      setToastMsg({ type: 'error', text: `Gagal membatalkan antrian: ${err.message}` });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleRescheduleSave = async () => {
     if (!rescheduleModal.item || !rescheduleModal.newDate) return;
     setActionLoading(rescheduleModal.item.id);
@@ -122,6 +140,7 @@ export const FollowUpQueue: React.FC = () => {
         body: JSON.stringify({ scheduledAt: rescheduleModal.newDate }),
       });
       setRescheduleModal({ open: false });
+      setToastMsg({ type: 'success', text: 'Jadwal follow-up berhasil diperbarui!' });
       loadFollowUps();
     } catch (err: any) {
       setToastMsg({ type: 'error', text: `Gagal reschedule: ${err.message}` });
@@ -143,29 +162,55 @@ export const FollowUpQueue: React.FC = () => {
       const days = [3, 7, 14];
       return {
         label: `Belum Purchase (+${days[stage - 1] || stage} Hari)`,
-        color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+        color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
       };
     }
     if (type === 'NEXT_TREATMENT') {
       return {
         label: `Treatment Lanjutan (+${stage} Bulan)`,
-        color: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+        color: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
       };
     }
-    return { label: `${type} Stage ${stage}`, color: 'bg-slate-500/10 text-slate-400 border-slate-500/20' };
+    return { label: `${type} Stage ${stage}`, color: 'bg-slate-500/10 text-slate-600 border-slate-500/20' };
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'PENDING':
-        return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center space-x-1"><Clock size={10} /><span>PENDING</span></span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center space-x-1 w-fit">
+            <Clock size={10} />
+            <span>Menunggu Persetujuan</span>
+          </span>
+        );
       case 'SENT':
-        return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center space-x-1"><CheckCircle size={10} /><span>SENT</span></span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center space-x-1 w-fit">
+            <CheckCircle size={10} />
+            <span>Terkirim</span>
+          </span>
+        );
       case 'CANCELLED':
-        return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20 flex items-center space-x-1"><XCircle size={10} /><span>CANCELLED</span></span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-600 border border-slate-200 flex items-center space-x-1 w-fit">
+            <XCircle size={10} />
+            <span>Dibatalkan</span>
+          </span>
+        );
+      case 'SKIPPED':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center space-x-1 w-fit">
+            <ShieldCheck size={10} />
+            <span>Dilewati (Kadaluarsa)</span>
+          </span>
+        );
       case 'FAILED':
-        return <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center space-x-1"><AlertCircle size={10} /><span>FAILED</span></span>;
-        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-600 border border-rose-200 flex w-fit items-center space-x-1"><AlertCircle size={10} /><span>FAILED</span></span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center space-x-1 w-fit">
+            <AlertCircle size={10} />
+            <span>Gagal Kirim</span>
+          </span>
+        );
       default:
         return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-50 text-slate-600">{status}</span>;
     }
@@ -181,16 +226,39 @@ export const FollowUpQueue: React.FC = () => {
             <span>Follow-Up & Reminder Queue</span>
           </h2>
           <p className="text-xs text-[#667781] mt-0.5">
-            Antrian otomatis follow-up belum purchase, treatment lanjutan, dan reminder jadwal
+            Antrian follow-up belum purchase dan treatment lanjutan (Wajib persetujuan manual Admin).
           </p>
         </div>
-        <button
-          onClick={loadFollowUps}
-          className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition flex items-center space-x-1.5 shadow-xs"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
-          <span className="text-xs font-semibold">Refresh</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {statusFilter === 'PENDING' && totalItems > 0 && (
+            <button
+              onClick={() => setConfirmAction({ type: 'bulk-cancel' })}
+              disabled={actionLoading === 'bulk-cancel'}
+              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition flex items-center space-x-1.5 shadow-xs text-xs font-semibold"
+            >
+              <Trash2 size={13} />
+              <span>Batalkan Semua Pending</span>
+            </button>
+          )}
+          <button
+            onClick={loadFollowUps}
+            className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition flex items-center space-x-1.5 shadow-xs"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
+            <span className="text-xs font-semibold">Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Safety Policy Notice */}
+      <div className="bg-[#e8f5f2] border border-[#c2e7e0] rounded-2xl p-3.5 flex items-start space-x-3 text-xs text-[#005c4b]">
+        <ShieldCheck size={18} className="text-[#008069] flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-bold text-[#111b21]">Mode Manual Approval Aktif</p>
+          <p className="text-[#54656f] mt-0.5">
+            Pesan follow-up di antrian <strong>tidak akan dikirim otomatis ke WhatsApp</strong>. Admin memiliki kendali penuh untuk meninjau, mengubah jadwal, membatalkan, atau menyetujui pengiriman dengan mengklik tombol <strong>Kirim</strong> di bawah.
+          </p>
+        </div>
       </div>
 
       {/* Filters & Search Bar */}
@@ -200,19 +268,26 @@ export const FollowUpQueue: React.FC = () => {
           
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
             className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="">Semua Status</option>
-            <option value="PENDING">PENDING (Jadwal Mendatang)</option>
+            <option value="PENDING">PENDING (Menunggu Persetujuan)</option>
             <option value="SENT">SENT (Sudah Terkirim)</option>
             <option value="CANCELLED">CANCELLED (Dibatalkan)</option>
+            <option value="SKIPPED">SKIPPED (Dilewati/Kadaluarsa)</option>
             <option value="FAILED">FAILED (Gagal)</option>
           </select>
 
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setPage(1);
+            }}
             className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="">Semua Tipe</option>
@@ -226,7 +301,7 @@ export const FollowUpQueue: React.FC = () => {
             <Search size={14} className="absolute left-3 top-2.5 text-[#8696a0]" />
             <input
               type="text"
-              placeholder="Cari nama / HP / kelurahan..."
+              placeholder="Cari nama atau nomor HP..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
@@ -247,11 +322,11 @@ export const FollowUpQueue: React.FC = () => {
           <table className="w-full text-left text-xs text-[#111b21]">
             <thead>
               <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px]">
-                <th className="px-4 py-3.5">Tanggal Kirim (`date_send`)</th>
-                <th className="px-4 py-3.5">Jam (`time_send`)</th>
+                <th className="px-4 py-3.5">Tanggal Jadwal</th>
+                <th className="px-4 py-3.5">Jam</th>
                 <th className="px-4 py-3.5">Tipe & Stage</th>
                 <th className="px-4 py-3.5">Customer & No. HP</th>
-                <th className="px-4 py-3.5">Rotasi Template</th>
+                <th className="px-4 py-3.5">Varian Template</th>
                 <th className="px-4 py-3.5">Status</th>
                 <th className="px-4 py-3.5 text-right">Aksi</th>
               </tr>
@@ -311,7 +386,7 @@ export const FollowUpQueue: React.FC = () => {
                       <td className="px-4 py-3.5 text-xs text-[#54656f]">
                         <div className="flex items-center space-x-1">
                           <Sparkles size={11} className="text-amber-500 flex-shrink-0" />
-                          <span>Varian #{((fu.stage - 1) % 3) + 1} (Auto)</span>
+                          <span>Varian #{((fu.stage - 1) % 3) + 1}</span>
                         </div>
                       </td>
 
@@ -326,11 +401,11 @@ export const FollowUpQueue: React.FC = () => {
                               <button
                                 onClick={() => setConfirmAction({ type: 'send', id: fu.id })}
                                 disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] text-[#008069] text-xs font-semibold flex items-center space-x-1 transition shadow-xs"
-                                title="Kirim Sekarang"
+                                className="px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] text-[#008069] text-xs font-bold flex items-center space-x-1 transition shadow-xs"
+                                title="Setujui & Kirim Sekarang"
                               >
                                 <Send size={12} />
-                                <span className="hidden md:inline">Kirim</span>
+                                <span>Kirim</span>
                               </button>
                               <button
                                 onClick={() => setRescheduleModal({ open: true, item: fu, newDate: fu.scheduled_at.slice(0, 16) })}
@@ -418,7 +493,7 @@ export const FollowUpQueue: React.FC = () => {
         </div>
       )}
 
-      {/* Confirm Modal untuk Send Now / Cancel */}
+      {/* Confirm Modal untuk Send Now / Cancel / Bulk-Cancel */}
       {confirmAction && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
@@ -429,15 +504,20 @@ export const FollowUpQueue: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
-              {confirmAction.type === 'cancel'
-                ? <><XCircle className="text-rose-600" size={18} /><span>Batalkan Follow-Up?</span></>
-                : <><Send className="text-[#008069]" size={18} /><span>Kirim Sekarang?</span></>
-              }
+              {confirmAction.type === 'bulk-cancel' ? (
+                <><Trash2 className="text-rose-600" size={18} /><span>Batalkan Semua Antrian Pending?</span></>
+              ) : confirmAction.type === 'cancel' ? (
+                <><XCircle className="text-rose-600" size={18} /><span>Batalkan Follow-Up?</span></>
+              ) : (
+                <><Send className="text-[#008069]" size={18} /><span>Setujui & Kirim Sekarang?</span></>
+              )}
             </h3>
             <p className="text-xs text-[#54656f]">
-              {confirmAction.type === 'cancel'
-                ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim otomatis.'
-                : 'Pesan akan langsung dikirim sekarang tanpa menunggu jadwal cron.'}
+              {confirmAction.type === 'bulk-cancel'
+                ? 'Seluruh follow-up berstatus PENDING akan dibatalkan sekaligus dan tidak akan dikirim.'
+                : confirmAction.type === 'cancel'
+                ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim ke customer.'
+                : 'Pesan follow-up akan langsung dikirim sekarang ke nomor WhatsApp customer.'}
             </p>
             <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
               <button
@@ -450,17 +530,24 @@ export const FollowUpQueue: React.FC = () => {
                 onClick={() => {
                   const { type, id } = confirmAction;
                   setConfirmAction(null);
-                  if (type === 'cancel') handleCancel(id);
-                  else handleSendNow(id);
+                  if (type === 'bulk-cancel') handleBulkCancel();
+                  else if (type === 'cancel' && id) handleCancel(id);
+                  else if (type === 'send' && id) handleSendNow(id);
                 }}
-                disabled={actionLoading === confirmAction.id}
+                disabled={actionLoading !== null}
                 className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs ${
-                  confirmAction.type === 'cancel'
+                  confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel'
                     ? 'bg-rose-600 hover:bg-rose-700'
                     : 'bg-[#008069] hover:bg-[#00a884]'
                 }`}
               >
-                {actionLoading === confirmAction.id ? 'Memproses...' : (confirmAction.type === 'cancel' ? 'Ya, Batalkan' : 'Ya, Kirim')}
+                {actionLoading !== null
+                  ? 'Memproses...'
+                  : confirmAction.type === 'bulk-cancel'
+                  ? 'Ya, Batalkan Semua'
+                  : confirmAction.type === 'cancel'
+                  ? 'Ya, Batalkan'
+                  : 'Ya, Kirim'}
               </button>
             </div>
           </div>

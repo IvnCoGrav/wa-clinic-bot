@@ -44,6 +44,7 @@ import {
   MoreVertical,
   PenLine,
   Smartphone,
+  MapPin,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
@@ -2136,7 +2137,23 @@ export const LiveChatMonitor: React.FC = () => {
                       const isWithin15Mins = msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false;
                       const canEdit = !isCustomer && !isRevoked && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
                       const hasMedia = !!msg.media;
-                      const hasMediaOnly = hasMedia && (!msg.content || /^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content));
+                      const isLocationMsg = (msg.content && /^\[LOCATION/i.test(msg.content)) || !!(msg as any).payload_raw?.location;
+                      const hasMediaOnly = hasMedia && (!msg.content || /^\[(IMAGE|MEDIA)/.test(msg.content));
+
+                      // Extract Location Coordinates if present
+                      let locLat: string | null = null;
+                      let locLng: string | null = null;
+                      if (isLocationMsg) {
+                        const locMatch = msg.content?.match(/Lat\s*([-\d.]+),\s*Lng\s*([-\d.]+)/i);
+                        if (locMatch) {
+                          locLat = locMatch[1];
+                          locLng = locMatch[2];
+                        } else if ((msg as any).payload_raw?.location) {
+                          const rawLoc = (msg as any).payload_raw.location;
+                          locLat = rawLoc.latitude != null ? String(rawLoc.latitude) : null;
+                          locLng = rawLoc.longitude != null ? String(rawLoc.longitude) : null;
+                        }
+                      }
 
                       return (
                         <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
@@ -2164,7 +2181,32 @@ export const LiveChatMonitor: React.FC = () => {
                                 />
                               </div>
                             )}
-                            {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && (
+                            {isLocationMsg && (
+                              <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
+                                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                  <MapPin size={17} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-bold text-[12px] text-[#111b21] leading-tight">Share Location</p>
+                                  <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                    {locLat && locLng ? `${locLat}, ${locLng}` : 'Titik koordinat diterima'}
+                                  </p>
+                                </div>
+                                {locLat && locLng && (
+                                  <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
+                                    title="Buka lokasi di Google Maps"
+                                  >
+                                    <span>Peta</span>
+                                    <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                            {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !isLocationMsg && (
                               <p className={`font-sans whitespace-pre-wrap ${isRevoked ? 'italic text-[#667781]' : ''}`}>{msg.content}</p>
                             )}
                             <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">

@@ -22,12 +22,16 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
       const { wabaTemplateService } = await import('../../services/waba-template.service');
       const templates = await wabaTemplateService.getAllTemplateMappings(DEFAULT_TENANT_ID);
 
+      const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+      const wahaOutboundCutoff = await whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID);
+
       return reply.status(200).send({
         success: true,
         data: {
           provider: tenant?.whatsapp_provider || 'WAHA',
           wahaSessionId: tenant?.waha_session_id || 'default',
           wahaStatus,
+          wahaOutboundCutoff,
           waba: {
             configured: !!(tenant?.waba_phone_number_id && tenant?.waba_access_token),
             phoneNumberId: tenant?.waba_phone_number_id || null,
@@ -137,6 +141,50 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         return reply
           .status(200)
           .send({ success: true, data, message: 'Session WAHA berhasil terputus (Disconnected).' });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/whatsapp-provider/cutoff
+   * Mengubah status cut-off internal aliran outbound bot ke WAHA (Emergency Kill-Switch).
+   */
+  fastify.patch(
+    '/api/admin/whatsapp-provider/cutoff',
+    async (
+      request: FastifyRequest<{
+        Body: { cutOff: boolean; tenantId?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { cutOff, tenantId = DEFAULT_TENANT_ID } = request.body || {};
+      if (typeof cutOff !== 'boolean') {
+        return reply.status(400).send({ error: 'Body harus berisi field "cutOff" bertipe boolean.' });
+      }
+
+      try {
+        const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+        const previousState = await whatsappProviderService.isOutboundCutOff(tenantId);
+        const newState = await whatsappProviderService.setOutboundCutOff(tenantId, cutOff);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'WAHA_INTERNAL_CUTOFF_TOGGLE',
+          targetId: tenantId,
+          payload: { previousState, newState },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          wahaOutboundCutoff: newState,
+          message: newState
+            ? 'Koneksi internal outbound ke WAHA berhasil diputus (Cut-Off Darurat Aktif). Sesi WhatsApp tetap login.'
+            : 'Koneksi internal outbound ke WAHA berhasil disambungkan kembali (Normal).',
+        });
       } catch (err: any) {
         return reply.status(500).send({ error: err.message });
       }
