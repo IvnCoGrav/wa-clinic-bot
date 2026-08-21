@@ -30,11 +30,11 @@ export async function resolveGatewayForTenant(tenantId: string): Promise<WhatsAp
       }
       gateway = new WabaGatewayDriver(config);
     } else {
-      gateway = new WahaGatewayDriver();
+      gateway = new WahaGatewayDriver(undefined, tenantId);
     }
   } catch {
     // Fallback aman ke WAHA jika DB error atau decrypt gagal
-    gateway = new WahaGatewayDriver();
+    gateway = new WahaGatewayDriver(undefined, tenantId);
   }
 
   gatewayCache.set(key, gateway);
@@ -45,7 +45,7 @@ export function getGateway(tenantId?: string): WhatsAppGateway {
   const key = getKey(tenantId);
   const cached = gatewayCache.get(key);
   if (cached) return cached;
-  const gw = new WahaGatewayDriver();
+  const gw = new WahaGatewayDriver(undefined, tenantId);
   gatewayCache.set(key, gw);
   return gw;
 }

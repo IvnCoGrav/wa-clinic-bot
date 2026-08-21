@@ -23,6 +23,54 @@ export const WAHA_STATUS_WITHOUT_QR = ['FAILED', 'STOPPED', 'STOPPING', 'DISCONN
  * saat DB tidak tersedia (sesuai pola degrade service lain).
  */
 export class WhatsappProviderService {
+  private cutoffCache: Map<string, boolean> = new Map();
+
+  /**
+   * Mengecek apakah aliran outbound WAHA internal sedang diputus (Emergency Cut-Off aktif).
+   */
+  public async isOutboundCutOff(tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    if (this.cutoffCache.has(tenantId)) {
+      return this.cutoffCache.get(tenantId)!;
+    }
+
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      const isCutOff = Boolean((tenant as any)?.waha_outbound_cutoff);
+      this.cutoffCache.set(tenantId, isCutOff);
+      return isCutOff;
+    } catch (err: any) {
+      console.warn(`[WhatsAppProvider] DB tidak tersedia untuk cek cut-off, fallback cache: ${err.message}`);
+    }
+
+    return this.cutoffCache.get(tenantId) ?? false;
+  }
+
+  /**
+   * Cek instan synchronous dari memory cache.
+   */
+  public isOutboundCutOffSync(tenantId: string = DEFAULT_TENANT_ID): boolean {
+    return this.cutoffCache.get(tenantId) ?? false;
+  }
+
+  /**
+   * Mengubah status cut-off outbound internal WAHA per-tenant.
+   */
+  public async setOutboundCutOff(tenantId: string = DEFAULT_TENANT_ID, cutoff: boolean): Promise<boolean> {
+    this.cutoffCache.set(tenantId, cutoff);
+
+    try {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { waha_outbound_cutoff: cutoff } as any,
+      });
+    } catch (err: any) {
+      console.warn(`[WhatsAppProvider] Gagal persist status cut-off ke DB: ${err.message}`);
+    }
+
+    console.log(`[WhatsAppProvider] WAHA Outbound Cut-Off for tenant '${tenantId}' is now: ${cutoff ? 'CUT-OFF (DISCONNECTED)' : 'CONNECTED (NORMAL)'}`);
+    return cutoff;
+  }
+
   private async resolveSessionId(tenantId: string): Promise<string> {
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });

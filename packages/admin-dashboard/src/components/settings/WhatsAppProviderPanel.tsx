@@ -9,6 +9,9 @@ import {
   AlertTriangle,
   KeyRound,
   ShieldCheck,
+  ShieldAlert,
+  ZapOff,
+  Zap,
   FileCheck,
   FileClock,
   FileX
@@ -23,6 +26,9 @@ interface Props {
   loadWhatsAppProvider: () => void;
   wahaStatus: string;
   wahaSessionId: string;
+  wahaOutboundCutoff?: boolean;
+  togglingCutoff?: boolean;
+  handleToggleOutboundCutoff?: (val: boolean) => void;
   qrData: { mimetype: string; data: string } | null;
   qrStatus: string;
   qrMessage: string;
@@ -67,6 +73,9 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
   loadWhatsAppProvider,
   wahaStatus,
   wahaSessionId,
+  wahaOutboundCutoff = false,
+  togglingCutoff = false,
+  handleToggleOutboundCutoff,
   qrData,
   qrStatus,
   qrMessage,
@@ -179,6 +188,66 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 <span className="text-xs font-mono font-semibold text-[#111b21]">{wahaSessionId}</span>
               </div>
               <p className="text-xs text-[#54656f] mt-1">WAHA dashboard: <span className="text-[#111b21] font-mono">port 3001</span></p>
+            </div>
+          </div>
+
+          {/* Internal Outbound Cut-Off (Emergency Kill-Switch) */}
+          <div className={`p-4 rounded-xl border transition shadow-xs space-y-3 ${
+            wahaOutboundCutoff
+              ? 'bg-rose-50/80 border-rose-200'
+              : 'bg-white border-[#e9edef]'
+          }`}>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                  {wahaOutboundCutoff ? (
+                    <ShieldAlert size={14} className="text-rose-600" />
+                  ) : (
+                    <ShieldCheck size={14} className="text-[#008069]" />
+                  )}
+                  <span>Internal Outbound Cut-Off (Emergency Kill-Switch)</span>
+                </h4>
+                <p className="text-[11px] text-[#667781] leading-relaxed">
+                  {wahaOutboundCutoff
+                    ? 'Pengiriman pesan bot keluar ke WAHA sedang DIPUTUS secara internal. Sesi WhatsApp di HP tetap login dan aman (tanpa perlu scan QR ulang).'
+                    : 'Koneksi aliran pesan bot ke WAHA normal. Putuskan darurat jika ingin menahan semua pengiriman pesan keluar seketika.'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center space-x-1 ${
+                  wahaOutboundCutoff
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                }`}>
+                  {wahaOutboundCutoff ? <ZapOff size={11} /> : <Zap size={11} />}
+                  <span>{wahaOutboundCutoff ? 'CUT-OFF AKTIF (TERPUTUS)' : 'TERHUBUNG (NORMAL)'}</span>
+                </span>
+
+                {handleToggleOutboundCutoff && (
+                  <button
+                    onClick={() => handleToggleOutboundCutoff(!wahaOutboundCutoff)}
+                    disabled={togglingCutoff}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 ${
+                      wahaOutboundCutoff
+                        ? 'bg-[#008069] hover:bg-[#00a884] text-white'
+                        : 'bg-rose-600 hover:bg-rose-700 text-white'
+                    }`}
+                  >
+                    {wahaOutboundCutoff ? (
+                      <>
+                        <Zap size={12} />
+                        <span>{togglingCutoff ? 'Menyambungkan...' : 'Sambungkan Aliran Internal'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ZapOff size={12} />
+                        <span>{togglingCutoff ? 'Memutus...' : 'Putuskan Aliran Internal'}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
