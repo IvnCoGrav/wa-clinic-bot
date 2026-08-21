@@ -27,7 +27,7 @@ async function diagnose() {
     include: {
       customer: true,
       messages: {
-        orderBy: { timestamp: 'desc' },
+        orderBy: { created_at: 'desc' },
         take: 3,
       },
     },
@@ -47,7 +47,7 @@ async function diagnose() {
       for (const m of c.messages.reverse()) {
         const dir = m.direction === 'inbound' ? '📥 Cust' : '📤 Bot';
         const txt = (m.content || '').replace(/\n/g, ' ').substring(0, 80);
-        console.log(`     ${dir}: "${txt}" (${m.timestamp.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })})`);
+        console.log(`     ${dir}: "${txt}" (${m.created_at.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })})`);
       }
     }
   }
