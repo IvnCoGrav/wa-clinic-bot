@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Refined — Zero-Hardcoding Admin Configurable Landing Domain & Funnel Architecture (2026-08-21)
+
+- **Zero-Hardcoding Tenant Landing Domain (`schema.prisma`, `settings.subroute.ts`, `CustomerService.tsx`, `capi.service.ts`, `landing.route.ts`)**:
+  - Menghilangkan seluruh hardcode domain (`kalababyspa.online` / `kalamomsspa.com`) dari backend, generator CTA, dan payload CAPI.
+  - Menambahkan kolom `landing_domain` pada tabel `Tenant` di PostgreSQL sehingga Admin dapat bebas mengatur dan mengubah domain landing page / website tenant langsung dari menu Admin Dashboard (Customer Service & CTA Generator).
+  - Memperbarui endpoint `GET` dan `POST /api/admin/customer-service` untuk membaca dan menyimpan `landingDomain` ke database.
+  - Memperbarui `capi.service.ts` dan `landing.route.ts` agar secara dinamis membaca `landing_domain` tenant dari database atau HTTP request headers (`x-forwarded-host`), menjamin arsitektur 100% SaaS-Ready dan fleksibel untuk semua bisnis.
+  - Memperbarui UI `CustomerService.tsx` untuk menyimpan domain ke database dan menyinkronkannya dengan generator link CTA dinamis.
+
 ### Added & Refined — Dynamic Tenant-Aware Meta CAPI Funnel Triggers & Zero-Hardcode Value Parser (2026-08-21)
 
 - **Dynamic Value Parser for Pure Treatment Revenue (`capi.service.ts`, `purchase-detection.service.ts`)**:

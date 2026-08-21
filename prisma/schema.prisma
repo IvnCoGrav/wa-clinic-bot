@@ -536,6 +536,7 @@ model Tenant {
   format_checkout           String?          @default("list untuk reservasi :")
   format_purchase           String?          @default("Payment")
   format_value              String?          @default("Treatment = %VALUE%")
+  landing_domain            String?          @default("")
   auto_send_purchase_capi   Boolean          @default(false)
   created_at                DateTime         @default(now())
   updated_at                DateTime         @updatedAt

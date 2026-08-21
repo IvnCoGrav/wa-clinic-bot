@@ -147,9 +147,25 @@ export async function landingRoutes(fastify: FastifyInstance) {
 
       if (!isBot) {
         const ip = (request.headers['x-forwarded-for'] as string) || request.ip || '';
-        const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'kalababyspa.online';
+        const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || '';
         const proto = (request.headers['x-forwarded-proto'] as string) || 'https';
-        const fullLandingUrl = query.landing_url || (request.url.startsWith('http') ? request.url : `${proto}://${host}${request.url}`);
+
+        let tenantDomain = '';
+        if (content?.tenant_id) {
+          try {
+            const { prisma } = await import('../db/client');
+            const tenant = await prisma.tenant.findUnique({ where: { id: content.tenant_id } });
+            if ((tenant as any)?.landing_domain) {
+              tenantDomain = (tenant as any).landing_domain.trim().replace(/\/$/, '');
+            }
+          } catch {}
+        }
+
+        const fullLandingUrl = query.landing_url || (
+          request.url.startsWith('http') 
+            ? request.url 
+            : (tenantDomain ? `${tenantDomain}${request.url}` : (host ? `${proto}://${host}${request.url}` : request.url))
+        );
 
         const { trackingCode: tc, record } = await generateTrackingCode({
           fbclid: query.fbclid || null,

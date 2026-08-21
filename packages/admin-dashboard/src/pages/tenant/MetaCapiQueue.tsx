@@ -146,7 +146,8 @@ const buildCapiJsonPayload = (item: QueueItem) => {
 
   let landingUrl = item.attribution.landingUrl || undefined;
   if (landingUrl && !landingUrl.startsWith('http://') && !landingUrl.startsWith('https://')) {
-    landingUrl = `https://kalababyspa.online${landingUrl.startsWith('/') ? '' : '/'}${landingUrl}`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    landingUrl = origin ? `${origin}${landingUrl.startsWith('/') ? '' : '/'}${landingUrl}` : landingUrl;
   }
 
   return {
