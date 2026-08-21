@@ -5,6 +5,7 @@ import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
 import { decryptSecret } from '../utils/encryption';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { prisma } from '../db/client';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -417,7 +418,16 @@ export class CapiService {
       //    event_id = trackingCode ad click (auto-derive) atau synthetic ID untuk organic
       let eventSourceUrl = effectiveAdClick?.landingUrl || undefined;
       if (eventSourceUrl && !eventSourceUrl.startsWith('http://') && !eventSourceUrl.startsWith('https://')) {
-        eventSourceUrl = `https://kalababyspa.online${eventSourceUrl.startsWith('/') ? '' : '/'}${eventSourceUrl}`;
+        let tenantDomain = '';
+        try {
+          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          if ((tenant as any)?.landing_domain) {
+            tenantDomain = (tenant as any).landing_domain.trim().replace(/\/$/, '');
+          }
+        } catch {}
+        if (tenantDomain) {
+          eventSourceUrl = `${tenantDomain}${eventSourceUrl.startsWith('/') ? '' : '/'}${eventSourceUrl}`;
+        }
       }
 
       const eventData: any = {

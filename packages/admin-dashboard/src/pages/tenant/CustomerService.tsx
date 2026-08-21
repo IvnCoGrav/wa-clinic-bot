@@ -21,13 +21,13 @@ export const CustomerService: React.FC = () => {
   const [formatCheckout, setFormatCheckout] = useState('list untuk reservasi :');
   const [formatPurchase, setFormatPurchase] = useState('Payment');
   const [formatValue, setFormatValue] = useState('Treatment = %VALUE%');
+  const [landingDomain, setLandingDomain] = useState(window.location.origin);
 
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Generator State
   const [divisi, setDivisi] = useState('Iklan Utama');
-  const [subdomain, setSubdomain] = useState(window.location.origin);
   const [greetingsText, setGreetingsText] = useState('ID [%ID%]\n\nHalo, saya tertarik dengan produknya. Boleh tanya-tanya dulu?');
   const [copied, setCopied] = useState(false);
 
@@ -43,6 +43,9 @@ export const CustomerService: React.FC = () => {
         setFormatCheckout(res.data.formatCheckout || 'list untuk reservasi :');
         setFormatPurchase(res.data.formatPurchase || 'Payment');
         setFormatValue(res.data.formatValue || 'Treatment = %VALUE%');
+        if (res.data.landingDomain) {
+          setLandingDomain(res.data.landingDomain);
+        }
       }
     } catch (err: any) {
       console.error('Failed to load CS config:', err);
@@ -69,6 +72,7 @@ export const CustomerService: React.FC = () => {
           formatCheckout,
           formatPurchase,
           formatValue,
+          landingDomain,
         }),
       });
       toast('Konfigurasi Customer Service berhasil disimpan!', 'success');
@@ -81,20 +85,20 @@ export const CustomerService: React.FC = () => {
 
   // Generate Dynamic Clean CTA Link (Recommended)
   const generatedDynamicCtaLink = React.useMemo(() => {
-    const baseUrl = subdomain.replace(/\/$/, '');
+    const baseUrl = (landingDomain || window.location.origin).replace(/\/$/, '');
     const cleanDivisi = encodeURIComponent(divisi.toLowerCase().replace(/\s+/g, '-'));
     return cleanDivisi ? `${baseUrl}/cta?divisi=${cleanDivisi}` : `${baseUrl}/cta`;
-  }, [subdomain, divisi]);
+  }, [landingDomain, divisi]);
 
   // Generate Full Manual CTA Link (Legacy)
   const generatedCtaLink = React.useMemo(() => {
-    const baseUrl = subdomain.replace(/\/$/, '');
+    const baseUrl = (landingDomain || window.location.origin).replace(/\/$/, '');
     const cleanDivisi = encodeURIComponent(divisi.toLowerCase().replace(/\s+/g, '-'));
     const encodedMsg = encodeURIComponent(greetingsText || formatVisit);
     const cleanPhone = whatsappNumber.replace(/\D/g, '');
 
     return `${baseUrl}/cta?divisi=${cleanDivisi}&phone=${cleanPhone}&msg=${encodedMsg}`;
-  }, [subdomain, divisi, greetingsText, formatVisit, whatsappNumber]);
+  }, [landingDomain, divisi, greetingsText, formatVisit, whatsappNumber]);
 
   const handleCopyLink = (textToCopy: string, label: string = 'CTA') => {
     navigator.clipboard.writeText(textToCopy);
@@ -248,14 +252,17 @@ export const CustomerService: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-[#111b21]">Subdomain / Domain Base</label>
+              <label className="block text-[11px] font-bold text-[#111b21]">Domain Landing Page / Base URL</label>
               <input
                 type="text"
-                value={subdomain}
-                onChange={(e) => setSubdomain(e.target.value)}
-                placeholder="https://app.kalababyspa.online"
+                value={landingDomain}
+                onChange={(e) => setLandingDomain(e.target.value)}
+                placeholder="https://example.com"
                 className="w-full bg-white border border-[#d1d7db] rounded-xl px-3.5 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
               />
+              <p className="text-[10px] text-[#8696a0]">
+                Domain ini akan tersimpan ke database dan digunakan untuk membuat link CTA serta atribusi Meta CAPI.
+              </p>
             </div>
 
             {/* Dynamic Clean Link (Recommended) */}
