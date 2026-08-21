@@ -4,7 +4,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { customerService } from '../../services/customer.service';
 import { googleCalendarService } from '../../services/google-calendar.service';
-import { capiService, resolveTreatmentValue, extractValueByFormat, getTenantCapiFormats } from '../../services/capi.service';
+import { capiService, resolveTreatmentValue, extractValueByFormat, getTenantCapiFormats, resolveCanonicalLandingUrl } from '../../services/capi.service';
 import { extractRupiahAmount } from '../../services/purchase-detection.service';
 import { parseReservationText, extractBabyDetails } from '../../utils/reservation-text-parser';
 import { memoryReservations } from './stores';
@@ -1074,6 +1074,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
       const now = Date.now();
+
+      let tenantLandingDomain = '';
+      try {
+        const tenant = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+        if ((tenant as any)?.landing_domain) {
+          tenantLandingDomain = (tenant as any).landing_domain.trim();
+        }
+      } catch {}
+
       const reservationData = await Promise.all(
         rows.map(async (r) => {
           const occurredDate = r.purchase_occurred_at || r.created_at || new Date();
@@ -1091,6 +1100,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           if (!distanceKm && r.raw_text) {
             const m = r.raw_text.match(/ongkir\s*([\d.,]+)\s*km/i);
             if (m && m[1]) distanceKm = `${m[1]} km`;
+          }
+
+          const rawLandingUrl = r.customer?.adClick?.landingUrl || null;
+          const canonicalLandingUrl = resolveCanonicalLandingUrl(rawLandingUrl, tenantLandingDomain) || rawLandingUrl;
+
+          // Self-heal AdClick record in DB if landingUrl was legacy /cta
+          if (r.customer?.adClick?.id && canonicalLandingUrl && canonicalLandingUrl !== rawLandingUrl) {
+            prisma.adClick
+              .update({
+                where: { id: r.customer.adClick.id },
+                data: { landingUrl: canonicalLandingUrl },
+              })
+              .catch(() => {});
           }
 
           return {
@@ -1111,7 +1133,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             attribution: {
               isPaid: !!r.customer?.adClick,
               trackingCode: r.customer?.adClick?.trackingCode || null,
-              landingUrl: r.customer?.adClick?.landingUrl || null,
+              landingUrl: canonicalLandingUrl,
             },
             utm: {
               campaign: r.customer?.adClick?.utmCampaign || null,
@@ -1167,6 +1189,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
           const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
 
+          const rawLandingUrl = c.adClick?.landingUrl || null;
+          const canonicalLandingUrl = resolveCanonicalLandingUrl(rawLandingUrl, tenantLandingDomain) || rawLandingUrl;
+
+          // Self-heal AdClick record in DB if landingUrl was legacy /cta
+          if (c.adClick?.id && canonicalLandingUrl && canonicalLandingUrl !== rawLandingUrl) {
+            prisma.adClick
+              .update({
+                where: { id: c.adClick.id },
+                data: { landingUrl: canonicalLandingUrl },
+              })
+              .catch(() => {});
+          }
+
           return {
             id: `lead_${c.id}`,
             status: 'mql_lead',
@@ -1185,7 +1220,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             attribution: {
               isPaid: !!c.adClick,
               trackingCode: c.adClick?.trackingCode || null,
-              landingUrl: c.adClick?.landingUrl || null,
+              landingUrl: canonicalLandingUrl,
             },
             utm: {
               campaign: c.adClick?.utmCampaign || null,

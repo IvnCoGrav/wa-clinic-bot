@@ -145,9 +145,38 @@ const buildCapiJsonPayload = (item: QueueItem) => {
     : Math.floor(Date.now() / 1000);
 
   let landingUrl = item.attribution.landingUrl || undefined;
-  if (landingUrl && !landingUrl.startsWith('http://') && !landingUrl.startsWith('https://')) {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    landingUrl = origin ? `${origin}${landingUrl.startsWith('/') ? '' : '/'}${landingUrl}` : landingUrl;
+  if (landingUrl) {
+    try {
+      if (landingUrl.includes('landing_url=')) {
+        const parsed = new URL(landingUrl.startsWith('http') ? landingUrl : `https://localhost${landingUrl.startsWith('/') ? '' : '/'}${landingUrl}`);
+        const nested = parsed.searchParams.get('landing_url');
+        if (nested && (nested.startsWith('http://') || nested.startsWith('https://'))) {
+          landingUrl = nested;
+        }
+      }
+    } catch {}
+
+    if (landingUrl.startsWith('http://') || landingUrl.startsWith('https://')) {
+      try {
+        const parsed = new URL(landingUrl);
+        if (parsed.pathname === '/cta' || parsed.pathname.endsWith('/cta')) {
+          const targetHost = parsed.host.replace(/^app\./i, '');
+          const targetPath = '/reservasionline';
+          parsed.searchParams.delete('landing_url');
+          parsed.searchParams.delete('slug');
+          parsed.searchParams.delete('p');
+          parsed.searchParams.delete('msg');
+          parsed.searchParams.delete('greetings');
+          parsed.searchParams.delete('divisi');
+          const q = parsed.searchParams.toString();
+          landingUrl = `${parsed.protocol}//${targetHost}${targetPath}${q ? `?${q}` : ''}`;
+        }
+      } catch {}
+    } else if (landingUrl.startsWith('/cta')) {
+      const qIdx = landingUrl.indexOf('?');
+      const q = qIdx !== -1 ? landingUrl.slice(qIdx) : '';
+      landingUrl = `https://kalababyspa.online/reservasionline${q}`;
+    }
   }
 
   return {
@@ -310,12 +339,12 @@ export const MetaCapiQueue: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e9edef]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-[#e9edef] shadow-xs">
         <div>
           <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
-            <ShieldAlert className="text-[#008069]" size={22} />
+            <Target className="text-[#008069]" size={24} />
             <span>Meta CAPI Queue</span>
           </h2>
           <p className="text-xs text-[#667781] mt-0.5">
