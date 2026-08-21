@@ -256,10 +256,14 @@ if (require.main === module) {
     import('./services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
       
-      // 1. Follow-Up worker: jalankan setiap 15 menit
-      const followUpIntervalMinutes = parseInt(process.env.FOLLOWUP_WORKER_INTERVAL_MINUTES || '15', 10);
-      setInterval(() => cron.runFollowUpWorker(), followUpIntervalMinutes * 60 * 1000);
-      console.log(`⏱️ Follow-Up Queue worker started (every ${followUpIntervalMinutes}m)`);
+      // 1. Follow-Up worker: jalankan setiap 15 menit HANYA jika ENABLE_FOLLOWUP_WORKER === 'true'
+      if (process.env.ENABLE_FOLLOWUP_WORKER === 'true') {
+        const followUpIntervalMinutes = parseInt(process.env.FOLLOWUP_WORKER_INTERVAL_MINUTES || '15', 10);
+        setInterval(() => cron.runFollowUpWorker(), followUpIntervalMinutes * 60 * 1000);
+        console.log(`⏱️ Follow-Up Queue worker started (every ${followUpIntervalMinutes}m)`);
+      } else {
+        console.log(`🛑 Follow-Up Worker is DISABLED (ENABLE_FOLLOWUP_WORKER is not 'true')`);
+      }
 
       // 2. Morning Jobs (Pengingat H-0 & Review H+1 pada 06:00 WIB)
       let lastMorningRunDate = '';
