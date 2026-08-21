@@ -415,12 +415,17 @@ export class CapiService {
 
       // 4. CONSTRUCT EVENT DATA payload
       //    event_id = trackingCode ad click (auto-derive) atau synthetic ID untuk organic
+      let eventSourceUrl = effectiveAdClick?.landingUrl || undefined;
+      if (eventSourceUrl && !eventSourceUrl.startsWith('http://') && !eventSourceUrl.startsWith('https://')) {
+        eventSourceUrl = `https://kalababyspa.online${eventSourceUrl.startsWith('/') ? '' : '/'}${eventSourceUrl}`;
+      }
+
       const eventData: any = {
         event_name: eventName,
         // eventTime opsional (Unix seconds) → dipakai moderator saat mengirim
         // event Purchase historis; default = waktu saat ini.
         event_time: eventTime ?? Math.floor(Date.now() / 1000),
-        event_source_url: effectiveAdClick?.landingUrl || undefined,
+        event_source_url: eventSourceUrl,
         action_source: 'chat',
         user_data: userData,
         custom_data: {
