@@ -2,6 +2,22 @@ import React from 'react';
 import { Reservation } from '../../types';
 import { QuickSlotTarget } from './types';
 
+function extractDurationMinutes(detail?: string | null): number {
+  if (!detail) return 60;
+  const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
+  if (totalMatch) return parseInt(totalMatch[1], 10);
+  const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
+  if (minMatches && minMatches.length > 0) {
+    let sum = 0;
+    for (const m of minMatches) {
+      const num = parseInt(m.replace(/\D/g, ''), 10);
+      if (num > 0 && num <= 300) sum += num;
+    }
+    if (sum > 0) return sum;
+  }
+  return 60;
+}
+
 interface MonthScheduleGridProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
@@ -159,7 +175,12 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
               <div className="space-y-1 w-full overflow-hidden flex-1">
                 {events.slice(0, 3).map((res) => {
                   const bDate = new Date(res.booking_date!);
-                  const timeStr = bDate
+                  const duration = extractDurationMinutes(res.treatment_detail);
+                  const endDate = new Date(bDate.getTime() + duration * 60000);
+                  const startTimeStr = bDate
+                    .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
+                    .replace('.', ':');
+                  const endTimeStr = endDate
                     .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                     .replace('.', ':');
                   const catColor = getCategoryColor(res.treatment_category);
@@ -168,11 +189,11 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   return (
                     <div
                       key={res.id}
-                      className={`w-full px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10.5px] font-semibold truncate border block leading-tight ${catColor}`}
-                      title={`${nameDisplay} - ${res.treatment_detail || res.treatment_category} (${timeStr})`}
+                      className={`w-full px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-semibold truncate border block leading-tight ${catColor}`}
+                      title={`${nameDisplay} (${startTimeStr} - ${endTimeStr}) - ${res.treatment_detail || res.treatment_category}`}
                     >
                       <span className="truncate block font-medium">
-                        {timeStr} {nameDisplay}
+                        {startTimeStr}-{endTimeStr} {nameDisplay}
                       </span>
                     </div>
                   );

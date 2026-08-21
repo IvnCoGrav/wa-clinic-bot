@@ -6,7 +6,7 @@ export interface CalendarFilterState {
   searchQuery: string;
   category: 'all' | 'BABY' | 'MOMS' | 'KIDS' | 'BOTH' | 'BUNDLE';
   staffId: string;
-  status: 'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  status: 'all' | 'upcoming' | 'overdue' | 'pending' | 'confirmed' | 'completed' | 'cancelled';
 }
 
 export interface ClinicServiceItem {

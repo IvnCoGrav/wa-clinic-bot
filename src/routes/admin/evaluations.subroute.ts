@@ -444,4 +444,26 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * GET /api/admin/debug/llm-logs
+   * Dedicated LLM reasoning & execution log feed
+   */
+  fastify.get(
+    '/api/admin/debug/llm-logs',
+    async (
+      request: FastifyRequest<{ Querystring: { limit?: string; flow?: string } }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { getLlmExecutionLogs } = await import('../../utils/llm-execution-logger');
+        const limit = Math.max(1, Math.min(150, parseInt(request.query?.limit || '100', 10) || 100));
+        const flow = request.query?.flow || 'all';
+        const logs = getLlmExecutionLogs(limit, flow);
+        return reply.status(200).send({ success: true, data: logs });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, message: err?.message });
+      }
+    }
+  );
 }

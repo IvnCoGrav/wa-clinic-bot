@@ -15,14 +15,16 @@ import {
   ShieldAlert,
   Cpu,
   Terminal,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
-type TabId = 'system' | 'router' | 'logs' | 'messages' | 'conversations';
+type TabId = 'system' | 'router' | 'llm' | 'logs' | 'messages' | 'conversations';
 
 const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: 'system', label: 'System Overview', icon: Server },
   { id: 'router', label: 'AI Router', icon: BrainCircuit },
+  { id: 'llm', label: '🧠 LLM Execution Logs', icon: Sparkles },
   { id: 'logs', label: 'Logs', icon: Terminal },
   { id: 'messages', label: 'Message Trace', icon: MessageSquare },
   { id: 'conversations', label: 'Conversations', icon: Phone },
@@ -637,6 +639,232 @@ function ConversationsSection() {
   );
 }
 
+// ---------------------------------------------------------------- LLM Execution Logs
+interface LlmLogEntry {
+  id: string;
+  timestamp: string;
+  flowType: 'CHATBOT_AUTO' | 'COPILOT_DRAFT' | 'CLINICAL_ESCALATION' | 'REASONING_ONLY';
+  customerPhone?: string;
+  customerName?: string;
+  customerInput: string;
+  reasoning: string | null;
+  groundTruthUsed?: any;
+  contextSummary?: string;
+  finalReply: string;
+  confidenceScore?: number;
+  modelUsed?: string;
+  durationMs?: number;
+  status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
+}
+
+function LlmLogsSection() {
+  const [logs, setLogs] = useState<LlmLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [flowFilter, setFlowFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest(`/api/admin/debug/llm-logs?limit=100&flow=${flowFilter}`);
+      if (res && res.success && Array.isArray(res.data)) {
+        setLogs(res.data);
+      }
+    } catch (err) {
+      console.warn('Gagal memuat LLM logs:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [flowFilter]);
+
+  useEffect(() => {
+    loadLogs();
+    const interval = setInterval(loadLogs, 6000);
+    return () => clearInterval(interval);
+  }, [loadLogs]);
+
+  const filteredLogs = useMemo(() => {
+    if (!searchQuery) return logs;
+    const q = searchQuery.toLowerCase();
+    return logs.filter(
+      (l) =>
+        (l.customerInput && l.customerInput.toLowerCase().includes(q)) ||
+        (l.reasoning && l.reasoning.toLowerCase().includes(q)) ||
+        (l.finalReply && l.finalReply.toLowerCase().includes(q)) ||
+        (l.customerName && l.customerName.toLowerCase().includes(q)) ||
+        (l.customerPhone && l.customerPhone.includes(q))
+    );
+  }, [logs, searchQuery]);
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader title="🧠 Dedicated LLM Execution & Reasoning Logs" onRefresh={loadLogs} loading={loading} auto />
+
+      {/* Filter Flow & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { id: 'all', label: 'Semua Flow' },
+            { id: 'CHATBOT_AUTO', label: '🤖 Chatbot Auto-Reply' },
+            { id: 'COPILOT_DRAFT', label: '💡 AI Copilot Draft' },
+          ].map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setFlowFilter(f.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
+                flowFilter === f.id
+                  ? 'bg-[#008069] text-white border border-[#008069]'
+                  : 'bg-white text-[#54656f] border border-[#d1d7db] hover:bg-[#f0f2f5]'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-full sm:w-64">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari prompt, reasoning, reply..."
+            className="w-full px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+          />
+        </div>
+      </div>
+
+      {/* Log Feed */}
+      <div className="space-y-3">
+        {filteredLogs.length === 0 ? (
+          <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-xs text-[#8696a0] shadow-xs">
+            {searchQuery ? 'Tidak ada log yang cocok dengan pencarian.' : 'Belum ada eksekusi LLM tercatat di buffer.'}
+          </div>
+        ) : (
+          filteredLogs.map((log) => {
+            const isExpanded = expandedId === log.id;
+            const isCopilot = log.flowType === 'COPILOT_DRAFT';
+
+            return (
+              <div
+                key={log.id}
+                className="bg-white border border-[#e9edef] hover:border-[#c2e7e0] rounded-2xl p-4 shadow-xs transition space-y-3 text-left"
+              >
+                {/* Header Meta */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] pb-2.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        isCopilot
+                          ? 'bg-purple-100 text-purple-800 border-purple-200'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      }`}
+                    >
+                      {isCopilot ? '💡 AI Copilot Draft' : '🤖 Chatbot Auto-Reply'}
+                    </span>
+
+                    <span className="text-xs font-bold text-[#111b21]">
+                      {log.customerName || log.customerPhone || 'Pasien'}
+                    </span>
+
+                    {log.durationMs !== undefined && (
+                      <span className="text-[10px] font-mono text-[#667781] bg-[#f0f2f5] px-2 py-0.5 rounded-md">
+                        ⏱️ {log.durationMs}ms
+                      </span>
+                    )}
+
+                    {log.modelUsed && (
+                      <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                        {log.modelUsed}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-[#8696a0]">{fmtTime(log.timestamp)}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        log.status === 'SUCCESS'
+                          ? 'bg-emerald-50 text-[#008069] border border-emerald-200'
+                          : log.status === 'FALLBACK'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}
+                    >
+                      {log.status}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Grid 4 Visual Blocks */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  {/* Block 1: Input Pasien */}
+                  <div className="bg-sky-50/60 border border-sky-200/80 rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
+                      💬 Input Pasien
+                    </span>
+                    <p className="text-sky-950 whitespace-pre-wrap font-medium">{log.customerInput || '-'}</p>
+                  </div>
+
+                  {/* Block 2: Ground Truth Injected */}
+                  <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                      📚 Ground Truth Injected
+                    </span>
+                    {log.groundTruthUsed ? (
+                      <pre className="text-[11px] font-mono text-amber-950 whitespace-pre-wrap overflow-x-auto">
+                        {typeof log.groundTruthUsed === 'string'
+                          ? log.groundTruthUsed
+                          : JSON.stringify(log.groundTruthUsed, null, 2)}
+                      </pre>
+                    ) : (
+                      <p className="text-amber-800/80 italic text-[11px]">Tidak ada data database khusus.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Block 3: AI Reasoning & Chain-of-Thought */}
+                {log.reasoning && (
+                  <div className="bg-purple-50/60 border border-purple-200/80 rounded-xl p-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider flex items-center gap-1">
+                        <BrainCircuit size={12} className="text-purple-600" />
+                        <span>🔍 AI Reasoning &amp; Chain-of-Thought</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                        className="text-[11px] font-semibold text-purple-700 hover:text-purple-900"
+                      >
+                        {isExpanded ? 'Sembunyikan' : 'Lihat Penuh'}
+                      </button>
+                    </div>
+                    <p
+                      className={`text-purple-950 font-mono text-[11px] whitespace-pre-wrap ${
+                        isExpanded ? '' : 'line-clamp-3'
+                      }`}
+                    >
+                      {log.reasoning}
+                    </p>
+                  </div>
+                )}
+
+                {/* Block 4: Final Reply / Draft */}
+                <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 space-y-1">
+                  <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
+                    {isCopilot ? '✉️ Draf Balasan AI Copilot' : '✉️ Final AI Auto-Reply'}
+                  </span>
+                  <p className="text-emerald-950 whitespace-pre-wrap font-medium">{log.finalReply || '-'}</p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Page
 export const Debug: React.FC = () => {
   const [tab, setTab] = useState<TabId>('system');
@@ -675,6 +903,7 @@ export const Debug: React.FC = () => {
 
       {tab === 'system' && <SystemSection />}
       {tab === 'router' && <RouterSection />}
+      {tab === 'llm' && <LlmLogsSection />}
       {tab === 'logs' && <LogsSection />}
       {tab === 'messages' && <MessagesSection />}
       {tab === 'conversations' && <ConversationsSection />}
