@@ -9,7 +9,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **CAPI Queue & Database Self-Healing URL Normalizer (`src/services/capi.service.ts`, `src/routes/admin/reservations.subroute.ts`, `MetaCapiQueue.tsx`)**:
   - Mengimplementasikan helper `resolveCanonicalLandingUrl()` terpadu yang secara otomatis mengekstrak nested `landing_url` dan memetakan URL redirect `/cta` lama ke domain landing page aktif (`Tenant.landing_domain`) dengan tetap mempertahankan 100% parameter query iklan (`fbclid`, `utm_*`).
   - Menambahkan auto-self-healing pada `GET /api/admin/capi-queue`: data reservasi dan lead historis yang masih memuat URL redirect `/cta` di database PostgreSQL otomatis diperbaiki menjadi URL landing page asli saat dimuat.
-  - Menambahkan endpoint batch fix `POST /api/admin/capi-queue/repair-urls` dan tombol **"Normalisasikan URL"** di UI Admin Dashboard Meta CAPI Queue.
+  - Memprioritaskan nominal murni treatment (`extractValueByFormat(text, 'Treatment = %VALUE%')` / `parsed.payment.treatmentPrice`) di atas total invoice (`totalPrice`), sehingga nilai Purchase di Meta CAPI dan CAPI Queue merefleksikan nilai riil treatment murni (misal: Rp 70.000) dan tidak tercampur ongkir (Rp 25.000) ataupun total tagihan (Rp 85.000).
   - Menyempurnakan JSON Viewer modal di `MetaCapiQueue.tsx` agar preview `event_source_url` selalu presisi dan selaras dengan format CAPI yang dikirim ke Meta.
 
 - **External Landing Page URL Preservation (`src/landing/public/external-tracker.js`, `docs/INTEGRASI_LANDING_EXTERNAL.md`)**:
