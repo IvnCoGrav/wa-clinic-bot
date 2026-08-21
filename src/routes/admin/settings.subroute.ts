@@ -296,6 +296,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         formatCheckout: tenant?.format_checkout || 'list untuk reservasi :',
         formatPurchase: tenant?.format_purchase || 'Payment',
         formatValue: tenant?.format_value || 'Treatment = %VALUE%',
+        landingDomain: (tenant as any)?.landing_domain || '',
       },
     });
   });
@@ -312,6 +313,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       formatCheckout?: string;
       formatPurchase?: string;
       formatValue?: string;
+      landingDomain?: string;
     };
 
     let tenant = await prisma.tenant.findFirst({ where: { id: DEFAULT_TENANT_ID } });
@@ -333,7 +335,8 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         ...(body.formatCheckout !== undefined ? { format_checkout: body.formatCheckout } : {}),
         ...(body.formatPurchase !== undefined ? { format_purchase: body.formatPurchase } : {}),
         ...(body.formatValue !== undefined ? { format_value: body.formatValue } : {}),
-      },
+        ...(body.landingDomain !== undefined ? { landing_domain: body.landingDomain } : {}),
+      } as any,
     });
 
     return reply.status(200).send({
@@ -346,6 +349,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         formatCheckout: updated.format_checkout,
         formatPurchase: updated.format_purchase,
         formatValue: updated.format_value,
+        landingDomain: (updated as any).landing_domain || '',
       },
     });
   });
