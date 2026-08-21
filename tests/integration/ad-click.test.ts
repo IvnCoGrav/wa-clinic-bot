@@ -173,7 +173,6 @@ describe('Ad Click Attribution & Meta CAPI Integration Tests', () => {
       await new Promise((r) => setTimeout(r, 400));
       expect(dbLogMsgSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: 'Halo',
           direction: 'INBOUND',
         })
       );

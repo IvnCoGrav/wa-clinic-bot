@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUiFeedback } from '../../components/common/UiFeedback';
@@ -95,7 +96,27 @@ function formatRupiah(amount: number): string {
 function parseNumberedTreatments(treatmentDetail: string | null): { items: string[]; totalMinutes: number } {
   if (!treatmentDetail) return { items: [], totalMinutes: 0 };
 
-  const rawItems = treatmentDetail
+  // 1. Bersihkan seluruh tag metadata buffer/total dalam kurung siku & teks buffer/bufer bocor
+  const sanitized = treatmentDetail
+    .replace(/\[\s*total.*?buffer.*?\]/gi, '')
+    .replace(/\[\s*total\s*bufer.*?\]/gi, '')
+    .replace(/\[\s*total\s*\d+m\s*\+\s*buffer.*?\]/gi, '')
+    .replace(/\[\s*buffer.*?\]/gi, '')
+    .replace(/\[\s*bufer.*?\]/gi, '')
+    .replace(/\[\s*total\s*=\s*\d+.*?\]/gi, '')
+    .replace(/\(\+?\d+m\s*buffer\)/gi, '')
+    .replace(/\(\+?\d+m\s*bufer\)/gi, '')
+    .replace(/\+\s*buffer\s*\d+m/gi, '')
+    .replace(/\+\s*bufer\s*\d+m/gi, '')
+    .replace(/\b\d+m\s*buffer\b/gi, '')
+    .replace(/\b\d+m\s*bufer\b/gi, '')
+    .replace(/\btotal\s*bufer\s*=\s*\d+m?\b/gi, '')
+    .replace(/\btotal\s*buffer\s*=\s*\d+m?\b/gi, '')
+    .trim();
+
+  if (!sanitized) return { items: [], totalMinutes: 0 };
+
+  const rawItems = sanitized
     .split(/\r?\n|,|;|\+|&/)
     .map((s) => s.trim())
     .filter(Boolean);
@@ -104,6 +125,12 @@ function parseNumberedTreatments(treatmentDetail: string | null): { items: strin
   const cleanItems: string[] = [];
 
   for (const item of rawItems) {
+    // Abaikan jika item mengandung kata buffer/bufer/total
+    const itemLower = item.toLowerCase();
+    if (itemLower.includes('buffer') || itemLower.includes('bufer') || itemLower.includes('total scheduled')) {
+      continue;
+    }
+
     const minMatch = item.match(/(\d+)\s*(?:menit|mins?|m\b)/i);
     const hourMatch = item.match(/(\d+(?:\.\d+)?)\s*(?:jam|hours?|h\b)/i);
 
@@ -121,36 +148,15 @@ function parseNumberedTreatments(treatmentDetail: string | null): { items: strin
       .replace(/^\d+[\.\)\-]\s*/, '')
       .trim();
 
-    if (clean) cleanItems.push(clean);
+    if (clean && !clean.toLowerCase().includes('buffer') && !clean.toLowerCase().includes('bufer')) {
+      cleanItems.push(clean);
+    }
   }
 
   return {
-    items: cleanItems.length > 0 ? cleanItems : [treatmentDetail.replace(/\s*\(\d+.*?\)/g, '').trim()],
+    items: cleanItems.length > 0 ? cleanItems : [sanitized.replace(/\s*\(\d+.*?\)/g, '').trim()].filter(Boolean),
     totalMinutes: totalMins,
   };
-}
-
-// Sound notification generator using Web Audio API & Haptic Vibration
-function playNotificationSound() {
-  try {
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate([100, 50, 100]);
-    }
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
-  } catch (_) {}
 }
 
 export const TodayTreatments: React.FC = () => {
@@ -347,7 +353,6 @@ export const TodayTreatments: React.FC = () => {
     try {
       const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, { method: 'POST' });
       if (res.success) {
-        playNotificationSound();
         toast('Notifikasi OTW berhasil dikirim ke WhatsApp pasien!', 'success');
         fetchTasks(true);
       }
@@ -375,7 +380,6 @@ export const TodayTreatments: React.FC = () => {
         body: JSON.stringify({ targetStaffId: reassignStaffId, staffId: reassignStaffId }),
       });
       if (res.success) {
-        playNotificationSound();
         toast('Jadwal berhasil didelegasikan ke terapis baru.', 'success');
         setReassignTask(null);
         fetchTasks();
@@ -402,7 +406,6 @@ export const TodayTreatments: React.FC = () => {
         }),
       });
       if (res.success) {
-        playNotificationSound();
         toast('Status pembayaran berhasil diperbarui menjadi LUNAS.', 'success');
         setPaymentTask(null);
         setProofImageB64(null);
@@ -455,9 +458,10 @@ export const TodayTreatments: React.FC = () => {
 
     setLocSaving(true);
     try {
-      const res = await apiRequest(`/api/staff/reservations/${locationTask.reservationId}/location`, {
+      const res = await apiRequest('/api/staff/update-location', {
         method: 'POST',
         body: JSON.stringify({
+          reservationId: locationTask.reservationId,
           landmark: locLandmark,
           lat: locCoords?.lat,
           lng: locCoords?.lng,
@@ -465,7 +469,6 @@ export const TodayTreatments: React.FC = () => {
         }),
       });
       if (res.success) {
-        playNotificationSound();
         toast('Titik lokasi & foto rumah pasien berhasil diperbarui!', 'success');
         setLocationTask(null);
         fetchTasks();
@@ -487,7 +490,7 @@ export const TodayTreatments: React.FC = () => {
 
     setLoadingChat(true);
     try {
-      const res = await apiRequest(`/api/staff/chat/${task.conversationId}/messages`);
+      const res = await apiRequest(`/api/staff/conversations/${task.conversationId}/messages`);
       if (res.success && Array.isArray(res.data)) {
         setChatMessages(res.data);
       }
@@ -505,27 +508,23 @@ export const TodayTreatments: React.FC = () => {
 
     setSendingChat(true);
     try {
-      let res;
+      const payload: any = {};
+      if (textToSend) payload.text = textToSend;
       if (selectedChatImage) {
-        const formData = new FormData();
-        formData.append('image', selectedChatImage.file);
-        if (textToSend) formData.append('caption', textToSend);
-        res = await apiRequest(`/api/staff/chat/${chatModalTask.conversationId}/media`, {
-          method: 'POST',
-          body: formData,
-        });
-      } else {
-        res = await apiRequest(`/api/staff/chat/${chatModalTask.conversationId}/reply`, {
-          method: 'POST',
-          body: JSON.stringify({ content: textToSend }),
-        });
+        payload.imageB64 = selectedChatImage.preview;
+        payload.fileName = selectedChatImage.file.name;
+        payload.mimeType = selectedChatImage.file.type;
       }
 
+      const res = await apiRequest(`/api/staff/conversations/${chatModalTask.conversationId}/reply`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
       if (res && res.success) {
-        playNotificationSound();
         setReplyText('');
         setSelectedChatImage(null);
-        const refreshed = await apiRequest(`/api/staff/chat/${chatModalTask.conversationId}/messages`);
+        const refreshed = await apiRequest(`/api/staff/conversations/${chatModalTask.conversationId}/messages`);
         if (refreshed.success && Array.isArray(refreshed.data)) {
           setChatMessages(refreshed.data);
         }
@@ -940,11 +939,11 @@ export const TodayTreatments: React.FC = () => {
                     {isSupervisor && (
                       <button
                         onClick={() => handleOpenReassign(task)}
-                        className="w-full sm:w-auto py-2.5 px-3.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs active:scale-95 touch-manipulation"
-                        title="Delegasikan Jadwal ke Terapis Lain"
+                        className="w-full sm:w-auto py-2.5 px-3.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs active:scale-95 touch-manipulation cursor-pointer"
+                        title={task.assignedStaff ? 'Ganti Terapis yang Ditugaskan' : 'Delegasikan Jadwal ke Terapis Lain'}
                       >
                         <UserCheck size={14} />
-                        <span>Delegasikan</span>
+                        <span>{task.assignedStaff ? 'Ganti Terapis' : 'Delegasikan'}</span>
                       </button>
                     )}
                   </div>
@@ -958,803 +957,820 @@ export const TodayTreatments: React.FC = () => {
       {/* ========================================================================= */}
       {/* POINT 3: MODAL DETAIL LENGKAP CUSTOMER & TREATMENT */}
       {/* ========================================================================= */}
-      {detailModalTask && (
-        <div
-          className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setDetailModalTask(null)}
-        >
+      {detailModalTask &&
+        createPortal(
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto animate-modalScaleUp"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setDetailModalTask(null)}
           >
-            {/* Header Detail */}
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-3">
-                {detailModalTask.customerProfilePictureUrl ? (
-                  <img
-                    src={detailModalTask.customerProfilePictureUrl}
-                    alt={detailModalTask.customerName || 'Pasien'}
-                    className="h-12 w-12 rounded-2xl object-cover border border-[#c2e7e0] shadow-xs"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-extrabold text-base shadow-xs">
-                    {(detailModalTask.customerName || 'P').charAt(0).toUpperCase()}
+            <div
+              className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header Detail */}
+              <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+                <div className="flex items-center space-x-3">
+                  {detailModalTask.customerProfilePictureUrl ? (
+                    <img
+                      src={detailModalTask.customerProfilePictureUrl}
+                      alt={detailModalTask.customerName || 'Pasien'}
+                      className="h-12 w-12 rounded-2xl object-cover border border-[#c2e7e0] shadow-xs"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-2xl bg-[#e8f5f2] border border-[#c2e7e0] text-[#008069] flex items-center justify-center font-extrabold text-base shadow-xs">
+                      {(detailModalTask.customerName || 'P').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="font-bold text-base text-[#111b21] flex items-center gap-1.5">
+                      <span>{detailModalTask.customerName || 'Customer'}</span>
+                      <span
+                        className={`p-1 rounded-md border ${getCategoryIcon(detailModalTask.treatmentCategory).badge} inline-flex items-center justify-center`}
+                        title={getCategoryIcon(detailModalTask.treatmentCategory).label}
+                      >
+                        {getCategoryIcon(detailModalTask.treatmentCategory).icon}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#667781] mt-0.5">
+                      Jam Kunjungan: <span className="font-bold text-[#111b21]">{formatTime(detailModalTask.bookingDate)}</span>
+                    </p>
                   </div>
-                )}
-                <div>
-                  <h3 className="font-bold text-base text-[#111b21] flex items-center gap-1.5">
-                    <span>{detailModalTask.customerName || 'Customer'}</span>
-                    <span
-                      className={`p-1 rounded-md border ${getCategoryIcon(detailModalTask.treatmentCategory).badge} inline-flex items-center justify-center`}
-                      title={getCategoryIcon(detailModalTask.treatmentCategory).label}
-                    >
-                      {getCategoryIcon(detailModalTask.treatmentCategory).icon}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-[#667781] mt-0.5">
-                    Jam Kunjungan: <span className="font-bold text-[#111b21]">{formatTime(detailModalTask.bookingDate)}</span>
-                  </p>
                 </div>
+
+                <button
+                  onClick={() => setDetailModalTask(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
               </div>
 
-              <button
-                onClick={() => setDetailModalTask(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Treatment & Layanan */}
-            <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                Layanan Treatment Dipesan
-              </span>
-              <div className="space-y-1 text-xs">
-                {parseNumberedTreatments(detailModalTask.treatmentDetail).items.map((it, idx) => (
-                  <div key={idx} className="font-semibold text-[#111b21] flex items-start gap-2">
-                    <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
-                      {idx + 1}
-                    </span>
-                    <span>{it}</span>
-                  </div>
-                ))}
-              </div>
-
-              {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes > 0 && (
-                <div className="pt-1">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                    <Timer size={12} className="text-amber-600" />
-                    <span>Total Estimasi Waktu: {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes} Menit</span>
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Data Pasien Anak */}
-            {detailModalTask.children && detailModalTask.children.length > 0 && (
-              <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-1.5">
+              {/* Treatment & Layanan */}
+              <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
                 <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                  Data Pasien Anak
+                  Layanan Treatment Dipesan
                 </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {detailModalTask.children.map((c, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold"
-                    >
-                      <Baby size={13} />
-                      <span>{c.name} {c.rawAgeText ? `(${c.rawAgeText})` : ''}</span>
-                    </span>
+                <div className="space-y-1 text-xs">
+                  {parseNumberedTreatments(detailModalTask.treatmentDetail).items.map((it, idx) => (
+                    <div key={idx} className="font-semibold text-[#111b21] flex items-start gap-2">
+                      <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span>{it}</span>
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
 
-            {/* Alamat & Lokasi */}
-            <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                Alamat & Titik Lokasi
-              </span>
-              <p className="text-xs text-[#111b21] leading-relaxed">{detailModalTask.address.fullText}</p>
-              
-              {detailModalTask.address.landmark && (
-                <p className="text-xs text-[#667781]">
-                  <span className="font-bold text-[#111b21]">Patokan:</span> {detailModalTask.address.landmark}
-                </p>
-              )}
-
-              {detailModalTask.address.housePhotoUrl && (
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setZoomImageUrl(detailModalTask.address.housePhotoUrl || null)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#008069] shadow-2xs hover:bg-[#e8f5f2]"
-                  >
-                    <ImageIcon size={14} />
-                    <span>Lihat Foto Depan Rumah (Zoom)</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Rincian Finansial */}
-            <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2 text-xs">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                Rincian Biaya & Status Pembayaran
-              </span>
-              <div className="space-y-1">
-                <div className="flex justify-between text-[#667781]">
-                  <span>Biaya Layanan:</span>
-                  <span>{formatRupiah(detailModalTask.pricing.treatmentFee)}</span>
-                </div>
-                <div className="flex justify-between text-[#667781]">
-                  <span>Ongkos Kirim:</span>
-                  <span>{formatRupiah(detailModalTask.pricing.deliveryFee)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-[#111b21] pt-1 border-t border-[#e9edef]">
-                  <span>Total Tagihan:</span>
-                  <span className="text-[#008069] text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center justify-between">
-                <span className="text-xs text-[#667781]">Status Pembayaran:</span>
-                {detailModalTask.pricing.paymentStatus === 'LUNAS' ? (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 flex items-center space-x-1">
-                    <CheckCircle2 size={12} />
-                    <span>LUNAS</span>
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
-                    <CreditCard size={12} />
-                    <span>TAGIH DI TEMPAT</span>
-                  </span>
+                {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes > 0 && (
+                  <div className="pt-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+                      <Timer size={12} className="text-amber-600" />
+                      <span>Total Estimasi Waktu: {parseNumberedTreatments(detailModalTask.treatmentDetail).totalMinutes} Menit</span>
+                    </span>
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Action Buttons di Modal */}
-            <div className="pt-2 flex space-x-2">
-              {(detailModalTask.navigationUrl || detailModalTask.mapsUrl) && (
-                <a
-                  href={detailModalTask.navigationUrl || detailModalTask.mapsUrl || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-2.5 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs"
-                >
-                  <Navigation size={14} />
-                  <span>Buka Peta</span>
-                </a>
+              {/* Data Pasien Anak */}
+              {detailModalTask.children && detailModalTask.children.length > 0 && (
+                <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-1.5">
+                  <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                    Data Pasien Anak
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailModalTask.children.map((c, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 text-xs font-semibold"
+                      >
+                        <Baby size={13} />
+                        <span>{c.name} {c.rawAgeText ? `(${c.rawAgeText})` : ''}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  const t = detailModalTask;
-                  setDetailModalTask(null);
-                  handleOpenChat(t);
-                }}
-                className="py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-bold transition flex items-center space-x-1.5"
-              >
-                <MessageSquare size={14} className="text-[#008069]" />
-                <span>Chat WA</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDetailModalTask(null)}
-                className="py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-bold transition"
-              >
-                Tutup
-              </button>
+
+              {/* Alamat & Lokasi */}
+              <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2">
+                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                  Alamat & Titik Lokasi
+                </span>
+                <p className="text-xs text-[#111b21] leading-relaxed">{detailModalTask.address.fullText}</p>
+                
+                {detailModalTask.address.landmark && (
+                  <p className="text-xs text-[#667781]">
+                    <span className="font-bold text-[#111b21]">Patokan:</span> {detailModalTask.address.landmark}
+                  </p>
+                )}
+
+                {detailModalTask.address.housePhotoUrl && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setZoomImageUrl(detailModalTask.address.housePhotoUrl || null)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#008069] shadow-2xs hover:bg-[#e8f5f2] cursor-pointer"
+                    >
+                      <ImageIcon size={14} />
+                      <span>Lihat Foto Depan Rumah (Zoom)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Rincian Finansial */}
+              <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-2 text-xs">
+                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                  Rincian Biaya & Status Pembayaran
+                </span>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[#667781]">
+                    <span>Biaya Layanan:</span>
+                    <span>{formatRupiah(detailModalTask.pricing.treatmentFee)}</span>
+                  </div>
+                  <div className="flex justify-between text-[#667781]">
+                    <span>Ongkos Kirim:</span>
+                    <span>{formatRupiah(detailModalTask.pricing.deliveryFee)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-[#111b21] pt-1 border-t border-[#e9edef]">
+                    <span>Total Tagihan:</span>
+                    <span className="text-[#008069] text-sm">{formatRupiah(detailModalTask.pricing.totalFee)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-between">
+                  <span className="text-xs text-[#667781]">Status Pembayaran:</span>
+                  {detailModalTask.pricing.paymentStatus === 'LUNAS' ? (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#d9fdd3] text-[#008069] border border-[#00a884]/30 flex items-center space-x-1">
+                      <CheckCircle2 size={12} />
+                      <span>LUNAS</span>
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center space-x-1">
+                      <CreditCard size={12} />
+                      <span>TAGIH DI TEMPAT</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons di Modal */}
+              <div className="pt-2 flex space-x-2">
+                {(detailModalTask.navigationUrl || detailModalTask.mapsUrl) && (
+                  <a
+                    href={detailModalTask.navigationUrl || detailModalTask.mapsUrl || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 py-2.5 px-4 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Navigation size={14} />
+                    <span>Buka Peta</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = detailModalTask;
+                    setDetailModalTask(null);
+                    handleOpenChat(t);
+                  }}
+                  className="py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <MessageSquare size={14} className="text-[#008069]" />
+                  <span>Chat WA</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailModalTask(null)}
+                  className="py-2.5 px-4 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ========================================================================= */}
       {/* POINT 2: MODAL DETAIL REKAP RESERVASI HARI INI */}
       {/* ========================================================================= */}
-      {showMetricsModal && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setShowMetricsModal(false)}
-        >
+      {showMetricsModal &&
+        createPortal(
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-[#e9edef] space-y-4 text-left relative animate-modalScaleUp"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setShowMetricsModal(false)}
           >
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
-                  <BarChart3 size={20} />
+            <div
+              className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[85dvh] sm:max-h-[80dvh] overflow-y-auto overscroll-contain animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                    <BarChart3 size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#111b21]">Rekap Metrik Treatment Hari Ini</h3>
+                    <p className="text-xs text-[#667781]">{todayFormatted}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111b21]">Rekap Metrik Treatment Hari Ini</h3>
-                  <p className="text-xs text-[#667781]">{todayFormatted}</p>
+                <button
+                  onClick={() => setShowMetricsModal(false)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="bg-[#f8fafc] rounded-2xl border border-[#e9edef] p-4">
+                  <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider block">Total Treatment</span>
+                  <p className="text-2xl font-black text-[#111b21] mt-1">{totalCount}</p>
+                  <span className="text-[11px] text-[#8696a0]">Kunjungan terjadwal</span>
+                </div>
+
+                <div className="bg-emerald-50/40 rounded-2xl border border-emerald-200 p-4">
+                  <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">Selesai</span>
+                  <p className="text-2xl font-black text-emerald-700 mt-1">{completedCount}</p>
+                  <span className="text-[11px] text-emerald-600">Pasien telah ditangani</span>
+                </div>
+
+                <div className="bg-sky-50/40 rounded-2xl border border-sky-200 p-4">
+                  <span className="text-[11px] font-bold text-sky-700 uppercase tracking-wider block">Sedang OTW</span>
+                  <p className="text-2xl font-black text-sky-700 mt-1">{otwCount}</p>
+                  <span className="text-[11px] text-sky-600">Dalam perjalanan</span>
+                </div>
+
+                <div className="bg-amber-50/40 rounded-2xl border border-amber-200 p-4">
+                  <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">Status Lunas</span>
+                  <p className="text-2xl font-black text-amber-700 mt-1">{lunasCount} / {totalCount}</p>
+                  <span className="text-[11px] text-amber-600">{totalCount - lunasCount} Tagih di tempat</span>
                 </div>
               </div>
-              <button
-                onClick={() => setShowMetricsModal(false)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="bg-[#f8fafc] rounded-2xl border border-[#e9edef] p-4">
-                <span className="text-[11px] font-bold text-[#667781] uppercase tracking-wider block">Total Treatment</span>
-                <p className="text-2xl font-black text-[#111b21] mt-1">{totalCount}</p>
-                <span className="text-[11px] text-[#8696a0]">Kunjungan terjadwal</span>
+              <div className="p-4 bg-[#f8fafc] rounded-2xl border border-[#e9edef] flex items-center justify-between text-xs">
+                <span className="font-bold text-[#667781]">Total Nilai Transaksi:</span>
+                <span className="font-black text-sm text-[#008069]">{formatRupiah(totalRevenue)}</span>
               </div>
 
-              <div className="bg-emerald-50/40 rounded-2xl border border-emerald-200 p-4">
-                <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">Selesai</span>
-                <p className="text-2xl font-black text-emerald-700 mt-1">{completedCount}</p>
-                <span className="text-[11px] text-emerald-600">Pasien telah ditangani</span>
-              </div>
-
-              <div className="bg-sky-50/40 rounded-2xl border border-sky-200 p-4">
-                <span className="text-[11px] font-bold text-sky-700 uppercase tracking-wider block">Sedang OTW</span>
-                <p className="text-2xl font-black text-sky-700 mt-1">{otwCount}</p>
-                <span className="text-[11px] text-sky-600">Dalam perjalanan</span>
-              </div>
-
-              <div className="bg-amber-50/40 rounded-2xl border border-amber-200 p-4">
-                <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">Status Lunas</span>
-                <p className="text-2xl font-black text-amber-700 mt-1">{lunasCount} / {totalCount}</p>
-                <span className="text-[11px] text-amber-600">{totalCount - lunasCount} Tagih di tempat</span>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMetricsModal(false)}
+                  className="px-5 py-2.5 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition cursor-pointer"
+                >
+                  Tutup Rekap
+                </button>
               </div>
             </div>
-
-            <div className="p-4 bg-[#f8fafc] rounded-2xl border border-[#e9edef] flex items-center justify-between text-xs">
-              <span className="font-bold text-[#667781]">Total Nilai Transaksi:</span>
-              <span className="font-black text-sm text-[#008069]">{formatRupiah(totalRevenue)}</span>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setShowMetricsModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-[#008069] text-white text-xs font-bold hover:bg-[#00a884] transition"
-              >
-                Tutup Rekap
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ========================================================================= */}
       {/* MODAL FULL SCREEN ZOOM IMAGE */}
       {/* ========================================================================= */}
-      {zoomImageUrl && (
-        <div
-          className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
-          onClick={() => setZoomImageUrl(null)}
-        >
-          <div className="relative max-w-3xl w-full max-h-[90vh] flex flex-col items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
-            <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-              <a
-                href={zoomImageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="p-2 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition"
-                title="Buka / Download Foto Asli"
-              >
-                <Download size={18} />
-              </a>
-              <button
-                onClick={() => setZoomImageUrl(null)}
-                className="p-2 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition"
-              >
-                <X size={18} />
-              </button>
+      {zoomImageUrl &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setZoomImageUrl(null)}
+          >
+            <div className="relative max-w-3xl w-full max-h-[90dvh] flex flex-col items-center justify-center p-2" onClick={(e) => e.stopPropagation()}>
+              <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+                <a
+                  href={zoomImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="p-2 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition"
+                  title="Buka / Download Foto Asli"
+                >
+                  <Download size={18} />
+                </a>
+                <button
+                  onClick={() => setZoomImageUrl(null)}
+                  className="p-2 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <img src={zoomImageUrl} alt="Zoom" className="max-w-full max-h-[85dvh] object-contain rounded-2xl shadow-2xl" />
             </div>
-            <img src={zoomImageUrl} alt="Zoom" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl" />
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ========================================================================= */}
-      {/* MODAL DELEGASI JADWAL TERAPIS */}
+      {/* MODAL DELEGASI       {/* ========================================================================= */}
+      {/* MODAL DELEGASI & GANTI TERAPIS */}
       {/* ========================================================================= */}
-      {reassignTask && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setReassignTask(null)}
-        >
+      {reassignTask &&
+        createPortal(
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative animate-modalScaleUp"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setReassignTask(null)}
           >
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center border border-purple-200 shadow-xs">
-                  <UserCheck size={20} />
+            <div
+              className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] overflow-hidden animate-modalScaleUp relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-start justify-between shrink-0">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-10 w-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center border border-purple-200 shadow-xs">
+                    <UserCheck size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#111b21]">
+                      {reassignTask.assignedStaff ? 'Ganti Terapis Jadwal' : 'Delegasikan Jadwal'}
+                    </h3>
+                    <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                      {reassignTask.customerName || 'Pasien'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111b21]">Delegasikan Jadwal</h3>
-                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
-                    {reassignTask.customerName || 'Pasien'}
+                <button
+                  onClick={() => setReassignTask(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveReassign} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
+                <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-1.5 text-xs">
+                  <p className="text-[#667781]">
+                    Jam Kunjungan: <span className="font-bold text-[#111b21]">{formatTime(reassignTask.bookingDate)}</span>
+                  </p>
+                  <p className="text-[#667781]">
+                    Treatment: <span className="font-bold text-[#111b21]">{reassignTask.treatmentDetail}</span>
+                  </p>
+                  <p className="text-[#667781]">
+                    Terapis Saat Ini: <span className="font-bold text-purple-700">{reassignTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
                   </p>
                 </div>
-              </div>
-              <button
-                onClick={() => setReassignTask(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-[#111b21]">Pilih Terapis Pengganti:</label>
+                  <select
+                    value={reassignStaffId}
+                    onChange={(e) => setReassignStaffId(e.target.value)}
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] font-semibold focus:outline-none focus:border-[#008069] shadow-xs"
+                  >
+                    <option value="">-- Pilih Staf Terapis --</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.role || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                  <button
+                    type="button"
+                    onClick={() => setReassignTask(null)}
+                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingReassign || !reassignStaffId}
+                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingReassign ? <span>Menyimpan...</span> : <span>{reassignTask.assignedStaff ? 'Simpan Ganti Terapis' : 'Simpan Delegasi'}</span>}
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleSaveReassign} className="space-y-4">
-              <div className="p-3.5 bg-[#f8fafc] rounded-2xl border border-[#e9edef] space-y-1.5 text-xs">
-                <p className="text-[#667781]">
-                  Jam Kunjungan: <span className="font-bold text-[#111b21]">{formatTime(reassignTask.bookingDate)}</span>
-                </p>
-                <p className="text-[#667781]">
-                  Treatment: <span className="font-bold text-[#111b21]">{reassignTask.treatmentDetail}</span>
-                </p>
-                <p className="text-[#667781]">
-                  Terapis Saat Ini: <span className="font-bold text-purple-700">{reassignTask.assignedStaff?.name || 'Belum Ditugaskan'}</span>
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#111b21]">Pilih Terapis Pengganti:</label>
-                <select
-                  value={reassignStaffId}
-                  onChange={(e) => setReassignStaffId(e.target.value)}
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] font-semibold focus:outline-none focus:border-[#008069] shadow-xs"
-                >
-                  <option value="">-- Pilih Staf Terapis --</option>
-                  {teamMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.role || 'Staff'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
-                <button
-                  type="button"
-                  onClick={() => setReassignTask(null)}
-                  className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingReassign || !reassignStaffId}
-                  className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-                >
-                  {submittingReassign ? <span>Menyimpan...</span> : <span>Simpan Delegasi</span>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ========================================================================= */}
       {/* MODAL PENCATATAN PEMBAYARAN */}
       {/* ========================================================================= */}
-      {paymentTask && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setPaymentTask(null)}
-        >
+      {paymentTask &&
+        createPortal(
           <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative animate-modalScaleUp"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setPaymentTask(null)}
           >
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200 shadow-xs">
-                  <CreditCard size={20} />
+            <div
+              className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] overflow-hidden animate-modalScaleUp relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-start justify-between shrink-0">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-10 w-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200 shadow-xs">
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#111b21]">Catat Pembayaran Lunas</h3>
+                    <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                      {paymentTask.customerName || 'Pasien'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111b21]">Catat Pembayaran Lunas</h3>
-                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
-                    {paymentTask.customerName || 'Pasien'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setPaymentTask(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePayment} className="space-y-4">
-              <div className="p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200 text-xs space-y-1">
-                <div className="flex justify-between text-[#667781]">
-                  <span>Biaya Layanan:</span>
-                  <span>{formatRupiah(paymentTask.pricing.treatmentFee)}</span>
-                </div>
-                <div className="flex justify-between text-[#667781]">
-                  <span>Ongkos Kirim:</span>
-                  <span>{formatRupiah(paymentTask.pricing.deliveryFee)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-[#111b21] pt-1 border-t border-amber-200">
-                  <span>Total Tagihan:</span>
-                  <span className="text-[#008069] text-sm">{formatRupiah(paymentTask.pricing.totalFee)}</span>
-                </div>
+                <button
+                  onClick={() => setPaymentTask(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#111b21]">Metode Pembayaran:</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['CASH', 'TRANSFER', 'QRIS'] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPaymentMethod(m)}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
-                        paymentMethod === m
-                          ? 'bg-[#008069] text-white border-[#008069] shadow-xs'
-                          : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
-                      }`}
-                    >
-                      {m === 'CASH' ? '💵 Tunai' : m === 'TRANSFER' ? '🏦 Transfer' : '📱 QRIS'}
-                    </button>
-                  ))}
+              <form onSubmit={handleSavePayment} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
+                <div className="p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200 text-xs space-y-1">
+                  <div className="flex justify-between text-[#667781]">
+                    <span>Biaya Layanan:</span>
+                    <span>{formatRupiah(paymentTask.pricing.treatmentFee)}</span>
+                  </div>
+                  <div className="flex justify-between text-[#667781]">
+                    <span>Ongkos Kirim:</span>
+                    <span>{formatRupiah(paymentTask.pricing.deliveryFee)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-[#111b21] pt-1 border-t border-amber-200">
+                    <span>Total Tagihan:</span>
+                    <span className="text-[#008069] text-sm">{formatRupiah(paymentTask.pricing.totalFee)}</span>
+                  </div>
                 </div>
-              </div>
 
-              {paymentMethod !== 'CASH' && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-[#111b21]">Upload Bukti Transfer:</label>
+                  <label className="block text-xs font-bold text-[#111b21]">Metode Pembayaran:</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['CASH', 'TRANSFER', 'QRIS'] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPaymentMethod(m)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                          paymentMethod === m
+                            ? 'bg-[#008069] text-white border-[#008069] shadow-xs'
+                            : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                        }`}
+                      >
+                        {m === 'CASH' ? '💵 Tunai' : m === 'TRANSFER' ? '🏦 Transfer' : '📱 QRIS'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {paymentMethod !== 'CASH' && (
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-[#111b21]">Upload Bukti Transfer:</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => setProofImageB64(reader.result as string);
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-[#54656f] file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#e8f5f2] file:text-[#008069] hover:file:bg-[#c2e7e0] cursor-pointer"
+                    />
+                    {proofImageB64 && (
+                      <div className="relative mt-2 rounded-xl overflow-hidden border">
+                        <img src={proofImageB64} alt="Bukti" className="h-28 w-auto object-contain" />
+                        <button
+                          type="button"
+                          onClick={() => setZoomImageUrl(proofImageB64)}
+                          className="absolute bottom-1 right-1 p-1 bg-black/60 text-white rounded-md text-[10px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <Maximize2 size={10} />
+                          <span>Zoom</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentTask(null)}
+                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingPayment}
+                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingPayment ? <span>Menyimpan...</span> : <span>Simpan Status Lunas</span>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ========================================================================= */}
+      {/* MODAL UPDATE LOKASI & FOTO RUMAH */}
+      {/* ========================================================================= */}
+      {locationTask &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setLocationTask(null)}
+          >
+            <div
+              className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] overflow-hidden animate-modalScaleUp relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-start justify-between shrink-0">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                    <MapPin size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#111b21]">Update Lokasi & Foto Rumah</h3>
+                    <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                      {locationTask.customerName || 'Pasien'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setLocationTask(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveLocation} className="flex-1 overflow-y-auto p-5 space-y-4 text-left overscroll-contain">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-[#111b21]">Patokan Rumah (Landmark):</label>
+                  <input
+                    type="text"
+                    value={locLandmark}
+                    onChange={(e) => setLocLandmark(e.target.value)}
+                    placeholder="Contoh: Pagar hitam, depan pos satpam blok C..."
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  />
+                </div>
+
+                {/* GPS Lock */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-[#111b21]">Kunci Titik GPS Akurat:</label>
+                  <button
+                    type="button"
+                    onClick={handleGetGps}
+                    disabled={locGettingGps}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center justify-center space-x-2"
+                  >
+                    <Crosshair size={14} className={locGettingGps ? 'animate-spin' : ''} />
+                    <span>{locGettingGps ? 'Mengunci GPS...' : '📍 Kunci Titik GPS Saya Sekarang'}</span>
+                  </button>
+
+                  {locCoords && (
+                    <p className="text-[11px] text-[#008069] font-mono font-bold bg-[#d9fdd3]/60 p-2 rounded-lg border border-[#00a884]/30">
+                      ✓ Koordinat: {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)} (Akurasi: ±{locCoords.accuracy || 10}m)
+                    </p>
+                  )}
+                  {locGpsError && (
+                    <p className="text-[11px] text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                      {locGpsError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Foto Rumah */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-[#111b21]">Foto Tampak Depan Rumah:</label>
                   <input
                     type="file"
+                    ref={locHouseFileInputRef}
                     accept="image/*"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
                         const reader = new FileReader();
-                        reader.onloadend = () => setProofImageB64(reader.result as string);
+                        reader.onloadend = () => setLocHousePhotoB64(reader.result as string);
                         reader.readAsDataURL(file);
                       }
                     }}
-                    className="w-full text-xs text-[#54656f] file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#e8f5f2] file:text-[#008069] hover:file:bg-[#c2e7e0] cursor-pointer"
+                    className="hidden"
                   />
-                  {proofImageB64 && (
-                    <div className="relative mt-2 rounded-xl overflow-hidden border">
-                      <img src={proofImageB64} alt="Bukti" className="h-28 w-auto object-contain" />
-                      <button
-                        type="button"
-                        onClick={() => setZoomImageUrl(proofImageB64)}
-                        className="absolute bottom-1 right-1 p-1 bg-black/60 text-white rounded-md text-[10px] flex items-center gap-1"
-                      >
-                        <Maximize2 size={10} />
-                        <span>Zoom</span>
-                      </button>
+
+                  {locHousePhotoB64 ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-40">
+                      <img src={locHousePhotoB64} alt="Rumah" className="object-contain max-h-40 w-auto rounded-xl" />
+                      <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setZoomImageUrl(locHousePhotoB64)}
+                          className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition shadow-md"
+                          title="Zoom Foto"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLocHousePhotoB64(null)}
+                          className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-md"
+                          title="Hapus Foto"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => locHouseFileInputRef.current?.click()}
+                      className="w-full py-3 border-2 border-dashed border-[#d1d7db] rounded-2xl text-xs font-semibold text-[#54656f] hover:border-[#008069] hover:bg-[#e8f5f2]/40 transition flex items-center justify-center space-x-2"
+                    >
+                      <Camera size={16} className="text-[#008069]" />
+                      <span>Upload / Ambil Foto Rumah Pasien</span>
+                    </button>
                   )}
                 </div>
-              )}
 
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
-                <button
-                  type="button"
-                  onClick={() => setPaymentTask(null)}
-                  className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingPayment}
-                  className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-                >
-                  {submittingPayment ? <span>Menyimpan...</span> : <span>Simpan Status Lunas</span>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL UPDATE LOKASI & FOTO RUMAH */}
-      {/* ========================================================================= */}
-      {locationTask && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setLocationTask(null)}
-        >
-          <div
-            className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative max-h-[90vh] overflow-y-auto animate-modalScaleUp"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
-                  <MapPin size={20} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111b21]">Update Lokasi & Foto Rumah</h3>
-                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
-                    {locationTask.customerName || 'Pasien'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setLocationTask(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveLocation} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#111b21]">Patokan Rumah (Landmark):</label>
-                <input
-                  type="text"
-                  value={locLandmark}
-                  onChange={(e) => setLocLandmark(e.target.value)}
-                  placeholder="Contoh: Pagar hitam, depan pos satpam blok C..."
-                  className="w-full bg-white border border-[#d1d7db] rounded-xl p-3 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
-                />
-              </div>
-
-              {/* GPS Lock */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-[#111b21]">Kunci Titik GPS Akurat:</label>
-                <button
-                  type="button"
-                  onClick={handleGetGps}
-                  disabled={locGettingGps}
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center justify-center space-x-2"
-                >
-                  <Crosshair size={14} className={locGettingGps ? 'animate-spin' : ''} />
-                  <span>{locGettingGps ? 'Mengunci GPS...' : '📍 Kunci Titik GPS Saya Sekarang'}</span>
-                </button>
-
-                {locCoords && (
-                  <p className="text-[11px] text-[#008069] font-mono font-bold bg-[#d9fdd3]/60 p-2 rounded-lg border border-[#00a884]/30">
-                    ✓ Koordinat: {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)} (Akurasi: ±{locCoords.accuracy || 10}m)
-                  </p>
-                )}
-                {locGpsError && (
-                  <p className="text-[11px] text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-200">
-                    {locGpsError}
-                  </p>
-                )}
-              </div>
-
-              {/* Foto Rumah */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-[#111b21]">Foto Tampak Depan Rumah:</label>
-                <input
-                  type="file"
-                  ref={locHouseFileInputRef}
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = () => setLocHousePhotoB64(reader.result as string);
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                  className="hidden"
-                />
-
-                {locHousePhotoB64 ? (
-                  <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-40">
-                    <img src={locHousePhotoB64} alt="Rumah" className="object-contain max-h-40 w-auto rounded-xl" />
-                    <div className="absolute top-2 right-2 flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setZoomImageUrl(locHousePhotoB64)}
-                        className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition shadow-md"
-                        title="Zoom Foto"
-                      >
-                        <Maximize2 size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setLocHousePhotoB64(null)}
-                        className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-md"
-                        title="Hapus Foto"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+                <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e9edef]">
                   <button
                     type="button"
-                    onClick={() => locHouseFileInputRef.current?.click()}
-                    className="w-full py-3 border-2 border-dashed border-[#d1d7db] rounded-2xl text-xs font-semibold text-[#54656f] hover:border-[#008069] hover:bg-[#e8f5f2]/40 transition flex items-center justify-center space-x-2"
+                    onClick={() => setLocationTask(null)}
+                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
                   >
-                    <Camera size={16} className="text-[#008069]" />
-                    <span>Upload / Ambil Foto Rumah Pasien</span>
+                    Batal
                   </button>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e9edef]">
-                <button
-                  type="button"
-                  onClick={() => setLocationTask(null)}
-                  className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={locSaving}
-                  className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-                >
-                  {locSaving ? <span>Menyimpan...</span> : <span>Simpan Lokasi</span>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                  <button
+                    type="submit"
+                    disabled={locSaving}
+                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                  >
+                    {locSaving ? <span>Menyimpan...</span> : <span>Simpan Lokasi</span>}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* ========================================================================= */}
       {/* MODAL QUICK LIVE CHAT */}
       {/* ========================================================================= */}
-      {chatModalTask && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setChatModalTask(null)}
-        >
+      {chatModalTask &&
+        createPortal(
           <div
-            className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-[#e9edef] flex flex-col h-[80vh] overflow-hidden animate-modalScaleUp"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setChatModalTask(null)}
           >
-            {/* Header */}
-            <div className="px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc] flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-9 w-9 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-xs">
-                  {chatModalTask.customerName?.charAt(0) || 'P'}
+            <div
+              className="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[85dvh] sm:max-h-[80dvh] flex flex-col shadow-2xl border border-[#e9edef] overflow-hidden animate-modalScaleUp relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc] flex items-center justify-between shrink-0">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-9 w-9 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    {chatModalTask.customerName?.charAt(0) || 'P'}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-[#111b21]">{chatModalTask.customerName || 'Pasien'}</h3>
+                    <p className="text-[10px] text-[#008069] font-medium">WhatsApp Pasien Hari Ini</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm text-[#111b21]">{chatModalTask.customerName || 'Pasien'}</h3>
-                  <p className="text-[10px] text-[#008069] font-medium">WhatsApp Pasien Hari Ini</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <a
-                  href="/admin/live-chat"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-2.5 py-1 rounded-lg bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-bold transition flex items-center gap-1 border border-[#c2e7e0]"
-                  title="Buka Halaman Live Chat Lengkap di Tab Baru"
-                >
-                  <span>Live Chat Penuh ↗</span>
-                </a>
-                <button
-                  onClick={() => setChatModalTask(null)}
-                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Replies Templates Bar */}
-            <div className="p-2 border-b border-[#e9edef] bg-[#f0f2f5] flex items-center gap-1.5 overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setReplyText(`Halo Bunda ${chatModalTask.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment hari ini ya Bun 🙏`)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shrink-0"
-              >
-                👋 Sapa Pasien
-              </button>
-              <button
-                type="button"
-                onClick={() => setReplyText(`Bunda ${chatModalTask.customerName || ''}, saya sudah meluncur OTW ke lokasi Bunda ya 🛵 Estimasi sampai sekitar 15-20 menit.`)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shrink-0"
-              >
-                🛵 Meluncur OTW
-              </button>
-              <button
-                type="button"
-                onClick={() => setReplyText(`Halo Bunda, saya sudah sampai di depan rumah/lokasi Bunda ya 🏠`)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shrink-0"
-              >
-                🏠 Sudah Sampai
-              </button>
-            </div>
-
-            {/* Message History */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efeae2]/30">
-              {loadingChat ? (
-                <div className="text-center py-10 text-xs text-[#667781]">Memuat riwayat chat...</div>
-              ) : chatMessages.length === 0 ? (
-                <div className="text-center py-10 text-xs text-[#8696a0]">Belum ada pesan tercatat.</div>
-              ) : (
-                chatMessages.map((m: any) => {
-                  const isOut = m.direction === 'OUTBOUND';
-                  return (
-                    <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs shadow-xs ${
-                          isOut ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs' : 'bg-white text-[#111b21] rounded-tl-xs'
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                        <span className="block text-[9px] text-[#8696a0] text-right mt-1 font-mono">
-                          {formatTime(m.created_at)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Selected Image Attachment Preview */}
-            {selectedChatImage && (
-              <div className="p-2 border-t border-[#e9edef] bg-white flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <img src={selectedChatImage.preview} alt="Lampiran" className="h-10 w-10 object-cover rounded-lg border" />
-                  <span className="text-xs text-[#54656f] font-medium">{selectedChatImage.file.name}</span>
+                  <a
+                    href="/admin/live-chat"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1 rounded-lg bg-[#e8f5f2] text-[#008069] hover:bg-[#c2e7e0] text-xs font-bold transition flex items-center gap-1 border border-[#c2e7e0]"
+                    title="Buka Halaman Live Chat Lengkap di Tab Baru"
+                  >
+                    <span>Live Chat Penuh ↗</span>
+                  </a>
+                  <button
+                    onClick={() => setChatModalTask(null)}
+                    className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
+              </div>
+
+              {/* Quick Replies Templates Bar */}
+              <div className="p-2 border-b border-[#e9edef] bg-[#f0f2f5] flex items-center gap-1.5 overflow-x-auto shrink-0">
                 <button
                   type="button"
-                  onClick={() => setSelectedChatImage(null)}
-                  className="p-1 text-rose-500 hover:text-rose-700"
+                  onClick={() => setReplyText(`Halo Bunda ${chatModalTask.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment hari ini ya Bun 🙏`)}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shrink-0"
                 >
-                  <X size={16} />
+                  👋 Sapa Pasien
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReplyText(`Bunda ${chatModalTask.customerName || ''}, saya sudah meluncur OTW ke lokasi Bunda ya 🛵 Estimasi sampai sekitar 15-20 menit.`)}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shrink-0"
+                >
+                  🛵 Meluncur OTW
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReplyText(`Halo Bunda, saya sudah sampai di depan rumah/lokasi Bunda ya 🏠`)}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-bold text-[#54656f] hover:text-[#008069] hover:border-[#008069] transition shrink-0"
+                >
+                  🏠 Sudah Sampai
                 </button>
               </div>
-            )}
 
-            {/* Input Reply */}
-            <form onSubmit={handleSendReply} className="p-3 border-t border-[#e9edef] bg-white flex items-center gap-2">
-              <input
-                type="file"
-                ref={chatFileInputRef}
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setSelectedChatImage({ file, preview: URL.createObjectURL(file) });
-                  }
-                }}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => chatFileInputRef.current?.click()}
-                className="p-2 text-[#54656f] hover:text-[#008069] hover:bg-[#f0f2f5] rounded-xl transition"
-                title="Lampirkan Gambar"
-              >
-                <Camera size={18} />
-              </button>
+              {/* Message History */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efeae2]/30 overscroll-contain">
+                {loadingChat ? (
+                  <div className="text-center py-10 text-xs text-[#667781]">Memuat riwayat chat...</div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-[#8696a0]">Belum ada pesan tercatat.</div>
+                ) : (
+                  chatMessages.map((m: any) => {
+                    const isOut = m.direction === 'OUTBOUND';
+                    return (
+                      <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs shadow-xs ${
+                            isOut ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs' : 'bg-white text-[#111b21] rounded-tl-xs'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                          <span className="block text-[9px] text-[#8696a0] text-right mt-1 font-mono">
+                            {formatTime(m.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Ketik pesan balasan ke pasien..."
-                className="flex-1 px-3.5 py-2 rounded-xl bg-[#f0f2f5] border-0 text-xs text-[#111b21] focus:outline-none focus:ring-2 focus:ring-[#008069]"
-              />
-              <button
-                type="submit"
-                disabled={sendingChat || (!replyText.trim() && !selectedChatImage)}
-                className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs"
-              >
-                <Send size={13} />
-                <span>Kirim</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+              {/* Selected Image Attachment Preview */}
+              {selectedChatImage && (
+                <div className="p-2 border-t border-[#e9edef] bg-white flex items-center justify-between shrink-0">
+                  <div className="flex items-center space-x-2">
+                    <img src={selectedChatImage.preview} alt="Lampiran" className="h-10 w-10 object-cover rounded-lg border" />
+                    <span className="text-xs text-[#54656f] font-medium">{selectedChatImage.file.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChatImage(null)}
+                    className="p-1 text-rose-500 hover:text-rose-700"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              {/* Input Reply */}
+              <form onSubmit={handleSendReply} className="p-3 border-t border-[#e9edef] bg-white flex items-center gap-2 shrink-0">
+                <input
+                  type="file"
+                  ref={chatFileInputRef}
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setSelectedChatImage({ file, preview: URL.createObjectURL(file) });
+                    }
+                  }}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => chatFileInputRef.current?.click()}
+                  className="p-2 text-[#54656f] hover:text-[#008069] hover:bg-[#f0f2f5] rounded-xl transition"
+                  title="Lampirkan Gambar"
+                >
+                  <Camera size={18} />
+                </button>
+
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Ketik pesan balasan ke pasien..."
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-[#f0f2f5] border-0 text-xs text-[#111b21] focus:outline-none focus:ring-2 focus:ring-[#008069]"
+                />
+                <button
+                  type="submit"
+                  disabled={sendingChat || (!replyText.trim() && !selectedChatImage)}
+                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                >
+                  <Send size={13} />
+                  <span>Kirim</span>
+                </button>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

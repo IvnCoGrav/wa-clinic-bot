@@ -11,6 +11,7 @@ import { customerService } from '../../services/customer.service';
 import { conversationService } from '../../services/conversation.service';
 import { measure } from '../../utils/timer';
 import { llmConcurrencyLimiter } from '../../utils/llm-concurrency';
+import { recordLlmExecution } from '../../utils/llm-execution-logger';
 import dotenv from 'dotenv';
 import { isAskingClinicLocation } from '../../state-machine/utils/clinic-location-checker';
 function isReferentialQuestion(userQuestion: string): boolean {
@@ -538,8 +539,19 @@ ATURAN EKSTRAKSI PREFERENSI:
         this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId, isLocationKnown, additionalContextText)
       );
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
+      const finalAnswer = truncateToMaxChars(res.answer, maxChars);
+
+      recordLlmExecution({
+        flowType: 'CHATBOT_AUTO',
+        customerInput: userQuestion,
+        reasoning: res.reasoning,
+        groundTruthUsed: customerId ? { customerId, contextChunks: contextChunks.map((c) => c.title) } : undefined,
+        finalReply: finalAnswer,
+        status: res.usedFallback ? 'FALLBACK' : 'SUCCESS',
+      });
+
       return {
-        answer: truncateToMaxChars(res.answer, maxChars),
+        answer: finalAnswer,
         reasoning: res.reasoning,
         extracted_preferences: res.extracted_preferences,
         usedFallback: res.usedFallback,
@@ -547,11 +559,192 @@ ATURAN EKSTRAKSI PREFERENSI:
     } catch (error) {
       console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
+      const fallbackAns = truncateToMaxChars(this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp), maxChars);
+
+      recordLlmExecution({
+        flowType: 'CHATBOT_AUTO',
+        customerInput: userQuestion,
+        reasoning: `[ERROR] ${(error as Error).message}`,
+        finalReply: fallbackAns,
+        status: 'FALLBACK',
+      });
+
       return {
-        answer: truncateToMaxChars(this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp), maxChars),
+        answer: fallbackAns,
         reasoning: '[ERROR] API call failed',
         usedFallback: true,
       };
+    }
+  }
+
+  /**
+   * AI Copilot Draft Generator (sejalan dengan alur LLM utama: Ground Truth + RAG Catalog + CoT Reasoning + Audit Logger).
+   */
+  public async generateCopilotDraft(params: {
+    conversationId: string;
+    tenantId: string;
+    customerId?: string;
+  }): Promise<{ draft: string; reasoning: string | null; latencyMs: number }> {
+    const { conversationId, tenantId, customerId } = params;
+    const startTime = Date.now();
+
+    try {
+      const { prisma } = await import('../../db/client');
+      const conv = await prisma.conversation.findFirst({
+        where: { id: conversationId, tenant_id: tenantId },
+        include: {
+          customer: {
+            include: {
+              children: true,
+              reservations: { take: 5, orderBy: { created_at: 'desc' } },
+            },
+          },
+          messages: {
+            take: 10,
+            orderBy: { created_at: 'desc' },
+          },
+        },
+      });
+
+      if (!conv) {
+        throw new Error('Percakapan tidak ditemukan');
+      }
+
+      const customer = conv.customer;
+      const customerName = customer?.name || 'Bunda';
+      const customerPhone = customer?.phone || undefined;
+      const childrenList = (customer?.children || []).map((c: any) => `${c.name || 'Anak'}${c.age_months ? ` (${c.age_months} bln)` : ''}`).join(', ') || '-';
+      const reservationsList = (customer?.reservations || []).map((r: any) => `${r.treatment_detail || r.raw_text || 'Treatment'} [${r.status}]`).join(', ') || '-';
+      const messagesAsc = (conv.messages || []).slice().reverse();
+      const lastInboundMsg = messagesAsc.filter((m: any) => m.direction === 'INBOUND').pop()?.content || '';
+
+      // 1. RAG Knowledge Retrieval dari katalog/SOP klinik
+      let knowledgeText = '';
+      try {
+        const { knowledgeBaseService } = await import('../../services/knowledge.service');
+        const chunks = await knowledgeBaseService.searchRelevantChunks(lastInboundMsg || customerName, 3, tenantId);
+        if (chunks && chunks.length > 0) {
+          knowledgeText = chunks.map((c: KnowledgeChunkResult, idx: number) => `[Referensi ${idx + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
+        }
+      } catch (ragErr) {
+        console.warn('[COPILOT DRAFT] RAG lookup warning:', ragErr);
+      }
+
+      const { getLlmEndpointConfig, callChatWithRetry } = await import('./llm-gateway');
+      const endpoint = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+
+      if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) {
+        const mockDraft = `Halo Bunda ${customerName}, terima kasih sudah menghubungi kami. Bidan kami siap membantu Bunda dan si kecil. Ada keluhan atau kebutuhan yang bisa kami bantu? 🙏🥰`;
+        return { draft: mockDraft, reasoning: '[MOCK_KEY] Copilot draft fallback', latencyMs: Date.now() - startTime };
+      }
+
+      const systemPrompt = `Kamu adalah Asisten AI Copilot untuk Bidan & Customer Service di klinik homecare ibu dan anak "Kala Homecare".
+Tugasmu adalah membantu Bidan menyusun 1 draf balasan WhatsApp yang:
+1. Ramah, sopan, empatik, dan menenangkan (selalu sapa dengan "Bunda").
+2. Akurat secara medis dan faktual sesuai data Ground Truth dan Referensi Katalog Layanan di bawah.
+3. Menggunakan penalaran terstruktur sebelum menuliskan draf balasan dalam tag <reasoning>...</reasoning>.
+
+Format output wajib:
+<reasoning>
+[Analisis kebutuhan pasien, kondisi anak, riwayat reservasi, dan rekomendasi tepat]
+</reasoning>
+[Teks draf balasan final siap kirim ke WhatsApp tanpa tanda kutip]`;
+
+      const userPrompt = `[DATA PASIEN (GROUND TRUTH)]
+Nama: ${customerName}
+Anak: ${childrenList}
+Riwayat Reservasi: ${reservationsList}
+
+${knowledgeText ? `[REFERENSI KATALOG & PENGETAHUAN KLINIK]\n${knowledgeText}\n\n` : ''}[RIWAYAT PERCAKAPAN TERAKHIR]
+${messagesAsc.map((m: any) => `${m.direction === 'INBOUND' ? 'Bunda' : 'Bidan'}: ${m.content}`).join('\n')}
+
+Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda:`;
+
+      const callResult = await callChatWithRetry({
+        baseUrl: endpoint.baseUrl,
+        apiKey: endpoint.apiKey,
+        model: endpoint.model,
+        fallbackModel: endpoint.fallbackModel,
+        timeoutMs: 25000,
+        payload: {
+          temperature: 0.3,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        },
+      });
+
+      const latencyMs = Date.now() - startTime;
+      const rawOutput = callResult.data?.choices?.[0]?.message?.content || '';
+
+      // Ekstrak reasoning & draft
+      let reasoning: string | null = null;
+      let cleanDraft = rawOutput.trim();
+
+      const reasoningMatch = rawOutput.match(/<reasoning>([\s\S]*?)<\/reasoning>/i);
+      if (reasoningMatch) {
+        reasoning = reasoningMatch[1].trim();
+        cleanDraft = rawOutput.replace(/<reasoning>[\s\S]*?<\/reasoning>/i, '').trim();
+      }
+
+      // Bersihkan tanda kutip awal/akhir jika ada
+      cleanDraft = cleanDraft.replace(/^["']|["']$/g, '').trim();
+
+      // Log ke Dedicated LLM Execution Logger
+      recordLlmExecution({
+        flowType: 'COPILOT_DRAFT',
+        customerPhone,
+        customerName,
+        customerInput: lastInboundMsg,
+        reasoning,
+        groundTruthUsed: { customerName, children: childrenList, reservations: reservationsList },
+        finalReply: cleanDraft,
+        modelUsed: endpoint.model,
+        durationMs: latencyMs,
+        status: 'SUCCESS',
+      });
+
+      // Telemetry usage audit
+      try {
+        const usage = callResult.data?.usage;
+        const promptTokens = usage?.prompt_tokens || 0;
+        const completionTokens = usage?.completion_tokens || 0;
+        const cachedTokens = usage?.prompt_tokens_details?.cached_tokens || usage?.cached_prompt_tokens || 0;
+        const { recordLlmUsage } = await import('../../utils/llm-audit-buffer');
+        const { deriveProvider } = await import('../../utils/cost-calculator');
+
+        recordLlmUsage({
+          tenant_id: tenantId,
+          customer_phone: customerPhone || 'unknown',
+          conversation_id: conversationId,
+          task_type: 'AI_COPILOT_DRAFT',
+          provider: deriveProvider(endpoint.model || 'gpt-4o-mini'),
+          model_name: endpoint.model || 'gpt-4o-mini',
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          cached_prompt_tokens: cachedTokens,
+          latency_ms: latencyMs,
+        });
+      } catch (auditErr) {
+        console.warn('[COPILOT DRAFT] Audit logger error:', auditErr);
+      }
+
+      return { draft: cleanDraft, reasoning, latencyMs };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      console.error('[COPILOT DRAFT] Generation failed:', err);
+
+      recordLlmExecution({
+        flowType: 'COPILOT_DRAFT',
+        customerInput: 'Draft generation request',
+        reasoning: `[ERROR] ${err?.message}`,
+        finalReply: '',
+        durationMs: latencyMs,
+        status: 'ERROR',
+      });
+
+      throw err;
     }
   }
 
@@ -583,13 +776,9 @@ ATURAN EKSTRAKSI PREFERENSI:
 
   private fallbackFaqResponse(userQuestion: string, chunks: KnowledgeChunkResult[], treatmentNameForFollowUp?: string): string {
     if (chunks.length === 0) {
-      // Tidak ada data → jangan kirim pesan apology/apology antrean. Kembalikan kosong;
-      // pemanggil (interest.ts) akan eskalasi senyap ke antrean human handling.
       return '';
     }
 
-    // Jalur katalog treatment terstruktur: bangun rekomendasi personal dari fakta data.
-    // AMAN — data terstruktur dari DB catalog, bukan echo RAG mentah.
     const firstChunk = chunks[0];
     if (firstChunk.content.includes('[DATA TREATMENT]')) {
       const items = firstChunk.content.split(/\[DATA TREATMENT\]/).filter((s) => s.trim().length > 0);
@@ -618,16 +807,10 @@ ATURAN EKSTRAKSI PREFERENSI:
       }
     }
 
-    // Jalur FAQ lokasi klinik / homebase: jawab factual lokasi Waru + Homecare
     if (firstChunk.id === 'clinic-location-faq' || isAskingClinicLocation(userQuestion)) {
       return `Kami berlokasi di daerah Waru (perbatasan Sidoarjo - Surabaya), Bunda. Kami melayani sistem Homecare (panggilan langsung ke rumah), jadi tim bidan kami yang akan datang langsung ke rumah Bunda 😊\n\nKalau boleh tahu untuk rumah Bunda di kelurahan mana ya bund? Biar sekalian kami bantu cekkan ketersediaan jadwal & ongkirnya 🙏`;
     }
 
-    // Jalur RAG/FAQ mentah (non-catalog) TIDAK lagi di-echo verbatim ke customer.
-    // Chunk yang terambil bisa generic/nyasar (mis. pertanyaan spesifik "usia minimal"
-    // match ke chunk umum "bayi baru lahir sampai beberapa tahun") → berisiko memberi
-    // info medis yang keliru. Saat AI gagal, jangan kirim pesan apology — kembalikan
-    // kosong agar pemanggil mengeskalasi ke antrean human handling.
     return '';
   }
 }

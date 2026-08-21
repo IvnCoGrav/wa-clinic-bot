@@ -104,7 +104,7 @@ function getSingletonAudio(): HTMLAudioElement | null {
  * Wajib memainkan silent buffer & men-trigger Audio element saat user interaction (touch/click) pertama kali.
  */
 export function unlockAudioContext(): void {
-  // 1. Unlock Web Audio Context
+  // 1. Unlock Web Audio Context (100% Silent Buffer)
   const ctx = getAudioContext();
   if (ctx) {
     if (ctx.state === 'suspended') {
@@ -120,14 +120,21 @@ export function unlockAudioContext(): void {
     } catch (_) {}
   }
 
-  // 2. Pre-bless singleton HTML5 Audio Element untuk iOS Safari
+  // 2. Pre-bless singleton HTML5 Audio Element untuk iOS Safari secara 100% senyap
   const audio = getSingletonAudio();
   if (audio) {
     try {
+      audio.volume = 0;
+      audio.muted = true;
       audio.play().then(() => {
         audio.pause();
         audio.currentTime = 0;
-      }).catch(() => {});
+        audio.volume = 1.0;
+        audio.muted = false;
+      }).catch(() => {
+        audio.volume = 1.0;
+        audio.muted = false;
+      });
     } catch (_) {}
   }
 }
@@ -174,20 +181,20 @@ export function setSoundEnabled(enabled: boolean): void {
 }
 
 /**
- * Mainkan nada chime pesan masuk khas WhatsApp (G5 784Hz -> C6 1046.5Hz) + Getaran Haptik
- * Memakai dua engine secara simultan untuk memastikan bunyi keluar di iOS Safari & Android.
+ * Mainkan nada chime notifikasi pesan masuk yang jernih & lembut (A5 880Hz -> E6 1318.5Hz) + Getaran Haptik
+ * Khusus dipanggil SAAT ADA PESAN BARU MASUK dari pelanggan (bukan untuk klik tombol).
  */
 export function playIncomingMessageSound(): void {
   if (!isSoundEnabled()) return;
 
-  // 1. Haptic Vibration (Khusus Smartphone Android/didukung)
+  // 1. Haptic Vibration (Khusus notifikasi pesan masuk di Smartphone Android)
   try {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate([150, 100, 200]);
+      navigator.vibrate([120, 80, 150]);
     }
   } catch (_) {}
 
-  // 2. Web Audio API Two-Tone Synthesizer
+  // 2. Web Audio API Soft Crystal Two-Tone Synthesizer
   try {
     const ctx = getAudioContext();
     if (ctx) {
@@ -197,33 +204,35 @@ export function playIncomingMessageSound(): void {
 
       const now = ctx.currentTime;
 
-      // Tone 1: G5 - 784 Hz
+      // Tone 1: A5 (880 Hz) - Soft Attack & Decay
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(783.99, now);
-      gain1.gain.setValueAtTime(0.4, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.001, now);
+      gain1.gain.exponentialRampToValueAtTime(0.35, now + 0.02);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
       osc1.start(now);
-      osc1.stop(now + 0.12);
+      osc1.stop(now + 0.15);
 
-      // Tone 2: C6 - 1046.5 Hz (Bright Crystal WhatsApp Tone)
+      // Tone 2: E6 (1318.5 Hz) - Warm Crystal Chime
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(1046.5, now + 0.08);
-      gain2.gain.setValueAtTime(0.55, now + 0.08);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+      osc2.frequency.setValueAtTime(1318.5, now + 0.09);
+      gain2.gain.setValueAtTime(0.001, now + 0.09);
+      gain2.gain.exponentialRampToValueAtTime(0.45, now + 0.11);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
-      osc2.start(now + 0.08);
-      osc2.stop(now + 0.42);
+      osc2.start(now + 0.09);
+      osc2.stop(now + 0.46);
     }
   } catch (_) {}
 
-  // 3. HTML5 Audio Element Playback (Pre-blessed fallback)
+  // 3. HTML5 Audio Element Playback (Pre-blessed fallback jika Web Audio diblokir)
   try {
     const audio = getSingletonAudio();
     if (audio) {

@@ -146,6 +146,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -155,7 +156,7 @@ export const LiveChatMonitor: React.FC = () => {
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
   const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
-  // Press-and-Hold Tooltip for filter icons on mobile
+  // Press-and-Hold Tooltip for filter icons on mobile (tanpa getaran haptik)
   const [iconTooltip, setIconTooltip] = useState<string | null>(null);
   const iconTooltipTimerRef = useRef<any>(null);
 
@@ -163,9 +164,6 @@ export const LiveChatMonitor: React.FC = () => {
     if (iconTooltipTimerRef.current) clearTimeout(iconTooltipTimerRef.current);
     iconTooltipTimerRef.current = setTimeout(() => {
       setIconTooltip(title);
-      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-        try { navigator.vibrate(25); } catch {}
-      }
     }, 280);
   };
 
@@ -524,17 +522,21 @@ export const LiveChatMonitor: React.FC = () => {
       clearTimeout(searchDebounceTimerRef.current);
     }
     searchDebounceTimerRef.current = setTimeout(() => {
-      loadChats(true, q);
+      loadChats(true, q, true);
     }, 350);
   };
 
-  const loadChats = async (reset = false, search = searchQuery) => {
-    if (reset) setLoading(true);
+  const loadChats = async (reset = false, search = searchQuery, isSearchOperation = false) => {
+    // Hanya aktifkan full-page loader saat boot awal (chats belum pernah dimuat sama sekali)
+    if (reset && chatsRef.current.length === 0) {
+      setLoading(true);
+    }
+    if (isSearchOperation) {
+      setIsSearching(true);
+    }
     if (loadingMoreRef.current && !reset) return;
-    if (reset) {
-      loadingMoreRef.current = true;
-    } else {
-      loadingMoreRef.current = true;
+    loadingMoreRef.current = true;
+    if (!reset) {
       setLoadingMore(true);
     }
     try {
@@ -566,7 +568,8 @@ export const LiveChatMonitor: React.FC = () => {
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
-      if (reset) setLoading(false);
+      setIsSearching(false);
+      setLoading(false);
     }
   };
 
@@ -640,6 +643,19 @@ export const LiveChatMonitor: React.FC = () => {
       vp.removeEventListener('resize', handleViewportChange);
       vp.removeEventListener('scroll', handleViewportChange);
     };
+  }, [mobileView]);
+
+  // ⬅️ Listener untuk Edge Swipe-Back Navigation dari Layout (Kembali dari Chat ke List di Mobile)
+  useEffect(() => {
+    const handleAppSwipeBack = (e: Event) => {
+      if (mobileView === 'chat') {
+        e.preventDefault();
+        setMobileView('list');
+        setSelectedId(null);
+      }
+    };
+    window.addEventListener('app-swipe-back', handleAppSwipeBack);
+    return () => window.removeEventListener('app-swipe-back', handleAppSwipeBack);
   }, [mobileView]);
 
   useEffect(() => {
@@ -1091,11 +1107,23 @@ export const LiveChatMonitor: React.FC = () => {
         method: 'PATCH',
         body: JSON.stringify({}),
       });
-      loadChats(true);
-      if (selectedId === chat.conversationId) {
-        setSelectedId(null);
-        setMessages([]);
-      }
+
+      // Optimistic in-place update: chat tetap terbuka dan badge langsung beralih ke Bot secara mulus
+      setChats((prev) =>
+        prev.map((c) =>
+          c.conversationId === chat.conversationId
+            ? { ...c, isHumanHandling: false, escalationReason: null, status: 'active', lastHandledBy: 'bot' }
+            : c
+        )
+      );
+      chatsRef.current = chatsRef.current.map((c) =>
+        c.conversationId === chat.conversationId
+          ? { ...c, isHumanHandling: false, escalationReason: null, status: 'active', lastHandledBy: 'bot' }
+          : c
+      );
+
+      // Sinkronisasi data latar belakang tanpa reload/unmount
+      loadChats(false);
       toast('Percakapan berhasil dikembalikan ke bot.', 'success');
     } catch (err: any) {
       toast(`Gagal merilis percakapan ke bot: ${err.message}`, 'error');
@@ -1369,8 +1397,8 @@ export const LiveChatMonitor: React.FC = () => {
 
   return (
     <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-1 sm:space-y-1.5">
-      {/* Top Header */}
-      <div className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'} justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0`}>
+      {/* Top Header (Desktop / Large screen only - on mobile it scrolls with the list) */}
+      <div className="hidden lg:flex justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">
           <h1 className="text-sm sm:text-base font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
             <MessageSquare className="text-[#008069]" size={18} />
@@ -1392,7 +1420,6 @@ export const LiveChatMonitor: React.FC = () => {
 
         {/* Sync Controls */}
         <div className="flex items-center space-x-1.5">
-          {/* Background Full Sync Icon Button */}
           <button
             onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
@@ -1440,7 +1467,7 @@ export const LiveChatMonitor: React.FC = () => {
         </div>
       )}
 
-      {loading ? (
+      {loading && chats.length === 0 ? (
         <div className="flex-1 flex justify-center items-center py-20">
           <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
@@ -1452,156 +1479,191 @@ export const LiveChatMonitor: React.FC = () => {
             onTouchMove={handleListTouchMove}
             onTouchEnd={() => { listTouchStartRef.current = null; }}
             onTouchCancel={() => { listTouchStartRef.current = null; }}
-            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-xs overflow-hidden min-h-0`}
+            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl shadow-xs overflow-hidden min-h-0`}
           >
-            {/* Header Toolbar Daftar Percakapan: Source Filter (Icons) + Label Dropdown Side-by-Side */}
-            <div className="space-y-1.5 pb-2 border-b border-[#f0f2f5] shrink-0">
-              <div className="flex items-center justify-between gap-1.5">
-                {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
-                <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
-                  {[
-                    { value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone },
-                    { value: 'all', title: 'Semua Percakapan', icon: Layers },
-                    { value: 'sandbox', title: 'Sandbox QA Test', icon: FlaskConical },
-                  ].map((opt) => {
-                    const Icon = opt.icon;
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => setSourceFilter(opt.value as any)}
-                        onTouchStart={() => handleIconTouchStart(opt.title)}
-                        onTouchEnd={handleIconTouchEnd}
-                        onTouchCancel={handleIconTouchEnd}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setIconTooltip(opt.title);
-                          setTimeout(() => setIconTooltip(null), 2000);
-                        }}
-                        title={opt.title}
-                        className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
-                          sourceFilter === opt.value
-                            ? opt.value === 'sandbox'
-                              ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs'
-                              : opt.value === 'real'
-                                ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
-                                : 'bg-[#111b21] text-white shadow-2xs'
-                            : 'text-[#667781] hover:text-[#111b21]'
-                        }`}
-                      >
-                        <Icon size={13} />
-                      </button>
-                    );
-                  })}
-
-                  {/* Press-Hold Floating Tooltip */}
-                  {iconTooltip && (
-                    <div className="absolute top-full left-0 mt-1 z-50 px-2 py-1 bg-[#111b21] text-white text-[10px] font-bold rounded-lg shadow-lg animate-fadeIn whitespace-nowrap pointer-events-none flex items-center space-x-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]" />
-                      <span>{iconTooltip}</span>
-                    </div>
-                  )}
+            {/* Scrollable Container covering entire panel: Header & filter bar scroll off, Searchbar sticks at top-0 */}
+            <div
+              ref={chatListContainerRef}
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-1.5 sm:px-2.5 pt-1.5 pb-2"
+              style={{ overscrollBehavior: 'contain' }}
+            >
+              {/* Mobile Page Header (Inside scroll flow so it scrolls off on scroll down) */}
+              <div className="flex lg:hidden justify-between items-center pb-2 border-b border-[#f0f2f5] mb-1.5">
+                <div className="flex items-center space-x-2">
+                  <h1 className="text-sm font-bold text-[#111b21] tracking-tight flex items-center space-x-1.5">
+                    <MessageSquare className="text-[#008069]" size={16} />
+                    <span>Live Chat</span>
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]">
+                    {filteredChats.length}
+                  </span>
+                  <div className="flex items-center space-x-1 px-1.5 py-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-full text-[10px] font-semibold text-[#54656f]">
+                    <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+                    <span>{sseConnected ? 'Live' : 'Offline'}</span>
+                  </div>
                 </div>
 
-                {/* Label Filter Dropdown & Mark All Read (Disampingnya) */}
-                <div className="flex items-center space-x-1 flex-1 min-w-0">
-                  {(isDesktop || mobileView === 'list') && (
-                    <select
-                      value={labelFilter}
-                      onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
-                      className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
-                    >
-                      <option value="all">Semua Label</option>
-                      <option value="human_request">Human Request</option>
-                      <option value="medical_concern">Medical Emergency</option>
-                      <option value="unresolved_faq">Unresolved FAQ</option>
-                    </select>
-                  )}
+                <button
+                  onClick={() => setShowSyncInfoModal(true)}
+                  disabled={bgSyncProgress.isSyncing}
+                  className="p-1.5 rounded-lg bg-[#008069] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+                  title="Sinkronisasi Seluruh Chat WhatsApp"
+                >
+                  <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
+                </button>
+              </div>
 
-                  <button
-                    type="button"
-                    onClick={handleMarkAllAsRead}
-                    tabIndex={mobileView === 'chat' ? -1 : 0}
-                    title="Tandai semua percakapan sebagai telah dibaca"
-                    className="p-1 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#c2e7e0] text-[#54656f] hover:text-[#008069] rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
-                  >
-                    <MailCheck size={14} className="text-[#008069]" />
-                  </button>
+              {/* Header Toolbar: Source Filter + Label Dropdown (Normal in-flow, scrolls away on scroll down) */}
+              <div className="pb-1.5 border-b border-[#f0f2f5]">
+                <div className="flex items-center justify-between gap-1.5">
+                  {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
+                  <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
+                    {[
+                      { value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone },
+                      { value: 'all', title: 'Semua Percakapan', icon: Layers },
+                      { value: 'sandbox', title: 'Sandbox QA Test', icon: FlaskConical },
+                    ].map((opt) => {
+                      const Icon = opt.icon;
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => setSourceFilter(opt.value as any)}
+                          onTouchStart={() => handleIconTouchStart(opt.title)}
+                          onTouchEnd={handleIconTouchEnd}
+                          onTouchCancel={handleIconTouchEnd}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setIconTooltip(opt.title);
+                            setTimeout(() => setIconTooltip(null), 2000);
+                          }}
+                          title={opt.title}
+                          className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
+                            sourceFilter === opt.value
+                              ? opt.value === 'sandbox'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs'
+                                : opt.value === 'real'
+                                  ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
+                                  : 'bg-[#111b21] text-white shadow-2xs'
+                              : 'text-[#667781] hover:text-[#111b21]'
+                          }`}
+                        >
+                          <Icon size={13} />
+                        </button>
+                      );
+                    })}
+
+                    {/* Press-Hold Floating Tooltip */}
+                    {iconTooltip && (
+                      <div className="absolute top-full left-0 mt-1 z-50 px-2 py-1 bg-[#111b21] text-white text-[10px] font-bold rounded-lg shadow-lg animate-fadeIn whitespace-nowrap pointer-events-none flex items-center space-x-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#25D366]" />
+                        <span>{iconTooltip}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Label Filter Dropdown & Mark All Read (Disampingnya) */}
+                  <div className="flex items-center space-x-1 flex-1 min-w-0">
+                    {(isDesktop || mobileView === 'list') && (
+                      <select
+                        value={labelFilter}
+                        onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
+                        className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
+                      >
+                        <option value="all">Semua Label</option>
+                        <option value="human_request">Human Request</option>
+                        <option value="medical_concern">Medical Emergency</option>
+                        <option value="unresolved_faq">Unresolved FAQ</option>
+                      </select>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleMarkAllAsRead}
+                      tabIndex={mobileView === 'chat' ? -1 : 0}
+                      title="Tandai semua percakapan sebagai telah dibaca"
+                      className="p-1 bg-white hover:bg-[#e8f5f2] border border-[#d1d7db] hover:border-[#c2e7e0] text-[#54656f] hover:text-[#008069] rounded-lg transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      <MailCheck size={14} className="text-[#008069]" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* 🔍 Search Bar Input: Cari Nama, No. HP, atau Keyword Pesan */}
+              {/* 🔍 Search Bar Input: STICKY AT TOP ONLY (Hanya Searchbar yang Stick Saat Scroll di Mobile) */}
               {(isDesktop || mobileView === 'list') && (
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
-                    <Search size={13} />
-                  </span>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      triggerDebouncedSearch(e.target.value);
-                    }}
-                    placeholder="Cari nama, no. HP, atau keyword chat..."
-                    className="w-full pl-8 pr-7 py-1 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        loadChats(true, '');
+                <div className="sticky top-0 z-20 bg-white py-1.5 border-b border-[#f0f2f5] shadow-xs -mx-1 px-1">
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#8696a0]">
+                      {isSearching ? (
+                        <Loader size={13} className="animate-spin text-[#008069]" />
+                      ) : (
+                        <Search size={13} />
+                      )}
+                    </span>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        triggerDebouncedSearch(e.target.value);
                       }}
-                      className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
-                      title="Hapus pencarian"
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
+                      placeholder="Cari nama, no. HP, atau keyword chat..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          loadChats(true, '', true);
+                        }}
+                        className="absolute inset-y-0 right-0 pr-2 flex items-center text-[#8696a0] hover:text-[#111b21] cursor-pointer"
+                        title="Hapus pencarian"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
-            </div>
 
-            {filteredChats.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-[#667781] text-xs">
-                {searchQuery ? (
-                  <>
-                    <Search className="mx-auto text-[#8696a0] mb-2 opacity-50" size={24} />
-                    <p className="font-bold text-[#111b21]">Tidak ada hasil pencarian</p>
-                    <p className="text-[#667781] text-[10px] mt-0.5">
-                      Tidak ditemukan chat dengan kata kunci &quot;{searchQuery}&quot;
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery('');
-                        loadChats(true, '');
-                      }}
-                      className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#008069] text-[11px] font-semibold transition cursor-pointer"
-                    >
-                      Reset Pencarian
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
-                    <p className="font-bold text-[#111b21]">
-                      {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
-                    </p>
-                    <p className="text-[#667781] text-[10px] mt-0.5">
-                      {chats.length === 0
-                        ? 'Percakapan baru akan muncul secara real-time.'
-                        : 'Ganti filter sumber atau label untuk melihat lainnya.'}
-                    </p>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div
-                ref={chatListContainerRef}
-                className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-1.5 pr-1 mt-1.5"
-                style={{ overscrollBehavior: 'contain' }}
-              >
+              {/* Chat Cards or Empty State */}
+              {filteredChats.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-6 text-center text-[#667781] text-xs min-h-[180px]">
+                  {searchQuery ? (
+                    <>
+                      <Search className="mx-auto text-[#8696a0] mb-2 opacity-50" size={24} />
+                      <p className="font-bold text-[#111b21]">Tidak ada hasil pencarian</p>
+                      <p className="text-[#667781] text-[10px] mt-0.5">
+                        Tidak ditemukan chat dengan kata kunci &quot;{searchQuery}&quot;
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          loadChats(true, '');
+                        }}
+                        className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#008069] text-[11px] font-semibold transition cursor-pointer"
+                      >
+                        Reset Pencarian
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
+                      <p className="font-bold text-[#111b21]">
+                        {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
+                      </p>
+                      <p className="text-[#667781] text-[10px] mt-0.5">
+                        {chats.length === 0
+                          ? 'Percakapan baru akan muncul secara real-time.'
+                          : 'Ganti filter sumber atau label untuk melihat lainnya.'}
+                      </p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5 pt-1.5">
                 {filteredChats.map((chat) => {
                   const isMedical = chat.escalationReason === 'medical_concern';
                   const isSelected = chat.conversationId === selectedId;
@@ -1725,7 +1787,7 @@ export const LiveChatMonitor: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Right Column: Bot / Release Icon Button + Unread / Awaiting Badge (Di Bawah Icon) */}
+                        {/* Right Column: Release Icon Button (Khusus Human/CS) + Unread / Awaiting Badge */}
                         <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
                           {chat.isHumanHandling ? (
                             <button
@@ -1748,12 +1810,7 @@ export const LiveChatMonitor: React.FC = () => {
                               )}
                             </button>
                           ) : (
-                            <span
-                              title="Ditangani Bot AI"
-                              className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[#f0f2f5] text-[#667781] border border-[#e9edef]"
-                            >
-                              <Bot size={12} />
-                            </span>
+                            <div className="h-6" />
                           )}
 
                           {/* Badge Unread / Orange Dot (Di Bawah Icon Bot) */}
@@ -1893,6 +1950,7 @@ export const LiveChatMonitor: React.FC = () => {
                 )}
               </div>
             )}
+            </div>
           </div>
 
           {/* Section 2: Right Panel - Live Chat Messages */}

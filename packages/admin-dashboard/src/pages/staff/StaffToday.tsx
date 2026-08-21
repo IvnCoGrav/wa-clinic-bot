@@ -122,31 +122,10 @@ function extractMedia(msg: any): ChatMediaData | undefined {
   return undefined;
 }
 
+import { playIncomingMessageSound } from '../../services/notificationSound';
+
 function formatRupiah(amount: number): string {
   return 'Rp ' + (amount || 0).toLocaleString('id-ID');
-}
-
-// Sound notification generator using Web Audio API & Haptic Vibration
-function playNotificationSound() {
-  try {
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate([100, 50, 100]);
-    }
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
-  } catch (_) {}
 }
 
 export const StaffToday: React.FC = () => {
@@ -631,8 +610,10 @@ export const StaffToday: React.FC = () => {
             media: extractMedia(payload),
           };
 
-          // Play notification tone
-          playNotificationSound();
+          // Play notification tone only on new incoming inbound message
+          if (msg.direction === 'INBOUND') {
+            playIncomingMessageSound();
+          }
 
           // Native browser notification
           if ('Notification' in window && Notification.permission === 'granted') {

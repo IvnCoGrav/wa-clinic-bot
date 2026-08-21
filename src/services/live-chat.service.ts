@@ -679,106 +679,16 @@ export class LiveChatService {
 
   /**
    * AI Copilot: Menghasilkan draf saran balasan profesional dari sudut pandang Bidan/CS
-   * berdasarkan riwayat pesan terakhir, konteks anak/reservasi, dan persona klinik.
+   * sejalan dengan alur LLM utama (Ground Truth, Katalog/SOP RAG, CoT reasoning & Logger).
    */
   public async generateAiSuggestion(conversationId: string, tenantId: string): Promise<string> {
     try {
-      const conv = await prisma.conversation.findFirst({
-        where: { id: conversationId, tenant_id: tenantId },
-        include: {
-          customer: {
-            include: {
-              children: true,
-              reservations: { take: 5, orderBy: { created_at: 'desc' } },
-              labels: { include: { label: true } },
-            },
-          },
-          messages: {
-            take: 10,
-            orderBy: { created_at: 'desc' },
-          },
-        },
+      const { llmResponseGenerator } = await import('../integrations/llm/generator');
+      const result = await llmResponseGenerator.generateCopilotDraft({
+        conversationId,
+        tenantId,
       });
-
-      if (!conv) {
-        throw new Error('Percakapan tidak ditemukan');
-      }
-
-      const customer = conv.customer;
-      const customerName = customer?.name || 'Bunda';
-      const childrenList = (customer?.children || []).map((c: any) => `${c.name || 'Anak'}${c.age_months ? ` (${c.age_months} bln)` : ''}`).join(', ') || '-';
-      const reservationsList = (customer?.reservations || []).map((r: any) => `${r.treatment_detail || r.raw_text || 'Treatment'} [${r.status}]`).join(', ') || '-';
-      const messagesAsc = (conv.messages || []).slice().reverse();
-
-      const { getLlmEndpointConfig, callChatWithRetry } = await import('../integrations/llm/llm-gateway');
-      const endpoint = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
-
-      if (!endpoint.apiKey) {
-        return `Halo Bunda ${customerName}, terima kasih sudah menghubungi kami. Bidan kami siap membantu Bunda dan si kecil. Ada keluhan atau kebutuhan yang bisa kami bantu? 🙏🥰`;
-      }
-
-      const systemPrompt = `Kamu adalah Asisten Bidan & Customer Service di klinik homecare ibu dan anak "Kala Homecare".
-Tugasmu adalah membantu Bidan menulis 1 draf balasan WhatsApp yang:
-- Ramah, sopan, empatik, dan menenangkan (selalu sapa dengan "Bunda").
-- Ringkas, to-the-point, dan solutif (jangan bertele-tele).
-- Menggunakan bahasa Indonesia yang luwes dan hangat (boleh gunakan 1-2 emoji seperti 🙏🥰✨).
-- HANYA kembalikan teks balasan yang siap dikirim langsung ke WhatsApp. JANGAN sertakan kalimat pembuka meta seperti "Berikut draf balasan:" atau tanda kutip.`;
-
-      const userPrompt = `[DATA PASIEN]
-Nama: ${customerName}
-Anak: ${childrenList}
-Riwayat Reservasi: ${reservationsList}
-
-[RIWAYAT PERCAKAPAN TERAKHIR]
-${messagesAsc.map((m: any) => `${m.direction === 'INBOUND' ? 'Bunda' : 'Bidan'}: ${m.content}`).join('\n')}
-
-Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda:`;
-
-      const startTime = Date.now();
-      const callResult = await callChatWithRetry({
-        baseUrl: endpoint.baseUrl,
-        apiKey: endpoint.apiKey,
-        model: endpoint.model,
-        fallbackModel: endpoint.fallbackModel,
-        timeoutMs: 25000,
-        payload: {
-          temperature: 0.3,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        },
-      });
-      const latencyMs = Date.now() - startTime;
-
-      // Telemetry: Catat LLM Usage & Biaya ke Buffer Audit
-      try {
-        const usage = callResult.data?.usage;
-        const promptTokens = usage?.prompt_tokens || 0;
-        const completionTokens = usage?.completion_tokens || 0;
-        const cachedTokens = usage?.prompt_tokens_details?.cached_tokens || usage?.cached_prompt_tokens || 0;
-
-        const { recordLlmUsage } = await import('../utils/llm-audit-buffer');
-        const { deriveProvider } = await import('../utils/cost-calculator');
-
-        recordLlmUsage({
-          tenant_id: tenantId,
-          customer_phone: customer?.phone || 'unknown',
-          conversation_id: conversationId,
-          provider: deriveProvider(callResult.baseUrl || endpoint.baseUrl),
-          model_name: callResult.model || endpoint.model,
-          task_type: 'AI_COPILOT_SUGGESTION',
-          prompt_tokens: promptTokens,
-          completion_tokens: completionTokens,
-          cached_prompt_tokens: cachedTokens,
-          latency_ms: latencyMs,
-        });
-      } catch (logErr: any) {
-        console.warn('[AI SUGGESTION TELEMETRY ERROR]:', logErr.message);
-      }
-
-      const draft = callResult.data?.choices?.[0]?.message?.content?.trim() || '';
-      return draft.replace(/^["']|["']$/g, '');
+      return result.draft;
     } catch (err: any) {
       console.warn('[AI SUGGESTION ERROR]:', err.message);
       return `Halo Bunda, terima kasih atas pesannya. Terkait pertanyaan Bunda, ada yang bisa Bidan bantu lebih lanjut hari ini? 🙏✨`;

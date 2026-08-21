@@ -20,6 +20,22 @@ const DAY_COL_WIDTH = 140; // minmax(140px,1fr) pada kolom hari
 const HOUR_ROW_HEIGHT = 90; // min-h-[90px] tiap baris jam
 const HEADER_HEIGHT = 60; // sticky header hari (kira-kira)
 
+function extractDurationMinutes(detail?: string | null): number {
+  if (!detail) return 60;
+  const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
+  if (totalMatch) return parseInt(totalMatch[1], 10);
+  const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
+  if (minMatches && minMatches.length > 0) {
+    let sum = 0;
+    for (const m of minMatches) {
+      const num = parseInt(m.replace(/\D/g, ''), 10);
+      if (num > 0 && num <= 300) sum += num;
+    }
+    if (sum > 0) return sum;
+  }
+  return 60;
+}
+
 export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   selectedDate,
   onSelectDate,
@@ -28,6 +44,50 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   onQuickAdd,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('[data-event-card]') || target.closest('input')) {
+      return;
+    }
+    const container = scrollRef.current;
+    if (!container) return;
+
+    isDraggingRef.current = true;
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    };
+    container.setPointerCapture?.(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+
+    container.scrollLeft = dragStartRef.current.scrollLeft - dx;
+    container.scrollTop = dragStartRef.current.scrollTop - dy;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    const container = scrollRef.current;
+    if (container) {
+      try {
+        container.releasePointerCapture?.(e.pointerId);
+      } catch (_) {}
+    }
+  };
+
   // Compute the 7 days of the current week (Senin s.d. Minggu)
   const curr = new Date(selectedDate);
   const dayOfWeek = curr.getDay(); // 0 is Sunday, 1 is Monday...
@@ -128,12 +188,22 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   return (
     <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col">
       {/* Scrollable Container with sticky header for continuous vertical line alignment */}
-      <div ref={scrollRef} className="overflow-x-auto overflow-y-auto max-h-[720px]">
+      <div
+        ref={scrollRef}
+        data-horizontal-scroll="true"
+        data-no-swipe-back="true"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="overflow-x-auto overflow-y-auto max-h-[720px] overscroll-x-contain select-none cursor-grab active:cursor-grabbing"
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
+      >
         <div className="min-w-[1050px] w-full divide-y divide-[#e9edef]">
           {/* Week Header Days Bar */}
-          <div className="sticky top-0 z-20 grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] border-b border-[#e9edef] bg-[#fafafa] shadow-xs">
+          <div className="sticky top-0 z-30 grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] border-b border-[#e9edef] bg-[#fafafa] shadow-xs">
             {/* Empty top-left time cell (frozen horizontally & vertically) */}
-            <div className="sticky left-0 z-30 p-3 flex items-center justify-center text-[#8696a0] bg-[#fafafa] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+            <div className="sticky top-0 left-0 z-40 p-3 flex items-center justify-center text-[#8696a0] bg-[#fafafa] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
               <Clock size={16} />
             </div>
 
@@ -148,7 +218,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 <button
                   key={idx}
                   onClick={() => onSelectDate(day)}
-                  className={`p-2.5 sm:p-3 text-center transition-all flex flex-col items-center justify-center ${
+                  className={`p-2.5 sm:p-3 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
                     isSelected
                       ? 'bg-[#111b21] text-white shadow-sm'
                       : currentDay
@@ -179,10 +249,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] min-h-[90px] divide-x divide-[#e9edef] group"
+              className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] h-[90px] min-h-[90px] divide-x divide-[#e9edef] group"
             >
               {/* Time label column (frozen horizontally on scroll) */}
-              <div className="sticky left-0 z-10 p-2 text-right pr-3 text-xs font-semibold text-[#8696a0] select-none bg-[#fafafa] flex items-start justify-end pt-2 border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+              <div className="sticky left-0 z-20 p-2 text-right pr-3 text-xs font-semibold text-[#8696a0] select-none bg-[#fafafa] flex items-start justify-end pt-2 border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
                 <span>{formatHourLabel(hour)}</span>
               </div>
 
@@ -194,75 +264,108 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 return (
                   <div
                     key={dayIdx}
-                    className={`p-1.5 relative transition-colors group/slot min-h-[90px] flex flex-col gap-1.5 ${
+                    className={`relative transition-colors group/slot h-[90px] ${
                       isSelectedDay ? 'bg-emerald-50/20' : 'hover:bg-gray-50/60'
                     }`}
                   >
-                    {/* Event Blocks */}
-                    {events.map((res) => {
+                    {/* Empty Slot Hover Quick-Add Button (Always available behind cards) */}
+                    <button
+                      onClick={() => onQuickAdd({ date: day, hour })}
+                      className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
+                      title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
+                    >
+                      <Plus size={16} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
+                    </button>
+
+                    {/* Event Blocks (Spanning proportionally by start minute & total duration) */}
+                    {events.map((res, evIdx) => {
                       const bDate = new Date(res.booking_date!);
-                      const timeStr = bDate
+                      const duration = extractDurationMinutes(res.treatment_detail);
+                      const startTimeStr = bDate
                         .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                         .replace('.', ':');
                       const categoryStyles = getCategoryStyles(res.treatment_category);
 
+                      // Bersihkan gelar/sapaan "Bunda/Ibu" dan ambil nama depan saja
+                      const rawName = res.customer?.name || 'Pasien';
+                      const cleanName = rawName
+                        .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
+                        .trim();
+                      const firstName = cleanName.split(/\s+/)[0] || cleanName;
+
+                      const cleanDetail = (res.treatment_detail || res.treatment_category || '')
+                        .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
+                        .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
+                        .trim();
+
+                      // Posisi menit awal (0..59) dan tinggi proporsional durasi
+                      const startMinutes = bDate.getMinutes();
+                      const topOffsetPx = Math.round((startMinutes / 60) * HOUR_ROW_HEIGHT);
+                      const heightPx = Math.max(54, Math.round((duration / 60) * HOUR_ROW_HEIGHT - 6));
+                      const evCount = events.length;
+                      const evWidth = evCount > 1 ? `calc(${100 / evCount}% - 6px)` : 'calc(100% - 8px)';
+                      const evLeft = evCount > 1 ? `calc(${(evIdx * 100) / evCount}% + 3px)` : '4px';
+
                       return (
                         <div
                           key={res.id}
+                          data-event-card="true"
                           onClick={(e) => {
                             e.stopPropagation();
                             onSelectReservation(res);
                           }}
-                          className={`p-2.5 rounded-xl transition-all cursor-pointer shadow-xs relative overflow-hidden group/card ${categoryStyles}`}
+                          style={{
+                            top: `${topOffsetPx + 3}px`,
+                            height: `${heightPx}px`,
+                            left: evLeft,
+                            width: evWidth,
+                          }}
+                          className={`absolute z-10 p-2 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
                         >
-                          {/* Status dot & Time */}
-                          <div className="flex items-center justify-between text-[11px] font-bold mb-1">
-                            <span className="flex items-center space-x-1">
-                              <Clock size={11} className="opacity-80" />
-                              <span>{timeStr}</span>
+                          {/* Baris Atas: Jam Mulai & Status Badge */}
+                          <div className="flex items-center justify-between text-[10.5px] font-bold shrink-0">
+                            <span className="flex items-center space-x-1 font-mono text-[#111b21]">
+                              <Clock size={10} className="opacity-75 shrink-0" />
+                              <span>{startTimeStr}</span>
                             </span>
                             {res.status === 'confirmed' ? (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
-                                <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
+                              <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800 shrink-0">
+                                <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
                                 Lunas
                               </span>
                             ) : (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 text-amber-800">
-                                <AlertCircle size={10} className="mr-0.5 text-amber-600" />
+                              <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8.5px] font-bold bg-amber-600/10 text-amber-800 shrink-0">
+                                <AlertCircle size={9} className="mr-0.5 text-amber-600" />
                                 Pending
                               </span>
                             )}
                           </div>
 
-                          {/* Customer & Treatment title */}
-                          <h5 className="font-bold text-xs line-clamp-1 leading-tight">
-                            {res.customer?.name || 'Bunda'}
-                          </h5>
-                          <p className="text-[11px] opacity-90 line-clamp-1 mt-0.5 font-medium">
-                            {res.treatment_detail || res.treatment_category}
-                          </p>
+                          {/* Baris Tengah: Nama Depan Saja (Bold) & Detail Treatment jika cukup tinggi */}
+                          <div className="my-auto py-0.5 overflow-hidden space-y-0.5">
+                            <h5 className="font-extrabold text-xs text-[#111b21] truncate leading-tight" title={res.customer?.name || ''}>
+                              {firstName}
+                            </h5>
+                            {heightPx >= 68 && cleanDetail && (
+                              <p className="text-[10px] opacity-90 line-clamp-1 font-medium leading-tight">
+                                {cleanDetail}
+                              </p>
+                            )}
+                          </div>
 
-                          {/* Staff badge */}
-                          {res.assigned_staff && (
-                            <div className="mt-1.5 pt-1 border-t border-black/10 flex items-center space-x-1 text-[10px] opacity-85">
-                              <User size={10} />
-                              <span className="truncate font-semibold">{res.assigned_staff.name}</span>
+                          {/* Baris Bawah: Nama Terapis & Durasi */}
+                          <div className="pt-0.5 border-t border-black/10 flex items-center justify-between text-[9.5px] opacity-85 shrink-0">
+                            <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f]">
+                              <User size={9} className="shrink-0 text-[#008069]" />
+                              <span className="truncate">{res.assigned_staff?.name ? res.assigned_staff.name.split(/\s+/)[0] : 'Unassigned'}</span>
                             </div>
-                          )}
+                            <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 shrink-0 ml-1">
+                              {duration}m
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
-
-                    {/* Empty Slot Hover Quick-Add Button */}
-                    {events.length === 0 && (
-                      <button
-                        onClick={() => onQuickAdd({ date: day, hour })}
-                        className="w-full h-full min-h-[60px] rounded-xl border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] flex items-center justify-center transition-all group-hover/slot:opacity-100"
-                        title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
-                      >
-                        <Plus size={16} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
-                      </button>
-                    )}
                   </div>
                 );
               })}

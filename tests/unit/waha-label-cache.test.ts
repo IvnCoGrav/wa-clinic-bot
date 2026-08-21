@@ -132,7 +132,7 @@ describe('WahaClient — label cache TTL & invalidate (Task 1)', () => {
 
     expect(p1).toBe('6285794210526');
     expect(p2).toBe('6285794210526');
-    const lidCalls = mockedAxios.get.mock.calls.filter(([u]) => String(u).includes('/lids/'));
+    const lidCalls = mockedAxios.get.mock.calls.filter(([u]) => String(u).includes('/lids/') || String(u).includes('/contacts'));
     expect(lidCalls).toHaveLength(1);
   });
 });
