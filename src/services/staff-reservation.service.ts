@@ -48,6 +48,10 @@ export interface StaffTaskItem {
   shareLocationText: string | null;
   customerProfilePictureUrl?: string | null;
   assignedStaff?: { id: string; name: string; role?: string } | null;
+  customerStats?: {
+    totalTreatments: number;
+    ltv: number;
+  };
 }
 
 function buildAddressText(c: {
@@ -156,6 +160,13 @@ export class StaffReservationService {
                 },
               },
               // phone: TIDAK di-select dari DB untuk privasi data customer
+              reservations: {
+                where: { status: { notIn: ['cancelled', 'rejected'] } },
+                select: {
+                  id: true,
+                  purchase_value: true,
+                },
+              },
               conversations: {
                 select: { id: true },
                 orderBy: { updated_at: 'desc' },
@@ -291,6 +302,10 @@ export class StaffReservationService {
                 role: (r as any).assigned_staff.role,
               }
             : null,
+          customerStats: {
+            totalTreatments: (cust?.reservations?.length ?? 0) > 0 ? (cust?.reservations?.length ?? 1) : 1,
+            ltv: (cust?.reservations || []).reduce((acc: number, curr: any) => acc + (curr.purchase_value || 0), 0) || pricing.totalFee,
+          },
         };
       });
     } catch (err: any) {

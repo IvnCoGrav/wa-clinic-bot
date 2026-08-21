@@ -4,6 +4,32 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added, Fixed & Refined — Time Range Display, Clickable Treatment Cards, Customer LTV/Treatment Stats, Background Reservation Auto-Capture & Follow-Up Queue Worker Activation (2026-08-21)
+
+- **Rentang Jam Kunjungan Lengkap (`Reservations.tsx`, `TodayTreatments.tsx`)**:
+  - Menampilkan rentang waktu kunjungan lengkap `Jam Mulai - Jam Selesai` (misal `09:30 - 11:45` atau `22 Agu 09:30 - 11:45`) yang dihitung secara otomatis berdasarkan total durasi menit layanan treatment (`extractDurationMinutes` / `parseNumberedTreatments`).
+  - Menggantikan tampilan lama yang hanya menampilkan jam mulai saja.
+
+- **Kartu & Baris Reservasi Dapat Diklik Langsung (`Reservations.tsx`)**:
+  - Pada tampilan Mobile Card List dan Desktop Table List, seluruh kontainer kartu `<div>` dan baris tabel `<tr>` kini dapat diklik langsung (`onClick={() => setSelectedRes(res)}` dengan efek hover visual dan kursor interaktif) untuk membuka modal detail reservasi tanpa mengharuskan pengguna mencari dan mengklik tombol "Manage".
+  - Seluruh tombol aksi di dalam kartu (seperti tombol lihat bukti bayar) diproteksi dengan `e.stopPropagation()` agar tidak memicu pembukaan modal ganda.
+
+- **Ringkasan LTV & Jumlah Riwayat Treatment Pasien (`Reservations.tsx`, `TodayTreatments.tsx`, `reservations.subroute.ts`, `staff-reservation.service.ts`)**:
+  - Backend kini secara otomatis menghitung dan menyertakan statistik ringkas customer:
+    - `totalTreatments`: jumlah reservasi non-cancelled customer (misal: `2x Treatment` / `Pasien Baru (1x)`).
+    - `ltv`: total nilai transaksi akumulatif customer (*Lifetime Value*).
+  - Ditampilkan secara elegan dalam bentuk badge pada kartu operasional terapis, header modal detail pasien, dan tabel daftar reservasi admin.
+
+- **Perbaikan Bug Scraping Teks Reservasi pada Mode Human Handling & Outbound (`human.ts`, `webhook.route.ts`, `reservation-text-parser.ts`)**:
+  - Memperbaiki akar masalah di mana chat reservasi tidak tertangkap jika percakapan sudah dialihkan ke mode `HUMAN_HANDLING` (CS membalas manual dari WhatsApp HP).
+  - Menambahkan *Background Auto-Capture Watcher* pada `handleHumanHandlingState` dan webhook balasan outbound admin untuk mendeteksi formulir reservasi lengkap (`isReservationFormMessage`), mem-parse jadwal/layanan/anak, dan otomatis membuat record `Reservation` di database secara idempoten tanpa mengganggu alur chat manual.
+  - Memperkaya pengenalan header teks reservasi (`berikut reservasi`, `jadwal treatment`).
+
+- **Aktivasi Worker Antrian Follow-Up & Morning Jobs (`app.ts`)**:
+  - Mendaftarkan recurring background interval timer di `src/app.ts`:
+    - `cron.runFollowUpWorker()` berjalan otomatis setiap 15 menit untuk memproses antrian follow-up `PENDING` yang telah jatuh tempo (`scheduled_at <= NOW()`).
+    - `cron.runMorningJobs()` berjalan otomatis setiap hari pukul 06:00 WIB untuk mengirimkan pengingat pagi Hari-H dan review H+1.
+
 ### Added, Fixed & Refined — React Portal Viewport Modal Centering, Dynamic Therapist Delegation Button & Known Issues Mandate (2026-08-21)
 
 - **Migrasi Modal ke React Portal `createPortal(..., document.body)` (`TodayTreatments.tsx`)**:
