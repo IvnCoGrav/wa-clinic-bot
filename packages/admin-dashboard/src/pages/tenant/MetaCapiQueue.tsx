@@ -23,6 +23,7 @@ interface QueueItem {
   eventType?: string;
   treatment_detail: string;
   raw_text: string;
+  child_name?: string | null;
   purchase_occurred_at: string | null;
   purchase_event_sent_at: string | null;
   purchase_review_status: string;
@@ -95,6 +96,31 @@ const utmText = (u: QueueItem['utm']) => {
 };
 
 /**
+ * Filter teks instruksi template / placeholder yang bukan nama treatment
+ */
+export function isPlaceholderTreatment(str: string): boolean {
+  if (!str) return true;
+  const clean = str.toLowerCase().replace(/[()\[\]*~_`]/g, '').trim();
+  if (!clean || clean.length < 2) return true;
+  if (
+    clean.includes('mohon bisa diisi') ||
+    clean.includes('bisa diisi bunda') ||
+    clean.includes('diisi bunda') ||
+    clean.includes('jika hamil') ||
+    clean.includes('jika ada') ||
+    clean.includes('bila ada') ||
+    clean.includes('opsional') ||
+    clean.includes('optional')
+  ) {
+    return true;
+  }
+  if (/^(tidak\s*ada|tdk\s*ada|belum\s*ada|belum|ga\s*ada|gak\s*ada|none|kosong|skip|-|\.|\/|\?)+$/i.test(clean)) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Membersihkan format treatment dari durasi [xxm], kurung bayi/anak, dan menyusunnya menjadi daftar bersih bernomor
  */
 export function cleanTreatmentList(detail: string): string[] {
@@ -119,7 +145,7 @@ export function cleanTreatmentList(detail: string): string[] {
     for (const sub of subParts) {
       let cleanSub = sub.replace(/\s+/g, ' ').trim();
       cleanSub = cleanSub.replace(/^(?:treatment\s*:\s*)/i, '');
-      if (cleanSub && cleanSub.length > 2 && !cleanSub.toLowerCase().startsWith('usia')) {
+      if (cleanSub && cleanSub.length > 2 && !cleanSub.toLowerCase().startsWith('usia') && !isPlaceholderTreatment(cleanSub)) {
         // Format huruf kapital awal kata
         const formatted = cleanSub
           .toLowerCase()
@@ -131,7 +157,7 @@ export function cleanTreatmentList(detail: string): string[] {
     }
   }
 
-  return items.length > 0 ? items : [detail.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim()];
+  return items.length > 0 ? items : [detail.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').trim()].filter(x => !isPlaceholderTreatment(x));
 }
 
 /**
@@ -179,6 +205,28 @@ const buildCapiJsonPayload = (item: QueueItem) => {
     }
   }
 
+  // Resolusi First Name (fn): Hindari meng-hash string generic "Bunda"
+  let resolvedFn: string | undefined = undefined;
+  if (item.customer.name) {
+    const rawFirst = item.customer.name.split(' ')[0].trim();
+    const lower = rawFirst.toLowerCase();
+    if (lower !== 'bunda' && lower !== 'ibu' && lower !== 'mama' && lower !== 'mom' && lower !== '-' && lower.length > 1) {
+      resolvedFn = rawFirst;
+    }
+  }
+  if (!resolvedFn && item.child_name) {
+    const rawChild = item.child_name.split(' ')[0].trim();
+    if (rawChild && rawChild !== '-' && rawChild.length > 1) {
+      resolvedFn = rawChild;
+    }
+  }
+  if (!resolvedFn && item.treatment_detail) {
+    const m = item.treatment_detail.match(/Bayi:\s*([^,\s|)]+)/i);
+    if (m && m[1] && m[1] !== '-' && m[1].toLowerCase() !== 'bayi') {
+      resolvedFn = m[1].trim();
+    }
+  }
+
   return {
     event_name: eventName,
     event_time: occurredTimestamp,
@@ -187,7 +235,7 @@ const buildCapiJsonPayload = (item: QueueItem) => {
     action_source: 'chat',
     user_data: {
       ph: item.customer.phone ? `sha256(${item.customer.phone})` : undefined,
-      fn: item.customer.name ? `sha256(${item.customer.name.split(' ')[0]})` : undefined,
+      fn: resolvedFn ? `sha256(${resolvedFn})` : undefined,
       fbp: item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined,
       fbc: item.attribution.isPaid && item.attribution.trackingCode ? `fb.1.1787293849.${item.attribution.trackingCode}` : undefined,
     },

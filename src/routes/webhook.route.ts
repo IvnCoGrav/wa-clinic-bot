@@ -407,12 +407,22 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const pAny = payload as any;
       const isInboundImage =
         pAny.type === 'image' ||
+        pAny._data?.type === 'image' ||
         !!(pAny.message && pAny.message.imageMessage) ||
         !!(pAny.hasMedia && (pAny.media?.mimetype?.startsWith('image/') || pAny.media?.mime_type?.startsWith('image/'))) ||
         !!(pAny._data?.mimetype?.startsWith('image/')) ||
-        !!(pAny.mimetype?.startsWith('image/'));
+        !!(pAny.mimetype?.startsWith('image/')) ||
+        !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
+        !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url);
+
+      // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG)
+      const rawLoc = payload.location || pAny._data?.location;
+      const rawLat = rawLoc?.latitude != null ? Number(rawLoc.latitude) : NaN;
+      const rawLng = rawLoc?.longitude != null ? Number(rawLoc.longitude) : NaN;
+      const hasRealLocation = !isInboundImage && !isNaN(rawLat) && !isNaN(rawLng) && rawLat !== 0 && rawLng !== 0;
+
       // Caption WAHA NOWEB sering ada di body, bukan caption — fallback ke body
-      const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || pAny.body || pAny._data?.caption || pAny._data?.body || '';
+      const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || (isInboundImage ? pAny.body : '') || pAny._data?.caption || pAny._data?.body || '';
       let inboundMedia: any = null;
       if (isInboundImage) {
         try {
@@ -471,8 +481,17 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       }
       const inboundContent = isInboundImage
         ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
-        : (payload.body || '[LOCATION/MEDIA]');
-      const mergeMediaIntoPayload = (p: any) => (inboundMedia ? { ...p, media: inboundMedia } : p);
+        : hasRealLocation
+          ? `[LOCATION: Lat ${rawLat}, Lng ${rawLng}]`
+          : (payload.body || '');
+      const mergeMediaIntoPayload = (p: any) => {
+        const cleanedPayload = { ...p };
+        if (!hasRealLocation) {
+          delete cleanedPayload.location;
+          if (cleanedPayload._data) delete cleanedPayload._data.location;
+        }
+        return inboundMedia ? { ...cleanedPayload, media: inboundMedia } : cleanedPayload;
+      };
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
       // Pesan lama tetap dicatat ke database (audit trail & Live Chat) dengan media jika ada,
@@ -710,15 +729,12 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         from: phone,
         chatId,
         timestamp: String(payload.timestamp || Math.floor(Date.now() / 1000)),
-        type: isInboundImage ? 'image' : payload.location ? 'location' : 'text',
+        type: isInboundImage ? 'image' : hasRealLocation ? 'location' : 'text',
         text: payload.body ? { body: payload.body } : undefined,
-        location: !isInboundImage && payload.location
+        location: hasRealLocation
           ? {
-              // WAHA kadang mengirim lat/lng sebagai string — koerce ke number
-              // supaya tidak menabrak kolom Float di Prisma.
-              // Image yang kebawa location {0,0} / EXIF tidak boleh jadi location
-              latitude: Number(payload.location.latitude),
-              longitude: Number(payload.location.longitude),
+              latitude: rawLat,
+              longitude: rawLng,
             }
           : undefined,
         media: inboundMedia,

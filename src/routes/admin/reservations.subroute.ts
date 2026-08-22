@@ -1089,7 +1089,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         orderBy: { created_at: 'desc' },
         include: {
           customer: {
-            include: { adClick: true },
+            include: { adClick: true, children: true },
           },
         },
       });
@@ -1112,11 +1112,33 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const ageMs = Math.max(0, now - occurredAt);
           const ageHours = Math.floor(ageMs / (60 * 60 * 1000));
           const daysOld = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+
+          // Sanitize treatment_detail on the fly (hapus part yang berisi placeholder teks template)
+          let sanitizedTreatmentDetail = r.treatment_detail || '';
+          if (
+            sanitizedTreatmentDetail.includes('Mohon bisa diisi') ||
+            sanitizedTreatmentDetail.includes('bisa diisi Bunda') ||
+            sanitizedTreatmentDetail.toLowerCase().includes('jika hamil') ||
+            sanitizedTreatmentDetail.toLowerCase().includes('jika ada')
+          ) {
+            const parts = sanitizedTreatmentDetail.split('|').map(p => p.trim());
+            const filtered = parts.filter(p => {
+              const low = p.toLowerCase();
+              return (
+                !low.includes('mohon bisa diisi') &&
+                !low.includes('bisa diisi bunda') &&
+                !low.includes('jika hamil') &&
+                !low.includes('jika ada')
+              );
+            });
+            sanitizedTreatmentDetail = filtered.length > 0 ? filtered.join(' | ') : 'Treatment Homecare';
+          }
+
           const value =
             extractValueByFormat(r.raw_text || '', formats.formatValue) ??
             r.purchase_value ??
             extractRupiahAmount(r.raw_text || '', formats.formatValue) ??
-            (await resolveTreatmentValue(r.treatment_detail || ''));
+            (await resolveTreatmentValue(sanitizedTreatmentDetail || ''));
 
           // Self-heal purchase_value in DB if previously stored as total price (including ongkir)
           if (r.id && value !== undefined && r.purchase_value !== value) {
@@ -1147,12 +1169,15 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               .catch(() => {});
           }
 
+          const childName = (r.customer as any)?.children?.[0]?.name || null;
+
           return {
             id: r.id,
             status: r.status,
             eventType: 'Purchase',
-            treatment_detail: r.treatment_detail,
+            treatment_detail: sanitizedTreatmentDetail,
             raw_text: r.raw_text,
+            child_name: childName,
             purchase_occurred_at: r.purchase_occurred_at || r.created_at,
             purchase_event_sent_at: r.purchase_event_sent_at,
             purchase_review_status: r.purchase_review_status || 'pending',
