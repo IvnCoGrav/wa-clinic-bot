@@ -61,7 +61,8 @@ export function sanitizeForbiddenEnglishWords(text: string): string {
 
 /**
  * Membersihkan istilah halusinasi penerjemahan LLM yang aneh
- * (seperti "antimeminjamkan", "biaya pinjam" alih-alih "ongkir").
+ * (seperti "antimeminjamkan", "biaya pinjam" alih-alih "ongkir",
+ * serta halusinasi nama panggilan anak seperti "Bunny").
  */
 export function sanitizeHallucinatedTerms(text: string): string {
   if (!text) return text;
@@ -70,6 +71,10 @@ export function sanitizeHallucinatedTerms(text: string): string {
     .replace(/\banti\s*meminjamkan(?:nya)?\b/gi, 'ongkirnya')
     .replace(/\bbiaya\s+peminjaman(?:nya)?\b/gi, 'ongkos kirimnya')
     .replace(/\b(untuk|ke|dari|pada|bagi|buat|oleh)\s+bund\b/gi, '$1 Bunda')
+    .replace(/\b(untuk|buat|pada|bagi|terkait)\s+bunny\b/gi, '$1 si kecil')
+    .replace(/\bsi\s+bunny\b/gi, 'si kecil')
+    .replace(/\b(ya|kan|nih|deh),?\s+bund\b/gi, '$1, Bunda')
+    .replace(/,\s*bund\b/gi, ', Bunda')
     .replace(/\bsyukur\s+sekali\b/gi, 'Wah senang sekali')
     .replace(/\bpuji\s+syukur\b/gi, 'Wah senang sekali');
 }
@@ -89,4 +94,22 @@ export function sanitizeEmDash(text: string): string {
     .replace(/^—\s*/gm, '- ')
     .replace(/\s*—\s*/g, ', ');
 }
+
+/**
+ * Membersihkan backslash liar (\) dan typo JSON escaping yang menempel di kata,
+ * seperti "\Bundlebih" -> "Bunda lebih", "\Bund" -> "Bunda", "\n" mentah, dll.
+ */
+export function sanitizeStrayBackslashes(text: string): string {
+  if (!text) return text;
+  return text
+    // Perbaiki pola "\Bundlebih" atau "\Bund lebih" -> "Bunda lebih"
+    .replace(/\\(?:Bundlebih|Bund\s*lebih)\b/gi, 'Bunda lebih')
+    .replace(/\\Bund\b/gi, 'Bunda')
+    // Buang backslash liar sebelum karakter alfabet (\Bunda -> Bunda, \text -> text)
+    .replace(/\\([a-zA-Z])/g, '$1')
+    // Buang backslash ganda atau menggantung di akhir/tengah kata
+    .replace(/\\\\+/g, '')
+    .trim();
+}
+
 

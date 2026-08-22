@@ -42,6 +42,16 @@ export class ConversationStateMachine {
       };
     }
 
+    // --- GATE 🛡️: HUMAN HANDLING ACTIVE (CS TAKEOVER GUARD) ---
+    // Jika percakapan sedang di-handle admin/CS, batalkan auto-reply bot
+    if (conversation.is_human_handling) {
+      console.log(`[STATE MACHINE ABORT] Conversation ${conversation.id} for customer ${customer.phone} is in HUMAN_HANDLING mode. Skipping bot auto-reply.`);
+      return {
+        nextState: conversation.current_state,
+        shouldSendReply: false,
+      };
+    }
+
     // --- GATE ✨: CUSTOMER SLASH COMMANDS (/reset, /state, /mulai) ---
     // Dieksekusi SEBELUM inbound logging, medical detection, NLU & AI router supaya pesan
     // perintah tidak salah-rute ke state handler / eskalasi medis. Command selalu
@@ -108,10 +118,13 @@ export class ConversationStateMachine {
     // 1. Audit Log Pesan Inbound (Masuk)
     // Skip jika pesan sudah di-log oleh BurstCoalesceService (_preLogged) — pesan asli
     // tercatat realtime saat diterima, job hasil merge tidak perlu mencatat ulang.
+    // Prioritas: media image dulu baru location — mencegah image dari WA Web yang kebawa location {0,0} tampil dobel Share Location
+    const hasValidLocation = !!(incomingMessage.location && Number((incomingMessage.location as any).latitude) !== 0 && Number((incomingMessage.location as any).longitude) !== 0);
+    const hasMedia = !!(incomingMessage.media || (incomingMessage as any).type === 'image');
+    const loc = incomingMessage.location as any;
     const inboundContent = (incomingMessage as any).originalText
       || incomingMessage.text?.body
-      || (incomingMessage.location ? `[LOCATION SHARE: Lat ${incomingMessage.location.latitude}, Lng ${incomingMessage.location.longitude}]`
-        : (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : incomingMessage.media ? '[MEDIA]' : '[MEDIA/UNKNOWN]'));
+      || (hasMedia ? (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : '[MEDIA]') : hasValidLocation ? `[LOCATION SHARE: Lat ${loc.latitude}, Lng ${loc.longitude}]` : '[MEDIA/UNKNOWN]');
     if (!(incomingMessage as any)._preLogged) {
       await messageService.logMessage({
         tenantId,
@@ -491,6 +504,14 @@ export class ConversationStateMachine {
         incomingMessageId: incomingMessage.id,
         incomingText: incomingBody,
         replyText: result.replyText,
+        shouldAbort: async () => {
+          try {
+            const freshConv = await conversationService.getOrCreateConversation(customer.id, tenantId);
+            return !!freshConv?.is_human_handling;
+          } catch {
+            return false;
+          }
+        },
       });
 
       // Audit Log Pesan Outbound (Keluar): dicatat SELALU — baik terkirim maupun

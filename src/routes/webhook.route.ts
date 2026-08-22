@@ -401,9 +401,82 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         } catch (_) {}
       }
 
+      // --- MEDIA INBOUND (gambar customer) — DIEKSEKUSI SEBELUM STALE GUARD ---
+      // Supaya image dari WA Web/Official tetap tersimpan ke storage/media/inbound
+      // meski timestamp telat (reconnect/QR burst) dan tetap muncul di LiveChat.
+      const pAny = payload as any;
+      const isInboundImage =
+        pAny.type === 'image' ||
+        !!(pAny.message && pAny.message.imageMessage) ||
+        !!(pAny.hasMedia && (pAny.media?.mimetype?.startsWith('image/') || pAny.media?.mime_type?.startsWith('image/'))) ||
+        !!(pAny._data?.mimetype?.startsWith('image/')) ||
+        !!(pAny.mimetype?.startsWith('image/'));
+      // Caption WAHA NOWEB sering ada di body, bukan caption — fallback ke body
+      const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || pAny.body || pAny._data?.caption || pAny._data?.body || '';
+      let inboundMedia: any = null;
+      if (isInboundImage) {
+        try {
+          const { mediaService } = await import('../services/media.service');
+          let buffer: Buffer | null = null;
+          const mimeType = pAny.message?.imageMessage?.mimetype || pAny.media?.mimetype || pAny.media?.mime_type || pAny._data?.mimetype || pAny.mimetype || 'image/jpeg';
+          const mediaUrlCandidate = pAny.media?.url || pAny._data?.mediaUrl || pAny._data?.deprecatedMms3Url || pAny.media?.deprecatedMms3Url || null;
+          // 1. Coba download langsung dari URL WAHA jika ada
+          if (mediaUrlCandidate) {
+            buffer = await wahaClient.fetchUrl(String(mediaUrlCandidate));
+          } else if (pAny.media?.url) {
+            buffer = await wahaClient.fetchUrl(String(pAny.media.url));
+          }
+          // 2. Fallback ke wahaClient.downloadMedia (multi-endpoint)
+          if (!buffer || buffer.length === 0) {
+            buffer = await wahaClient.downloadMedia(waMessageId, chatId);
+          }
+          // 3. Fallback ke base64 jpegThumbnail jika download gagal
+          if ((!buffer || buffer.length === 0) && (pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail)) {
+            const thumbB64 = pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail;
+            buffer = Buffer.from(thumbB64, 'base64');
+          }
+          if (buffer && buffer.length > 0) {
+            const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
+            inboundMedia = {
+              url: saved.thumbUrl || saved.hdUrl,
+              hdUrl: saved.hdUrl,
+              thumbUrl: saved.thumbUrl,
+              mimeType,
+              caption: imageCaption || null,
+            };
+          } else if (mediaUrlCandidate) {
+            const rawUrl = String(mediaUrlCandidate);
+            const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+            inboundMedia = {
+              url: urlPath,
+              hdUrl: urlPath,
+              mimeType,
+              caption: imageCaption || null,
+            };
+          } else if (pAny.media?.url) {
+            const rawUrl = String(pAny.media.url);
+            const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+            inboundMedia = {
+              url: urlPath,
+              hdUrl: urlPath,
+              mimeType,
+              caption: imageCaption || null,
+            };
+          } else {
+            console.warn(`[WAHA MEDIA WARNING] Gagal mengunduh gambar dari WAHA untuk pesan ${waMessageId} (chat: ${chatId}) — buffer kosong / null.`);
+          }
+        } catch (mediaErr: any) {
+          console.warn('[WAHA MEDIA] Gagal menyimpan media inbound:', mediaErr.message);
+        }
+      }
+      const inboundContent = isInboundImage
+        ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
+        : (payload.body || '[LOCATION/MEDIA]');
+      const mergeMediaIntoPayload = (p: any) => (inboundMedia ? { ...p, media: inboundMedia } : p);
+
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE (Mencegah banjir sync saat QR scan / reconnect) ---
-      // Dievaluasi SEDINI MUNGKIN SEBELUM API eksternal (Google Contacts, WAHA Label, Unduh Media, State Machine).
-      // Pesan lama tetap dicatat ke database (audit trail & Live Chat), tetapi dilewati dari bot auto-reply & API eksternal.
+      // Pesan lama tetap dicatat ke database (audit trail & Live Chat) dengan media jika ada,
+      // tetapi dilewati dari bot auto-reply & API eksternal.
       const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
       if (maxAgeSeconds > 0 && payload.timestamp) {
         const rawTs = Number(payload.timestamp);
@@ -411,9 +484,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
           const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
           if (ageSeconds > maxAgeSeconds) {
-            // Bypass stale guard untuk form reservasi — jam WAHA bisa telat saat reconnect/QR rebroadcast (kasus Siska #777).
-            // Form tetap harus diproses meski timestamp terlihat stale.
-            const rawBodyForStale = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || '';
+            const rawBodyForStale = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || imageCaption || '';
             let isStaleForm = false;
             try {
               const { isReservationFormMessage: _isFormStale } = await import('../utils/reservation-text-parser');
@@ -421,6 +492,21 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             } catch {}
             if (isStaleForm) {
               console.log(`[STALE GUARD BYPASS] Reservation form dari ${phone} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur capture (Siska #777).`);
+            } else if (isInboundImage) {
+              // Image stale tetap simpan dengan media, jangan hilangkan gambar
+              console.log(`[STALE IMAGE] Message ${waMessageId} from ${phone} is ${ageSeconds}s old — tetap simpan image ke LiveChat.`);
+              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, DEFAULT_TENANT_ID);
+              await messageService.logMessage({
+                tenantId: DEFAULT_TENANT_ID,
+                conversationId: staleConversation.id,
+                direction: 'INBOUND',
+                content: inboundContent,
+                waMessageId,
+                payloadRaw: mergeMediaIntoPayload(payload),
+                skipMqlEvaluation: true,
+              });
+              return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
             } else {
               console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
               const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
@@ -429,9 +515,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 tenantId: DEFAULT_TENANT_ID,
                 conversationId: staleConversation.id,
                 direction: 'INBOUND',
-                content: inboundTextPreview,
+                content: inboundContent,
                 waMessageId,
-                payloadRaw: payload,
+                payloadRaw: mergeMediaIntoPayload(payload),
                 skipMqlEvaluation: true,
               });
               return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
@@ -457,67 +543,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           if (isAdmin) {
             isAdminChat = true;
           }
-        }
-      }
-
-      // --- MEDIA INBOUND (gambar customer) ---
-      // Deteksi image, unduh file dari WAHA, simpan ke storage/media/inbound/<tenantId>,
-      // dan lampirkan metadata media ke payload_raw agar bisa dirender di Live Chat
-      // (blur + download). Konten teks bot tetap seperti sebelumnya agar state machine
-      // & classifier TIDAK berubah. Best-effort: gagal unduh tidak menghentikan alur.
-      const pAny = payload as any;
-      const isInboundImage =
-        pAny.type === 'image' ||
-        !!(pAny.message && pAny.message.imageMessage) ||
-        !!(pAny.hasMedia && pAny.media?.mimetype?.startsWith('image/'));
-      const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || '';
-      let inboundMedia: any = null;
-      if (isInboundImage) {
-        try {
-          const { mediaService } = await import('../services/media.service');
-          let buffer: Buffer | null = null;
-          const mimeType = pAny.message?.imageMessage?.mimetype || pAny.media?.mimetype || 'image/jpeg';
-
-          // 1. Coba download langsung dari pAny.media.url jika ada
-          if (pAny.media?.url) {
-            buffer = await wahaClient.fetchUrl(String(pAny.media.url));
-          }
-
-          // 2. Fallback ke wahaClient.downloadMedia
-          if (!buffer || buffer.length === 0) {
-            buffer = await wahaClient.downloadMedia(waMessageId, chatId);
-          }
-
-          // 3. Fallback ke base64 jpegThumbnail jika download gagal
-          if ((!buffer || buffer.length === 0) && (pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail)) {
-            const thumbB64 = pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail;
-            buffer = Buffer.from(thumbB64, 'base64');
-          }
-
-          if (buffer && buffer.length > 0) {
-            const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
-            inboundMedia = {
-              url: saved.thumbUrl || saved.hdUrl,
-              hdUrl: saved.hdUrl,
-              thumbUrl: saved.thumbUrl,
-              mimeType,
-              caption: imageCaption || null,
-            };
-          } else if (pAny.media?.url) {
-            // Minimal simpan URL yang sudah dinormalisasi menjadi relative path /api/files/...
-            const rawUrl = String(pAny.media.url);
-            const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
-            inboundMedia = {
-              url: urlPath,
-              hdUrl: urlPath,
-              mimeType,
-              caption: imageCaption || null,
-            };
-          } else {
-            console.warn(`[WAHA MEDIA WARNING] Gagal mengunduh gambar dari WAHA untuk pesan ${waMessageId} (chat: ${chatId}) — buffer kosong / null.`);
-          }
-        } catch (mediaErr: any) {
-          console.warn('[WAHA MEDIA] Gagal menyimpan media inbound:', mediaErr.message);
         }
       }
 
@@ -554,10 +579,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
         })();
       }
-      const inboundContent = isInboundImage
-        ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
-        : (payload.body || '[LOCATION/MEDIA]');
-      const mergeMediaIntoPayload = (p: any) => (inboundMedia ? { ...p, media: inboundMedia } : p);
 
       if (isAdminChat) {
         console.log(`[ADMIN CHAT] Chat ${chatId} is labeled as "Admin". Logging to Live Chat and bypassing bot auto-reply.`);
@@ -689,12 +710,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         from: phone,
         chatId,
         timestamp: String(payload.timestamp || Math.floor(Date.now() / 1000)),
-        type: payload.location ? 'location' : isInboundImage ? 'image' : 'text',
+        type: isInboundImage ? 'image' : payload.location ? 'location' : 'text',
         text: payload.body ? { body: payload.body } : undefined,
-        location: payload.location
+        location: !isInboundImage && payload.location
           ? {
               // WAHA kadang mengirim lat/lng sebagai string — koerce ke number
               // supaya tidak menabrak kolom Float di Prisma.
+              // Image yang kebawa location {0,0} / EXIF tidak boleh jadi location
               latitude: Number(payload.location.latitude),
               longitude: Number(payload.location.longitude),
             }

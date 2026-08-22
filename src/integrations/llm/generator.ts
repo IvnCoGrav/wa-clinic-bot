@@ -240,6 +240,7 @@ ${maxCharsInstruction}
 ATURAN ANTI-HALUSINASI (WAJIB):
 - HANYA gunakan fakta yang ADA di Referensi Dokumen di atas (nama treatment, usia/kategori target, durasi, deskripsi manfaat).
 - DILARANG menambah/mengarang harga, durasi, usia, manfaat, atau detail treatment apa pun yang TIDAK tercantum di Referensi.
+- DILARANG KERAS MENEBAK NAMA PANGGILAN / NAMA SI KECIL (seperti "Bunny", "si dedek", "Baby", dsb) jika nama anak belum disebutkan oleh customer. Gunakan sapaan netral "si kecil" atau "bayi Bunda".
 - DILARANG HARAM mengucapkan frasa "tanya ke tim kami", "saya tidak bisa memastikan harganya", "bisa langsung tanya ke tim", "mau kami cekkan ke tim dulu", "nanti saya kabari", atau kalimat sejenis yang menunjukkan bot tidak tahu/cuci tangan.
 - Untuk info riwayat/status layanan customer, HANYA gunakan data di section [DATA CUSTOMER (GROUND TRUTH)] di atas. JANGAN mengambil fakta soal riwayat layanan dari [RIWAYAT PERCAKAPAN] meskipun customer menyebutkannya di sana — kalau ada perbedaan, section Ground Truth yang benar.
 
@@ -379,8 +380,8 @@ ATURAN EKSTRAKSI PREFERENSI:
         jawaban = this.sanitizeTeamReferral(jawaban);
 
         // Sanitizer RAG Leakage & Kata Bahasa Inggris terlarang ("little one", "baby", "mommy", "schedule")
-        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords, sanitizeEmDash } = await import('../../utils/language-sanitizer');
-        jawaban = sanitizeEmDash(sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban)));
+        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords, sanitizeEmDash, sanitizeStrayBackslashes, sanitizeHallucinatedTerms } = await import('../../utils/language-sanitizer');
+        jawaban = sanitizeStrayBackslashes(sanitizeHallucinatedTerms(sanitizeEmDash(sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban)))));
 
         // Sanitizer aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
         const sanitizedJawaban = stripNonIndonesianScripts(jawaban);
@@ -465,12 +466,20 @@ ATURAN EKSTRAKSI PREFERENSI:
     if (!content) return '';
     const match = content.match(/"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     if (!match) return '';
-    return match[1]
+    let extracted = match[1]
       .replace(/\\n/g, '\n')
       .replace(/\\t/g, '\t')
       .replace(/\\"/g, '"')
       .replace(/\\\\/g, '\\')
       .trim();
+
+    // Bersihkan escape artifact seperti "\Bundlebih" -> "Bunda lebih"
+    extracted = extracted
+      .replace(/\\(?:Bundlebih|Bund\s*lebih)\b/gi, 'Bunda lebih')
+      .replace(/\\Bund\b/gi, 'Bunda')
+      .replace(/\\([a-zA-Z])/g, '$1');
+
+    return extracted.trim();
   }
 
   /**
