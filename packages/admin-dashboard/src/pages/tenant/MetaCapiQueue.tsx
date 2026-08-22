@@ -15,6 +15,11 @@ import {
   Copy,
   Sparkles,
   MapPin,
+  Pencil,
+  RotateCcw,
+  Save,
+  Send,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface QueueItem {
@@ -277,6 +282,79 @@ export const MetaCapiQueue: React.FC = () => {
   // JSON Modal State
   const [selectedJsonItem, setSelectedJsonItem] = useState<QueueItem | null>(null);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [isEditingJson, setIsEditingJson] = useState(false);
+  const [jsonDraft, setJsonDraft] = useState('');
+  const [jsonParseError, setJsonParseError] = useState<string | null>(null);
+  const [customPayloads, setCustomPayloads] = useState<Record<string, any>>({});
+
+  const openJsonModal = (item: QueueItem) => {
+    setSelectedJsonItem(item);
+    setIsEditingJson(false);
+    setJsonParseError(null);
+    const payload = customPayloads[item.id] || buildCapiJsonPayload(item);
+    setJsonDraft(JSON.stringify(payload, null, 2));
+  };
+
+  const handleStartEditJson = () => {
+    if (!selectedJsonItem) return;
+    const current = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem);
+    setJsonDraft(JSON.stringify(current, null, 2));
+    setJsonParseError(null);
+    setIsEditingJson(true);
+  };
+
+  const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setJsonDraft(val);
+    try {
+      JSON.parse(val);
+      setJsonParseError(null);
+    } catch (err: any) {
+      setJsonParseError(err.message);
+    }
+  };
+
+  const handleFormatJson = () => {
+    try {
+      const parsed = JSON.parse(jsonDraft);
+      setJsonDraft(JSON.stringify(parsed, null, 2));
+      setJsonParseError(null);
+      toast('Format JSON berhasil dirapikan.', 'success');
+    } catch (err: any) {
+      setJsonParseError(err.message);
+      toast('Format gagal: JSON tidak valid.', 'error');
+    }
+  };
+
+  const handleResetJson = () => {
+    if (!selectedJsonItem) return;
+    const original = buildCapiJsonPayload(selectedJsonItem);
+    setJsonDraft(JSON.stringify(original, null, 2));
+    setJsonParseError(null);
+    setCustomPayloads((prev) => {
+      const next = { ...prev };
+      delete next[selectedJsonItem.id];
+      return next;
+    });
+    toast('JSON direset ke default payload otomatis.', 'info');
+  };
+
+  const handleSaveEditedJson = () => {
+    if (!selectedJsonItem) return;
+    try {
+      const parsed = JSON.parse(jsonDraft);
+      setCustomPayloads((prev) => ({
+        ...prev,
+        [selectedJsonItem.id]: parsed,
+      }));
+      setIsEditingJson(false);
+      setJsonParseError(null);
+      toast('Perubahan JSON berhasil disimpan.', 'success');
+    } catch (err: any) {
+      setJsonParseError(err.message);
+      toast('Gagal menyimpan: Format JSON tidak valid.', 'error');
+    }
+  };
 
   const loadQueue = useCallback(async () => {
     try {
@@ -320,20 +398,23 @@ export const MetaCapiQueue: React.FC = () => {
     return list;
   }, [items, mode, filterStatus, searchQuery]);
 
-  const handleApprove = async (item: QueueItem) => {
-    const eventName = item.eventType || 'Purchase';
+  const handleApprove = async (item: QueueItem, customPayload?: any) => {
+    const effectivePayload = customPayload || customPayloads[item.id];
+    const eventName = (effectivePayload && effectivePayload.event_name) || item.eventType || 'Purchase';
+    const isCustom = !!effectivePayload;
+
     const ok = item.metaDropRisk
       ? await confirm({
           title: '⚠️ Event Lebih dari 7 Hari',
           message:
             `Event terjadi pada ${formatDateTime(item.purchase_occurred_at)} (${item.daysOld} hari lalu). ` +
-            'Meta CAPI kemungkinan akan mengabaikan event historis yang terlalu lama. Tetap kirim ke Meta?',
+            `Meta CAPI kemungkinan akan mengabaikan event historis yang terlalu lama. Tetap kirim ke Meta${isCustom ? ' dengan JSON custom' : ''}?`,
           confirmText: 'Ya, Tetap Kirim',
         })
       : await confirm({
           title: `Kirim ${eventName} ke Meta CAPI?`,
           message:
-            `Event ${eventName} akan dikirim ke Meta dengan event_time historis agar attribution akurat. Lanjutkan?`,
+            `Event ${eventName} akan dikirim ke Meta CAPI${isCustom ? ' menggunakan JSON kustom yang telah disesuaikan' : ' dengan event_time historis'}. Lanjutkan?`,
           confirmText: 'Ya, Kirim',
         });
     if (!ok) return;
@@ -342,6 +423,7 @@ export const MetaCapiQueue: React.FC = () => {
       setLoading(true);
       const res = await apiRequest(`/api/admin/reservation/${item.id}/approve-purchase`, {
         method: 'POST',
+        body: effectivePayload ? JSON.stringify({ customPayload: effectivePayload }) : undefined,
       });
       if (res && res.success === false) {
         toast(res.error || `Gagal approve ${eventName} event.`, 'error');
@@ -358,11 +440,33 @@ export const MetaCapiQueue: React.FC = () => {
           p.id === item.id ? { ...p, purchase_review_status: 'approved', purchase_event_sent_at: new Date().toISOString() } : p
         )
       );
+      if (selectedJsonItem?.id === item.id) {
+        setSelectedJsonItem(null);
+        setIsEditingJson(false);
+      }
       await loadQueue();
     } catch (err: any) {
       toast(`Error approving event: ${err.message}`, 'error');
       setLoading(false);
     }
+  };
+
+  const handleApproveFromModal = async () => {
+    if (!selectedJsonItem) return;
+    let payloadToSend = customPayloads[selectedJsonItem.id];
+    if (isEditingJson) {
+      try {
+        payloadToSend = JSON.parse(jsonDraft);
+        setCustomPayloads((prev) => ({
+          ...prev,
+          [selectedJsonItem.id]: payloadToSend,
+        }));
+      } catch (err: any) {
+        toast('Perbaiki format JSON terlebih dahulu: ' + err.message, 'error');
+        return;
+      }
+    }
+    await handleApprove(selectedJsonItem, payloadToSend);
   };
 
   const handleReject = async (item: QueueItem) => {
@@ -622,12 +726,16 @@ export const MetaCapiQueue: React.FC = () => {
                       {/* 7. View JSON Button */}
                       <td className="py-3.5 px-4 text-center align-top">
                         <button
-                          onClick={() => setSelectedJsonItem(item)}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-xs font-mono font-bold transition shadow-xs"
-                          title="Lihat Payload JSON Meta CAPI"
+                          onClick={() => openJsonModal(item)}
+                          className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition shadow-xs ${
+                            customPayloads[item.id]
+                              ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                              : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                          }`}
+                          title={customPayloads[item.id] ? 'Lihat/Edit Payload JSON (Telah Disesuaikan)' : 'Lihat Payload JSON Meta CAPI'}
                         >
-                          <Code2 size={13} className="text-[#008069]" />
-                          <span>JSON</span>
+                          <Code2 size={13} className={customPayloads[item.id] ? 'text-amber-600' : 'text-[#008069]'} />
+                          <span>JSON{customPayloads[item.id] ? ' *' : ''}</span>
                         </button>
                       </td>
 
@@ -668,63 +776,180 @@ export const MetaCapiQueue: React.FC = () => {
         )}
       </div>
 
-      {/* 📦 Modal View JSON Payload */}
-      {selectedJsonItem && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-[#e9edef] overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc]">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
-                  <Code2 size={18} />
+      {/* 📦 Modal View & Edit JSON Payload */}
+      {selectedJsonItem && (() => {
+        const currentPayload = customPayloads[selectedJsonItem.id] || buildCapiJsonPayload(selectedJsonItem);
+        const isCustom = !!customPayloads[selectedJsonItem.id];
+        const isPending = selectedJsonItem.purchase_review_status === 'pending';
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-[#e9edef] overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+                <div className="flex items-center space-x-2.5">
+                  <div className={`p-2 rounded-xl border ${isEditingJson ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#e8f5f2] text-[#008069] border-[#c2e7e0]'}`}>
+                    {isEditingJson ? <Pencil size={18} /> : <Code2 size={18} />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-[#111b21]">
+                        {isEditingJson ? 'Edit Meta CAPI Payload' : 'Meta Graph API CAPI Payload'}
+                      </h3>
+                      {isCustom && !isEditingJson && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold flex items-center gap-1">
+                          <Pencil size={10} /> Custom Payload
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#667781]">
+                      Event: <span className="font-bold text-[#008069]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold">{selectedJsonItem.customer.name}</span>
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#111b21]">Meta Graph API CAPI Payload</h3>
-                  <p className="text-[11px] text-[#667781]">
-                    Event: <span className="font-bold text-[#008069]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold">{selectedJsonItem.customer.name}</span>
-                  </p>
+
+                {/* Header Action Buttons */}
+                <div className="flex items-center space-x-2">
+                  {!isEditingJson ? (
+                    <button
+                      onClick={handleStartEditJson}
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold transition shadow-xs cursor-pointer"
+                      title="Edit payload JSON secara manual"
+                    >
+                      <Pencil size={13} />
+                      <span>Edit JSON</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleFormatJson}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition cursor-pointer"
+                        title="Format & rapikan JSON"
+                      >
+                        <Sparkles size={12} className="text-blue-500" />
+                        <span>Format</span>
+                      </button>
+                      <button
+                        onClick={handleResetJson}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition cursor-pointer"
+                        title="Reset ke nilai default otomatis"
+                      >
+                        <RotateCcw size={12} className="text-rose-500" />
+                        <span>Reset</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingJson(false);
+                          setJsonParseError(null);
+                          setJsonDraft(JSON.stringify(currentPayload, null, 2));
+                        }}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition cursor-pointer"
+                      >
+                        <span>Batal</span>
+                      </button>
+                      <button
+                        onClick={handleSaveEditedJson}
+                        disabled={!!jsonParseError}
+                        className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                      >
+                        <Save size={13} />
+                        <span>Simpan</span>
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedJsonItem(null);
+                      setIsEditingJson(false);
+                    }}
+                    aria-label="Tutup modal"
+                    className="text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-xl hover:bg-[#e9edef] transition cursor-pointer ml-1"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedJsonItem(null)}
-                aria-label="Tutup modal"
-                className="text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-xl hover:bg-[#e9edef] transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            {/* Modal Body: JSON Code */}
-            <div className="p-5 flex-1 overflow-y-auto bg-[#1e293b] text-slate-100 font-mono text-xs leading-relaxed">
-              <pre className="overflow-x-auto select-all">
-                {JSON.stringify(buildCapiJsonPayload(selectedJsonItem), null, 2)}
-              </pre>
-            </div>
+              {/* Modal Body: JSON Viewer / Editor */}
+              <div className="p-4 flex-1 overflow-y-auto bg-[#0f172a] text-slate-100 font-mono text-xs flex flex-col min-h-[350px]">
+                {isEditingJson ? (
+                  <div className="flex flex-col flex-1">
+                    <textarea
+                      value={jsonDraft}
+                      onChange={handleJsonChange}
+                      spellCheck={false}
+                      className="w-full flex-1 min-h-[300px] p-3.5 bg-[#1e293b] text-emerald-300 font-mono text-xs rounded-xl border border-slate-700 focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] resize-y leading-relaxed"
+                      placeholder="Masukkan payload JSON Meta CAPI..."
+                    />
+                    {/* Live Validation Bar */}
+                    <div className="mt-2.5 flex items-center justify-between text-[11px]">
+                      {jsonParseError ? (
+                        <div className="flex items-center space-x-1.5 text-rose-400 font-medium">
+                          <AlertTriangle size={13} className="shrink-0" />
+                          <span className="truncate">Syntax Error: {jsonParseError}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-1.5 text-emerald-400 font-medium">
+                          <CheckCircle2 size={13} className="shrink-0" />
+                          <span>JSON Valid ({jsonDraft.split('\n').length} baris, {new Blob([jsonDraft]).size} bytes)</span>
+                        </div>
+                      )}
+                      <span className="text-slate-400 text-[10px]">
+                        Gunakan tombol Format untuk merapikan indentasi.
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <pre className="overflow-x-auto select-all leading-relaxed p-1">
+                    {JSON.stringify(currentPayload, null, 2)}
+                  </pre>
+                )}
+              </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9edef] bg-white">
-              <span className="text-[11px] text-[#667781]">
-                Data ini yang akan dikirimkan ke endpoint Meta Conversions API.
-              </span>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => handleCopyJson(buildCapiJsonPayload(selectedJsonItem))}
-                  className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-xs font-bold transition shadow-xs"
-                >
-                  {copiedJson ? <Check size={14} className="text-[#008069]" /> : <Copy size={14} />}
-                  <span>{copiedJson ? 'Tersalin!' : 'Copy JSON'}</span>
-                </button>
-                <button
-                  onClick={() => setSelectedJsonItem(null)}
-                  className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold rounded-xl transition shadow-xs"
-                >
-                  Tutup
-                </button>
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9edef] bg-white">
+                <span className="text-[11px] text-[#667781] max-w-sm">
+                  {isEditingJson
+                    ? 'Simpan perubahan atau langsung klik Approve untuk mengirim payload custom ini ke Meta.'
+                    : isCustom
+                    ? 'Payload custom tersimpan. Klik Approve untuk mengirim payload ini.'
+                    : 'Data ini yang akan dikirimkan ke endpoint Meta Conversions API.'}
+                </span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleCopyJson(isEditingJson ? jsonDraft : currentPayload)}
+                    className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-xs font-bold transition shadow-xs cursor-pointer"
+                  >
+                    {copiedJson ? <Check size={14} className="text-[#008069]" /> : <Copy size={14} />}
+                    <span>{copiedJson ? 'Tersalin!' : 'Copy JSON'}</span>
+                  </button>
+
+                  {isPending && (
+                    <button
+                      onClick={handleApproveFromModal}
+                      className="flex items-center space-x-1.5 px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                      title="Setujui dan kirim payload ini ke Meta CAPI"
+                    >
+                      <Send size={13} />
+                      <span>{isCustom || isEditingJson ? 'Approve Custom' : 'Approve & Kirim'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setSelectedJsonItem(null);
+                      setIsEditingJson(false);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#111b21] text-xs font-semibold rounded-xl transition shadow-xs cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <p className="text-xs text-[#8696a0]">
         Catatan: event Purchase &amp; Lead hanya dapat dikirim ke Meta dalam jendela ±7 hari sejak transaksi/interaksi. Event yang

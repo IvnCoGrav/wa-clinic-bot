@@ -925,27 +925,51 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           warning = `Event terjadi ${daysOld} hari lalu (>7 hari). Meta CAPI kemungkinan akan mengabaikan event ini.`;
         }
 
+        const body = (request.body || {}) as { customPayload?: any };
+        const customPayload = body.customPayload;
+
         const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
-        const resolvedVal =
+        const autoResolvedVal =
           extractValueByFormat(existing.raw_text || '', formats.formatValue) ??
           existing.purchase_value ??
           extractRupiahAmount(existing.raw_text || '', formats.formatValue) ??
           (await resolveTreatmentValue(existing.treatment_detail || existing.raw_text));
 
-        capiService
-          .sendCapiEvent({
-            eventName: 'Purchase',
-            customer: existing.customer,
-            adClick: existing.customer?.adClick || undefined,
-            value: resolvedVal,
-            currency: 'IDR',
-            tenantId: DEFAULT_TENANT_ID,
-            eventTime: Math.floor(occurredAt.getTime() / 1000),
-            customData: {
+        const resolvedVal = (customPayload && typeof customPayload.custom_data?.value === 'number')
+          ? customPayload.custom_data.value
+          : autoResolvedVal;
+
+        const eventName = (customPayload && typeof customPayload.event_name === 'string')
+          ? customPayload.event_name
+          : 'Purchase';
+
+        const eventTime = (customPayload && typeof customPayload.event_time === 'number')
+          ? customPayload.event_time
+          : Math.floor(occurredAt.getTime() / 1000);
+
+        const customData = customPayload?.custom_data
+          ? {
+              ...customPayload.custom_data,
+              source: 'ADMIN_MODERATION_APPROVE_CUSTOM',
+              reservationId: existing.id,
+              purchaseOccurredAt: occurredAt.toISOString(),
+            }
+          : {
               source: 'ADMIN_MODERATION_APPROVE',
               reservationId: existing.id,
               purchaseOccurredAt: occurredAt.toISOString(),
-            },
+            };
+
+        capiService
+          .sendCapiEvent({
+            eventName,
+            customer: existing.customer,
+            adClick: existing.customer?.adClick || undefined,
+            value: resolvedVal,
+            currency: customPayload?.custom_data?.currency || 'IDR',
+            tenantId: DEFAULT_TENANT_ID,
+            eventTime,
+            customData,
           })
           .then((result) => {
             if (!result.success) {
