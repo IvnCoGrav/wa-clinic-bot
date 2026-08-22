@@ -2198,7 +2198,7 @@ export const LiveChatMonitor: React.FC = () => {
                             {msg.media && (
                               <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
                                 <MediaImage
-                                  src={msg.media.thumbUrl || msg.media.url || msg.media.hdUrl}
+                                  src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
                                   downloadSrc={msg.media.hdUrl || msg.media.url}
                                   thumbUrl={msg.media.thumbUrl}
                                   caption={msg.media.caption || undefined}
