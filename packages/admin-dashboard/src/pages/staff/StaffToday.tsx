@@ -106,13 +106,15 @@ function extractMedia(msg: any): ChatMediaData | undefined {
   if (m && (m.url || m.hdUrl)) {
     const hdUrlStr = m.hdUrl || m.url;
     const standardUrlStr = (m.url && !m.url.includes('_thumb.')) ? m.url : (m.hdUrl || m.url);
+    const thumbStr = m.thumbUrl || (m.url && m.url.includes('_thumb.') ? m.url : undefined);
     const cleanUrl = standardUrlStr.replace(/^https?:\/\/[^/]+/, '');
     const cleanHdUrl = hdUrlStr.replace(/^https?:\/\/[^/]+/, '');
+    const cleanThumb = thumbStr ? thumbStr.replace(/^https?:\/\/[^/]+/, '') : undefined;
     return {
       ...m,
       url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
       hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
-      thumbUrl: m.thumbUrl ? (m.thumbUrl.replace(/^https?:\/\/[^/]+/, '').startsWith('/') ? m.thumbUrl.replace(/^https?:\/\/[^/]+/, '') : `/${m.thumbUrl.replace(/^https?:\/\/[^/]+/, '')}`) : undefined,
+      thumbUrl: cleanThumb ? (cleanThumb.startsWith('/') ? cleanThumb : `/${cleanThumb}`) : undefined,
     };
   }
   const directMediaUrl = msg?.media_url ?? msg?.mediaUrl ?? msg?.media_hd_url ?? msg?.mediaHdUrl;
