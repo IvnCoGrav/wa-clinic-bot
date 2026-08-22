@@ -180,14 +180,14 @@ export class MediaService {
       if (!meta.width || !meta.height) return null;
 
       let pipeline = sharp(buffer, { failOn: 'none' });
-      if (meta.width > 256 || meta.height > 256) {
-        pipeline = pipeline.resize({ width: 256, withoutEnlargement: true });
+      if (meta.width > 640 || meta.height > 640) {
+        pipeline = pipeline.resize({ width: 640, withoutEnlargement: true });
       }
-      const data = await pipeline.blur(1.5).jpeg({ quality: 50 }).toBuffer();
+      const data = await pipeline.jpeg({ quality: 80 }).toBuffer();
       if (!data || data.length === 0) return null;
       return { data, mimeType: 'image/jpeg' };
     } catch (err: any) {
-      console.warn('[MEDIA] Gagal generate blur thumbnail:', err?.message || err);
+      console.warn('[MEDIA] Gagal generate thumbnail:', err?.message || err);
       return null;
     }
   }
