@@ -23,6 +23,11 @@ describe('WABA Webhook Route (raw-body signature + tenant + status + media)', ()
     // tidak tergantung nilai .env lokal (mis. BURST_COALESCE_MS=5000).
     process.env.BURST_COALESCE_MS = '0';
     await seedAiScopeAll();
+    // Seed juga untuk tenant-waba-a agar AI scope gate tidak silence (fail-closed NEW_ONLY -> flaky)
+    const { AiEligibilityConfigService } = await import('../../src/config/ai-eligibility-config');
+    const { AiCustomerScope } = await import('@prisma/client');
+    await AiEligibilityConfigService.saveConfig('tenant-waba-a', { ai_customer_scope: AiCustomerScope.ALL, ai_scope_cutoff_at: new Date(0) });
+    await AiEligibilityConfigService.saveConfig('tenant-waba-b', { ai_customer_scope: AiCustomerScope.ALL, ai_scope_cutoff_at: new Date(0) });
   });
 
   function sign(body: string): string {

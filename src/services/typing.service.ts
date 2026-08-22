@@ -9,6 +9,7 @@ export interface HumanReplyParams {
   incomingMessageId?: string;
   incomingText?: string;   // untuk hitung reading delay
   replyText: string;      // teks balasan yang akan di-bubble-split
+  shouldAbort?: () => Promise<boolean> | boolean; // guard pembatalan real-time jika CS takeover
 }
 
 export interface HumanReplyResult {
@@ -289,7 +290,7 @@ export class TypingService {
    * 4. SAFETY NET (try/finally): Hanya panggil stopTyping di blok finally jika typing belum di-stop (mencegah redundant calls)!
    */
   public async simulateHumanReply(params: HumanReplyParams): Promise<HumanReplyResult> {
-    const { chatId, incomingMessageId, incomingText, replyText } = params;
+    const { chatId, incomingMessageId, incomingText, replyText, shouldAbort } = params;
     const isEnabled = (process.env.HUMANIZER_ENABLED ?? 'true') !== 'false' && this.speedFactor >= 0.01;
 
     let bubblesSent = 0;
@@ -298,6 +299,11 @@ export class TypingService {
 
     try {
       // Step 1: Send Seen & Reading Delay
+      if (shouldAbort && (await shouldAbort())) {
+        console.log(`[TYPING ABORT] Human takeover detected for ${chatId} before reading delay. Aborting reply.`);
+        return { success: false, bubblesSent: 0, error: 'ABORTED_BY_HUMAN_HANDLING' };
+      }
+
       if (isEnabled) {
         if (incomingMessageId) {
           await this.client.sendSeen(chatId, incomingMessageId).catch(() => {});
@@ -307,11 +313,25 @@ export class TypingService {
           const readingDelayMs = this.calculateReadingDelay(incomingText);
           await this.sleep(readingDelayMs);
         }
+
+        if (shouldAbort && (await shouldAbort())) {
+          console.log(`[TYPING ABORT] Human takeover detected for ${chatId} after reading delay. Aborting reply.`);
+          return { success: false, bubblesSent: 0, error: 'ABORTED_BY_HUMAN_HANDLING' };
+        }
       }
 
       // Step 2: Loop sending bubbles dengan indikator mengetik per bubble
       for (let i = 0; i < bubbles.length; i++) {
         const bubbleContent = bubbles[i];
+
+        if (shouldAbort && (await shouldAbort())) {
+          console.log(`[TYPING ABORT] Human takeover detected for ${chatId} before bubble ${i + 1}. Aborting reply.`);
+          if (!typingStopped) {
+            this.client.stopTyping(chatId).catch(() => {});
+            typingStopped = true;
+          }
+          return { success: false, bubblesSent, error: 'ABORTED_BY_HUMAN_HANDLING' };
+        }
 
         if (isEnabled) {
           typingStopped = false; // Tandai status typing aktif sebelum startTyping
@@ -330,6 +350,16 @@ export class TypingService {
           // Stop typing secara non-blocking (fire-and-forget) agar tidak menunda pengiriman sendText
           this.client.stopTyping(chatId).catch(() => {});
           typingStopped = true; // Status typing di-stop secara normal
+        }
+
+        // RE-CHECK GUARD SEBELUM SEND: Pastikan admin tidak takeover saat bot sedang typing!
+        if (shouldAbort && (await shouldAbort())) {
+          console.log(`[TYPING ABORT] Human takeover detected for ${chatId} right after typing delay of bubble ${i + 1}. Aborting sendText.`);
+          if (!typingStopped) {
+            this.client.stopTyping(chatId).catch(() => {});
+            typingStopped = true;
+          }
+          return { success: false, bubblesSent, error: 'ABORTED_BY_HUMAN_HANDLING' };
         }
 
         const sentSuccess = await this.client.sendText(chatId, bubbleContent);

@@ -225,14 +225,28 @@ export class ConversationService {
 
     // EXPLICIT GUARD: 6-hour auto-release is DISABLED for medical_concern escalation to protect customer safety
     if (conversation.escalation_reason === 'medical_concern') {
-      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to medical_concern. 6-hour auto-release is DISABLED.`);
+      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to medical_concern. Auto-release is DISABLED.`);
       return { released: false, updatedConversation: conversation };
     }
 
     // EXPLICIT GUARD: Legacy customer non-AI (AI Rollout Scope) TIDAK boleh auto-release
     // kembali ke bot — customer ini memang diarahkan ke human handling permanen.
     if (conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON) {
-      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${AI_ELIGIBILITY_ESCALATION_REASON}. 6-hour auto-release is DISABLED.`);
+      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${AI_ELIGIBILITY_ESCALATION_REASON}. Auto-release is DISABLED.`);
+      return { released: false, updatedConversation: conversation };
+    }
+
+    // EXPLICIT GUARD: Manual reply via WhatsApp HP atau Takeover CS via Dashboard
+    // TIDAK boleh di-auto-release oleh timer malam/diam — hanya boleh dilepas manual oleh admin via UI/command.
+    const isManualTakeover = 
+      conversation.escalation_reason === 'manual_reply' ||
+      conversation.escalation_reason === 'manual_takeover' ||
+      conversation.escalation_reason === 'admin_takeover' ||
+      conversation.escalation_reason === 'admin_manual_reply' ||
+      (typeof conversation.escalation_reason === 'string' && conversation.escalation_reason.startsWith('manual_'));
+
+    if (isManualTakeover) {
+      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to CS manual action (${conversation.escalation_reason}). Auto-release is DISABLED.`);
       return { released: false, updatedConversation: conversation };
     }
 

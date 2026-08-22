@@ -135,6 +135,14 @@ export class QueueService {
           try {
             const ctx = await this.resolveFreshContext(job.data);
             if (!ctx) return;
+
+            // RACE CONDITION GUARD: Jika percakapan sudah di-takeover CS (is_human_handling = true),
+            // batalkan eksekusi antrian bot agar tidak menimpa/bocor ke chat CS!
+            if (ctx.conversation?.is_human_handling) {
+              console.log(`[QUEUE ABORT] Conversation ${ctx.conversation.id} (customer: ${hashPiiPhone(ctx.customer.phone)}) is in HUMAN_HANDLING mode. Dropping queued bot reply.`);
+              return;
+            }
+
             console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${hashPiiPhone(ctx.customer.phone)} (Tenant: ${ctx.tenantId})`);
             await stateMachine.processMessage(ctx);
           } catch (err: any) {
@@ -252,6 +260,14 @@ export class QueueService {
         this.processNextInMemory(phone);
         return;
       }
+
+      // RACE CONDITION GUARD: Jika percakapan sudah di-takeover CS (is_human_handling = true),
+      // batalkan eksekusi antrian bot agar tidak menimpa/bocor ke chat CS!
+      if (ctx.conversation?.is_human_handling) {
+        console.log(`[QUEUE ABORT] Conversation ${ctx.conversation.id} (customer: ${phone}) is in HUMAN_HANDLING mode. Dropping in-memory queued bot reply.`);
+        return;
+      }
+
       console.log(`[QUEUE Memory-Fallback] Processing message for customer: ${ctx.customer.phone} (Tenant: ${ctx.tenantId}, Queue depth: ${queue.length})`);
       await stateMachine.processMessage(ctx);
     } catch (e: any) {

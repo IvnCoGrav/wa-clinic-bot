@@ -176,7 +176,8 @@ A: "${answer}"`;
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: 15000,
         }
       );
 
@@ -189,9 +190,11 @@ A: "${answer}"`;
         };
       }
       return null;
-    } catch (err) {
-      console.warn('[SELF-LEARNING LLM ERROR] Failed to refine FAQ with LLM, using fallback filter:', err);
-      return { question, answer };
+    } catch (err: any) {
+      const status = err?.response?.status || err?.status || 'ERR';
+      const briefError = err?.response?.data?.error?.message || err?.message || String(err);
+      console.warn(`[SELF-LEARNING LLM ERROR] HTTP ${status}: ${briefError} (model: ${model}). Skipping FAQ staging.`);
+      return null;
     }
   }
 }
