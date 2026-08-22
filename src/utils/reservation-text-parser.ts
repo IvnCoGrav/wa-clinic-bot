@@ -108,6 +108,37 @@ export function preprocessReservationText(rawText: string): string {
   return cleaned;
 }
 
+/**
+ * Memeriksa apakah suatu teks adalah placeholder / instruksi template form reservasi yang belum diisi.
+ * Contoh: "(Mohon bisa diisi Bunda 😊)", "(Jika hamil)", "-", "tidak ada", "none", dsb.
+ */
+export function isPlaceholderText(val: string | null | undefined): boolean {
+  if (!val) return true;
+  const clean = val.trim().toLowerCase().replace(/[()\[\]*~_`]/g, '').trim();
+  if (!clean || clean.length < 2) return true;
+
+  if (
+    clean.includes('mohon bisa diisi') ||
+    clean.includes('bisa diisi bunda') ||
+    clean.includes('diisi bunda') ||
+    clean.includes('jika hamil') ||
+    clean.includes('jika ada') ||
+    clean.includes('bila ada') ||
+    clean.includes('opsional') ||
+    clean.includes('optional')
+  ) {
+    return true;
+  }
+
+  if (
+    /^(tidak\s*ada|tdk\s*ada|belum\s*ada|belum|ga\s*ada|gak\s*ada|none|kosong|skip|-|\.|\/|\?)+$/i.test(clean)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function parseReservationText(rawText: string): ParseResult {
   if (!rawText) {
     return { success: false, error: 'Teks reservasi kosong.', missingFields: ['rawText'] };
@@ -156,7 +187,7 @@ export function parseReservationText(rawText: string): ParseResult {
       const colonIdx = trimmed.indexOf(':');
       if (colonIdx !== -1) {
         const val = trimmed.substring(colonIdx + 1).trim();
-        if (val) babyTreatment = val;
+        if (val && !isPlaceholderText(val)) babyTreatment = val;
       }
       continue;
     }
@@ -171,7 +202,7 @@ export function parseReservationText(rawText: string): ParseResult {
       const colonIdx = trimmed.indexOf(':');
       if (colonIdx !== -1) {
         const val = trimmed.substring(colonIdx + 1).trim();
-        if (val) momsTreatment = val;
+        if (val && !isPlaceholderText(val)) momsTreatment = val;
       }
       continue;
     }
@@ -181,17 +212,19 @@ export function parseReservationText(rawText: string): ParseResult {
       // Jika baris ini tidak punya titik dua `:`, tapi baris sebelumnya punya label dengan nilai kosong
       if (pendingField) {
         const value = trimmed;
-        if (pendingField === 'name') name = value;
-        else if (pendingField === 'phone') phone = value;
-        else if (pendingField === 'address') address = value;
-        else if (pendingField === 'date') dateStr = value;
-        else if (pendingField === 'kec') kec = value;
-        else if (pendingField === 'kota') kota = value;
-        else if (pendingField === 'babyName') { babyName = value; babyNameLines.push(value); }
-        else if (pendingField === 'babyAge') { babyAge = value; babyAgeLines.push(value); }
-        else if (pendingField === 'babyTreatment') babyTreatment = value;
-        else if (pendingField === 'momsPregnancyAge') momsPregnancyAge = value;
-        else if (pendingField === 'momsTreatment') momsTreatment = value;
+        if (!isPlaceholderText(value)) {
+          if (pendingField === 'name') name = value;
+          else if (pendingField === 'phone') phone = value;
+          else if (pendingField === 'address') address = value;
+          else if (pendingField === 'date') dateStr = value;
+          else if (pendingField === 'kec') kec = value;
+          else if (pendingField === 'kota') kota = value;
+          else if (pendingField === 'babyName') { babyName = value; babyNameLines.push(value); }
+          else if (pendingField === 'babyAge') { babyAge = value; babyAgeLines.push(value); }
+          else if (pendingField === 'babyTreatment') babyTreatment = value;
+          else if (pendingField === 'momsPregnancyAge') momsPregnancyAge = value;
+          else if (pendingField === 'momsTreatment') momsTreatment = value;
+        }
         pendingField = null;
       }
       continue;
@@ -203,7 +236,9 @@ export function parseReservationText(rawText: string): ParseResult {
 
     const setOrPending = (val: string, fieldName: string, setter: (v: string) => void) => {
       if (val) {
-        setter(val);
+        if (!isPlaceholderText(val)) {
+          setter(val);
+        }
       } else {
         pendingField = fieldName;
       }
@@ -224,8 +259,10 @@ export function parseReservationText(rawText: string): ParseResult {
         setOrPending(value, 'kota', (v) => (kota = v));
       } else if (label.includes('kec') && label.includes('kota')) {
         const parts = value.split(/[,\/]/);
-        kec = parts[0]?.trim() || '';
-        kota = parts[1]?.trim() || '';
+        const k1 = parts[0]?.trim() || '';
+        const k2 = parts[1]?.trim() || '';
+        if (k1 && !isPlaceholderText(k1)) kec = k1;
+        if (k2 && !isPlaceholderText(k2)) kota = k2;
       } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
         setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
       }
@@ -249,13 +286,16 @@ export function parseReservationText(rawText: string): ParseResult {
   const babies = buildBabyDetails(babyNameLines, babyAgeLines);
 
   // Jika Nama Bunda kosong tapi Nama Bayi ada, gunakan nama bayi
-  if (!name && (babyName || babyNameLines.length > 0)) {
-    name = babyName || babyNameLines[0] || '';
+  if ((!name || isPlaceholderText(name)) && (babyName || babyNameLines.length > 0)) {
+    const validBaby = babyName || babyNameLines.find(b => !isPlaceholderText(b)) || '';
+    if (validBaby && !isPlaceholderText(validBaby)) {
+      name = validBaby;
+    }
   }
 
   // Validasi Field Krusial: Minimal Alamat & (Nama Bunda atau Nama Bayi)
   const missingFields: string[] = [];
-  const hasName = !!name || !!babyName || babyNameLines.length > 0;
+  const hasName = (!!name && !isPlaceholderText(name)) || (!!babyName && !isPlaceholderText(babyName)) || babyNameLines.some(b => !isPlaceholderText(b));
   const hasAddress = !!address || !!kec || !!kota;
 
   if (!hasName) missingFields.push('Nama Bunda/Bayi');
@@ -269,20 +309,21 @@ export function parseReservationText(rawText: string): ParseResult {
     };
   }
 
-  const hasBabyTreatment = !!babyTreatment || !!babyName || babyNameLines.length > 0;
-  const hasMomsTreatment = !!momsTreatment || !!momsPregnancyAge;
+  const hasBabyTreatment = (!!babyTreatment && !isPlaceholderText(babyTreatment)) || (!!babyName && !isPlaceholderText(babyName)) || babyNameLines.some(b => !isPlaceholderText(b));
+  const hasMomsTreatment = (!!momsTreatment && !isPlaceholderText(momsTreatment)) || (!!momsPregnancyAge && !isPlaceholderText(momsPregnancyAge));
   const treatmentDetailParts: string[] = [];
 
   if (hasBabyTreatment) {
     const effBabyTreatment = babyTreatment || 'Treatment / Pijat Bayi';
-    const babyParts = babies.length > 0
-      ? babies.map((b) => `Bayi: ${b.name || '-'}, Usia: ${b.age || '-'}`).join(' | ')
-      : `Bayi: ${babyName || '-'}, Usia: ${babyAge || '-'}`;
+    const validBabies = babies.filter(b => b.name && !isPlaceholderText(b.name));
+    const babyParts = validBabies.length > 0
+      ? validBabies.map((b) => `Bayi: ${b.name || '-'}, Usia: ${b.age || '-'}`).join(' | ')
+      : `Bayi: ${babyName && !isPlaceholderText(babyName) ? babyName : '-'}, Usia: ${babyAge && !isPlaceholderText(babyAge) ? babyAge : '-'}`;
     treatmentDetailParts.push(`Baby: ${effBabyTreatment} (${babyParts})`);
   }
-  if (hasMomsTreatment || momsPregnancyAge) {
+  if (hasMomsTreatment) {
     const effMomsTreatment = momsTreatment || 'Treatment Moms';
-    treatmentDetailParts.push(`Moms: ${effMomsTreatment} (Kehamilan: ${momsPregnancyAge || '-'})`);
+    treatmentDetailParts.push(`Moms: ${effMomsTreatment} (Kehamilan: ${momsPregnancyAge && !isPlaceholderText(momsPregnancyAge) ? momsPregnancyAge : '-'})`);
   }
   if (treatmentDetailParts.length === 0) {
     treatmentDetailParts.push(`Treatment: ${babyTreatment || momsTreatment || 'Treatment Homecare'}`);

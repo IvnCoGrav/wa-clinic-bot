@@ -4,6 +4,41 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Meta CAPI Queue Payload Hardening (Issue #4) & Total Fix Inbound Image / False Share Location (Issue #6 / Known Issue #14) (2026-08-22)
+
+- **Root cause Meta CAPI Queue Payload Corruption (Issue #4):**
+  - Form reservasi WhatsApp klinik memuat teks template instruksi `(Mohon bisa diisi Bunda 😊)` pada baris treatment Moms.
+  - Ketika pelanggan hanya memesan treatment anak, teks template instruksi terbaca sebagai nama layanan Moms oleh `reservation-text-parser.ts`.
+  - Generator CAPI Queue (`cleanTreatmentList()` & `buildCapiJsonPayload()`) tidak memfilter teks instruksi sehingga menyuntikkan `Mohon Bisa Diisi Bunda 😊` sebagai item produk (`treatment_2`) di `custom_data.contents` dan `content_name`.
+  - Pelanggan tanpa nama Bunda di-fallback ke `"Bunda"`, sehingga PII hashing mengirim `user_data.fn: sha256("Bunda")`.
+- **Root cause Inbound Image Gagal & False Share Location (Issue #6 / Known Issue #14):**
+  - WAHA NOWEB (`devlikeapro/waha:noweb-2026.7.2`) mengirim lampiran media dengan struktur variatif (`_data.type: 'image'`, `_data.directPath`, `_data.mediaKey`, `mediaUrl`).
+  - `isInboundImage` tidak menangkap semua variasi tersebut sehingga bernilai `false`.
+  - WhatsApp menyertakan object `{ latitude: 0, longitude: 0 }` kosong pada lampiran media. Di `webhook.route.ts`, kode `payload.location ? 'location' : 'text'` mengevaluasi object `{}` sebagai truthy sehingga mengubah tipe pesan menjadi `location` dan teks menjadi `[LOCATION/MEDIA]`.
+  - LiveChat merender card `Share Location` (koordinat 0, 0) dan menolak menampilkan gambar.
+- **Perbaikan:**
+  - **Reservation Text Parser (`src/utils/reservation-text-parser.ts`)**:
+    - Menambahkan helper `isPlaceholderText()` untuk mendeteksi dan mengabaikan seluruh variasi template instruksi (`mohon bisa diisi...`, `(jika hamil)`, `(jika ada)`, `(opsional)`, `-`, `tidak ada`, `none`, dll).
+    - Memastikan field `momsTreatment`, `babyTreatment`, `name`, `babyName`, dan `momsPregnancyAge` kebal dari penyusupan teks placeholder template.
+  - **Meta CAPI Queue (`packages/admin-dashboard/src/pages/tenant/MetaCapiQueue.tsx`)**:
+    - Memperbarui `cleanTreatmentList()` dengan filter `isPlaceholderTreatment()` sehingga teks template tidak pernah masuk ke `custom_data.contents` maupun `content_name`.
+    - Memperbaiki resolusi `user_data.fn`: Menyaring kata generic `"Bunda"` / `"Ibu"` dan memprioritaskan nama asli si kecil (`child_name` / `Hasbi`), atau mengabaikan `fn` jika nama asli tidak tersedia.
+  - **CAPI Service & Admin Route (`src/services/capi.service.ts` & `src/routes/admin/reservations.subroute.ts`)**:
+    - Mengintegrasikan filter placeholder pada `resolveTreatmentValue()` dan response `GET /api/admin/capi-queue` dengan sanitasi *on-the-fly*.
+    - Menghapus prefix honorific (*"Bunda Sarah"* $\rightarrow$ *"Sarah"*) sebelum melakukan hashing PII `user_data.fn`.
+  - **Webhook Route & WAHA Client (`src/routes/webhook.route.ts` & `src/integrations/waha/client.ts`)**:
+    - Memperluas deteksi `isInboundImage` untuk meng-cover seluruh format WAHA NOWEB (`_data.type === 'image'`, `_data.directPath && _data.mediaKey`, `mediaUrl`, `hasMedia`).
+    - Memasang **Strict Location Validator**: Lokasi hanya diakui jika `latitude !== 0` dan `longitude !== 0` serta bukan NaN. Menghapus object location kosong `0, 0` dari payload mentah.
+    - Menambahkan implementasi method `fetchUrl` dan `downloadMedia` yang tangguh pada `WahaClient`.
+  - **LiveChat Monitor (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`)**:
+    - Memperketat `hasValidLocation` agar hanya merender card Peta Share Location jika koordinat nyata dan bukan `0, 0`.
+  - **Database Sanitizer Script (`src/scripts/sanitize-db-reservations.ts`)**:
+    - Script one-off untuk memulihkan dan membersihkan baris reservasi yang terlanjur menyimpan teks `Mohon bisa diisi...` di database production.
+- **Verifikasi:**
+  - `npx vitest run tests/unit/capi-payload-sanitizer.test.ts tests/unit/inbound-media-location-guard.test.ts` (7/7 passed).
+  - Full regression suite `npm test` passed (1514+ tests).
+  - Full TypeScript build `npm run build` dan dashboard frontend `vite build` passed (0 error).
+
 ### Fixed — Typo Backslash Escaping (`\Bundlebih`), Anti-Halusinasi Nama Bayi (`Bunny`), & Generator Sanitizer Pipeline (2026-08-22)
 
 - **Root cause Typo `\Bundlebih` & Stray Backslashes:**
