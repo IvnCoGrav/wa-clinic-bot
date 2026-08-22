@@ -4,6 +4,26 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — WhatsApp Companion Phone Outbound Image Capture & LiveChat Media Rendering (2026-08-22)
+
+- **Root Cause Analisis Masalah Gambar HP (Gambar Kartini tidak muncul di LiveChat):**
+  1. **Webhook Outbound Bypass**: Ketika admin/staf mengirim gambar dari aplikasi WhatsApp di HP (*companion phone*), webhook WAHA mengirim event `payload.fromMe = true` dengan `payload.body = ""` (karena foto tanpa caption). Logika webhook sebelumnya `if (adminReplyText.trim() && !isBotAutoReply)` mengevaluasi string kosong sebagai falsy sehingga pengiriman foto dilewati sepenuhnya (tidak di-download, tidak dicatat ke database `Message`, dan tidak di-broadcast via SSE ke LiveChat).
+  2. **Media Download Outbound Hilang**: Blok `fromMe` belum memiliki mekanisme download media dari WAHA NOWEB (`fetchUrl`, `downloadMedia`, base64 `jpegThumbnail`), sehingga pesan outbound tidak pernah menyimpan aset gambar ke storage lokal (`/storage/media/inbound`).
+  3. **LiveChat & Staff UI `extractMedia` Gap**: Fungsi `extractMedia` di frontend hanya mencari `msg.payload_raw.media`. Ketika mengambil data dari database via REST API (`GET /api/admin/live-chat/conversations/:id/messages`), kolom `media_url` dan `media_hd_url` berada langsung pada objek baris pesan, sehingga gambar tidak terbaca dan dirender sebagai pesan teks biasa / kosong.
+- **Perbaikan:**
+  - **Webhook Route (`src/routes/webhook.route.ts`)**:
+    - Menambahkan deteksi `isOutboundImage` lengkap pada event `fromMe` yang mencakup seluruh varian format WAHA NOWEB (`_data.type: 'image'`, `hasMedia`, `mediaUrl`, `imageMessage`, `directPath`).
+    - Mengunduh gambar otomatis dari WAHA via `wahaClient.fetchUrl` / `wahaClient.downloadMedia` / fallback base64 thumbnail, dan menyimpannya secara permanen via `mediaService.saveInboundMedia`.
+    - Mencatat pesan outbound ke database dengan `payloadRaw: { ...payload, media: outboundMedia }` serta menyiarkannya secara real-time ke LiveChat Monitor via Server-Sent Events (SSE).
+    - Memastikan pengiriman gambar tanpa teks tetap diproses dan dieksekusi tanpa terblokir filter `trim()`.
+  - **Admin Dashboard (`packages/admin-dashboard`)**:
+    - Memperbarui fungsi `extractMedia()` di `LiveChatMonitor.tsx` dan `StaffToday.tsx` untuk mengenali kolom `media_url`, `mediaUrl`, `media_hd_url`, dan `mediaHdUrl` langsung dari database.
+    - Menambahkan properti `thumbUrl` pada interface `ChatMediaData` (`MediaImage.tsx`).
+- **Verifikasi:**
+  - Unit tests `tests/unit/inbound-media-location-guard.test.ts` (4/4 passed).
+  - Full test suite regression (1522 passed across 173 test files).
+  - Frontend & Backend compilation (0 errors).
+
 ### Added — Interactive JSON Editor & Custom Payload Approve in Meta CAPI Queue (2026-08-22)
 
 - **Kebutuhan & Latar Belakang:**
