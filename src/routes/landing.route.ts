@@ -184,6 +184,18 @@ export async function landingRoutes(fastify: FastifyInstance) {
           }
         }
 
+        // Kanonikalisasi landingUrl SEBELUM disimpan — cegah AdClick.landingUrl tersimpan sebagai app.* /cta (kasus Aisyah 929).
+        // Jika landing_url tidak dikirim (external-tracker belum terpasang atau klik sebelum scan), fallback app.kalababyspa/cta akan
+        // dipetakan ke Tenant.landing_domain + /reservasionline agar event_source_url konsisten dengan PageView.
+        if (!query.landing_url) {
+          request.log.warn(`[CTA LANDING_URL MISSING] No landing_url param from ${host}${request.url} — fallback ke kanonikalisasi. Pasang external-tracker.js di LP eksternal.`);
+        }
+        try {
+          const { resolveCanonicalLandingUrl } = await import('../services/capi.service');
+          const canonical = resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain);
+          if (canonical) fullLandingUrl = canonical;
+        } catch {}
+
         const clickData = {
           fbclid: query.fbclid || null,
           fbp: query.fbp || null,

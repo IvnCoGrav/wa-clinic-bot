@@ -217,6 +217,27 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 12. [Reservations] Reservasi gagal capture saat Human Handling & stale guard (Siska #777) — FIXED 2026-08-22
+
+- **Status:** fixed (2026-08-22).
+- **Gejala:** Reservasi nomor 777 atas nama Siska tidak masuk `reservations` meski customer sudah kirim form lengkap. Di `messages` ada, di kalender/`/api/admin/reservations` kosong. Kasus serupa bisa terjadi pada form lain saat CS sudah take-over.
+- **Akar masalah:**
+  1. `webhook.route.ts` `HUMAN_HANDLING_ACTIVE_SILENT` (grace 30s / `ENABLE_WAHA_HOLD_LABEL=false` / explicit guard) langsung `return` tanpa `enqueue` — `human.ts` watcher tidak reachable.
+  2. `STALE MESSAGE GUARD` 180s drop form saat reconnect/QR burst.
+  3. `interest.ts` catch DB error kosong → reply sukses palsu.
+- **Fix:** stale guard bypass untuk `isReservationFormMessage`, 3 early-return human handling kini inline `prisma.reservation.create` + `reservationLifecycleService` best-effort (idempoten 24h), `interest.ts` catch log + update nama + eskalasi jujur. Verif `npx vitest run 1495 passed`.
+- **Sisa risiko:** tenant yang `landing_domain` belum diisi tetap fallback `kalababyspa.online/reservasionline` (by design). Idempoten `treatment_detail` exact match bisa skip duplikat legit jika customer kirim 2 treatment identik <24h — monitor via `AuditLog`.
+
+## 13. [Attribution] AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView asli (Aisyah 929) — FIXED 2026-08-22
+
+- **Status:** fixed (storage), self-heal untuk data lama tetap jalan.
+- **Gejala:** CAPI queue / `ad_clicks.landingUrl` untuk Aisyah 929 tampil `https://app.kalababyspa.online/cta?...` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` ke Meta jadi `app.*` → atribusi kurang presisi.
+- **Akar masalah:** `external-tracker.js` tidak terpasang di LP eksternal / CTA `href` bukan `/cta` / race 250ms → `GET /cta` tanpa `landing_url` → `landing.route.ts` fallback ke `x-forwarded-host` (`app.*`). Self-heal `resolveCanonicalLandingUrl` (strip `app.`, map `/cta → /reservasionline`) sudah ada di `capi.service.ts` + `GET /capi-queue` tapi baru heal saat CAPI send/queue view, raw DB tetap `app.*` sampai itu.
+- **Fix:** `landing.route.ts` kanonikalisasi **sebelum simpan** via `resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain)` + warn `CTA LANDING_URL MISSING`. Data baru langsung `kalababyspa.online/reservasionline`. Data lama tetap heal on-read.
+- **Tindak lanjut:** pastikan setiap LP eksternal load `/assets/external-tracker.js?pixel=xxx` dan CTA `href` mengarah `…/cta` agar `landing_url=window.location.href` selalu terkirim. Cek `Tenant.landing_domain` terisi di Settings.
+
+---
+
 ## 11. [Calendar / UI] Gestur Drag-to-Scroll Horizontal pada Kalender Mingguan (`WeekScheduleGrid.tsx`)
 
 - **Status:** open (investigasi arsitektur gesture sentuh / pending dedicated touch-recognizer).
