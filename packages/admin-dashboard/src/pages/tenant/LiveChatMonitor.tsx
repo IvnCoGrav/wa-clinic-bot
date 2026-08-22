@@ -2138,7 +2138,13 @@ export const LiveChatMonitor: React.FC = () => {
                       const hasMedia = !!msg.media;
                       // Lokasi valid = latitude/longitude ada dan bukan 0,0 (image WA Web sering kebawa location kosong)
                       const rawLoc = (msg as any).payload_raw?.location || (msg as any).payloadRaw?.location;
-                      const hasValidLocation = !!(rawLoc && Number(rawLoc.latitude) !== 0 && Number(rawLoc.longitude) !== 0);
+                      const hasValidLocation = !!(
+                        rawLoc &&
+                        Number(rawLoc.latitude) !== 0 &&
+                        Number(rawLoc.longitude) !== 0 &&
+                        !isNaN(Number(rawLoc.latitude)) &&
+                        !isNaN(Number(rawLoc.longitude))
+                      );
                       const isLocationMsg = hasValidLocation && ((msg.content && /^\[LOCATION/i.test(msg.content)) || !!rawLoc);
                       // Jika ada media valid, jangan anggap sebagai location walau payload_raw.location ada (0,0)
                       const effectiveIsLocationMsg = isLocationMsg && !hasMedia;
@@ -2149,10 +2155,10 @@ export const LiveChatMonitor: React.FC = () => {
                       let locLng: string | null = null;
                       if (effectiveIsLocationMsg) {
                         const locMatch = msg.content?.match(/Lat\s*([-\d.]+),\s*Lng\s*([-\d.]+)/i);
-                        if (locMatch) {
+                        if (locMatch && Number(locMatch[1]) !== 0 && Number(locMatch[2]) !== 0) {
                           locLat = locMatch[1];
                           locLng = locMatch[2];
-                        } else if (rawLoc) {
+                        } else if (hasValidLocation) {
                           locLat = rawLoc.latitude != null ? String(rawLoc.latitude) : null;
                           locLng = rawLoc.longitude != null ? String(rawLoc.longitude) : null;
                         }

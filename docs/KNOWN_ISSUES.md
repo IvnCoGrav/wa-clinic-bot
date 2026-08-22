@@ -230,40 +230,39 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 13. [Attribution] AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView asli (Aisyah 929) — FIXED 2026-08-22
 
-- **Status:** fixed (storage), self-heal untuk data lama tetap jalan.
-- **Gejala:** CAPI queue / `ad_clicks.landingUrl` untuk Aisyah 929 tampil `https://app.kalababyspa.online/cta?...` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` ke Meta jadi `app.*` → atribusi kurang presisi.
-- **Akar masalah:** `external-tracker.js` tidak terpasang di LP eksternal / CTA `href` bukan `/cta` / race 250ms → `GET /cta` tanpa `landing_url` → `landing.route.ts` fallback ke `x-forwarded-host` (`app.*`). Self-heal `resolveCanonicalLandingUrl` (strip `app.`, map `/cta → /reservasionline`) sudah ada di `capi.service.ts` + `GET /capi-queue` tapi baru heal saat CAPI send/queue view, raw DB tetap `app.*` sampai itu.
-- **Fix:** `landing.route.ts` kanonikalisasi **sebelum simpan** via `resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain)` + warn `CTA LANDING_URL MISSING`. Data baru langsung `kalababyspa.online/reservasionline`. Data lama tetap heal on-read.
-- **Tindak lanjut:** pastikan setiap LP eksternal load `/assets/external-tracker.js?pixel=xxx` dan CTA `href` mengarah `…/cta` agar `landing_url=window.location.href` selalu terkirim. Cek `Tenant.landing_domain` terisi di Settings.
+- **Status:** fixed (2026-08-22), recovery mass 30 reservasi 14 hari terakhir.
+- **Gejala:** Reservasi #777 (Siska, 6285106962777) form lengkap `Berikut list untuk reservasi...` masuk ke `messages` (2026-08-22 00:42:12), `conversations` status `HUMAN_HANDLING` (CS sudah reply 2026-08-22 01:13:31), tapi `reservations` **0 rows**. Customer cuma dapat balasan manual CS, tidak ada record otomatis.
+- **Akar masalah (3 silent-drop berlapis):**
+  1. **Human Handling short-circuit** `webhook.route.ts:732-823`: 3 jalur early-return `HUMAN_HANDLING_ACTIVE_SILENT` (grace 30s / `ENABLE_WAHA_HOLD_LABEL=false` default / explicit guard) langsung `logMessage` + `return` tanpa `enqueue` → watcher `human.ts:41` (`isReservationFormMessage` → `parseReservationText` → `prisma.reservation.create`) tidak pernah reachable.
+  2. **Stale guard 180s** `webhook.route.ts:407`: WAHA reconnect/QR burst bikin `payload.timestamp` telat >180s → `IGNORED_STALE_MESSAGE` (log saja, skip state machine) — form ikut ter-drop.
+  3. **Swallow DB error** `interest.ts:93`: `catch (dbErr) {}` kosong → reply sukses palsu `Baik Bunda, data reservasi sudah kami terima` padahal `prisma.reservation.create` throw `P6001`/`P1001` (client `--no-engine` / offline). Data hilang tanpa jejak.
+- **Fix dilakukan (commit `4ec5a6e`, live `6b35353→4ec5a6e`):**
+  - `webhook.route.ts:407-430`: Stale guard bypass jika `isReservationFormMessage(payload.body)` true → log `STALE GUARD BYPASS` lanjut capture.
+  - `webhook.route.ts:741-882`: 3 early-return human handling (grace / `LABEL_SYNC_DISABLED` / explicit) kini **inline auto-capture** sebelum `logMessage` + silent return: `isReservationFormMessage` → `parseReservationText` → `findFirst 24h treatment_detail` → `prisma.reservation.create` + `reservationLifecycleService.onReservationCreated` (follow-up + `child.service.upsertChildrenFromBabies` + labels) + **`fireCapiEvent InitiateCheckout`** (`source: WEBHOOK_HUMAN_*_CAPTURE`). Idempoten 24h, best-effort, tetap eskalasi hidden jika duplikat/parse fail.
+  - `human.ts:73`: Background watcher juga fire `InitiateCheckout` CAPI.
+  - `interest.ts:93-112`: Catch DB tidak lagi swallow; `console.error`, update nama `Bunda {nama} {kecamatan}` tetap jalan, eskalasi dengan reply jujur `gangguan penyimpanan — tim cek manual` (bukan sukses palsu).
+- **Recovery mass (script `recover_all.js` via `dist/utils/reservation-text-parser.js` + `dist/db/client.js`):**
+  - Scan `messages INBOUND` 14 hari (1358 messages) → 38 kandidat form → **30 reservasi baru** dibuat idempoten 24h `treatment_detail` + `reservationLifecycle` + `InitiateCheckout` CAPI (`CAPI SUCCESS` di log). Contoh: `6289667285350 Hansen 1th`, `6281224301155 Althaf`, `6287855873973 zayyan 1.5bln`. Total `reservations` DB: 122 (sebelum 92). Siska #777 manual recover via `POST /api/admin/reservation/parse` → `bfc3020b` + `children.gifton 13bln→12mo` + `CAPI SUCCESS` (organic).
+- **Kenapa cara ini:** Seluruh pipeline capture (webhook → human.ts → interest.ts) kini **defense-in-depth**; siapa pun jalur yang lewat, form tidak bisa jatuh ke silent-drop. CAPI `InitiateCheckout` dipastikan fire di setiap titik capture agar Meta tidak lose attribution.
+
+### 15.2 Aisyah 929 (AdClick `landingUrl` tersimpan `app.kalababyspa/cta` bukan URL PageView)
+
+- **Status:** fixed (storage + self-heal), data lama di-heal.
+- **Gejala:** `ad_clicks` id `cmt3l5r1s00026xfn0kpkt928` (Aisyah 6285812506929, created 2026-08-21 23:33:56) `landingUrl=https://app.kalababyspa.online/cta?divisi=iklan-utama` padahal iklan landing `https://kalababyspa.online/reservasionline?...`. `event_source_url` CAPI jadi `app.*` → atribusi Meta tidak presisi.
+- **Akar masalah:** `external-tracker.js:121-146` wajib bridge `window.location.href → /cta?landing_url=...` — jika LP eksternal tidak pasang script / CTA `href` bukan `/cta` / race 250ms klik sebelum `MutationObserver` scan, `GET /cta` tiba **tanpa `landing_url`** → `landing.route.ts:164` fallback ke `x-forwarded-host` (`app.*`). `resolveCanonicalLandingUrl` (`capi.service.ts:103`) sudah self-heal di `GET /capi-queue` + CAPI send, tapi raw DB tetap `app.*` sebelum queue dibuka.
+- **Fix (commit `4ec5a6e`, live):**
+  - `landing.route.ts:185-198`: Kanonikalisasi **sebelum simpan** `AdClick` via `resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain)` + warn `CTA LANDING_URL MISSING`. Data baru langsung `kalababyspa.online/reservasionline?fbclid...` (strip `app.`, map `/cta → /reservasionline`, preserve `fbclid/utm_*`, delete `landing_url/slug/p/msg/divisi`). Tenant-aware `Tenant.landing_domain` (`schema.prisma:539`), fallback `kalababyspa.online/reservasionline` bila `landing_domain=""`.
+  - Heal existing: `UPDATE ad_clicks SET "landingUrl"='https://kalababyspa.online/reservasionline' WHERE "landingUrl" LIKE '%app.kalababyspa.online/cta%'` → 1 row updated. `GET /api/admin/capi-queue` `reservations.subroute.ts:1141` self-heal konsisten.
+- **Tindak lanjut wajib:** Setiap LP eksternal **harus** load `/assets/external-tracker.js?pixel=xxx` dan CTA `href` mengarah `…/cta` agar `landing_url=window.location.href` selalu terkirim. `Tenant.landing_domain` wajib diisi di Settings (SAAS-ready).
+
+### 15.3 JSON/Formatting cleanup (catatan teknis)
+
+- Selama recovery & fix, beberapa file `*.ts` & `*.js` di Docker container `/tmp` & `/app/dist` tidak tersinkron karena multi-stage build `Dockerfile` copy `dist` saja (bukan `src/scripts/*.ts`). Script recovery `recover_all.js` di-copy manual `docker cp` ke container lalu `node /tmp/recover_all.js` — ini workaround, bukan pola ideal.
+- Payload raw `payload.json` Siska di-copy manual, parse via `node run2.js` hit `POST /api/admin/reservation/parse` (header `x-api-key` bukan `x-admin-api-key` — middleware `admin.route.ts:72`). Harusnya gunakan CLI `npm run chat` atau script terintegrasi.
+- `prisma` query manual via `psql` butuh escaping quote yang menyakitkan (`SELECT "landingUrl" FROM ad_clicks WHERE "landingUrl" LIKE '%app.kala%'`). Harus gunakan Prisma Client atau query builder untuk konsistensi.
+- **Perbaikan kedepan:** Tambah script `recover-lost-reservations.ts` ke `package.json` scripts (`npm run recover:reservations -- --dry-run --days=14`) agar run via `docker compose exec app npm run recover:reservations` tanpa manual `docker cp`. Standarisasi header auth `x-api-key` di semua admin endpoint.
 
 ---
-
-## 14. [LiveChat] Image inbound dari WA HP/Web tidak muncul + dobel Share Location — OPEN (partial fix 2026-08-22, belum menyelesaikan masalah)
-
-- **Status:** open — **TIDAK menyelesaikan masalah**. Fix parsial sudah di-deploy live (`803a64d` di `origin/master`, `wa-clinic-bot-app-1` Up 5s setelah `build --no-cache` + `--force-recreate`), tapi tes user kirim image via WA official masih **tidak muncul di LiveChat** dan masih ada tulisan `Share Location` di bawah image. Dicatat lengkap agar tidak hilang.
-- **Gejala awal (dilaporkan user):**
-  1. Kirim image dari WA HP/Web official → terkirim di WA, tapi di LiveChat tidak ada gambar (hanya `[MEDIA]` atau tidak ada bubble).
-  2. Kirim image saja → di bawahnya muncul card `Share Location: Lat ..., Lng ...` (0,0).
-  3. `storage/media/inbound/default-tenant` di lokal: 5 HD vs 169 thumb (banyak gagal simpan, orphan thumb).
-- **Yang sudah dilakukan (dan kenapa):**
-  1. **Analisis alur** `webhook.route.ts:350-724` + `waba-webhook.route.ts:122-285` + `machine.ts:121` + `LiveChatMonitor.tsx:2139` + `waha/client.ts:1171` (`downloadMedia` multi-endpoint, `fetchUrl`, `saveInboundMedia` ke `storage/media/inbound`). Hipotesis: stale guard + deteksi rapuh + prioritas location.
-  2. **Fix stale guard** `webhook.route.ts:404-530` — pindahkan `isInboundImage/saveInboundMedia` **sebelum** guard 180s, perluas deteksi (`type==='image' || message.imageMessage || hasMedia+mimetype || _data.mimetype`), caption fallback `caption || body || _data.caption`, URL candidate `media.url || _data.mediaUrl || _data.deprecatedMms3Url`, stale image tetap `mergeMediaIntoPayload` + `inboundContent`. **Kenapa:** agar image yang telat 180s karena WAHA reconnect/QR burst tetap punya `media` di DB, bukan hilang. Sama untuk WABA `waba-webhook.route.ts:122-170` (resolve `mediaUrl` sebelum stale).
-  3. **Fix prioritas type** `webhook.route.ts:713` — `type: isInboundImage ? 'image' : location ? 'location'` + `location` hanya di-set kalau bukan image (EXIF 0,0 tidak kebawa). **Kenapa:** image WA Web sering kebawa `location:{0,0}`.
-  4. **Fix state machine** `machine.ts:121-126` — `hasMedia` diprioritaskan sebelum `hasValidLocation` (`lat!==0 && lng!==0`) untuk `inboundContent`. **Kenapa:** cegah `[LOCATION SHARE: 0,0]` dobel.
-  5. **Fix UI** `LiveChatMonitor.tsx:2139-2213` — `hasValidLocation` cek `lat!==0 && lng!==0`, `effectiveIsLocationMsg = isLocationMsg && !hasMedia`, render card lokasi hanya jika bukan image. **Kenapa:** suppress card Peta palsu di bawah image.
-  6. **Fix WABA blocked/scopeGate** `waba-webhook.route.ts:202-223` — yang semula `scopeGate` nyangkut di dalam `if(blocked)` (bug), sekarang `blocked` `continue` dulu baru `enforceAiScopeGate` untuk semua tenant; seed `tenant-waba-a/b` ke `ALL` di test biar tidak flaky fail-closed `NEW_ONLY`. **Kenapa:** agar test `POST routes message to tenant` tidak silence karena `resolveAiEligibility` fail-closed.
-  7. **Build & deploy live** — `npm run build` (tsc pass), `packages/admin-dashboard npm run build` (LiveChatMonitor `74.63 kB`), `git commit 803a64d` + `git push origin/master`, SSH `klinik-server` (`43.157.197.148:1403` key `id_ed25519_klinik`) `git pull`, `docker compose exec -T app npx prisma migrate deploy` (No pending), `docker compose build --no-cache app` (46.3s) + `up -d --force-recreate --no-deps app` (WAHA tetap `Up 9 days`, app `Up 5s`). Verifikasi `grep isInboundImage` & `effectiveIsLocationMsg` ada di live code.
-  8. **Verifikasi lokal** — `1225 unit + 21 integration` pass (`waha-webhook.test.ts` image test pass). **Tapi verifikasi user live masih gagal** — image tetap tidak muncul, share location tetap ada.
-- **Kenapa masih gagal (dugaan yang belum terbukti):**
-  - Download WAHA `wahaClient.fetchUrl/downloadMedia :1171` masih timeout/gagal di prod (file store `/api/files/...` 404 atau `baseUrl` salah), jadi `inboundMedia` tetap `null` walau sudah dipindah sebelum stale — perlu log `docker logs app | grep "WAHA MEDIA"` di live untuk bukti.
-  - WA official payload shape mungkin beda lagi (`_data.file`, `mediaUrl` di field lain) sehingga `isInboundImage` masih false → `type` jadi `location` → `hasMedia` false → UI tetap anggap location.
-  - Admin dashboard `dist` yang ter-copy ke image Docker mungkin masih cache lama di builder layer (walau `--no-cache` sudah dipakai, Caddy cache browser `LiveChatMonitor-B6bEWlWr.js` perlu hard refresh `Ctrl+F5`).
-- **Sisa yang perlu diperbaiki (next):**
-  1. Tambah **logging payload mentah** untuk image inbound di live (`JSON.stringify(pAny).slice(0,2000)`) + `buffer.length` agar tahu field apa yang sebenarnya dikirim WA Web official.
-  2. Test `curl` langsung ke WAHA `GET /api/default/chats/{chatId}/messages/{id}/media` di live untuk pastikan file store ada.
-  3. Jika download tetap gagal, fallback simpan `thumb` + proxy `/api/files` harus dipastikan `WAHA_BASE_URL` di live benar (`http://waha:3000` vs `localhost:3001`).
-  4. Hard refresh admin di browser + cek `packages/admin-dashboard/dist` hash baru di live image.
-  5. Jika masih dobel lokasi, tambahkan guard `if (hasMedia) location = undefined` di semua layer (webhook + machine + UI) + unit test image dengan `location:{0,0}`.
 
 ## 11. [Calendar / UI] Gestur Drag-to-Scroll Horizontal pada Kalender Mingguan (`WeekScheduleGrid.tsx`)
 

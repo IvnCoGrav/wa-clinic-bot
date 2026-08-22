@@ -64,7 +64,25 @@ export async function resolveTreatmentValue(treatmentDetail: string | null | und
   if (!treatmentDetail || !treatmentDetail.trim()) return undefined;
   try {
     const { treatmentCatalogService } = await import('./treatment-catalog.service');
-    const q = treatmentDetail.toLowerCase();
+    // Filter out template placeholder phrases (misal: "Mohon bisa diisi Bunda 😊")
+    let cleanDetail = treatmentDetail
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/\([^)]*\)/g, '')
+      .split('|')
+      .map(p => p.trim())
+      .filter(p => {
+        const lower = p.toLowerCase();
+        return (
+          !lower.includes('mohon bisa diisi') &&
+          !lower.includes('bisa diisi bunda') &&
+          !lower.includes('jika ada') &&
+          !lower.includes('jika hamil') &&
+          !lower.includes('opsional')
+        );
+      })
+      .join(' ');
+
+    const q = (cleanDetail || treatmentDetail).toLowerCase();
     const services = treatmentCatalogService.getAllServices();
     const exact = services.find((s) => {
       const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
@@ -412,14 +430,20 @@ export class CapiService {
       let hashedLn: string | undefined;
       const rawName = (customer.name || customer.pushName || effectiveAdClick?.name || '').trim();
       if (rawName) {
-        const parts = rawName.split(/\s+/);
-        const firstName = parts[0];
-        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : firstName;
-        if (firstName) {
-          hashedFn = builder.getNormalizedAndHashedPII(firstName, PII_DATA_TYPE.FIRST_NAME) || undefined;
-        }
-        if (lastName) {
-          hashedLn = builder.getNormalizedAndHashedPII(lastName, PII_DATA_TYPE.LAST_NAME) || undefined;
+        // Strip honorifics seperti "Bunda", "Ibu", "Mama", "Mom" di awal nama
+        const cleanedName = rawName.replace(/^(?:bunda|ibu|mama|mom|ny|ny\.|mrs|mrs\.)\s+/i, '').trim();
+        const lowerClean = cleanedName.toLowerCase();
+        const isGenericAlone = ['bunda', 'ibu', 'mama', 'mom', 'pasien', 'customer', '-'].includes(lowerClean);
+        if (cleanedName && !isGenericAlone && cleanedName.length > 1) {
+          const parts = cleanedName.split(/\s+/);
+          const firstName = parts[0];
+          if (firstName && firstName.length > 1) {
+            hashedFn = builder.getNormalizedAndHashedPII(firstName, PII_DATA_TYPE.FIRST_NAME) || undefined;
+            const lastName = parts.length > 1 ? parts.slice(1).join(' ') : undefined;
+            if (lastName) {
+              hashedLn = builder.getNormalizedAndHashedPII(lastName, PII_DATA_TYPE.LAST_NAME) || undefined;
+            }
+          }
         }
       }
 
