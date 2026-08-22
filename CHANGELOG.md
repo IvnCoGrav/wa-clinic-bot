@@ -21,8 +21,9 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
     - Memperbarui `extractAnswerFromPartialJson()` dengan pembersih backslash escaping otomatis.
 - **Verifikasi:** `npx vitest run tests/unit/language-sanitizer-fixes.test.ts` (7 tests pass), `npm run build` pass (zero error).
 
-### Fixed — Image Inbound Hilang di LiveChat & Dobel Share Location 0,0 (2026-08-22)
+### Fixed (Partial — BELUM menyelesaikan masalah live, lihat `docs/KNOWN_ISSUES.md#14`) — Image Inbound Hilang di LiveChat & Dobel Share Location 0,0 (2026-08-22)
 
+- **Status:** Sudah di-push `803a64d` & di-deploy live `docker compose build --no-cache + --force-recreate` (app Up 5s, waha Up 9 days), tapi tes user kirim image via WA Web official **masih tidak muncul** dan masih ada `Share Location` — dicatat sebagai **open** di KNOWN_ISSUES #14. Perubahan di bawah tetap di-keep karena benar secara logic, tapi belum cukup.
 - **Root cause 1 - Stale guard memotong media (`src/routes/webhook.route.ts:404` & `src/routes/waba-webhook.route.ts:132`):**
   - Image dari WA HP/Web official terdeteksi `isInboundImage` tapi `FAST-PATH STALE GUARD` 180s dieksekusi **sebelum** `saveInboundMedia`. Saat WAHA reconnect/QR burst atau jam HP skew, `payload.timestamp` telat >180s → `IGNORED_STALE_MESSAGE` di-log dengan `payloadRaw: payload` tanpa `media` dan `content: "[MEDIA]"` placeholder. `storage/media/inbound` tidak tercipta (cek: 5 HD vs 169 thumb orphan), `LiveChatMonitor.tsx:69 extractMedia` tidak ketemu `media.url` → `<MediaImage>` tidak render, seolah tidak masuk.
   - WABA sama: `waba-webhook.route.ts:132` resolve `mediaUrl` **setelah** stale guard, jadi image stale juga hilang di DB.
@@ -35,7 +36,8 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - **WABA** (`waba-webhook.route.ts:122-170` + `202-223`): resolve `mediaUrl/msgMedia` **sebelum** stale guard, stale log pakai `mergeWabaMedia(rawPayload)`, hapus duplikat resolve setelah attribution, dan perbaiki `blocked`+`scopeGate` yang sebelumnya `scopeGate` nyangkut di dalam `if(blocked)` (bug) → sekarang `blocked` log lalu `continue`, baru `conversation = getOrCreate` + `enforceAiScopeGate` untuk semua (seed `tenant-waba-a/b` ke `ALL` di test agar tidak flaky).
   - **State machine** (`machine.ts:121-126`): `hasMedia` (media/type==='image') diprioritaskan sebelum `hasValidLocation` (`latitude!==0 && longitude!==0`), cegah `[LOCATION SHARE: Lat 0, Lng 0]`.
   - **LiveChat** (`LiveChatMonitor.tsx:2139-2150`): `hasValidLocation` cek `latitude!==0 && longitude!==0` dan `effectiveIsLocationMsg = isLocationMsg && !hasMedia`, render card lokasi hanya jika bukan image.
-- **Verifikasi:** `npm run build` pass, `npx vitest run tests/integration/waha-webhook.test.ts tests/integration/waba-webhook-route.test.ts` 21 passed, `npx vitest run tests/unit` 1225 passed / 128 files, cek `storage/media/inbound` image stale tetap nambah HD+thumb, LiveChat SSE `message.created` bawa `media.hdUrl`.
+  - **Webhook type** (`webhook.route.ts:713`): `type: isInboundImage ? 'image' : location ? 'location'` + `location` hanya di-set kalau bukan image (EXIF 0,0 tidak kebawa).
+- **Verifikasi lokal:** `npm run build` pass, `1225 unit + 21 integration` pass, `storage/media/inbound` stale image nambah HD+thumb (lokal). **Verifikasi live user: GAGAL** — image masih tidak muncul & share location tetap ada setelah deploy `803a64d` + `docker compose build --no-cache` + `--force-recreate` (app Up 5s, waha 9 days). Lihat `docs/KNOWN_ISSUES.md#14` untuk next steps (log payload mentah, curl WAHA media, Caddy cache).
 
 ### Fixed — Auto-Release Exemption (Bypass Hold #1155), Anti-Race In-Flight Abort (#319), & Self-Learning Error Logger (2026-08-22)
 
