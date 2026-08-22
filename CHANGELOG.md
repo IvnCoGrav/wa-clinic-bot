@@ -4,6 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added / Fixed — Export Chat Data Ingestion, Customer & Children DB Enrichment, and CAPI Queue Alignment (2026-08-22)
+
+- **Latar Belakang & Kebutuhan:**
+  - Sinkronisasi dan pengkayaan database pelanggan klinik dari 126 riwayat transaksi chat ekspor (107 kontak unik).
+  - Melakukan deduplikasi dengan menghapus kontak duplikat (contact_id "57" / "Suami Bunda Luluk, Ampel").
+  - Menyelaraskan nama bersih pelanggan, kota, detail anak (nama, usia bulan/hari), detail treatment, nominal transaksi (`purchase_value`), dan status pemesanan.
+  - Memastikan seluruh data selaras dengan antrean Meta CAPI Queue (`GET /api/admin/capi-queue`).
+- **Implementasi:**
+  - **Enrichment Helpers (`src/scripts/enrich-export-helpers.ts`)**:
+    - `normalizePhone()`: Menormalkan format nomor telepon Indonesia (`08...` $\rightarrow$ `628...`, `+62...` $\rightarrow$ `628...`).
+    - `cleanCustomerName()`: Membersihkan awalan honorifik (`Bunda`, `Suami Bunda`, `Momm`, `~`) dan akhiran nama kecamatan/wilayah (`Jambangan`, `Wiyung`, `Bubutan`, dll).
+    - `parsePatientAgeAndName()`: Mengekstrak nama pasien dan umur dalam bulan (`Dhafi (11 bulan)` $\rightarrow$ `11`, `Briell (3 tahun)` $\rightarrow$ `36`, `Nami (32 hari)` $\rightarrow$ `1`).
+    - `parseBookingDateTime()`: Parser cerdas berbagai variasi tanggal booking (DD/MM/YYYY, teks hari dan bulan Indonesia).
+    - `mapPatientTypeToCategory()`: Klasifikasi kategori treatment (`BABY`, `MOMS`, `BOTH`).
+  - **Synchronization Script (`src/scripts/sync-export-data.ts`)**:
+    - Memproses 126 record ekspor secara idempoten.
+    - Melakukan upsert pada tabel `Customer`, relasi `Child`, dan tabel `Reservation` dengan purchase value dan status selesai.
+- **Verifikasi & Eksekusi di Live Server:**
+  - Unit tests `tests/unit/sync-export-data.test.ts` (6/6 passed).
+  - Full test suite regression (1520 passed across 173 test files).
+  - Berhasil dieksekusi di database live server: **32 Customer diperkaya, 55 Child di-upsert, 56 Reservasi disinkronkan & diperbarui**.
+
 ### Fixed — Meta CAPI Queue Payload Hardening (Issue #4) & Total Fix Inbound Image / False Share Location (Issue #6 / Known Issue #14) (2026-08-22)
 
 - **Root cause Meta CAPI Queue Payload Corruption (Issue #4):**
