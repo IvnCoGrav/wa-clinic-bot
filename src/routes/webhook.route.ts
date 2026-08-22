@@ -767,6 +767,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     console.log(`[HUMAN GRACE AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name}) — bypass grace silent`);
                     const { reservationLifecycleService: _rlG } = await import('../services/reservation-lifecycle.service');
                     await _rlG.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [] });
+                    try { const { fireCapiEvent: _fcG } = await import('../services/capi.service'); _fcG({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HUMAN_GRACE_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
                 }
               }
@@ -803,6 +804,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     console.log(`[HUMAN HOLD-DISABLED AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name})`);
                     const { reservationLifecycleService: _rlL } = await import('../services/reservation-lifecycle.service');
                     await _rlL.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [] });
+                    try { const { fireCapiEvent: _fcL } = await import('../services/capi.service'); _fcL({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HOLD_DISABLED_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   } else {
                     console.log(`[HUMAN HOLD-DISABLED CAPTURE SKIP] Duplicate reservation within 24h for ${customer.phone}`);
                   }
@@ -878,6 +880,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     console.log(`[HUMAN EXPLICIT AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name})`);
                     const { reservationLifecycleService: _rlE } = await import('../services/reservation-lifecycle.service');
                     await _rlE.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [] });
+                    try { const { fireCapiEvent: _fcE } = await import('../services/capi.service'); _fcE({ eventName: 'InitiateCheckout', customer, tenantId: DEFAULT_TENANT_ID, customData: { source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE', treatment: p.treatmentDetail } }); } catch {}
                   }
                 }
               }

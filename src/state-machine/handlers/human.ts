@@ -79,6 +79,12 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
               babies: parsed.babies || [],
             });
 
+            // Meta CAPI InitiateCheckout — pastikan event ter-record walau via human handling
+            try {
+              const { fireCapiEvent } = await import('../../services/capi.service');
+              fireCapiEvent({ eventName: 'InitiateCheckout', customer, tenantId, customData: { source: 'HUMAN_HANDLER_FORM_CAPTURE', treatment: parsed.treatmentDetail } });
+            } catch {}
+
             // Update nama kontak jika terisi
             const customerName = parsed.name?.trim();
             if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
