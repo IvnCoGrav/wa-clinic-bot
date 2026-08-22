@@ -65,4 +65,49 @@ describe('Inbound Media & Location Guard', () => {
     // Plain text message should NOT be detected as image
     expect(detectInboundImage({ body: 'Halo min reservasi' })).toBe(false);
   });
+
+  it('should detect and process outbound companion images with and without captions', () => {
+    const isOutboundImagePayload = (pAny: any) => {
+      const isImg =
+        pAny.type === 'image' ||
+        pAny._data?.type === 'image' ||
+        !!(pAny.message && pAny.message.imageMessage) ||
+        !!(pAny.hasMedia && (pAny.media?.mimetype?.startsWith('image/') || pAny.media?.mime_type?.startsWith('image/'))) ||
+        !!(pAny._data?.mimetype?.startsWith('image/')) ||
+        !!(pAny.mimetype?.startsWith('image/')) ||
+        !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
+        !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url);
+
+      const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || (isImg ? '' : pAny.body) || pAny._data?.caption || '';
+      const adminReplyText = imageCaption || pAny.body || '';
+
+      return {
+        isOutboundImage: isImg,
+        shouldProcess: (adminReplyText.trim().length > 0 || isImg),
+        caption: imageCaption,
+      };
+    };
+
+    // Outbound image from phone WITHOUT caption (body: "")
+    const imgWithoutCaption = {
+      fromMe: true,
+      body: '',
+      hasMedia: true,
+      media: { mimetype: 'image/jpeg', url: 'http://waha:3000/api/files/kartini.jpg' },
+    };
+    const res1 = isOutboundImagePayload(imgWithoutCaption);
+    expect(res1.isOutboundImage).toBe(true);
+    expect(res1.shouldProcess).toBe(true);
+
+    // Outbound image from phone WITH caption
+    const imgWithCaption = {
+      fromMe: true,
+      body: 'Selamat Hari Kartini',
+      _data: { type: 'image', caption: 'Selamat Hari Kartini' },
+    };
+    const res2 = isOutboundImagePayload(imgWithCaption);
+    expect(res2.isOutboundImage).toBe(true);
+    expect(res2.shouldProcess).toBe(true);
+    expect(res2.caption).toBe('Selamat Hari Kartini');
+  });
 });
