@@ -40,8 +40,8 @@ export const MediaImage: React.FC<{
   const touchStartYRef = useRef<number>(0);
   const isHistoryPushedRef = useRef<boolean>(false);
 
-  // Standard preview (jelas, cepat, hemat kuota) vs HD original
-  const standardSrc = src || thumbUrl || downloadSrc || '';
+  // Standard preview (jelas, cepat, tajam dari file utama) vs HD original
+  const standardSrc = src || downloadSrc || thumbUrl || '';
   const hdSrc = downloadSrc || src || '';
   const hasHdOption = Boolean(hdSrc && standardSrc && hdSrc !== standardSrc);
 
