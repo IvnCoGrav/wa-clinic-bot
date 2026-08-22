@@ -272,7 +272,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
               // 4. Log outbound manual reply ke tabel Messages & broadcast SSE ke Live Chat Panel
               const outboundContent = isOutboundImage
-                ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
+                ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[IMAGE]')
                 : adminReplyText;
 
               const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
@@ -281,7 +281,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 outboundContent,
                 payload.id,
                 DEFAULT_TENANT_ID,
-                30
+                60,
+                isOutboundImage
               );
 
               if (!isDuplicateOutbound && !isRecentDuplicate) {
