@@ -151,14 +151,14 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
         let ctaInstruction = '';
         if (isLocationKnown) {
           if (treatmentNameForFollowUp && treatmentNameForFollowUp.trim()) {
-            ctaInstruction = `6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, tutup dengan ajakan lanjut booking yang MENYATU secara natural dengan konteks jawabanmu. Sebutkan nama treatment "${treatmentNameForFollowUp.trim()}" (contoh: "Mau saya bantu jadwalkan ${treatmentNameForFollowUp.trim()} sekalian, Bunda? 🙏🏻"). DILARANG menanyakan alamat/rumah lagi karena kami sudah tahu.`;
+            ctaInstruction = `6. TUGAS WAJIB DI AKHIR KALIMAT (HANYA 1 PERTANYAAN): Setelah jawaban inti yang singkat selesai, tutup dengan HANYA SATU pertanyaan ajakan lanjut booking yang natural: "Mau saya bantu jadwalkan ${treatmentNameForFollowUp.trim()} sekalian, Bunda? 🙏🏻". DILARANG menanyakan alamat/rumah lagi karena kami sudah tahu. DILARANG KERAS menanyakan 2 hal/pertanyaan sekaligus.`;
           } else {
-            ctaInstruction = '6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, tutup pesan dengan menanyakan apakah Bunda tertarik lanjut ke reservasi. DILARANG menanyakan alamat/rumah lagi karena kami sudah tahu.';
+            ctaInstruction = '6. TUGAS WAJIB DI AKHIR KALIMAT (HANYA 1 PERTANYAAN): Setelah jawaban inti yang singkat selesai, tutup pesan dengan HANYA SATU pertanyaan apakah Bunda tertarik lanjut ke reservasi. DILARANG menanyakan alamat/rumah lagi. DILARANG KERAS menanyakan 2 hal/pertanyaan sekaligus.';
           }
         } else {
-          ctaInstruction = '6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, Anda WAJIB MENGAKHIRI PESAN dengan menanyakan area/rumah tempat tinggal customer secara ramah (contoh: "Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊"). DILARANG KERAS menanyakan hal lain (seperti bertanya usia bayi) di akhir kalimat, HARUS menanyakan rumah/daerah. DILARANG KERAS memakai kata "lokasi".';
+          ctaInstruction = '6. TUGAS WAJIB DI AKHIR KALIMAT (HANYA 1 PERTANYAAN): Setelah jawaban inti yang singkat selesai, Anda WAJIB MENGAKHIRI PESAN dengan HANYA SATU PERTANYAAN menanyakan area/rumah tempat tinggal customer secara ramah: "Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊". DILARANG KERAS menanyakan hal lain (seperti menanyakan keluhan si kecil atau usia bayi) di akhir kalimat, HARUS HANYA menanyakan rumah/daerah. DILARANG KERAS menanyakan 2 hal sekaligus. DILARANG KERAS memakai kata "lokasi".';
           if (treatmentNameForFollowUp && treatmentNameForFollowUp.trim()) {
-            ctaInstruction = `6. TUGAS WAJIB DI AKHIR KALIMAT: Setelah jawaban inti selesai, tutup dengan ajakan lanjut booking yang MENYATU secara natural dengan konteks jawabanmu. Sebutkan nama treatment "${treatmentNameForFollowUp.trim()}" dan WAJIB tanyakan rumah customer di akhir chat (contoh: "Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ongkirnya untuk treatment ${treatmentNameForFollowUp.trim()} 🙏🏻"). DILARANG KERAS menanyakan hal lain. DILARANG KERAS memakai kata "lokasi".`;
+            ctaInstruction = `6. TUGAS WAJIB DI AKHIR KALIMAT (HANYA 1 PERTANYAAN): Setelah jawaban inti yang singkat selesai, tutup dengan HANYA SATU PERTANYAAN menanyakan rumah customer di akhir chat: "Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ongkirnya untuk treatment ${treatmentNameForFollowUp.trim()} 🙏🏻". DILARANG KERAS menanyakan hal lain. DILARANG KERAS menanyakan 2 hal sekaligus. DILARANG KERAS memakai kata "lokasi".`;
           }
         }
 
@@ -200,7 +200,11 @@ Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Refe
 ${contextText ? contextText : '(Tidak ada referensi dokumen spesifik yang ditemukan)'}
 
 ATURAN BALASAN:
-1. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "answer" (gunakan informasi dari referensi dokumen di atas). Jawab layaknya chat WhatsApp biasa yang mengalir natural. DILARANG KERAS menggunakan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:", "Berikut adalah informasi yang diminta", atau sejenisnya. Langsung ke inti jawaban dengan gaya bahasa ngobrol!
+0. PENJELASAN SINGKAT & PADAT (MAKSIMAL 2-3 KALIMAT):
+   Jelaskan treatment/informasi secara SINGKAT, PADAT, dan LANGSUNG KE INTI MANFAATNYA (maksimal 2–3 kalimat saja). DILARANG menulis penjelasan yang terlalu detail, teori medis panjang lebar, atau membanding-bandingkan treatment secara bertele-tele kecuali secara eksplisit diminta oleh customer. Gunakan bahasa obrolan WhatsApp yang santai, ringkas, dan to the point.
+1. ATURAN HANYA 1 PERTANYAAN / CTA (WAJIB TUNGGAL):
+   Dalam 1 kali pesan, HANYA BOLEH ADA MAKSIMAL 1 PERTANYAAN di akhir pesan. DILARANG KERAS menanyakan 2 pertanyaan/hal sekaligus (contoh DILARANG: menanyakan keluhan anak SEKALIGUS menanyakan alamat rumah). Pilih satu pertanyaan saja yang paling relevan.
+2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "answer" (gunakan informasi dari referensi dokumen di atas). Jawab layaknya chat WhatsApp biasa yang mengalir natural. DILARANG KERAS menggunakan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:", "Berikut adalah informasi yang diminta", atau sejenisnya. Langsung ke inti jawaban dengan gaya bahasa ngobrol!
    FORMAT TEKS (WAJIB): WhatsApp hanya mengenali format SATU tanda. Untuk teks tebal pakai SATU bintang (*teks*), DILARANG memakai dua bintang (**teks**) karena markdown ganda akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan ~teks~.
    PENTING: Jika customer menggunakan kata referensial seperti "berapa itu", "berapa yang tadi", "yang itu", "yang baru", dll., WAJIB gunakan info "Treatment yang terakhir dibahas" pada section [KONTEKS PERCAKAPAN] di atas sebagai sumber utama penentuan treatment. Jika section tersebut "Belum ada", baru gunakan konteks dari riwayat percakapan.
 2. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog kaku. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
@@ -393,19 +397,29 @@ ATURAN EKSTRAKSI PREFERENSI:
           jawaban = sanitizedJawaban;
         }
 
-        // ENFORCE CTA: Jika lokasi/rumah customer BELUM diketahui, pastikan pesan DIUTAMAKAN menutup dengan pertanyaan rumah.
+        // ENFORCE CTA & SINGLE QUESTION: Jika lokasi/rumah customer BELUM diketahui, pastikan pesan HANYA menutup dengan pertanyaan rumah tunggal.
         if (isLocationKnown === false) {
           const asksLocation = /\b(rumah|rumahnya|daerah|kelurahan|kecamatan|area)\b/i.test(jawaban);
           if (!asksLocation) {
-            // Jika LLM lupa menanyakan rumah dan malah menutup dengan "Mau saya bantu jadwalkan?",
-            // ubah atau tambahkan pertanyaan rumah secara otomatis.
-            if (/\bmau\s+saya\s+bantu\s+(?:jadwalkan|pilih|booking).*?\?\s*🙏🏻?😊?/gi.test(jawaban)) {
-              jawaban = jawaban.replace(
-                /\bmau\s+saya\s+bantu\s+(?:jadwalkan|pilih|booking).*?\?\s*🙏🏻?😊?/gi,
-                'Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊'
-              );
-            } else if (!jawaban.includes('rumahnya di mana')) {
+            // Bersihkan pertanyaan penutup non-lokasi (seperti tanya keluhan / usia / bantuan jadwal) agar TIDAK menumpuk jadi 2 pertanyaan
+            jawaban = jawaban.replace(
+              /\n*(?:(?:Kalau\s+boleh\s+tahu,?\s*)?(?:apakah\s+si\s+kecil|apakah\s+adek|apakah\s+bunda|ada\s+keluhan|sedang\s+mengalami\s+keluhan|untuk\s+usia\s+berapa|mau\s+saya\s+bantu\s+(?:jadwalkan|pilih|booking)).*?\?\s*🙏🏻?😊?)/gi,
+              ''
+            ).trim();
+
+            if (!jawaban.includes('rumahnya di mana')) {
               jawaban = `${jawaban}\n\nKalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkir ke tempat Bunda 😊`;
+            }
+          } else {
+            // Jika sudah ada pertanyaan lokasi, pastikan tidak ada pertanyaan keluhan yang mendahuluinya di akhir kalimat
+            const parts = jawaban.split('\n\n');
+            if (parts.length > 2) {
+              jawaban = parts.filter((p, idx) => {
+                if (idx < parts.length - 1 && /\b(keluhan tertentu|usia berapa|sedang mengalami keluhan)\b/i.test(p) && p.includes('?')) {
+                  return false;
+                }
+                return true;
+              }).join('\n\n').trim();
             }
           }
         }
