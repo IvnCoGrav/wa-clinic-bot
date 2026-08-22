@@ -79,6 +79,20 @@ function extractMedia(msg: any): ChatMediaData | undefined {
       hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
     };
   }
+  const directMediaUrl = msg?.media_url ?? msg?.mediaUrl ?? msg?.media_hd_url ?? msg?.mediaHdUrl;
+  if (directMediaUrl && typeof directMediaUrl === 'string') {
+    const rawUrl = directMediaUrl;
+    const rawHdUrl = msg?.media_hd_url ?? msg?.mediaHdUrl ?? rawUrl;
+    const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+    const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
+    return {
+      url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
+      hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
+      thumbUrl: (msg?.media_thumb_url ?? msg?.mediaThumbUrl)?.replace(/^https?:\/\/[^/]+/, ''),
+      mimeType: msg?.media_mime_type ?? msg?.mediaMimeType ?? 'image/jpeg',
+      caption: msg?.media_caption ?? msg?.mediaCaption ?? undefined,
+    };
+  }
   if (msg?.payload_raw?.imageUrl) return { url: msg.payload_raw.imageUrl, hdUrl: msg.payload_raw.imageUrl };
   if (typeof msg?.content === 'string' && (msg.content.startsWith('/media/') || msg.content.startsWith('/api/files/') || msg.content.startsWith('http://') || msg.content.startsWith('https://')) && /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.content)) {
     const clean = msg.content.replace(/^https?:\/\/[^/]+/, '');

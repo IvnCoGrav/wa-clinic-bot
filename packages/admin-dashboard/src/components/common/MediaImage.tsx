@@ -4,6 +4,7 @@ import { ImageOff, Loader, X } from 'lucide-react';
 export interface ChatMediaData {
   url?: string;
   hdUrl?: string;
+  thumbUrl?: string;
   mimeType?: string;
   caption?: string;
 }

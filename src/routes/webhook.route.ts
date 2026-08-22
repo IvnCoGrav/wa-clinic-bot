@@ -154,7 +154,19 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
 
           if (phone && /^\d+$/.test(phone) && !phone.startsWith('6289999')) {
-            const adminReplyText = payload.body || '';
+            const pAny = payload as any;
+            const isOutboundImage =
+              pAny.type === 'image' ||
+              pAny._data?.type === 'image' ||
+              !!(pAny.message && pAny.message.imageMessage) ||
+              !!(pAny.hasMedia && (pAny.media?.mimetype?.startsWith('image/') || pAny.media?.mime_type?.startsWith('image/'))) ||
+              !!(pAny._data?.mimetype?.startsWith('image/')) ||
+              !!(pAny.mimetype?.startsWith('image/')) ||
+              !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
+              !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url);
+
+            const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || (isOutboundImage ? '' : pAny.body) || pAny._data?.caption || '';
+            const adminReplyText = imageCaption || payload.body || '';
 
             // CRITICAL FILTER: Ignore bot automated emergency/waiting templates if echoed back
             const isBotAutoReply = 
@@ -163,9 +175,53 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               adminReplyText.startsWith('Pricelist ') ||
               adminReplyText.startsWith('[AUTOMATED]');
 
-            if (adminReplyText.trim() && !isBotAutoReply) {
+            if ((adminReplyText.trim() || isOutboundImage) && !isBotAutoReply) {
               const customer = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
               const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+              let outboundMedia: any = null;
+              if (isOutboundImage) {
+                try {
+                  const { mediaService } = await import('../services/media.service');
+                  let buffer: Buffer | null = null;
+                  const mimeType = pAny.message?.imageMessage?.mimetype || pAny.media?.mimetype || pAny.media?.mime_type || pAny._data?.mimetype || pAny.mimetype || 'image/jpeg';
+                  const mediaUrlCandidate = pAny.media?.url || pAny._data?.mediaUrl || pAny._data?.deprecatedMms3Url || pAny.media?.deprecatedMms3Url || null;
+                  
+                  if (mediaUrlCandidate) {
+                    buffer = await wahaClient.fetchUrl(String(mediaUrlCandidate));
+                  } else if (pAny.media?.url) {
+                    buffer = await wahaClient.fetchUrl(String(pAny.media.url));
+                  }
+                  if (!buffer || buffer.length === 0) {
+                    buffer = await wahaClient.downloadMedia(payload.id, customerJid);
+                  }
+                  if ((!buffer || buffer.length === 0) && (pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail)) {
+                    const thumbB64 = pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail;
+                    buffer = Buffer.from(thumbB64, 'base64');
+                  }
+                  if (buffer && buffer.length > 0) {
+                    const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
+                    outboundMedia = {
+                      url: saved.thumbUrl || saved.hdUrl,
+                      hdUrl: saved.hdUrl,
+                      thumbUrl: saved.thumbUrl,
+                      mimeType,
+                      caption: imageCaption || null,
+                    };
+                  } else if (mediaUrlCandidate || pAny.media?.url) {
+                    const rawUrl = String(mediaUrlCandidate || pAny.media?.url);
+                    const urlPath = rawUrl.replace(/^https?:\/\/[^/]+/, '');
+                    outboundMedia = {
+                      url: urlPath,
+                      hdUrl: urlPath,
+                      mimeType,
+                      caption: imageCaption || null,
+                    };
+                  }
+                } catch (mediaErr: any) {
+                  console.warn('[WAHA OUTBOUND MEDIA] Gagal menyimpan media outbound dari WhatsApp HP:', mediaErr.message);
+                }
+              }
 
               // 1. Jika percakapan sedang human handling, reset timer 6 jam
               if (conversation.is_human_handling) {
@@ -187,13 +243,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 } catch (_) {}
               }
 
-              // 2. Self Learning Capture
-              const { selfLearningService } = await import('../services/self-learning.service');
-              selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
-                .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
+              // 2. Self Learning Capture (hanya jika ada teks)
+              if (adminReplyText.trim()) {
+                const { selfLearningService } = await import('../services/self-learning.service');
+                selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
+                  .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
+              }
 
               // 3. MedicalFaqStaging Capture Hook
-              if (conversation.escalation_reason === 'medical_concern') {
+              if (conversation.escalation_reason === 'medical_concern' && adminReplyText.trim()) {
                 try {
                   const lastInbound = await messageService.getLastInboundMessage(conversation.id, DEFAULT_TENANT_ID);
                   const rawQuestion = lastInbound?.content || 'Pertanyaan medis customer';
@@ -213,10 +271,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
 
               // 4. Log outbound manual reply ke tabel Messages & broadcast SSE ke Live Chat Panel
+              const outboundContent = isOutboundImage
+                ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[MEDIA]')
+                : adminReplyText;
+
               const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
               const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
                 conversation.id,
-                adminReplyText,
+                outboundContent,
                 payload.id,
                 DEFAULT_TENANT_ID,
                 30
@@ -236,14 +298,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   tenantId: DEFAULT_TENANT_ID,
                   conversationId: conversation.id,
                   direction: 'OUTBOUND',
-                  content: adminReplyText,
+                  content: outboundContent,
                   waMessageId: payload.id,
                   senderType: 'ADMIN',
                   senderName: 'Admin (WhatsApp HP)',
                   createdAt: msgDate,
+                  payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
                 }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
 
-                console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp HP ke ${phone} tercatat & disiarkan ke Live Chat.`);
+                console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp HP ke ${phone} (${isOutboundImage ? 'GAMBAR' : 'TEKS'}) tercatat & disiarkan ke Live Chat.`);
               } else {
                 console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded.`);
               }
