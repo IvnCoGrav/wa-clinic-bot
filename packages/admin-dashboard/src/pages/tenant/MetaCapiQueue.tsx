@@ -297,12 +297,20 @@ export const MetaCapiQueue: React.FC = () => {
       });
       if (res && res.success === false) {
         toast(res.error || `Gagal approve ${eventName} event.`, 'error');
+        setLoading(false);
+        return;
       } else if (res?.warning) {
         toast(`⚠️ ${res.warning}`, 'info');
       } else {
         toast(`Event ${eventName} disetujui & dikirim ke Meta CAPI.`, 'success');
       }
-      loadQueue();
+      // Optimistic update: langsung ubah status di UI agar tombol Approve hilang seketika
+      setItems((prev) =>
+        prev.map((p) =>
+          p.id === item.id ? { ...p, purchase_review_status: 'approved', purchase_event_sent_at: new Date().toISOString() } : p
+        )
+      );
+      await loadQueue();
     } catch (err: any) {
       toast(`Error approving event: ${err.message}`, 'error');
       setLoading(false);
@@ -324,7 +332,10 @@ export const MetaCapiQueue: React.FC = () => {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${item.id}/reject-purchase`, { method: 'POST' });
       toast(`Event ${eventName} ditandai Outlier & tidak dikirim ke Meta.`, 'success');
-      loadQueue();
+      setItems((prev) =>
+        prev.map((p) => (p.id === item.id ? { ...p, purchase_review_status: 'ignored_outlier' } : p))
+      );
+      await loadQueue();
     } catch (err: any) {
       toast(`Error rejecting event: ${err.message}`, 'error');
       setLoading(false);

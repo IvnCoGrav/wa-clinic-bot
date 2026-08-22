@@ -977,21 +977,27 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({ success: true, data: reservation, warning });
       } catch (error) {
-        const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
-          mock.purchase_review_status = 'approved';
-          mock.purchase_event_sent_at = new Date();
-          mock.updated_at = new Date();
-          memoryReservations.set(id, mock);
-          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        console.error('[CAPI APPROVE ERROR]', (error as Error).message);
+        // Fallback in-memory hanya untuk dev/test — di production harus fail agar UI tidak tampil success palsu
+        if (process.env.NODE_ENV !== 'production') {
+          const mock = memoryReservations.get(id);
+          if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+            mock.purchase_review_status = 'approved';
+            mock.purchase_event_sent_at = new Date();
+            mock.updated_at = new Date();
+            memoryReservations.set(id, mock);
+            return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+          }
         }
-        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+        const msg = (error as Error).message || 'Reservation not found';
+        const status = msg.includes('not found') || msg.includes('Not found') ? 404 : 500;
+        return reply.status(status).send({ success: false, error: msg });
       }
     }
   );
 
   /**
-   * POST /api/admin/reservation/:id/reject-purchase
+    * POST /api/admin/reservation/:id/reject-purchase
    * Moderasi outlier: admin menandai transaksi sebagai outlier / dibatalkan
    * (purchase_review_status='ignored_outlier'). Event TIDAK dikirim ke Meta CAPI
    * agar tidak mencemari data optimasi Ads Manager.
@@ -1049,24 +1055,31 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {
-        const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
-          mock.purchase_review_status = 'ignored_outlier';
-          mock.updated_at = new Date();
-          memoryReservations.set(id, mock);
-          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        console.error('[CAPI REJECT ERROR]', (error as Error).message);
+        if (process.env.NODE_ENV !== 'production') {
+          const mock = memoryReservations.get(id);
+          if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+            mock.purchase_review_status = 'ignored_outlier';
+            mock.updated_at = new Date();
+            memoryReservations.set(id, mock);
+            return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+          }
         }
-        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+        const msg = (error as Error).message || 'Reservation not found';
+        const status = msg.includes('not found') || msg.includes('Not found') ? 404 : 500;
+        return reply.status(status).send({ success: false, error: msg });
       }
     }
   );
 
   /**
-   * GET /api/admin/capi-queue
+    * GET /api/admin/capi-queue
    * Meja kerja Advertiser (Meta CAPI Queue): daftar reservasi & lead yang masuk ke sistem
    * beserta data atribusi (paid/organic + UTM) dan estimasi sisa usia event sebelum Meta drop (7 hari).
    */
   fastify.get('/api/admin/capi-queue', async (_request: FastifyRequest, reply: FastifyReply) => {
+    reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+    reply.header('Pragma', 'no-cache');
     try {
       const rows = await prisma.reservation.findMany({
         where: {

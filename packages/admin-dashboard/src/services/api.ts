@@ -102,6 +102,7 @@ export async function apiRequest<T = any>(
 
   const mergedOptions: RequestInit = {
     ...options,
+    cache: (options as any).cache ?? 'no-store',
     credentials: 'include',
     headers,
     signal: options.signal || controller.signal,
