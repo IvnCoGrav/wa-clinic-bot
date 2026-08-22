@@ -5,12 +5,15 @@ import { memoryAdClicks } from '../../src/routes/tracking.route';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 import { buildApp } from '../../src/app';
 
+import { memoryReservations } from '../../src/routes/admin/stores';
+
 describe('Meta Click Catcher, CAPI Queue & Attribution Fixes Unit Tests', () => {
   const app = buildApp();
 
   beforeEach(() => {
     vi.restoreAllMocks();
     memoryAdClicks.clear();
+    memoryReservations.clear();
     process.env.ADMIN_API_KEY = 'test_admin_key_999';
     process.env.FB_PIXEL_ID = '1382300863013984';
     process.env.FB_CAPI_ACCESS_TOKEN = 'mock_valid_token';
@@ -102,4 +105,41 @@ describe('Meta Click Catcher, CAPI Queue & Attribution Fixes Unit Tests', () => 
     expect(body.success).toBe(true);
     expect(Array.isArray(body.data)).toBe(true);
   });
+
+  it('4. POST /api/admin/reservation/:id/approve-purchase supports customPayload override in memory fallback', async () => {
+    const resId = 'res-test-custom-123';
+    memoryReservations.set(resId, {
+      id: resId,
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-123',
+      purchase_review_status: 'pending',
+      purchase_value: 70000,
+      treatment_detail: 'Pijat Bayi Ceria',
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    const customPayload = {
+      event_name: 'Purchase',
+      event_time: 1787360000,
+      custom_data: {
+        currency: 'IDR',
+        value: 125000,
+        content_name: 'Pijat Bayi Custom & Laktasi',
+      },
+    };
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/admin/reservation/${resId}/approve-purchase`,
+      headers: { 'x-api-key': 'test_admin_key_999' },
+      payload: { customPayload },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(true);
+    expect(body.data.purchase_review_status).toBe('approved');
+  });
 });
+

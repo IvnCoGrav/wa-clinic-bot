@@ -4,6 +4,32 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added — Interactive JSON Editor & Custom Payload Approve in Meta CAPI Queue (2026-08-22)
+
+- **Kebutuhan & Latar Belakang:**
+  - Menambahkan tombol **Edit** pada modal "View JSON" di halaman Meta CAPI Moderation Queue (`/admin/capi-queue`).
+  - Mengizinkan admin / operator untuk memodifikasi struktur payload Meta Graph API Conversions API (CAPI) secara interaktif sebelum disetujui dan dikirim.
+  - Memungkinkan penyesuaian nominal transaksi, nama produk, timestamp, hingga atribut PII secara granular.
+- **Implementasi:**
+  - **Admin Dashboard (`packages/admin-dashboard/src/pages/tenant/MetaCapiQueue.tsx`)**:
+    - Menambahkan tombol **"Edit JSON"** (`Pencil`) pada modal payload CAPI yang beralih ke editor teks kode monospaced interaktif bertema dark code editor.
+    - **Live JSON Syntax Validator**: Memberikan status visual real-time (🟢 *JSON Valid* dengan info baris & byte atau 🔴 *Syntax Error*).
+    - **Quick Actions**:
+      - `Format`: Merapikan dan mengindentasikan JSON secara otomatis (`Sparkles`).
+      - `Reset`: Mengembalikan payload ke nilai kalkulasi default sistem (`RotateCcw`).
+      - `Batal`: Membatalkan mode edit tanpa menyimpan (`X`).
+      - `Simpan`: Menyimpan perubahan custom JSON ke dalam state lokal (`Save`).
+    - **Custom Approve**:
+      - Tombol **"Approve & Kirim dengan JSON ini"** / **"Approve Custom"** (`Send`) mengirimkan payload yang telah diedit langsung ke backend untuk dieksekusi ke Meta Graph API.
+      - Indikator badge `*` dan status visual pada baris tabel untuk item yang memiliki custom payload.
+  - **Backend Route (`src/routes/admin/reservations.subroute.ts`)**:
+    - Memperbarui handler `POST /api/admin/reservation/:id/approve-purchase` agar menerima body `{ customPayload }`.
+    - Jika `customPayload` disediakan, nilai `event_name`, `event_time`, `custom_data.value`, `currency`, dan metadata kustom digunakan saat memanggil `capiService.sendCapiEvent()`, dan memperbarui `purchase_value` pada database reservasi.
+- **Verifikasi & Pengujian:**
+  - Unit tests `tests/unit/meta-attribution-fix.test.ts` (4/4 passed).
+  - Full test suite regression (1521 passed across 173 test files).
+  - Build Frontend (`packages/admin-dashboard`: `tsc && vite build`) & Backend (`tsc`) 100% lulus tanpa error.
+
 ### Added / Fixed — Export Chat Data Ingestion, Customer & Children DB Enrichment, and CAPI Queue Alignment (2026-08-22)
 
 - **Latar Belakang & Kebutuhan:**
