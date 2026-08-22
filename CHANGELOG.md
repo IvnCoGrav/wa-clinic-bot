@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Total Outbound Message Deduplication Guard & Database Cleanup (2026-08-22)
+
+- **Latar Belakang & Root Cause Analisis Masalah Balasan Duplikat (*Double Bubble* Admin Web vs WA HP):**
+  1. **Perbedaan Format ID WhatsApp (`wa_message_id`)**: Pengiriman dari Admin Web via WAHA API menghasilkan Short ID (`3EB0...`), sedangkan webhook echo dari WAHA mengirimkan Compound Key (`true_6288...@c.us_3EB0...`). Pengecekan kesamaan string persis gagal mengenali kecocokan ID tersebut.
+  2. **Perbedaan Placeholder Teks Gambar (`[IMAGE]` vs `[MEDIA]`)**: Admin Web mencatat pengiriman gambar dengan placeholder `[IMAGE]`, sedangkan webhook echo mencatat gambar dengan `[MEDIA]`. Pencocokan equality string `content` di database menghasilkan `null` sehingga baris baru ganda dibuat.
+  3. **Pencocokan Teks Case-Sensitive**: Pencarian teks pesan di PostgreSQL bersifat case-sensitive (*"Tes"* $\neq$ *"tes"*).
+- **Implementasi Perbaikan:**
+  - **Message Service (`src/services/message.service.ts`)**:
+    - Menambahkan helper `extractShortMessageId()` untuk menormalkan compound key WAHA/Baileys ke short key.
+    - Memperbarui `isDuplicateMessage()` agar mendaftarkan dan memverifikasi kedua varian ID (raw dan short key) ke memory cache dan Prisma `OR` query.
+    - Memperbarui `checkAndAttachOutboundDuplicate()` dengan window toleransi 60 detik, pencocokan gambar cerdas (`[IMAGE]`, `[MEDIA]`, `payload_raw.media`), dan pencocokan teks case-insensitive (`mode: 'insensitive'`).
+  - **Webhook Route (`src/routes/webhook.route.ts`)**:
+    - Menyelaraskan placeholder gambar outbound menjadi standar tunggal `[IMAGE]`.
+    - Memanggil `checkAndAttachOutboundDuplicate()` dengan parameter `isOutboundImage` dan window 60 detik.
+  - **Database Cleanup di Live Server**:
+    - Menjalankan kueri pembersihan partisi duplikasi idempoten di PostgreSQL live server: **244 pesan outbound duplikat historis berhasil dibersihkan**.
+- **Verifikasi & Pengujian:**
+  - Unit tests baru `tests/unit/outbound-deduplication.test.ts` (4/4 passed).
+  - Full Vitest suite regression (174 test files, 1526 passed).
+  - TypeScript build backend (`tsc`) 100% lulus tanpa error.
+
 ### Enhanced — On-Demand HD Image Loading & Mobile-Friendly Back Navigation in LiveChat Lightbox (2026-08-22)
 
 - **Kebutuhan & Latar Belakang:**

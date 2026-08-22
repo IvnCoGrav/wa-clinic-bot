@@ -21,6 +21,13 @@ function extractMediaFromPayload(payloadRaw: any): any {
   return undefined;
 }
 
+export function extractShortMessageId(waMessageId: string): string {
+  if (!waMessageId) return '';
+  const match = waMessageId.match(/(?:true|false)_[^@]+@[^_]+_([A-Za-z0-9_\-]+)$/);
+  if (match) return match[1];
+  return waMessageId;
+}
+
 export class MessageService {
   /**
    * Pengecekan Idempotensi: Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
@@ -29,20 +36,37 @@ export class MessageService {
   public async isDuplicateMessage(waMessageId: string, tenantId: string): Promise<boolean> {
     if (!waMessageId) return false;
 
-    const memoryKey = `${tenantId}:${waMessageId}`;
+    const shortId = extractShortMessageId(waMessageId);
+    const keysToCheck = [
+      `${tenantId}:${waMessageId}`,
+      shortId !== waMessageId ? `${tenantId}:${shortId}` : null,
+    ].filter(Boolean) as string[];
 
     // 1. Cek memory store dulu
-    if (memoryWaMessageIds.has(memoryKey)) {
-      return true;
+    for (const key of keysToCheck) {
+      if (memoryWaMessageIds.has(key)) {
+        return true;
+      }
     }
 
-    // Tambahkan ke memory store sebagai lock in-flight agar request paralel tertahan
-    memoryWaMessageIds.add(memoryKey);
+    // Tambahkan kedua key ke memory store sebagai lock in-flight agar request paralel tertahan
+    for (const key of keysToCheck) {
+      memoryWaMessageIds.add(key);
+    }
 
     try {
       // 2. Query ke Prisma DB
+      const orConditions: any[] = [{ wa_message_id: waMessageId }];
+      if (shortId && shortId !== waMessageId) {
+        orConditions.push({ wa_message_id: shortId });
+        orConditions.push({ wa_message_id: { endsWith: `_${shortId}` } });
+      }
+
       const existing = await prisma.message.findFirst({
-        where: { wa_message_id: waMessageId, tenant_id: tenantId },
+        where: {
+          tenant_id: tenantId,
+          OR: orConditions,
+        },
       });
 
       if (existing) {
@@ -65,10 +89,13 @@ export class MessageService {
     content: string,
     waMessageId: string,
     tenantId: string,
-    windowSeconds = 30
+    windowSeconds = 60,
+    isImage = false
   ): Promise<boolean> {
     const cutoff = new Date(Date.now() - windowSeconds * 1000);
     const normalizedContent = (content || '').trim();
+    const isImagePlaceholder = isImage || !normalizedContent || /^\[(IMAGE|MEDIA|GAMBAR)/i.test(normalizedContent);
+    const shortId = extractShortMessageId(waMessageId);
 
     // 1. Cek memoryMessages fallback
     const memMsg = memoryMessages.find(
@@ -76,27 +103,49 @@ export class MessageService {
         m.conversation_id === conversationId &&
         m.tenant_id === tenantId &&
         m.direction === 'OUTBOUND' &&
-        (m.content || '').trim() === normalizedContent &&
-        new Date(m.created_at) >= cutoff
+        new Date(m.created_at) >= cutoff &&
+        (
+          (isImagePlaceholder && (!m.content || /^\[(IMAGE|MEDIA|GAMBAR)/i.test((m.content || '').trim()) || !!(m.payload_raw as any)?.media)) ||
+          (!isImagePlaceholder && (m.content || '').trim().toLowerCase() === normalizedContent.toLowerCase())
+        )
     );
     if (memMsg) {
       if (!memMsg.wa_message_id && waMessageId) {
         memMsg.wa_message_id = waMessageId;
         memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+        if (shortId && shortId !== waMessageId) {
+          memoryWaMessageIds.add(`${tenantId}:${shortId}`);
+        }
       }
       return true;
     }
 
     // 2. Cek DB Prisma
     try {
+      let whereClause: any = {
+        conversation_id: conversationId,
+        tenant_id: tenantId,
+        direction: 'OUTBOUND',
+        created_at: { gte: cutoff },
+      };
+
+      if (isImagePlaceholder) {
+        whereClause.OR = [
+          { content: { startsWith: '[IMAGE' } },
+          { content: { startsWith: '[MEDIA' } },
+          { content: { startsWith: '[GAMBAR' } },
+          { content: '[IMAGE]' },
+          { content: '[MEDIA]' },
+        ];
+      } else {
+        whereClause.content = {
+          equals: normalizedContent,
+          mode: 'insensitive',
+        };
+      }
+
       const existing = await prisma.message.findFirst({
-        where: {
-          conversation_id: conversationId,
-          tenant_id: tenantId,
-          direction: 'OUTBOUND',
-          content: normalizedContent,
-          created_at: { gte: cutoff },
-        },
+        where: whereClause,
         orderBy: { created_at: 'desc' },
       });
 
@@ -106,7 +155,10 @@ export class MessageService {
             where: { id: existing.id },
             data: { wa_message_id: waMessageId },
           });
-          memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+        }
+        memoryWaMessageIds.add(`${tenantId}:${waMessageId}`);
+        if (shortId && shortId !== waMessageId) {
+          memoryWaMessageIds.add(`${tenantId}:${shortId}`);
         }
         return true;
       }
@@ -137,6 +189,10 @@ export class MessageService {
   }) {
     if (data.waMessageId) {
       memoryWaMessageIds.add(`${data.tenantId}:${data.waMessageId}`);
+      const shortId = extractShortMessageId(data.waMessageId);
+      if (shortId && shortId !== data.waMessageId) {
+        memoryWaMessageIds.add(`${data.tenantId}:${shortId}`);
+      }
     }
 
     const effectiveReadAt = data.readAt !== undefined
