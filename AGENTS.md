@@ -53,4 +53,4 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 
 - docker-compose pins `devlikeapro/waha:noweb-2026.7.2` (Postgres 16). Never use `:latest` for WAHA; validate WAHA upgrades in staging first. Notes: `deploy_config.txt`, README.
 - `.env` holds live credentials and is gitignored — never commit it or its values.
-- **Server update & Meta gate**: Testing on live server with potential Meta event triggers requires 2-step verification (Pixel is real). Standard safe deploys require 1-step verification. Any deploy/action with risk of touching/disrupting WAHA requires 2-step verification + explicit WARNING. See `.agents/rules/server-update-gate.md`.
+- **Server update & Meta gate**: Testing on live server with potential Meta event triggers requires 2-step verification (Pixel is real). Standard safe deploys require 1-step verification. Any deploy/action with risk of touching/disrupting WAHA requires 2-step verification + explicit WARNING. See `.agents/rules/server-update-gate.md` and `.agents/skills/server-access/SKILL.md` for SSH, database queries, container logs, and deployment runbook.
