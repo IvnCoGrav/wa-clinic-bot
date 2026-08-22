@@ -2136,19 +2136,23 @@ export const LiveChatMonitor: React.FC = () => {
                       const isWithin15Mins = msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false;
                       const canEdit = !isCustomer && !isRevoked && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
                       const hasMedia = !!msg.media;
-                      const isLocationMsg = (msg.content && /^\[LOCATION/i.test(msg.content)) || !!(msg as any).payload_raw?.location;
+                      // Lokasi valid = latitude/longitude ada dan bukan 0,0 (image WA Web sering kebawa location kosong)
+                      const rawLoc = (msg as any).payload_raw?.location || (msg as any).payloadRaw?.location;
+                      const hasValidLocation = !!(rawLoc && Number(rawLoc.latitude) !== 0 && Number(rawLoc.longitude) !== 0);
+                      const isLocationMsg = hasValidLocation && ((msg.content && /^\[LOCATION/i.test(msg.content)) || !!rawLoc);
+                      // Jika ada media valid, jangan anggap sebagai location walau payload_raw.location ada (0,0)
+                      const effectiveIsLocationMsg = isLocationMsg && !hasMedia;
                       const hasMediaOnly = hasMedia && (!msg.content || /^\[(IMAGE|MEDIA)/.test(msg.content));
 
-                      // Extract Location Coordinates if present
+                      // Extract Location Coordinates if present (hanya jika lokasi valid & bukan image)
                       let locLat: string | null = null;
                       let locLng: string | null = null;
-                      if (isLocationMsg) {
+                      if (effectiveIsLocationMsg) {
                         const locMatch = msg.content?.match(/Lat\s*([-\d.]+),\s*Lng\s*([-\d.]+)/i);
                         if (locMatch) {
                           locLat = locMatch[1];
                           locLng = locMatch[2];
-                        } else if ((msg as any).payload_raw?.location) {
-                          const rawLoc = (msg as any).payload_raw.location;
+                        } else if (rawLoc) {
                           locLat = rawLoc.latitude != null ? String(rawLoc.latitude) : null;
                           locLng = rawLoc.longitude != null ? String(rawLoc.longitude) : null;
                         }
@@ -2180,7 +2184,7 @@ export const LiveChatMonitor: React.FC = () => {
                                 />
                               </div>
                             )}
-                            {isLocationMsg && (
+                            {effectiveIsLocationMsg && (
                               <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
                                 <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
                                   <MapPin size={17} />
@@ -2205,7 +2209,7 @@ export const LiveChatMonitor: React.FC = () => {
                                 )}
                               </div>
                             )}
-                            {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !isLocationMsg && (
+                            {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
                               <p className={`font-sans whitespace-pre-wrap ${isRevoked ? 'italic text-[#667781]' : ''}`}>{msg.content}</p>
                             )}
                             <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">

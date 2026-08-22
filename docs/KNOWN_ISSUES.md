@@ -238,6 +238,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 14. [LiveChat] Image inbound dari WA HP/Web tidak muncul + dobel Share Location — FIXED 2026-08-22
+
+- **Status:** fixed (2026-08-22).
+- **Gejala:** Customer kirim image via WA HP/Web official → terkirim di WA, tapi di LiveChat tidak ada gambar (hanya `[MEDIA]` atau tidak ada bubble), atau muncul gambar + card `Share Location: Lat 0, Lng 0` di bawahnya. `storage/media/inbound` hanya 5 HD vs 169 thumb (banyak gagal simpan).
+- **Akar masalah:**
+  1. `STALE GUARD` 180s di `webhook.route.ts:404` & `waba-webhook.route.ts:132` dieksekusi sebelum `saveInboundMedia` → image stale di-log tanpa `media` → LiveChat tidak render.
+  2. Deteksi `isInboundImage` rapuh (hanya `type==='image' || message.imageMessage`) + caption hanya dari `caption`, padahal WAHA NOWEB taruh di `body` dan URL di `_data.mediaUrl` → `fetchUrl` gagal → `downloadMedia` timeout.
+  3. `machine.ts:121` & `LiveChatMonitor.tsx:2139` prioritas `location` dulu → image dengan `location:{0,0}` kebawa tampil dobel kartu Peta.
+- **Fix:** (a) pindah `saveInboundMedia` sebelum stale guard + stale image tetap simpan; (b) perluas deteksi + fallback caption/body + multi URL candidate; (c) prioritaskan `hasMedia` sebelum `hasValidLocation` (`lat!==0 && lng!==0`) di `machine.ts` dan `effectiveIsLocationMsg = isLocationMsg && !hasMedia` di LiveChatMonitor.
+- **Verifikasi:** `npm run build` pass, `1225 unit + 21 integration` pass, `storage/media/inbound` nambah HD+thumb untuk image stale.
+
 ## 11. [Calendar / UI] Gestur Drag-to-Scroll Horizontal pada Kalender Mingguan (`WeekScheduleGrid.tsx`)
 
 - **Status:** open (investigasi arsitektur gesture sentuh / pending dedicated touch-recognizer).

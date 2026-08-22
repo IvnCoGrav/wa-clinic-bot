@@ -4,6 +4,60 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Typo Backslash Escaping (`\Bundlebih`), Anti-Halusinasi Nama Bayi (`Bunny`), & Generator Sanitizer Pipeline (2026-08-22)
+
+- **Root cause Typo `\Bundlebih` & Stray Backslashes:**
+  - Saat LLM (MiniMax-M2.7) menghasilkan baris baru `\n` dan kata sapaan `Bund` dalam format JSON, escaping karakter newline dan token sapaan bergabung menjadi `\Bundlebih` / `\Bund`.
+  - Helper `extractAnswerFromPartialJson` sebelumnya hanya me-replace `\n` standar sehingga menyisakan backslash yang menempel di kata.
+- **Root cause Halusinasi Nama Si Kecil ("Bunny"):**
+  - Model LLM mengarang nama panggilan si kecil ("treatment untuk Bunny ya, Bund?") meskipun customer belum pernah menyebutkan nama anaknya di percakapan.
+- **Perbaikan:**
+  - **Language Sanitizer (`src/utils/language-sanitizer.ts`)**:
+    - Menambahkan `sanitizeStrayBackslashes()` untuk membersihkan seluruh pola `\Bundlebih` $\rightarrow$ `Bunda lebih`, `\Bund` $\rightarrow$ `Bunda`, dan menghapus backslash liar sebelum karakter alfabet (`\Bunda` $\rightarrow$ `Bunda`).
+    - Menambahkan filter di `sanitizeHallucinatedTerms()` untuk menormalkan frasa halusinasi nama anak seperti `untuk Bunny` / `terkait Bunny` / `si Bunny` $\rightarrow$ `si kecil`, serta menormalkan sapaan `ya, bund` $\rightarrow$ `ya, Bunda`.
+  - **LLM Generator (`src/integrations/llm/generator.ts`)**:
+    - Memperbarui prompt `systemMessage` di section `ATURAN ANTI-HALUSINASI`: melarang keras menebak atau mengarang nama panggilan si kecil ("Bunny", "Baby", "si dedek") jika belum disebutkan customer.
+    - Menambahkan `sanitizeStrayBackslashes` dan `sanitizeHallucinatedTerms` ke dalam pipeline pembersihan akhir respons AI.
+    - Memperbarui `extractAnswerFromPartialJson()` dengan pembersih backslash escaping otomatis.
+- **Verifikasi:** `npx vitest run tests/unit/language-sanitizer-fixes.test.ts` (7 tests pass), `npm run build` pass (zero error).
+
+### Fixed — Image Inbound Hilang di LiveChat & Dobel Share Location 0,0 (2026-08-22)
+
+- **Root cause 1 - Stale guard memotong media (`src/routes/webhook.route.ts:404` & `src/routes/waba-webhook.route.ts:132`):**
+  - Image dari WA HP/Web official terdeteksi `isInboundImage` tapi `FAST-PATH STALE GUARD` 180s dieksekusi **sebelum** `saveInboundMedia`. Saat WAHA reconnect/QR burst atau jam HP skew, `payload.timestamp` telat >180s → `IGNORED_STALE_MESSAGE` di-log dengan `payloadRaw: payload` tanpa `media` dan `content: "[MEDIA]"` placeholder. `storage/media/inbound` tidak tercipta (cek: 5 HD vs 169 thumb orphan), `LiveChatMonitor.tsx:69 extractMedia` tidak ketemu `media.url` → `<MediaImage>` tidak render, seolah tidak masuk.
+  - WABA sama: `waba-webhook.route.ts:132` resolve `mediaUrl` **setelah** stale guard, jadi image stale juga hilang di DB.
+- **Root cause 2 - Deteksi image rapuh (`webhook.route.ts:469`):**
+  - Hanya cek `type==='image' || message.imageMessage || hasMedia+mimetype`. WAHA NOWEB sering kirim caption di `body` (bukan `caption`), `media.url` di `_data.deprecatedMms3Url/mediaUrl`, `mimetype` di `_data.mimetype`. `imageCaption` jadi `""` → `[MEDIA]` tanpa caption, dan `fetchUrl` tidak coba URL alternatif → `downloadMedia` timeout 15s → fallback thumb 1x1 → gambar HD hilang.
+- **Root cause 3 - Prioritas Location salah (`src/state-machine/machine.ts:121` + `LiveChatMonitor.tsx:2139`):**
+  - `machine.ts` pilih `location ? [LOCATION]` **dulu** baru `media ? [IMAGE]`. Image WA Web yang kebawa `location: {latitude:0, longitude:0}` kosong tampil dobel: gambar + card `Share Location: 0,0`. UI `LiveChatMonitor.tsx:2139` `isLocationMsg = !!payload_raw.location` juga true untuk `0,0` sehingga selalu render card Peta di bawah image.
+- **Perbaikan:**
+  - **WAHA** (`webhook.route.ts:404-530`): pindahkan `isInboundImage/saveInboundMedia` **sebelum** stale guard, per luas deteksi (`_data.mimetype`, `mimetype`, `media.mime_type`), `imageCaption = caption || body || _data.caption` dan `mediaUrlCandidate = media.url || _data.mediaUrl || _data.deprecatedMms3Url`, stale branch kini log dengan `mergeMediaIntoPayload(payload)` + `inboundContent` dan khusus `isInboundImage` tetap simpan via `saveInboundMedia` dengan status `IGNORED_STALE_MESSAGE` (image tetap muncul). Hapus duplikat `inboundContent` setelah `heavyMediaType`.
+  - **WABA** (`waba-webhook.route.ts:122-170` + `202-223`): resolve `mediaUrl/msgMedia` **sebelum** stale guard, stale log pakai `mergeWabaMedia(rawPayload)`, hapus duplikat resolve setelah attribution, dan perbaiki `blocked`+`scopeGate` yang sebelumnya `scopeGate` nyangkut di dalam `if(blocked)` (bug) → sekarang `blocked` log lalu `continue`, baru `conversation = getOrCreate` + `enforceAiScopeGate` untuk semua (seed `tenant-waba-a/b` ke `ALL` di test agar tidak flaky).
+  - **State machine** (`machine.ts:121-126`): `hasMedia` (media/type==='image') diprioritaskan sebelum `hasValidLocation` (`latitude!==0 && longitude!==0`), cegah `[LOCATION SHARE: Lat 0, Lng 0]`.
+  - **LiveChat** (`LiveChatMonitor.tsx:2139-2150`): `hasValidLocation` cek `latitude!==0 && longitude!==0` dan `effectiveIsLocationMsg = isLocationMsg && !hasMedia`, render card lokasi hanya jika bukan image.
+- **Verifikasi:** `npm run build` pass, `npx vitest run tests/integration/waha-webhook.test.ts tests/integration/waba-webhook-route.test.ts` 21 passed, `npx vitest run tests/unit` 1225 passed / 128 files, cek `storage/media/inbound` image stale tetap nambah HD+thumb, LiveChat SSE `message.created` bawa `media.hdUrl`.
+
+### Fixed — Auto-Release Exemption (Bypass Hold #1155), Anti-Race In-Flight Abort (#319), & Self-Learning Error Logger (2026-08-22)
+
+- **Root cause #1155 Bunda Inez (Bypass Hold & Balasan Bot Ngawur):**
+  - Percakapan yang di-takeover oleh CS (`escalation_reason = 'manual_reply'` via WhatsApp HP atau `manual_takeover` via Dashboard) sebelumnya tetap terkena timer auto-release 6 jam (`HUMAN_HANDLING_TIMEOUT_HOURS = 6`).
+  - Setelah melewati malam/keesokan harinya (>6 jam hening), fungsi `checkAndApplyAutoRelease` otomatis mencabut status Human Handling dan merestore state ke `INITIAL`.
+  - Saat customer mengirim chat *"Jadi kan ya kak?"* untuk menanyakan janji temu CS, bot menganggap percakapan baru dan membalas dengan greeting jualan pembuka.
+- **Root cause #319 (Banjir/Bocor Chat Bot Menimpa CS):**
+  - Customer mengirim 2 pesan beruntun (*"Kebraon..."* lalu *"Ada gerai nya?"*). Pesan pertama di-split jadi 2 bubble (ada typing delay 5-6s), sementara pesan kedua sudah mengantri di BullMQ queue.
+  - Saat admin melihat bot membalas pesan 1 dan admin langsung membalas manual via WA HP (memicu `HUMAN HANDOFF`), antrian BullMQ untuk pesan kedua dan in-flight typing bubble yang sedang berjalan di background TIDAK DIBATALKAN. Bot tetap menembakkan sisa 2-3 bubble ke WhatsApp menyela chat admin.
+- **Root cause Self-Learning LLM Error Dump:**
+  - `self-learning.service.ts` membuang full object AxiosError (400+ baris per error) ke stdout saat server LLM eksternal mengembalikan HTTP 500.
+- **Perbaikan:**
+  - **Auto-Release Exemption (`src/services/conversation.service.ts:225-245`)**: Menambahkan explicit guard exemption untuk seluruh eskalasi manual CS (`manual_reply`, `manual_takeover`, `admin_takeover`, `admin_manual_reply`, prefix `manual_`). Percakapan yang pernah disentuh CS tidak akan pernah di-auto-release oleh timer malam.
+  - **Default Timeout Bump (`src/config/clinic.ts:23`)**: Mengubah default fallback `humanHandlingTimeoutHours` dari 6 jam menjadi 18 jam (aman dari siklus malam/libur).
+  - **3-Layer Queue & In-Flight Abort (`src/services/queue.service.ts`, `src/state-machine/machine.ts`, `src/services/typing.service.ts`)**:
+    1. *BullMQ Worker & Memory Queue Guard*: Sebelum memproses job, cek `conversation.is_human_handling`. Jika true, buang job bot (`[QUEUE ABORT]`).
+    2. *State Machine Entry Gate*: `processMessage` langsung return `shouldSendReply: false` jika percakapan sedang di-handle CS (`[STATE MACHINE ABORT]`).
+    3. *Real-Time In-Flight Abort*: `simulateHumanReply` menerima callback `shouldAbort` yang mengecek status DB sebelum reading delay, sesudah reading delay, dan sebelum eksekusi `sendText` tiap bubble. Jika CS takeover saat bot sedang delay/mengetik, bot seketika membatalkan pengiriman dan mematikan indikator typing.
+  - **Self-Learning Logger & Timeout (`src/services/self-learning.service.ts`)**: Menambahkan `timeout: 15000` dan merapikan log error menjadi 1 baris ringkas (`HTTP 500: message`), serta mengembalikan `null` (skip staging) saat LLM gagal agar tidak memasukkan Q&A rusak ke database.
+- **Verifikasi:** `npm run build` (tsc) pass, `npx vitest run tests/unit/human-handling-race-guard.test.ts` (5 tests pass), `npm test` offline pass.
+
 ### Fixed — Reservasi #777 Siska Gagal Capture & Atribusi Aisyah 929 `app.kalababyspa` (2026-08-22)
 
 - **Root cause #777 Siska (gagal capture reservasi):** 3 silent-drop berlapis:

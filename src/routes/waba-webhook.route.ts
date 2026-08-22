@@ -129,8 +129,48 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         continue;
       }
 
+      // Best-effort: resolve URL media WABA (image) & simpan ke storage/media/inbound SEBELUM stale guard
+      // supaya image stale tetap punya media di LiveChat
+      let mediaUrl: string | undefined;
+      let msgMedia: any = undefined;
+      if (msg.type === 'image' && msg.mediaId) {
+        try {
+          const { prisma } = await import('../db/client');
+          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+          if (tenant?.waba_access_token) {
+            const { decryptSecret } = await import('../utils/encryption');
+            const { resolveWabaMediaUrl } = await import('../integrations/whatsapp/media');
+            const resolved = await resolveWabaMediaUrl(msg.mediaId, decryptSecret(tenant.waba_access_token));
+            mediaUrl = resolved?.url;
+          }
+        } catch (mediaErr) {
+          console.warn(`[WABA MEDIA] Gagal resolve URL media ${msg.mediaId}:`, (mediaErr as Error).message);
+        }
+        if (mediaUrl) {
+          try {
+            const axios = (await import('axios')).default;
+            const response = await axios.get(mediaUrl, { responseType: 'arraybuffer', timeout: 15000 });
+            const { mediaService } = await import('../services/media.service');
+            const saved = await mediaService.saveInboundMedia({
+              tenantId,
+              buffer: Buffer.from(response.data),
+              mimeType: msg.mimeType || 'image/jpeg',
+            });
+            msgMedia = {
+              url: saved.thumbUrl || saved.hdUrl,
+              hdUrl: saved.hdUrl,
+              thumbUrl: saved.thumbUrl,
+              mimeType: msg.mimeType || 'image/jpeg',
+              caption: msg.caption || null,
+            };
+          } catch (mediaErr: any) {
+            console.warn(`[WABA MEDIA] Gagal menyimpan media ${msg.mediaId}:`, mediaErr.message);
+          }
+        }
+      }
+      const mergeWabaMedia = (raw: any) => (msgMedia ? { ...raw, media: msgMedia } : raw);
+
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE FOR WABA ---
-      // Cegah eksekusi CAPI, download media berat, dan pemicu antrean AI saat sinkronisasi pesan lama
       const maxAgeSeconds = parseInt(process.env.MAX_INBOUND_MESSAGE_AGE_SECONDS || '180', 10);
       if (maxAgeSeconds > 0 && msg.timestamp) {
         const rawTs = Number(msg.timestamp);
@@ -151,7 +191,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
               direction: 'INBOUND',
               content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
               waMessageId: msg.messageId,
-              payloadRaw: msg.rawPayload,
+              payloadRaw: mergeWabaMedia(msg.rawPayload),
             });
             processed++;
             continue;
@@ -181,77 +221,33 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         msg.text = attributionResult.strippedText;
       }
 
-      // Best-effort: resolve URL media WABA (image) & simpan ke storage/media/inbound
-      // agar bisa dirender di Live Chat (blur + download). Gagal tidak menghalangi alur.
-      let mediaUrl: string | undefined;
-      if (msg.type === 'image' && msg.mediaId) {
-        try {
-          const { prisma } = await import('../db/client');
-          const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-          if (tenant?.waba_access_token) {
-            const { decryptSecret } = await import('../utils/encryption');
-            const { resolveWabaMediaUrl } = await import('../integrations/whatsapp/media');
-            const resolved = await resolveWabaMediaUrl(msg.mediaId, decryptSecret(tenant.waba_access_token));
-            mediaUrl = resolved?.url;
-          }
-        } catch (mediaErr) {
-          console.warn(`[WABA MEDIA] Gagal resolve URL media ${msg.mediaId}:`, (mediaErr as Error).message);
-        }
-      }
-
-      let msgMedia: any = undefined;
-      if (msg.type === 'image' && mediaUrl) {
-        try {
-          const axios = (await import('axios')).default;
-          const response = await axios.get(mediaUrl, { responseType: 'arraybuffer', timeout: 15000 });
-          const { mediaService } = await import('../services/media.service');
-          const saved = await mediaService.saveInboundMedia({
-            tenantId,
-            buffer: Buffer.from(response.data),
-            mimeType: msg.mimeType || 'image/jpeg',
-          });
-          msgMedia = {
-            url: saved.thumbUrl || saved.hdUrl,
-            hdUrl: saved.hdUrl,
-            thumbUrl: saved.thumbUrl,
-            mimeType: msg.mimeType || 'image/jpeg',
-            caption: msg.caption || null,
-          };
-        } catch (mediaErr: any) {
-          console.warn(`[WABA MEDIA] Gagal menyimpan media ${msg.mediaId}:`, mediaErr.message);
-        }
-      }
-      const mergeMediaIntoRaw = (raw: any) => (msgMedia ? { ...raw, media: msgMedia } : raw);
-
       if (customer.status === 'blocked') {
-const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+        const blockedConversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
+        await messageService.logMessage({
+          tenantId,
+          conversationId: blockedConversation.id,
+          direction: 'INBOUND',
+          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
+          waMessageId: msg.messageId,
+          payloadRaw: mergeWabaMedia(msg.rawPayload),
+        });
+        continue;
+      }
+
+      const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
       // --- AI ROLLOUT SCOPE GATE (Task: AI hanya untuk customer baru) ---
-      // Konsisten dgn webhook WAHA. Legacy customer non-AI di-senyapkan (human
-      // handling + escalation khusus) sebelum masuk queue / state machine.
       const scopeGate = await enforceAiScopeGate({
         customer,
         conversation,
         tenantId,
         content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
         waMessageId: msg.messageId,
-        payloadRaw: mergeMediaIntoRaw(msg.rawPayload),
+        payloadRaw: mergeWabaMedia(msg.rawPayload),
       });
       if (scopeGate.action === 'silence') {
         continue;
       }
-        await messageService.logMessage({
-          tenantId,
-          conversationId: conversation.id,
-          direction: 'INBOUND',
-          content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
-          waMessageId: msg.messageId,
-          payloadRaw: mergeMediaIntoRaw(msg.rawPayload),
-        });
-        continue;
-      }
-
-      const conversation = await conversationService.getOrCreateConversation(customer.id, tenantId);
 
       // --- PURCHASE EVENT DETECTION FOR WABA (sebelum state machine / human handling) ---
       if (msg.type === 'text' && msg.text) {
