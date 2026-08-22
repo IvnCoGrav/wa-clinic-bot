@@ -202,7 +202,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   if (buffer && buffer.length > 0) {
                     const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
                     outboundMedia = {
-                      url: saved.thumbUrl || saved.hdUrl,
+                      url: saved.hdUrl || saved.thumbUrl,
                       hdUrl: saved.hdUrl,
                       thumbUrl: saved.thumbUrl,
                       mimeType,
@@ -511,7 +511,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           if (buffer && buffer.length > 0) {
             const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
             inboundMedia = {
-              url: saved.thumbUrl || saved.hdUrl,
+              url: saved.hdUrl || saved.thumbUrl,
               hdUrl: saved.hdUrl,
               thumbUrl: saved.thumbUrl,
               mimeType,

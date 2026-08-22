@@ -104,20 +104,21 @@ interface ChatMessage {
 function extractMedia(msg: any): ChatMediaData | undefined {
   const m = msg?.payload_raw?.media ?? msg?.payloadRaw?.media ?? msg?.media;
   if (m && (m.url || m.hdUrl)) {
-    const rawUrl = m.url || m.hdUrl;
-    const rawHdUrl = m.hdUrl || m.url;
-    const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
-    const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
+    const hdUrlStr = m.hdUrl || m.url;
+    const standardUrlStr = (m.url && !m.url.includes('_thumb.')) ? m.url : (m.hdUrl || m.url);
+    const cleanUrl = standardUrlStr.replace(/^https?:\/\/[^/]+/, '');
+    const cleanHdUrl = hdUrlStr.replace(/^https?:\/\/[^/]+/, '');
     return {
       ...m,
       url: cleanUrl.startsWith('/') ? cleanUrl : `/${cleanUrl}`,
       hdUrl: cleanHdUrl.startsWith('/') ? cleanHdUrl : `/${cleanHdUrl}`,
+      thumbUrl: m.thumbUrl ? (m.thumbUrl.replace(/^https?:\/\/[^/]+/, '').startsWith('/') ? m.thumbUrl.replace(/^https?:\/\/[^/]+/, '') : `/${m.thumbUrl.replace(/^https?:\/\/[^/]+/, '')}`) : undefined,
     };
   }
   const directMediaUrl = msg?.media_url ?? msg?.mediaUrl ?? msg?.media_hd_url ?? msg?.mediaHdUrl;
   if (directMediaUrl && typeof directMediaUrl === 'string') {
-    const rawUrl = directMediaUrl;
-    const rawHdUrl = msg?.media_hd_url ?? msg?.mediaHdUrl ?? rawUrl;
+    const rawHdUrl = msg?.media_hd_url ?? msg?.mediaHdUrl ?? directMediaUrl;
+    const rawUrl = (!directMediaUrl.includes('_thumb.')) ? directMediaUrl : rawHdUrl;
     const cleanUrl = rawUrl.replace(/^https?:\/\/[^/]+/, '');
     const cleanHdUrl = rawHdUrl.replace(/^https?:\/\/[^/]+/, '');
     return {
