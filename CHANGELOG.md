@@ -4,6 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Meta CAPI Queue Approve Stale UI (2026-08-22)
+
+- **Root cause**: `POST /api/admin/reservation/:id/approve-purchase` punya fallback `memoryReservations` yang di production mengembalikan `200 success` palsu saat DB error — frontend toast `berhasil` tapi `GET /api/admin/capi-queue` baca dari DB tetap `pending`. Ditambah `apiRequest` tanpa `cache: no-store` dan `handleApprove` tanpa `await loadQueue()` bikin refresh tidak deterministik.
+- **Fix backend** (`src/routes/admin/reservations.subroute.ts:979`): fallback in-memory hanya aktif saat `NODE_ENV !== 'production'`; di production kembalikan `500` agar UI tampil error, bukan success palsu. `GET /api/admin/capi-queue` set header `Cache-Control: no-store, no-cache, must-revalidate` + `Pragma: no-cache`.
+- **Fix frontend** (`packages/admin-dashboard/src/services/api.ts:103`, `MetaCapiQueue.tsx:293-327`): `apiRequest` default `cache: 'no-store'` untuk semua admin call. `handleApprove`/`handleReject` pakai optimistic update (`setItems` langsung set `approved`/`ignored_outlier`) + `await loadQueue()` agar UI re-konsiliasi dengan DB.
+
 ### Added & Fixed — Meta Full-Funnel Attribution & Initial Landing URL Preservation (2026-08-21)
 
 - **CAPI Queue & Database Self-Healing URL Normalizer (`src/services/capi.service.ts`, `src/routes/admin/reservations.subroute.ts`, `MetaCapiQueue.tsx`)**:
