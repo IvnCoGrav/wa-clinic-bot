@@ -2100,8 +2100,9 @@ export const StaffToday: React.FC = () => {
                                   className="mb-2 rounded-xl overflow-hidden"
                                 >
                                   <MediaImage
-                                    src={media.url || media.hdUrl}
+                                    src={media.thumbUrl || media.url || media.hdUrl}
                                     downloadSrc={media.hdUrl || media.url}
+                                    thumbUrl={media.thumbUrl}
                                     caption={media.caption}
                                   />
                                 </div>
