@@ -159,7 +159,7 @@ export class LiveChatService {
         unreadMap.get(c.id) || 0
       )
     );
-    // Urutan sudah dijamin DB (human handling di atas, lalu last_message_at desc) — stabil antar halaman.
+    // Urutan sudah dijamin DB (pinned desc, lalu last_message_at desc absolut waktu) — stabil antar halaman.
     return { items, hasMore: conversations.length === take };
   }
 

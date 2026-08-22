@@ -152,7 +152,7 @@ export class ConversationService {
 
   /**
    * Daftar percakapan per tenant dengan paging offset (dengan memory store fallback saat DB offline).
-   * Urutan: Pinned chat paling atas, lalu human-handling di atas (yang butuh aksi admin), lalu sisanya by last_message_at desc.
+   * Urutan: Pinned chat paling atas (aksi eksplisit admin), lalu semua chat by last_message_at desc (waktu absolut jam chat masuk).
    */
   public async listConversations(
     tenantId: string,
@@ -182,7 +182,6 @@ export class ConversationService {
         where,
         orderBy: [
           { is_pinned: 'desc' },
-          { is_human_handling: 'desc' },
           { last_message_at: 'desc' },
         ],
         skip: offset,
@@ -196,8 +195,7 @@ export class ConversationService {
         .filter((c) => c.tenant_id === tenantId)
         .sort((a, b) => {
           if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
-          if (!!a.is_human_handling !== !!b.is_human_handling) return a.is_human_handling ? -1 : 1;
-          return new Date(b.updated_at || b.last_message_at).getTime() - new Date(a.updated_at || a.last_message_at).getTime();
+          return new Date(b.last_message_at || b.updated_at).getTime() - new Date(a.last_message_at || a.updated_at).getTime();
         });
       const filtered = mode === 'all' ? all : [];
       if (mode !== 'all') {

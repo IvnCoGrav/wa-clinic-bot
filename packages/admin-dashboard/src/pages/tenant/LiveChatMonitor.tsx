@@ -667,7 +667,6 @@ export const LiveChatMonitor: React.FC = () => {
   const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
     return [...list].sort((a, b) => {
       if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
-      if (!!a.isHumanHandling !== !!b.isHumanHandling) return a.isHumanHandling ? -1 : 1;
       return new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
     });
   };

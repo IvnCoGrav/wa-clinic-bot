@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed — Reservasi #777 Siska Gagal Capture & Atribusi Aisyah 929 `app.kalababyspa` (2026-08-22)
+
+- **Root cause #777 Siska (gagal capture reservasi):** 3 silent-drop berlapis:
+  1. **Human Handling short-circuit `src/routes/webhook.route.ts:732-823`**: `HUMAN_HANDLING_ACTIVE_SILENT` (grace 30s, `ENABLE_WAHA_HOLD_LABEL=false` default, explicit guard) langsung `logMessage` + `return` tanpa `enqueue` — watcher `human.ts:41` (`isReservationFormMessage → parseReservationText → prisma.reservation.create` idempoten 24h) tidak pernah reachable. Form Siska saat CS sudah take-over hanya ter-log di `messages` tapi `reservations` 0.
+  2. **Stale guard 180s `webhook.route.ts:407`**: reconnect/QR burst bikin `payload.timestamp` telat >180s → `IGNORED_STALE_MESSAGE` (log saja) — form reservasi ikut ter-drop.
+  3. **Swallow DB error `src/state-machine/handlers/interest.ts:93`**: `catch (dbErr) {}` kosong → reply sukses palsu `Baik Bunda, data reservasi sudah kami terima` padahal `prisma.reservation.create` throw `P6001`/`P1001` (client `--no-engine` / offline). Data hilang tanpa jejak.
+- **Root cause 929 Aisyah (link `app.kalababyspa`):** `AdClick.landingUrl` tersimpan sebagai `https://app.kalababyspa.online/cta?...` bukan first-touch URL PageView. `external-tracker.js:121-146` wajib bridge `window.location.href → /cta?landing_url=...` — jika LP tidak pasang script / CTA `href` bukan `/cta` / klik race 250ms, `GET /cta` `landing.route.ts:164` fallback ke `host` (`app.*`). `resolveCanonicalLandingUrl` (`capi.service.ts:103`) sudah self-heal di `GET /capi-queue` + CAPI send, tapi `ad_clicks` raw tetap `app.*` sebelum queue dibuka.
+- **Fix Siska:**
+  - `webhook.route.ts:407-430` stale guard bypass: jika `isReservationFormMessage(payload.body)` true → jangan `IGNORED_STALE_MESSAGE`, lanjut capture path (log `STALE GUARD BYPASS`).
+  - `webhook.route.ts:741-823` 3 early return human handling (grace / `LABEL_SYNC_DISABLED` / explicit) kini **inline auto-capture** sebelum `logMessage` + silent return: `isReservationFormMessage` → `parseReservationText` → `findFirst 24h treatment_detail` → `prisma.reservation.create` → `reservationLifecycleService.onReservationCreated` (followUp + `child.service.upsertChildrenFromBabies` + labels). Idempoten, best-effort, tetap eskalasi hidden jika duplikat/parse fail.
+  - `interest.ts:93-112` catch kini `console.error`, update nama kontak `Bunda {nama} {kecamatan}` tetap jalan (penting untuk `tests/unit/e2e-chat-to-reservation.test.ts:374`), eskalasi dengan percakapan `gagal persist DB` + reply jujur `gangguan penyimpanan — tim akan cek manual` (bukan sukses palsu). Di `test` tetap human handling.
+- **Fix Aisyah:**
+  - `landing.route.ts:185-198` kanonikalisasi sebelum simpan: jika `!query.landing_url` log `CTA LANDING_URL MISSING` + `resolveCanonicalLandingUrl(fullLandingUrl, tenantDomain)` sehingga `AdClick.landingUrl` langsung `https://kalababyspa.online/reservasionline?fbclid...` (strip `app.`, map `/cta → /reservasionline`, preserve `fbclid/utm_*`, delete `landing_url/slug/p/msg/divisi`). Tenant-aware via `Tenant.landing_domain` (SAAS). Fallback hardcode `kalababyspa.online/reservasionline` bila `landing_domain=""` tetap konsisten dengan `capi.service.ts:187`.
+  - Self-heal existing tetap: `capi.service.ts:525` saat kirim CAPI + `reservations.subroute.ts:1137` saat `GET /capi-queue` tulis balik DB.
+- **Verifikasi:** `npm run build` pass, `npx vitest run` 1495 passed / 168 files (termasuk `landing-url-attribution.test.ts:6` + `webhook-stale-message-guard.test.ts:3` + `e2e-chat-to-reservation.test.ts:10`), cek live: `SELECT landingUrl FROM ad_clicks WHERE phone LIKE '%929'` harus `kalababyspa.online/reservasionline`, `SELECT * FROM reservations WHERE raw_text ILIKE '%Siska%'` harus ada entry usai bypass.
+
+### Fixed — Live Chat Sorting Absolut by Waktu (Human Handling Tidak Lagi di Atas) (2026-08-22)
+
+- **Root cause**: Daftar Live Chat diurut 2 layer (Backend `src/services/conversation.service.ts:183` `orderBy: [is_pinned desc, is_human_handling desc, last_message_at desc]` + Frontend `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx:667` `sortChats()` cek `isPinned` lalu `isHumanHandling` lalu `lastMessageAt`). Chat `human handling` yang `lastMessageAt`-nya lama tetap nangkring di atas chat bot yang baru masuk — tidak sesuai ekspektasi waktu absolut.
+- **Fix (Opsi A - Pin tetap di atas)**: Hapus privilege `is_human_handling` dari sorting, pertahankan `is_pinned` sebagai aksi eksplisit admin.
+  - **Backend** (`src/services/conversation.service.ts:154`, `182-187`, `197-201`): `orderBy` menjadi `[is_pinned desc, last_message_at desc]`; memory fallback `.sort()` hanya cek `is_pinned` lalu `last_message_at || updated_at` (hapus cek `is_human_handling`).
+  - **Frontend** (`LiveChatMonitor.tsx:667-673`): `sortChats()` hanya cek `isPinned` lalu `lastMessageAt desc` — seluruh call site SSE (`message.created:901`, `conversation.updated:929`), optimistic `handleSendReply:1226`, `handleTogglePin:698`, dan polling 3.5s otomatis ikut.
+  - **Komentar** (`src/services/live-chat.service.ts:162`): update dari `human handling di atas` → `pinned desc, lalu last_message_at desc absolut`.
+- **Verifikasi**: `npm run build` (tsc) pass, `packages/admin-dashboard: npm run build` pass (LiveChatMonitor 74.58 kB), `npm test` 1495 passed / 168 files, repro 4-chat (P pinned 3h, C human 5m, B bot 10m, A human 2h) → OLD `P->C->A->B` vs NEW `P->C->B->A` (absolut waktu) pass.
+
 ### Fixed — Meta CAPI Queue Approve Stale UI (2026-08-22)
 
 - **Root cause**: `POST /api/admin/reservation/:id/approve-purchase` punya fallback `memoryReservations` yang di production mengembalikan `200 success` palsu saat DB error — frontend toast `berhasil` tapi `GET /api/admin/capi-queue` baca dari DB tetap `pending`. Ditambah `apiRequest` tanpa `cache: no-store` dan `handleApprove` tanpa `await loadQueue()` bikin refresh tidak deterministik.
