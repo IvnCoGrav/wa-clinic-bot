@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ImageOff, Loader, X, ArrowLeft, Sparkles, Check, ZoomIn, ZoomOut, Download } from 'lucide-react';
 
 export interface ChatMediaData {
@@ -204,10 +205,14 @@ export const MediaImage: React.FC<{
         )}
       </div>
 
-      {/* Full-Screen Lightbox Modal with Mobile Header & HD On-Demand */}
-      {isViewerOpen && (
+      {/* Full-Screen Lightbox Modal with Mobile Header & HD On-Demand rendered via React Portal directly to document.body */}
+      {isViewerOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[100] bg-black/95 sm:bg-black/90 backdrop-blur-sm flex flex-col justify-between select-none animate-in fade-in duration-150"
+          className="fixed inset-0 z-[999999] bg-black/95 sm:bg-black/90 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
+          style={{
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}
           onClick={closeViewer}
         >
           {/* Top Navigation Header Bar (Safe Area Friendly) */}
@@ -342,7 +347,8 @@ export const MediaImage: React.FC<{
               <span>Kembali ke Chat</span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
