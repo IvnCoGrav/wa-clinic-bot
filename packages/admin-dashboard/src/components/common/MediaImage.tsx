@@ -40,11 +40,20 @@ export const MediaImage: React.FC<{
   const [isDragging, setIsDragging] = useState(false);
   const touchStartYRef = useRef<number>(0);
   const isHistoryPushedRef = useRef<boolean>(false);
-
-  // Standard preview (jelas, cepat, tajam dari file utama) vs HD original
-  const standardSrc = src || downloadSrc || thumbUrl || '';
+  // Fast preview for inline chat bubble (lightweight thumb or compressed)
+  const previewSrc = thumbUrl || src || downloadSrc || '';
+  // High quality for modal lightbox (full clear uncompressed)
+  const standardSrc = (src && !src.includes('_thumb.')) ? src : (downloadSrc || src || thumbUrl || '');
   const hdSrc = downloadSrc || src || '';
   const hasHdOption = Boolean(hdSrc && standardSrc && hdSrc !== standardSrc);
+
+  const [currentImgSrc, setCurrentImgSrc] = useState(previewSrc);
+
+  useEffect(() => {
+    setCurrentImgSrc(previewSrc);
+    setThumbnailLoading(true);
+    setError(false);
+  }, [previewSrc]);
 
   // Current active modal source (hanya beralih ke HD jika sudah diminta & berhasil di-load)
   const activeModalSrc = isHdLoaded && hdSrc ? hdSrc : standardSrc;
@@ -149,13 +158,13 @@ export const MediaImage: React.FC<{
       if (deltaY > 0) {
         setTouchTranslateY(deltaY);
       } else {
-        setTouchTranslateY(deltaY * 0.2); // resistansi saat geser ke atas
+        setTouchTranslateY(0);
       }
     }
   };
 
   const handleTouchEnd = () => {
-    if (!isDragging || isZoomed) return;
+    if (!isDragging) return;
     setIsDragging(false);
     if (touchTranslateY > 80) {
       closeViewer();
@@ -166,7 +175,7 @@ export const MediaImage: React.FC<{
 
   if (!standardSrc || error) {
     return (
-      <div className="w-56 h-36 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-1.5 px-3 text-center">
+      <div className="w-48 sm:w-56 h-32 sm:h-36 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-slate-500 text-[10px] space-y-1.5 px-3 text-center">
         <ImageOff size={18} className="text-slate-400" />
         <span className="font-medium text-slate-500 leading-tight">
           Gambar tidak tersedia
@@ -178,20 +187,25 @@ export const MediaImage: React.FC<{
   return (
     <>
       {/* Inline Chat Bubble Thumbnail */}
-      <div className="relative inline-block overflow-hidden rounded-xl group max-w-full">
+      <div className="relative inline-block overflow-hidden rounded-xl group max-w-full min-w-[140px] sm:min-w-[180px] min-h-[100px] sm:min-h-[130px] bg-slate-100/90">
         {thumbnailLoading && (
-          <div className="absolute inset-0 rounded-xl bg-slate-100/90 flex items-center justify-center text-slate-400 z-10">
+          <div className="absolute inset-0 rounded-xl bg-slate-100/95 flex flex-col items-center justify-center text-slate-400 z-10 space-y-1">
             <Loader size={16} className="animate-spin text-[#008069]" />
+            <span className="text-[10px] text-slate-400 font-medium select-none">Memuat...</span>
           </div>
         )}
         <img
-          src={standardSrc}
+          src={currentImgSrc}
           alt={caption || alt || 'Gambar'}
           loading="lazy"
           onLoad={() => setThumbnailLoading(false)}
           onError={() => {
-            setThumbnailLoading(false);
-            setError(true);
+            if (currentImgSrc !== standardSrc && standardSrc) {
+              setCurrentImgSrc(standardSrc);
+            } else {
+              setThumbnailLoading(false);
+              setError(true);
+            }
           }}
           onClick={openViewer}
           title="Klik / tap untuk melihat foto"
