@@ -4,6 +4,26 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Enhanced — On-Demand HD Image Loading & Mobile-Friendly Back Navigation in LiveChat Lightbox (2026-08-22)
+
+- **Kebutuhan & Latar Belakang:**
+  1. **On-Demand HD Loading**: Saat mengklik gambar di LiveChat, user menginginkan gambar preview standar yang jelas & ringan dimuat terlebih dahulu tanpa langsung mengunduh file HD ukuran besar. File resolusi penuh (HD) hanya dimuat saat user secara eksplisit mengklik tombol "HD".
+  2. **Mobile Navigation & Anti-Blocking**: Di perangkat mobile / smartphone, membuka gambar tidak boleh memblokir seluruh halaman tanpa opsi kembali. Harus tersedia skema navigasi kembali yang jelas dan ergonomis untuk kembali ke percakapan chat.
+- **Implementasi (`packages/admin-dashboard/src/components/common/MediaImage.tsx` & Pages)**:
+  - **On-Demand HD Mechanism**:
+    - Lightbox modal default membuka gambar menggunakan `standardSrc` (`thumbUrl` / `url`), memberikan rendering instan dan hemat kuota/bandwidth.
+    - Menambahkan tombol interaktif **"✨ Muat HD"** pada header toolbar. Saat diklik, sistem melakukan prefetching HD di background dengan status *Memuat HD...*, dan saat selesai beralih mulus ke tampilan resolusi tinggi dengan badge **"✓ HD Aktif"**.
+  - **Skema Navigasi Mobile ("Kembali ke Chat")**:
+    - **Header Bar Atas (Safe-Area Aware)**: Dilengkapi tombol **"⬅️ Kembali"** (mobile) / **"⬅️ Kembali ke Chat"** (desktop) berukuran besar dan mudah di-tap dengan jempol.
+    - **Mobile Bottom Quick-Action**: Tombol floating pill **"⬅️ Kembali ke Chat"** di bagian bawah layar smartphone untuk akses satu tangan yang nyaman.
+    - **Mobile Swipe-Down to Dismiss**: Gesture geser/tarik ke bawah (*drag-to-dismiss*) dengan animasi transisi pegas (*spring pull*) dan reduksi opasitas untuk menutup viewer secara natural.
+    - **Android Back Button / Browser Popstate**: Mengintegrasikan `window.history.pushState` sehingga menekan tombol Back hardware Android / browser menutup modal gambar tanpa meninggalkan halaman LiveChat.
+    - **Escape Key & Backdrop Tap**: Menutup viewer saat klik di area gelap di luar gambar atau menekan tombol `Esc` keyboard.
+    - **Body Scroll Lock**: Mencegah scrolling halaman latar belakang saat modal gambar aktif.
+- **Verifikasi & Build:**
+  - Build Frontend (`packages/admin-dashboard`: `tsc && vite build`) 100% lulus tanpa error.
+  - Unit tests `tests/unit/inbound-media-location-guard.test.ts` (4/4 passed).
+
 ### Fixed — WhatsApp Companion Phone Outbound Image Capture & LiveChat Media Rendering (2026-08-22)
 
 - **Root Cause Analisis Masalah Gambar HP (Gambar Kartini tidak muncul di LiveChat):**
