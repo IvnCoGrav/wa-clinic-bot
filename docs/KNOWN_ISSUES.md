@@ -238,16 +238,32 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
-## 14. [LiveChat] Image inbound dari WA HP/Web tidak muncul + dobel Share Location — FIXED 2026-08-22
+## 14. [LiveChat] Image inbound dari WA HP/Web tidak muncul + dobel Share Location — OPEN (partial fix 2026-08-22, belum menyelesaikan masalah)
 
-- **Status:** fixed (2026-08-22).
-- **Gejala:** Customer kirim image via WA HP/Web official → terkirim di WA, tapi di LiveChat tidak ada gambar (hanya `[MEDIA]` atau tidak ada bubble), atau muncul gambar + card `Share Location: Lat 0, Lng 0` di bawahnya. `storage/media/inbound` hanya 5 HD vs 169 thumb (banyak gagal simpan).
-- **Akar masalah:**
-  1. `STALE GUARD` 180s di `webhook.route.ts:404` & `waba-webhook.route.ts:132` dieksekusi sebelum `saveInboundMedia` → image stale di-log tanpa `media` → LiveChat tidak render.
-  2. Deteksi `isInboundImage` rapuh (hanya `type==='image' || message.imageMessage`) + caption hanya dari `caption`, padahal WAHA NOWEB taruh di `body` dan URL di `_data.mediaUrl` → `fetchUrl` gagal → `downloadMedia` timeout.
-  3. `machine.ts:121` & `LiveChatMonitor.tsx:2139` prioritas `location` dulu → image dengan `location:{0,0}` kebawa tampil dobel kartu Peta.
-- **Fix:** (a) pindah `saveInboundMedia` sebelum stale guard + stale image tetap simpan; (b) perluas deteksi + fallback caption/body + multi URL candidate; (c) prioritaskan `hasMedia` sebelum `hasValidLocation` (`lat!==0 && lng!==0`) di `machine.ts` dan `effectiveIsLocationMsg = isLocationMsg && !hasMedia` di LiveChatMonitor.
-- **Verifikasi:** `npm run build` pass, `1225 unit + 21 integration` pass, `storage/media/inbound` nambah HD+thumb untuk image stale.
+- **Status:** open — **TIDAK menyelesaikan masalah**. Fix parsial sudah di-deploy live (`803a64d` di `origin/master`, `wa-clinic-bot-app-1` Up 5s setelah `build --no-cache` + `--force-recreate`), tapi tes user kirim image via WA official masih **tidak muncul di LiveChat** dan masih ada tulisan `Share Location` di bawah image. Dicatat lengkap agar tidak hilang.
+- **Gejala awal (dilaporkan user):**
+  1. Kirim image dari WA HP/Web official → terkirim di WA, tapi di LiveChat tidak ada gambar (hanya `[MEDIA]` atau tidak ada bubble).
+  2. Kirim image saja → di bawahnya muncul card `Share Location: Lat ..., Lng ...` (0,0).
+  3. `storage/media/inbound/default-tenant` di lokal: 5 HD vs 169 thumb (banyak gagal simpan, orphan thumb).
+- **Yang sudah dilakukan (dan kenapa):**
+  1. **Analisis alur** `webhook.route.ts:350-724` + `waba-webhook.route.ts:122-285` + `machine.ts:121` + `LiveChatMonitor.tsx:2139` + `waha/client.ts:1171` (`downloadMedia` multi-endpoint, `fetchUrl`, `saveInboundMedia` ke `storage/media/inbound`). Hipotesis: stale guard + deteksi rapuh + prioritas location.
+  2. **Fix stale guard** `webhook.route.ts:404-530` — pindahkan `isInboundImage/saveInboundMedia` **sebelum** guard 180s, perluas deteksi (`type==='image' || message.imageMessage || hasMedia+mimetype || _data.mimetype`), caption fallback `caption || body || _data.caption`, URL candidate `media.url || _data.mediaUrl || _data.deprecatedMms3Url`, stale image tetap `mergeMediaIntoPayload` + `inboundContent`. **Kenapa:** agar image yang telat 180s karena WAHA reconnect/QR burst tetap punya `media` di DB, bukan hilang. Sama untuk WABA `waba-webhook.route.ts:122-170` (resolve `mediaUrl` sebelum stale).
+  3. **Fix prioritas type** `webhook.route.ts:713` — `type: isInboundImage ? 'image' : location ? 'location'` + `location` hanya di-set kalau bukan image (EXIF 0,0 tidak kebawa). **Kenapa:** image WA Web sering kebawa `location:{0,0}`.
+  4. **Fix state machine** `machine.ts:121-126` — `hasMedia` diprioritaskan sebelum `hasValidLocation` (`lat!==0 && lng!==0`) untuk `inboundContent`. **Kenapa:** cegah `[LOCATION SHARE: 0,0]` dobel.
+  5. **Fix UI** `LiveChatMonitor.tsx:2139-2213` — `hasValidLocation` cek `lat!==0 && lng!==0`, `effectiveIsLocationMsg = isLocationMsg && !hasMedia`, render card lokasi hanya jika bukan image. **Kenapa:** suppress card Peta palsu di bawah image.
+  6. **Fix WABA blocked/scopeGate** `waba-webhook.route.ts:202-223` — yang semula `scopeGate` nyangkut di dalam `if(blocked)` (bug), sekarang `blocked` `continue` dulu baru `enforceAiScopeGate` untuk semua tenant; seed `tenant-waba-a/b` ke `ALL` di test biar tidak flaky fail-closed `NEW_ONLY`. **Kenapa:** agar test `POST routes message to tenant` tidak silence karena `resolveAiEligibility` fail-closed.
+  7. **Build & deploy live** — `npm run build` (tsc pass), `packages/admin-dashboard npm run build` (LiveChatMonitor `74.63 kB`), `git commit 803a64d` + `git push origin/master`, SSH `klinik-server` (`43.157.197.148:1403` key `id_ed25519_klinik`) `git pull`, `docker compose exec -T app npx prisma migrate deploy` (No pending), `docker compose build --no-cache app` (46.3s) + `up -d --force-recreate --no-deps app` (WAHA tetap `Up 9 days`, app `Up 5s`). Verifikasi `grep isInboundImage` & `effectiveIsLocationMsg` ada di live code.
+  8. **Verifikasi lokal** — `1225 unit + 21 integration` pass (`waha-webhook.test.ts` image test pass). **Tapi verifikasi user live masih gagal** — image tetap tidak muncul, share location tetap ada.
+- **Kenapa masih gagal (dugaan yang belum terbukti):**
+  - Download WAHA `wahaClient.fetchUrl/downloadMedia :1171` masih timeout/gagal di prod (file store `/api/files/...` 404 atau `baseUrl` salah), jadi `inboundMedia` tetap `null` walau sudah dipindah sebelum stale — perlu log `docker logs app | grep "WAHA MEDIA"` di live untuk bukti.
+  - WA official payload shape mungkin beda lagi (`_data.file`, `mediaUrl` di field lain) sehingga `isInboundImage` masih false → `type` jadi `location` → `hasMedia` false → UI tetap anggap location.
+  - Admin dashboard `dist` yang ter-copy ke image Docker mungkin masih cache lama di builder layer (walau `--no-cache` sudah dipakai, Caddy cache browser `LiveChatMonitor-B6bEWlWr.js` perlu hard refresh `Ctrl+F5`).
+- **Sisa yang perlu diperbaiki (next):**
+  1. Tambah **logging payload mentah** untuk image inbound di live (`JSON.stringify(pAny).slice(0,2000)`) + `buffer.length` agar tahu field apa yang sebenarnya dikirim WA Web official.
+  2. Test `curl` langsung ke WAHA `GET /api/default/chats/{chatId}/messages/{id}/media` di live untuk pastikan file store ada.
+  3. Jika download tetap gagal, fallback simpan `thumb` + proxy `/api/files` harus dipastikan `WAHA_BASE_URL` di live benar (`http://waha:3000` vs `localhost:3001`).
+  4. Hard refresh admin di browser + cek `packages/admin-dashboard/dist` hash baru di live image.
+  5. Jika masih dobel lokasi, tambahkan guard `if (hasMedia) location = undefined` di semua layer (webhook + machine + UI) + unit test image dengan `location:{0,0}`.
 
 ## 11. [Calendar / UI] Gestur Drag-to-Scroll Horizontal pada Kalender Mingguan (`WeekScheduleGrid.tsx`)
 
