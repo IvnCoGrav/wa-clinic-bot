@@ -90,8 +90,34 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         } catch (capiErr) {
           console.warn('[CAPI] InitiateCheckout (customer form submit) skipped:', (capiErr as Error).message);
         }
-      } catch (dbErr) {
-        // Abaikan error DB untuk in-memory fallback
+      } catch (dbErr: any) {
+        console.error(`[RESERVATION CREATE ERROR] Gagal simpan reservasi customer ${customer.phone} (${parsed.name}):`, dbErr.message);
+        // Siska #777: jangan swallow silent. Simpan nama kontak dulu agar tidak hilang, lalu eskalasi dengan balasan yang jujur.
+        // Di test/dev (DB offline) tetap update nama via fallback store agar test e2e tetap valid.
+        const customerNameOnError = parsed.name?.trim();
+        if (customerNameOnError && customerNameOnError.length > 0 && customerNameOnError.toLowerCase() !== 'bunda') {
+          const kecOnError = customer.kecamatan || '';
+          const contactOnError = `Bunda ${customerNameOnError}${kecOnError ? ` ${kecOnError}` : ''}`.trim();
+          try {
+            const { customerService: csErr } = await import('../../services/customer.service');
+            await csErr.updateCustomerName(customer.id, contactOnError, tenantId);
+          } catch {}
+        }
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[RESERVATION CREATE] Fallback in-memory mode (DB offline) — reservasi tidak persist di production.');
+        }
+        await conversationService.escalateToHumanHandling(
+          conversation,
+          customer.phone,
+          `Formulir reservasi gagal persist DB (butuh cek manual): "${parsed.treatmentDetail}" — error: ${dbErr.message}`,
+          tenantId
+        ).catch(() => {});
+        return {
+          nextState: ConversationState.HUMAN_HANDLING,
+          replyText: `Baik Bunda, data reservasi sudah kami terima ya bund. Namun sistem kami sedang gangguan penyimpanan — tim kami akan segera cek manual dan konfirmasi jadwalnya ya bund. Mohon tunggu sebentar 😊`,
+          shouldSendReply: true,
+          isHumanHandling: true,
+        };
       }
 
       // Simpan nama kontak customer: "Bunda {nama} {kecamatan}"

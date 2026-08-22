@@ -411,19 +411,31 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           const msgTimeMs = rawTs > 10000000000 ? rawTs : rawTs * 1000;
           const ageSeconds = Math.floor((Date.now() - msgTimeMs) / 1000);
           if (ageSeconds > maxAgeSeconds) {
-            console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
-            const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
-            const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, DEFAULT_TENANT_ID);
-            await messageService.logMessage({
-              tenantId: DEFAULT_TENANT_ID,
-              conversationId: staleConversation.id,
-              direction: 'INBOUND',
-              content: inboundTextPreview,
-              waMessageId,
-              payloadRaw: payload,
-              skipMqlEvaluation: true,
-            });
-            return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
+            // Bypass stale guard untuk form reservasi — jam WAHA bisa telat saat reconnect/QR rebroadcast (kasus Siska #777).
+            // Form tetap harus diproses meski timestamp terlihat stale.
+            const rawBodyForStale = payload.body || msgObj?.conversation || msgObj?.extendedTextMessage?.text || '';
+            let isStaleForm = false;
+            try {
+              const { isReservationFormMessage: _isFormStale } = await import('../utils/reservation-text-parser');
+              isStaleForm = _isFormStale(rawBodyForStale);
+            } catch {}
+            if (isStaleForm) {
+              console.log(`[STALE GUARD BYPASS] Reservation form dari ${phone} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur capture (Siska #777).`);
+            } else {
+              console.log(`[STALE MESSAGE GUARD] Message ${waMessageId} from ${phone} is ${ageSeconds}s old (threshold: ${maxAgeSeconds}s). Fast-tracking to DB only and dropping auto-reply/side-effects.`);
+              const staleCustomer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
+              const staleConversation = await conversationService.getOrCreateConversation(staleCustomer.id, DEFAULT_TENANT_ID);
+              await messageService.logMessage({
+                tenantId: DEFAULT_TENANT_ID,
+                conversationId: staleConversation.id,
+                direction: 'INBOUND',
+                content: inboundTextPreview,
+                waMessageId,
+                payloadRaw: payload,
+                skipMqlEvaluation: true,
+              });
+              return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
+            }
           }
         }
       }
@@ -740,6 +752,26 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
         if (timeSinceEscalation <= 30000) {
           console.log(`[ESCALATION GRACE PERIOD] Conversation ${conversation.id} escalated recently (${(timeSinceEscalation / 1000).toFixed(1)}s ago). Bypassing WhatsApp label release checks.`);
+          // Siska #777 FIX: tetap coba capture reservasi meski dalam grace period — jangan silent-drop form.
+          try {
+            const raw = incomingMessage.text?.body || '';
+            if (raw.trim()) {
+              const { isReservationFormMessage: _isFormG, parseReservationText: _parseG } = await import('../utils/reservation-text-parser');
+              if (_isFormG(raw)) {
+                const pr = _parseG(raw);
+                if (pr.success && pr.reservation) {
+                  const p = pr.reservation;
+                  const recent = await prisma.reservation.findFirst({ where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID, created_at: { gte: new Date(Date.now() - 24*60*60*1000) }, treatment_detail: p.treatmentDetail } });
+                  if (!recent) {
+                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending' } });
+                    console.log(`[HUMAN GRACE AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name}) — bypass grace silent`);
+                    const { reservationLifecycleService: _rlG } = await import('../services/reservation-lifecycle.service');
+                    await _rlG.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [] });
+                  }
+                }
+              }
+            }
+          } catch (e: any) { console.warn('[HUMAN GRACE AUTO-CAPTURE ERROR]', e.message); }
           // Log pesan ke DB Audit Trail
           await messageService.logMessage({
             tenantId: DEFAULT_TENANT_ID,
@@ -756,6 +788,30 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
         if (!enableHoldLabel) {
           console.log(`[LABEL SYNC DISABLED] Skipping WAHA label checks in production (UI-managed mode). Bot stays silent in HUMAN_HANDLING.`);
+          // Siska #777 FIX: tetap coba capture reservasi meski label sync disabled — fallback inline sebelum silent return.
+          try {
+            const raw = incomingMessage.text?.body || '';
+            if (raw.trim()) {
+              const { isReservationFormMessage: _isFormL, parseReservationText: _parseL } = await import('../utils/reservation-text-parser');
+              if (_isFormL(raw)) {
+                const pr = _parseL(raw);
+                if (pr.success && pr.reservation) {
+                  const p = pr.reservation;
+                  const recent = await prisma.reservation.findFirst({ where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID, created_at: { gte: new Date(Date.now() - 24*60*60*1000) }, treatment_detail: p.treatmentDetail } });
+                  if (!recent) {
+                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending' } });
+                    console.log(`[HUMAN HOLD-DISABLED AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name})`);
+                    const { reservationLifecycleService: _rlL } = await import('../services/reservation-lifecycle.service');
+                    await _rlL.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [] });
+                  } else {
+                    console.log(`[HUMAN HOLD-DISABLED CAPTURE SKIP] Duplicate reservation within 24h for ${customer.phone}`);
+                  }
+                } else {
+                  console.warn(`[HUMAN HOLD-DISABLED PARSE FAIL] ${pr.error} missing=${pr.missingFields?.join(',')}`);
+                }
+              }
+            }
+          } catch (e: any) { console.warn('[HUMAN HOLD-DISABLED AUTO-CAPTURE ERROR]', e.message); }
           await messageService.logMessage({
             tenantId: DEFAULT_TENANT_ID,
             conversationId: conversation.id,
@@ -807,6 +863,26 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           }
         } else {
           console.log(`[EXPLICIT GUARD CLAUSE] Conversation ${conversation.id} is in HUMAN_HANDLING mode. Logging inbound message and BYPASSING all LLM & auto-replies.`);
+          // Siska #777 FIX: attempt capture sebelum silent return — form jangan hilang.
+          try {
+            const raw = incomingMessage.text?.body || '';
+            if (raw.trim()) {
+              const { isReservationFormMessage: _isFormE, parseReservationText: _parseE } = await import('../utils/reservation-text-parser');
+              if (_isFormE(raw)) {
+                const pr = _parseE(raw);
+                if (pr.success && pr.reservation) {
+                  const p = pr.reservation;
+                  const recent = await prisma.reservation.findFirst({ where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID, created_at: { gte: new Date(Date.now() - 24*60*60*1000) }, treatment_detail: p.treatmentDetail } });
+                  if (!recent) {
+                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending' } });
+                    console.log(`[HUMAN EXPLICIT AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name})`);
+                    const { reservationLifecycleService: _rlE } = await import('../services/reservation-lifecycle.service');
+                    await _rlE.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [] });
+                  }
+                }
+              }
+            }
+          } catch (e: any) { console.warn('[HUMAN EXPLICIT AUTO-CAPTURE ERROR]', e.message); }
 
           // Log pesan ke DB Audit Trail
           await messageService.logMessage({
