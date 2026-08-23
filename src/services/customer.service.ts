@@ -202,7 +202,7 @@ export class CustomerService {
         throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
       }
 
-      return await prisma.customer.update({
+      const updated = await prisma.customer.update({
         where: { id: customerId },
         data: {
           kelurahan: data.kelurahan,
@@ -216,6 +216,17 @@ export class CustomerService {
           zipcode: data.zipcode,
         },
       });
+
+      // Auto-sync Google Contacts jika kelurahan / kecamatan diperbarui
+      if (data.kelurahan || data.kecamatan) {
+        import('./google-contacts.service')
+          .then(({ googleContactsService }) => {
+            googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'chat' }).catch(() => {});
+          })
+          .catch(() => {});
+      }
+
+      return updated;
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
@@ -814,6 +825,15 @@ export class CustomerService {
         } catch (hubErr) {
           // ignore
         }
+      }
+
+      // Auto-sync kontak ke Google Contacts saat MQL ter-trigger
+      if (shouldQualifyMql) {
+        import('./google-contacts.service')
+          .then(({ googleContactsService }) => {
+            googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'chat' }).catch(() => {});
+          })
+          .catch(() => {});
       }
 
       return { customer: updatedCustomer, newlyTriggeredMql };
