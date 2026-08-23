@@ -80,19 +80,40 @@ describe('Google Contacts Integration Suite', () => {
       expect(res.familyName).toBe('Citra');
     });
 
-    it('supports custom template tags', () => {
+    it('supports custom template tags with kelurahan and kecamatan', () => {
       const res = formatContactName(
         {
           name: 'Ibu Maya',
           phone: '081234567890',
           kota: 'Surabaya',
+          kecamatan: 'Mulyorejo',
+          kelurahan: 'Kalisari',
           children: [{ name: 'Kimi' }],
         },
         null,
-        '[Klinik] {{name}} - {{child_name}} ({{city}})'
+        '{{name}} - {{child_name}} ({{kelurahan}}, {{kecamatan}})'
       );
 
-      expect(res.displayName).toBe('[Klinik] Ibu Maya - Kimi (Surabaya)');
+      expect(res.displayName).toBe('Ibu Maya - Kimi (Kalisari, Mulyorejo)');
+      expect(res.givenName).toBe('Ibu');
+      expect(res.familyName).toBe('Maya - Kimi (Kalisari, Mulyorejo)');
+    });
+
+    it('cleans up empty location tags cleanly', () => {
+      const res = formatContactName(
+        {
+          name: 'Ibu Maya',
+          phone: '081234567890',
+          kota: 'Surabaya',
+          kecamatan: '',
+          kelurahan: '',
+          children: [],
+        },
+        null,
+        '{{name}} - {{child_name}} ({{kelurahan}}, {{kecamatan}})'
+      );
+
+      expect(res.displayName).toBe('Ibu Maya');
     });
 
     it('builds structured notes with child and address info', () => {

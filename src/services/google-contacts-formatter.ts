@@ -39,6 +39,7 @@ export function formatContactName(
   const phone = normalizePhoneForGoogle(customer.phone);
   const city = customer.kota?.trim() || '';
   const district = customer.kecamatan?.trim() || '';
+  const subdistrict = customer.kelurahan?.trim() || '';
 
   let formatted = template;
 
@@ -58,13 +59,31 @@ export function formatContactName(
       .replace(/{{\s*child_name\s*}}/gi, '');
   }
 
+  if (subdistrict) {
+    formatted = formatted.replace(/{{\s*kelurahan\s*}}/gi, subdistrict);
+  } else {
+    formatted = formatted.replace(/{{\s*kelurahan\s*}}/gi, '');
+  }
+
+  if (district) {
+    formatted = formatted.replace(/{{\s*kecamatan\s*}}/gi, district);
+  } else {
+    formatted = formatted.replace(/{{\s*kecamatan\s*}}/gi, '');
+  }
+
   formatted = formatted
     .replace(/{{\s*phone\s*}}/gi, phone)
-    .replace(/{{\s*(kota|city)\s*}}/gi, city)
-    .replace(/{{\s*kecamatan\s*}}/gi, district);
+    .replace(/{{\s*(kota|city)\s*}}/gi, city);
 
-  // Bersihkan spasi dan tanda minus gantung
-  let displayName = formatted.replace(/\s+/g, ' ').replace(/^[\s\-–—]+|[\s\-–—]+$/g, '').trim();
+  // Bersihkan tanda koma, kurung kosong (), minus gantung, dan multiple spaces
+  let displayName = formatted
+    .replace(/\(\s*,\s*/g, '(')
+    .replace(/\s*,\s*\)/g, ')')
+    .replace(/\(\s*\)/g, '')
+    .replace(/,\s*,+/g, ',')
+    .replace(/^[\s,–—\-]+|[\s,–—\-]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   if (!displayName) {
     displayName = customerName || `Pelanggan ${phone}`;
