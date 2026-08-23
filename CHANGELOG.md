@@ -4,6 +4,25 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Weekly Google Drive Auto-Backup, Download & Database Restore (2026-08-23)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Perlindungan Aset & Disaster Recovery Klinik**: Menyediakan sistem backup database berkala 100% gratis ke Google Drive pribadi klinik untuk mengamankan data pasien, rekam medis bayi/anak, jadwal reservasi treatment, log chat WhatsApp, dan katalog tarif.
+  2. **Jadwal Auto-Backup Mingguan**: Cron mingguan setiap Senin pukul 02:00 WIB yang otomatis mendump database PostgreSQL (`.sql.gz`), mengunggahnya ke Google Drive (`📁 Kala Clinic Bot Backups`), dan melakukan auto-pruning (retensi 8 backup terakhir / ~2 bulan).
+  3. **Download Mandiri & Pemulihan Database (Restore)**: Admin dapat mengunduh backup `.sql.gz` ke laptop dalam 1 klik, serta memulihkan data database melalui panel dashboard dengan konfirmasi proteksi data.
+- **Implementasi Service & Backend:**
+  - **Backup Service (`src/services/backup.service.ts`)**: Service utama pembuatan dump database gzip, upload Google Drive, dan pemulihan tabel secara aman.
+  - **Google Drive Client (`src/integrations/google-drive/client.ts`)**: Client Google Drive API v3 untuk mengelola folder backup, upload stream, dan auto-pruning.
+  - **File Utilities (`src/utils/backup-file.ts`)**: Helper validasi magic bytes gzip, sanitasi nama file, dan proteksi path traversal.
+  - **Cron Scheduler (`src/services/cron.service.ts` & `src/app.ts`)**: Registrasi pemicu mingguan Senin 02:00 WIB (`runWeeklyBackup`).
+  - **REST API Subroute (`src/routes/admin/backup.subroute.ts`)**: Endpoint `/api/admin/backup/list`, `/create`, `/download/:fileName`, `/upload-drive`, dan `/restore`.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  - Komponen `DatabaseBackupPanel.tsx` di menu Pengaturan dengan tombol Download, Backup ke Drive, tabel riwayat, dan modal konfirmasi pemulihan data (`useUiFeedback`).
+- **Verifikasi & Pengujian:**
+  - Unit tests baru di `tests/unit/backup.test.ts` (8/8 passed).
+  - Regresi penuh suite Vitest lolos (**180 test files, 1578 passed, 0 failed**).
+  - Backend (`tsc`) dan Frontend (`vite build`) 100% lolos (0 error).
+
 ### Added & Enhanced — Google Maps Distance Matrix Fallback (Tier-2 Motorbike Routing) (2026-08-23)
 
 - **Latar Belakang & Kebutuhan:**

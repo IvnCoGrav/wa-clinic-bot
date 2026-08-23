@@ -11,10 +11,11 @@ beforeEach(() => {
 // dan menggagalkan test yang mengharap state/enqueue per-pesan.
 process.env.BURST_COALESCE_MS = '0';
 
-// Force ORS to skip HTTP calls by clearing the API key before any module is loaded.
-// OrsClient.calculateRoute() returns null immediately when apiKey is falsy,
+// Force ORS & Google Maps to skip HTTP calls by clearing the API key before any module is loaded.
+// calculateRoute() / calculateDistance() return null immediately when apiKey is falsy,
 // which triggers the Haversine fallback in DeliveryService (deterministic, no network).
 process.env.ORS_API_KEY = '';
+process.env.GOOGLE_MAPS_API_KEY = '';
 
 // Blank WAHA_WEBHOOK_SECRET so the /webhook route runs in no-auth mode during tests
 // (deterministic, not dependent on the local .env value). Test files that intentionally

@@ -265,24 +265,32 @@ if (require.main === module) {
         console.log(`🛑 Follow-Up Worker is DISABLED (ENABLE_FOLLOWUP_WORKER is not 'true')`);
       }
 
-      // 2. Morning Jobs (Pengingat H-0 & Review H+1 pada 06:00 WIB)
+      // 2. Morning Jobs (Pengingat H-0 & Review H+1 pada 06:00 WIB) & Weekly Auto-Backup (Senin 02:00 WIB)
       let lastMorningRunDate = '';
+      let lastWeeklyBackupRunDate = '';
       setInterval(async () => {
         try {
           const nowUtc = new Date();
           const wibTime = new Date(nowUtc.getTime() + 7 * 60 * 60 * 1000);
           const wibHour = wibTime.getUTCHours();
+          const wibDay = wibTime.getUTCDay(); // 0 = Minggu, 1 = Senin
           const todayDateStr = wibTime.toISOString().slice(0, 10);
 
           if (wibHour === 6 && lastMorningRunDate !== todayDateStr) {
             lastMorningRunDate = todayDateStr;
             await cron.runMorningJobs();
           }
+
+          // Auto-Backup Mingguan ke Google Drive (Setiap Senin 02:00 WIB)
+          if (wibDay === 1 && wibHour === 2 && lastWeeklyBackupRunDate !== todayDateStr) {
+            lastWeeklyBackupRunDate = todayDateStr;
+            await cron.runWeeklyBackup();
+          }
         } catch (err: any) {
-          console.error('[MORNING JOBS CRON ERROR]', err.message);
+          console.error('[CRON SCHEDULE ERROR]', err.message);
         }
       }, 15 * 60 * 1000);
-      console.log(`🌅 Morning Jobs cron registered (checking for 06:00 WIB daily)`);
+      console.log(`🌅 Morning Jobs (06:00 WIB) & Weekly Backup (Senin 02:00 WIB) cron registered`);
     }).catch(e => console.error('[CRON SERVICE START ERROR]', e));
   });
 }
