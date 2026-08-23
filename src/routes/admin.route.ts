@@ -32,6 +32,7 @@ import { pushSubroutes } from './admin/push.subroute';
 import { rolesAdminRoutes } from './admin/roles.subroute';
 import { followUpAdminRoutes } from './admin/follow-up.subroute';
 import { googleIntegrationAdminRoutes } from './admin/google-integration.subroute';
+import { backupAdminRoutes } from './admin/backup.subroute';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
@@ -127,6 +128,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(rolesAdminRoutes);
   fastify.register(followUpAdminRoutes);
   fastify.register(googleIntegrationAdminRoutes);
+  fastify.register(backupAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');
