@@ -1,6 +1,10 @@
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
 import { IOrsClient, orsClient as defaultOrsClient } from '../integrations/ors/client';
+import {
+  IGoogleDistanceClient,
+  defaultGoogleDistanceClient,
+} from '../integrations/google-maps/distance-matrix.client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { prisma } from '../db/client';
 import fs from 'fs';
@@ -166,9 +170,14 @@ export interface DeliveryCalculationResult {
  */
 export class DeliveryService {
   private orsClient: IOrsClient;
+  private googleDistanceClient: IGoogleDistanceClient;
 
-  constructor(orsClient?: IOrsClient) {
+  constructor(
+    orsClient?: IOrsClient,
+    googleDistanceClient?: IGoogleDistanceClient
+  ) {
     this.orsClient = orsClient || defaultOrsClient;
+    this.googleDistanceClient = googleDistanceClient || defaultGoogleDistanceClient;
   }
 
   /**
@@ -182,7 +191,7 @@ export class DeliveryService {
     let distanceKm: number;
     let isEstimated = false;
 
-    // 1. Coba hit OpenRouteService (ORS) Directions API
+    // 1. Lapis 1: Coba hit OpenRouteService (ORS) Directions API (Mode Rute Motor / Sepeda Listrik)
     const orsResult = await this.orsClient.calculateRoute(
       clinicCoords.lat,
       clinicCoords.lng,
@@ -200,19 +209,37 @@ export class DeliveryService {
         `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${ORS_BUFFER_FACTOR}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
       );
     } else {
-      // 2. FALLBACK: Haversine + circuity factor
-      console.warn(
-        `[DELIVERY SERVICE FALLBACK] ORS Directions API route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with ${HAVERSINE_CIRCUITY_FACTOR}x circuity multiplier.`
+      // 2. Lapis 2 (Fallback 1): Coba hit Google Maps Distance Matrix API (Mode Motor / Hindari Tol)
+      const googleResult = await this.googleDistanceClient.calculateDistance(
+        clinicCoords.lat,
+        clinicCoords.lng,
+        customerCoords.lat,
+        customerCoords.lng
       );
-      const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
-      distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(2));
-      isEstimated = true;
-      console.log(
-        `[DISTANCE CALC] 📐 Method: Haversine Fallback (${HAVERSINE_CIRCUITY_FACTOR}x circuity) | Straight: ${straightLineKm.toFixed(2)} km ──▶ Road Est: ${distanceKm} km | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
-      );
+
+      if (googleResult && typeof googleResult.distanceMeters === 'number') {
+        const rawDistanceKm = googleResult.distanceMeters / 1000;
+        distanceKm = parseFloat((rawDistanceKm * ORS_BUFFER_FACTOR).toFixed(2));
+        isEstimated = false;
+        const durationMins = googleResult.durationSeconds ? Math.round(googleResult.durationSeconds / 60) : null;
+        console.log(
+          `[DISTANCE CALC] 🗺️ Method: Google Maps Distance Matrix (Motorbike/Avoid Tolls) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${ORS_BUFFER_FACTOR}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+        );
+      } else {
+        // 3. Lapis 3 (Fallback 2): Rumus Matematis Haversine + circuity factor
+        console.warn(
+          `[DELIVERY SERVICE FALLBACK] ORS & Google Maps route calculation failed/unavailable for coords (${customerCoords.lat}, ${customerCoords.lng}). Falling back to Haversine distance with ${HAVERSINE_CIRCUITY_FACTOR}x circuity multiplier.`
+        );
+        const straightLineKm = calculateHaversineDistance(clinicCoords, customerCoords);
+        distanceKm = parseFloat((straightLineKm * HAVERSINE_CIRCUITY_FACTOR).toFixed(2));
+        isEstimated = true;
+        console.log(
+          `[DISTANCE CALC] 📐 Method: Haversine Fallback (${HAVERSINE_CIRCUITY_FACTOR}x circuity) | Straight: ${straightLineKm.toFixed(2)} km ──▶ Road Est: ${distanceKm} km | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+        );
+      }
     }
 
-    // 3. Ambil tier ongkir per tenant (DB -> fallback file)
+    // 4. Ambil tier ongkir per tenant (DB -> fallback file)
     const tiers = await getDeliveryTiersFromDb(tenantId);
 
     // 4. Evaluasi threshold jarak & tentukan tarif ongkir
