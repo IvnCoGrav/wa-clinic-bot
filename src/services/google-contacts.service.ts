@@ -6,6 +6,7 @@ import {
   formatContactName,
   normalizePhoneForGoogle,
   buildContactNotes,
+  extractContactPhoneAndName,
   CustomerContactContext,
 } from './google-contacts-formatter';
 
@@ -465,6 +466,113 @@ export class GoogleContactsService {
       total: customers.length,
       success,
       failed,
+    };
+  }
+
+  /**
+   * Tarik dan impor seluruh kontak dari akun Google Contacts ke database bot (Inbound Sync)
+   */
+  public async importContactsFromGoogle(
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<{
+    totalFetched: number;
+    newlyCreated: number;
+    updatedExisting: number;
+    skippedNoPhone: number;
+  }> {
+    const authClient = await googleOAuthClientManager.getAuthenticatedClient(tenantId);
+    if (!authClient) {
+      throw new Error('Akun Google Contacts belum terhubung atau token kedaluwarsa.');
+    }
+
+    const peopleService = google.people({ version: 'v1', auth: authClient as any });
+
+    let pageToken: string | undefined = undefined;
+    let totalFetched = 0;
+    let newlyCreated = 0;
+    let updatedExisting = 0;
+    let skippedNoPhone = 0;
+
+    do {
+      const res: any = await peopleService.people.connections.list({
+        resourceName: 'people/me',
+        pageSize: 100,
+        pageToken,
+        personFields: 'names,phoneNumbers,biographies,metadata',
+      });
+
+      const connections = res.data?.connections || [];
+      totalFetched += connections.length;
+
+      for (const person of connections) {
+        const extracted = extractContactPhoneAndName(person);
+        if (!extracted || !extracted.phone) {
+          skippedNoPhone++;
+          continue;
+        }
+
+        const rawPhone = extracted.phone;
+        // Variasi format nomor telepon di DB: +628..., 628..., 08...
+        const digits = rawPhone.replace(/\D/g, '');
+        const clean = digits.startsWith('62') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
+        const phoneFormats = [`62${clean}`, `0${clean}`, `+62${clean}`, clean];
+
+        try {
+          const existing = await prisma.customer.findFirst({
+            where: {
+              tenant_id: tenantId,
+              phone: { in: phoneFormats },
+            },
+          });
+
+          if (existing) {
+            // Update resource name & lengkapi nama jika sebelumnya null/kosong
+            await prisma.customer.update({
+              where: { id: existing.id },
+              data: {
+                google_resource_name: extracted.resourceName,
+                google_etag: extracted.etag,
+                google_synced_at: new Date(),
+                name: !existing.name && extracted.name ? extracted.name : undefined,
+              },
+            });
+            updatedExisting++;
+          } else {
+            // Buat record Customer baru sebagai legacy/import source
+            await prisma.customer.create({
+              data: {
+                tenant_id: tenantId,
+                phone: `62${clean}`,
+                name: extracted.name,
+                is_legacy_source: true,
+                google_resource_name: extracted.resourceName,
+                google_etag: extracted.etag,
+                google_synced_at: new Date(),
+              },
+            });
+            newlyCreated++;
+          }
+        } catch (err: any) {
+          console.warn(`[GoogleContacts Import] Gagal memproses kontak (${rawPhone}):`, err?.message);
+        }
+      }
+
+      pageToken = res.data?.nextPageToken;
+    } while (pageToken);
+
+    // Update last_synced_at di TenantGoogleIntegration
+    try {
+      await prisma.tenantGoogleIntegration.update({
+        where: { tenant_id: tenantId },
+        data: { last_synced_at: new Date() },
+      });
+    } catch (_) {}
+
+    return {
+      totalFetched,
+      newlyCreated,
+      updatedExisting,
+      skippedNoPhone,
     };
   }
 }

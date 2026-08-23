@@ -3,6 +3,7 @@ import {
   formatContactName,
   normalizePhoneForGoogle,
   buildContactNotes,
+  extractContactPhoneAndName,
 } from '../../src/services/google-contacts-formatter';
 import { googleOAuthClientManager } from '../../src/integrations/google-contacts/google-oauth.client';
 import { googleContactsService } from '../../src/services/google-contacts.service';
@@ -13,9 +14,11 @@ const upsertIntegrationMock = vi.fn();
 const updateIntegrationMock = vi.fn();
 const createIntegrationMock = vi.fn();
 const findUniqueCustomerMock = vi.fn();
+const findFirstCustomerMock = vi.fn();
 const findManyCustomerMock = vi.fn();
 const countCustomerMock = vi.fn();
 const updateCustomerMock = vi.fn();
+const createCustomerMock = vi.fn();
 
 vi.mock('../../src/db/client', () => ({
   prisma: {
@@ -27,9 +30,11 @@ vi.mock('../../src/db/client', () => ({
     },
     customer: {
       findUnique: (...args: any[]) => findUniqueCustomerMock(...args),
+      findFirst: (...args: any[]) => findFirstCustomerMock(...args),
       findMany: (...args: any[]) => findManyCustomerMock(...args),
       count: (...args: any[]) => countCustomerMock(...args),
       update: (...args: any[]) => updateCustomerMock(...args),
+      create: (...args: any[]) => createCustomerMock(...args),
     },
   },
 }));
@@ -133,6 +138,34 @@ describe('Google Contacts Integration Suite', () => {
       expect(notes).toContain('Kenzo (Lahir: 2024-01-15)');
       expect(notes).toContain('Alamat: Kalisari, Mulyorejo, Surabaya');
       expect(notes).toContain('Reservasi Terakhir: Baby Massage + Bath');
+    });
+
+    it('extracts contact details from Google Person payload', () => {
+      const person = {
+        resourceName: 'people/c999',
+        etag: '%etag999',
+        names: [{ displayName: 'Bunda Sarah', metadata: { primary: true } }],
+        phoneNumbers: [{ value: '081299887766' }],
+        biographies: [{ value: 'Alamat: Mulyorejo' }],
+      };
+
+      const extracted = extractContactPhoneAndName(person);
+      expect(extracted).not.toBeNull();
+      expect(extracted?.name).toBe('Bunda Sarah');
+      expect(extracted?.phone).toBe('+6281299887766');
+      expect(extracted?.resourceName).toBe('people/c999');
+      expect(extracted?.notes).toBe('Alamat: Mulyorejo');
+    });
+
+    it('ignores contacts without phone numbers in extractContactPhoneAndName', () => {
+      const person = {
+        resourceName: 'people/c1000',
+        names: [{ displayName: 'Hanya Email' }],
+        phoneNumbers: [],
+      };
+
+      const extracted = extractContactPhoneAndName(person);
+      expect(extracted).toBeNull();
     });
   });
 
