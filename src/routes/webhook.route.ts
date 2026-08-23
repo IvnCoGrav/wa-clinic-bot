@@ -738,8 +738,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Cek apakah customer baru saja dibuat (< 5 detik lalu) untuk memicu auto-save ke Google Contacts
       const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
       if (isNewCustomer) {
-        googleContactsService.createContact(phone, contactName).catch((err) => {
-          console.error('[GOOGLE CONTACTS] Unhandled rejection:', err);
+        googleContactsService.syncCustomer(DEFAULT_TENANT_ID, customer.id, { trigger: 'chat' }).catch((err: any) => {
+          console.error('[GOOGLE CONTACTS] Unhandled rejection:', err?.message);
         });
       }
 

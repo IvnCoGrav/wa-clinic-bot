@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Google Contacts SaaS-Ready Integration (1-Click Google OAuth & Auto-Sync) (2026-08-23)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Kemudahan Klien Non-Tech Savvy (SaaS Managed OAuth)**: Pemilik klinik dan admin tidak perlu repot membuat project Google Cloud Platform atau mengurus API Key/Secret. Integrasi dirancang terpusat di server dengan tombol otorisasi 1-klik di Admin Dashboard.
+  2. **Sinkronisasi Otomatis Buku Telepon HP**: Nama pasien yang masuk via chat WhatsApp atau melakukan reservasi treatment otomatis tersimpan dan ter-update di buku kontak Google Contacts (HP klinik/CS/dokter).
+  3. **Penamaan Kontak Cerdas & Terstruktur**: Template penamaan kustomisasi (misal: `{{name}} - {{child_name}} (Klinik)`), normalisasi nomor telepon ke format internasional E.164 (`+628...`), dan pencegahan duplikasi nomor kontak.
+- **Implementasi Database & Skema Prisma (`prisma/schema.prisma`):**
+  - Menambahkan model `TenantGoogleIntegration`: `tenant_id`, `is_enabled`, `connected_email`, `refresh_token`, `access_token`, `token_expiry`, `naming_template`, `contact_label`, `auto_sync_on_chat`, `auto_sync_on_reserve`, `last_synced_at`.
+  - Memperluas model `Customer` dengan field tracking: `google_resource_name`, `google_etag`, `google_synced_at`.
+- **Implementasi Backend & Service Layer:**
+  - **Google OAuth Manager (`src/integrations/google-contacts/google-oauth.client.ts`)**: Mengelola OAuth 2.0 Client, pembuatan URL otorisasi berparameter state tenant, pertukaran authorization code, auto-refresh token, dan pencabutan izin (revoke token).
+  - **Formatter & Normalizer (`src/services/google-contacts-formatter.ts`)**: Parser template penamaan kontak, normalisasi nomor telepon, dan pembuat catatan terstruktur (data anak, alamat, reservasi).
+  - **Core Service (`src/services/google-contacts.service.ts`)**: Penanganan query People API, deduplikasi kontak berdasarkan nomor HP, create/update kontak, sinkronisasi tunggal, dan batch sync throttling (menghindari rate limit Google).
+  - **Event Hooks Otomatis**: Integrasi trigger async di `customer.service.ts` (saat update nama) dan `reservation-lifecycle.service.ts` (saat booking selesai), dengan proteksi isolasi sandbox test (`is_sandbox_test = true`).
+  - **REST API Admin Routes (`src/routes/admin/google-integration.subroute.ts`)**: Endpoint `/auth-url`, `/callback`, `/status`, `/settings`, `/sync-all`, dan `/disconnect`.
+- **Implementasi Admin Dashboard UI (`packages/admin-dashboard`):**
+  - Menambahkan komponen `GoogleContactsPanel.tsx`:
+    - Mode Belum Terhubung: Tombol 1-klik *"Hubungkan dengan Akun Google"* dengan logo resmi.
+    - Mode Terhubung: Indikator status email, statistik total kontak tersinkron, waktu sync terakhir, dan tombol putus akun (dengan modal `useUiFeedback`).
+    - Formulir Kustomisasi Format Nama Kontak dengan **Live Preview Box**.
+    - Toggle Switch auto-sync saat chat nama & saat reservasi.
+    - Tombol aksi *"Sinkronkan Semua Kontak Sekarang"*.
+  - Terintegrasi pada halaman tab Pengaturan (`Settings.tsx`).
+- **Verifikasi & Pengujian:**
+  - Unit tests baru `tests/unit/google-contacts.test.ts` (10/10 passed).
+  - Full Vitest test suite regression (**178 test files, 1560 passed, 0 failed**).
+  - TypeScript compilation backend (`npm run build`) 100% lolos.
+  - Frontend production build (`packages/admin-dashboard: npm run build`) 100% lolos.
+
 ### Enhanced & Fixed — Clinic Services Bundle & Add-on Strict Business Logic Alignment (2026-08-22)
 
 - **Latar Belakang & Kebutuhan:**
