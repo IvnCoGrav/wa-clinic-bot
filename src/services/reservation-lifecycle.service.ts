@@ -51,6 +51,14 @@ export class ReservationLifecycleService {
     if (process.env.ENABLE_LIFECYCLE_LABELS === 'true' && chatId) {
       await this.applyLifecycleLabels({ customerId, tenantId, chatId });
     }
+
+    // 4. Google Contacts auto-sync (best-effort)
+    try {
+      const { googleContactsService } = await import('./google-contacts.service');
+      googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'reservation' }).catch(() => {});
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] googleContactsService.syncCustomer failed:', err?.message);
+    }
   }
 
   /**

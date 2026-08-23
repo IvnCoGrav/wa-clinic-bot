@@ -566,10 +566,19 @@ export class CustomerService {
    */
   public async updateCustomerName(customerId: string, name: string, tenantId: string): Promise<any> {
     try {
-      return await prisma.customer.update({
+      const updated = await prisma.customer.update({
         where: { id: customerId },
         data: { name },
       });
+
+      // Google Contacts auto-sync (best-effort, non-blocking)
+      import('./google-contacts.service')
+        .then(({ googleContactsService }) => {
+          googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'chat' }).catch(() => {});
+        })
+        .catch(() => {});
+
+      return updated;
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {

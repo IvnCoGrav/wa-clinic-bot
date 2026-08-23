@@ -99,6 +99,10 @@ model Customer {
   profile_picture_url        String?
   profile_picture_updated_at DateTime?
 
+  google_resource_name       String?
+  google_etag                String?
+  google_synced_at           DateTime?
+
   @@index([tenant_id])
   @@index([tenant_id, created_at])
   @@map("customers")
@@ -364,6 +368,26 @@ model TenantAiConfig {
 
   @@unique([tenant_id, task])
   @@map("tenant_ai_config")
+}
+
+model TenantGoogleIntegration {
+  id                   String    @id @default(uuid())
+  tenant_id            String    @unique @default("default-tenant")
+  is_enabled           Boolean   @default(false)
+  connected_email      String?
+  refresh_token        String?
+  access_token         String?
+  token_expiry         DateTime?
+  auto_sync_on_chat    Boolean   @default(true)
+  auto_sync_on_reserve Boolean   @default(true)
+  naming_template      String    @default("{{name}} - {{child_name}}")
+  contact_label        String?   @default("Pasien Klinik")
+  last_synced_at       DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  @@index([tenant_id])
+  @@map("tenant_google_integrations")
 }
 
 model FollowUpTemplate {
