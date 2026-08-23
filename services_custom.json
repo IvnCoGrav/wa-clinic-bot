@@ -137,22 +137,28 @@
   {
     "id": "moms-laktasi-oksitosin-full",
     "name": "Breast + Oksitoksin Fullbody Massage",
-    "category": "MOMS",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "moms-paket-laktasi",
+      "moms-oksitosin-fullbody"
+    ],
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
       "label": "Ibu Menyusui / Nifas"
     },
     "durationMinutes": 75,
-    "originalPrice": 190000,
+    "originalPrice": 230000,
     "promoPrice": 155000,
-    "description": "Paket kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI.",
+    "description": "Paket hemat kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI.",
     "isActive": true
   },
   {
     "id": "baby-tindik",
     "name": "Tindik Telinga Bayi",
     "category": "BABY",
+    "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": 12,
@@ -168,6 +174,7 @@
     "id": "baby-cukur",
     "name": "Cukur Rambut Bayi",
     "category": "BABY",
+    "serviceType": "STANDARD",
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": 12,
@@ -182,7 +189,12 @@
   {
     "id": "baby-cukur-pijat-terapi",
     "name": "Cukur + Pijat Terapi",
-    "category": "BABY",
+    "category": "BUNDLE",
+    "serviceType": "BUNDLE",
+    "bundleItemIds": [
+      "baby-cukur",
+      "baby-massage-pulih-ceria"
+    ],
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": 12,
@@ -197,7 +209,9 @@
   {
     "id": "add-on-sinar-moksa",
     "name": "Sinar Moksa (Add-on)",
-    "category": "BOTH",
+    "category": "ADD_ON",
+    "serviceType": "ADD_ON",
+    "isAddon": true,
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
@@ -206,13 +220,15 @@
     "durationMinutes": 15,
     "originalPrice": 15000,
     "promoPrice": 10000,
-    "description": "Terapi tambahan sinar inframerah (moksa) hangat untuk membantu mengencerkan dahak, lendir ingus, dan melegakan pernapasan.",
+    "description": "Terapi tambahan sinar inframerah (moksa) hangat untuk membantu mengencerkan dahak, lendir ingus, dan melegakan pernapasan. (Layanan tambahan / Add-on)",
     "isActive": true
   },
   {
     "id": "add-on-nebulizer",
     "name": "Nebulizer (Terapi Uap Add-on)",
-    "category": "BABY",
+    "category": "ADD_ON",
+    "serviceType": "ADD_ON",
+    "isAddon": true,
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
@@ -221,13 +237,15 @@
     "durationMinutes": 20,
     "originalPrice": 50000,
     "promoPrice": 35000,
-    "description": "Terapi uap nebulizer tambahan untuk melegakan tenggorokan dan mengencerkan dahak.",
+    "description": "Terapi uap nebulizer tambahan untuk melegakan tenggorokan dan mengencerkan dahak. (Layanan tambahan / Add-on)",
     "isActive": true
   },
   {
     "id": "add-on-nebulizer-obat",
     "name": "Nebulizer + Obat (Terapi Uap Lengkap)",
-    "category": "BABY",
+    "category": "ADD_ON",
+    "serviceType": "ADD_ON",
+    "isAddon": true,
     "ageTier": {
       "minAgeMonths": 0,
       "maxAgeMonths": null,
@@ -236,7 +254,7 @@
     "durationMinutes": 20,
     "originalPrice": 85000,
     "promoPrice": 65000,
-    "description": "Terapi uap nebulizer lengkap dengan obat khusus untuk meredakan batuk pilek dan sesak napas.",
+    "description": "Terapi uap nebulizer lengkap dengan obat khusus untuk meredakan batuk pilek dan sesak napas. (Layanan tambahan / Add-on)",
     "isActive": true
   },
   {

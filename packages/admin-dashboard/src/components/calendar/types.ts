@@ -12,7 +12,10 @@ export interface CalendarFilterState {
 export interface ClinicServiceItem {
   id: string;
   name: string;
-  category: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE';
+  category: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE' | 'ADD_ON';
+  serviceType?: 'STANDARD' | 'BUNDLE' | 'ADD_ON';
+  bundleItemIds?: string[];
+  isAddon?: boolean;
   ageTier?: {
     minAgeMonths: number;
     maxAgeMonths: number | null;

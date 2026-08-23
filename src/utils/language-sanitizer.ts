@@ -70,13 +70,39 @@ export function sanitizeHallucinatedTerms(text: string): string {
     .replace(/\b(?:biaya\s+)?antimeminjamkan(?:nya)?\b/gi, 'ongkirnya')
     .replace(/\banti\s*meminjamkan(?:nya)?\b/gi, 'ongkirnya')
     .replace(/\bbiaya\s+peminjaman(?:nya)?\b/gi, 'ongkos kirimnya')
-    .replace(/\b(untuk|ke|dari|pada|bagi|buat|oleh)\s+bund\b/gi, '$1 Bunda')
+    // Perbaiki kesalahan penerjemahan nama brand "Kala Moms and bayi Spa"
+    .replace(/\bKala\s+Moms?\s+(?:and|&)\s+bayi\s+Spa\b/gi, 'Kala Moms and Baby Spa')
+    .replace(/\bKala\s+Mom's\s+(?:and|&)\s+bayi\s+Spa\b/gi, 'Kala Moms and Baby Spa')
+    // Perbaiki preposisi dan konjungsi kaku "maupun/dan/untuk bund" -> "Bunda"
+    .replace(/\b(maupun|dan|serta|untuk|ke|dari|pada|bagi|buat|oleh)\s+bund\b/gi, '$1 Bunda')
+    .replace(/\b(maupun|dan|serta|untuk|ke|dari|pada|bagi|buat|oleh)\s+Bund\b/g, '$1 Bunda')
     .replace(/\b(untuk|buat|pada|bagi|terkait)\s+bunny\b/gi, '$1 si kecil')
     .replace(/\bsi\s+bunny\b/gi, 'si kecil')
     .replace(/\b(ya|kan|nih|deh),?\s+bund\b/gi, '$1, Bunda')
     .replace(/,\s*bund\b/gi, ', Bunda')
     .replace(/\bsyukur\s+sekali\b/gi, 'Wah senang sekali')
     .replace(/\bpuji\s+syukur\b/gi, 'Wah senang sekali');
+}
+
+/**
+ * Mengurangi penggunaan kata sapaan "Bunda" yang berulang-ulang secara berlebihan (anti-overuse)
+ * dalam satu klausa/kalimat penutup agar kalimat mengalir alami seperti manusia (CS/Bidan asli).
+ */
+export function sanitizeRepetitiveGreetings(text: string): string {
+  if (!text) return text;
+  
+  let cleaned = text
+    // 1. Perbaiki frasa dobel sapaan yang menumpuk di kalimat penutup
+    .replace(/rumah(?:nya)?\s+di\s+mana\s+ya\s+Bunda\?\s*Biar\s+sekalian\s+kami\s+bantu\s+cekkan\s+ketersediaan\s+bidan\s+&\s+ongkir\s+ke\s+tempat\s+Bunda\s*😊?/gi, 
+      'Kalau boleh tahu rumahnya di mana ya Bunda? Biar sekalian kami bantu cekkan ketersediaan bidan & ongkirnya 😊')
+    .replace(/ongkir\s+ke\s+tempat\s+Bunda\b/gi, 'ongkirnya')
+    .replace(/ongkirnya\s+ke\s+tempat\s+Bunda\b/gi, 'ongkirnya')
+    .replace(/ketersediaan\s+bidan\s+ke\s+tempat\s+Bunda\b/gi, 'ketersediaan bidan')
+    // 2. Hilangkan sapaan jeda yang menumpuk dalam kalimat yang sama (contoh: "ya, Bunda. Sudah terlatih ... maupun Bunda" -> "ya. Sudah terlatih ... maupun Bunda")
+    .replace(/,\s*ya,?\s*Bunda\b(?=[^.!?\n]*\bBunda\b)/gi, ', ya')
+    .replace(/,\s*Bunda\b(?=[^.!?\n]*\bBunda\b)/gi, '');
+
+  return cleaned;
 }
 
 /**

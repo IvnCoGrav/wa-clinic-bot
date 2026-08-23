@@ -250,6 +250,106 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * OPTIONS & POST /api/tracking/pageview
+   * Menerima sinyal PageView dari external-tracker.js di landing page eksternal (WordPress, Berdu, Scalev, dsb.)
+   */
+  fastify.options('/api/tracking/pageview', async (_req, reply) => {
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type');
+    return reply.status(204).send();
+  });
+
+  fastify.post(
+    '/api/tracking/pageview',
+    {
+      config: {
+        rateLimit: {
+          max: 120,
+          timeWindow: '1 minute',
+          keyGenerator: (req) => req.ip,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type');
+
+      const body = (request.body || {}) as any;
+      const userAgent = request.headers['user-agent'] || null;
+
+      // Filter bot crawler Meta / search bot agar data tetap bersih
+      if (isBotOrCrawler(userAgent)) {
+        return reply.status(200).send({ success: true, ignored: true });
+      }
+
+      const ipAddress = (request.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || request.ip || null;
+      const tenant_id = body.tenantId || body.tenant_id || DEFAULT_TENANT_ID;
+
+      const viewData = {
+        tenant_id,
+        landingUrl: body.landingUrl || null,
+        fbclid: body.fbclid || null,
+        fbp: body.fbp || null,
+        fbc: body.fbc || null,
+        ipAddress,
+        userAgent,
+        utmSource: body.utm_source || body.utmSource || null,
+        utmMedium: body.utm_medium || body.utmMedium || null,
+        utmCampaign: body.utm_campaign || body.utmCampaign || null,
+        utmContent: body.utm_content || body.utmContent || null,
+        utmTerm: body.utm_term || body.utmTerm || null,
+        utmId: body.utm_id || body.utmId || null,
+      };
+
+      try {
+        await (prisma as any).landingPageView.create({
+          data: viewData,
+        });
+      } catch (err: any) {
+        // Fallback in-memory jika DB offline
+        pruneMemoryMap(memoryPageViews, 2000);
+        memoryPageViews.set(`view_${Date.now()}_${Math.random().toString(36).substring(7)}`, {
+          ...viewData,
+          createdAt: new Date(),
+        });
+      }
+
+      // Hybrid Deduplication: Tembakkan event PageView ke Meta CAPI dengan eventID yang sama
+      if (body.eventID) {
+        try {
+          const { capiService } = await import('../services/capi.service');
+          capiService.sendCapiEvent({
+            eventName: 'PageView',
+            customer: { phone: '', id: `pv_${Date.now()}` },
+            adClick: {
+              fbclid: viewData.fbclid,
+              fbp: viewData.fbp,
+              fbc: viewData.fbc,
+              ipAddress: viewData.ipAddress,
+              userAgent: viewData.userAgent,
+              landingUrl: viewData.landingUrl,
+              trackingCode: body.eventID,
+              utmSource: viewData.utmSource,
+              utmMedium: viewData.utmMedium,
+              utmCampaign: viewData.utmCampaign,
+            },
+            tenantId: tenant_id,
+            customData: {
+              traffic_source: viewData.fbclid ? 'paid' : 'organic',
+            },
+          }).catch(() => {});
+        } catch (_) {}
+      }
+
+      return reply.status(200).send({ success: true });
+    }
+  );
 }
+
+export const memoryPageViews = new Map<string, any>();
 
 
