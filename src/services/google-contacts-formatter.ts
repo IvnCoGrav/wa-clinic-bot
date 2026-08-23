@@ -136,3 +136,57 @@ export function buildContactNotes(customer: CustomerContactContext): string {
 
   return lines.join('\n');
 }
+
+/**
+ * Ekstrak nama, nomor HP, dan catatan dari objek person Google People API
+ */
+export function extractContactPhoneAndName(person: any): {
+  resourceName: string;
+  etag: string;
+  phone: string;
+  name: string;
+  notes?: string;
+} | null {
+  if (!person) return null;
+
+  const resourceName = person.resourceName || '';
+  const etag = person.etag || '';
+
+  // 1. Ekstrak nomor telepon utama
+  const phoneNumbers = person.phoneNumbers || [];
+  let phone = '';
+  for (const p of phoneNumbers) {
+    const rawVal = p.value || '';
+    const norm = normalizePhoneForGoogle(rawVal);
+    if (norm) {
+      phone = norm;
+      break;
+    }
+  }
+
+  if (!phone) {
+    return null; // Lewati kontak yang tidak memiliki nomor telepon
+  }
+
+  // 2. Ekstrak nama
+  const names = person.names || [];
+  const primaryName = names.find((n: any) => n.metadata?.primary) || names[0];
+  let name = primaryName?.displayName || `${primaryName?.givenName || ''} ${primaryName?.familyName || ''}`.trim();
+
+  if (!name) {
+    name = `Kontak Google (${phone.slice(-4)})`;
+  }
+
+  // 3. Ekstrak catatan / bios
+  const biographies = person.biographies || [];
+  const notes = biographies.map((b: any) => b.value).filter(Boolean).join('\n') || undefined;
+
+  return {
+    resourceName,
+    etag,
+    phone,
+    name,
+    notes,
+  };
+}
+

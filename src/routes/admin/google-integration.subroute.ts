@@ -199,6 +199,50 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/integrations/google/import
+   * Tarik & impor seluruh kontak eksisting dari akun Google Contacts ke database bot (Inbound Sync)
+   */
+  fastify.post(
+    '/api/admin/integrations/google/import',
+    async (
+      request: FastifyRequest<{
+        Body: { tenantId?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+
+      try {
+        const status = await googleContactsService.getIntegrationStatus(tenantId);
+        if (!status.isConnected) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Akun Google belum terhubung. Silakan sambungkan akun terlebih dahulu.',
+          });
+        }
+
+        const result = await googleContactsService.importContactsFromGoogle(tenantId);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'IMPORT_GOOGLE_CONTACTS',
+          payload: { tenantId, result },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          data: result,
+          message: `Berhasil menarik ${result.totalFetched} kontak dari Google Contacts: ${result.newlyCreated} pasien baru ditambahkan, ${result.updatedExisting} pasien diperbarui, ${result.skippedNoPhone} dilewati (tanpa no HP).`,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err?.message });
+      }
+    }
+  );
+
+  /**
    * POST /api/admin/integrations/google/disconnect
    * Putus koneksi Google Contacts & hapus token
    */
