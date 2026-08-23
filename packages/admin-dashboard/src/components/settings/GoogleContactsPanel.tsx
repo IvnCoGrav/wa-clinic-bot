@@ -10,7 +10,8 @@ import {
   Save,
   Sparkles,
   ExternalLink,
-  Info
+  Info,
+  Download
 } from 'lucide-react';
 
 interface GoogleStatus {
@@ -41,6 +42,7 @@ export const GoogleContactsPanel: React.FC = () => {
   // Action states
   const [savingSettings, setSavingSettings] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
+  const [importingContacts, setImportingContacts] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [fetchingAuthUrl, setFetchingAuthUrl] = useState(false);
 
@@ -54,12 +56,12 @@ export const GoogleContactsPanel: React.FC = () => {
         setStatus(res.data);
         setNamingTemplate(res.data.namingTemplate || '{{name}} - {{child_name}}');
         setContactLabel(res.data.contactLabel || 'Pasien Klinik');
-        setAutoSyncOnChat(res.data.autoSyncOnChat);
-        setAutoSyncOnReserve(res.data.autoSyncOnReserve);
-        setIsEnabled(res.data.isEnabled);
+        setAutoSyncOnChat(res.data.autoSyncOnChat ?? true);
+        setAutoSyncOnReserve(res.data.autoSyncOnReserve ?? true);
+        setIsEnabled(res.data.isEnabled ?? true);
       }
     } catch (err: any) {
-      console.error('Failed to fetch Google integration status:', err);
+      toast(err.message || 'Gagal memuat status integrasi Google Contacts.', 'error');
     } finally {
       setLoading(false);
     }
@@ -67,16 +69,6 @@ export const GoogleContactsPanel: React.FC = () => {
 
   useEffect(() => {
     fetchStatus();
-
-    // Cek query param jika baru selesai redirect dari OAuth
-    const hash = window.location.hash || '';
-    if (hash.includes('google_connected=true')) {
-      toast('Akun Google Contacts berhasil disambungkan ke bot klinik.', 'success');
-      // Bersihkan query param
-      window.location.hash = hash.replace('google_connected=true', '');
-    } else if (hash.includes('google_error=')) {
-      toast('Terjadi kendala saat otorisasi Google OAuth.', 'error');
-    }
   }, []);
 
   const handleConnectGoogle = async () => {
@@ -88,10 +80,10 @@ export const GoogleContactsPanel: React.FC = () => {
       if (res.success && res.data?.authUrl) {
         window.location.href = res.data.authUrl;
       } else {
-        toast(res.error || 'Google OAuth belum dikonfigurasi di environment server.', 'info');
+        toast(res.error || 'Gagal mendapatkan URL otorisasi Google.', 'error');
       }
     } catch (err: any) {
-      toast(err.message || 'Gagal memulai alur login Google.', 'error');
+      toast(err.message || 'Terjadi kesalahan saat memulai autentikasi Google.', 'error');
     } finally {
       setFetchingAuthUrl(false);
     }
@@ -105,24 +97,65 @@ export const GoogleContactsPanel: React.FC = () => {
         {
           method: 'PUT',
           body: JSON.stringify({
-            isEnabled,
             namingTemplate,
             contactLabel,
             autoSyncOnChat,
             autoSyncOnReserve,
+            isEnabled,
           }),
         }
       );
+
       if (res.success) {
-        toast(res.message || 'Pengaturan Google Contacts berhasil diperbarui.', 'success');
+        toast('Pengaturan Google Contacts berhasil disimpan.', 'success');
         fetchStatus();
       } else {
-        toast(res.error || 'Terjadi kesalahan saat menyimpan pengaturan.', 'error');
+        toast(res.error || 'Gagal menyimpan pengaturan Google Contacts.', 'error');
       }
     } catch (err: any) {
-      toast(err.message || 'Gagal menyimpan pengaturan.', 'error');
+      toast(err.message || 'Terjadi kesalahan saat menyimpan pengaturan.', 'error');
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleImportContacts = async () => {
+    const confirmed = await confirm({
+      title: 'Tarik & Samakan Kontak dari Google Contacts?',
+      message:
+        'Sistem akan menarik seluruh kontak yang ada di akun Google Contacts Anda dan menyelaraskannya dengan database pasien bot. Pasien yang sudah ada akan ditautkan, dan kontak baru akan ditambahkan ke database.',
+      confirmText: 'Tarik Kontak Sekarang',
+      cancelText: 'Batal',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setImportingContacts(true);
+      const res = await apiRequest<{
+        success: boolean;
+        message?: string;
+        data?: {
+          totalFetched: number;
+          newlyCreated: number;
+          updatedExisting: number;
+          skippedNoPhone: number;
+        };
+        error?: string;
+      }>('/api/admin/integrations/google/import', {
+        method: 'POST',
+      });
+
+      if (res.success) {
+        toast(res.message || 'Berhasil menarik seluruh kontak dari Google Contacts.', 'success');
+        fetchStatus();
+      } else {
+        toast(res.error || 'Terjadi kendala saat menarik kontak dari Google.', 'error');
+      }
+    } catch (err: any) {
+      toast(err.message || 'Gagal menarik kontak dari Google Contacts.', 'error');
+    } finally {
+      setImportingContacts(false);
     }
   };
 
@@ -404,21 +437,33 @@ export const GoogleContactsPanel: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#f0f2f5]">
-            {/* Tombol Sinkronisasi Massal */}
-            <button
-              onClick={handleSyncAll}
-              disabled={syncingAll}
-              className="w-full sm:w-auto px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50"
-            >
-              <RefreshCw size={13} className={syncingAll ? 'animate-spin' : ''} />
-              <span>{syncingAll ? 'Sedang Menyinkronkan...' : 'Sinkronkan Semua Kontak Sekarang'}</span>
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              {/* Tombol Tarik Kontak dari Google (Inbound Sync) */}
+              <button
+                onClick={handleImportContacts}
+                disabled={importingContacts || syncingAll}
+                className="w-full sm:w-auto px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+              >
+                <Download size={13} className={importingContacts ? 'animate-bounce' : ''} />
+                <span>{importingContacts ? 'Menarik Kontak Google...' : '📥 Tarik & Samakan Kontak dari Google'}</span>
+              </button>
+
+              {/* Tombol Sinkronisasi Massal ke Google (Outbound Sync) */}
+              <button
+                onClick={handleSyncAll}
+                disabled={syncingAll || importingContacts}
+                className="w-full sm:w-auto px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw size={13} className={syncingAll ? 'animate-spin' : ''} />
+                <span>{syncingAll ? 'Sedang Mengirim...' : '📤 Kirim Semua Pasien ke Google'}</span>
+              </button>
+            </div>
 
             {/* Tombol Simpan Pengaturan */}
             <button
               onClick={handleSaveSettings}
               disabled={savingSettings}
-              className="w-full sm:w-auto px-5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-1.5 disabled:opacity-50 shadow-xs"
+              className="w-full sm:w-auto px-5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center justify-center space-x-1.5 disabled:opacity-50 shadow-xs cursor-pointer"
             >
               <Save size={13} />
               <span>{savingSettings ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>

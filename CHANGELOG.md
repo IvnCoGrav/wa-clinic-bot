@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Inbound Google Contacts Sync & Strict Dual-Gate Trigger Strategy (2026-08-23)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Tarik Kontak Eksisting dari Google Contacts (Inbound Two-Way Sync)**: Memungkinkan klinik mengimpor seluruh kontak pasien lama yang sudah tersimpan di akun Google Contacts / HP ke database bot pelanggan (`Customer`) dalam 1 klik.
+  2. **Strict Dual-Gate Trigger Strategy (MQL & Reservasi)**: Menjaga buku kontak HP klinik selalu bersih dari spam dan memangkas penggunaan kuota API Google Contacts hingga >80% dengan hanya menyinkronkan kontak pada 2 milestone penting:
+     - **Gate 1 (MQL Capture)**: Saat prospek mencapai batas interaksi bubble MQL (Marketing Qualified Lead) atau menyebutkan nama/lokasi di chat.
+     - **Gate 2 (Reservation Verification)**: Saat reservasi treatment terkonfirmasi resmi (memperbarui data anak terverifikasi, layanan treatment, dan alamat pasti).
+  3. **Dukungan Tag Wilayah (`{{kelurahan}}`, `{{kecamatan}}`)**: Memungkinkan format kontak `{{name}} - {{child_name}} ({{kelurahan}}, {{kecamatan}})` dengan fitur smart sanitasi otomatis jika data wilayah belum terisi.
+- **Implementasi Service & Backend:**
+  - **Inbound Import (`src/services/google-contacts.service.ts`)**: Method `importContactsFromGoogle` yang membaca seluruh kontak Google via `people.connections.list` dengan pagination token dan mencocokkan nomor telepon ke database (`Customer`).
+  - **Helper Parser (`src/services/google-contacts-formatter.ts`)**: Method `extractContactPhoneAndName` dan penyempurnaan `formatContactName` dengan dukungan `{{kelurahan}}` dan `{{kecamatan}}`.
+  - **Penyelarasan Trigger**: Menghapus sinkronisasi acak di `webhook.route.ts` dan memusatkan trigger pada hook MQL (`customer.service.ts`) serta hook reservasi (`reservation-lifecycle.service.ts`).
+  - **REST API Admin**: Endpoint baru `POST /api/admin/integrations/google/import`.
+- **Implementasi Admin Dashboard UI (`packages/admin-dashboard`):**
+  - Tombol aksi baru: **`[ 📥 Tarik & Samakan Kontak dari Google ]`** dan **`[ 📤 Kirim Semua Pasien ke Google ]`**.
+  - Live preview box penamaan kontak yang menampilkan simulasi kelurahan dan kecamatan secara dinamis.
+- **Verifikasi & Pengujian:**
+  - Unit tests diperluas di `tests/unit/google-contacts.test.ts` (13/13 passed).
+  - Regresi penuh suite Vitest lolos (**178 test files, 1563 passed, 0 failed**).
+  - Backend (`tsc`) dan Frontend React (`vite build`) berhasil 100%.
+
 ### Added & Enhanced — Google Contacts SaaS-Ready Integration (1-Click Google OAuth & Auto-Sync) (2026-08-23)
 
 - **Latar Belakang & Kebutuhan:**

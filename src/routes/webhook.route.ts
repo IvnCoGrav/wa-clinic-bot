@@ -735,13 +735,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Ambil/Buat record Customer & Conversation
       const customer = await customerService.getOrCreateCustomer(phone, contactName, DEFAULT_TENANT_ID);
 
-      // Cek apakah customer baru saja dibuat (< 5 detik lalu) untuk memicu auto-save ke Google Contacts
+      // Periksa apakah customer baru (belum ada record di database)
       const isNewCustomer = Date.now() - new Date(customer.created_at).getTime() < 5000;
-      if (isNewCustomer) {
-        googleContactsService.syncCustomer(DEFAULT_TENANT_ID, customer.id, { trigger: 'chat' }).catch((err: any) => {
-          console.error('[GOOGLE CONTACTS] Unhandled rejection:', err?.message);
-        });
-      }
 
       // --- LABEL "new customer" (Task 3 / flag: ENABLE_LIFECYCLE_LABELS) ---
       // Hanya untuk customer baru (record baru dibuat) yang BUKAN legacy source —
