@@ -200,8 +200,9 @@ export const GoogleContactsPanel: React.FC = () => {
     preview = preview.replace(/{{\s*name\s*}}/gi, 'Bunda Alisa');
     preview = preview.replace(/{{\s*child_name\s*}}/gi, 'Rayyan');
     preview = preview.replace(/{{\s*phone\s*}}/gi, '+6281234567890');
-    preview = preview.replace(/{{\s*(kota|city)\s*}}/gi, 'Surabaya');
+    preview = preview.replace(/{{\s*kelurahan\s*}}/gi, 'Kalisari');
     preview = preview.replace(/{{\s*kecamatan\s*}}/gi, 'Mulyorejo');
+    preview = preview.replace(/{{\s*(kota|city)\s*}}/gi, 'Surabaya');
     return preview.replace(/\s+/g, ' ').trim();
   };
 
@@ -334,17 +335,17 @@ export const GoogleContactsPanel: React.FC = () => {
             {/* Kolom Kiri: Template Penamaan */}
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#111b21] flex items-center justify-between">
+                <label className="text-xs font-bold text-[#111b21] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                   <span>Format Penamaan Kontak</span>
                   <span className="text-[10px] font-normal text-[#8696a0]">
-                    Gunakan tag: <code>{`{{name}}`}</code>, <code>{`{{child_name}}`}</code>, <code>{`{{phone}}`}</code>
+                    Tag: <code>{`{{name}}`}</code>, <code>{`{{child_name}}`}</code>, <code>{`{{kelurahan}}`}</code>, <code>{`{{kecamatan}}`}</code>, <code>{`{{kota}}`}</code>
                   </span>
                 </label>
                 <input
                   type="text"
                   value={namingTemplate}
                   onChange={(e) => setNamingTemplate(e.target.value)}
-                  placeholder="{{name}} - {{child_name}} (Klinik)"
+                  placeholder="{{name}} - {{child_name}} ({{kelurahan}}, {{kecamatan}})"
                   className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
@@ -368,10 +369,10 @@ export const GoogleContactsPanel: React.FC = () => {
               <label className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] cursor-pointer hover:bg-gray-50 transition">
                 <div className="space-y-0.5">
                   <div className="text-xs font-semibold text-[#111b21]">
-                    Sinkron Saat Pasien Sebut Nama
+                    Sinkron Otomatis (MQL / Chat Nama / Lokasi)
                   </div>
                   <div className="text-[11px] text-[#667781]">
-                    Otomatis buat/update kontak saat nama ibu/anak terdeteksi di chat.
+                    Otomatis buat/update kontak saat prospek mencapai MQL, menyebut nama, atau mengirimkan lokasi kelurahan/kecamatan.
                   </div>
                 </div>
                 <input
