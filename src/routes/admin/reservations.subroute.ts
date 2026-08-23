@@ -235,6 +235,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'Customer tidak ditemukan.' });
       }
 
+      // Validasi aturan Add-on: Tidak bisa berdiri sendiri tanpa layanan utama
+      const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
+      const itemsInDetail = treatmentDetail.split(/[,+\n]/).map((s) => s.trim()).filter(Boolean);
+      const treatmentValidation = treatmentCatalogService.validateReservationTreatments(itemsInDetail);
+      if (!treatmentValidation.valid) {
+        return reply.status(400).send({ error: treatmentValidation.error });
+      }
+
       const parsedDate = bookingDate ? new Date(bookingDate) : null;
       if (bookingDate && parsedDate && isNaN(parsedDate.getTime())) {
         return reply.status(400).send({ error: 'Format bookingDate tidak valid.' });

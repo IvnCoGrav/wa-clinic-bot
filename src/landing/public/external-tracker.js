@@ -31,6 +31,24 @@
   // -------------------------------------------------------------------------
   // 1. AUTO META PIXEL LOADER & PAGEVIEW
   // -------------------------------------------------------------------------
+  function getCookie(name) {
+    try {
+      var match = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[2]) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function setCookie(name, value, days) {
+    try {
+      var d = new Date();
+      d.setTime(d.getTime() + (days || 90) * 24 * 60 * 60 * 1000);
+      var expires = '; expires=' + d.toUTCString();
+      document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/; SameSite=Lax';
+    } catch (_) {}
+  }
+
   function getScriptPixelId() {
     try {
       var currentScript = document.currentScript;
@@ -55,7 +73,7 @@
     return DEFAULT_PIXEL_ID;
   }
 
-  function initMetaPixel() {
+  function initMetaPixel(pvEventId) {
     var pixelId = getScriptPixelId();
     if (!pixelId) return;
 
@@ -87,8 +105,9 @@
     if (!window._kala_pixel_initialized) {
       window._kala_pixel_initialized = true;
       try {
-        window.fbq('init', pixelId);
-        window.fbq('track', 'PageView');
+        // Aktifkan Automatic Advanced Matching dengan Geo-Hint 'id' (Indonesia)
+        window.fbq('init', pixelId, { country: 'id' });
+        window.fbq('track', 'PageView', {}, { eventID: pvEventId });
       } catch (err) {
         /* fail-open */
       }
@@ -115,6 +134,23 @@
         }
       }
     } catch (e) {}
+
+    // Auto-Capture & Format cookie _fbc dari fbclid
+    if (params.fbclid && !params.fbc) {
+      var fbcValue = 'fb.1.' + Date.now() + '.' + params.fbclid;
+      params.fbc = fbcValue;
+      setCookie('_fbc', fbcValue, 90);
+    } else if (!params.fbc) {
+      var existingFbc = getCookie('_fbc');
+      if (existingFbc) params.fbc = existingFbc;
+    }
+
+    // Capture cookie _fbp jika ada
+    if (!params.fbp) {
+      var existingFbp = getCookie('_fbp');
+      if (existingFbp) params.fbp = existingFbp;
+    }
+
     return params;
   }
 
@@ -158,12 +194,81 @@
     }
   }
 
-  function boot() {
-    // 1. Jalankan Auto Meta Pixel
-    initMetaPixel();
+  // -------------------------------------------------------------------------
+  // 3. SERVER-SIDE PAGEVIEW BEACON
+  // -------------------------------------------------------------------------
+  function getBaseApiUrl() {
+    try {
+      var currentScript = document.currentScript;
+      if (!currentScript) {
+        var scripts = document.getElementsByTagName('script');
+        for (var i = scripts.length - 1; i >= 0; i--) {
+          if (scripts[i].src && scripts[i].src.indexOf('external-tracker.js') !== -1) {
+            currentScript = scripts[i];
+            break;
+          }
+        }
+      }
+      if (currentScript && currentScript.src) {
+        var u = new URL(currentScript.src);
+        return u.origin;
+      }
+    } catch (_) {}
+    return 'https://app.kalababyspa.online';
+  }
 
-    // 2. Scan & salin param URL ke CTA
+  function sendPageViewBeacon(params, pvEventId) {
+    if (window._kala_pageview_tracked) return;
+    window._kala_pageview_tracked = true;
+
+    try {
+      var baseUrl = getBaseApiUrl();
+      var endpoint = baseUrl + '/api/tracking/pageview';
+      var payload = {
+        eventID: pvEventId,
+        landingUrl: window.location.href,
+        referrer: document.referrer || null,
+        fbclid: params.fbclid || null,
+        fbp: params.fbp || null,
+        fbc: params.fbc || null,
+        utm_source: params.utm_source || null,
+        utm_medium: params.utm_medium || null,
+        utm_campaign: params.utm_campaign || null,
+        utm_term: params.utm_term || null,
+        utm_content: params.utm_content || null,
+        utm_id: params.utm_id || null,
+      };
+
+      var jsonStr = JSON.stringify(payload);
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        var blob = new Blob([jsonStr], { type: 'application/json' });
+        navigator.sendBeacon(endpoint, blob);
+      } else if (typeof fetch === 'function') {
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: jsonStr,
+          keepalive: true,
+          mode: 'cors',
+        }).catch(function () {});
+      }
+    } catch (_) {
+      /* fail-open */
+    }
+  }
+
+  function boot() {
+    var pvEventId = 'pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+
+    // 1. Jalankan Auto Meta Pixel dengan eventID kembar
+    initMetaPixel(pvEventId);
+
     var params = collectUrlParams();
+
+    // 2. Kirim sinyal PageView ke server sistem bot dengan eventID kembar untuk deduplikasi
+    sendPageViewBeacon(params, pvEventId);
+
+    // 3. Scan & salin param URL ke CTA
     function scanNow() {
       if (Object.keys(params).length) {
         scan(document.querySelectorAll('a[href]'), params);

@@ -345,9 +345,6 @@ export function fireCapiEvent(params: {
 export class CapiService {
   /**
    * Mengirimkan server-side event ke Meta Conversions API (CAPI).
-   * Tenant-aware: pixelId & accessToken diambil dari kolom tenant DB
-   * (meta_pixel_id / meta_capi_access_token), fallback env FB_PIXEL_ID /
-   * FB_CAPI_ACCESS_TOKEN saat tenant tidak punya config.
    */
   public async sendCapiEvent(params: {
     eventName: string;
@@ -358,6 +355,7 @@ export class CapiService {
     tenantId?: string;
     customData?: Record<string, any>;
     eventTime?: number;
+    eventId?: string;
   }): Promise<{
     success: boolean;
     message?: string;
@@ -368,7 +366,7 @@ export class CapiService {
     sentPayload?: any;
     pixelId?: string;
   }> {
-    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime } = params;
+    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId } = params;
 
     // 1. Meta CAPI Sandbox / Dummy Test Guard (Pencegahan pencemaran data conversion pixel)
     if (customer?.is_sandbox_test || isDummyOrTestContact(customer?.phone, customer?.name, customer?.is_sandbox_test)) {
@@ -564,7 +562,9 @@ export class CapiService {
           ...(effectiveAdClick?.utmCampaign ? { utm_campaign: effectiveAdClick.utmCampaign } : {}),
         },
       };
-      if (effectiveAdClick?.trackingCode) {
+      if (eventId) {
+        eventData.event_id = eventId;
+      } else if (effectiveAdClick?.trackingCode) {
         eventData.event_id = effectiveAdClick.trackingCode;
       } else {
         eventData.event_id = `org_${customer.id}_${eventName.toLowerCase()}_${Math.floor(Date.now() / 1000)}`;

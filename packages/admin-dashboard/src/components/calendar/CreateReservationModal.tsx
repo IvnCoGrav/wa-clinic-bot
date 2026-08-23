@@ -48,7 +48,10 @@ function calculateHaversine(lat1: number, lng1: number, lat2: number, lng2: numb
   return Math.round(R * c * 10) / 10;
 }
 
-export function isAddonService(t: { name: string; category?: string }): boolean {
+export function isAddonService(t: { name: string; category?: string; serviceType?: string; isAddon?: boolean }): boolean {
+  if (t.isAddon === true || t.category === 'ADD_ON' || t.serviceType === 'ADD_ON') {
+    return true;
+  }
   const name = (t.name || '').toLowerCase();
   return (
     name.includes('moksa') ||
@@ -75,7 +78,7 @@ export interface SelectedTreatmentItem {
   instanceId: string;
   serviceId: string;
   name: string;
-  category: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE';
+  category: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE' | 'ADD_ON';
   durationMinutes: number;
   price: number;
   isAddon?: boolean;
@@ -255,6 +258,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Multi-treatment handler: Supports adding multiple instances (for 2 children)
   const handleAddServiceInstance = (srv: ClinicServiceItem, targetChildIndex?: number) => {
     const isAddon = isAddonService(srv);
+
+    // Business Rule Check: Add-on cannot stand alone.
+    // If trying to add an Add-on and there are no main (non-addon) treatments selected yet:
+    const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
+    if (isAddon && !hasMainService) {
+      toast(`Layanan "${srv.name}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
+      return;
+    }
+
     const existingForService = selectedTreatments.filter((t) => t.serviceId === srv.id);
     const nextChildIndex = targetChildIndex !== undefined 
       ? targetChildIndex 
@@ -271,8 +283,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       assignedChildIndex: nextChildIndex,
     };
     setSelectedTreatments((prev) => [...prev, newItem]);
-    if (!isAddon) {
-      setTreatmentCategory(srv.category);
+    if (!isAddon && srv.category !== 'ADD_ON') {
+      setTreatmentCategory(srv.category as any);
     }
   };
 
@@ -280,7 +292,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setSelectedTreatments((prev) => {
       const idx = prev.map((t) => t.serviceId).lastIndexOf(serviceId);
       if (idx === -1) return prev;
-      return prev.filter((_, i) => i !== idx);
+      const next = prev.filter((_, i) => i !== idx);
+      const remainingMain = next.filter((t) => !isAddonService(t));
+      const remainingAddons = next.filter((t) => isAddonService(t));
+      if (remainingMain.length === 0 && remainingAddons.length > 0) {
+        toast('Perhatian: Reservasi yang tersisa hanya berisi layanan add-on. Harap tambahkan layanan utama.', 'info');
+      }
+      return next;
     });
   };
 
@@ -309,7 +327,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       toast('Nama treatment kustom wajib diisi', 'error');
       return;
     }
-    const isAddon = customIsAddon || isAddonService({ name: customServiceName });
+    const isAddon = customIsAddon || isAddonService({ name: customServiceName, category: customCategory });
+    const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
+    if (isAddon && !hasMainService) {
+      toast(`Layanan kustom "${customServiceName}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
+      return;
+    }
+
     const newItem: SelectedTreatmentItem = {
       instanceId: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       serviceId: `custom-${Date.now()}`,
@@ -327,7 +351,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   };
 
   const handleRemoveTreatment = (instanceId: string) => {
-    setSelectedTreatments((prev) => prev.filter((t) => t.instanceId !== instanceId));
+    setSelectedTreatments((prev) => {
+      const next = prev.filter((t) => t.instanceId !== instanceId);
+      const remainingMain = next.filter((t) => !isAddonService(t));
+      const remainingAddons = next.filter((t) => isAddonService(t));
+      if (remainingMain.length === 0 && remainingAddons.length > 0) {
+        toast('Perhatian: Reservasi yang tersisa hanya berisi layanan add-on. Harap tambahkan layanan utama.', 'info');
+      }
+      return next;
+    });
   };
 
   // Duration & Buffer Calculation: +20 min per MAIN treatment (Addon like moksa = 0 buffer)

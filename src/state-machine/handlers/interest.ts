@@ -588,6 +588,8 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       return {
         nextState: ConversationState.RESERVATION_SENT,
         replyText: TEMPLATES.reservationFormRequest({
+          name: customer.name || undefined,
+          address: customer.kelurahan || undefined,
           kecamatan: customer.kecamatan || undefined,
           kota: customer.kota || undefined,
           phone: customer.phone || undefined,

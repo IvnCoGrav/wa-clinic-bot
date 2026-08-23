@@ -64,6 +64,7 @@ interface ManualHistoryItem {
 }
 
 interface MetaSummary {
+  totalPageViews?: number;
   totalClicks: number;
   matchedChats: number;
   unmatchedDrain: number;
@@ -447,13 +448,17 @@ export const MetaClickCatcher: React.FC = () => {
       <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard
           label="Total Page View / Kunjungan"
-          value={summary?.totalClicks ?? '-'}
-          sub="pengunjung buka link/LP"
+          value={summary?.totalPageViews ?? summary?.totalClicks ?? '-'}
+          sub="pengunjung buka web/LP"
         />
         <StatCard
           label="Total Klik CTA"
           value={summary?.totalClicks ?? '-'}
-          sub="klik tombol chat / redirect WA"
+          sub={
+            summary && summary.totalPageViews && summary.totalPageViews > 0
+              ? `${fmtPct((summary.totalClicks / summary.totalPageViews) * 100)} CTR dari Page View`
+              : 'klik tombol chat / redirect WA'
+          }
         />
         <StatCard
           label="Chat WA Masuk (Matched)"
