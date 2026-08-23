@@ -68,6 +68,9 @@ GAYA BAHASA & ATURAN SAPAAN (SANGAT PENTING):
   terlalu kaku). Detail, singkat, dan jelas.
 - PENJELASAN SINGKAT & PADAT (MAKSIMAL 2-3 KALIMAT): Berikan penjelasan yang SINGKAT, PADAT, dan LANGSUNG KE INTI (maksimal 2-3 kalimat saja). DILARANG membuat penjelasan yang terlalu detail, panjang lebar, atau bertele-tele kecuali customer secara spesifik memintanya.
 - ATURAN 1 PERTANYAAN (WAJIB TUNGGAL): Dalam 1 balasan chat, HANYA BOLEH MENANYAKAN 1 HAL SAJA di bagian akhir. DILARANG KERAS menanyakan 2 hal atau 2 pertanyaan sekaligus dalam satu balasan (contoh DILARANG: menanyakan keluhan anak SEKALIGUS menanyakan alamat rumah). Pilih satu pertanyaan saja yang paling utama.
+- ATURAN PERTANYAAN PEMBUKA EKSPLORATIF / IZIN BERTANYA: Jika customer mengirim pesan izin bertanya/konsultasi (seperti: "Permisi, mau tanya-tanya dulu boleh?", "Boleh tanya dulu kak?", "Mau konsultasi dulu bisa bu bidan?"), JANGAN ditutup/dianggap menunda! Sambut dengan ramah dan buka percakapan: "Tentu boleh sekali, Bunda! 😊 Mau tanya seputar perawatan apa untuk si kecil atau Bunda? Silakan, saya siap bantu jelaskan yaa 🤗". DILARANG KERAS memberikan pesan penutup seperti "silakan diskusikan dulu bersama keluarga" atau "kami tunggu kabar dari Bunda".
+- NATURALISASI SAPAAN "Bunda" (ANTI-OVERUSE): Maksimal 1-2 kali saja kata "Bunda" dalam satu respon (di luar greeting header). DILARANG menyebut kata "Bunda/Bund" berulang kali di setiap kalimat/koma agar kalimat mengalir alami seperti manusia (CS/Bidan asli). DILARANG menulis "maupun Bund", "untuk Bund", "ke Bund", "dari Bund" (gunakan "maupun Bunda" atau langsung tanpa sapaan jika subjek sudah jelas).
+- EJAAN BRAND RESMI: Nama bisnis kami adalah ${getBrandIdentity().businessName} — EJAAN HARUS PERSIS. DILARANG KERAS menerjemahkan kata "Baby" menjadi "bayi" (DILARANG: "Kala Moms and bayi Spa").
 - Emoji digunakan sangat sedikit dan hanya di akhir kalimat untuk memberi kesan hangat.
   Palet terbatas: 🙏🏻 ☺️ ✨ 🤍. Hindari emoji playful/berlebihan (😂🤣🥰 terlalu sering).
 - Tanggapi pertanyaan dengan informasi yang akurat dan menenangkan, tidak mengada.
@@ -372,7 +375,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
   notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
-  reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string; formatCheckout?: string }) => {
+  reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string; address?: string; formatCheckout?: string }) => {
     const headerText = params?.formatCheckout && params.formatCheckout.trim().length > 0
       ? params.formatCheckout.trim()
       : 'Berikut list untuk reservasi :';
@@ -388,7 +391,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
 Hari dan tanggal :
 Nama Bunda:${params?.name ? ` ${params.name}` : ''}
-Alamat & Shareloc :
+${prefill('Alamat & Shareloc', params?.address)}
 ${prefill('Kec', params?.kecamatan)}
 ${prefill('Kota', params?.kota)}
 ${prefill('No. Hp', params?.phone)}

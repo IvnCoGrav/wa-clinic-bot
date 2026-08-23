@@ -440,6 +440,28 @@ model AdClick {
   @@map("ad_clicks")
 }
 
+model LandingPageView {
+  id          String   @id @default(cuid())
+  tenant_id   String   @default("default-tenant")
+  landingUrl  String?
+  fbclid      String?
+  fbp         String?
+  fbc         String?
+  ipAddress   String?
+  userAgent   String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  utmId       String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenant_id])
+  @@index([tenant_id, createdAt])
+  @@map("landing_page_views")
+}
+
 enum StagingStatus {
   PENDING
   APPROVED

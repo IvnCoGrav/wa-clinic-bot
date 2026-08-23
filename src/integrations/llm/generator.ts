@@ -204,7 +204,11 @@ ATURAN BALASAN:
    Jelaskan treatment/informasi secara SINGKAT, PADAT, dan LANGSUNG KE INTI MANFAATNYA (maksimal 2–3 kalimat saja). DILARANG menulis penjelasan yang terlalu detail, teori medis panjang lebar, atau membanding-bandingkan treatment secara bertele-tele kecuali secara eksplisit diminta oleh customer. Gunakan bahasa obrolan WhatsApp yang santai, ringkas, dan to the point.
 1. ATURAN HANYA 1 PERTANYAAN / CTA (WAJIB TUNGGAL):
    Dalam 1 kali pesan, HANYA BOLEH ADA MAKSIMAL 1 PERTANYAAN di akhir pesan. DILARANG KERAS menanyakan 2 pertanyaan/hal sekaligus (contoh DILARANG: menanyakan keluhan anak SEKALIGUS menanyakan alamat rumah). Pilih satu pertanyaan saja yang paling relevan.
-2. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "answer" (gunakan informasi dari referensi dokumen di atas). Jawab layaknya chat WhatsApp biasa yang mengalir natural. DILARANG KERAS menggunakan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:", "Berikut adalah informasi yang diminta", atau sejenisnya. Langsung ke inti jawaban dengan gaya bahasa ngobrol!
+2. ATURAN PERTANYAAN PEMBUKA EKSPLORATIF / IZIN BERTANYA:
+   Jika customer bertanya apakah boleh bertanya/tanya-tanya dulu (contoh: "Permisi, mau tanya-tanya dulu boleh?", "Boleh tanya dulu kak?", "Mau konsultasi dulu bisa bu bidan?"): JANGAN ditutup/dianggap menunda! Sambut dengan ramah dan tanyakan perawatan apa yang ingin ditanyakan: "Tentu boleh sekali, Bunda! 😊 Mau tanya seputar perawatan apa untuk si kecil atau Bunda? Silakan, saya siap bantu jelaskan yaa 🤗". DILARANG KERAS memberikan pesan penutup seperti "silakan diskusikan dulu bersama keluarga" atau "kami tunggu kabar dari Bunda".
+3. NATURALISASI KATA SAPAAN (MAKSIMAL 1-2X):
+   DILARANG menyebut kata "Bunda/Bund" berulang kali di setiap kalimat. Maksimal 1-2x saja dalam seluruh badan jawaban agar terdengar luwes layaknya percakapan manusia asli. DILARANG menulis "maupun Bund", "untuk Bund", "ke Bund", "dari Bund".
+4. Tuliskan balasan ramah, santun, dan informatif untuk customer di bagian "answer" (gunakan informasi dari referensi dokumen di atas). Jawab layaknya chat WhatsApp biasa yang mengalir natural. DILARANG KERAS menggunakan frasa kaku pembuka seperti "Berikut jawaban untuk pertanyaan bunda:", "Berikut adalah informasi yang diminta", atau sejenisnya. Langsung ke inti jawaban dengan gaya bahasa ngobrol!
    FORMAT TEKS (WAJIB): WhatsApp hanya mengenali format SATU tanda. Untuk teks tebal pakai SATU bintang (*teks*), DILARANG memakai dua bintang (**teks**) karena markdown ganda akan tampil mentah di WhatsApp. Miring pakai _teks_, coretan ~teks~.
    PENTING: Jika customer menggunakan kata referensial seperti "berapa itu", "berapa yang tadi", "yang itu", "yang baru", dll., WAJIB gunakan info "Treatment yang terakhir dibahas" pada section [KONTEKS PERCAKAPAN] di atas sebagai sumber utama penentuan treatment. Jika section tersebut "Belum ada", baru gunakan konteks dari riwayat percakapan.
 2. JIKA pertanyaan customer soal treatment/katalog (misal "pijat ibu hamil", "treatment untuk bayi rewel"): jawab dengan NADA REKOMENDASI PERSONAL seperti menyarankan ke teman, BUKAN membacakan daftar/katalog kaku. Sebutkan SEMUA treatment relevan yang ada di Referensi sebagai opsi, lalu akhiri dengan menawarkan bantuan memilih/menjadwalkan.
@@ -383,9 +387,9 @@ ATURAN EKSTRAKSI PREFERENSI:
         // Sanitizer: Bersihkan jika LLM tidak sengaja menghasilkan frasa "tanya ke tim / tidak bisa memastikan harga"
         jawaban = this.sanitizeTeamReferral(jawaban);
 
-        // Sanitizer RAG Leakage & Kata Bahasa Inggris terlarang ("little one", "baby", "mommy", "schedule")
-        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords, sanitizeEmDash, sanitizeStrayBackslashes, sanitizeHallucinatedTerms } = await import('../../utils/language-sanitizer');
-        jawaban = sanitizeStrayBackslashes(sanitizeHallucinatedTerms(sanitizeEmDash(sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban)))));
+        // Sanitizer RAG Leakage, Kata Bahasa Inggris, Typo Brand/Grammar, & Repetitive Greetings
+        const { sanitizeRagLeakage, sanitizeForbiddenEnglishWords, sanitizeEmDash, sanitizeStrayBackslashes, sanitizeHallucinatedTerms, sanitizeRepetitiveGreetings } = await import('../../utils/language-sanitizer');
+        jawaban = sanitizeRepetitiveGreetings(sanitizeStrayBackslashes(sanitizeHallucinatedTerms(sanitizeEmDash(sanitizeForbiddenEnglishWords(sanitizeRagLeakage(jawaban))))));
 
         // Sanitizer aksara asing (CJK/Kanji/Jepang/Korea/Rusia) yang bocor dari model
         const sanitizedJawaban = stripNonIndonesianScripts(jawaban);

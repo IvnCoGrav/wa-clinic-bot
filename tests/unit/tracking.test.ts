@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateTrackingCode } from '../../src/routes/tracking.route';
+import { generateTrackingCode, isBotOrCrawler } from '../../src/routes/tracking.route';
 
 import { safeCompare } from '../../src/utils/auth';
 import { normalizePhoneToE164, sha256Hash, capiService, capiBreaker } from '../../src/services/capi.service';
@@ -209,6 +209,15 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
       // fbc and fbp must have the 8-character appendix
       expect(userData.fbc).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
       expect(userData.fbp).toMatch(/^fb\.\d+\.\d+\..*?\.[a-zA-Z0-9]{8}$/);
+    });
+  });
+
+  describe('6. Landing Page View Tracking & External Tracker Beacon', () => {
+    it('should detect bot crawlers and ignore them', () => {
+      expect(isBotOrCrawler('facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)')).toBe(true);
+      expect(isBotOrCrawler('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')).toBe(true);
+      expect(isBotOrCrawler('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Instagram')).toBe(false);
+      expect(isBotOrCrawler('Mozilla/5.0 (Linux; Android 14) Chrome/120.0 Mobile Safari/537.36')).toBe(false);
     });
   });
 });

@@ -804,10 +804,39 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       });
     }
 
+    const isBundle = 
+      serviceData.category === 'BUNDLE' || 
+      serviceData.serviceType === 'BUNDLE' || 
+      (Array.isArray(serviceData.bundleItemIds) && serviceData.bundleItemIds.length > 0);
+
+    if (isBundle) {
+      const bundleValidation = treatmentCatalogService.validateBundle({
+        id: serviceData.id,
+        name: serviceData.name,
+        bundleItemIds: serviceData.bundleItemIds,
+        originalPrice: Number(serviceData.originalPrice),
+        promoPrice: Number(serviceData.promoPrice),
+      });
+
+      if (!bundleValidation.valid) {
+        return reply.status(400).send({
+          error: bundleValidation.error,
+        });
+      }
+    }
+
+    const isAddon = 
+      serviceData.category === 'ADD_ON' || 
+      serviceData.serviceType === 'ADD_ON' || 
+      serviceData.isAddon === true;
+
     const updated = treatmentCatalogService.upsertService({
       id: serviceData.id,
       name: serviceData.name,
       category: serviceData.category || 'BABY',
+      serviceType: isBundle ? 'BUNDLE' : isAddon ? 'ADD_ON' : (serviceData.serviceType || 'STANDARD'),
+      bundleItemIds: isBundle ? serviceData.bundleItemIds : undefined,
+      isAddon: isAddon,
       ageTier: serviceData.ageTier || { minAgeMonths: 0, maxAgeMonths: null, label: 'Umum' },
       durationMinutes: Number(serviceData.durationMinutes) || 45,
       originalPrice: Number(serviceData.originalPrice) || 0,
@@ -841,11 +870,49 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       if (!existing) {
         return reply.status(404).send({ error: 'Service not found' });
       }
-      const updated = treatmentCatalogService.upsertService({
+
+      const merged = {
         ...existing,
         ...body,
         id,
+      };
+
+      const isBundle = 
+        merged.category === 'BUNDLE' || 
+        merged.serviceType === 'BUNDLE' || 
+        (Array.isArray(merged.bundleItemIds) && merged.bundleItemIds.length > 0);
+
+      if (isBundle) {
+        const bundleValidation = treatmentCatalogService.validateBundle({
+          id: merged.id,
+          name: merged.name,
+          bundleItemIds: merged.bundleItemIds,
+          originalPrice: Number(merged.originalPrice),
+          promoPrice: Number(merged.promoPrice),
+        });
+
+        if (!bundleValidation.valid) {
+          return reply.status(400).send({
+            error: bundleValidation.error,
+          });
+        }
+      }
+
+      const isAddon = 
+        merged.category === 'ADD_ON' || 
+        merged.serviceType === 'ADD_ON' || 
+        merged.isAddon === true;
+
+      const updated = treatmentCatalogService.upsertService({
+        ...merged,
+        serviceType: isBundle ? 'BUNDLE' : isAddon ? 'ADD_ON' : (merged.serviceType || 'STANDARD'),
+        bundleItemIds: isBundle ? merged.bundleItemIds : undefined,
+        isAddon: isAddon,
+        durationMinutes: Number(merged.durationMinutes),
+        originalPrice: Number(merged.originalPrice),
+        promoPrice: Number(merged.promoPrice),
       });
+
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,

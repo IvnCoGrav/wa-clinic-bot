@@ -210,6 +210,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       const utmCampaign = typeof query.utmCampaign === 'string' && query.utmCampaign.trim() ? query.utmCampaign.trim() : undefined;
 
       let dbNote: string | undefined;
+      let totalPageViews = 0;
       let totalClicks = 0;
       let matchedChats = 0;
       let mqlLeads = 0;
@@ -223,7 +224,11 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
         if (search) adClickWhere.trackingCode = { contains: search, mode: 'insensitive' };
         if (utmCampaign) adClickWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
 
-        const [clicks, matched, mqlCount, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+        const pageViewWhere: any = { tenant_id: DEFAULT_TENANT_ID, ...dateRange, ...BOT_EXCLUDE_CLAUSE };
+        if (utmCampaign) pageViewWhere.utmCampaign = { contains: utmCampaign, mode: 'insensitive' };
+
+        const [views, clicks, matched, mqlCount, pendingCount, approvedCount, rejectedCount] = await Promise.all([
+          (prisma as any).landingPageView.count({ where: pageViewWhere }).catch(() => 0),
           prisma.adClick.count({ where: adClickWhere }),
           prisma.adClick.count({ where: { ...adClickWhere, matchedAt: { not: null } } }),
           prisma.customer.count({ where: { tenant_id: DEFAULT_TENANT_ID, is_mql: true } }),
@@ -232,6 +237,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           prisma.reservation.count({ where: { tenant_id: DEFAULT_TENANT_ID, purchase_review_status: 'ignored_outlier' } }),
         ]);
         totalClicks = clicks;
+        totalPageViews = views > 0 ? views : totalClicks;
         matchedChats = matched;
         mqlLeads = mqlCount;
         pendingPurchases = pendingCount;
@@ -265,6 +271,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
             startDate: dateRange.createdAt?.gte?.toISOString?.() ?? null,
             endDate: dateRange.createdAt?.lte?.toISOString?.() ?? null,
           },
+          totalPageViews,
           totalClicks,
           matchedChats,
           unmatchedDrain,
@@ -275,6 +282,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           ignoredOutliers,
           mqlLeads,
           funnel: {
+            step0_pageViews: totalPageViews,
             step1_adClicks: totalClicks,
             step2_contactMatched: matchedChats,
             step3_mqlLeads: mqlLeads,

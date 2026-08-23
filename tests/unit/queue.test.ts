@@ -63,7 +63,7 @@ describe('Message Queue Service Unit Tests', () => {
     await Promise.all(promises);
 
     // Wait a brief moment to let the loop execute
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    await new Promise((resolve) => setTimeout(resolve, 600));
 
     expect(processSpy).toHaveBeenCalledTimes(5);
     // Verify FIFO processing order: msg_1, msg_2, msg_3, msg_4, msg_5

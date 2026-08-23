@@ -3,7 +3,9 @@ import path from 'path';
 import { parseAgeTextToMonths } from '../utils/age-calculator';
 import { checkMedicalKeywords } from '../config/medical-keywords';
 
-export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE';
+export type TreatmentCategoryType = 'BABY' | 'KIDS' | 'MOMS' | 'BOTH' | 'BUNDLE' | 'ADD_ON';
+
+export type ClinicServiceType = 'STANDARD' | 'BUNDLE' | 'ADD_ON';
 
 export interface AgeTier {
   minAgeMonths: number;        // Batas minimal usia (dalam bulan), misal 0
@@ -15,6 +17,9 @@ export interface ClinicServiceItem {
   id: string;                  // Identifier unik treatment, misal: "baby-massage-0-6"
   name: string;                // Nama layanan/treatment
   category: TreatmentCategoryType;
+  serviceType?: ClinicServiceType; // STANDARD | BUNDLE | ADD_ON
+  bundleItemIds?: string[];    // Daftar ID layanan eksisting yang digabungkan (minimal 2 untuk bundle)
+  isAddon?: boolean;           // Menandakan bahwa layanan ini add-on (tidak bisa berdiri sendiri)
   ageTier: AgeTier;
   durationMinutes: number;     // Durasi pengerjaan treatment (dalam menit)
   originalPrice: number;       // Harga Asli (Rp)
@@ -28,12 +33,12 @@ const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
 const serviceCatalog: Map<string, ClinicServiceItem> = new Map();
 
 // Default data catalog
-// Default data catalog
 export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     id: 'baby-massage-ceria',
     name: 'Pijat Bayi Ceria (Rileksasi)',
     category: 'BABY',
+    serviceType: 'STANDARD',
     ageTier: { minAgeMonths: 0.5, maxAgeMonths: 24, label: 'Minimal 2 Minggu (0.5 - 24 Bulan)' },
     durationMinutes: 40,
     originalPrice: 80000,
@@ -45,6 +50,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     id: 'baby-massage-pulih-ceria',
     name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)',
     category: 'BABY',
+    serviceType: 'STANDARD',
     ageTier: { minAgeMonths: 0.5, maxAgeMonths: 24, label: 'Minimal 2 Minggu (0.5 - 24 Bulan)' },
     durationMinutes: 40,
     originalPrice: 90000,
@@ -56,6 +62,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     id: 'kids-massage-ceria',
     name: 'Pijat Kids Ceria',
     category: 'KIDS',
+    serviceType: 'STANDARD',
     ageTier: { minAgeMonths: 24, maxAgeMonths: 84, label: '2 - 7 Tahun' },
     durationMinutes: 45,
     originalPrice: 110000,
@@ -67,6 +74,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     id: 'baby-massage-lahap-juara',
     name: 'Pijat Lahap Juara (Nafsu Makan)',
     category: 'BABY',
+    serviceType: 'STANDARD',
     ageTier: { minAgeMonths: 0, maxAgeMonths: 24, label: '0 - 24 Bulan' },
     durationMinutes: 40,
     originalPrice: 90000,
@@ -132,18 +140,21 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     id: 'moms-laktasi-oksitosin-full',
     name: 'Breast + Oksitoksin Fullbody Massage',
-    category: 'MOMS',
+    category: 'BUNDLE',
+    serviceType: 'BUNDLE',
+    bundleItemIds: ['moms-paket-laktasi', 'moms-oksitosin-fullbody'],
     ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Ibu Menyusui / Nifas' },
     durationMinutes: 75,
-    originalPrice: 190000,
+    originalPrice: 230000,
     promoPrice: 155000,
-    description: 'Paket kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI.',
+    description: 'Paket hemat kombinasi pijat laktasi (payudara) dan oksitosin massage fullbody untuk relaksasi maksimal dan kelancaran ASI.',
     isActive: true,
   },
   {
     id: 'baby-tindik',
     name: 'Tindik Telinga Bayi',
     category: 'BABY',
+    serviceType: 'STANDARD',
     ageTier: { minAgeMonths: 0, maxAgeMonths: 12, label: 'Bayi 0 - 12 Bulan' },
     durationMinutes: 15,
     originalPrice: 70000,
@@ -155,6 +166,7 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
     id: 'baby-cukur',
     name: 'Cukur Rambut Bayi',
     category: 'BABY',
+    serviceType: 'STANDARD',
     ageTier: { minAgeMonths: 0, maxAgeMonths: 12, label: 'Bayi 0 - 12 Bulan' },
     durationMinutes: 15,
     originalPrice: 25000,
@@ -165,7 +177,9 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     id: 'baby-cukur-pijat-terapi',
     name: 'Cukur + Pijat Terapi',
-    category: 'BABY',
+    category: 'BUNDLE',
+    serviceType: 'BUNDLE',
+    bundleItemIds: ['baby-cukur', 'baby-massage-pulih-ceria'],
     ageTier: { minAgeMonths: 0, maxAgeMonths: 12, label: 'Bayi 0 - 12 Bulan' },
     durationMinutes: 55,
     originalPrice: 115000,
@@ -176,34 +190,40 @@ export const DEFAULT_CLINIC_SERVICES: ClinicServiceItem[] = [
   {
     id: 'add-on-sinar-moksa',
     name: 'Sinar Moksa (Add-on)',
-    category: 'BOTH',
+    category: 'ADD_ON',
+    serviceType: 'ADD_ON',
+    isAddon: true,
     ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Semua Usia' },
     durationMinutes: 15,
     originalPrice: 15000,
     promoPrice: 10000,
-    description: 'Terapi tambahan sinar inframerah (moksa) hangat untuk membantu mengencerkan dahak, lendir ingus, dan melegakan pernapasan.',
+    description: 'Terapi tambahan sinar inframerah (moksa) hangat untuk membantu mengencerkan dahak, lendir ingus, dan melegakan pernapasan. (Layanan tambahan / Add-on)',
     isActive: true,
   },
   {
     id: 'add-on-nebulizer',
     name: 'Nebulizer (Terapi Uap Add-on)',
-    category: 'BABY',
+    category: 'ADD_ON',
+    serviceType: 'ADD_ON',
+    isAddon: true,
     ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Semua Usia' },
     durationMinutes: 20,
     originalPrice: 50000,
     promoPrice: 35000,
-    description: 'Terapi uap nebulizer tambahan untuk melegakan tenggorokan dan mengencerkan dahak.',
+    description: 'Terapi uap nebulizer tambahan untuk melegakan tenggorokan dan mengencerkan dahak. (Layanan tambahan / Add-on)',
     isActive: true,
   },
   {
     id: 'add-on-nebulizer-obat',
     name: 'Nebulizer + Obat (Terapi Uap Lengkap)',
-    category: 'BABY',
+    category: 'ADD_ON',
+    serviceType: 'ADD_ON',
+    isAddon: true,
     ageTier: { minAgeMonths: 0, maxAgeMonths: null, label: 'Semua Usia' },
     durationMinutes: 20,
     originalPrice: 85000,
     promoPrice: 65000,
-    description: 'Terapi uap nebulizer lengkap dengan obat khusus untuk meredakan batuk pilek dan sesak napas.',
+    description: 'Terapi uap nebulizer lengkap dengan obat khusus untuk meredakan batuk pilek dan sesak napas. (Layanan tambahan / Add-on)',
     isActive: true,
   }
 ];
@@ -254,10 +274,34 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
     if (dbServices.length > 0) {
       serviceCatalog.clear();
       dbServices.forEach((s) => {
+        let bundleItemIds: string[] | undefined = undefined;
+        let isAddon = s.category === 'ADD_ON';
+        let desc = s.description;
+
+        // Parse meta tags from description if present
+        const bundleMatch = desc.match(/\[BUNDLE:([^\]]+)\]/);
+        if (bundleMatch) {
+          bundleItemIds = bundleMatch[1].split(',').map((id) => id.trim()).filter(Boolean);
+          desc = desc.replace(/\[BUNDLE:[^\]]+\]\s*/g, '').trim();
+        }
+
+        if (desc.includes('[ADDON]')) {
+          isAddon = true;
+          desc = desc.replace(/\[ADDON\]\s*/g, '').trim();
+        }
+
+        const cat = s.category as TreatmentCategoryType;
+        const sType: ClinicServiceType = 
+          cat === 'BUNDLE' || (bundleItemIds && bundleItemIds.length >= 2) ? 'BUNDLE' :
+          cat === 'ADD_ON' || isAddon ? 'ADD_ON' : 'STANDARD';
+
         serviceCatalog.set(s.service_id, {
           id: s.service_id,
           name: s.name,
-          category: s.category as TreatmentCategoryType,
+          category: cat,
+          serviceType: sType,
+          bundleItemIds,
+          isAddon: sType === 'ADD_ON' || isAddon,
           ageTier: {
             minAgeMonths: s.min_age_months,
             maxAgeMonths: s.max_age_months,
@@ -266,7 +310,7 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           durationMinutes: s.duration_minutes,
           originalPrice: s.original_price,
           promoPrice: s.promo_price,
-          description: s.description,
+          description: desc,
           isActive: s.is_active,
         });
       });
@@ -296,21 +340,31 @@ export async function saveServicesToDb(tenantId: string): Promise<boolean> {
 
     await prisma.clinicService.deleteMany({ where: { tenant_id: tenantId } });
     await prisma.clinicService.createMany({
-      data: list.map((s, idx) => ({
-        tenant_id: tenantId,
-        service_id: s.id,
-        name: s.name,
-        category: s.category,
-        min_age_months: s.ageTier.minAgeMonths,
-        max_age_months: s.ageTier.maxAgeMonths,
-        age_label: s.ageTier.label,
-        duration_minutes: s.durationMinutes,
-        original_price: s.originalPrice,
-        promo_price: s.promoPrice,
-        description: s.description,
-        is_active: s.isActive,
-        sort_order: idx,
-      })),
+      data: list.map((s, idx) => {
+        let metaDesc = s.description;
+        if (s.bundleItemIds && s.bundleItemIds.length > 0 && !metaDesc.includes('[BUNDLE:')) {
+          metaDesc = `[BUNDLE:${s.bundleItemIds.join(',')}] ${metaDesc}`;
+        }
+        if (s.isAddon && !metaDesc.includes('[ADDON]')) {
+          metaDesc = `[ADDON] ${metaDesc}`;
+        }
+
+        return {
+          tenant_id: tenantId,
+          service_id: s.id,
+          name: s.name,
+          category: s.category,
+          min_age_months: s.ageTier.minAgeMonths,
+          max_age_months: s.ageTier.maxAgeMonths,
+          age_label: s.ageTier.label,
+          duration_minutes: s.durationMinutes,
+          original_price: s.originalPrice,
+          promo_price: s.promoPrice,
+          description: metaDesc,
+          is_active: s.isActive,
+          sort_order: idx,
+        };
+      }),
     });
 
     // Legacy compat
@@ -345,9 +399,192 @@ export class TreatmentCatalogService {
   }
 
   /**
-   * Filter layanan berdasarkan kategori ('BABY', 'KIDS', 'MOMS', 'BOTH')
+   * Cek apakah sebuah layanan merupakan layanan Add-on (tidak bisa berdiri sendiri)
+   */
+  public isAddonService(serviceOrId: ClinicServiceItem | string): boolean {
+    const s = typeof serviceOrId === 'string' ? this.getServiceById(serviceOrId) : serviceOrId;
+    if (!s) {
+      if (typeof serviceOrId === 'string') {
+        const idLower = serviceOrId.toLowerCase();
+        return (
+          idLower.startsWith('add-on') ||
+          idLower.startsWith('addon') ||
+          idLower.includes('moksa') ||
+          idLower.includes('nebulizer')
+        );
+      }
+      return false;
+    }
+    if (s.isAddon === true || s.category === 'ADD_ON' || s.serviceType === 'ADD_ON') {
+      return true;
+    }
+    const nameLower = (s.name || '').toLowerCase();
+    const idLower = (s.id || '').toLowerCase();
+    return (
+      idLower.startsWith('add-on') ||
+      idLower.startsWith('addon') ||
+      nameLower.includes('(add-on)') ||
+      nameLower.includes('(addon)') ||
+      nameLower.includes('add-on') ||
+      nameLower.includes('addon')
+    );
+  }
+
+  /**
+   * Cek apakah sebuah layanan merupakan Paket Bundle (gabungan 2+ layanan eksisting)
+   */
+  public isBundleService(serviceOrId: ClinicServiceItem | string): boolean {
+    const s = typeof serviceOrId === 'string' ? this.getServiceById(serviceOrId) : serviceOrId;
+    if (!s) return false;
+    return (
+      s.category === 'BUNDLE' ||
+      s.serviceType === 'BUNDLE' ||
+      (Array.isArray(s.bundleItemIds) && s.bundleItemIds.length >= 2)
+    );
+  }
+
+  /**
+   * Mengambil komponen layanan yang menyusun suatu bundle
+   */
+  public getBundleComponents(bundleOrId: ClinicServiceItem | string): ClinicServiceItem[] {
+    const s = typeof bundleOrId === 'string' ? this.getServiceById(bundleOrId) : bundleOrId;
+    if (!s || !Array.isArray(s.bundleItemIds) || s.bundleItemIds.length === 0) {
+      return [];
+    }
+    return s.bundleItemIds
+      .map((id) => this.getServiceById(id))
+      .filter((item): item is ClinicServiceItem => item !== undefined);
+  }
+
+  /**
+   * Validasi aturan bisnis Paket Bundle:
+   * 1. Wajib menggabungkan minimal 2 layanan eksisting yang valid di katalog.
+   * 2. Layanan penyusun tidak boleh rekursif / bundle bersarang.
+   * 3. Harga Bundle (promoPrice atau originalPrice) WAJIB LEBIH MURAH dari total harga normal layanan penyusunnya.
+   */
+  public validateBundle(bundleData: Partial<ClinicServiceItem>): {
+    valid: boolean;
+    error?: string;
+    calculatedOriginalPrice?: number;
+    calculatedDuration?: number;
+    componentNames?: string[];
+  } {
+    const bundleItemIds = bundleData.bundleItemIds || [];
+    if (!Array.isArray(bundleItemIds) || bundleItemIds.length < 2) {
+      return {
+        valid: false,
+        error: 'Paket Bundle wajib menggabungkan minimal 2 layanan eksisting.',
+      };
+    }
+
+    // Pastikan tidak ada duplikasi ID
+    const uniqueIds = Array.from(new Set(bundleItemIds));
+    if (uniqueIds.length !== bundleItemIds.length) {
+      return {
+        valid: false,
+        error: 'Layanan penyusun bundle tidak boleh duplikat.',
+      };
+    }
+
+    // Periksa apakah semua komponen ada di katalog
+    const components: ClinicServiceItem[] = [];
+    for (const id of bundleItemIds) {
+      if (bundleData.id && id === bundleData.id) {
+        return {
+          valid: false,
+          error: 'Bundle tidak boleh mereferensikan dirinya sendiri.',
+        };
+      }
+      const item = this.getServiceById(id);
+      if (!item) {
+        return {
+          valid: false,
+          error: `Layanan penyusun dengan ID "${id}" tidak ditemukan dalam katalog.`,
+        };
+      }
+      if (this.isBundleService(item)) {
+        return {
+          valid: false,
+          error: `Layanan "${item.name}" adalah sebuah bundle. Bundle tidak boleh disusun dari bundle lain.`,
+        };
+      }
+      components.push(item);
+    }
+
+    const calculatedOriginalPrice = components.reduce((sum, c) => sum + (c.originalPrice || 0), 0);
+    const calculatedDuration = components.reduce((sum, c) => sum + (c.durationMinutes || 0), 0);
+    const componentNames = components.map((c) => c.name);
+
+    // Bundle price (promoPrice jika ada, atau originalPrice) wajib lebih murah dari total calculatedOriginalPrice
+    const bundleEffectivePrice = bundleData.promoPrice !== undefined ? bundleData.promoPrice : bundleData.originalPrice;
+
+    if (bundleEffectivePrice !== undefined && bundleEffectivePrice >= calculatedOriginalPrice) {
+      return {
+        valid: false,
+        error: `Harga Bundle (Rp ${bundleEffectivePrice.toLocaleString('id-ID')}) harus lebih murah dari total harga normal layanan penyusunnya (Rp ${calculatedOriginalPrice.toLocaleString('id-ID')}).`,
+        calculatedOriginalPrice,
+        calculatedDuration,
+        componentNames,
+      };
+    }
+
+    return {
+      valid: true,
+      calculatedOriginalPrice,
+      calculatedDuration,
+      componentNames,
+    };
+  }
+
+  /**
+   * Validasi aturan bisnis Layanan Add-on pada Reservasi:
+   * Layanan Add-on TIDAK BISA berdiri sendiri. Reservasi wajib memiliki minimal satu layanan utama.
+   */
+  public validateReservationTreatments(treatmentIdsOrNames: string[]): {
+    valid: boolean;
+    error?: string;
+  } {
+    if (!treatmentIdsOrNames || treatmentIdsOrNames.length === 0) {
+      return { valid: true };
+    }
+
+    let hasMainService = false;
+    let hasAddonService = false;
+
+    for (const idOrName of treatmentIdsOrNames) {
+      const trimmed = idOrName.trim();
+      if (!trimmed) continue;
+      const s = this.getServiceById(trimmed) || 
+        this.getAllServices(false).find((item) => item.name.toLowerCase() === trimmed.toLowerCase());
+
+      const isAddon = s ? this.isAddonService(s) : this.isAddonService(trimmed);
+      if (isAddon) {
+        hasAddonService = true;
+      } else {
+        hasMainService = true;
+      }
+    }
+
+    if (hasAddonService && !hasMainService) {
+      return {
+        valid: false,
+        error: 'Layanan add-on tidak bisa berdiri sendiri. Harap sertakan minimal satu layanan utama.',
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Filter layanan berdasarkan kategori ('BABY', 'KIDS', 'MOMS', 'BOTH', 'BUNDLE', 'ADD_ON')
    */
   public getServicesByCategory(category: TreatmentCategoryType): ClinicServiceItem[] {
+    if (category === 'BUNDLE') {
+      return this.getAllServices().filter((s) => this.isBundleService(s));
+    }
+    if (category === 'ADD_ON') {
+      return this.getAllServices().filter((s) => this.isAddonService(s));
+    }
     return this.getAllServices().filter((s) => s.category === category || s.category === 'BOTH');
   }
 
@@ -411,10 +648,18 @@ export class TreatmentCatalogService {
     const services = this.getAllServices();
     return services
       .map((s) => {
+        const isBundle = this.isBundleService(s);
+        const isAddon = this.isAddonService(s);
+        const bundleComponents = isBundle ? this.getBundleComponents(s) : [];
+        const bundleInfo = bundleComponents.length > 0
+          ? `  Termasuk Layanan: ${bundleComponents.map((c) => c.name).join(' + ')}\n`
+          : '';
+        const addonInfo = isAddon ? `  Tipe: Layanan Tambahan (Add-on - Wajib digabung layanan utama)\n` : '';
+
         const priceLine = includePrice
           ? `  Harga Normal: Rp${s.originalPrice.toLocaleString('id-ID')} | Promo: Rp${s.promoPrice.toLocaleString('id-ID')}\n`
           : '';
-        return `• *${s.name}*\n  Usia: ${s.ageTier.label}\n  Durasi: ${s.durationMinutes} menit\n${priceLine}  Deskripsi: ${s.description}`;
+        return `• *${s.name}*${isBundle ? ' [Paket Bundle Hemat]' : isAddon ? ' [Add-on]' : ''}\n${bundleInfo}${addonInfo}  Usia: ${s.ageTier.label}\n  Durasi: ${s.durationMinutes} menit\n${priceLine}  Deskripsi: ${s.description}`;
       })
       .join('\n\n');
   }

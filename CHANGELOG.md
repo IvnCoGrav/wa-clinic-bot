@@ -4,6 +4,39 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Enhanced & Fixed — Clinic Services Bundle & Add-on Strict Business Logic Alignment (2026-08-22)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Paket Bundle**: Layanan bertipe Bundle wajib merupakan gabungan dari minimal 2 layanan eksisting yang valid di katalog, dan harga bundle (`promoPrice`) wajib lebih murah dari total harga normal layanan satuan penyusunnya ($\text{Harga Bundle} < \sum \text{Harga Normal Item}$).
+  2. **Layanan Add-on**: Layanan bertipe Add-on adalah layanan komplementer/tambahan yang tidak bisa berdiri sendiri. Pemesanan di formulir reservasi wajib menyertakan minimal 1 layanan utama sebelum dapat menambahkan layanan add-on.
+- **Implementasi Backend (`src/services/treatment-catalog.service.ts` & Routes):**
+  - **Data Model**: Memperluas interface `ClinicServiceItem` dengan `serviceType: 'STANDARD' | 'BUNDLE' | 'ADD_ON'`, `bundleItemIds?: string[]`, `isAddon?: boolean`, dan kategori `ADD_ON`.
+  - **Metode Validasi**:
+    - Menambahkan `validateBundle(bundleData)`: Memvalidasi minimal 2 komponen ID unik, memastikan semua komponen ada di katalog, mencegah rekursi bundle di dalam bundle, dan memastikan harga promo bundle lebih murah dari total harga normal satuan.
+    - Menambahkan `validateReservationTreatments(treatmentIdsOrNames)`: Mencegah pembuatan pesanan yang hanya berisi layanan add-on tanpa layanan utama.
+    - Menambahkan helper `isAddonService()`, `isBundleService()`, dan `getBundleComponents()`.
+  - **Sinkronisasi Database**:
+    - Mendukung serialisasi dan parsing tag metadata `[BUNDLE:id1,id2]` dan `[ADDON]` di database tanpa mengubah skema tabel (SaaS-ready, zero-migration-risk).
+  - **API Endpoints (`settings.subroute.ts` & `reservations.subroute.ts`)**:
+    - `POST /api/admin/services` & `PUT /api/admin/services/:id`: Menolak bundle tidak valid dengan HTTP 400 dan pesan error deskriptif.
+    - `POST /api/admin/reservation`: Menolak pembuatan reservasi yang hanya berisi add-on.
+- **Implementasi Admin Dashboard UI (`packages/admin-dashboard`):**
+  - **Manajemen Layanan (`ClinicServices.tsx`)**:
+    - **Filter Tabs & Realtime Search**: Tab filter "Semua", "Baby", "Kids", "Moms", "Bundle", dan "Add-on", disertai pencarian multi-atribut.
+    - **Tabel Interaktif**: Badge Bundle (Indigo) dilengkapi daftar layanan penyusun dan nominal penghematan; Badge Add-on (Rose) dengan penanda wajib bersama layanan utama.
+    - **Form Modal Pintar**:
+      - Selektor tipe layanan: *Layanan Standar*, *Paket Bundle*, dan *Layanan Tambahan (Add-on)*.
+      - Mode Bundle: Picker interaktif layanan eksisting, kalkulasi otomatis total durasi & total harga normal asli, serta validasi live diskon/penghematan.
+      - Mode Add-on: Panduan visual bahwa layanan tidak dapat dipesan mandiri.
+  - **Formulir Reservasi Kalender (`CreateReservationModal.tsx`)**:
+    - Memblokir penambahan layanan Add-on jika belum ada layanan utama dalam keranjang reservasi.
+    - Menampilkan notifikasi info jika seluruh layanan utama dihapus dan hanya tersisa add-on.
+- **Verifikasi & Pengujian:**
+  - Unit tests baru `tests/unit/treatment-catalog-bundle-addon.test.ts` (13/13 passed).
+  - Full Vitest test suite regression (**176 test files, 1545 passed, 0 failed**).
+  - Frontend Build (`packages/admin-dashboard: npm run build`) 100% lulus tanpa error.
+  - Backend Build (`npm run build`) 100% lulus tanpa error.
+
 ### Fixed — Total Outbound Message Deduplication Guard & Database Cleanup (2026-08-22)
 
 - **Latar Belakang & Root Cause Analisis Masalah Balasan Duplikat (*Double Bubble* Admin Web vs WA HP):**
