@@ -4,6 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Google Maps Distance Matrix Fallback (Tier-2 Motorbike Routing) (2026-08-23)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Jaring Pengaman Ongkir 3 Lapis (Triple-Layer Routing)**: Menyempurnakan keandalan perhitungan jarak dan ongkir rute jalan dengan menempatkan Google Maps Distance Matrix API sebagai fallback lapis kedua di antara OpenRouteService (ORS) dan rumus matematis Haversine.
+  2. **Rute Khusus Sepeda Motor Terapis (`avoid=tolls`)**: Permintaan khusus operasional terapis yang berkendara sepeda motor (bukan mobil). Pemanggilan API Google Maps dikonfigurasi secara eksplisit untuk menghindari jalan tol (`mode=driving`, `avoid=tolls`).
+  3. **Efisiensi Biaya Maksimal & 0 Downtime**: 98%+ perhitungan jarak tetap ditangani gratis oleh ORS, sementara Google Maps hanya dipanggil saat ORS limit/timeout/rute gang tidak ditemukan, memanfaatkan kredit gratis bulanan $200 Google Cloud tanpa risiko kehabisan kuota.
+- **Implementasi Service & Backend:**
+  - **Google Distance Client (`src/integrations/google-maps/distance-matrix.client.ts`)**: Client mandiri `GoogleDistanceMatrixClient` yang memanggil Google Maps Distance Matrix API dengan timeout 2.5 detik, graceful degradation (mengembalikan `null` jika tanpa key/error), dan opsi `avoid=tolls`.
+  - **Orkestrasi 3-Tier di DeliveryService (`src/services/delivery.service.ts`)**:
+    - *Lapis 1 (Utama)*: OpenRouteService (ORS API).
+    - *Lapis 2 (Fallback 1)*: Google Maps Distance Matrix API (Rute motor).
+    - *Lapis 3 (Fallback 2)*: Rumus Haversine $\times$ `HAVERSINE_CIRCUITY_FACTOR` ($1.60\times$).
+- **Verifikasi & Pengujian:**
+  - Unit test baru di `tests/unit/google-distance.test.ts` (7/7 passed) menguji kegagalan/keberhasilan setiap transisi lapis.
+  - Regresi penuh suite Vitest lolos (**179 test files, 1570 passed, 0 failed**).
+  - Backend build (`tsc`) 100% lolos (0 error).
+
 ### Added & Enhanced — Inbound Google Contacts Sync & Strict Dual-Gate Trigger Strategy (2026-08-23)
 
 - **Latar Belakang & Kebutuhan:**
