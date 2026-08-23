@@ -5,6 +5,7 @@ import { DEFAULT_TENANT_ID } from '../../config/tenant';
 const GOOGLE_CONTACTS_SCOPES = [
   'https://www.googleapis.com/auth/contacts',
   'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/drive.file',
 ];
 
 export interface GoogleOAuthTokens {

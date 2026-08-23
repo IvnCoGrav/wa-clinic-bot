@@ -439,6 +439,25 @@ export class CronService {
       console.error('[Cron Service] Failed to check pending purchase moderation alerts:', err.message || err);
     }
   }
+
+  /**
+   * Auto-Backup Mingguan ke Google Drive (Dijalankan setiap Senin jam 02:00 WIB)
+   */
+  public async runWeeklyBackup(tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    try {
+      console.log('[Cron Service] 📦 Starting Weekly Auto-Backup to Google Drive...');
+      const { backupService } = await import('./backup.service');
+      const dump = await backupService.createDatabaseDump(tenantId);
+      const driveFile = await backupService.uploadToGoogleDrive(tenantId, dump.filePath);
+      if (driveFile) {
+        console.log(`[Cron Service] ☁️ Weekly Auto-Backup uploaded to Google Drive: ${driveFile.name} (${driveFile.id})`);
+      } else {
+        console.log(`[Cron Service] 💾 Weekly Auto-Backup saved locally: ${dump.fileName} (${dump.sizeBytes} bytes)`);
+      }
+    } catch (err: any) {
+      console.error('[Cron Service] ❌ Error running weekly backup:', err?.message);
+    }
+  }
 }
 
 export const cronService = new CronService();

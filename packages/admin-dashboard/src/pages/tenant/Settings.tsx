@@ -9,6 +9,7 @@ import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
 import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
 import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 import { GoogleContactsPanel } from '../../components/settings/GoogleContactsPanel';
+import { DatabaseBackupPanel } from '../../components/settings/DatabaseBackupPanel';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
 const CAPI_TOKEN_MASK = '••••••••••••••••••••••••••••••••';
@@ -810,6 +811,9 @@ export const Settings: React.FC = () => {
 
       {/* Google Contacts Integration Panel */}
       <GoogleContactsPanel />
+
+      {/* Database Auto-Backup & Restore Panel */}
+      <DatabaseBackupPanel />
 
       {/* Remaining panels: Global Toggle + Branch Picker + Delivery Tiers + Broadcast */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
