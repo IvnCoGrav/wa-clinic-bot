@@ -588,7 +588,7 @@ export const Reservations: React.FC = () => {
     void (async () => {
       try {
         const dataUrl = await fileToDataUrl(file);
-        await handleProofUpload(dataUrl, file.type || 'image/jpeg', file.name);
+        await handleProofUploadBase64(dataUrl, file.type || 'image/jpeg', file.name);
       } catch (err: any) {
         toast(`Gagal membaca file: ${err.message}`, 'error');
       } finally {

@@ -25,47 +25,7 @@ import {
   Loader,
 } from 'lucide-react';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
-
-interface Reservation {
-  id: string;
-  customer_id: string;
-  customer?: {
-    id: string;
-    name: string | null;
-    phone: string;
-    kelurahan?: string | null;
-    kecamatan?: string | null;
-    kota?: string | null;
-    distance_km?: number | null;
-    ongkir?: number | null;
-    preferences?: any;
-    lat?: number | null;
-    lng?: number | null;
-    children?: Array<{
-      id: string;
-      name: string;
-      current_age?: string;
-      raw_age_text?: string;
-      birth_date?: string;
-    }>;
-  };
-  treatment_category: string;
-  treatment_detail: string | null;
-  raw_text: string;
-  booking_date: string | null;
-  status: string;
-  payment_method: string | null;
-  proof_url: string | null;
-  purchase_event_sent_at: string | null;
-  purchase_value: number | null;
-  assigned_staff_id?: string | null;
-  assigned_staff?: {
-    id: string;
-    name: string;
-    active?: boolean;
-  } | null;
-  created_at: string;
-}
+import { Reservation } from '../../types';
 
 interface StaffOption {
   id: string;
@@ -101,8 +61,8 @@ const getBabyRows = (res: Reservation): Array<{ name: string; age: string; regAg
   if (children && children.length > 0) {
     return children.map((c) => ({
       name: c.name,
-      age: c.current_age || c.raw_age_text || '',
-      regAge: c.raw_age_text,
+      age: (c.current_age as string) || (c.raw_age_text as string) || '',
+      regAge: (c.raw_age_text as string) ?? undefined,
     }));
   }
   const bd = (res as any).baby_details;
