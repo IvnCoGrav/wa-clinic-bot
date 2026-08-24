@@ -48,6 +48,7 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
         ongkir: delivery.ongkir,
         isOutOfCoverage: delivery.isOutOfCoverage,
         zipcode: resolved.zipcode,
+        isNativePin: true,
       },
       tenantId
     );
@@ -65,6 +66,22 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
         nextState: ConversationState.COMPLETED,
         replyText: TEMPLATES.outOfCoverage({ distanceKm: delivery.distanceKm, maxCoverageKm: delivery.maxCoverageKm }),
         shouldSendReply: true,
+      };
+    }
+
+    // 5. DOUBLE ONGKIR GUARD: Cek apakah bot baru saja mengirimkan ongkir dalam 45 detik terakhir
+    const historyList = (ctx as any).history || [];
+    const lastAssistant = historyList.slice().reverse().find((m: any) => m.role === 'assistant');
+    const isRecentOngkirSent = lastAssistant &&
+      (lastAssistant.content.includes('ongkir') || lastAssistant.content.includes('jarak')) &&
+      lastAssistant.createdAt &&
+      (Date.now() - new Date(lastAssistant.createdAt).getTime() < 45000);
+
+    if (isRecentOngkirSent) {
+      console.log(`[DOUBLE ONGKIR GUARD] Customer ${customer.phone} sent Pin GPS right after location text. Coordinates updated, skipping duplicate ongkir & pricelist.`);
+      return {
+        nextState: ConversationState.AWAITING_INTEREST,
+        shouldSendReply: false,
       };
     }
 
@@ -306,11 +323,14 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     if (resolved.ambiguityResults && resolved.ambiguityResults.length > 0) {
       const kecName = resolved.matchedSpan || resolved.ambiguityResults[0].Kecamatan;
       const kotaName = resolved.ambiguityResults[0].Kabupaten_Kota || resolved.kota || null;
+      const lowerSpan = (resolved.matchedSpan || '').toLowerCase().trim();
+      const isCity = lowerSpan === 'sidoarjo' || lowerSpan === 'surabaya' || lowerSpan.includes('kabupaten') || lowerSpan.includes('kota');
+
       // Simpan konteks pending kecamatan agar balasan kelurahan berikutnya langsung terhubung ke kecamatan ini
       await customerService.updateCustomerPendingLocation(
         customer.id,
         {
-          kecamatan: kecName,
+          kecamatan: isCity ? null : kecName,
           kota: kotaName,
         },
         tenantId
@@ -318,7 +338,12 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
       return {
         nextState: ConversationState.AWAITING_LOCATION,
-        replyText: TEMPLATES.askKelurahanAmbiguous({ kecamatanName: kecName, options: resolved.ambiguityResults }),
+        replyText: TEMPLATES.askKelurahanAmbiguous({
+          kecamatanName: kecName,
+          cityName: kotaName || kecName,
+          isCity,
+          options: resolved.ambiguityResults,
+        }),
         shouldSendReply: true,
       };
     }
