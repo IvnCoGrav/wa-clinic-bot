@@ -436,4 +436,26 @@ describe('LiveChatService — monitor & balas admin', () => {
     expect(editRes.success).toBe(false);
     expect(editRes.error).toContain('tidak mendukung fitur edit pesan');
   });
+
+  it('getTotalUnreadCount: mengembalikan jumlah unread inbound message secara cepat', async () => {
+    const phone = `628990${Date.now()}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Unread', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.INBOUND,
+      content: 'Pesan belum dibaca 1',
+    });
+    await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.INBOUND,
+      content: 'Pesan belum dibaca 2',
+    });
+
+    const totalUnread = await messageService.getTotalUnreadCount(DEFAULT_TENANT_ID);
+    expect(totalUnread).toBeGreaterThanOrEqual(2);
+  });
 });

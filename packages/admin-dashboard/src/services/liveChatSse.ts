@@ -1,91 +1,134 @@
-// SSE client untuk Live Chat Monitor.
-// EventSource dipakai (bukan fetch-stream) karena auth dashboard berbasis cookie
-// admin_session — EventSource mengirim cookie secara otomatis (same-origin).
-// EventSource menangani auto-reconnect; server mengirim `retry: 3000`.
+// SSE client Singleton untuk Live Chat Monitor & Notification Header.
+// Memastikan hanya 1 koneksi EventSource aktif per tab browser agar tidak memakan kuota HTTP koneksi browser (6 connection limit).
 
 export interface LiveChatSseOptions {
   onEvent: (type: string, payload: any) => void;
   onStatusChange?: (connected: boolean) => void;
 }
 
-export function connectLiveChatSse(options: LiveChatSseOptions): () => void {
-  let es: EventSource | null = null;
-  let watchdogTimer: any = null;
-  let isClosed = false;
+let sharedEs: EventSource | null = null;
+let watchdogTimer: any = null;
+let graceCloseTimer: any = null;
+let isConnected = false;
+const subscribers = new Set<LiveChatSseOptions>();
 
-  const resetWatchdog = () => {
-    if (watchdogTimer) clearTimeout(watchdogTimer);
-    // Jika tidak ada ping/event dari server dalam 35 detik, reconnect
-    watchdogTimer = setTimeout(() => {
-      if (!isClosed) {
-        console.warn('[LIVE CHAT SSE] Watchdog timeout (35s silent), reconnecting...');
-        reconnect();
-      }
-    }, 35000);
-  };
-
-  const cleanupEs = () => {
-    if (es) {
-      es.onopen = null;
-      es.onerror = null;
-      es.close();
-      es = null;
+function resetWatchdog() {
+  if (watchdogTimer) clearTimeout(watchdogTimer);
+  watchdogTimer = setTimeout(() => {
+    if (subscribers.size > 0) {
+      console.warn('[LIVE CHAT SSE] Watchdog timeout (35s silent), reconnecting...');
+      reconnectShared();
     }
-  };
+  }, 35000);
+}
 
-  const reconnect = () => {
-    cleanupEs();
-    if (!isClosed) {
-      options.onStatusChange?.(false);
-      open();
-    }
-  };
-
-  const open = () => {
-    if (isClosed) return;
+function notifyStatus(status: boolean) {
+  isConnected = status;
+  for (const sub of Array.from(subscribers)) {
     try {
-      es = new EventSource('/api/admin/live-chat/events');
+      sub.onStatusChange?.(status);
+    } catch (_) {}
+  }
+}
 
-      es.onopen = () => {
-        options.onStatusChange?.(true);
-        resetWatchdog();
-      };
-
-      es.onerror = () => {
-        options.onStatusChange?.(false);
-        // EventSource will auto-reconnect, but if it stays errored, watchdog will trigger
-      };
-
-      const handleEvent = (type: string, e: Event) => {
-        resetWatchdog();
-        try {
-          const dataStr = (e as MessageEvent).data;
-          if (!dataStr || dataStr === ': ping') return;
-          const parsed = JSON.parse(dataStr);
-          options.onEvent(type, parsed);
-        } catch (_) {
-          // payload korup — abaikan
-        }
-      };
-
-      es.addEventListener('message.created', (e) => handleEvent('message.created', e));
-      es.addEventListener('message.updated', (e) => handleEvent('message.updated', e));
-      es.addEventListener('message.status_updated', (e) => handleEvent('message.status_updated', e));
-      es.addEventListener('conversation.updated', (e) => handleEvent('conversation.updated', e));
-      es.addEventListener('ping', () => resetWatchdog());
-      es.addEventListener('open', () => resetWatchdog());
-
-      resetWatchdog();
+function broadcastEvent(type: string, payload: any) {
+  for (const sub of Array.from(subscribers)) {
+    try {
+      sub.onEvent(type, payload);
     } catch (err) {
-      console.warn('[LIVE CHAT SSE] Gagal inisialisasi EventSource:', err);
+      console.error('[LIVE CHAT SSE] Error in subscriber callback:', err);
     }
-  };
+  }
+}
 
-  open();
+function cleanupEs() {
+  if (sharedEs) {
+    sharedEs.onopen = null;
+    sharedEs.onerror = null;
+    sharedEs.close();
+    sharedEs = null;
+  }
+}
+
+function reconnectShared() {
+  cleanupEs();
+  if (subscribers.size > 0) {
+    notifyStatus(false);
+    openShared();
+  }
+}
+
+function openShared() {
+  if (sharedEs || typeof window === 'undefined' || !window.EventSource) return;
+
+  try {
+    sharedEs = new EventSource('/api/admin/live-chat/events');
+
+    sharedEs.onopen = () => {
+      notifyStatus(true);
+      resetWatchdog();
+    };
+
+    sharedEs.onerror = () => {
+      notifyStatus(false);
+      // EventSource akan auto-reconnect, watchdog akan menangani jika koneksi hang
+    };
+
+    const handleEvent = (type: string, e: Event) => {
+      resetWatchdog();
+      try {
+        const dataStr = (e as MessageEvent).data;
+        if (!dataStr || dataStr === ': ping') return;
+        const parsed = JSON.parse(dataStr);
+        broadcastEvent(type, parsed);
+      } catch (_) {}
+    };
+
+    sharedEs.addEventListener('message.created', (e) => handleEvent('message.created', e));
+    sharedEs.addEventListener('message.updated', (e) => handleEvent('message.updated', e));
+    sharedEs.addEventListener('message.status_updated', (e) => handleEvent('message.status_updated', e));
+    sharedEs.addEventListener('conversation.updated', (e) => handleEvent('conversation.updated', e));
+    sharedEs.addEventListener('ping', () => resetWatchdog());
+    sharedEs.addEventListener('open', () => resetWatchdog());
+
+    resetWatchdog();
+  } catch (err) {
+    console.warn('[LIVE CHAT SSE] Gagal inisialisasi EventSource shared:', err);
+  }
+}
+
+export function connectLiveChatSse(options: LiveChatSseOptions): () => void {
+  // Batalkan penutupan jika ada subscriber baru bergabung dalam masa grace period
+  if (graceCloseTimer) {
+    clearTimeout(graceCloseTimer);
+    graceCloseTimer = null;
+  }
+
+  subscribers.add(options);
+
+  // Kirim status koneksi saat ini ke subscriber baru
+  if (options.onStatusChange) {
+    options.onStatusChange(isConnected);
+  }
+
+  // Buka koneksi jika belum aktif
+  if (!sharedEs) {
+    openShared();
+  }
 
   return () => {
-    isClosed = true;
-    if (watchdogTimer) clearTimeout(watchdogTimer);
-    cleanupEs();
+    subscribers.delete(options);
+
+    // Jika tidak ada subscriber tersisa, jadwalkan penutupan koneksi setelah 5 detik
+    if (subscribers.size === 0) {
+      if (graceCloseTimer) clearTimeout(graceCloseTimer);
+      graceCloseTimer = setTimeout(() => {
+        if (subscribers.size === 0) {
+          if (watchdogTimer) clearTimeout(watchdogTimer);
+          cleanupEs();
+          isConnected = false;
+        }
+      }, 5000);
+    }
   };
 }

@@ -157,29 +157,37 @@ Intent definitions:
   }
 
   private ruleBasedFallbackIntent(text: string): IntentDetectionResult {
-    const lower = text.toLowerCase();
+    const lower = text.toLowerCase().trim();
 
     // 1. Deteksi Keluhan / Komplain
-    const complaintKeywords = ['miring', 'ketinggian', 'telat', 'nyasar', 'kecewa', 'kurang pas', 'salah', 'tidak pas', 'komplain'];
+    const complaintKeywords = ['miring', 'ketinggian', 'telat', 'nyasar', 'kecewa', 'kurang pas', 'pelayanan buruk', 'lambat banget', 'lama banget balas', 'komplain'];
     if (complaintKeywords.some((kw) => lower.includes(kw))) {
       return { intent: 'complaint', confidence: 0.9 };
     }
 
     // 2. Deteksi Keluhan Medis / Kesehatan — single source di config/medical-keywords.ts
     const medical = checkMedicalKeywords(lower);
-    if (medical.isMedical && (lower.includes('obat') || lower.includes('sakit') || lower.includes('kasih') || lower.includes('bisa') || lower.includes('?'))) {
-      return { intent: 'medical_query', confidence: 0.9 };
+    const isSeekingTreatment = /\b(treatment|perawatan|pijat|massage|spa|terapi|paket|ada\s+treatment|bisa\s+di\s*pijat|boleh\s+di\s*pijat)\b/i.test(lower);
+    const isAskingMedicineOrEmergency = lower.includes('obat') || lower.includes('dikasih apa') || lower.includes('resep') || medical.severity === 'HIGH';
+
+    if (medical.isMedical) {
+      if (isSeekingTreatment && !isAskingMedicineOrEmergency) {
+        return { intent: 'faq_question', confidence: 0.9 };
+      }
+      if (isAskingMedicineOrEmergency || lower.includes('obat') || lower.includes('sakit') || lower.includes('kasih') || lower.includes('bisa') || lower.includes('?')) {
+        return { intent: 'medical_query', confidence: 0.9 };
+      }
     }
 
     // 3. Deteksi Pertanyaan Jadwal Spesifik
-    const scheduleKeywords = ['jadwal', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'besok', 'lusa', 'bisa jam'];
-    if (scheduleKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('bisa'))) {
+    const scheduleKeywords = ['jadwal', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu', 'besok', 'lusa', 'bisa jam', 'jam berapa buka'];
+    if (scheduleKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('bisa') || lower.includes('ada'))) {
       return { intent: 'asking_schedule', confidence: 0.9 };
     }
 
-    // 4. Deteksi FAQ / Pertanyaan Info
-    const faqKeywords = ['apa', 'berapa', 'fasilitas', 'manfaat', 'harga', 'biaya', 'fungsi', 'treatment', 'facial', 'acne', 'jerawat', 'glowing', 'bagus', 'mana'];
-    if (faqKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('apa') || lower.includes('berapa') || lower.includes('ada'))) {
+    // 4. Deteksi FAQ / Pertanyaan Info / Durasi / Kebijakan
+    const faqKeywords = ['apa', 'berapa', 'fasilitas', 'manfaat', 'harga', 'biaya', 'fungsi', 'treatment', 'durasi', 'lama', 'kali', 'menit', 'jam', 'termasuk', 'include', 'ongkir', 'transfer', 'qris', 'cash', 'bidan', 'str'];
+    if (faqKeywords.some((kw) => lower.includes(kw)) && (lower.includes('?') || lower.includes('apa') || lower.includes('berapa') || lower.includes('ada') || lower.includes('bisa') || lower.includes('blm') || lower.includes('belum'))) {
       return { intent: 'faq_question', confidence: 0.9 };
     }
 
@@ -188,27 +196,22 @@ Intent definitions:
       return { intent: 'faq_question', confidence: 0.9 };
     }
 
-    // 5. Deteksi TIDAK TERTARIK — prioritas TERTINGGI (dicek sebelum 'interested') karena
-    //    kata ambigu ('ya','ok','mau') sering jadi substring kata lain ("kayaknya", "saya").
-    //    Pola negasi eksplisit diprioritaskan agar "ga jadi aja", "kemahalan", "batal" tidak
-    //    salah masuk ke interested.
-    if (
-      /(^|\s)(ga|gak|nggak|tidak|enggak|ndak)\s+(jadi|mau|usah|perlu)\b/i.test(lower) ||
-      /\b(kemahalan|mahal|batal|gausah|ga usah|gak usah|skip|enggak jadi|tidak jadi)\b/i.test(lower) ||
-      /\bnanti\s+(aja|dulu)\b/i.test(lower)
-    ) {
+    // 5. Deteksi TIDAK TERTARIK — Negasi Kontekstual (True Refusal/Cancellation)
+    const isExplicitCancel = /\b(batal|cancel|ga\s+jadi|gak\s+jadi|nggak\s+jadi|tidak\s+jadi|enggak\s+jadi|tidak\s+mau|enggak\s+mau|ga\s+mau|gak\s+mau|kemahalan|skip)\b/i.test(lower);
+    const isShortRefusal = /^(tidak|enggak|nggak|bukan|ga|gak|ndak)\s*(bunda|bund|kak|min|mbak|dulu|makasih|terima\s+kasih)?[.!]?$/i.test(lower);
+    const isSituationalDescription = /\b(ga|gak|nggak|tidak|enggak)\s+(bisa\s+diem|bisa\s+diam|mau\s+tidur|panas|demam|ada\s+keluhan|rewel|bisa\s+anteng)\b/i.test(lower);
+    const isPreferenceCorrection = /\b(bukan\s+yang|tidak\s+usah\s+yang|gak\s+usah\s+yang|maksud(?:nya|ku|saya)?\s+bukan)\b/i.test(lower);
+
+    if ((isExplicitCancel || isShortRefusal) && !isSituationalDescription && !isPreferenceCorrection) {
       return { intent: 'not_interested', confidence: 0.95 };
     }
 
-    // 6. Deteksi Tidak Tertarik — sinyal negasi umum (word-boundary, hindari substring).
-    const notInterestedWord = /\b(ga|gak|nggak|tidak|enggak|batal|mahal|kemahalan|nanti|ndak|ngg)\b/i;
-    if (notInterestedWord.test(lower)) {
-      return { intent: 'not_interested', confidence: 0.9 };
-    }
+    // 6. Deteksi Tertarik — word-boundary (hindari "ya" dalam "kayaknya/saya").
+    const isMauTanya = /\bmau\s+(tanya|nanya|konsultasi|tau|tahu|cek)\b/i.test(lower);
+    const interestedWord = /\b(iya+|iyaa+|ya|bener|betul|setuju|sip|gpp|oke|ok|tertarik|boleh|yes|booking|daftar|reservasi|kirim\s+list|ambil\s+paket)\b/i.test(lower) ||
+      (!isMauTanya && /\bmau\b/i.test(lower) && /\b(booking|daftar|ambil|pesan|coba|paket|treatment)\b/i.test(lower));
 
-    // 7. Deteksi Tertarik — word-boundary (hindari "ya" dalam "kayaknya/saya").
-    const interestedWord = /\b(iya+|iyaa+|ya|bener|betul|setuju|sip|gpp|oke|ok|mau|tertarik|boleh|yes|booking|daftar|kirim\s+list)\b/i;
-    if (interestedWord.test(lower)) {
+    if (interestedWord) {
       return { intent: 'interested', confidence: 0.95 };
     }
 

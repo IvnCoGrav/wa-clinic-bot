@@ -110,24 +110,28 @@ export class LiveChatService {
       customerStats.set(id, { purchaseCount: resList.length, ltv });
     }
 
-    // Batch fetch pesan terakhir per conversation (1 query, bukan N query).
+    // Batch fetch pesan terakhir per conversation (maksimal 3 pesan per percakapan langsung di SQL).
     let lastMessagesByConv = new Map<string, any[]>();
     try {
-      const rows = await prisma.message.findMany({
-        where: { conversation_id: { in: conversationIds }, tenant_id: tenantId },
-        orderBy: { created_at: 'desc' },
-      });
-      const grouped = new Map<string, any[]>();
+      const rows = await prisma.$queryRaw<any[]>`
+        WITH ranked AS (
+          SELECT id, tenant_id, conversation_id, direction, content, sender_type, sender_name, payload_raw, delivery_status, is_revoked, created_at,
+                 ROW_NUMBER() OVER(PARTITION BY conversation_id ORDER BY created_at DESC) as rn
+          FROM messages
+          WHERE conversation_id = ANY(${conversationIds}::text[]) AND tenant_id = ${tenantId}
+        )
+        SELECT id, tenant_id, conversation_id, direction, content, sender_type, sender_name, payload_raw, delivery_status, is_revoked, created_at
+        FROM ranked
+        WHERE rn <= 3
+        ORDER BY created_at ASC;
+      `;
       for (const m of rows) {
-        const arr = grouped.get(m.conversation_id) || [];
-        if (arr.length < 3) arr.push(m);
-        grouped.set(m.conversation_id, arr);
-      }
-      for (const [cid, arr] of grouped.entries()) {
-        lastMessagesByConv.set(cid, arr.reverse()); // kembalikan ke kronologis (lama -> baru)
+        const arr = lastMessagesByConv.get(m.conversation_id) || [];
+        arr.push(m);
+        lastMessagesByConv.set(m.conversation_id, arr);
       }
     } catch (error) {
-      // DB offline → fallback per-conversation (memory store)
+      // DB offline / raw query fallback → memory store
       for (const cid of conversationIds) {
         lastMessagesByConv.set(cid, await messageService.getRecentMessages(cid, 3, tenantId));
       }
@@ -136,14 +140,19 @@ export class LiveChatService {
     // Batch fetch unread counts
     const unreadMap = await messageService.getUnreadCountsBatch(conversationIds, tenantId);
 
-    // Background sync foto profil untuk customer yang belum ada / sudah kedaluwarsa (> 3 hari)
+    // Background sync foto profil secara hemat (maksimal 5 customer per batch dengan jeda bertahap agar tidak membebani WAHA)
+    let syncQueueCount = 0;
     for (const cust of customers.values()) {
       if (cust && cust.phone && !cust.is_sandbox_test) {
         const isStale =
           !cust.profile_picture_updated_at ||
           Date.now() - new Date(cust.profile_picture_updated_at).getTime() > 3 * 24 * 60 * 60 * 1000;
-        if (isStale) {
-          customerService.syncProfilePictureInBackground(cust.id, cust.phone, tenantId);
+        if (isStale && syncQueueCount < 5) {
+          const delayMs = syncQueueCount * 300;
+          setTimeout(() => {
+            customerService.syncProfilePictureInBackground(cust.id, cust.phone, tenantId);
+          }, delayMs);
+          syncQueueCount++;
         }
       }
     }

@@ -57,13 +57,18 @@ export function isReservationFormMessage(rawText: string): boolean {
   if (hasFormHeader) return true;
 
   // 2. Field Combination Signals (e.g. Nama Bunda + (Alamat or Treatment or Bayi or Anak))
-  const hasName = lower.includes('nama bunda') || lower.includes('nama ibu') || lower.includes('nama pasien') || lower.includes('nama:');
-  const hasAddress = lower.includes('alamat') || lower.includes('shareloc') || lower.includes('kec :') || lower.includes('kota :');
-  const hasTreatment = lower.includes('treatment') || lower.includes('pijat bayi') || lower.includes('pijat hamil') || lower.includes('baby spa') || lower.includes('paket');
-  const hasBaby = lower.includes('nama bayi') || lower.includes('nama anak') || lower.includes('usia bayi') || lower.includes('usia anak');
+  const hasName = lower.includes('nama bunda') || lower.includes('nama ibu') || lower.includes('nama pasien') || lower.includes('nama:') || lower.includes('nama anak') || lower.includes('atas nama');
+  const hasAddress = lower.includes('alamat') || lower.includes('shareloc') || lower.includes('kec :') || lower.includes('kota :') || lower.includes('lokasi');
+  const hasTreatment = lower.includes('treatment') || lower.includes('pijat bayi') || lower.includes('pijat hamil') || lower.includes('baby spa') || lower.includes('paket') || lower.includes('booking') || lower.includes('reservasi');
+  const hasBaby = lower.includes('nama bayi') || lower.includes('nama anak') || lower.includes('usia bayi') || lower.includes('usia anak') || lower.includes('anak saya') || lower.includes('bayi saya') || lower.includes('newborn');
 
   const matchCount = (hasName ? 1 : 0) + (hasAddress ? 1 : 0) + (hasTreatment ? 1 : 0) + (hasBaby ? 1 : 0);
   if (matchCount >= 2) return true;
+
+  // 3. Conversational Booking Pattern (e.g. "Mau booking buat anak saya ... alamat ...")
+  if ((lower.includes('booking') || lower.includes('pesan paket') || lower.includes('reservasi')) && hasAddress && (hasBaby || hasName)) {
+    return true;
+  }
 
   return false;
 }
@@ -302,6 +307,16 @@ export function parseReservationText(rawText: string): ParseResult {
   if (!hasAddress) missingFields.push('Alamat');
 
   if (missingFields.length > 0) {
+    // Fallback: coba ekstraksi teks percakapan bebas (Free-form conversational reservation)
+    const conversationalParsed = parseConversationalReservation(rawText);
+    if (conversationalParsed) {
+      console.log(`[CONVERSATIONAL RESERVATION PARSED] Successfully extracted reservation from free-form text for "${conversationalParsed.name}".`);
+      return {
+        success: true,
+        reservation: conversationalParsed,
+      };
+    }
+
     return {
       success: false,
       error: `Gagal memproses list reservasi. Field berikut tidak terbaca atau kosong: ${missingFields.join(', ')}`,
@@ -530,4 +545,101 @@ function tryParseIndonesianDate(dateStr: string): Date | null {
 
   // Jika formatnya ambigu / tidak ada tahun (contoh "Selasa, 21 Juli"), return null (non-blocking)
   return null;
+}
+
+/**
+ * Fallback parser untuk mengekstrak entitas reservasi dari teks paragraf / percakapan bebas (Free-form text).
+ * Contoh input:
+ * "Mau booking buat anak saya Raffa 1 th, Wisma Lidah Kulon no 12, besok rabu jam 10 ya bund"
+ */
+export function parseConversationalReservation(rawText: string): ParsedReservation | null {
+  if (!rawText) return null;
+  const lower = rawText.toLowerCase().replace(/\s+/g, ' ');
+
+  // 1. Ekstrak Nama Bunda / Pasien / Bayi
+  let name = '';
+  let babyName = '';
+  let babyAge = '';
+
+  const babyMatch =
+    rawText.match(/(?:anak(?:nya)?(?:\s+saya)?|bayi(?:nya)?(?:\s+saya)?|pasien|atas\s+nama\s+anak)\s+(?:nama(?:nya)?\s+)?([A-Za-z\s]{2,30}?)(?:\s+usia|\s+umur|\s+\d+|\s+di|\s+alamat|,|\.|\n|$)/i) ||
+    rawText.match(/nama\s+(?:anak|bayi)\s*[:\-]?\s*([A-Za-z\s]{2,30}?)(?:\s+usia|\s+umur|\s+alamat|,|\.|\n|$)/i);
+
+  if (babyMatch && babyMatch[1]) {
+    const candidate = babyMatch[1].trim();
+    if (!isPlaceholderText(candidate) && candidate.length >= 2) {
+      babyName = candidate;
+    }
+  }
+
+  const momMatch =
+    rawText.match(/(?:atas\s+nama|nama\s+bunda|nama\s+ibu|nama\s+pasien)\s*[:\-]?\s*([A-Za-z\s]{2,30}?)(?:\s+alamat|\s+di|\s+nomor|\s+no|,|\.|\n|$)/i) ||
+    rawText.match(/nama\s*[:\-]\s*([A-Za-z\s]{2,30}?)(?:\s+alamat|\s+di|,|\.|\n|$)/i);
+
+  if (momMatch && momMatch[1]) {
+    const candidate = momMatch[1].trim();
+    if (!isPlaceholderText(candidate) && candidate.length >= 2) {
+      name = candidate;
+    }
+  }
+
+  if (!name && babyName) {
+    name = babyName;
+  }
+
+  // 2. Ekstrak Usia Bayi / Anak
+  const ageMatch = rawText.match(/(\d+\s*(?:bulan|bln|tahun|thn|th|hari|hr|minggu|mg|mgg))/i);
+  if (ageMatch) {
+    babyAge = ageMatch[1].trim();
+  }
+
+  // 3. Ekstrak Alamat
+  let address = '';
+  const addressMatch =
+    rawText.match(/(?:alamat(?:nya)?|shareloc(?:nya)?|lokasi(?:nya)?)\s*[:\-]?\s*([^,\n]+(?:,[^,\n]+){0,2})/i) ||
+    rawText.match(/(?:di|ke)\s+([A-Za-z0-9\s.\-\/]{4,50}?)(?:\s+besok|\s+hari|\s+tanggal|\s+jam|\s+pukul|\s+no|\s+wa|,|\.|\n|$)/i);
+
+  if (addressMatch && addressMatch[1]) {
+    const candidate = addressMatch[1].trim();
+    if (!isPlaceholderText(candidate) && candidate.length >= 3) {
+      address = candidate;
+    }
+  }
+
+  // 4. Ekstrak Tanggal & Jam
+  let dateStr = '';
+  const dateMatch = rawText.match(/(besok(?:\s+pagi|\s+siang|\s+sore)?|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|tanggal\s+\d+[\/\-\s]\d+)/i);
+  const timeMatch = rawText.match(/(?:jam|pukul)\s*(\d{1,2}(?:[.:]\d{2})?)/i);
+
+  if (dateMatch) {
+    dateStr = dateMatch[1].trim() + (timeMatch ? ` ${timeMatch[0]}` : '');
+  }
+
+  // 5. Ekstrak Treatment
+  let treatmentDetail = 'Pijat / Treatment Homecare';
+  const treatmentMatch = rawText.match(/(pijat\s+bayi|pijat\s+anak|baby\s+spa|newborn|pulih\s+ceria|mom\s+spa|pijat\s+hamil|pijat\s+laktasi|nebulizer|terapi\s+moksa|cukur\s+bayi|tindik\s+bayi)/i);
+  if (treatmentMatch) {
+    treatmentDetail = treatmentMatch[1].trim();
+  }
+
+  // Validasi: harus ada Nama DAN Alamat
+  if (!name || !address) {
+    return null;
+  }
+
+  const babies: BabyDetail[] = babyName ? [{ name: babyName, age: babyAge || '-' }] : [];
+  const bookingDate = dateStr ? tryParseIndonesianDate(dateStr) : null;
+
+  return {
+    name,
+    phone: '',
+    address,
+    kec: '',
+    kota: '',
+    treatmentCategory: TreatmentCategory.BABY,
+    treatmentDetail: `Baby: ${treatmentDetail} (Bayi: ${babyName || name}, Usia: ${babyAge || '-'})`,
+    bookingDate,
+    rawText,
+    babies,
+  };
 }

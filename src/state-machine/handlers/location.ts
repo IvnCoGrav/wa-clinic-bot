@@ -213,19 +213,21 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
   }
 
   // Bersihkan teks dari awalan query yang tidak relevan untuk geocoding
-  const textLocation = rawTextLocation.toLowerCase()
+  let textLocation = rawTextLocation.toLowerCase()
     // Bersihkan sapaan di awal (gunakan \b agar tidak memotong 'p' pada kata seperti 'pakuwon' atau 'pabean')
     .replace(/^(halo|hola|hi|hei|p|assalamualaikum|salam|pagi|siang|sore|malam|permisi|kak|min|mbak|mas|bund|bunda)\b[,\.\s]*/gi, '')
-    .replace(/^(kalau\s+)?(ke|di)\s+/gi, '')
-    .replace(/^(alamat\s+|rumah\s+)?saya\s+(di|ke)\s+/gi, '')
-    .replace(/^(ongkir\s+|tarif\s+|biaya\s+|kirim\s+|pengiriman\s+)(ke|di)\s+/gi, '')
-    .replace(/^(kelurahan\s+|desa\s+|kecamatan\s+)/gi, '')
-    // Bersihkan pertanyaan harga/tarif di bagian belakang secara agresif
-    .replace(/[,.]?\s*(kena|ongkir|ongkirnya|tarif|tarifnya|biaya|biayanya|harga|harganya|ongkos|ongkosnya)\s+.*$/gi, '')
-    .replace(/[,.]?\s*berapa\s+.*$/gi, '')
-    .replace(/[,.]?\s*berapa$/gi, '')
-    // Bersihkan sapaan dan partikel tanya di bagian belakang
-    .replace(/\s+(bund|bunda|ya|kak|ka|min|mbak|mas|gan|sis|dong|kah|\?)\b/gi, '')
+    // Bersihkan query harga/ongkir di AWAL kalimat (misal: "Berapa ongkir ke Medokan Ayu", "Ongkir ke Waru berapa")
+    .replace(/^(?:berapa|brp)\s+(?:ongkir(?:nya)?|tarif(?:nya)?|biaya(?:nya)?|ongkos(?:nya)?)?\s*(?:kalau\s+|kalo\s+)?(?:ke|di)\s+/gi, '')
+    .replace(/^(?:kalau\s+|kalo\s+)?(?:ke|di)\s+/gi, '')
+    .replace(/^(?:alamat\s+|rumah\s+)?saya\s+(?:di|ke)\s+/gi, '')
+    .replace(/^(?:ongkir|tarif|biaya|kirim|pengiriman)(?:nya)?\s+(?:ke|di)\s+/gi, '')
+    .replace(/^(?:kelurahan|desa|kecamatan|kec)\s+/gi, '');
+
+  // Bersihkan pertanyaan harga/tarif di bagian AKHIR kalimat (setelah nama lokasi)
+  textLocation = textLocation
+    .replace(/[,.]?\s*(?:kena\s+)?(?:ongkir(?:nya)?|tarif(?:nya)?|biaya(?:nya)?|harga(?:nya)?|ongkos(?:nya)?)\s*(?:berapa|brp)?\s*[?.]*$/gi, '')
+    .replace(/[,.]?\s*(?:berapa|brp)\s*(?:ya|yaa|bund|bunda|kak|ka|min|mbak|mas|gan|sis|dong|kah|\?|\s)*$/gi, '')
+    .replace(/\s+(?:bund|bunda|ya|yaa|kak|ka|min|mbak|mas|gan|sis|dong|kah|\?)\b/gi, '')
     .replace(/\?/g, '')
     .trim();
 
@@ -241,6 +243,23 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
     return {
       ...interestResult,
       nextState: ConversationState.AWAITING_LOCATION,
+    };
+  }
+
+  // --- SANITY GUARD: NON-LOCATION CASUAL CHAT (Mencegah "makasih" -> "Makassar") ---
+  const isCasualChatPhrase = /^(oke\s+makasih|makasih|terima\s+kasih|matur\s+nuwun|thanks|thank\s+you|sip|ok|oke|nanti\s+ya|sebentar\s+cek\s+dulu|tanya\s+suami|wait|tunggu\s+sebentar)[.!]?$/i.test(textLocation);
+  if (isCasualChatPhrase || textLocation.length < 2) {
+    console.log(`[GEOCODE GUARD] Casual phrase or empty location text "${textLocation}". Prompting for location detail without API call.`);
+    const askDetailReply = await phrasingService.generate({
+      intent: 'ask_kelurahan_detail',
+      conversationId: conversation.id,
+      tenantId,
+      fallbackTemplate: TEMPLATES.askKelurahanDetail(),
+    });
+    return {
+      nextState: ConversationState.AWAITING_LOCATION,
+      replyText: askDetailReply,
+      shouldSendReply: true,
     };
   }
 
