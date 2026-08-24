@@ -72,6 +72,20 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/live-chat/unread-count
+   * Endpoint cepat & sangat ringan untuk menghitung total pesan unread badge di sidebar.
+   */
+  fastify.get('/api/admin/live-chat/unread-count', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    try {
+      const count = await messageService.getTotalUnreadCount(tenantId);
+      return reply.status(200).send({ success: true, count });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal menghitung unread count' });
+    }
+  });
+
+  /**
    * POST /api/admin/live-chat/sync-history
    * Backfill history chat dari WAHA ke DB bot (batch per `limit`, idempoten by wa_message_id).
    * Response berisi nextOffset + hasMore untuk "Load More" lanjutan.

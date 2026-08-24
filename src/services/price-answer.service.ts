@@ -18,6 +18,8 @@ import { TEMPLATES } from '../config/persona';
 import { isMultiChildTransportQuestion } from '../state-machine/utils/transport-policy-checker';
 import { parseAgeTextToMonths } from '../utils/age-calculator';
 
+import { checkPolicyInquiry, PolicyInquiryType } from '../state-machine/utils/policy-checker';
+
 export interface PriceAnswerResult {
   replyText: string;
   /** Jika set → bot juga mengirim pricelist image dengan caption ini. */
@@ -28,8 +30,9 @@ export interface PriceAnswerResult {
 export function isAskPrice(userText: string, nluIntents?: string[]): boolean {
   const lower = (userText || '').toLowerCase();
 
-  // Pertanyaan kebijakan transport untuk multi-anak/multi-treatment bukan tanya harga katalog
-  if (isMultiChildTransportQuestion(userText)) {
+  // Pertanyaan kebijakan (ongkir inclusion, payment, therapist, multi-child) BUKAN tanya harga treatment
+  const policyType = checkPolicyInquiry(userText);
+  if (policyType) {
     return false;
   }
 
@@ -47,18 +50,46 @@ export function isAskPrice(userText: string, nluIntents?: string[]): boolean {
     return true;
   }
 
-  // Tanpa kata harga eksplisit: hanya andalkan NLU ask_price JIKA bukan jadwal/waktu/buka/usia.
+  // Tanpa kata harga eksplisit: hanya andalkan NLU ask_price JIKA bukan jadwal/waktu/buka/usia/durasi.
   // (Fallback NLU menandai 'berapa' sebagai ask_price juga — "jam buka berapa?" bukan harga,
-  //  "usia berapa boleh pijat?" pun bukan harga.)
+  //  "usia berapa boleh pijat?" pun bukan harga, "berapa lama?" pun bukan harga.)
   if (nluIntents?.includes('ask_price')) {
     if (nluIntents.includes('ask_schedule')) return false;
-    if (/\b(jam|buka|jadwal|operasional|waktu|hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|usia|umur)\b/i.test(lower)) {
+    if (/\b(jam|buka|jadwal|operasional|waktu|hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|usia|umur|lama|durasi|menit|kali)\b/i.test(lower)) {
       return false;
     }
     return true;
   }
 
   return false;
+}
+
+/**
+ * Bangun balasan untuk pertanyaan kebijakan (Ongkir Inclusion, Payment, Therapist, dsb).
+ */
+export function buildPolicyAnswer(
+  policyType: PolicyInquiryType,
+  context?: { kelurahan?: string; ongkir?: number }
+): string {
+  switch (policyType) {
+    case 'ONGKIR_INCLUSION':
+      return TEMPLATES.ongkirInclusionPolicy({
+        kelurahan: context?.kelurahan,
+        ongkir: context?.ongkir,
+      });
+    case 'PAYMENT_METHOD':
+      return TEMPLATES.paymentMethodPolicy();
+    case 'THERAPIST_QUALIFICATION':
+      return TEMPLATES.therapistQualificationPolicy();
+    case 'COVERAGE_AREA':
+      return TEMPLATES.coverageAreaPolicy();
+    case 'MULTI_CHILD_TRANSPORT':
+      return TEMPLATES.multiChildTransportPolicy();
+    case 'OPERATING_HOURS':
+      return `Kala Baby Spa buka setiap hari (Senin - Minggu) pukul 08.00 - 17.00 WIB untuk layanan homecare ya Bunda 😊 Mau dijadwalkan untuk jam berapa bund?`;
+    default:
+      return TEMPLATES.interestUnrelatedFollowUp();
+  }
 }
 
 /**

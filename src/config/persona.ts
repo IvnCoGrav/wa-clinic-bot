@@ -377,6 +377,22 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
   multiChildTransportPolicy: () => `Iya betul Bunda, untuk biaya transport/ongkir homecare kami dihitung per kedatangan/kunjungan (per alamat) ya Bunda, jadi meskipun untuk 2 anak atau lebih (atau Bunda + si kecil), ongkirnya tetap dihitung 1 kali saja yaa 🤗\n\nMau ambil treatment apa saja untuk si kecil/Bunda?`,
 
+  ongkirInclusionPolicy: (params?: { kelurahan?: string; ongkir?: number }) => {
+    if (params?.kelurahan && params?.ongkir !== undefined) {
+      return `Iya betul Bunda, harga treatment kami belum termasuk ongkir ya bund. Untuk ke area Bunda di *${params.kelurahan}*, ongkirnya Rp ${params.ongkir.toLocaleString('id-ID')} ya Bunda 😊\n\nApakah mau langsung kami bantu jadwalkan perawatannya bund? 🤗`;
+    }
+    return `Iya betul Bunda, harga treatment kami belum termasuk biaya transport/ongkir ya bund. Biaya ongkir dihitung sesuai jarak dari klinik kami di Waru. Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan ongkir presisinya? 😊`;
+  },
+
+  paymentMethodPolicy: () =>
+    `Untuk metode pembayaran bisa melalui Transfer Bank (BCA / Mandiri), QRIS, atau Cash langsung saat bidan kami tiba di rumah ya Bunda 😊 Mau pakai metode yang mana bund?`,
+
+  therapistQualificationPolicy: () =>
+    `Seluruh terapis ${getBrandIdentity().businessName} adalah Bidan Resmi bersertifikat (memiliki STR aktif) dan terlatih khusus untuk baby massage, mom spa, dan perawatan anak ya Bunda 🩺🤗 Jadi dijamin aman, higienis, dan profesional bund.`,
+
+  coverageAreaPolicy: () =>
+    `Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya ya Bunda 🚗✨ Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan jangkauan dan ongkir presisinya ya bund 😊`,
+
   notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
 
   reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string; address?: string; formatCheckout?: string }) => {

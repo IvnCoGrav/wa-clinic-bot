@@ -10,11 +10,12 @@ import { getBrandIdentity } from '../../config/brand';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { fireCapiEvent } from '../../services/capi.service';
 import { isPureIdleGreeting } from '../utils/idle-greeting';
-import { buildPriceAnswer, isAskPrice, isPricelistLostRequest } from '../../services/price-answer.service';
+import { buildPriceAnswer, isAskPrice, isPricelistLostRequest, buildPolicyAnswer } from '../../services/price-answer.service';
 import { isLocationQueryMessage } from '../utils/location-query';
 import { isNeedTimeOrDiscussionMessage } from '../utils/need-time-checker';
 import { isAskingClinicLocation } from '../utils/clinic-location-checker';
 import { isMultiChildTransportQuestion } from '../utils/transport-policy-checker';
+import { checkPolicyInquiry } from '../utils/policy-checker';
 import { stageLog } from '../../utils/stage-logger';
 import { parseAgeTextToBirthDate, parseAgeTextToMonths, monthsBetween } from '../../utils/age-calculator';
 import { checkMedicalKeywords } from '../../config/medical-keywords';
@@ -246,6 +247,10 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     /\b(boleh|boleh\s+banget|iya|iyaa+|iyas|mau|mau\s+dong|siap|oke|ok|okey|sip|gas|lanjut|bisa|bisa\s+bunda|insya\s+allah)\b/i.test(userText) &&
     !/\b(jam|tanggal|hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|jadwal|slot)\b/i.test(userText) &&
     !/\b(ga|gak|nggak|tidak|enggak|batal|ndak|ngg|jangan|ngga)\b/i.test(userText) &&
+    !/\b(tapi|tetapi|tp|cuma|asal(kan)?|kalau|kalo|syaratnya|masih|nanti|dulu|dl|dlu)\b/i.test(userText) &&
+    !/\b(transfer|qris|cash|bayar|ongkir|bidan|str)\b/i.test(userText) &&
+    !checkPolicyInquiry(userText) &&
+    !isNeedTimeOrDiscussionMessage(userText) &&
     !/\?/.test(userText.trim());
 
   if (isShortAffirmAfterCta) {
@@ -371,13 +376,18 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       };
 
     case 'faq_question': {
-      // --- PERTANYAAN ONGKIR / TRANSPORT MULTI-ANAK ATAU MULTI-TREATMENT ---
-      if (isMultiChildTransportQuestion(userText)) {
-        console.log(`[TRANSPORT POLICY] Multi-child / visit transport question detected in "${userText}". Returning policy reply.`);
-        stageLog('GENERATE', `Transport Policy: Multi-child visit transport fee answered (1x charge)`, customer.phone);
+      // --- PERTANYAAN KEBIJAKAN (ONGKIR INCLUSION, PAYMENT, THERAPIST, TRANSPORT, COVERAGE) ---
+      const policyType = checkPolicyInquiry(userText);
+      if (policyType) {
+        console.log(`[POLICY INQUIRY] Detected policy inquiry type "${policyType}" in "${userText}".`);
+        stageLog('GENERATE', `Policy Inquiry: [${policyType}] answered`, customer.phone);
+        const policyReply = buildPolicyAnswer(policyType, {
+          kelurahan: customer.kelurahan || undefined,
+          ongkir: (customer as any).ongkir ?? undefined,
+        });
         return {
           nextState: ConversationState.AWAITING_INTEREST,
-          replyText: TEMPLATES.multiChildTransportPolicy(),
+          replyText: policyReply,
           shouldSendReply: true,
         };
       }
@@ -570,7 +580,39 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
       };
     }
 
-    case 'interested':
+    case 'interested': {
+      // 1. Cek apakah ada pertanyaan kebijakan yang menyertai afirmasi (mis. "Boleh bund, tapi bayarnya bisa transfer?")
+      const policyTypeInInterested = checkPolicyInquiry(userText);
+      if (policyTypeInInterested) {
+        console.log(`[POLICY INQUIRY IN INTERESTED] User message "${userText}" has policy inquiry "${policyTypeInInterested}".`);
+        const policyReply = buildPolicyAnswer(policyTypeInInterested, {
+          kelurahan: customer.kelurahan || undefined,
+          ongkir: (customer as any).ongkir ?? undefined,
+        });
+        return {
+          nextState: ConversationState.AWAITING_INTEREST,
+          replyText: policyReply,
+          shouldSendReply: true,
+        };
+      }
+
+      // 2. Cek apakah customer meminta jeda waktu / diskusi (mis. "Boleh, nanti tanya suami dulu ya")
+      if (isNeedTimeOrDiscussionMessage(userText)) {
+        console.log(`[NEED TIME IN INTERESTED] User message "${userText}" is a need-time message.`);
+        const needTimeReply = await phrasingService.generate({
+          intent: 'need_time_acknowledgment',
+          conversationId: conversation.id,
+          tenantId,
+          facts: { customer_message: userText },
+          fallbackTemplate: `Baik Bunda, kami tunggu kabarnya ya bund 🤗 Santai saja yaa, nanti kalau sudah siap, langsung kabari kami kembali ya Bunda 😊🙏🏻`,
+        });
+        return {
+          nextState: ConversationState.AWAITING_INTEREST,
+          replyText: needTimeReply,
+          shouldSendReply: true,
+        };
+      }
+
       if (!customer.kelurahan || !customer.lat || !customer.lng) {
         return {
           nextState: ConversationState.AWAITING_LOCATION,
@@ -596,6 +638,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         }),
         shouldSendReply: true,
       };
+    }
 
     case 'asking_schedule':
       // Eskalasi ke Human Handling + simpan previous_state = AWAITING_INTEREST

@@ -872,6 +872,42 @@ export class MessageService {
   }
 
   /**
+   * Mengambil total unread count seluruh percakapan pada tenant secara instan (agregat cepat).
+   */
+  public async getTotalUnreadCount(tenantId: string): Promise<number> {
+    try {
+      const inboundUnread = await prisma.message.count({
+        where: {
+          tenant_id: tenantId,
+          direction: Direction.INBOUND,
+          read_at: null,
+        },
+      });
+
+      const manualUnread = await prisma.conversation.count({
+        where: {
+          tenant_id: tenantId,
+          is_manual_unread: true,
+          messages: {
+            none: {
+              direction: Direction.INBOUND,
+              read_at: null,
+            },
+          },
+        },
+      });
+
+      return inboundUnread + manualUnread;
+    } catch {
+      // Memory store fallback
+      const unreadMemMessages = memoryMessages.filter(
+        (m) => m.tenant_id === tenantId && m.direction === 'INBOUND' && !m.read_at
+      ).length;
+      return unreadMemMessages;
+    }
+  }
+
+  /**
    * Menandai SEMUA pesan pada semua percakapan dalam sebuah tenant sebagai telah dibaca (read_at = now).
    * Menyetel is_manual_unread = false pada semua percakapan.
    */
