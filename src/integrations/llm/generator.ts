@@ -171,9 +171,10 @@ Treatment yang terakhir dibahas dalam percakapan ini: ${conv.last_discussed_trea
         // Guard CTA anti hard-selling: nama treatment HANYA boleh disebut di CTA
         // jika customer memang sedang membahas treatment itu (bukan dipaksa sistem).
         const antiHardSellNote = `
-ATURAN ANTI HARD-SELLING (WAJIB):
+ATURAN ANTI HARD-SELLING & ANTI-HALUSINASI LOKASI (WAJIB):
 - JANGAN menyebut / menjual nama treatment tertentu di CTA jika customer tidak sedang membahas treatment tersebut.
-- CTA harus menyatu NATURAL dengan topik yang dibahas customer. Jika sistem belum memberikan nama treatment yang dibahas, jangan menebak — cukup gunakan ajakan yang netral (tanya area/rumah atau ajakan lanjut reservasi yang umum).`;
+- CTA harus menyatu NATURAL dengan topik yang dibahas customer. Jika sistem belum memberikan nama treatment yang dibahas, jangan menebak — cukup gunakan ajakan yang netral (tanya area/rumah atau ajakan lanjut reservasi yang umum).
+- DILARANG KERAS menyisipkan atau menebak nama kelurahan, desa, kecamatan, atau kota spesifik (contoh: "Bintara", "Bintaro", "Bekasi", dll) jika customer belum menyebutkannya secara eksplisit. Selalu gunakan kalimat netral: "di kelurahan atau kecamatan mana ya Bunda?".`;
 
         ctaInstruction += antiHardSellNote;
 

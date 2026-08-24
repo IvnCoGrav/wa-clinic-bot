@@ -496,6 +496,40 @@ export class ConversationStateMachine {
       const incomingBody = incomingMessage.text?.body || '';
       result.replyText = formatIslamicReply(result.replyText, incomingBody);
 
+      // --- AI OUTPUT VERIFIER (QUALITY CONTROL GUARDRAIL) ---
+      try {
+        const { AiResponseVerifierService } = await import('../services/ai-verifier.service');
+        const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
+        const allowedCatalog = treatmentCatalogService.getAllServices().map((s) => ({
+          name: s.name,
+          category: s.category,
+          minAgeMonths: s.ageTier.minAgeMonths,
+          maxAgeMonths: s.ageTier.maxAgeMonths,
+          promoPrice: s.promoPrice,
+        }));
+
+        const qc = await AiResponseVerifierService.verifyAndCorrect({
+          tenantId,
+          customerPhone: customer.phone,
+          conversationId: activeConversation.id,
+          customerMessage: incomingBody,
+          draftReply: result.replyText,
+          groundTruth: {
+            customerAgeMonths: (customer as any).age_months || (customer as any).preferences?.childAgeMonths || null,
+            customerLocation: customer.kelurahan ? `${customer.kelurahan}, ${customer.kecamatan || ''}` : null,
+            isLocationConfirmed: !!customer.kelurahan,
+            lastDiscussedTreatment: activeConversation.last_discussed_treatment,
+            allowedServices: allowedCatalog,
+          },
+        });
+
+        if (qc.wasCorrected && qc.finalReply) {
+          result.replyText = qc.finalReply;
+        }
+      } catch (verifierErr: any) {
+        console.warn('[AI VERIFIER HOOK ERROR]', verifierErr.message);
+      }
+
       // Selalu gunakan nomor HP asli customer (customer.phone@c.us) sebagai target chatId
       // agar pesan tidak terkirim ke JID palsu (mis. LID number@c.us) jika resolusi LID WAHA gagal.
       const chatId = `${customer.phone}@c.us`;

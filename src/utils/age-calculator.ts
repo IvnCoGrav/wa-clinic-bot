@@ -23,6 +23,11 @@ export function parseAgeTextToMonths(ageText: string): number | null {
   if (!ageText || typeof ageText !== 'string') return null;
   const lower = ageText.toLowerCase();
 
+  // Jika teks konteksnya usia kehamilan/ibu hamil/janin, bukan usia anak yang sudah lahir
+  if (/\b(hamil|kehamilan|kandungan|trimester|bumil|janin)\b/i.test(lower)) {
+    return null;
+  }
+
   let years = 0;
   let months = 0;
 

@@ -124,6 +124,59 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'ACK_PROCESSED' });
       }
 
+      // --- EVENT MESSAGE REVOKE / DELETED (WAHA Revoke / Delete for Everyone) ---
+      const isRevokeEvent =
+        event.event === 'message.revoke' ||
+        event.event === 'message.revoked' ||
+        (event.event === 'message' && (
+          (event.payload as any)?.type === 'revoked' ||
+          (event.payload as any)?.subType === 'revoke' ||
+          (event.payload as any)?.message?.protocolMessage?.type === 0 ||
+          (event.payload as any)?.message?.protocolMessage?.type === 'REVOKE' ||
+          (event.payload as any)?.protocolMessage?.type === 0 ||
+          (event.payload as any)?.protocolMessage?.type === 'REVOKE'
+        ));
+
+      if (isRevokeEvent) {
+        const revPayload: any = event.payload || {};
+        const targetMsgId =
+          revPayload.messageId ||
+          revPayload.id?._serialized ||
+          revPayload.id ||
+          revPayload.key?.id ||
+          revPayload.protocolMessage?.key?.id ||
+          revPayload.message?.protocolMessage?.key?.id;
+
+        if (targetMsgId) {
+          console.log(`[MESSAGE REVOKE WEBHOOK] Revoking message wa_message_id=${targetMsgId}`);
+          try {
+            const { prisma } = await import('../db/client');
+            const cleanId = String(targetMsgId);
+            const shortId = cleanId.replace(/^true_|^false_/, '').replace(/^[^_]+_/, '').replace(/@.*$/, '');
+
+            const updated = await prisma.message.updateMany({
+              where: {
+                OR: [
+                  { wa_message_id: cleanId },
+                  { wa_message_id: { contains: targetMsgId } },
+                  { wa_message_id: shortId },
+                ],
+              },
+              data: {
+                content: '🚫 Pesan ini telah ditarik',
+                is_revoked: true,
+                revoked_at: new Date(),
+                revoked_by: revPayload.fromMe ? 'ADMIN' : 'CUSTOMER',
+              },
+            });
+            console.log(`[MESSAGE REVOKED] Updated ${updated.count} message records for ${targetMsgId}`);
+          } catch (revErr: any) {
+            console.error('[MESSAGE REVOKE ERROR]', revErr.message);
+          }
+        }
+        return reply.status(200).send({ status: 'REVOKE_PROCESSED' });
+      }
+
       // Filter hanya event "message" atau "message.any"
       if (event.event !== 'message' && event.event !== 'message.any') {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
@@ -201,10 +254,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   if (!buffer || buffer.length === 0) {
                     buffer = await wahaClient.downloadMedia(payload.id, customerJid);
                   }
-                  if ((!buffer || buffer.length === 0) && (pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail)) {
-                    const thumbB64 = pAny.message?.imageMessage?.jpegThumbnail || pAny._data?.jpegThumbnail;
-                    buffer = Buffer.from(thumbB64, 'base64');
-                  }
+                  // Catatan: JANGAN fallback ke jpegThumbnail untuk outbound WhatsApp Web karena rawan cache collision di level socket Baileys.
                   if (buffer && buffer.length > 0) {
                     const saved = await mediaService.saveInboundMedia({ tenantId: DEFAULT_TENANT_ID, buffer, mimeType });
                     outboundMedia = {

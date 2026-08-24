@@ -34,6 +34,7 @@ enum WhatsappProvider {
 
 enum TreatmentCategory {
   BABY
+  KIDS
   MOMS
   BOTH
 }
@@ -217,6 +218,9 @@ model Message {
   sender_name           String?
   payload_raw           Json?
   delivery_status       String?
+  is_revoked            Boolean      @default(false)
+  revoked_at            DateTime?
+  revoked_by            String?
   meta_error_code       String?
   meta_error_desc       String?
   meta_pricing_category String?
@@ -557,6 +561,7 @@ model Tenant {
   waba_app_secret           String?
   ai_router_enabled         Boolean          @default(true)
   ai_router_shadow_mode     Boolean          @default(true)
+  ai_verifier_enabled       Boolean          @default(true)
   ai_customer_scope         AiCustomerScope  @default(NEW_ONLY)
   ai_scope_cutoff_at        DateTime         @default(now())
   manual_reply_escalates    Boolean          @default(true)
