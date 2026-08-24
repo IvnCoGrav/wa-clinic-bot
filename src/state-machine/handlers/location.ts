@@ -197,8 +197,8 @@ export async function handleLocationState(ctx: StateHandlerContext): Promise<Sta
 
   // Bersihkan teks dari awalan query yang tidak relevan untuk geocoding
   const textLocation = rawTextLocation.toLowerCase()
-    // Bersihkan sapaan di awal
-    .replace(/^(halo|hola|hi|hei|p|assalamualaikum|salam|pagi|siang|sore|malam|permisi|kak|min|mbak|mas|bund|bunda)[,\.\s]*/gi, '')
+    // Bersihkan sapaan di awal (gunakan \b agar tidak memotong 'p' pada kata seperti 'pakuwon' atau 'pabean')
+    .replace(/^(halo|hola|hi|hei|p|assalamualaikum|salam|pagi|siang|sore|malam|permisi|kak|min|mbak|mas|bund|bunda)\b[,\.\s]*/gi, '')
     .replace(/^(kalau\s+)?(ke|di)\s+/gi, '')
     .replace(/^(alamat\s+|rumah\s+)?saya\s+(di|ke)\s+/gi, '')
     .replace(/^(ongkir\s+|tarif\s+|biaya\s+|kirim\s+|pengiriman\s+)(ke|di)\s+/gi, '')
