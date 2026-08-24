@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 import {
   Contact,
   Cloud,
@@ -580,6 +581,39 @@ export const GoogleIntegrationPanel: React.FC = () => {
                         placeholder="Pasien Klinik"
                         className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       />
+                    </div>
+
+                    {/* Auto-sync Switches */}
+                    <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 block">Auto-Sync Saat Chat Pertama (MQL)</span>
+                          <span className="text-[11px] text-slate-500">Simpan kontak otomatis saat chat masuk</span>
+                        </div>
+                        <ToggleSwitch
+                          checked={autoSyncOnChat}
+                          onChange={(next) => setAutoSyncOnChat(next)}
+                          variant="indigo"
+                          onLabel="ON (AKTIF)"
+                          offLabel="OFF (NONAKTIF)"
+                          size="sm"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-slate-200">
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 block">Auto-Sync Saat Booking Reservasi</span>
+                          <span className="text-[11px] text-slate-500">Perbarui kontak saat reservasi dibuat</span>
+                        </div>
+                        <ToggleSwitch
+                          checked={autoSyncOnReserve}
+                          onChange={(next) => setAutoSyncOnReserve(next)}
+                          variant="indigo"
+                          onLabel="ON (AKTIF)"
+                          offLabel="OFF (NONAKTIF)"
+                          size="sm"
+                        />
+                      </div>
                     </div>
                   </div>
 

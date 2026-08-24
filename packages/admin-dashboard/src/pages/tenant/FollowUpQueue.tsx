@@ -6,6 +6,7 @@ import {
   Send,
   XCircle,
   Calendar,
+  CalendarCheck,
   Search,
   Filter,
   RefreshCw,
@@ -49,7 +50,7 @@ export const FollowUpQueue: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send' | 'bulk-cancel'; id?: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send' | 'bulk-cancel' | 'queue' | 'bulk-queue'; id?: string } | null>(null);
 
   // Reschedule Modal
   const [rescheduleModal, setRescheduleModal] = useState<{ open: boolean; item?: FollowUpItem; newDate?: string }>({ open: false });
@@ -87,6 +88,32 @@ export const FollowUpQueue: React.FC = () => {
     e.preventDefault();
     setPage(1);
     loadFollowUps();
+  };
+
+  const handleQueue = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await apiRequest(`follow-ups/${id}/queue`, { method: 'POST' });
+      setToastMsg({ type: 'success', text: 'Follow-up berhasil dijadwalkan dan masuk ke antrian!' });
+      loadFollowUps();
+    } catch (err: any) {
+      setToastMsg({ type: 'error', text: `Gagal menjadwalkan: ${err.message}` });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleBulkQueue = async () => {
+    setActionLoading('bulk-queue');
+    try {
+      const res = await apiRequest('follow-ups/bulk-queue', { method: 'POST' });
+      setToastMsg({ type: 'success', text: res.message || 'Semua antrian pending berhasil dijadwalkan.' });
+      loadFollowUps();
+    } catch (err: any) {
+      setToastMsg({ type: 'error', text: `Gagal menjadwalkan antrian: ${err.message}` });
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleSendNow = async (id: string) => {
@@ -183,6 +210,13 @@ export const FollowUpQueue: React.FC = () => {
             <span>Menunggu Persetujuan</span>
           </span>
         );
+      case 'QUEUED':
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center space-x-1 w-fit">
+            <CalendarCheck size={10} />
+            <span>Terjadwal di Antrian</span>
+          </span>
+        );
       case 'SENT':
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center space-x-1 w-fit">
@@ -226,19 +260,29 @@ export const FollowUpQueue: React.FC = () => {
             <span>Follow-Up & Reminder Queue</span>
           </h2>
           <p className="text-xs text-[#667781] mt-0.5">
-            Antrian follow-up belum purchase dan treatment lanjutan (Wajib persetujuan manual Admin).
+            Antrian follow-up belum purchase dan treatment lanjutan (Sesuai tanggal & jam jadwal setup).
           </p>
         </div>
         <div className="flex items-center space-x-2">
           {statusFilter === 'PENDING' && totalItems > 0 && (
-            <button
-              onClick={() => setConfirmAction({ type: 'bulk-cancel' })}
-              disabled={actionLoading === 'bulk-cancel'}
-              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition flex items-center space-x-1.5 shadow-xs text-xs font-semibold"
-            >
-              <Trash2 size={13} />
-              <span>Batalkan Semua Pending</span>
-            </button>
+            <>
+              <button
+                onClick={() => setConfirmAction({ type: 'bulk-queue' })}
+                disabled={actionLoading === 'bulk-queue'}
+                className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition flex items-center space-x-1.5 shadow-xs text-xs font-semibold"
+              >
+                <CalendarCheck size={13} />
+                <span>Jadwalkan Semua Pending</span>
+              </button>
+              <button
+                onClick={() => setConfirmAction({ type: 'bulk-cancel' })}
+                disabled={actionLoading === 'bulk-cancel'}
+                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition flex items-center space-x-1.5 shadow-xs text-xs font-semibold"
+              >
+                <Trash2 size={13} />
+                <span>Batalkan Semua Pending</span>
+              </button>
+            </>
           )}
           <button
             onClick={loadFollowUps}
@@ -254,9 +298,9 @@ export const FollowUpQueue: React.FC = () => {
       <div className="bg-[#e8f5f2] border border-[#c2e7e0] rounded-2xl p-3.5 flex items-start space-x-3 text-xs text-[#005c4b]">
         <ShieldCheck size={18} className="text-[#008069] flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-bold text-[#111b21]">Mode Manual Approval Aktif</p>
+          <p className="font-bold text-[#111b21]">Sistem Penjadwalan Antrian Follow-Up</p>
           <p className="text-[#54656f] mt-0.5">
-            Pesan follow-up di antrian <strong>tidak akan dikirim otomatis ke WhatsApp</strong>. Admin memiliki kendali penuh untuk meninjau, mengubah jadwal, membatalkan, atau menyetujui pengiriman dengan mengklik tombol <strong>Kirim</strong> di bawah.
+            Pesan berstatus <strong>PENDING</strong> menunggu konfirmasi admin. Klik tombol <strong>Jadwalkan</strong> untuk memasukkan pesan ke antrian (<strong>QUEUED</strong>) agar terkirim otomatis tepat pada tanggal & jam yang sudah disetup.
           </p>
         </div>
       </div>
@@ -276,6 +320,7 @@ export const FollowUpQueue: React.FC = () => {
           >
             <option value="">Semua Status</option>
             <option value="PENDING">PENDING (Menunggu Persetujuan)</option>
+            <option value="QUEUED">QUEUED (Terjadwal di Antrian)</option>
             <option value="SENT">SENT (Sudah Terkirim)</option>
             <option value="CANCELLED">CANCELLED (Dibatalkan)</option>
             <option value="SKIPPED">SKIPPED (Dilewati/Kadaluarsa)</option>
@@ -399,14 +444,34 @@ export const FollowUpQueue: React.FC = () => {
                           {fu.status === 'PENDING' && (
                             <>
                               <button
-                                onClick={() => setConfirmAction({ type: 'send', id: fu.id })}
+                                onClick={() => setConfirmAction({ type: 'queue', id: fu.id })}
                                 disabled={actionLoading === fu.id}
-                                className="px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] text-[#008069] text-xs font-bold flex items-center space-x-1 transition shadow-xs"
-                                title="Setujui & Kirim Sekarang"
+                                className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center space-x-1 transition shadow-xs"
+                                title="Jadwalkan / Masukkan ke Antrian"
                               >
-                                <Send size={12} />
-                                <span>Kirim</span>
+                                <CalendarCheck size={12} />
+                                <span>Jadwalkan</span>
                               </button>
+                              <button
+                                onClick={() => setRescheduleModal({ open: true, item: fu, newDate: fu.scheduled_at.slice(0, 16) })}
+                                disabled={actionLoading === fu.id}
+                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition shadow-xs"
+                                title="Ubah Jadwal"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                              <button
+                                onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
+                                disabled={actionLoading === fu.id}
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold transition shadow-xs"
+                                title="Batalkan"
+                              >
+                                <XCircle size={12} />
+                              </button>
+                            </>
+                          )}
+                          {fu.status === 'QUEUED' && (
+                            <>
                               <button
                                 onClick={() => setRescheduleModal({ open: true, item: fu, newDate: fu.scheduled_at.slice(0, 16) })}
                                 disabled={actionLoading === fu.id}
@@ -493,7 +558,7 @@ export const FollowUpQueue: React.FC = () => {
         </div>
       )}
 
-      {/* Confirm Modal untuk Send Now / Cancel / Bulk-Cancel */}
+      {/* Confirm Modal untuk Queue / Bulk-Queue / Cancel / Bulk-Cancel / Send */}
       {confirmAction && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
@@ -506,8 +571,12 @@ export const FollowUpQueue: React.FC = () => {
             <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
               {confirmAction.type === 'bulk-cancel' ? (
                 <><Trash2 className="text-rose-600" size={18} /><span>Batalkan Semua Antrian Pending?</span></>
+              ) : confirmAction.type === 'bulk-queue' ? (
+                <><CalendarCheck className="text-blue-600" size={18} /><span>Jadwalkan Semua Antrian Pending?</span></>
               ) : confirmAction.type === 'cancel' ? (
                 <><XCircle className="text-rose-600" size={18} /><span>Batalkan Follow-Up?</span></>
+              ) : confirmAction.type === 'queue' ? (
+                <><CalendarCheck className="text-blue-600" size={18} /><span>Jadwalkan Follow-Up?</span></>
               ) : (
                 <><Send className="text-[#008069]" size={18} /><span>Setujui & Kirim Sekarang?</span></>
               )}
@@ -515,8 +584,12 @@ export const FollowUpQueue: React.FC = () => {
             <p className="text-xs text-[#54656f]">
               {confirmAction.type === 'bulk-cancel'
                 ? 'Seluruh follow-up berstatus PENDING akan dibatalkan sekaligus dan tidak akan dikirim.'
+                : confirmAction.type === 'bulk-queue'
+                ? 'Seluruh follow-up berstatus PENDING akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam jadwal masing-masing.'
                 : confirmAction.type === 'cancel'
                 ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim ke customer.'
+                : confirmAction.type === 'queue'
+                ? 'Follow-up ini akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam yang sudah disetup.'
                 : 'Pesan follow-up akan langsung dikirim sekarang ke nomor WhatsApp customer.'}
             </p>
             <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
@@ -531,13 +604,17 @@ export const FollowUpQueue: React.FC = () => {
                   const { type, id } = confirmAction;
                   setConfirmAction(null);
                   if (type === 'bulk-cancel') handleBulkCancel();
+                  else if (type === 'bulk-queue') handleBulkQueue();
                   else if (type === 'cancel' && id) handleCancel(id);
+                  else if (type === 'queue' && id) handleQueue(id);
                   else if (type === 'send' && id) handleSendNow(id);
                 }}
                 disabled={actionLoading !== null}
                 className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs ${
                   confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel'
                     ? 'bg-rose-600 hover:bg-rose-700'
+                    : confirmAction.type === 'bulk-queue' || confirmAction.type === 'queue'
+                    ? 'bg-blue-600 hover:bg-blue-700'
                     : 'bg-[#008069] hover:bg-[#00a884]'
                 }`}
               >
@@ -545,8 +622,12 @@ export const FollowUpQueue: React.FC = () => {
                   ? 'Memproses...'
                   : confirmAction.type === 'bulk-cancel'
                   ? 'Ya, Batalkan Semua'
+                  : confirmAction.type === 'bulk-queue'
+                  ? 'Ya, Jadwalkan Semua'
                   : confirmAction.type === 'cancel'
                   ? 'Ya, Batalkan'
+                  : confirmAction.type === 'queue'
+                  ? 'Ya, Jadwalkan'
                   : 'Ya, Kirim'}
               </button>
             </div>
@@ -573,3 +654,4 @@ export const FollowUpQueue: React.FC = () => {
 };
 
 export default FollowUpQueue;
+
