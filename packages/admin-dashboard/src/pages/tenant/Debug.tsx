@@ -643,7 +643,15 @@ function ConversationsSection() {
 interface LlmLogEntry {
   id: string;
   timestamp: string;
-  flowType: 'CHATBOT_AUTO' | 'COPILOT_DRAFT' | 'CLINICAL_ESCALATION' | 'REASONING_ONLY';
+  flowType:
+    | 'CHATBOT_AUTO'
+    | 'COPILOT_DRAFT'
+    | 'CLINICAL_ESCALATION'
+    | 'REASONING_ONLY'
+    | 'NLU_CLASSIFICATION'
+    | 'AI_ROUTER'
+    | 'AI_VERIFIER'
+    | 'PHRASING';
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
@@ -656,6 +664,25 @@ interface LlmLogEntry {
   durationMs?: number;
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
 }
+
+const getFlowBadge = (flowType: string) => {
+  switch (flowType) {
+    case 'NLU_CLASSIFICATION':
+      return { label: '🔍 NLU Intent & Entity', cls: 'bg-cyan-100 text-cyan-800 border-cyan-200' };
+    case 'AI_ROUTER':
+      return { label: '🧭 AI Router Decision', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
+    case 'CHATBOT_AUTO':
+      return { label: '🤖 Chatbot RAG Generator', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+    case 'AI_VERIFIER':
+      return { label: '🛡️ AI Output Verifier (QC)', cls: 'bg-amber-100 text-amber-900 border-amber-300' };
+    case 'COPILOT_DRAFT':
+      return { label: '💡 AI Copilot Draft', cls: 'bg-purple-100 text-purple-800 border-purple-200' };
+    case 'PHRASING':
+      return { label: '✍️ Persona Phrasing', cls: 'bg-teal-100 text-teal-800 border-teal-200' };
+    default:
+      return { label: `⚡ ${flowType}`, cls: 'bg-slate-100 text-slate-800 border-slate-200' };
+  }
+};
 
 function LlmLogsSection() {
   const [logs, setLogs] = useState<LlmLogEntry[]>([]);
@@ -706,8 +733,11 @@ function LlmLogsSection() {
         <div className="flex flex-wrap gap-1.5">
           {[
             { id: 'all', label: 'Semua Flow' },
-            { id: 'CHATBOT_AUTO', label: '🤖 Chatbot Auto-Reply' },
-            { id: 'COPILOT_DRAFT', label: '💡 AI Copilot Draft' },
+            { id: 'NLU_CLASSIFICATION', label: '🔍 NLU Intent' },
+            { id: 'AI_ROUTER', label: '🧭 AI Router' },
+            { id: 'CHATBOT_AUTO', label: '🤖 Chatbot Reply' },
+            { id: 'AI_VERIFIER', label: '🛡️ AI Verifier (QC)' },
+            { id: 'COPILOT_DRAFT', label: '💡 AI Copilot' },
           ].map((f) => (
             <button
               key={f.id}
@@ -743,7 +773,7 @@ function LlmLogsSection() {
         ) : (
           filteredLogs.map((log) => {
             const isExpanded = expandedId === log.id;
-            const isCopilot = log.flowType === 'COPILOT_DRAFT';
+            const badge = getFlowBadge(log.flowType);
 
             return (
               <div
@@ -754,13 +784,9 @@ function LlmLogsSection() {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] pb-2.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                        isCopilot
-                          ? 'bg-purple-100 text-purple-800 border-purple-200'
-                          : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                      }`}
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls}`}
                     >
-                      {isCopilot ? '💡 AI Copilot Draft' : '🤖 Chatbot Auto-Reply'}
+                      {badge.label}
                     </span>
 
                     <span className="text-xs font-bold text-[#111b21]">
@@ -801,7 +827,7 @@ function LlmLogsSection() {
                   {/* Block 1: Input Pasien */}
                   <div className="bg-sky-50/60 border border-sky-200/80 rounded-xl p-3 space-y-1">
                     <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
-                      💬 Input Pasien
+                      💬 Input Pasien / Prompt
                     </span>
                     <p className="text-sky-950 whitespace-pre-wrap font-medium">{log.customerInput || '-'}</p>
                   </div>
@@ -809,7 +835,7 @@ function LlmLogsSection() {
                   {/* Block 2: Ground Truth Injected */}
                   <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1">
                     <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                      📚 Ground Truth Injected
+                      📚 Ground Truth &amp; Konteks Injected
                     </span>
                     {log.groundTruthUsed ? (
                       <pre className="text-[11px] font-mono text-amber-950 whitespace-pre-wrap overflow-x-auto">
@@ -849,10 +875,18 @@ function LlmLogsSection() {
                   </div>
                 )}
 
-                {/* Block 4: Final Reply / Draft */}
+                {/* Block 4: Final Reply / Output / Decision */}
                 <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 space-y-1">
                   <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
-                    {isCopilot ? '✉️ Draf Balasan AI Copilot' : '✉️ Final AI Auto-Reply'}
+                    {log.flowType === 'COPILOT_DRAFT'
+                      ? '✉️ Draf Balasan AI Copilot'
+                      : log.flowType === 'NLU_CLASSIFICATION'
+                      ? '🎯 Klasifikasi Intent & Entitas'
+                      : log.flowType === 'AI_ROUTER'
+                      ? '🎯 Keputusan AI Router & Eskalasi'
+                      : log.flowType === 'AI_VERIFIER'
+                      ? '🛡️ Hasil Evaluasi QC Verifier'
+                      : '✉️ Final AI Auto-Reply'}
                   </span>
                   <p className="text-emerald-950 whitespace-pre-wrap font-medium">{log.finalReply || '-'}</p>
                 </div>

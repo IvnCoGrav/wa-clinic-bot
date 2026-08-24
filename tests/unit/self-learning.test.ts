@@ -39,6 +39,7 @@ describe('Self-Learning Service Unit Tests', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.restoreAllMocks();
+    process.env.ENABLE_SELF_LEARNING = 'true';
     process.env.LLM_API_KEY = 'mock'; // paksa offline fallback (tanpa LLM)
     vi.mocked(knowledgeBaseService.checkDuplicateFaq).mockResolvedValue({
       isDuplicate: false,

@@ -571,9 +571,14 @@ ATURAN EKSTRAKSI PREFERENSI:
 
       recordLlmExecution({
         flowType: 'CHATBOT_AUTO',
+        customerPhone: customerId,
         customerInput: userQuestion,
         reasoning: res.reasoning,
-        groundTruthUsed: customerId ? { customerId, contextChunks: contextChunks.map((c) => c.title) } : undefined,
+        groundTruthUsed: {
+          customerId,
+          referencedTreatment: res.extracted_preferences ? Object.keys(res.extracted_preferences) : undefined,
+          contextChunks: contextChunks.map((c) => c.title),
+        },
         finalReply: finalAnswer,
         status: res.usedFallback ? 'FALLBACK' : 'SUCCESS',
       });
@@ -591,6 +596,7 @@ ATURAN EKSTRAKSI PREFERENSI:
 
       recordLlmExecution({
         flowType: 'CHATBOT_AUTO',
+        customerPhone: customerId,
         customerInput: userQuestion,
         reasoning: `[ERROR] ${(error as Error).message}`,
         finalReply: fallbackAns,

@@ -4,6 +4,53 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Enhanced & Hardened — Disable Passive Self-Learning & Extend LLM Timeouts to 60s/120s (2026-08-24)
+
+- **Latar Belakang & Investigasi Masalah:**
+  1. **Investigasi Fallback Beruntun pada Live Server**: Muncul log fallback berturut-turut pada model `MiniMax-M2.7-highspeed` yang diputus paksa di detik ke-15 (`timeout of 15000ms exceeded`).
+  2. **Akar Masalah Timeout Kaku 15 Detik**: Modul `AI_VERIFIER` (QC Guardrail) dan `SELF-LEARNING` sebelumnya memiliki timeout hardcoded `15000ms` (15 detik), sedangkan model bertipe *Reasoning* seperti MiniMax M2.7 membutuhkan waktu berpikir (*reasoning_content*) 16–22 detik untuk evaluasi draf.
+  3. **Penonaktifan Fitur Self-Learning**: Sesuai arahan, fitur passive self-learning saat CS membalas pesan manual kini dimatikan secara default (`ENABLE_SELF_LEARNING="false"`).
+- **Implementasi Perubahan:**
+  1. **`src/services/self-learning.service.ts` & `src/routes/webhook.route.ts`**:
+     - Menambahkan pengecekan `process.env.ENABLE_SELF_LEARNING === 'true'` agar bot tidak melakukan ekstraksi FAQ otomatis saat admin membalas pesan manual dari WhatsApp HP.
+  2. **`src/services/ai-verifier.service.ts` & `src/services/daily-report.service.ts`**:
+     - Mengubah timeout kaku 15 detik menjadi configurable via env dengan default 1 menit (`parsePositiveInt(process.env.LLM_TIMEOUT_VERIFIER_MS, 60000)` dan `LLM_TIMEOUT_REPORT_MS`).
+     - Menambahkan offline apiKey guard agar verifikasi dibypass seketika saat mode offline/unit test.
+  3. **`src/utils/reservation-text-parser.ts` & `src/integrations/llm/intent.ts`**:
+     - Memperkuat regex deteksi tertarik (`interested`) pada fallback offline agar kata `pijat|massage|spa` dikenali dengan akurat.
+     - Memblokir conversational parser fallback pada form terstruktur yang field-nya kosong agar missing fields tertangkap dengan benar.
+- **Verifikasi & Pengujian:**
+  - Full suite Vitest: **187 test files PASS (1.736 tests, 0 failed)**.
+  - TypeScript build (`npm run build`): 100% lolos (0 error).
+
+### Added & Enhanced — AI Output Verifier Audit Logger & Visual Tracing Flow LLM di Menu Debug (2026-08-24)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Audit Log AI Output Verifier**: Modul `AiResponseVerifierService` (QC Guardrail) sebelumnya telah mengeksekusi model LLM ke provider, tetapi belum mengaitkan `auditLlmCall` untuk task `AI_VERIFIER`. Akibatnya, pemakaian token dan estimasi biaya Verifier tidak muncul di tabel **AI Monitoring & Usage Dashboard** (`llm_audit_logs`).
+  2. **Observability Pipeline LLM di Menu Debug**: Pada halaman **System Debug** (`/admin/debug` ➔ Tab **🧠 LLM Execution Logs**), hanya respon RAG akhir dari `generator.ts` yang tercatat, sedangkan langkah NLU (`NLU_CLASSIFICATION`), Router (`AI_ROUTER`), dan Verifier (`AI_VERIFIER`) belum tercatat. Admin kesulitan melihat alur utuh (*end-to-end pipeline*) dari setiap pesan yang masuk.
+- **Implementasi Backend:**
+  - **`src/services/ai-verifier.service.ts`**:
+    - Menambahkan `auditLlmCall` untuk task `AI_VERIFIER` pada kondisi sukses maupun fallback/error lengkap dengan metrik `prompt_tokens`, `completion_tokens`, `model_name`, `baseUrl`, dan `latency_ms`.
+    - Menambahkan pencatatan eksekusi ke buffer `recordLlmExecution` dengan `flowType: 'AI_VERIFIER'` yang merekam input draf, hasil evaluasi 4 pilar QC, catatan pelanggaran (*violation reasons*), dan model yang dipakai.
+    - Menambahkan console log `[AI VERIFIER PASS]` dan `[AI VERIFIER CORRECTION]`.
+  - **`src/utils/llm-execution-logger.ts`**:
+    - Memperluas tipe `LlmFlowType` (`'CHATBOT_AUTO' | 'COPILOT_DRAFT' | 'CLINICAL_ESCALATION' | 'REASONING_ONLY' | 'NLU_CLASSIFICATION' | 'AI_ROUTER' | 'AI_VERIFIER' | 'PHRASING'`).
+  - **`src/services/nlu-classifier.service.ts`**:
+    - Menambahkan integrasi `recordLlmExecution` dengan `flowType: 'NLU_CLASSIFICATION'` untuk merekam input customer, deteksi intent, confidence score, dan entities.
+  - **`src/integrations/llm/ai-router.ts`**:
+    - Menambahkan integrasi `recordLlmExecution` dengan `flowType: 'AI_ROUTER'` untuk merekam state awal, pesan customer, keputusan rute, dan flag eskalasi.
+    - Mengubah getter `model` di `AIRouterLLMClient` menjadi `public`.
+  - **`src/integrations/llm/generator.ts`**:
+    - Melengkapi metadata `customerPhone`, `groundTruthUsed`, dan `referencedTreatment` pada payload `recordLlmExecution`.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  - **`Debug.tsx` (Tab 🧠 LLM Execution Logs)**:
+    - Menambahkan filter flow lengkap: `Semua Flow`, `🔍 NLU Intent`, `🧭 AI Router`, `🤖 Chatbot Reply`, `🛡️ AI Verifier (QC)`, `💡 AI Copilot`.
+    - Menambahkan badge warna spesifik untuk tiap tahap pemrosesan LLM.
+    - Menyesuaikan label visual blok output dinamis berdasarkan tipe flow (Intent/Entity, Keputusan Router, Draf Balasan, atau Evaluasi QC).
+- **Pengujian & Verifikasi:**
+  - Unit test `tests/unit/verifier-outbound.test.ts` (3/3 tests PASS, termasuk verifikasi `auditLlmCall` dan `recordLlmExecution`).
+  - TypeScript build backend (`npm run build`) & Vite frontend build (`admin-dashboard: npm run build`) 100% lolos (0 error).
+
 ### Enhanced & Optimized — Akses Cepat Live Chat & Eliminasi Browser Connection Starvation (2026-08-24)
 
 - **Latar Belakang & Investigasi Masalah:**

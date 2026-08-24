@@ -1,10 +1,11 @@
-﻿import { z } from 'zod';
+import { z } from 'zod';
 import { callChatCompletionsWithFallback } from '../integrations/llm/model-fallback';
 import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
 import { extractJsonContent } from '../utils/json-extract';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { prisma } from '../db/client';
 import { AiModelConfigService } from '../config/ai-models.config';
+import { parsePositiveInt } from '../utils/env-numeric';
 
 export interface VerifierGroundTruth {
   customerAgeMonths?: number | null;
@@ -78,6 +79,10 @@ export class AiResponseVerifierService {
       const verifierConfig = AiModelConfigService.getModelConfig('AI_VERIFIER', tenantId);
       const endpoint = getLlmEndpointConfig();
 
+      if (!endpoint.apiKey || endpoint.apiKey.startsWith('mock')) {
+        return { finalReply: input.draftReply, wasCorrected: false, reasons: [] };
+      }
+
       const systemPrompt = `Anda adalah Quality Control (QC) & Safety Verifier medis untuk Mom & Baby Home Care Clinic (Bidan Yusi).
 Tugas Anda adalah memeriksa apakah "DRAF BALASAN AI" yang akan dikirim ke customer di WhatsApp sudah 100% BENAR, AMAN, dan SESUAI GROUND TRUTH.
 
@@ -119,42 +124,118 @@ DRAF BALASAN AI YANG AKAN DIKIRIM:
 Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
 
       const startedAt = Date.now();
-      const callResult = await callChatCompletionsWithFallback({
-        baseUrl: endpoint.baseUrl,
-        apiKey: endpoint.apiKey,
-        model: verifierConfig.modelName || 'MiniMax-M2.7-highspeed',
-        fallbackModel: endpoint.fallbackModel,
-        timeoutMs: 15000,
-        payload: {
-          temperature: 0.1,
-          max_tokens: 1024,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userContent },
-          ],
-        },
-      });
+      let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
+      try {
+        callResult = await callChatCompletionsWithFallback({
+          baseUrl: endpoint.baseUrl,
+          apiKey: endpoint.apiKey,
+          model: verifierConfig.modelName || 'MiniMax-M2.7-highspeed',
+          fallbackModel: endpoint.fallbackModel,
+          timeoutMs: parsePositiveInt(process.env.LLM_TIMEOUT_VERIFIER_MS, 60000),
+          payload: {
+            temperature: 0.1,
+            max_tokens: 1024,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userContent },
+            ],
+          },
+        });
+      } catch (err: any) {
+        try {
+          const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+          auditLlmCall({
+            tenant_id: tenantId,
+            customer_phone: input.customerPhone || 'unknown',
+            conversation_id: input.conversationId ?? null,
+            task_type: 'AI_VERIFIER',
+            model_name: verifierConfig.modelName || 'MiniMax-M2.7-highspeed',
+            baseUrl: endpoint.baseUrl,
+            startedAt,
+            error: err,
+          });
+        } catch {}
+        try {
+          const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+          recordLlmExecution({
+            flowType: 'AI_VERIFIER',
+            customerPhone: input.customerPhone,
+            customerInput: `[DRAFT QC] ${input.customerMessage}`,
+            reasoning: `[ERROR] ${err.message}`,
+            finalReply: input.draftReply,
+            modelUsed: verifierConfig.modelName,
+            durationMs: Date.now() - startedAt,
+            status: 'FALLBACK',
+          });
+        } catch {}
+        throw err;
+      }
 
-      const rawContent = callResult.data?.choices?.[0]?.message?.content || '{}';
+      const responseData = callResult.data;
+      const usedModel = callResult.model || verifierConfig.modelName || 'MiniMax-M2.7-highspeed';
+
+      try {
+        const { auditLlmCall } = await import('../utils/llm-audit-buffer');
+        auditLlmCall({
+          tenant_id: tenantId,
+          customer_phone: input.customerPhone || 'unknown',
+          conversation_id: input.conversationId ?? null,
+          task_type: 'AI_VERIFIER',
+          model_name: usedModel,
+          baseUrl: callResult.baseUrl,
+          startedAt,
+          usage: responseData?.usage,
+        });
+      } catch {}
+
+      const rawContent = responseData?.choices?.[0]?.message?.content || '{}';
       const parsedJson = extractJsonContent(rawContent);
       const validated = VerifierOutputSchema.safeParse(parsedJson);
 
+      let finalReply = input.draftReply;
+      let wasCorrected = false;
+      let reasons: string[] = [];
+      let reasoningNote = '';
+
       if (validated.success) {
         const result = validated.data;
+        reasoningNote = result.reasoning || (result.is_valid ? 'QC PASSED: Draf balasan sesuai ground truth dan aman.' : 'QC VIOLATIONS DETECTED');
         if (!result.is_valid && result.corrected_reply && result.corrected_reply.trim().length > 0) {
           console.warn(
             `[AI VERIFIER CORRECTION] Draft reply corrected for ${input.customerPhone}. Violations: ${result.violation_reasons.join(', ')}`
           );
-          return {
-            finalReply: result.corrected_reply,
-            wasCorrected: true,
-            reasons: result.violation_reasons,
-          };
+          finalReply = result.corrected_reply;
+          wasCorrected = true;
+          reasons = result.violation_reasons;
+        } else {
+          console.log(`[AI VERIFIER PASS] Draft reply verified valid for ${input.customerPhone}.`);
         }
+      } else {
+        reasoningNote = 'QC JSON output invalid / unparseable, passed original draft';
       }
 
-      return { finalReply: input.draftReply, wasCorrected: false, reasons: [] };
+      try {
+        const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'AI_VERIFIER',
+          customerPhone: input.customerPhone,
+          customerInput: `[DRAFT QC] "${input.draftReply.slice(0, 150)}..." (User: "${input.customerMessage.slice(0, 80)}")`,
+          reasoning: reasoningNote + (reasons.length > 0 ? ` | Pelanggaran: ${reasons.join(', ')}` : ''),
+          groundTruthUsed: {
+            customerAgeMonths: input.groundTruth.customerAgeMonths,
+            customerLocation: input.groundTruth.customerLocation,
+            allowedServicesCount: input.groundTruth.allowedServices?.length,
+            wasCorrected,
+          },
+          finalReply,
+          modelUsed: usedModel,
+          durationMs: Date.now() - startedAt,
+          status: wasCorrected ? 'FALLBACK' : 'SUCCESS',
+        });
+      } catch {}
+
+      return { finalReply, wasCorrected, reasons };
     } catch (err: any) {
       console.warn(`[AI VERIFIER ERROR] QC check failed, using original draft fallback:`, err.message);
       return { finalReply: input.draftReply, wasCorrected: false, reasons: [] };
