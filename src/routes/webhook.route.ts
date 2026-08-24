@@ -165,7 +165,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
               !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url);
 
-            const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || (isOutboundImage ? '' : pAny.body) || pAny._data?.caption || '';
+            const imageCaption =
+              pAny.message?.imageMessage?.caption ||
+              pAny._data?.message?.imageMessage?.caption ||
+              pAny.caption ||
+              pAny._data?.caption ||
+              pAny.body ||
+              '';
             const adminReplyText = imageCaption || payload.body || '';
 
             // CRITICAL FILTER: Ignore bot automated emergency/waiting templates if echoed back
