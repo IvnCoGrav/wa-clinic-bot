@@ -4,6 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Dynamic Peak-Hour Pricing & Tenant-Aware MiniMax NLU Model Transition (2026-08-24)
+
+- **Latar Belakang & Investigasi Masalah:**
+  1. **Audit Penggunaan Model AI**: Pengecekan riil pada database live server (`llm_audit_logs`) dan request logs SumoPod mengungkap bahwa DeepSeek mendominasi ~80% traffic LLM karena bertugas di gerbang awal `NLU_CLASSIFICATION`, `NLU_ROUTING`, dan `GEOCODE_RESOLVER`.
+  2. **Lonjakan Tarif Peak Hours DeepSeek**: Data log transaksi membuktikan bahwa DeepSeek di SumoPod menerapkan *dynamic pricing* pada jam sibuk (07:30 – 19:30 WIB / 08:30 – 20:30 UTC+8) dengan lonjakan output token mencapai **\$1.50 / 1M token** (Rp 40.80 per 1.5k token output), sedangkan `cost-calculator.ts` sebelumnya masih menghitung secara statis di \$0.66 / 1M.
+  3. **Keunggulan Tarif MiniMax**: MiniMax-M2.7-highspeed memiliki tarif flat 24 jam sebesar **\$0.03 / 1M in / \$0.12 / 1M out** (Rp 3.24 per 1.5k token output, hemat ~12x lipat saat peak hours).
+- **Implementasi Perubahan:**
+  1. **Dynamic Peak-Hour Pricing (`src/utils/cost-calculator.ts`)**:
+     - Menambahkan helper `isDeepSeekPeakHour()` yang mendeteksi jam sibuk 08:30–20:30 UTC+8 (07:30–19:30 WIB).
+     - Menambahkan fungsi `getModelPricing()` yang secara dinamis menyesuaikan tarif output DeepSeek (`$1.50/1M` saat Peak vs `$0.28/1M` saat Off-Peak) dan memperbarui tarif Qwen (`$0.28/1M` output).
+     - Memperbarui `calculateLlmCost()` agar menerima parameter opsional timestamp dan mengembalikan flag `isPeak`.
+  2. **Tenant-Aware Model Selection Sync (`ai-router.ts`, `geocoding.ts`, `phrasing.service.ts`)**:
+     - `src/integrations/llm/ai-router.ts`: Menyelaraskan getter `model` agar membaca konfigurasi dinamis tenant-aware `AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION')` saat `AI_MODEL_ROUTER` / `AI_MODEL_NLU` tidak di-set secara eksplisit.
+     - `src/integrations/google-maps/geocoding.ts`: Menyelaraskan `llmResolveLocation()` agar membaca model NLU dari `AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION')`.
+     - `src/integrations/llm/phrasing.service.ts`: Memastikan `this.model` menggunakan `chatConfig.modelName` dari `AiModelConfigService.getModelConfig('CHAT_REPLY')` saat env var tidak di-override.
+  3. **Transisi Default Model Registry (`src/config/ai-models.config.ts` & `.env.example`)**:
+     - Mengubah default registry `INTENT_CLASSIFICATION`, `CHAT_REPLY`, `SUMMARIZATION`, dan `PII_SCRUBBING` menjadi `MiniMax-M2.7-highspeed` (provider `MiniMax`).
+     - Memperbarui `.env.example` dengan rantai fallback `AI_MODEL_FALLBACK_CHAIN="deepseek-v4-flash,qwen3.7-flash-2026-07-15"`.
+- **Verifikasi & Pengujian:**
+  - `tests/unit/cost-calculator.test.ts`: 9/9 tests PASS (memvalidasi kalkulasi Peak vs Off-Peak DeepSeek, flat MiniMax, dan Qwen).
+  - `tests/unit/ai-models-tenant.test.ts`: 4/4 tests PASS.
+  - `tests/unit/ai-router-engine.test.ts`: 107/107 tests PASS.
+  - Full suite Vitest: **180 test files PASS (1.585 tests, 0 failed)**.
+  - TypeScript build (`npm run build`): 100% lolos (0 error).
+
 ### Fixed & Hardened — Regex Word-Boundary Protection for NLU Classifier & Geocoding (2026-08-24)
 
 - **Latar Belakang & Investigasi Masalah:**

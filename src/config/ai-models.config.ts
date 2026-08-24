@@ -38,8 +38,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY',
     {
       task: 'CHAT_REPLY',
-      provider: process.env.AI_PROVIDER_CHAT || 'Alibaba',
-      modelName: process.env.AI_MODEL_CHAT || 'qwen3.7-flash-2026-07-15',
+      provider: process.env.AI_PROVIDER_CHAT || 'MiniMax',
+      modelName: process.env.AI_MODEL_CHAT || 'MiniMax-M2.7-highspeed',
       description: 'Digunakan untuk menghasilkan respon percakapan otomatis kepada customer.',
       maxTokens: 1024,
       temperature: 0.7,
@@ -60,8 +60,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'SUMMARIZATION',
     {
       task: 'SUMMARIZATION',
-      provider: process.env.AI_PROVIDER_SUMMARIZATION || 'Alibaba',
-      modelName: process.env.AI_MODEL_SUMMARIZATION || 'qwen3.7-flash-2026-07-15',
+      provider: process.env.AI_PROVIDER_SUMMARIZATION || 'MiniMax',
+      modelName: process.env.AI_MODEL_SUMMARIZATION || 'MiniMax-M2.7-highspeed',
       description: 'Digunakan untuk merangkum riwayat percakapan panjang.',
       maxTokens: 1024,
       temperature: 0.3,
@@ -71,8 +71,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'PII_SCRUBBING',
     {
       task: 'PII_SCRUBBING',
-      provider: process.env.AI_PROVIDER_PII || 'Alibaba',
-      modelName: process.env.AI_MODEL_PII || 'qwen3.7-flash-2026-07-15',
+      provider: process.env.AI_PROVIDER_PII || 'MiniMax',
+      modelName: process.env.AI_MODEL_PII || 'MiniMax-M2.7-highspeed',
       description: 'Digunakan untuk membantu pembersihan nama dan data sensitif dari teks.',
       maxTokens: 512,
       temperature: 0.0,
@@ -82,8 +82,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'INTENT_CLASSIFICATION',
     {
       task: 'INTENT_CLASSIFICATION',
-      provider: process.env.AI_PROVIDER_NLU || 'Alibaba',
-      modelName: process.env.AI_MODEL_NLU || 'qwen3.7-flash-2026-07-15',
+      provider: process.env.AI_PROVIDER_NLU || 'MiniMax',
+      modelName: process.env.AI_MODEL_NLU || 'MiniMax-M2.7-highspeed',
       description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
       maxTokens: 1024,
       temperature: 0.1,
