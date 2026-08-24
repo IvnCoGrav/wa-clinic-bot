@@ -504,6 +504,7 @@ export class ConversationStateMachine {
         incomingMessageId: incomingMessage.id,
         incomingText: incomingBody,
         replyText: result.replyText,
+        tenantId,
         shouldAbort: async () => {
           try {
             const freshConv = await conversationService.getOrCreateConversation(customer.id, tenantId);

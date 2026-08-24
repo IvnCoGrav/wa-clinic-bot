@@ -111,17 +111,17 @@ export class NluClassifierService {
     const entities: NluEntities = {};
 
     // 1. Greeting
-    if (/^(halo|hi|pagi|siang|sore|malam|p|assalamu['`]?alaikum|haloo+)/i.test(text)) {
+    if (/^(halo|hi|pagi|siang|sore|malam|p|assalamu['`]?alaikum|haloo+)\b/i.test(text)) {
       intents.push('greeting');
     }
 
     // 2. Affirmation
-    if (/^(ya|iya|betul|bisa|ok|okay|siap|baik|setuju|bisa bunda|iyaa+)/i.test(text)) {
+    if (/^(ya|iya|betul|bisa|ok|okay|siap|baik|setuju|bisa bunda|iyaa+)\b/i.test(text)) {
       intents.push('affirmation');
     }
 
     // 3. Negation
-    if (/^(tidak|enggak|nggak|bukan|batal|ga|gak|ndak)/i.test(text)) {
+    if (/^(tidak|enggak|nggak|bukan|batal|ga|gak|ndak)\b/i.test(text)) {
       intents.push('negation');
     }
 

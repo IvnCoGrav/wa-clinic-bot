@@ -61,7 +61,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             where: { id, tenant_id: DEFAULT_TENANT_ID },
             include: {
               children: true,
-              reservations: { orderBy: { created_at: 'desc' } },
+              reservations: { orderBy: { created_at: 'desc' }, include: { assigned_staff: { select: { id: true, name: true } } } },
               labels: { include: { label: true } },
               adClick: true,
             },

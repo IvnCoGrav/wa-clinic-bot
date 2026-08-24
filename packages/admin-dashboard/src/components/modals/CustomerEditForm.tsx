@@ -108,24 +108,28 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden max-w-md w-full mx-auto">
-      {/* Header */}
-      <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <User size={18} className="text-[#008069]" />
-          <h3 className="font-bold text-[#111b21] text-sm">Edit Profil Customer</h3>
+    <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn" onClick={handleCancel}>
+      <div
+        className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-4 border-b border-[#e9edef] bg-[#f8fafc] flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-2">
+            <User size={18} className="text-[#008069]" />
+            <h3 className="font-bold text-[#111b21] text-sm">Edit Profil Customer</h3>
+          </div>
+          <button
+            onClick={handleCancel}
+            disabled={saving || loading}
+            className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition disabled:opacity-50"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <button
-          onClick={handleCancel}
-          disabled={saving || loading}
-          className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition disabled:opacity-50"
-        >
-          <X size={18} />
-        </button>
-      </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto flex-1">
         {/* Nama */}
         <div className="space-y-1">
           <label className="block text-[11px] font-bold text-[#111b21] flex items-center space-x-1">
@@ -266,35 +270,36 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           <p className="font-mono text-xs text-[#111b21]">{customer.phone}</p>
         </div>
 
-        {/* Actions */}
-        <div className="flex space-x-2 pt-2">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={saving || loading}
-            className="flex-1 py-2.5 px-4 rounded-xl border border-[#d1d7db] text-[#54656f] font-semibold text-xs hover:bg-[#f0f2f5] transition disabled:opacity-50"
-          >
-            Batal
-          </button>
-          <button
-            type="submit"
-            disabled={saving || loading}
-            className="flex-1 py-2.5 px-4 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-xs disabled:opacity-50"
-          >
-            {saving || loading ? (
-              <>
-                <Loader size={14} className="animate-spin" />
-                <span>Menyimpan...</span>
-              </>
-            ) : (
-              <>
-                <Save size={14} />
-                <span>Simpan</span>
-              </>
-            )}
-          </button>
-        </div>
-      </form>
+          {/* Actions */}
+          <div className="flex space-x-2 pt-2 border-t border-[#e9edef] bg-[#f8fafc] -mx-4 -mb-4 p-4 mt-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={saving || loading}
+              className="flex-1 py-2.5 px-4 rounded-xl border border-[#d1d7db] text-[#54656f] font-semibold text-xs hover:bg-[#f0f2f5] transition disabled:opacity-50 bg-white"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={saving || loading}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-xs disabled:opacity-50"
+            >
+              {saving || loading ? (
+                <>
+                  <Loader size={14} className="animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <>
+                  <Save size={14} />
+                  <span>Simpan Perubahan</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

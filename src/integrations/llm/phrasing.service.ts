@@ -64,6 +64,7 @@ export class PhrasingService {
         const isOngkirIntent = req.intent === 'ongkir_info';
         const isAskLocationIntent = req.intent === 'ask_kelurahan_detail' || req.intent === 'ask_location';
         const isNeedTimeIntent = req.intent === 'need_time_acknowledgment';
+        const isScheduleHandoffIntent = req.intent === 'schedule_check_handoff';
         const templateConstraint = isGreetingIntent
           ? `ATURAN KHUSUS GREETING (SANGAT KETAT): Ini pesan GREETING. Pertahankan MINIMAL ${keepPercent}% dari teks acuan (fallbackTemplate) tetap sama secara kata-per-kata. Hanya ubah SEKITAR ${greetingChangePercent}% teks, misalnya ganti sedikit kata sapaan/penghubung/penutup saja. DILARANG menulis ulang pesan dari nol, mengganti struktur kalimat utama, atau mengubah fakta/brand name. Intinya: hasil akhir harus terlihat nyaris sama dengan teks acuan, hanya dengan variasi kecil yang wajar.\n\n`
           : isOngkirIntent
@@ -72,6 +73,8 @@ export class PhrasingService {
           ? `ATURAN KHUSUS TANYA LOKASI / KELURAHAN (SANGAT KETAT): Ini pesan ${req.intent}. Gunakan istilah standar "ongkir" atau "ongkos kirim". DILARANG KERAS mengganti kata "ongkir" dengan istilah halusinasi asing seperti "antimeminjamkan", "biaya pinjam", "biaya antar jemput", dll. Pertahankan MINIMAL 80% teks acuan tetap sama.\n\n`
           : isNeedTimeIntent
           ? `ATURAN KHUSUS JEDA / TUNGGU KABAR (SANGAT KETAT): Customer meminta waktu untuk berdiskusi/menanyakan ke keluarga/berpikir. Berikan respon hangat, santun, sabar, dan penuh pengertian (contoh: "Baik Bunda, kami tunggu kabarnya yaa bund 🤗"). DILARANG KERAS mendesak, menodong, atau menanyakan ulang pertanyaan lokasi/jadwal/harga. Cukup sampaikan bahwa kita siap menunggu dan siap membantu kapan pun Bunda sudah siap.\n\n`
+          : isScheduleHandoffIntent
+          ? `ATURAN KHUSUS CEK JADWAL / HANDOFF (SANGAT KETAT): Ini pesan ${req.intent}. Sampaikan secara singkat dan ramah bahwa kita sedang mengecek jadwal (contoh: "Baik Bunda, kami bantu cekkan ketersediaan jadwalnya dulu yaa 🙏🏻😊"). DILARANG KERAS menanyakan ulang tanggal atau informasi yang sudah disebutkan customer. DILARANG membuat kalimat panjang atau bertele-tele. Pertahankan pesan tetap singkat dan ringkas.\n\n`
           : '';
 
         const systemPrompt = `${BOT_PERSONA_PROMPT}

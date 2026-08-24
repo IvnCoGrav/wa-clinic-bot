@@ -243,9 +243,21 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 60,
                 isOutboundImage
               );
+              const isInFlightBot = messageService.isInFlightBotOutbound(
+                customerJid || `${phone}@c.us`,
+                outboundContent,
+                DEFAULT_TENANT_ID
+              ) || messageService.isInFlightBotOutbound(
+                `${phone}@c.us`,
+                outboundContent,
+                DEFAULT_TENANT_ID
+              );
 
-              if (isDuplicateOutbound || isRecentDuplicate) {
-                console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded (Bot echo / duplicate). Skipping manual reply escalation.`);
+              if (isDuplicateOutbound || isRecentDuplicate || isInFlightBot) {
+                if (isInFlightBot && payload.id) {
+                  messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID).catch(() => {});
+                }
+                console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded (Bot echo / in-flight / duplicate). Skipping manual reply escalation.`);
                 return reply.status(200).send({ status: 'OUTBOUND_DUPLICATE_SKIPPED' });
               }
 

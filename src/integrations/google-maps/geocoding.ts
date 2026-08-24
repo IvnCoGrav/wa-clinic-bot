@@ -416,7 +416,8 @@ export class GeocodingService {
 
     // Hapus conversational redirect wrappers (seperti "ganti ke", "salah alamat di")
     cleanText = cleanText
-      .replace(/.*(ganti|pindah|ubah|salah|yang\s+bener|alamat)\s+(ke|di|hanya|saja)\s+/i, '')
+      .replace(/^.*?\b(ganti|pindah|ubah|salah|yang\s+bener)\s+(ke|di|hanya|saja)\s+/i, '')
+      .replace(/^.*?\balamat\s+(ke|di)\s+/i, '')
       .trim();
 
     // --- HARD GATE: Kecamatan/Kota-only tanpa kelurahan → TOLAK, minta detail ---

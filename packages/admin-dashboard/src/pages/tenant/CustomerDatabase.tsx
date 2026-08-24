@@ -3,6 +3,7 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
+import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import {
   Users,
   Search,
@@ -34,6 +35,7 @@ import {
   ShieldCheck,
   FileText,
   Navigation,
+  PenLine,
 } from 'lucide-react';
 
 interface CustomerItem {
@@ -96,6 +98,9 @@ export const CustomerDatabase: React.FC = () => {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailData, setDetailData] = useState<any | null>(null);
   const [detailEditMode, setDetailEditMode] = useState(false);
+  // Reservation detail dari riwayat (klik row/card)
+  const [selectedReservation, setSelectedReservation] = useState<any>(null);
+  const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
 
   // Chat History Modal State
   const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<CustomerItem | null>(null);
@@ -185,6 +190,41 @@ export const CustomerDatabase: React.FC = () => {
       toast('Profil customer berhasil diperbarui!', 'success');
     } catch (err: any) {
       toast(`Gagal menyimpan: ${err.message}`, 'error');
+    }
+  };
+
+  const handleOpenReservationDetail = async (reservationId: string) => {
+    try {
+      const res = await apiRequest(`/api/admin/reservation/${reservationId}`);
+      const data = res?.data || res;
+      if (data) {
+        setSelectedReservation(data);
+        if (reservationStaffList.length === 0) {
+          try {
+            const staffRes = await apiRequest('/api/admin/staff');
+            if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
+            else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      toast(`Gagal memuat detail reservasi: ${err.message}`, 'error');
+    }
+  };
+
+  const handleReservationUpdate = async () => {
+    if (activeDetailCustomer) {
+      try {
+        const res = await apiRequest(`/api/admin/customers/${activeDetailCustomer.id}`);
+        if (res?.data) setDetailData((prev: any) => ({ ...prev, ...res.data, reservations: res.data.reservations || prev?.reservations }));
+      } catch {}
+    }
+    if (selectedReservation?.id) {
+      try {
+        const res = await apiRequest(`/api/admin/reservation/${selectedReservation.id}`);
+        const data = res?.data || res;
+        if (data) setSelectedReservation(data);
+      } catch {}
     }
   };
 
@@ -977,25 +1017,6 @@ export const CustomerDatabase: React.FC = () => {
                   <Loader className="animate-spin text-[#008069]" size={36} />
                   <p className="text-xs text-[#667781] font-medium">Memuat data lengkap customer...</p>
                 </div>
-              ) : detailEditMode ? (
-                <CustomerEditForm
-                  customer={{
-                    id: activeDetailCustomer.id,
-                    name: detailData?.name || activeDetailCustomer.name,
-                    phone: activeDetailCustomer.phone,
-                    kelurahan: detailData?.kelurahan,
-                    kecamatan: detailData?.kecamatan,
-                    kota: detailData?.kota,
-                    zipcode: detailData?.zipcode,
-                    landmark: detailData?.preferences?.landmark || detailData?.preferences?.address_notes,
-                    lat: detailData?.lat,
-                    lng: detailData?.lng,
-                    preferences: detailData?.preferences,
-                  }}
-                  onSave={handleSaveCustomerDetail}
-                  onCancel={() => setDetailEditMode(false)}
-                  loading={loadingDetail}
-                />
               ) : (
                 <>
                   {/* Grid Top Cards: LTV & MQL Status */}
@@ -1158,7 +1179,12 @@ export const CustomerDatabase: React.FC = () => {
                           </thead>
                           <tbody className="divide-y divide-[#e9edef]">
                             {detailData.reservations.map((res: any) => (
-                              <tr key={res.id} className="hover:bg-[#f8fafc]">
+                              <tr
+                                key={res.id}
+                                onClick={() => handleOpenReservationDetail(res.id)}
+                                className="hover:bg-[#f8fafc] hover:border-[#008069]/20 cursor-pointer transition group"
+                                title="Klik untuk lihat detail reservasi"
+                              >
                                 <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-semibold text-[#111b21]">
                                   {res.booking_date
                                     ? new Date(res.booking_date).toLocaleDateString('id-ID', {
@@ -1176,7 +1202,7 @@ export const CustomerDatabase: React.FC = () => {
                                 <td className="py-2.5 px-3 text-[#54656f] max-w-[180px] truncate" title={res.treatment_detail}>
                                   {res.treatment_detail || res.raw_text}
                                 </td>
-                                <td className="py-2.5 px-3 text-[#54656f] text-[11px]">
+                                <td className="py-2.5 px-3 text-[#54656f] text-[11px] group-hover:text-[#008069]">
                                   {res.assigned_staff?.name || <span className="text-[#8696a0] italic">-</span>}
                                 </td>
                                 <td className="py-2.5 px-3 text-right">
@@ -1197,6 +1223,9 @@ export const CustomerDatabase: React.FC = () => {
                           </tbody>
                         </table>
                       </div>
+                    )}
+                    {detailData?.reservations?.length > 0 && (
+                      <p className="text-[10px] text-[#8696a0] italic flex items-center space-x-1"><Eye size={10} /><span>Klik baris untuk lihat detail lengkap</span></p>
                     )}
                   </div>
 
@@ -1265,25 +1294,74 @@ className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-
               </a>
             </div>
 
-            {!detailEditMode && (
               <button
                 type="button"
                 onClick={() => setDetailEditMode(true)}
-                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs"
+                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5"
               >
-                Edit Profil
+                <PenLine size={13} />
+                <span>Edit Profil</span>
               </button>
-            )}
             <button
-              onClick={detailEditMode ? () => setDetailEditMode(false) : () => setActiveDetailCustomer(null)}
+              onClick={() => setActiveDetailCustomer(null)}
               className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
             >
-              {detailEditMode ? 'Batal' : 'Tutup'}
+              Tutup
             </button>
           </div>
-        </div>
+          </div>
       </div>
     )}
+
+      {/* Edit Profil Modal - terpisah, placement seperti ReservationDetailModal (tidak nested, full overlay) */}
+      {detailEditMode && activeDetailCustomer && (
+        <CustomerEditForm
+          customer={{
+            id: activeDetailCustomer.id,
+            name: detailData?.name || activeDetailCustomer.name,
+            phone: activeDetailCustomer.phone,
+            kelurahan: detailData?.kelurahan,
+            kecamatan: detailData?.kecamatan,
+            kota: detailData?.kota,
+            zipcode: detailData?.zipcode,
+            landmark: detailData?.preferences?.landmark || detailData?.preferences?.address_notes,
+            lat: detailData?.lat,
+            lng: detailData?.lng,
+            preferences: detailData?.preferences,
+          }}
+          onSave={handleSaveCustomerDetail}
+          onCancel={() => setDetailEditMode(false)}
+          loading={loadingDetail}
+        />
+      )}
+
+      {/* Reservation Detail Modal dari riwayat (klik row) */}
+      {selectedReservation && (
+        <ReservationDetailModal
+          reservation={selectedReservation}
+          staffList={reservationStaffList}
+          user={null}
+          googleCalendarMockActive={false}
+          onClose={() => setSelectedReservation(null)}
+          onUpdate={handleReservationUpdate}
+          onConfirm={async (id) => { await apiRequest(`/api/admin/reservation/${id}/confirm`, { method: 'PATCH' }); await handleReservationUpdate(); }}
+          onComplete={async (id) => { await apiRequest(`/api/admin/reservation/${id}/complete`, { method: 'PATCH' }); await handleReservationUpdate(); }}
+          onStatusChange={async (id, s) => { await apiRequest(`/api/admin/reservation/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: s }) }); await handleReservationUpdate(); }}
+          onSetDate={async (id, d) => { await apiRequest(`/api/admin/reservation/${id}/set-date`, { method: 'PATCH', body: JSON.stringify({ bookingDate: new Date(d).toISOString() }) }); await handleReservationUpdate(); }}
+          onAssignStaff={async (id, sid) => { await apiRequest(`/api/admin/reservation/${id}/assign-staff`, { method: 'PATCH', body: JSON.stringify({ assigned_staff_id: sid }) }); await handleReservationUpdate(); }}
+          onDelete={async (id) => { await apiRequest(`/api/admin/reservation/${id}`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(); }}
+          onProofUpload={async (file) => {
+            const toB64 = (f: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read fail')); r.readAsDataURL(f); });
+            const b64 = await toB64(file);
+            await apiRequest(`/api/admin/reservation/${selectedReservation.id}/proof`, { method: 'PUT', body: JSON.stringify({ imageB64: b64, mimeType: file.type, fileName: file.name }) });
+            await handleReservationUpdate();
+          }}
+          onProofRemove={async () => { await apiRequest(`/api/admin/reservation/${selectedReservation.id}/proof`, { method: 'PUT', body: JSON.stringify({ remove: true }) }); await handleReservationUpdate(); }}
+          onOpenEditLocation={() => toast('Edit lokasi via menu Reservations untuk akses penuh.', 'info')}
+          onProofView={(r) => window.open(r.proof_url!, '_blank')}
+          onHousePhotoView={(url) => window.open(url, '_blank')}
+        />
+      )}
   </div>
 );
 };

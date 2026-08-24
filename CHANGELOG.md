@@ -4,6 +4,25 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Fixed & Hardened — Regex Word-Boundary Protection for NLU Classifier & Geocoding (2026-08-24)
+
+- **Latar Belakang & Investigasi Masalah:**
+  1. **Insiden Pemotongan Kata & Salah Klasifikasi Intent**: Berdasarkan temuan log live server pada pesan customer `"Pakuwon city mall, mulyorejo"`, ditemukan bahwa regex sapaan tanpa word boundary (`\b`) memotong huruf `P` di awal kata (`"akuwon"`), sehingga sistem gagal mendeteksi mall/landmark.
+  2. **Audit Menyeluruh Sistem Regex**: Ditemukan 3 regex berisiko tinggi di NLU classifier (`src/services/nlu-classifier.service.ts`) dan 1 regex greedy di sanitasi geocoding (`src/integrations/google-maps/geocoding.ts`).
+- **Implementasi Perubahan:**
+  1. **`src/services/nlu-classifier.service.ts`**:
+     - Menambahkan word boundary `\b` pada regex Greeting (baris 114) agar kata berawalan `p` (seperti *Pakuwon*, *Pabean*, *Pijat*) tidak dianggap salam.
+     - Menambahkan word boundary `\b` pada regex Affirmation (baris 119) agar nama/kata berawalan `ya`/`ok`/`siap` (*Yani*, *Oktober*, *Siaran*) tidak dianggap afirmasi.
+     - Menambahkan word boundary `\b` pada regex Negation (baris 124) agar alamat berawalan `ga` (*Gajah Mada*, *Gatot Subroto*) tidak dianggap penolakan.
+  2. **`src/integrations/google-maps/geocoding.ts`**:
+     - Mengubah regex redirect pembersih alamat dari greedy `.*` menjadi non-greedy anchored `^.*?\b(ganti|pindah|ubah|salah|yang\s+bener)\s+` untuk melindungi nama jalan seperti *Jl. Gantiwarno* atau *Jl. Salahuddin*.
+  3. **`tests/unit/nlu-classifier.test.ts`**:
+     - Menambahkan 3 unit regression test case untuk memvalidasi proteksi kata awalan `P` (Pakuwon, Pabean), `Ga` (Gajah Mada, Gatot Subroto), dan `Ya/Ok` (Yani, Oktober).
+- **Verifikasi & Pengujian:**
+  - `tests/unit/nlu-classifier.test.ts` (12/12 tests PASS).
+  - `tests/unit/geocoding.test.ts` (17/17 tests PASS).
+  - TypeScript build (`npm run build`) 100% lulus (0 error).
+
 ### Enhanced & Aligned — Clinic Services Catalog & Live Database Sync with Pricelist Flyer (2026-08-23)
 
 - **Latar Belakang & Kebutuhan:**
