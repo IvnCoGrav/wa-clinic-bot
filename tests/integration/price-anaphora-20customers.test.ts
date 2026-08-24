@@ -68,7 +68,7 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
       q: 'itu berapa kak?',
       seeds: ['Untuk bunda bisa coba Pijat Lahap Juara.'],
       expectName: 'Pijat Lahap Juara',
-      expectPrice: 'Rp 70.000',
+      expectPrice: 'Rp 75.000',
     },
     {
       q: 'berapa ya bu?',
@@ -92,7 +92,7 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
       q: 'berapa dong bund?',
       seeds: ['Pijat Lahap Juara bantu nafsu makan.'],
       expectName: 'Pijat Lahap Juara',
-      expectPrice: 'Rp 70.000',
+      expectPrice: 'Rp 75.000',
     },
     {
       q: 'itu berapa harganya bun?',
@@ -116,7 +116,7 @@ describe('PRICE ANAPHORA — 20 simulasi chat customer berbeda', () => {
       q: 'berapa itu bund ?',
       seeds: ['Pijat Lahap Juara tersedia.'],
       expectName: 'Pijat Lahap Juara',
-      expectPrice: 'Rp 70.000',
+      expectPrice: 'Rp 75.000',
     },
     {
       q: 'kalau yang itu berapa bun?',

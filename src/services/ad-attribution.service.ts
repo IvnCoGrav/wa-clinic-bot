@@ -34,14 +34,14 @@ export async function matchAdClickAndFireContact(
 ): Promise<MatchAdClickResult> {
   const { bodyText, isNewCustomerRecord, customer, tenantId, referral } = params;
 
-  const promoMatch = bodyText ? bodyText.match(/(?:Promo\s*)?\[\s*([\w\s]{2,10}?)\s*\]/i) : null;
+  const promoMatch = bodyText ? bodyText.match(/(?:Promo\s*)?\[\s*([\w\s-]{2,32}?)\s*\]/i) : null;
   const trackingCode = promoMatch ? promoMatch[1].replace(/\s+/g, '') : undefined;
   const ctwaClid = referral?.ctwaClid;
 
   let matched = false;
   let matchedAdClick: any = null;
 
-  // 1. Priority 1: Native Click-to-WhatsApp (ctwa_clid) from Meta Referral payload
+  // 1. Priority 1: Native Click-to-WhatsApp (ctwa_clid) from Meta Referral payload (WABA)
   if (ctwaClid) {
     try {
       const result = await prisma.adClick.create({
@@ -62,7 +62,7 @@ export async function matchAdClickAndFireContact(
     }
   }
 
-  // 2. Priority 2: Text-based Promo Code regex match [a7x9]
+  // 2. Priority 2: Text-based Promo Code regex match [IG-BABYSPA] / [64] (Website CTA & WAHA Direct CTWA)
   if (!matched && promoMatch && trackingCode) {
     // Memory cache fallback (for unit tests / in-memory mode)
     if (memoryAdClicks && typeof memoryAdClicks.get === 'function') {
@@ -78,7 +78,7 @@ export async function matchAdClickAndFireContact(
       }
     }
 
-    // Atomic DB updateMany to avoid race conditions
+    // Atomic DB updateMany to avoid race conditions on website /cta clicks
     try {
       const updateResult = await prisma.adClick.updateMany({
         where: {
@@ -93,7 +93,7 @@ export async function matchAdClickAndFireContact(
 
       if (updateResult.count === 1) {
         matched = true;
-        console.log(`[ATTRIBUTION SUCCESS] Linked trackingCode ${trackingCode} to customer ${customer.phone}`);
+        console.log(`[ATTRIBUTION SUCCESS - WEB CTA] Linked trackingCode ${trackingCode} to customer ${customer.phone}`);
         matchedAdClick = await prisma.adClick.findFirst({
           where: { trackingCode, customerId: customer.id },
         });
@@ -105,6 +105,26 @@ export async function matchAdClickAndFireContact(
         if (alreadyLinked) {
           matched = true;
           matchedAdClick = alreadyLinked;
+        } else {
+          // Direct WAHA CTWA lead (tanpa lewat website /cta) -> Otomatis buat record AdClick baru
+          try {
+            const directAdClick = await prisma.adClick.create({
+              data: {
+                trackingCode,
+                utmCampaign: trackingCode,
+                utmSource: 'whatsapp_direct',
+                matchedAt: new Date(),
+                customerId: customer.id,
+                tenant_id: tenantId,
+                phone: customer.phone,
+              },
+            });
+            matched = true;
+            matchedAdClick = directAdClick;
+            console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA] Created direct AdClick for campaign tag ${trackingCode} on customer ${customer.phone}`);
+          } catch (createErr: any) {
+            console.warn('[ATTRIBUTION WARNING - DIRECT CTWA] Failed to create direct AdClick:', createErr.message);
+          }
         }
       }
     } catch (err: any) {
@@ -131,10 +151,10 @@ export async function matchAdClickAndFireContact(
     }
   }
 
-  // Calculate stripped text (removes Promo[code] prefix/suffix for AI processing)
+  // Calculate stripped text (removes Promo[code] / [IG-BABYSPA] prefix/suffix for AI processing)
   let strippedText = bodyText;
   if (promoMatch && bodyText) {
-    const stripped = bodyText.replace(/(?:Promo\s*)?\[\s*[\w\s]{2,10}?\s*\]\s*/gi, '').trim();
+    const stripped = bodyText.replace(/(?:Promo\s*)?\[\s*[\w\s-]{2,32}?\s*\]\s*/gi, '').trim();
     strippedText = stripped || 'Halo';
   }
 
