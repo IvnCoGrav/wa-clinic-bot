@@ -96,23 +96,23 @@ export const AiRouterPanel: React.FC<Props> = ({
             </p>
           </div>
 
-          {/* Shadow Mode Activation */}
+          {/* AI Output Verifier Activation (QC Guardrail) */}
           <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#111b21]">Shadow Mode (Uji Coba)</span>
+              <span className="text-xs font-bold text-[#111b21]">AI Output Verifier (Quality Control)</span>
               <button
                 type="button"
                 onClick={() => handleToggleAiRouter('shadowMode', !aiRouterShadowMode)}
                 disabled={savingAiRouter}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-xs ${
-                  aiRouterShadowMode ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-[#008069] text-white'
+                  aiRouterShadowMode ? 'bg-[#008069] text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'
                 }`}
               >
-                {aiRouterShadowMode ? 'SHADOW MODE (LOG ONLY)' : 'FULL ACTIVE (LIVE)'}
+                {aiRouterShadowMode ? 'QC ACTIVE (GUARDRAIL ON)' : 'QC DISABLED (OFF)'}
               </button>
             </div>
             <p className="text-xs text-[#667781] leading-relaxed">
-              Dalam Shadow Mode, hasil evaluasi AI Router hanya dicatat di log tanpa mengubah routing langsung.
+              Memeriksa draf balasan AI terhadap Ground Truth (kategori usia, SOP klinik, validasi lokasi) sebelum pesan dikirim ke customer.
             </p>
           </div>
         </div>
