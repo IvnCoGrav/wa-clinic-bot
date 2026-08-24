@@ -77,9 +77,14 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
       extractedLocationForGeocode: locationTextToPass,
     } as any);
 
-    // Perbaikan Poin 3b: Jika customer baru (belum punya kelurahan confirmed)
-    const hasConfirmedLocation = !!customer.kelurahan;
-    if (!hasConfirmedLocation && result.replyText) {
+    // Hanya tempel intro perkenalan jika percakapan ini benar-benar kontak pertama
+    const historyList = (ctx as any).history || [];
+    const hasPriorAssistantMessage = historyList.some((m: any) => m.role === 'assistant');
+    const lastInteraction = conversation.last_message_at;
+    const isNew = !lastInteraction || (lastInteraction.getTime() === conversation.created_at.getTime());
+    const isTrulyFirstContact = isNew && !hasPriorAssistantMessage;
+
+    if (isTrulyFirstContact && result.replyText && !result.replyText.startsWith('Halo Bunda! Terima kasih')) {
       const intro = `Halo Bunda! Terima kasih sudah menghubungi kami. Perkenalkan, saya ${getBrandIdentity().botDisplayName} dari ${getBrandIdentity().businessName}. ✨\n\n`;
       result.replyText = intro + result.replyText;
     }

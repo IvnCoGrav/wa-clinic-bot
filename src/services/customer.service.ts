@@ -191,6 +191,7 @@ export class CustomerService {
       ongkir?: number;
       isOutOfCoverage?: boolean;
       zipcode?: string;
+      isNativePin?: boolean;
     },
     tenantId: string
   ): Promise<any> {
@@ -202,18 +203,27 @@ export class CustomerService {
         throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
       }
 
+      // GPS PRIORITY GUARD: Jika customer sudah pernah mengirimkan Pin GPS asli (share_location_sent = true)
+      // dan update ini BUKAN dari Pin GPS baru, pertahankan koordinat presisi asli (jangan timpa dengan centroid kelurahan teks)!
+      const preserveExactGps = existing.share_location_sent && !data.isNativePin && existing.lat !== null && existing.lng !== null;
+
+      const effectiveLat = preserveExactGps ? existing.lat : CustomerService.toNumberOrNull(data.lat);
+      const effectiveLng = preserveExactGps ? existing.lng : CustomerService.toNumberOrNull(data.lng);
+      const effectiveDistance = preserveExactGps ? existing.distance_km : data.distanceKm;
+      const effectiveOngkir = preserveExactGps ? existing.ongkir : data.ongkir;
+
       const updated = await prisma.customer.update({
         where: { id: customerId },
         data: {
-          kelurahan: data.kelurahan,
-          kecamatan: data.kecamatan,
-          kota: data.kota,
-          lat: CustomerService.toNumberOrNull(data.lat),
-          lng: CustomerService.toNumberOrNull(data.lng),
-          distance_km: data.distanceKm,
-          ongkir: data.ongkir,
+          kelurahan: data.kelurahan ?? existing.kelurahan,
+          kecamatan: data.kecamatan ?? existing.kecamatan,
+          kota: data.kota ?? existing.kota,
+          lat: effectiveLat,
+          lng: effectiveLng,
+          distance_km: effectiveDistance,
+          ongkir: effectiveOngkir,
           is_out_of_coverage: data.isOutOfCoverage ?? false,
-          zipcode: data.zipcode,
+          zipcode: data.zipcode ?? existing.zipcode,
         },
       });
 
