@@ -49,6 +49,30 @@ describe('NLU Classifier Service Unit Tests', () => {
       const negRes = await NluClassifierService.classifyMessage('bukan, salah alamat', []);
       expect(negRes.intents).toContain('negation');
     });
+
+    it('should NOT falsely trigger greeting on words starting with P (e.g. Pakuwon, Pabean, Pijat)', async () => {
+      const pakuwonRes = await NluClassifierService.classifyMessage('Pakuwon city mall', []);
+      expect(pakuwonRes.intents).not.toContain('greeting');
+
+      const pabeanRes = await NluClassifierService.classifyMessage('Pabean Sedati', []);
+      expect(pabeanRes.intents).not.toContain('greeting');
+    });
+
+    it('should NOT falsely trigger negation on words starting with Ga (e.g. Gajah Mada, Gatot Subroto)', async () => {
+      const gajahRes = await NluClassifierService.classifyMessage('Gajah Mada No 10', []);
+      expect(gajahRes.intents).not.toContain('negation');
+
+      const gatotRes = await NluClassifierService.classifyMessage('Gatot Subroto Blok A', []);
+      expect(gatotRes.intents).not.toContain('negation');
+    });
+
+    it('should NOT falsely trigger affirmation on words starting with Ya/Ok/Siap (e.g. Yani, Oktober, Siaran)', async () => {
+      const yaniRes = await NluClassifierService.classifyMessage('Yani mau booking treatment', []);
+      expect(yaniRes.intents).not.toContain('affirmation');
+
+      const oktoberRes = await NluClassifierService.classifyMessage('Oktober ada slot kosong?', []);
+      expect(oktoberRes.intents).not.toContain('affirmation');
+    });
   });
 
   describe('2. Multi-intent & Context Support', () => {

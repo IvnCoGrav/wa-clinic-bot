@@ -9,6 +9,7 @@ export interface HumanReplyParams {
   incomingMessageId?: string;
   incomingText?: string;   // untuk hitung reading delay
   replyText: string;      // teks balasan yang akan di-bubble-split
+  tenantId?: string;
   shouldAbort?: () => Promise<boolean> | boolean; // guard pembatalan real-time jika CS takeover
 }
 
@@ -290,12 +291,22 @@ export class TypingService {
    * 4. SAFETY NET (try/finally): Hanya panggil stopTyping di blok finally jika typing belum di-stop (mencegah redundant calls)!
    */
   public async simulateHumanReply(params: HumanReplyParams): Promise<HumanReplyResult> {
-    const { chatId, incomingMessageId, incomingText, replyText, shouldAbort } = params;
+    const { chatId, incomingMessageId, incomingText, replyText, shouldAbort, tenantId } = params;
     const isEnabled = (process.env.HUMANIZER_ENABLED ?? 'true') !== 'false' && this.speedFactor >= 0.01;
 
     let bubblesSent = 0;
     let typingStopped = true; // Status awal typing mati/stop
     const bubbles = this.splitIntoBubbles(replyText);
+
+    // Daftarkan semua bubble ke in-flight registry sebelum mulai pengiriman
+    // agar echo webhook dari WAHA tidak memicu false positive human takeover
+    try {
+      const { messageService } = await import('./message.service');
+      const effectiveTenantId = tenantId || 'default-tenant';
+      for (const bubbleContent of bubbles) {
+        messageService.registerInFlightBotOutbound(chatId, bubbleContent, effectiveTenantId);
+      }
+    } catch (_) {}
 
     try {
       // Step 1: Send Seen & Reading Delay
@@ -390,6 +401,12 @@ export class TypingService {
       const errMsg = error?.message || 'Unknown error during human reply simulation';
       return { success: false, bubblesSent, error: errMsg };
     } finally {
+      // Hapus registrasi in-flight bot outbound untuk chat ini setelah selesai
+      try {
+        const { messageService } = await import('./message.service');
+        messageService.clearInFlightBotOutbound(chatId, tenantId);
+      } catch (_) {}
+
       // SAFETY NET: HANYA panggil stopTyping di blok finally jika typing belum di-stop (menghindari redundant call)!
       if (isEnabled) {
         if (!typingStopped) {

@@ -8,6 +8,16 @@ const memoryWaMessageIds = new Set<string>();
 // In-Memory store fallback untuk record pesan (agar Live Chat panel tetap jalan saat DB offline)
 const memoryMessages: any[] = [];
 
+// In-Memory registry untuk bot outbound yang sedang dalam proses simulasi mengetik/kirim (in-flight)
+interface InFlightBotOutbound {
+  chatId: string;
+  phone: string;
+  content: string;
+  tenantId: string;
+  expiresAt: number;
+}
+const inFlightBotOutbounds: InFlightBotOutbound[] = [];
+
 // Sender default untuk payload Live Chat: outbound tanpa penanda = bot, inbound = customer
 function resolveSenderType(data: { direction: Direction; senderType?: string }): string {
   if (data.senderType) return data.senderType;
@@ -29,6 +39,79 @@ export function extractShortMessageId(waMessageId: string): string {
 }
 
 export class MessageService {
+  /**
+   * Daftarkan konten outbound bot sebelum atau saat sedang proses pengiriman bubble (in-flight).
+   * Mencegah webhook echo dari WAHA salah mendeteksi bubble bot sebagai balasan manual admin.
+   */
+  public registerInFlightBotOutbound(chatId: string, content: string, tenantId: string, ttlMs = 45000): void {
+    if (!chatId || !content) return;
+    const cleanPhone = chatId.replace(/@.*$/, '').replace(/[^\d]/g, '');
+    const cleanContent = content.trim();
+    if (!cleanContent) return;
+
+    const expiresAt = Date.now() + ttlMs;
+    inFlightBotOutbounds.push({
+      chatId,
+      phone: cleanPhone,
+      content: cleanContent,
+      tenantId,
+      expiresAt,
+    });
+  }
+
+  /**
+   * Hapus registrasi in-flight bot outbound setelah pengiriman selesai/dibatalkan.
+   */
+  public clearInFlightBotOutbound(chatId: string, tenantId?: string): void {
+    const cleanPhone = chatId ? chatId.replace(/@.*$/, '').replace(/[^\d]/g, '') : '';
+    const now = Date.now();
+    for (let i = inFlightBotOutbounds.length - 1; i >= 0; i--) {
+      const entry = inFlightBotOutbounds[i];
+      if (entry.expiresAt <= now || (cleanPhone && entry.phone === cleanPhone && (!tenantId || entry.tenantId === tenantId))) {
+        inFlightBotOutbounds.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Pengecekan apakah pesan outbound yang diterima di webhook merupakan bubble bot yang sedang in-flight.
+   */
+  public isInFlightBotOutbound(chatIdOrPhone: string, content: string, tenantId: string): boolean {
+    if (!chatIdOrPhone || !content) return false;
+    const cleanPhone = chatIdOrPhone.replace(/@.*$/, '').replace(/[^\d]/g, '');
+    const normalizedContent = content.trim().toLowerCase();
+    const now = Date.now();
+
+    // Cleanup expired
+    for (let i = inFlightBotOutbounds.length - 1; i >= 0; i--) {
+      if (inFlightBotOutbounds[i].expiresAt <= now) {
+        inFlightBotOutbounds.splice(i, 1);
+      }
+    }
+
+    const matched = inFlightBotOutbounds.find((entry) => {
+      if (tenantId && entry.tenantId !== tenantId) return false;
+      const phoneMatch = !cleanPhone || !entry.phone || entry.phone === cleanPhone || entry.chatId.includes(cleanPhone);
+      if (!phoneMatch) return false;
+
+      const entryNorm = entry.content.toLowerCase().trim();
+      if (entryNorm === normalizedContent) return true;
+
+      // Substring / prefix match (antisipasi WAHA memotong/trimming teks)
+      const checkLen = Math.min(entryNorm.length, normalizedContent.length, 60);
+      if (checkLen >= 15 && entryNorm.slice(0, checkLen) === normalizedContent.slice(0, checkLen)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matched) {
+      console.log(`[IN-FLIGHT BOT MATCH] Outbound echo matched in-flight bot bubble for ${chatIdOrPhone}: "${content.slice(0, 40)}..."`);
+      return true;
+    }
+
+    return false;
+  }
   /**
    * Pengecekan Idempotensi: Memeriksa apakah wa_message_id dari Meta sudah pernah diproses.
    * Mengembalikan true jika pesan SUDAH PERNAH diproses sebelumnya (duplicate/retry).
