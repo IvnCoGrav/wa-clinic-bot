@@ -53,10 +53,12 @@ export function sanitizeForbiddenEnglishWords(text: string): string {
   if (!text) return text;
   return text
     .replace(/\blittle\s+one(?:-nya|nya)?\b/gi, 'si kecil')
-    .replace(/\bbaby(?:-nya|nya)?\b/gi, 'bayi')
+    .replace(/(?<!\bKala\s+Moms?\s+(?:and|&)\s+)baby(?:-nya|nya)?\b/gi, 'bayi')
     .replace(/\bmommy(?:-nya|nya)?\b/gi, 'Bunda')
     .replace(/\bschedule\b/gi, 'jadwal')
-    .replace(/\bappointment(?:-nya|nya)?\b/gi, 'jadwal reservasi');
+    .replace(/\bappointment(?:-nya|nya)?\b/gi, 'jadwal reservasi')
+    .replace(/\bKala\s+Moms?\s+(?:and|&)\s+bayi\s+Spa\b/gi, 'Kala Moms and Baby Spa')
+    .replace(/\bKala\s+Mom's\s+(?:and|&)\s+bayi\s+Spa\b/gi, 'Kala Moms and Baby Spa');
 }
 
 /**
