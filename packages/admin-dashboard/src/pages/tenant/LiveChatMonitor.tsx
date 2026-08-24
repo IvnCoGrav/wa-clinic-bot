@@ -46,6 +46,7 @@ import {
   Smartphone,
   MapPin,
   Eye,
+  Ban,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
@@ -2244,13 +2245,15 @@ export const LiveChatMonitor: React.FC = () => {
                       return (
                         <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
                           <div className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs ${
-                            isCustomer
-                              ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                              : isAdmin
-                                ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                                : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
+                            isRevoked
+                              ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
+                              : isCustomer
+                                ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                                : isAdmin
+                                  ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                                  : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
                           }`}>
-                            {(!hasMediaOnly || (!isCustomer && !isAdmin)) && (
+                            {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
                               <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
                                 isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
                               }`}>
@@ -2258,7 +2261,7 @@ export const LiveChatMonitor: React.FC = () => {
                                 <span>{senderLabel(msg)}</span>
                               </span>
                             )}
-                            {msg.media && (
+                            {!isRevoked && msg.media && (
                               <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
                                 <MediaImage
                                   src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
@@ -2268,33 +2271,42 @@ export const LiveChatMonitor: React.FC = () => {
                                 />
                               </div>
                             )}
-                            {effectiveIsLocationMsg && (
-                              <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
-                                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                                  <MapPin size={17} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-bold text-[12px] text-[#111b21] leading-tight">Share Location</p>
-                                  <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
-                                    {locLat && locLng ? `${locLat}, ${locLng}` : 'Titik koordinat diterima'}
-                                  </p>
-                                </div>
-                                {locLat && locLng && (
-                                  <a
-                                    href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
-                                    title="Buka lokasi di Google Maps"
-                                  >
-                                    <span>Peta</span>
-                                    <ExternalLink size={12} />
-                                  </a>
+                            {isRevoked ? (
+                              <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
+                                <Ban size={12} className="text-[#8696a0] shrink-0" />
+                                <span>Pesan ini telah ditarik</span>
+                              </p>
+                            ) : (
+                              <>
+                                {effectiveIsLocationMsg && (
+                                  <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
+                                    <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                      <MapPin size={17} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-bold text-[12px] text-[#111b21] leading-tight">Share Location</p>
+                                      <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                        {locLat && locLng ? `${locLat}, ${locLng}` : 'Titik koordinat diterima'}
+                                      </p>
+                                    </div>
+                                    {locLat && locLng && (
+                                      <a
+                                        href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
+                                        title="Buka lokasi di Google Maps"
+                                      >
+                                        <span>Peta</span>
+                                        <ExternalLink size={12} />
+                                      </a>
+                                    )}
+                                  </div>
                                 )}
-                              </div>
-                            )}
-                            {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
-                              <p className={`font-sans whitespace-pre-wrap ${isRevoked ? 'italic text-[#667781]' : ''}`}>{msg.content}</p>
+                                {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
+                                  <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
+                                )}
+                              </>
                             )}
                             <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
                               {isEdited && !isRevoked && (

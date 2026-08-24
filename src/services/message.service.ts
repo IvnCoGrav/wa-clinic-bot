@@ -76,10 +76,15 @@ export class MessageService {
   /**
    * Pengecekan apakah pesan outbound yang diterima di webhook merupakan bubble bot yang sedang in-flight.
    */
-  public isInFlightBotOutbound(chatIdOrPhone: string, content: string, tenantId: string): boolean {
+  public isInFlightBotOutbound(
+    chatIdOrPhone: string,
+    content: string,
+    tenantId: string,
+    customWindowMs = 60000
+  ): boolean {
     if (!chatIdOrPhone || !content) return false;
     const cleanPhone = chatIdOrPhone.replace(/@.*$/, '').replace(/[^\d]/g, '');
-    const normalizedContent = content.trim().toLowerCase();
+    const normalizedContent = content.trim().toLowerCase().replace(/\s+/g, ' ');
     const now = Date.now();
 
     // Cleanup expired
@@ -94,7 +99,12 @@ export class MessageService {
       const phoneMatch = !cleanPhone || !entry.phone || entry.phone === cleanPhone || entry.chatId.includes(cleanPhone);
       if (!phoneMatch) return false;
 
-      const entryNorm = entry.content.toLowerCase().trim();
+      // Custom window check jika ditentukan
+      if (customWindowMs && now - (entry.expiresAt - 60000) > customWindowMs) {
+        return false;
+      }
+
+      const entryNorm = entry.content.toLowerCase().trim().replace(/\s+/g, ' ');
       if (entryNorm === normalizedContent) return true;
 
       // Substring / prefix match (antisipasi WAHA memotong/trimming teks)

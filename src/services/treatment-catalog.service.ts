@@ -840,6 +840,65 @@ export class TreatmentCatalogService {
   }
 
   /**
+   * Filter layanan secara ketat berdasarkan target audiens (BABY, KIDS, MOMS) dan rentang usia.
+   * Mencegah rekomendasi silang (contoh: Prenatal Yoga untuk anak 3 tahun).
+   */
+  public filterServicesByAudience(
+    services: ClinicServiceItem[],
+    context: {
+      ageMonths?: number | null;
+      audienceIntent?: 'BABY' | 'KIDS' | 'MOMS' | 'GENERAL';
+      isMaternalKeyword?: boolean;
+    }
+  ): ClinicServiceItem[] {
+    const { ageMonths, audienceIntent, isMaternalKeyword } = context;
+
+    // 1. Context Kehamilan / Maternal / Ibu Hamil / Nifas
+    if (audienceIntent === 'MOMS' || isMaternalKeyword) {
+      return services.filter(
+        (s) => s.category === 'MOMS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && (s.id.includes('moms') || s.id.includes('laktasi') || s.id.includes('kelahiran')))
+      );
+    }
+
+    // 2. Context Usia Anak / Bayi (dalam bulan)
+    if (ageMonths != null && ageMonths > 0) {
+      return services.filter((s) => {
+        // Blokir mutlak kategori MOMS jika mencari untuk anak
+        if (s.category === 'MOMS') return false;
+        if (s.category === 'BUNDLE' && (s.id.includes('moms') || s.id.includes('laktasi') || s.id.includes('kelahiran'))) return false;
+
+        const minAge = s.ageTier?.minAgeMonths ?? 0;
+        const maxAge = s.ageTier?.maxAgeMonths ?? null;
+
+        if (ageMonths < minAge) return false;
+        if (maxAge !== null && ageMonths > maxAge) return false;
+
+        if (ageMonths >= 24) {
+          // Usia anak >= 2 tahun (24 bulan)
+          return s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi')) || (s.category === 'BABY' && (maxAge === null || maxAge >= ageMonths));
+        } else {
+          // Usia bayi < 2 tahun
+          return s.category === 'BABY' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi') && !s.id.includes('kelahiran'));
+        }
+      });
+    }
+
+    // 3. Audience KIDS
+    if (audienceIntent === 'KIDS') {
+      return services.filter((s) => s.category === 'KIDS' || s.category === 'BOTH' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi')));
+    }
+
+    // 4. Audience BABY
+    if (audienceIntent === 'BABY') {
+      return services.filter(
+        (s) => s.category === 'BABY' || s.category === 'BOTH' || s.category === 'ADD_ON' || (s.category === 'BUNDLE' && !s.id.includes('moms') && !s.id.includes('laktasi') && !s.id.includes('kelahiran'))
+      );
+    }
+
+    return services;
+  }
+
+  /**
    * Cari treatment yang relevan dengan pertanyaan customer dan kembalikan array item terstruktur.
    * Logika scoring sama persis dengan searchCatalog (exact-name priority, lalu IDF keyword top-2),
    * TAPI mengembalikan data mentah — biarkan pembentuk jawaban (LLM/fallback) yang menyusun kalimat.
@@ -850,11 +909,32 @@ export class TreatmentCatalogService {
     const q = rawQ
       .replace(/\b(?:maksud\s*(?:saya|ku|e|kami|sy)|bukan(?:\s+yang\s+itu)?[,\s]+(?:maksud(?:ku|saya)?\s+)?)\s*(?:yang\s+)?/i, '')
       .trim() || rawQ;
-    const services = this.getAllServices();
+    const allServices = this.getAllServices();
+
+    const ageMonths = parseAgeTextToMonths(userText);
+    const isMaternal = /\b(hamil|bumil|prenatal|nifas|laktasi|menyusui|trimester|oksitosin|induksi|postpartum|payudara|breast)\b/i.test(userText);
+    const isKidKeyword = /\b(anak|kids|balita|paud|tk|bocah)\b/i.test(userText);
+    const isBabyKeyword = /\b(bayi|baby|newborn|selapan|infant)\b/i.test(userText);
+
+    let audienceIntent: 'BABY' | 'KIDS' | 'MOMS' | 'GENERAL' = 'GENERAL';
+    if (isMaternal) {
+      audienceIntent = 'MOMS';
+    } else if (ageMonths !== null) {
+      audienceIntent = ageMonths >= 24 ? 'KIDS' : 'BABY';
+    } else if (isKidKeyword) {
+      audienceIntent = 'KIDS';
+    } else if (isBabyKeyword) {
+      audienceIntent = 'BABY';
+    }
+
+    // Filter awal berdasarkan audience / age tier untuk mencegah halusinasi silang
+    const services = this.filterServicesByAudience(allServices, {
+      ageMonths,
+      audienceIntent,
+      isMaternalKeyword: isMaternal,
+    });
 
     // 1. Exact Phrase Match & Bigram Phrase Match pada Nama Treatment
-    // Dipisahkan antara Exact Match (nama cocok utuh) dan Partial Match (2 kata awal cocok)
-    // agar nama spesifik (misal "Pijat Bayi Pulih Ceria") tidak kalah/tercampur dengan nama yang lebih umum ("Pijat Bayi Ceria").
     const exactMatches: ClinicServiceItem[] = [];
     const partialMatches: ClinicServiceItem[] = [];
 
@@ -884,7 +964,6 @@ export class TreatmentCatalogService {
     }
 
     // 2. Smart Age & Category Matching
-    const ageMonths = parseAgeTextToMonths(userText);
     const hasMedical = checkMedicalKeywords(userText).isMedical;
     if (ageMonths !== null && !hasMedical) {
       const isMassage = /\b(pijat|mijat|pijet|urut|massage)\b/i.test(q);

@@ -8,7 +8,7 @@
  */
 import { DEFAULT_TENANT_ID } from './tenant';
 
-export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION';
+export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION' | 'AI_VERIFIER';
 
 export interface AiTaskModelConfig {
   task: AiTaskType;
@@ -88,6 +88,17 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       maxTokens: 1024,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
+    },
+  ],
+  [
+    'AI_VERIFIER',
+    {
+      task: 'AI_VERIFIER',
+      provider: process.env.AI_PROVIDER_VERIFIER || 'MiniMax',
+      modelName: process.env.AI_MODEL_VERIFIER || 'MiniMax-M2.7-highspeed',
+      description: 'Digunakan untuk Quality Control (QC) otomatis memeriksa draf balasan terhadap Ground Truth usia, katalog, dan lokasi.',
+      maxTokens: 1024,
+      temperature: 0.1,
     },
   ],
 ]);
