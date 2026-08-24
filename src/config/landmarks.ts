@@ -251,6 +251,17 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lng: 112.779155,
   },
   {
+    name: 'Pakuwon City Mall (PCM / East Coast / Educity / Laguna)',
+    patterns: [
+      /\b(pakuwon\s*city(\s*mall)?|pcm|east\s*coast(\s*center|\s*mall|\s*residence)?|educity(\s*apartment)?|san\s*antonio\s*pakuwon|laguna\s*pakuwon|grand\s*island\s*pakuwon|villa\s*royal\s*pakuwon|taman\s*florence|florence\s*pakuwon)\b/i,
+    ],
+    kelurahan: 'Kalisari',
+    kecamatan: 'Mulyorejo',
+    kota: 'Kota Surabaya',
+    lat: -7.276389,
+    lng: 112.805556,
+  },
+  {
     name: 'Grand Dharmahusada Lagoon',
     patterns: [
       /\b(grand\s*dharmahusada|dharmahusada\s*lagoon|gdl)\b/i,
@@ -337,6 +348,50 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     kota: 'Kota Surabaya',
     lat: -7.308253,
     lng: 112.721183,
+  },
+  {
+    name: 'Grand City Mall Surabaya',
+    patterns: [
+      /\b(grand\s*city(\s*mall)?|gc\s*mall)\b/i,
+    ],
+    kelurahan: 'Ketabang',
+    kecamatan: 'Genteng',
+    kota: 'Kota Surabaya',
+    lat: -7.260844,
+    lng: 112.752317,
+  },
+  {
+    name: 'The Trans Icon Mall Surabaya',
+    patterns: [
+      /\b(trans\s*icon(\s*mall|\s*apartment)?|the\s*trans\s*icon)\b/i,
+    ],
+    kelurahan: 'Gayungan',
+    kecamatan: 'Gayungan',
+    kota: 'Kota Surabaya',
+    lat: -7.339257,
+    lng: 112.729114,
+  },
+  {
+    name: 'Plaza Marina Surabaya',
+    patterns: [
+      /\b(plaza\s*marina|marina\s*plaz?a)\b/i,
+    ],
+    kelurahan: 'Sidosermo',
+    kecamatan: 'Wonocolo',
+    kota: 'Kota Surabaya',
+    lat: -7.316086,
+    lng: 112.748057,
+  },
+  {
+    name: 'Lippo Plaza Sidoarjo',
+    patterns: [
+      /\b(lippo\s*plaza(\s*sidoarjo)?|lippo\s*sda)\b/i,
+    ],
+    kelurahan: 'Jati',
+    kecamatan: 'Sidoarjo',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.453303,
+    lng: 112.704253,
   },
   {
     name: 'Royal Plaza Surabaya',
