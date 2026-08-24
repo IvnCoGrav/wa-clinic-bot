@@ -138,4 +138,45 @@ describe('Follow-Up Admin Subroute Integration Tests', () => {
     expect(body.success).toBe(true);
     expect(rescheduleSpy).toHaveBeenCalledWith('fu-1', expect.any(Date), expect.any(String));
   });
+
+  it('6. GET /api/admin/follow-ups supports sortBy and sortOrder', async () => {
+    const listSpy = vi.spyOn(followUpService, 'listFollowUps').mockResolvedValueOnce({
+      data: [],
+      pagination: { total: 0, page: 1, pageSize: 20, totalPages: 0 },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/follow-ups?sortBy=customer_name&sortOrder=asc',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ sortBy: 'customer_name', sortOrder: 'asc' })
+    );
+  });
+
+  it('7. POST /api/admin/follow-ups/reschedule-overdue triggers batch rescheduling', async () => {
+    const rescheduleOverdueSpy = vi.spyOn(followUpService, 'rescheduleOverdueFollowUps').mockResolvedValueOnce({
+      rescheduledCount: 20,
+      daysCount: 2,
+      distribution: { '2026-08-25': 10, '2026-08-26': 10 },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/reschedule-overdue',
+      payload: { maxPerDay: 10 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.rescheduledCount).toBe(20);
+    expect(rescheduleOverdueSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ maxPerDay: 10 })
+    );
+  });
 });

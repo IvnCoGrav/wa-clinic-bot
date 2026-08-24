@@ -6,7 +6,7 @@ import { auditService } from '../../services/audit.service';
 export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/follow-ups
-   * Mengambil daftar antrian follow-up dengan pagination, filter status, filter type, dan pencarian customer.
+   * Mengambil daftar antrian follow-up dengan pagination, filter status, filter type, pencarian customer, dan sorting.
    */
   fastify.get(
     '/api/admin/follow-ups',
@@ -18,18 +18,22 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
           search?: string;
           page?: string;
           pageSize?: string;
+          sortBy?: string;
+          sortOrder?: 'asc' | 'desc';
         };
       }>,
       reply: FastifyReply
     ) => {
       try {
-        const { status, type, search, page, pageSize } = request.query || {};
+        const { status, type, search, page, pageSize, sortBy, sortOrder } = request.query || {};
         const result = await followUpService.listFollowUps(DEFAULT_TENANT_ID, {
           status,
           type,
           search,
           page: page ? parseInt(page, 10) : 1,
           pageSize: pageSize ? parseInt(pageSize, 10) : 20,
+          sortBy,
+          sortOrder,
         });
 
         return reply.status(200).send({
@@ -228,6 +232,50 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ success: true, data: updated });
       } catch (err: any) {
         return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/follow-ups/reschedule-overdue
+   * Memajukan seluruh follow-up PENDING yang sudah lewat ke tanggal sekarang / besok
+   * dengan kuota terjadwal maksimal X pesan per hari (default: 10).
+   */
+  fastify.post(
+    '/api/admin/follow-ups/reschedule-overdue',
+    async (
+      request: FastifyRequest<{
+        Body?: {
+          maxPerDay?: number;
+          startDate?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { maxPerDay, startDate } = request.body || {};
+        const parsedStartDate = startDate ? new Date(startDate) : undefined;
+        const result = await followUpService.rescheduleOverdueFollowUps(DEFAULT_TENANT_ID, {
+          maxPerDay: maxPerDay ? Number(maxPerDay) : 10,
+          startDate: parsedStartDate,
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'SYSTEM',
+          adminIdentity: (request as any).adminIdentity || 'Admin',
+          action: 'RESCHEDULE_OVERDUE_FOLLOWUPS',
+          payload: { maxPerDay, startDate, rescheduledCount: result.rescheduledCount },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Berhasil memajukan & menjadwalkan ${result.rescheduledCount} follow-up ke ${result.daysCount} hari ke depan (maks ${maxPerDay || 10} pesan/hari).`,
+          data: result,
+        });
+      } catch (err: any) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Gagal menjadwalkan ulang follow-up overdue', details: err.message });
       }
     }
   );
