@@ -21,7 +21,7 @@ export interface ModelPricing {
  * - DeepSeek Output Tokens: $0.28 / 1M
  */
 const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
-  // Qwen Models (Alibaba) — Primary Model
+  // Qwen Models (Alibaba) — Primary & Fallback Models
   'qwen3.7-flash-2026-07-15': {
     provider: 'Alibaba Qwen',
     promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR, // Cache Miss ($0.03 / 1M)
@@ -101,18 +101,18 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
     completionCostPer1kIdr: 0,
   },
 
-  // DeepSeek Models (Direct & Proxy Fallback)
+  // DeepSeek Models (Direct & Proxy Fallback with Peak/Off-Peak Support)
   'deepseek-chat': {
     provider: 'DeepSeek Direct',
     promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Cache Miss ($0.14 / 1M)
     promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR, // Cache Hit ($0.003 / 1M)
-    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR, // Output ($0.28 / 1M)
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR, // Off-Peak ($0.28 / 1M)
   },
   'deepseek-v4-flash': {
     provider: 'DeepSeek',
-    promptCostPer1kIdr: (0.22 / 1000) * USD_TO_IDR, // Off-peak ($0.22 / 1M)
-    promptCacheHitCostPer1kIdr: (0.007 / 1000) * USD_TO_IDR, // Off-peak ($0.007 / 1M)
-    completionCostPer1kIdr: (0.66 / 1000) * USD_TO_IDR, // Off-peak ($0.66 / 1M)
+    promptCostPer1kIdr: (0.22 / 1000) * USD_TO_IDR, // Off-Peak Cache Miss ($0.22 / 1M)
+    promptCacheHitCostPer1kIdr: (0.007 / 1000) * USD_TO_IDR, // Off-Peak Cache Hit ($0.007 / 1M)
+    completionCostPer1kIdr: (0.66 / 1000) * USD_TO_IDR, // Off-Peak Output ($0.66 / 1M)
   },
   'deepseek-reasoner': {
     provider: 'DeepSeek Direct',
@@ -124,9 +124,9 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
   // Mimo Models
   'mimo-v2.5': {
     provider: 'Mimo',
-    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR,
+    promptCostPer1kIdr: (0.14 / 1000) * USD_TO_IDR, // Cache Miss ($0.14 / 1M)
+    promptCacheHitCostPer1kIdr: (0.003 / 1000) * USD_TO_IDR, // Cache Hit ($0.003 / 1M)
+    completionCostPer1kIdr: (0.28 / 1000) * USD_TO_IDR, // Output ($0.28 / 1M)
   },
   'mimo-v2.5-pro': {
     provider: 'Mimo',
@@ -138,9 +138,9 @@ const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
   // MiniMax Models
   'minimax-m2.7-highspeed': {
     provider: 'MiniMax',
-    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR,
-    promptCacheHitCostPer1kIdr: (0.030 / 1000) * USD_TO_IDR,
-    completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR,
+    promptCostPer1kIdr: (0.03 / 1000) * USD_TO_IDR, // Cache Miss ($0.03 / 1M)
+    promptCacheHitCostPer1kIdr: (0.030 / 1000) * USD_TO_IDR, // Cache Hit ($0.030 / 1M)
+    completionCostPer1kIdr: (0.12 / 1000) * USD_TO_IDR, // Output ($0.12 / 1M)
   },
   'minimax-m3': {
     provider: 'MiniMax',
@@ -197,6 +197,43 @@ const DEFAULT_PRICING: ModelPricing = {
 };
 
 /**
+ * Memeriksa apakah waktu saat ini berada pada Peak Hours DeepSeek.
+ * Peak Hours: 08:30 - 20:30 UTC+8 (Beijing Time) = 00:30 - 12:30 UTC = 07:30 - 19:30 WIB.
+ */
+export function isDeepSeekPeakHour(date: Date = new Date()): boolean {
+  const utcMins = date.getUTCHours() * 60 + date.getUTCMinutes();
+  return utcMins >= 30 && utcMins < (12 * 60 + 30);
+}
+
+/**
+ * Resolusi tarif model dengan mempertimbangkan Peak Hours dinamis.
+ */
+export function getModelPricing(modelName: string, date: Date = new Date()): ModelPricing {
+  const normalizedName = (modelName || '').toLowerCase().trim();
+  const basePricing = MODEL_PRICING_MAP[normalizedName] || DEFAULT_PRICING;
+
+  // DeepSeek Peak Hour adjustment (Input $0.44/1M, Hit $0.014/1M, Output $1.32/1M saat peak hours)
+  if (normalizedName.startsWith('deepseek') && isDeepSeekPeakHour(date)) {
+    if (normalizedName === 'deepseek-v4-flash') {
+      return {
+        ...basePricing,
+        promptCostPer1kIdr: (0.44 / 1000) * USD_TO_IDR, // Peak Input: $0.44 / 1M
+        promptCacheHitCostPer1kIdr: (0.014 / 1000) * USD_TO_IDR, // Peak Cache Hit: $0.014 / 1M
+        completionCostPer1kIdr: (1.32 / 1000) * USD_TO_IDR, // Peak Output: $1.32 / 1M
+      };
+    }
+    if (normalizedName === 'deepseek-chat') {
+      return {
+        ...basePricing,
+        completionCostPer1kIdr: (1.32 / 1000) * USD_TO_IDR, // Peak Output: $1.32 / 1M
+      };
+    }
+  }
+
+  return basePricing;
+}
+
+/**
  * Menentukan provider aktual dari base URL yang benar-benar dipakai request
  * (SumoPod vs DeepSeek Direct vs OpenAI), bukan dari nama model — karena nama
  * model bisa sama tapi di-host oleh provider berbeda (mis. deepseek-v4-flash
@@ -222,10 +259,12 @@ export function calculateLlmCost(
   modelName: string,
   promptTokens: number,
   completionTokens: number,
-  cachedPromptTokens: number = 0
-): { provider: string; promptCostIdr: number; completionCostIdr: number; totalCostIdr: number } {
+  cachedPromptTokens: number = 0,
+  timestamp: Date = new Date()
+): { provider: string; promptCostIdr: number; completionCostIdr: number; totalCostIdr: number; isPeak?: boolean } {
   const normalizedName = (modelName || '').toLowerCase().trim();
-  const pricing = MODEL_PRICING_MAP[normalizedName] || DEFAULT_PRICING;
+  const isPeak = normalizedName.startsWith('deepseek') ? isDeepSeekPeakHour(timestamp) : false;
+  const pricing = getModelPricing(modelName, timestamp);
 
   const hitTokens = Math.min(promptTokens, Math.max(0, cachedPromptTokens));
   const missTokens = Math.max(0, promptTokens - hitTokens);
@@ -240,5 +279,6 @@ export function calculateLlmCost(
     promptCostIdr: Number(promptCostIdr.toFixed(4)),
     completionCostIdr: Number(completionCostIdr.toFixed(4)),
     totalCostIdr: Number(totalCostIdr.toFixed(4)),
+    isPeak,
   };
 }

@@ -726,7 +726,14 @@ export class AIRouterLLMClient {
   }
 
   private get model(): string {
-    return process.env.AI_MODEL_ROUTER || process.env.AI_MODEL_NLU || 'deepseek-v4-flash';
+    if (process.env.AI_MODEL_ROUTER) return process.env.AI_MODEL_ROUTER;
+    if (process.env.AI_MODEL_NLU) return process.env.AI_MODEL_NLU;
+    try {
+      const { AiModelConfigService } = require('../../config/ai-models.config');
+      return AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION')?.modelName || 'MiniMax-M2.7-highspeed';
+    } catch {
+      return 'MiniMax-M2.7-highspeed';
+    }
   }
 
   public async classify(input: AIRouterInput): Promise<AIRouterResponse> {

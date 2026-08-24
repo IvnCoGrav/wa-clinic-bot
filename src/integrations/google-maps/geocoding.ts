@@ -809,7 +809,15 @@ export class GeocodingService {
   private async llmResolveLocation(locationText: string): Promise<ResolvedLocation | null> {
     const apiKey = process.env.LLM_API_KEY || '';
     const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const model = process.env.AI_MODEL_NLU || 'gpt-4.1-nano';
+    let model = process.env.AI_MODEL_NLU || '';
+    if (!model) {
+      try {
+        const { AiModelConfigService } = await import('../../config/ai-models.config');
+        model = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION')?.modelName || 'MiniMax-M2.7-highspeed';
+      } catch {
+        model = 'MiniMax-M2.7-highspeed';
+      }
+    }
 
     if (!apiKey || apiKey.startsWith('mock')) {
       return null;

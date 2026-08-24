@@ -23,11 +23,14 @@ export class PhrasingService {
   public phrasingBreaker: CircuitBreaker<[PhrasingRequest], string>;
 
   private get model(): string {
+    if (process.env.AI_MODEL_PHRASING || process.env.AI_MODEL_HUMANIZER) {
+      return process.env.AI_MODEL_PHRASING || process.env.AI_MODEL_HUMANIZER || '';
+    }
     try {
       const chatConfig = AiModelConfigService.getModelConfig('CHAT_REPLY');
-      return process.env.AI_MODEL_PHRASING || process.env.AI_MODEL_HUMANIZER || 'qwen3.7-flash-2026-07-15';
+      return chatConfig?.modelName || 'qwen3.7-flash-2026-07-15';
     } catch {
-      return process.env.AI_MODEL_PHRASING || process.env.AI_MODEL_HUMANIZER || 'qwen3.7-flash-2026-07-15';
+      return 'qwen3.7-flash-2026-07-15';
     }
   }
 
