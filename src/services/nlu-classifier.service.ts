@@ -459,6 +459,25 @@ You MUST end your response with this complete JSON block (values may be null/omi
         isFallback: false,
       });
 
+      try {
+        const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'NLU_CLASSIFICATION',
+          customerPhone: auditCtx?.customerPhone,
+          customerInput: incomingText,
+          reasoning: reasoning || `Confidence score: ${result.confidence}`,
+          groundTruthUsed: {
+            extractedEntities: result.entities,
+            historyCount: history.length,
+          },
+          finalReply: `Intents: [${result.intents.join(', ')}] (Confidence: ${result.confidence})`,
+          confidenceScore: result.confidence,
+          modelUsed: callResult.model,
+          durationMs: Date.now() - startedAt,
+          status: 'SUCCESS',
+        });
+      } catch {}
+
       return result;
   }
 }

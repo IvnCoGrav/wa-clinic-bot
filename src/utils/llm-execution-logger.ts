@@ -1,9 +1,19 @@
 import crypto from 'crypto';
 
+export type LlmFlowType =
+  | 'CHATBOT_AUTO'
+  | 'COPILOT_DRAFT'
+  | 'CLINICAL_ESCALATION'
+  | 'REASONING_ONLY'
+  | 'NLU_CLASSIFICATION'
+  | 'AI_ROUTER'
+  | 'AI_VERIFIER'
+  | 'PHRASING';
+
 export interface LlmExecutionRecord {
   id: string;
   timestamp: string;
-  flowType: 'CHATBOT_AUTO' | 'COPILOT_DRAFT' | 'CLINICAL_ESCALATION' | 'REASONING_ONLY';
+  flowType: LlmFlowType;
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
