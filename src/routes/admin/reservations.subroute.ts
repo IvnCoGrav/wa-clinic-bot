@@ -321,6 +321,50 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/reservation/:id
+   * Ambil detail single reservation lengkap dengan customer, children, staff
+   */
+  fastify.get(
+    '/api/admin/reservation/:id',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const reservation = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          include: {
+            customer: {
+              include: {
+                children: true,
+                reservations: {
+                  where: { status: { notIn: ['cancelled', 'rejected'] } },
+                  select: { id: true, purchase_value: true },
+                },
+              },
+            },
+            assigned_staff: {
+              select: { id: true, name: true, phone: true },
+            },
+          },
+        });
+        if (!reservation) {
+          // memory fallback
+          const mem = memoryReservations.get(id);
+          if (!mem) return reply.status(404).send({ success: false, error: 'Reservation tidak ditemukan' });
+          return reply.status(200).send({ success: true, data: { ...mem, baby_details: extractBabyDetails(mem.raw_text) } });
+        }
+        return reply.status(200).send({
+          success: true,
+          data: { ...reservation, baby_details: extractBabyDetails(reservation.raw_text) },
+        });
+      } catch (err: any) {
+        const mem = memoryReservations.get(id);
+        if (mem) return reply.status(200).send({ success: true, data: { ...mem, baby_details: extractBabyDetails(mem.raw_text) } });
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * PATCH /api/admin/reservation/:id/confirm
    */
   fastify.patch(

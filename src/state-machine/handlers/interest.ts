@@ -610,6 +610,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         intent: 'schedule_check_handoff',
         conversationId: conversation.id,
         tenantId,
+        facts: { customer_message: userText },
         fallbackTemplate: TEMPLATES.scheduleCheckHandoff(),
       });
 
