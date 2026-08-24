@@ -159,14 +159,17 @@ export async function handleGreetingState(ctx: StateHandlerContext): Promise<Sta
   // --- NLU CONFLICT RESOLUTION: State = INITIAL (fresh customer), NLU detected sela price/faq ---
   const nlu = ctx.nluResult;
 
-  // BUG #3 FIX: Eskalasi jadwal spesifik harus trigger di SEMUA state, termasuk INITIAL.
-  // Cek intent dari NLU (termasuk fallback regex) DAN regex langsung untuk robust.
-  // Flag: ESCALATE_SCHEDULE_IN_INITIAL (default: true sesuai PRD Section 4.1 poin 8)
+  // BUG #3 FIX REFINED: Eskalasi jadwal spesifik murni (mis. "besok jam 10 ada slot?") trigger di INITIAL.
+  // Tapi jika customer MENYEBUT TREATMENT / HARGA / LOKASI (mis. "Mau pijat bayi besok bisa?"),
+  // biarkan bot menjawab rekomendasi treatment & meminta lokasi terlebih dahulu.
   const shouldEscalateSchedule = process.env.ESCALATE_SCHEDULE_IN_INITIAL !== 'false';
   const nluHasAskSchedule = nlu?.intents?.includes('ask_schedule') || false;
   const regexHasAskSchedule = /(\bjadwal\b|\bslot\b|\bbuka\b|\bhari\b|\btanggal\b|\bjam\b)/i.test(lower) &&
                               /\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu|besok|lusa|jam\s*\d|pukul\s*\d)\b/i.test(lower);
-  if ((nluHasAskSchedule || regexHasAskSchedule) && shouldEscalateSchedule) {
+  const hasTreatmentMention = /\b(pijat|massage|spa|treatment|terapi|paket|newborn|baby|bayi|anak|mom|moms|hamil|laktasi|moksa|nebulizer|cukur|gundul|tindik)\b/i.test(lower);
+  const isPureScheduleInquiry = (nluHasAskSchedule || regexHasAskSchedule) && !hasTreatmentMention && !hasLocationKeyword && !hasValidGeocode;
+
+  if (isPureScheduleInquiry && shouldEscalateSchedule) {
     const { conversationService } = await import('../../services/conversation.service');
     await conversationService.escalateToHumanHandling(
       conversation,

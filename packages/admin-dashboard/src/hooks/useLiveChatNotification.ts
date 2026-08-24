@@ -70,24 +70,26 @@ export function useLiveChatNotification(currentRole: string) {
     }
   }, [canAccessLiveChat, currentRole]);
 
-  // Fetch initial unread count on mount if authorized
+  // Fetch initial unread count on mount if authorized (ultra lightweight endpoint)
   useEffect(() => {
     if (!canAccessLiveChat) return;
 
     let isMounted = true;
-    apiRequest('/api/admin/live-chat/conversations?limit=100&mode=all')
+    apiRequest('/api/admin/live-chat/unread-count')
       .then((res) => {
         if (!isMounted) return;
-        const data = Array.isArray(res) ? res : (res?.data || []);
-        const totalUnread = data.reduce((acc: number, c: any) => acc + (c.unreadCount || 0), 0);
-        setUnreadLiveChatCount(totalUnread);
+        if (res?.success && typeof res.count === 'number') {
+          setUnreadLiveChatCount(res.count);
+        } else if (typeof res === 'number') {
+          setUnreadLiveChatCount(res);
+        }
       })
       .catch(() => {});
 
     return () => {
       isMounted = false;
     };
-  }, [canAccessLiveChat, location.pathname]);
+  }, [canAccessLiveChat]);
 
   // Initialize Web Audio Auto-Unlock listener
   useEffect(() => {

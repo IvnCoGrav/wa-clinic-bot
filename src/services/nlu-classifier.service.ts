@@ -111,27 +111,44 @@ export class NluClassifierService {
     const entities: NluEntities = {};
 
     // 1. Greeting
-    if (/^(halo|hi|pagi|siang|sore|malam|p|assalamu['`]?alaikum|haloo+)\b/i.test(text)) {
+    if (/^(halo|hi|pagi|siang|sore|malam|p|assalamu['`]?alaikum|haloo+|hai)\b/i.test(text)) {
       intents.push('greeting');
     }
 
     // 2. Affirmation
-    if (/^(ya|iya|betul|bisa|ok|okay|siap|baik|setuju|bisa bunda|iyaa+)\b/i.test(text)) {
+    if (/^(ya|iya|betul|bisa|ok|okay|siap|baik|setuju|bisa bunda|iyaa+|yup|yes|sip|boleh)\b/i.test(text)) {
       intents.push('affirmation');
     }
 
-    // 3. Negation
-    if (/^(tidak|enggak|nggak|bukan|batal|ga|gak|ndak)\b/i.test(text)) {
+    // 3. Negation (Context-Aware Guard)
+    // ONLY true negation (refusal/cancellation/declining/correction).
+    // NOT baby behavior ("ga bisa diem") or preference ("bukan yang pulih ceria").
+    const isSituationalDescription = /\b(ga|gak|nggak|tidak|enggak)\s+(bisa\s+diem|bisa\s+diam|mau\s+tidur|panas|demam|ada\s+keluhan|rewel|bisa\s+anteng)\b/i.test(text);
+    const isPreferenceCorrection = /\b(bukan\s+yang|tidak\s+usah\s+yang|gak\s+usah\s+yang|maksud(?:nya|ku|saya)?\s+bukan)\b/i.test(text);
+    const startsWithNegation = /^(tidak|enggak|nggak|bukan|batal|ga|gak|ndak)\b/i.test(text);
+    const hasExplicitCancelOrCorrection = /\b(batal|cancel|ga\s+jadi|gak\s+jadi|nggak\s+jadi|tidak\s+jadi|enggak\s+jadi|tidak\s+mau|enggak\s+mau|ga\s+mau|gak\s+mau|kemahalan|skip|salah|salah\s+alamat)\b/i.test(text);
+
+    if ((startsWithNegation || hasExplicitCancelOrCorrection) && !isSituationalDescription && !isPreferenceCorrection) {
       intents.push('negation');
     }
 
-    // 3b. Medical Query — keluhan medis / gejala / minta obat (fallback deterministik).
-    // Gate konservatif (mirip intent.ts): keyword gejala ADA && ada sinyal pertanyaan/tindakan.
-    // Keyword bersumber dari single source config/medical-keywords.ts (checkMedicalKeywords).
+    // 3b. Medical Query vs Treatment Inquiry
+    // Keluhan medis / gejala ringan yang menanyakan ketersediaan treatment (misal: "batuk pilek ada treatment?")
+    // adalah FAQ / treatment inquiry (Pulih Ceria / Moksa), BUKAN emergency medical_query.
     const medical = checkMedicalKeywords(text);
-    const hasMedicalSignal = text.includes('obat') || text.includes('sakit') || text.includes('kasih') || text.includes('bisa') || text.includes('?') || text.includes('normal') || text.includes('wajar') || text.includes('bahaya');
-    if (medical.isMedical && hasMedicalSignal) {
-      intents.push('medical_query');
+    const hasNanahOrInfection = /\b(nanah|bernanah|infeksi|luka\s+terbuka|kejang|step)\b/i.test(text);
+    const isAskingMedicineOrEmergency = text.includes('obat') || text.includes('resep') || text.includes('dikasih apa') || text.includes('sembuh pakai apa') || hasNanahOrInfection || medical.severity === 'HIGH';
+    const isSeekingTreatment = /\b(treatment|perawatan|pijat|massage|spa|terapi|paket|ada\s+treatment|bisa\s+di\s*pijat|boleh\s+di\s*pijat|cocok|layanan)\b/i.test(text);
+    const hasMedicalSignal = text.includes('sakit') || text.includes('kasih') || text.includes('bisa') || text.includes('?') || text.includes('normal') || text.includes('wajar') || text.includes('bahaya') || hasNanahOrInfection;
+
+    if (medical.isMedical || isAskingMedicineOrEmergency || hasNanahOrInfection) {
+      if (isSeekingTreatment && !isAskingMedicineOrEmergency) {
+        if (!intents.includes('faq_question')) {
+          intents.push('faq_question');
+        }
+      } else if (isAskingMedicineOrEmergency || hasMedicalSignal) {
+        intents.push('medical_query');
+      }
     }
 
     // 4. Provide Location
@@ -142,33 +159,44 @@ export class NluClassifierService {
     }
 
     // 5. Ask Price
-    // HARDENING anti-salah-rute: "berapa" tanpa konteks harga BUKAN pertanyaan harga —
-    // "usia berapa boleh pijat?"/"minimal berapa bulan?" TIDAK menanyakan harga, tapi
-    // "pijat bayi berapa ya?" (treatment + berapa) TETAP harga. Aturan:
-    // (a) kata harga eksplisit → harga; (b) "berapa" murni KECUALI ada kata usia/
-    // umur/minimal/berat di kalimat (menandakan pertanyaan kelayakan usia, bukan harga);
-    // (c) nominal rb/ribu bebas → harga; (d) nominal bare 'k' HANYA jika ada kata harga.
-    const hasPriceWord = /\b(harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|pricelists?|promos?|rp\d)\b/i.test(text);
+    // HARDENING anti-salah-rute:
+    // (a) "berapa lama", "berapa kali", "berapa jam", "berapa orang" BUKAN tanya harga melainkan durasi/frekuensi FAQ.
+    // (b) "usia berapa", "minimal berapa" BUKAN tanya harga melainkan kelayakan usia FAQ.
+    // (c) Pertanyaan inklusivitas ongkir ("brrti blm termasuk ongkir ya") BUKAN tanya harga melainkan FAQ kebijakan.
+    const hasPriceWord = /\b(harga(nya)?|tarif(nya)?|ongkir(nya)?|biaya(nya)?|ongkos(nya)?|pricelists?|promos?|rp\s*\d)\b/i.test(text);
     const hasBerapa = /\b(berapa|brp)\b/i.test(text);
     const hasAgeContext = /\b(usia|umur|umurnya|minimal|minimum|minimalnya|min\b|berat|tinggi)\b/i.test(text);
+    const hasDurationOrFrequency = /\b(lama|durasi|menit|jam|kali|sesi|frekuensi|jarak|km|orang|anak)\b/i.test(text);
+    const isOngkirInclusionPolicy = /\b(termasuk|include|sudah\s+sama|udah\s+sama|sama\s+ongkir|ongkir\s+terpisah|ongkir\s+lagi)\b/i.test(text);
+
     const isAskPriceText =
-      hasPriceWord ||
-      (hasBerapa && !hasAgeContext) ||
-      /\b\d+\s*(rb|ribu)\b/i.test(text) ||
-      (/\b\d+\s*k\b/i.test(text) && hasPriceWord);
+      !isOngkirInclusionPolicy &&
+      ((hasPriceWord && !/(\bberapa\s+(lama|kali|jam|menit|jarak|orang)\b)/i.test(text)) ||
+       (hasBerapa && !hasAgeContext && !hasDurationOrFrequency) ||
+       /\b\d+\s*(rb|ribu)\b/i.test(text) ||
+       (/\b\d+\s*k\b/i.test(text) && hasPriceWord));
+
     if (isAskPriceText) {
       intents.push('ask_price');
     }
 
     // 6. Ask Schedule
-    if (/(\bjam\b|\bbuka\b|\bjadwal\b|\bslot\b|\bhari\b|\btanggal\b|\boperasional\b)/i.test(text)) {
+    // Memerlukan indikator penjadwalan/hari spesifik agar "sehari 2 kali" atau "durasi 1 jam" tidak salah rute.
+    const isScheduleIntent =
+      /\b(kapan|jadwal|slot|operasional|buka\s+jam|tutup\s+jam|jam\s+buka|hari\s+apa|ada\s+jadwal|bisa\s+(hari|besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu|pagi|siang|sore|malam))\b/i.test(text) ||
+      (/\b(besok|lusa|senin|selasa|rabu|kamis|jumat|sabtu|minggu)\b/i.test(text) && /\b(bisa|ada|booking|slot|jam|\?)\b/i.test(text)) ||
+      (/\b(jam|pukul)\s*\d+/i.test(text) && /\b(bisa|ada|booking|slot|\?)\b/i.test(text));
+
+    if (isScheduleIntent) {
       intents.push('ask_schedule');
     }
 
-    // 7. FAQ Question (Inquiry / Questions / Clinic Location)
-    const isQuestion = /(\bapakah\b|\bsiapa\b|\bapa\b|\bkenapa\b|\bbagaimana\b|\bmanfaat\b|\baman\b|\busia\b|\bboleh\b|\bbayar\b|\bbidan\b|\bperawat\b|\bdarimana\b|\bdimana\b|\bdi\s+mana\b|\bdari\s+mana\b|\bmana\b|\?)/i.test(text) ||
+    // 7. FAQ Question (Inquiry / Questions / Clinic Location / Duration / Policy)
+    const isQuestion = /(\bapakah\b|\bsiapa\b|\bapa\b|\bkenapa\b|\bbagaimana\b|\bgimana\b|\bmanfaat\b|\baman\b|\busia\b|\bboleh\b|\bbayar\b|\bbidan\b|\bperawat\b|\bdarimana\b|\bdimana\b|\bdi\s+mana\b|\bdari\s+mana\b|\bmana\b|\?)/i.test(text) ||
+      hasDurationOrFrequency ||
+      isOngkirInclusionPolicy ||
       /\b(kakak|kakaknya|mbak|mbaknya|bidan|bubid|klinik)\s+(dari\s*mana|darimana|dimana|di\s+mana)\b/i.test(text);
-    if (isQuestion) {
+    if (isQuestion && !intents.includes('faq_question')) {
       intents.push('faq_question');
     }
 
@@ -184,13 +212,18 @@ export class NluClassifierService {
       }
     }
 
-    // 8. Express Interest / Reservation (Must not be a pure question like "apakah...")
-    if (/(\bbooking\b|\bdaftar\b|\bpesan\b|\bmau\b|\bmohon\b|\breservasi\b)/i.test(text) || (!isQuestion && /\b(treatment|paket)\b/i.test(text))) {
-      intents.push('express_interest');
+    // 8. Express Interest / Reservation (Must not be pure inquiry like "mau tanya" or "pesan wa")
+    const isMauTanya = /\bmau\s+(tanya|nanya|konsultasi|tau|tahu|cek)\b/i.test(text);
+    const isPesanWa = /\bpesan\s+(ini|wa|terakhir|sebelumnya)\b/i.test(text);
+    if (!isMauTanya && !isPesanWa) {
+      if (/\b(booking|daftar|reservasi|pesan\s+slot|mau\s+ambil|mau\s+coba|mau\s+treatment|mau\s+pijat|mau\s+pesan|ambil\s+paket)\b/i.test(text) || 
+          (!isQuestion && /\b(treatment|paket)\b/i.test(text) && /\bmau\b/i.test(text))) {
+        intents.push('express_interest');
+      }
     }
 
-    // 9. Complaint
-    if (/(\blama\b|\bjelek\b|\bkapok\b|\bkomplain\b|\bsalah\b|\bcepat\b|\bbad\b)/i.test(text)) {
+    // 9. Complaint (Must express real dissatisfaction / frustration)
+    if (/\b(kapok|jelek|buruk|kecewa|mengecewakan|parah|komplain|pelayanan\s+buruk|lama\s+banget\s+balas|lambat\s+banget|admin(nya)?\s+mana|kok\s+([a-z0-9]+\s+)?belum\s+(sampai|datang)|nyasar|miring|tidak\s+profesional|gak\s+profesional)\b/i.test(text)) {
       intents.push('complaint');
     }
 
@@ -258,14 +291,14 @@ Your task is to analyze customer messages and return ONLY a JSON object represen
 ALLOWED INTENTS (A single message MAY contain multiple intents!):
 - "greeting": Friendly greetings (e.g., "Halo", "Selamat pagi", "P", "Assalamualaikum").
 - "provide_location": Customer shares their location, address, area, or landmark (e.g., "Saya di Rungkut", "Dekat Indomaret Sidoklumpuk"). CRITICAL: If they ask a price and mention a location together (e.g., "ke rungkut kidul berapa ya"), you MUST include BOTH "provide_location" and "ask_price", and extract "location_text".
-- "ask_price": Inquiring about service prices, packages, promo rates, or delivery fees (e.g., "Pijat bayi berapa ya?", "Ongkir ke waru berapa?").
-- "ask_schedule": Inquiring about clinic operating hours, available slots, or appointment dates.
-- "express_interest": Customer wants to book, make a reservation, or try a treatment.
-- "faq_question": General clinical/service question (e.g., "Boleh untuk usia 2 bulan?", "Manfaat flu bath apa?").
+- "ask_price": Inquiring about service prices, packages, promo rates, or delivery fees (e.g., "Pijat bayi berapa ya?", "Ongkir ke waru berapa?"). NOTE: Questions about session duration/frequency ("Berapa lama pijatnya?", "Berapa kali seminggu?") or age eligibility ("Usia berapa boleh?") are "faq_question", NOT "ask_price".
+- "ask_schedule": Inquiring about clinic operating hours, available slots, booking appointment dates/times (e.g. "Bisa besok jam 10?", "Buka hari apa saja?"). NOTE: Questions about session duration ("Berapa jam durasinya?") are "faq_question", NOT "ask_schedule".
+- "express_interest": Customer wants to book, make a reservation, or try a treatment (e.g. "Mau booking", "Mau coba paket newborn", "Daftar sekarang"). NOTE: "Mau tanya" is an inquiry ("faq_question"), NOT "express_interest".
+- "faq_question": General clinical/service question, duration, frequency, payment methods, delivery fee inclusion policies, therapist credentials, OR asking about therapy/treatments for common mild baby symptoms like cough/flu/colic/bloating (e.g., "Boleh untuk usia 2 bulan?", "Manfaat flu bath apa?", "Anak saya batuk pilek ada treatment?", "Brrti blm termasuk ongkir ya?").
 - "affirmation": Affirmation or agreement ("Iya", "Betul", "Bisa", "Oke", "Boleh").
-- "negation": Refusal or cancellation ("Tidak", "Bukan itu", "Batal").
-- "complaint": Customer expressing frustration, slow response, or service complaint.
-- "medical_query": Customer reporting a health/medical concern, describing a symptom, or asking for medicine/dosage/medical advice (e.g., "anak saya demam dikasih apa ya", "tali pusar kok bau", "jahitan melahirkan perih", "minta rekomendasi obat batuk"). Escalate, do NOT answer with medical advice.
+- "negation": ONLY for refusal, rejection, cancellation, or declining an offer ("Tidak mau", "Ga jadi", "Batal", "Kemahalan", "Enggak dulu"). DO NOT mark as negation if customer is describing baby behavior ("anak saya ga bisa diem") or clarifying a preference ("bukan yang pulih ceria, mau yang biasa").
+- "complaint": Customer expressing genuine frustration, slow response, or service complaint (e.g. "pelayanan buruk", "kapok", "kecewa", "admin lama balasnya").
+- "medical_query": Customer reporting severe emergencies, asking for medicine prescriptions/dosage, or asking medical diagnostic questions (e.g., "anak saya demam 40 derajat dikasih obat apa", "tali pusar keluar nanah berbau", "jahitan melahirkan berdarah").
 - "off_topic": Unrelated or gibberish chatter.
 
 EXTRACTED ENTITIES (If mentioned):
