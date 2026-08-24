@@ -67,12 +67,12 @@ describe('Treatment Catalog - Bundle & Add-on Business Logic Unit Tests', () => 
     });
 
     it('should reject a bundle where bundle price is NOT cheaper than individual normal prices sum', () => {
-      // baby-cukur (25.000) + baby-massage-pulih-ceria (90.000) = 115.000
+      // baby-cukur (30.000) + baby-massage-pulih-ceria (90.000) = 120.000
       const resultSamePrice = treatmentCatalogService.validateBundle({
         id: 'bundle-expensive',
         name: 'Paket Mahal',
         bundleItemIds: ['baby-cukur', 'baby-massage-pulih-ceria'],
-        promoPrice: 115000, // equal to sum
+        promoPrice: 120000, // equal to sum
       });
 
       expect(resultSamePrice.valid).toBe(false);
@@ -82,7 +82,7 @@ describe('Treatment Catalog - Bundle & Add-on Business Logic Unit Tests', () => 
         id: 'bundle-more-expensive',
         name: 'Paket Lebih Mahal',
         bundleItemIds: ['baby-cukur', 'baby-massage-pulih-ceria'],
-        promoPrice: 120000, // > sum
+        promoPrice: 125000, // > sum
       });
 
       expect(resultMoreExpensive.valid).toBe(false);
@@ -90,16 +90,16 @@ describe('Treatment Catalog - Bundle & Add-on Business Logic Unit Tests', () => 
     });
 
     it('should accept a valid bundle where bundle price is cheaper than components total normal price', () => {
-      // baby-cukur (25.000) + baby-massage-pulih-ceria (90.000) = 115.000
+      // baby-cukur (30.000) + baby-massage-pulih-ceria (90.000) = 120.000
       const result = treatmentCatalogService.validateBundle({
         id: 'bundle-valid-hemat',
         name: 'Paket Cukur Sehat Hemat',
         bundleItemIds: ['baby-cukur', 'baby-massage-pulih-ceria'],
-        promoPrice: 85000, // cheaper by 30.000
+        promoPrice: 85000, // cheaper by 35.000
       });
 
       expect(result.valid).toBe(true);
-      expect(result.calculatedOriginalPrice).toBe(115000);
+      expect(result.calculatedOriginalPrice).toBe(120000);
       expect(result.calculatedDuration).toBe(55); // 15 + 40
       expect(result.componentNames?.length).toBe(2);
     });

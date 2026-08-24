@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Enhanced & Aligned — Clinic Services Catalog & Live Database Sync with Pricelist Flyer (2026-08-23)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Sinkronisasi Total Flyer Pricelist & Database**: Menyelaraskan seluruh harga, durasi, tier usia, nama treatment, dan paket bundling pada database live PostgreSQL (`clinic_services`) agar 100% sama persis dengan Gambar Flyer Pricelist resmi klinik (`Kala Moms and Baby Spa - Homecare Service`).
+  2. **Penyesuaian Harga & Pemecahan Tier Usia Anak**:
+     - Memecah kategori `Pijat Kids Ceria` menjadi 3 tier usia spesifik: 2-4 tahun (Rp 70.000), 4-6 tahun (Rp 80.000), dan 6-8 tahun (Rp 90.000).
+     - Menyelaraskan harga promo `Pijat Lahap Juara` (Rp 75.000), `Cukur Rambut Bayi` (Rp 25.000), `Breast Massage` (Rp 50.000), dan `Prenatal Massage` (Rp 100.000).
+  3. **Penambahan Layanan Baru Ibu Hamil & Paket Pra-Kelahiran**:
+     - Menambahkan layanan tunggal: `Perineum Massage` (Rp 45.000), `Induksi Massage` (Rp 50.000), `Induksi Massage Fullbody` (Rp 105.000), dan `Prenatal Yoga` (Rp 50.000).
+     - Menambahkan 4 paket bundling pra-kelahiran: *Paket Pra Kelahiran Lengkap* (Rp 135.000), *Paket Yoga + Breast* (Rp 80.000), *Paket Perineum + Yoga* (Rp 80.000), dan *Paket Perineum + Breast* (Rp 80.000).
+- **Implementasi & Eksekusi Database Live:**
+  - **Katalog Default & JSON (`services_custom.json` & `src/services/treatment-catalog.service.ts`)**: Pembaruan menyeluruh pada `DEFAULT_CLINIC_SERVICES` dan filter pencarian natural language catalog.
+  - **Eksekusi Live Database (`wa_clinic_db` PostgreSQL)**: Melakukan update 14 baris data eksisting dan insert 12 baris layanan baru dengan validasi integritas data `ON CONFLICT (tenant_id, service_id)`.
+- **Verifikasi & Pengujian:**
+  - Unit tests di `tests/unit/treatment-catalog-bundle-addon.test.ts`, `tests/unit/treatment-catalog-search.test.ts`, `tests/unit/price-answer.test.ts`, dan `tests/integration/price-anaphora-20customers.test.ts` 100% lulus.
+  - TypeScript build (`npm run build`) 100% lulus (0 error).
+  - Query verifikasi langsung ke database live server memastikan 29 layanan terdaftar aktif dan sinkron.
+
 ### Added & Enhanced — Weekly Google Drive Auto-Backup, Download & Database Restore (2026-08-23)
 
 - **Latar Belakang & Kebutuhan:**

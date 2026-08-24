@@ -223,7 +223,29 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              // 1. Jika percakapan sedang human handling, reset timer 6 jam
+              // 1. Cek duplikasi pesan outbound (apakah ini pesan yang baru saja dikirim oleh bot/sistem)
+              const outboundContent = isOutboundImage
+                ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[IMAGE]')
+                : adminReplyText;
+
+              const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
+              const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
+                conversation.id,
+                outboundContent,
+                payload.id,
+                DEFAULT_TENANT_ID,
+                60,
+                isOutboundImage
+              );
+
+              if (isDuplicateOutbound || isRecentDuplicate) {
+                console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded (Bot echo / duplicate). Skipping manual reply escalation.`);
+                return reply.status(200).send({ status: 'OUTBOUND_DUPLICATE_SKIPPED' });
+              }
+
+              // JIKA BUKAN DUPLIKAT: Pesan ini benar-benar dikirim secara manual oleh Admin/CS dari HP WhatsApp asli!
+
+              // 2. Jika percakapan sedang human handling, reset timer 6 jam
               if (conversation.is_human_handling) {
                 conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
                   .catch((err) => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
@@ -243,14 +265,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 } catch (_) {}
               }
 
-              // 2. Self Learning Capture (hanya jika ada teks)
+              // 3. Self Learning Capture (hanya jika ada teks)
               if (adminReplyText.trim()) {
                 const { selfLearningService } = await import('../services/self-learning.service');
                 selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
                   .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
               }
 
-              // 3. MedicalFaqStaging Capture Hook
+              // 4. MedicalFaqStaging Capture Hook
               if (conversation.escalation_reason === 'medical_concern' && adminReplyText.trim()) {
                 try {
                   const lastInbound = await messageService.getLastInboundMessage(conversation.id, DEFAULT_TENANT_ID);
@@ -270,47 +292,29 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              // 4. Log outbound manual reply ke tabel Messages & broadcast SSE ke Live Chat Panel
-              const outboundContent = isOutboundImage
-                ? (imageCaption ? `[IMAGE: ${imageCaption}]` : '[IMAGE]')
-                : adminReplyText;
-
-              const isDuplicateOutbound = await messageService.isDuplicateMessage(payload.id, DEFAULT_TENANT_ID);
-              const isRecentDuplicate = await messageService.checkAndAttachOutboundDuplicate(
-                conversation.id,
-                outboundContent,
-                payload.id,
-                DEFAULT_TENANT_ID,
-                60,
-                isOutboundImage
-              );
-
-              if (!isDuplicateOutbound && !isRecentDuplicate) {
-                let msgDate: Date | undefined = undefined;
-                if (payload.timestamp) {
-                  const rawTs = Number(payload.timestamp);
-                  if (!isNaN(rawTs) && rawTs > 0) {
-                    const ms = rawTs > 10000000000 ? rawTs : rawTs * 1000;
-                    msgDate = new Date(ms);
-                  }
+              // 5. Log outbound manual reply ke tabel Messages & broadcast SSE ke Live Chat Panel
+              let msgDate: Date | undefined = undefined;
+              if (payload.timestamp) {
+                const rawTs = Number(payload.timestamp);
+                if (!isNaN(rawTs) && rawTs > 0) {
+                  const ms = rawTs > 10000000000 ? rawTs : rawTs * 1000;
+                  msgDate = new Date(ms);
                 }
-
-                await messageService.logMessage({
-                  tenantId: DEFAULT_TENANT_ID,
-                  conversationId: conversation.id,
-                  direction: 'OUTBOUND',
-                  content: outboundContent,
-                  waMessageId: payload.id,
-                  senderType: 'ADMIN',
-                  senderName: 'Admin (WhatsApp HP)',
-                  createdAt: msgDate,
-                  payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
-                }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
-
-                console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp HP ke ${phone} (${isOutboundImage ? 'GAMBAR' : 'TEKS'}) tercatat & disiarkan ke Live Chat.`);
-              } else {
-                console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded.`);
               }
+
+              await messageService.logMessage({
+                tenantId: DEFAULT_TENANT_ID,
+                conversationId: conversation.id,
+                direction: 'OUTBOUND',
+                content: outboundContent,
+                waMessageId: payload.id,
+                senderType: 'ADMIN',
+                senderName: 'Admin (WhatsApp HP)',
+                createdAt: msgDate,
+                payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
+              }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
+
+              console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp HP ke ${phone} (${isOutboundImage ? 'GAMBAR' : 'TEKS'}) tercatat & disiarkan ke Live Chat.`);
 
               // 5. Background Auto-Capture Reservasi dari Konfirmasi Admin
               try {
