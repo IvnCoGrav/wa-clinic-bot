@@ -517,10 +517,11 @@ export const CustomerDatabase: React.FC = () => {
                     )}
 
                     {customer.adClick?.utmCampaign && (
-                    <p className="text-[11px] text-[#667781] truncate">
-                      Campaign: <span className="text-[#111b21] font-medium">{customer.adClick.utmCampaign}</span>
-                    </p>
-                  )}
+                      <p className="text-[11px] text-[#667781] truncate">
+                        Campaign: <span className="text-[#111b21] font-medium">{customer.adClick.utmCampaign}</span>
+                      </p>
+                    )}
+                  </div>
 
                   {/* Action buttons (Mobile) */}
                   <div className="grid grid-cols-3 gap-1.5 pt-1">
@@ -1275,13 +1276,14 @@ className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-
             )}
             <button
               onClick={detailEditMode ? () => setDetailEditMode(false) : () => setActiveDetailCustomer(null)}
-              className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db} text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
+              className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
             >
               {detailEditMode ? 'Batal' : 'Tutup'}
             </button>
           </div>
         </div>
       </div>
-    </div>
-  );
+    )}
+  </div>
+);
 };
