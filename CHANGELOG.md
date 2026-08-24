@@ -4,6 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Enhanced & Optimized — Akses Cepat Live Chat & Eliminasi Browser Connection Starvation (2026-08-24)
+
+- **Latar Belakang & Investigasi Masalah:**
+  1. **Keluhan Akses Lambat (~1 Menit)**: Pengguna mengalami waktu pemuatan halaman Live Chat yang sangat lambat (hingga 1 menit) saat mengakses dashboard di browser.
+  2. **Hasil Validasi Database**: Analisis `EXPLAIN ANALYZE` membuktikan bahwa query PostgreSQL (`conversations`, `customers`, `messages`) sangat cepat (**0.9 ms – 5.8 ms**).
+  3. **Akar Masalah Nyata**:
+     - **Browser Connection Starvation (Batas 6 Koneksi HTTP/1.1)**: `Layout.tsx` (via notifikasi) dan `LiveChatMonitor.tsx` membuka 2 koneksi `EventSource` (SSE) terpisah. Saat membuka beberapa tab, kuota maksimal 6 koneksi simultan browser terkunci, menyebabkan request baru tertahan (*stalled / pending*) di browser hingga 30–60 detik.
+     - **Over-Fetching Badge Unread**: Header dashboard memanggil `GET /api/admin/live-chat/conversations?limit=100` pada setiap perpindahan halaman hanya untuk menjumlahkan badge angka belum dibaca, menarik megabyte data percakapan & memicu background sync WAHA.
+     - **Over-Fetching Pesan di Backend**: `getConversationList` menarik seluruh riwayat pesan dari 50 percakapan ke RAM Node.js tanpa limit per thread di level SQL.
+- **Implementasi Perbaikan:**
+  1. **Shared Singleton EventSource (`packages/admin-dashboard/src/services/liveChatSse.ts`)**:
+     - Mengubah arsitektur SSE menjadi single shared connection per tab dengan registry pub/sub subscriber, mencegah pembukaan stream ganda.
+  2. **Dedicated Fast Unread Count Endpoint (`GET /api/admin/live-chat/unread-count`)**:
+     - Menambahkan endpoint agregasi cepat di backend (`src/routes/admin/livechat.subroute.ts` & `src/services/message.service.ts`) yang merespons dalam **~1-2 ms** (< 100 bytes).
+     - Memperbarui `useLiveChatNotification.ts` untuk menggunakan endpoint ini dan menghapus re-fetch berlebihan pada setiap perubahan `location.pathname`.
+  3. **Optimasi Query Message Preview di Database (`src/services/live-chat.service.ts`)**:
+     - Menggunakan query CTE window function `ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at DESC)` yang membatasi maksimal 3 pesan per thread langsung di level SQL Postgres.
+     - Menerapkan pembatasan dan jeda bertahap (throttling) pada sinkronisasi foto profil background WAHA.
+- **Verifikasi & Pengujian:**
+  - Unit tests di `tests/unit/live-chat.service.test.ts` (16/16 tests PASS).
+  - TypeScript build backend (`npm run build`) & Vite frontend build (`admin-dashboard: npm run build`) 100% lolos (0 error).
+
 ### Added & Enhanced — Fitur Sorting Antrian Follow-Up & Rescheduling Overdue Otomatis (Maks 10 Blast/Hari) (2026-08-24)
 
 - **Latar Belakang & Kebutuhan:**
