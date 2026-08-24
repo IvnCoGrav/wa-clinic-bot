@@ -603,6 +603,75 @@ export class CustomerService {
   }
 
   /**
+   * Update field dasar customer (nama, alamat, koordinat, landmark).
+   * Digunakan oleh admin dashboard untuk edit profil customer.
+   * Field yang didukung: name, kelurahan, kecamatan, kota, zipcode, landmark/address_notes, lat, lng
+   */
+  public async updateCustomer(
+    customerId: string,
+    data: {
+      name?: string;
+      kelurahan?: string | null;
+      kecamatan?: string | null;
+      kota?: string | null;
+      zipcode?: string | null;
+      landmark?: string | null; // alias address_notes
+      lat?: number | null;
+      lng?: number | null;
+    },
+    tenantId: string
+  ): Promise<any> {
+    const updateData: any = { ...data };
+    // Normalize landmark -> address_notes di preferences
+    if (data.landmark !== undefined) {
+      const customer = await this.getCustomerById(customerId, tenantId);
+      const currentPrefs = (customer?.preferences as any) || {};
+      updateData.preferences = {
+        ...currentPrefs,
+        landmark: data.landmark,
+        address_notes: data.landmark,
+        location_updated_at: new Date().toISOString(),
+        location_updated_by_staff_name: 'Admin CS',
+      };
+      delete updateData.landmark;
+    }
+
+    try {
+      const updated = await prisma.customer.update({
+        where: { id: customerId },
+        data: updateData,
+      });
+
+      // Google Contacts auto-sync (best-effort, non-blocking)
+      import('./google-contacts.service')
+        .then(({ googleContactsService }) => {
+          googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'chat' }).catch(() => {});
+        })
+        .catch(() => {});
+
+      return updated;
+    } catch (error) {
+      // Memory fallback update
+      for (const [phone, cust] of memoryCustomers.entries()) {
+        if (cust.id === customerId && cust.tenant_id === tenantId) {
+          Object.assign(cust, data);
+          if (data.landmark !== undefined) {
+            cust.preferences = {
+              ...(cust.preferences as any),
+              landmark: data.landmark,
+              address_notes: data.landmark,
+              location_updated_at: new Date().toISOString(),
+              location_updated_by_staff_name: 'Admin CS',
+            };
+          }
+          return cust;
+        }
+      }
+      throw new Error(`Customer ${customerId} not found for tenant ${tenantId}`);
+    }
+  }
+
+  /**
    * Set override AI Rollout Scope per customer (FORCE_ON / FORCE_OFF / null).
    * null = ikuti aturan tenant (scope + cutoff). Fail-over ke memory store saat DB offline.
    */

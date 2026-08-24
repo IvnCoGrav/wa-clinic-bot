@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
+import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import {
   Users,
   Search,
@@ -94,6 +95,7 @@ export const CustomerDatabase: React.FC = () => {
   const [activeDetailCustomer, setActiveDetailCustomer] = useState<CustomerItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailData, setDetailData] = useState<any | null>(null);
+  const [detailEditMode, setDetailEditMode] = useState(false);
 
   // Chat History Modal State
   const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<CustomerItem | null>(null);
@@ -164,6 +166,25 @@ export const CustomerDatabase: React.FC = () => {
       toast(`Gagal memuat detail customer: ${err.message}`, 'error');
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const handleSaveCustomerDetail = async (data: any) => {
+    if (!activeDetailCustomer) return;
+    try {
+      await apiRequest(`/api/admin/customers/${activeDetailCustomer.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      // Refresh detail data
+      const res = await apiRequest(`/api/admin/customers/${activeDetailCustomer.id}`);
+      if (res?.data) {
+        setDetailData({ ...res.data, labels: detailData?.labels || [] });
+      }
+      setDetailEditMode(false);
+      toast('Profil customer berhasil diperbarui!', 'success');
+    } catch (err: any) {
+      toast(`Gagal menyimpan: ${err.message}`, 'error');
     }
   };
 
@@ -495,31 +516,7 @@ export const CustomerDatabase: React.FC = () => {
                       </span>
                     )}
 
-                    <div className="flex items-center space-x-1 ml-auto">
-                      <button
-                        onClick={() => handleToggleLabel(customer, 'admin', !customer.isAdminLabeled)}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
-                          customer.isAdminLabeled
-                            ? 'bg-rose-100 text-rose-800 border-rose-200'
-                            : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef]'
-                        }`}
-                      >
-                        Admin
-                      </button>
-                      <button
-                        onClick={() => handleToggleLabel(customer, 'hold', !customer.isHoldLabeled)}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
-                          customer.isHoldLabeled
-                            ? 'bg-amber-100 text-amber-800 border-amber-200'
-                            : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef]'
-                        }`}
-                      >
-                        Hold
-                      </button>
-                    </div>
-                  </div>
-
-                  {customer.adClick?.utmCampaign && (
+                    {customer.adClick?.utmCampaign && (
                     <p className="text-[11px] text-[#667781] truncate">
                       Campaign: <span className="text-[#111b21] font-medium">{customer.adClick.utmCampaign}</span>
                     </p>
@@ -581,7 +578,6 @@ export const CustomerDatabase: React.FC = () => {
                         {renderSortIcon('mqlBubbleCount')}
                       </div>
                     </th>
-                    <th className="py-3 px-4">Label WA</th>
                     <th
                       className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
                       onClick={() => handleSort('ltv')}
@@ -650,34 +646,6 @@ export const CustomerDatabase: React.FC = () => {
                             Regular ({customer.mqlBubbleCount} Bubble)
                           </span>
                         )}
-                      </td>
-
-                      {/* Label WA */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center space-x-1.5">
-                          <button
-                            onClick={() => handleToggleLabel(customer, 'admin', !customer.isAdminLabeled)}
-                            title={customer.isAdminLabeled ? 'Klik untuk lepas label Admin' : 'Klik untuk pasang label Admin'}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
-                              customer.isAdminLabeled
-                                ? 'bg-rose-100 text-rose-800 border-rose-200'
-                                : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef] hover:text-[#111b21] hover:bg-[#e2e8f0]'
-                            }`}
-                          >
-                            Admin
-                          </button>
-                          <button
-                            onClick={() => handleToggleLabel(customer, 'hold', !customer.isHoldLabeled)}
-                            title={customer.isHoldLabeled ? 'Klik untuk lepas label Hold' : 'Klik untuk pasang label Hold'}
-                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide border transition ${
-                              customer.isHoldLabeled
-                                ? 'bg-amber-100 text-amber-800 border-amber-200'
-                                : 'bg-[#f0f2f5] text-[#54656f] border-[#e9edef] hover:text-[#111b21] hover:bg-[#e2e8f0]'
-                            }`}
-                          >
-                            Hold
-                          </button>
-                        </div>
                       </td>
 
                       {/* LTV */}
@@ -1008,6 +976,25 @@ export const CustomerDatabase: React.FC = () => {
                   <Loader className="animate-spin text-[#008069]" size={36} />
                   <p className="text-xs text-[#667781] font-medium">Memuat data lengkap customer...</p>
                 </div>
+              ) : detailEditMode ? (
+                <CustomerEditForm
+                  customer={{
+                    id: activeDetailCustomer.id,
+                    name: detailData?.name || activeDetailCustomer.name,
+                    phone: activeDetailCustomer.phone,
+                    kelurahan: detailData?.kelurahan,
+                    kecamatan: detailData?.kecamatan,
+                    kota: detailData?.kota,
+                    zipcode: detailData?.zipcode,
+                    landmark: detailData?.preferences?.landmark || detailData?.preferences?.address_notes,
+                    lat: detailData?.lat,
+                    lng: detailData?.lng,
+                    preferences: detailData?.preferences,
+                  }}
+                  onSave={handleSaveCustomerDetail}
+                  onCancel={() => setDetailEditMode(false)}
+                  loading={loadingDetail}
+                />
               ) : (
                 <>
                   {/* Grid Top Cards: LTV & MQL Status */}
@@ -1269,24 +1256,32 @@ export const CustomerDatabase: React.FC = () => {
                   href={`https://wa.me/${(activeDetailCustomer.phone || '').replace(/\D/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
-                >
-                  <Phone size={13} />
-                  <span>Buka di WhatsApp</span>
-                  <ExternalLink size={11} />
-                </a>
-              </div>
-
-              <button
-                onClick={() => setActiveDetailCustomer(null)}
-                className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
+className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
               >
-                Tutup
-              </button>
+                <Phone size={13} />
+                <span>Buka di WhatsApp</span>
+                <ExternalLink size={11} />
+              </a>
             </div>
+
+            {!detailEditMode && (
+              <button
+                type="button"
+                onClick={() => setDetailEditMode(true)}
+                className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs"
+              >
+                Edit Profil
+              </button>
+            )}
+            <button
+              onClick={detailEditMode ? () => setDetailEditMode(false) : () => setActiveDetailCustomer(null)}
+              className="px-4 py-2 bg-white hover:bg-[#e9edef] border border-[#d1d7db} text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs ml-auto"
+            >
+              {detailEditMode ? 'Batal' : 'Tutup'}
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

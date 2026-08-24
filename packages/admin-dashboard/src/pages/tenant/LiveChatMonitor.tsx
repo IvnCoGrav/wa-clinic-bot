@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
+import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { emitBootPhase } from '../../lib/bootProgress';
 
 interface ChatMessage {
@@ -149,6 +150,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [generatingDraft, setGeneratingDraft] = useState(false);
   const [customerDetailModalOpen, setCustomerDetailModalOpen] = useState(false);
+  const [customerDetailEditMode, setCustomerDetailEditMode] = useState(false);
   const [customerDetailLoading, setCustomerDetailLoading] = useState(false);
   const [customerDetailData, setCustomerDetailData] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
@@ -1202,6 +1204,21 @@ export const LiveChatMonitor: React.FC = () => {
     } finally {
       setCustomerDetailLoading(false);
     }
+  };
+
+  const handleSaveCustomerDetail = async (data: any) => {
+    const customerId = customerDetailData?.id || selectedChat?.customerId;
+    if (!customerId) throw new Error('Customer ID tidak ditemukan');
+    await apiRequest(`/api/admin/customers/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    // Refresh customer detail data after save
+    const res = await apiRequest(`/api/admin/customers/${customerId}`);
+    if (res?.data) {
+      setCustomerDetailData({ ...res.data, labels: customerDetailData?.labels || [] });
+    }
+    setCustomerDetailEditMode(false);
   };
 
   const handleSendReply = async () => {
@@ -2487,6 +2504,25 @@ export const LiveChatMonitor: React.FC = () => {
                 <div className="py-12 flex justify-center items-center">
                   <Loader size={24} className="animate-spin text-[#008069]" />
                 </div>
+              ) : customerDetailEditMode ? (
+                <CustomerEditForm
+                  customer={{
+                    id: customerDetailData?.id || selectedChat?.customerId,
+                    name: customerDetailData?.name,
+                    phone: customerDetailData?.phone || selectedChat?.customerPhone,
+                    kelurahan: customerDetailData?.kelurahan,
+                    kecamatan: customerDetailData?.kecamatan,
+                    kota: customerDetailData?.kota,
+                    zipcode: customerDetailData?.zipcode,
+                    landmark: customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes,
+                    lat: customerDetailData?.lat,
+                    lng: customerDetailData?.lng,
+                    preferences: customerDetailData?.preferences,
+                  }}
+                  onSave={handleSaveCustomerDetail}
+                  onCancel={() => setCustomerDetailEditMode(false)}
+                  loading={customerDetailLoading}
+                />
               ) : (
                 <>
                   {/* Quick Metric Cards */}
@@ -2601,13 +2637,22 @@ export const LiveChatMonitor: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end">
+            <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end space-x-2">
+              {!customerDetailEditMode && (
+                <button
+                  type="button"
+                  onClick={() => setCustomerDetailEditMode(true)}
+                  className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-bold rounded-xl transition shadow-xs"
+                >
+                  Edit Profil
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setCustomerDetailModalOpen(false)}
+                onClick={customerDetailEditMode ? () => setCustomerDetailEditMode(false) : () => setCustomerDetailModalOpen(false)}
                 className="px-4 py-2 bg-[#111b21] hover:bg-black text-white text-xs font-bold rounded-xl transition shadow-xs"
               >
-                Tutup
+                {customerDetailEditMode ? 'Batal' : 'Tutup'}
               </button>
             </div>
           </div>

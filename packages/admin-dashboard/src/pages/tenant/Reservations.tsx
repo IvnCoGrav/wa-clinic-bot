@@ -35,12 +35,14 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Loader,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
 import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
 import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
+import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const Reservations: React.FC = () => {
@@ -205,6 +207,51 @@ export const Reservations: React.FC = () => {
     setShowCreateModal(true);
   };
 
+  // Shared ReservationDetailModal callbacks
+  const handleModalConfirm = async (id: string) => {
+    await handleConfirm(id);
+  };
+
+  const handleModalComplete = async (id: string) => {
+    await handleComplete(id);
+  };
+
+  const handleModalStatusChange = async (id: string, newStatus: string) => {
+    await handleStatusChange(id, newStatus);
+  };
+
+  const handleModalSetDate = async (id: string, date: string) => {
+    await handleSetDate(id, date);
+  };
+
+  const handleModalAssignStaff = async (id: string, staffId: string | null) => {
+    await handleAssignStaff(id, staffId);
+  };
+
+  const handleModalDelete = async (id: string) => {
+    await handleDelete(id);
+  };
+
+  const handleModalProofUpload = async (file: File) => {
+    await handleProofUpload(file);
+  };
+
+  const handleModalProofRemove = async () => {
+    await handleProofRemove();
+  };
+
+  const handleModalOpenEditLocation = (res: Reservation) => {
+    handleOpenEditLocation(res);
+  };
+
+  const handleModalProofView = (res: Reservation) => {
+    setProofModal(res);
+  };
+
+  const handleModalHousePhotoView = (url: string) => {
+    setHousePhotoModal(url);
+  };
+
   // Confirm Reservation
   const handleConfirm = async (id: string) => {
     try {
@@ -262,13 +309,14 @@ export const Reservations: React.FC = () => {
   };
 
   // Update Reservation Date
-  const handleSetDate = async (id: string) => {
-    if (!editDate) return;
+  const handleSetDate = async (id: string, date?: string) => {
+    const targetDate = date || editDate;
+    if (!targetDate) return;
     try {
       setLoading(true);
       await apiRequest(`/api/admin/reservation/${id}/set-date`, {
         method: 'PATCH',
-        body: JSON.stringify({ bookingDate: new Date(editDate).toISOString() }),
+        body: JSON.stringify({ bookingDate: new Date(targetDate).toISOString() }),
       });
       toast('Jadwal kunjungan berhasil diperbarui!', 'success');
       setSelectedRes(null);
@@ -487,7 +535,7 @@ export const Reservations: React.FC = () => {
     });
 
   // Upload bukti bayar dari modal Manage (dikompres server-side max 800px)
-  const handleProofUpload = async (imageB64: string, mimeType: string, fileName: string) => {
+  const handleProofUploadBase64 = async (imageB64: string, mimeType: string, fileName: string) => {
     if (!selectedRes) return;
     setProofUploading(true);
     try {
@@ -504,6 +552,25 @@ export const Reservations: React.FC = () => {
       toast(`Gagal menyimpan bukti bayar: ${err.message}`, 'error');
     } finally {
       setProofUploading(false);
+    }
+  };
+
+  // Wrapper for shared modal - accepts File object
+  const handleProofUpload = async (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Hanya file gambar yang didukung.', 'error');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast('Gambar maksimal 8 MB.', 'error');
+      return;
+    }
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      await handleProofUploadBase64(dataUrl, file.type || 'image/jpeg', file.name);
+    } catch (err: any) {
+      toast(`Gagal membaca file: ${err.message}`, 'error');
     }
   };
 
@@ -1284,401 +1351,27 @@ export const Reservations: React.FC = () => {
           )}
         </div>
 
-      {/* Reservation Details & Management Modal */}
+      {/* Reservation Details & Management Modal (Shared Component) */}
       {selectedRes && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4"
-          onClick={() => setSelectedRes(null)}
-        >
-          <div
-            className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl relative max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setSelectedRes(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Modal Header */}
-            <div>
-              <h3 className="text-base sm:text-lg font-bold text-[#111b21] flex items-center space-x-2 pr-6">
-                <Info size={18} className="text-[#008069] flex-shrink-0" />
-                <span>Detail Reservasi</span>
-              </h3>
-              <p className="text-xs text-[#667781] mt-0.5">
-                Kelola penugasan terapis, tanggal jadwal, dan status pembayaran
-              </p>
-            </div>
-
-            {/* Info contents split layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 text-xs">
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Data Pasien</span>
-                  <div className="flex items-center space-x-2 text-[#111b21]">
-                    <User size={15} className="text-[#8696a0] flex-shrink-0" />
-                    <span className="font-semibold break-all">
-                      {selectedRes.customer?.name || 'Bunda'} ({selectedRes.customer?.phone})
-                    </span>
-                  </div>
-                  {selectedRes.customer?.kelurahan && (
-                    <div className="flex items-center space-x-2 text-[#54656f] text-[11px]">
-                      <MapPin size={13} className="text-[#8696a0] flex-shrink-0" />
-                      <span className="break-words">
-                        {selectedRes.customer?.kelurahan}, {selectedRes.customer?.kecamatan}, {selectedRes.customer?.kota}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Baby / Anak info */}
-                  {getBabyRows(selectedRes).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-[#e9edef] space-y-1.5">
-                      <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
-                        Bayi / Anak ({getBabyRows(selectedRes).length})
-                      </span>
-                      {getBabyRows(selectedRes).map((baby, i) => (
-                        <div key={i} className="flex items-center space-x-2 text-[#111b21]">
-                          <Baby size={14} className="text-[#008069] flex-shrink-0" />
-                          <span className="break-words">
-                            <span className="font-semibold">{baby.name || '-'}</span>
-                            <span className="text-[#54656f] text-xs"> · {baby.age || '?'}</span>
-                            {baby.regAge && baby.regAge !== baby.age && (
-                              <span className="text-[#8696a0] text-[11px] ml-1">
-                                (saat booking: {baby.regAge})
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
-                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Lokasi & Pengiriman</span>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[#667781]">Jarak dari Cabang</span>
-                    <span className="text-[#111b21] font-bold">
-                      {selectedRes.customer?.distance_km?.toFixed(2) || '0.0'} km
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-[#667781]">Ongkir</span>
-                    <span className="text-[#111b21] font-bold">
-                      {selectedRes.customer?.ongkir ? `Rp ${selectedRes.customer.ongkir.toLocaleString()}` : 'Gratis / Belum dihitung'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs text-[#008069]">
-                    <span>Status Jarak</span>
-                    <span className="font-bold">Haversine 1.6x Terkalibrasi</span>
-                  </div>
-
-                  {/* Foto Depan Rumah & Landmark Patokan */}
-                  {(() => {
-                    const prefs = selectedRes.customer?.preferences as any;
-                    const housePhoto = prefs?.house_photo_url;
-                    const landmark = prefs?.landmark;
-                    const lat = selectedRes.customer?.lat;
-                    const lng = selectedRes.customer?.lng;
-                    const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : null;
-
-                    if (!housePhoto && !landmark && !mapsUrl) {
-                      return (
-                        <div className="mt-2 pt-2 border-t border-[#e9edef]">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditLocation(selectedRes)}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-white hover:bg-[#e8f5f2] text-[#008069] text-xs font-semibold border border-dashed border-[#00a884]/40 transition shadow-xs"
-                          >
-                            <Camera size={13} />
-                            <span>+ Tambah Foto Rumah & Patokan</span>
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="mt-2 pt-2 border-t border-[#e9edef] space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block">
-                            Panduan Lokasi & Foto Rumah
-                          </span>
-                          <div className="flex items-center space-x-2">
-                            {mapsUrl && (
-                              <a
-                                href={mapsUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
-                              >
-                                <Navigation size={11} />
-                                <span>Maps</span>
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditLocation(selectedRes)}
-                              className="text-[11px] text-[#008069] hover:underline font-semibold flex items-center gap-1"
-                              title="Edit foto rumah / patokan / titik koordinat"
-                            >
-                              <PenLine size={11} />
-                              <span>Edit</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {housePhoto && (
-                          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white border border-[#e9edef]">
-                            <div
-                              onClick={() => setHousePhotoModal(housePhoto)}
-                              className="h-14 w-14 rounded-xl bg-[#f0f2f5] overflow-hidden flex-shrink-0 relative group cursor-pointer border border-[#e9edef]"
-                              title="Klik untuk memperbesar foto rumah"
-                            >
-                              <img
-                                src={housePhoto}
-                                alt="Foto Depan Rumah"
-                                className="h-full w-full object-cover group-hover:scale-105 transition-transform"
-                              />
-                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                                <Maximize2 size={14} />
-                              </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
-                                🏠 Foto Tampak Depan Rumah
-                              </span>
-                              {landmark ? (
-                                <p className="text-xs text-[#111b21] font-semibold mt-0.5 leading-snug">
-                                  Patokan: {landmark}
-                                </p>
-                              ) : (
-                                <p className="text-[11px] text-[#667781]">Foto panduan tersimpan</p>
-                              )}
-                              {prefs?.location_updated_by_staff_name && (
-                                <p className="text-[10px] text-[#8696a0] mt-0.5">
-                                  Diperbarui oleh: {prefs.location_updated_by_staff_name}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {!housePhoto && landmark && (
-                          <div className="p-2 rounded-xl bg-white border border-[#e9edef] text-xs">
-                            <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
-                              📍 Patokan Rumah
-                            </span>
-                            <p className="text-xs text-[#111b21] font-semibold mt-0.5">{landmark}</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Bukti Bayar (upload + lihat) */}
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Bukti Bayar</span>
-                  {selectedRes.proof_url ? (
-                    <div className="flex items-center space-x-2.5">
-                      <img
-                        src={selectedRes.proof_url}
-                        alt="Bukti bayar"
-                        className="h-14 w-14 object-cover rounded-lg border border-[#e9edef] shadow-xs bg-white"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-[#54656f] truncate">
-                          Metode: <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(selectedRes.payment_method)}</span>
-                        </p>
-                        <p className="text-[10px] text-[#8696a0]">Bukti tersimpan (versi ringan)</p>
-                      </div>
-                      <button
-                        onClick={() => setProofModal(selectedRes)}
-                        className="p-2 rounded-lg bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] transition flex items-center justify-center"
-                        title="Lihat Detail Bukti Bayar"
-                      >
-                        <Eye size={15} />
-                      </button>
-                      <button
-                        onClick={handleProofRemove}
-                        disabled={proofUploading}
-                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition flex items-center justify-center disabled:opacity-50"
-                        title="Hapus Bukti Bayar"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => proofFileInputRef.current?.click()}
-                      disabled={proofUploading}
-                      className="w-full py-3 rounded-xl border-2 border-dashed border-[#d1d7db] hover:border-[#008069] hover:bg-[#e8f5f2]/20 text-xs text-[#54656f] hover:text-[#008069] font-semibold transition flex items-center justify-center space-x-2 disabled:opacity-50"
-                    >
-                      {proofUploading ? (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#008069] border-t-transparent"></div>
-                      ) : (
-                        <Upload size={14} />
-                      )}
-                      <span>{proofUploading ? 'Menyimpan...' : 'Unggah Bukti Bayar (maks 8 MB)'}</span>
-                    </button>
-                  )}
-                  <input
-                    ref={proofFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleProofPick}
-                  />
-                </div>
-              </div>
-
-              {/* Edit Schedule section */}
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
-                  <span className="text-[11px] text-[#667781] font-bold block uppercase">Atur Jadwal Kunjungan</span>
-                  <input
-                    type="datetime-local"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
-                  />
-                  <button
-                    onClick={() => handleSetDate(selectedRes.id)}
-                    className="w-full py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-xs font-semibold transition shadow-xs"
-                  >
-                    Simpan Jadwal Kunjungan
-                  </button>
-                </div>
-
-                {/* Staff Assignment */}
-                <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#667781] font-bold block uppercase">Penugasan Staff / Terapis</span>
-                    {user?.id && selectedRes.assigned_staff_id !== user.id && (
-                      <button
-                        type="button"
-                        onClick={() => handleAssignStaff(selectedRes.id, user.id)}
-                        disabled={assigningStaff}
-                        className="text-[10px] text-[#008069] font-bold hover:underline flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
-                      >
-                        <span>⚡ Tugaskan ke Saya</span>
-                      </button>
-                    )}
-                  </div>
-                  <select
-                    value={selectedRes.assigned_staff_id || ''}
-                    onChange={(e) => handleAssignStaff(selectedRes.id, e.target.value || null)}
-                    disabled={assigningStaff}
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
-                  >
-                    <option value="">-- Belum Ditugaskan --</option>
-                    {staffList
-                      .filter((s) => s.active !== false || s.id === selectedRes.assigned_staff_id)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} {s.active === false ? '(Nonaktif)' : ''}
-                        </option>
-                      ))}
-                  </select>
-                  {selectedRes.assigned_staff && (
-                    <p className="text-xs text-[#008069] font-bold">
-                      Ditugaskan ke: {selectedRes.assigned_staff.name}
-                    </p>
-                  )}
-                </div>
-
-                {/* Google Calendar sync notifier */}
-                {googleCalendarMockActive && (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-start space-x-2.5 text-xs">
-                    <AlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600" size={15} />
-                    <div>
-                      <p className="font-bold">Google Calendar: Mode Mock Aktif</p>
-                      <p className="mt-0.5 text-[10px] text-amber-700">
-                        Sinkronisasi berjalan dalam simulasi lokal.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Raw Text Log */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] text-[#667781] font-bold block uppercase flex items-center space-x-1">
-                <FileText size={12} />
-                <span>Format Teks Chat Asli / Detail</span>
-              </span>
-              <pre className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-[11px] text-[#54656f] font-mono overflow-auto max-h-28 whitespace-pre-wrap break-all">
-                {selectedRes.raw_text}
-              </pre>
-            </div>
-
-            {/* Actions button footer */}
-            <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 justify-between items-center">
-              <button
-                onClick={() => handleDelete(selectedRes.id)}
-                className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition text-xs font-semibold flex items-center space-x-1.5"
-              >
-                <X size={14} />
-                <span>Batalkan Reservasi</span>
-              </button>
-
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-                {selectedRes.status === 'pending' && (() => {
-                  const purchaseSentAt = selectedRes.purchase_event_sent_at ? new Date(selectedRes.purchase_event_sent_at) : null;
-                  const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
-                  return (
-                    <button
-                      onClick={() => handleConfirm(selectedRes.id)}
-                      disabled={!!purchaseWindowOpen}
-                      title={
-                        purchaseWindowOpen
-                          ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count.`
-                          : undefined
-                      }
-                      className={`w-full sm:w-auto justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
-                        purchaseWindowOpen
-                          ? 'bg-[#e9edef] text-[#8696a0] cursor-not-allowed'
-                          : 'bg-[#008069] text-white hover:bg-[#00a884] shadow-xs'
-                      }`}
-                    >
-                      <Check size={14} />
-                      <span>{purchaseWindowOpen ? 'Purchase Sudah Dikirim' : 'Tandai Lunas'}</span>
-                    </button>
-                  );
-                })()}
-
-                {selectedRes.status === 'confirmed' && (
-                  <button
-                    onClick={() => handleComplete(selectedRes.id)}
-                    className="w-full sm:w-auto justify-center px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs"
-                  >
-                    <CheckCircle size={14} />
-                    <span>Tandai Selesai Treatment</span>
-                  </button>
-                )}
-
-                {selectedRes.status === 'completed' && (
-                  <div className="flex items-center space-x-2">
-                    <span className="px-3 py-1.5 rounded-xl bg-sky-100 border border-sky-200 text-sky-800 text-xs font-bold flex items-center space-x-1">
-                      <CheckCheck size={14} className="text-sky-600" />
-                      <span>Treatment Telah Selesai</span>
-                    </span>
-                    <button
-                      onClick={() => handleStatusChange(selectedRes.id, 'confirmed')}
-                      className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition"
-                      title="Kembalikan ke status Terkonfirmasi / Lunas"
-                    >
-                      Ubah Status
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ReservationDetailModal
+          reservation={selectedRes}
+          staffList={staffList}
+          user={user}
+          googleCalendarMockActive={googleCalendarMockActive}
+          onClose={() => setSelectedRes(null)}
+          onUpdate={loadReservations}
+          onConfirm={handleModalConfirm}
+          onComplete={handleModalComplete}
+          onStatusChange={handleModalStatusChange}
+          onSetDate={handleModalSetDate}
+          onAssignStaff={handleModalAssignStaff}
+          onDelete={handleModalDelete}
+          onProofUpload={handleModalProofUpload}
+          onProofRemove={handleModalProofRemove}
+          onOpenEditLocation={handleModalOpenEditLocation}
+          onProofView={handleModalProofView}
+          onHousePhotoView={handleModalHousePhotoView}
+        />
       )}
 
       {/* Payment Proof Viewer Modal */}

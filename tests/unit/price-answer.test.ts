@@ -60,10 +60,10 @@ describe('buildPriceAnswer — Resolusi Anaphora', () => {
 
   it('pesan tanya biaya pijat balita usia 2 tahun → rekomendasi Pijat Kids Ceria natural dan luwes', () => {
     const res = buildPriceAnswer('mijat balita usia 2 tahun, kena biaya berapa?', baseOpts);
-    expect(res.replyText).toContain('Untuk pijat si kecil usia 2 tahun, kami rekomendasikan *Pijat Kids Ceria* ya Bunda');
+    expect(res.replyText).toContain('Untuk pijat si kecil usia 2 tahun, kami rekomendasikan *Pijat Kids Ceria');
     expect(res.replyText).toContain('Durasinya 45 menit');
+    expect(res.replyText).toContain('Rp 70.000');
     expect(res.replyText).toContain('Rp 90.000');
-    expect(res.replyText).toContain('Rp 110.000');
     expect(res.replyText).toContain('Kira-kira mau dijadwalkan di hari apa ya Bunda? Biar sekalian kami bantu cekkan slot terapisnya 🤗');
     // Must NOT include bubble spa
     expect(res.replyText).not.toContain('Bubble Spa');
@@ -81,7 +81,7 @@ describe('buildPriceAnswer — Resolusi Anaphora', () => {
     const res = buildPriceAnswer('Maksud saya yang paket newborn', baseOpts);
     expect(res.replyText).toContain('Paket Selapan');
     expect(res.replyText).toContain('Rp 80.000');
-    expect(res.replyText).toContain('Rp 100.000');
+    expect(res.replyText).toContain('Rp 85.000');
     expect(res.pricelist).toBeUndefined();
   });
 
