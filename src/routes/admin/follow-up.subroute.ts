@@ -45,6 +45,69 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/follow-ups/:id/queue
+   * Menjadwalkan follow-up tunggal ke antrian (status QUEUED) agar dikirim saat jadwal tiba.
+   */
+  fastify.post(
+    '/api/admin/follow-ups/:id/queue',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const success = await followUpService.queueFollowUp(id, DEFAULT_TENANT_ID);
+        if (!success) {
+          return reply.status(404).send({ error: 'Item follow-up tidak ditemukan atau status bukan PENDING' });
+        }
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'SYSTEM',
+          adminIdentity: (request as any).adminIdentity || 'Admin',
+          action: 'QUEUE_FOLLOWUP',
+          targetId: id,
+          payload: { status: 'QUEUED' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Follow-up berhasil dijadwalkan dan masuk ke antrian.',
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message || 'Gagal menjadwalkan follow-up.' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/follow-ups/bulk-queue
+   * Menjadwalkan seluruh follow-up PENDING ke antrian (status QUEUED).
+   */
+  fastify.post(
+    '/api/admin/follow-ups/bulk-queue',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const queuedCount = await followUpService.bulkQueueFollowUps(DEFAULT_TENANT_ID);
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'SYSTEM',
+          adminIdentity: (request as any).adminIdentity || 'Admin',
+          action: 'BULK_QUEUE_FOLLOWUP',
+          targetId: 'ALL',
+          payload: { count: queuedCount, status: 'QUEUED' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `Berhasil menjadwalkan ${queuedCount} antrian follow-up ke status QUEUED.`,
+          count: queuedCount,
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message || 'Gagal menjadwalkan seluruh antrian.' });
+      }
+    }
+  );
+
+  /**
    * POST /api/admin/follow-ups/:id/send-now
    * Manual Send (Approve & Kirim Sekarang) oleh Admin.
    */

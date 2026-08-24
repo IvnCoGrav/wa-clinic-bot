@@ -61,6 +61,36 @@ describe('Follow-Up Admin Subroute Integration Tests', () => {
     expect(sendSpy).toHaveBeenCalledWith('fu-1', expect.any(String));
   });
 
+  it('2b. POST /api/admin/follow-ups/:id/queue queues follow-up to QUEUED status', async () => {
+    const queueSpy = vi.spyOn(followUpService, 'queueFollowUp').mockResolvedValueOnce(true);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/fu-1/queue',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.message).toContain('berhasil dijadwalkan');
+    expect(queueSpy).toHaveBeenCalledWith('fu-1', expect.any(String));
+  });
+
+  it('2c. POST /api/admin/follow-ups/bulk-queue queues all pending follow-ups', async () => {
+    const bulkQueueSpy = vi.spyOn(followUpService, 'bulkQueueFollowUps').mockResolvedValueOnce(3);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/bulk-queue',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.count).toBe(3);
+    expect(bulkQueueSpy).toHaveBeenCalledWith(expect.any(String));
+  });
+
   it('3. PATCH /api/admin/follow-ups/:id/cancel cancels follow-up', async () => {
     const cancelSpy = vi.spyOn(followUpService, 'cancelFollowUp').mockResolvedValueOnce(true);
 

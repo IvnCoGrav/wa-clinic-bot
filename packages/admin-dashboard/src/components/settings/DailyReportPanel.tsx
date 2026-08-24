@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 
 export const DailyReportPanel: React.FC = () => {
   const { toast } = useUiFeedback();
@@ -280,16 +281,17 @@ export const DailyReportPanel: React.FC = () => {
           </div>
 
           {/* Schedule Settings */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
             <div>
               <span className="text-xs font-bold text-[#111b21] block">Aktifkan Jadwal Cron Otomatis</span>
               <span className="text-xs text-[#667781]">Kirim notifikasi ringkasan otomatis setiap hari di jam terpilih</span>
             </div>
-            <input
-              type="checkbox"
+            <ToggleSwitch
               checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="w-4 h-4 text-[#008069] rounded focus:ring-[#008069] cursor-pointer"
+              onChange={(next) => setEnabled(next)}
+              onLabel="ON (AKTIF)"
+              offLabel="OFF (NONAKTIF)"
+              size="md"
             />
           </div>
 

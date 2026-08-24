@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import {
   Users,
   UserPlus,
@@ -1441,16 +1442,20 @@ export const StaffManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#111b21]">Status Akun</label>
-                <select
-                  value={editActive ? 'active' : 'inactive'}
-                  onChange={(e) => setEditActive(e.target.value === 'active')}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] text-xs focus:outline-none focus:border-[#008069] shadow-xs"
-                >
-                  <option value="active">Aktif (Dapat Login)</option>
-                  <option value="inactive">Nonaktif (Login Diblokir & Sesi Dicabut)</option>
-                </select>
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                <div>
+                  <span className="text-xs font-bold text-[#111b21] block">Status Akun Staf</span>
+                  <span className="text-[11px] text-[#667781]">
+                    {editActive ? 'Akun aktif dan dapat login ke dashboard' : 'Akun dinonaktifkan (login diblokir & sesi dicabut)'}
+                  </span>
+                </div>
+                <ToggleSwitch
+                  checked={editActive}
+                  onChange={(next) => setEditActive(next)}
+                  size="sm"
+                  onLabel="Aktif"
+                  offLabel="Nonaktif"
+                />
               </div>
 
               <div className="pt-2 border-t border-[#e9edef] flex items-center justify-end space-x-2">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, KeyRound, ShieldCheck, Check, FileClock, ArrowRight } from 'lucide-react';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 
 interface Props {
   metaPixelId: string;
@@ -117,14 +118,16 @@ export const MetaCapiPanel: React.FC<Props> = ({
                 : 'Off — event ditahan di queue moderasi (Pending Review Meta) sampai disetujui admin.'}
             </p>
           </div>
-          <button
-            onClick={() => handleTogglePurchaseModeration(!autoSendPurchaseCapi)}
+          <ToggleSwitch
+            checked={autoSendPurchaseCapi}
+            onChange={(next) => handleTogglePurchaseModeration(next)}
             disabled={savingPurchaseModeration}
-            className={`w-12 h-6 rounded-full transition-all relative flex-shrink-0 ${autoSendPurchaseCapi ? 'bg-[#008069]' : 'bg-[#d1d7db]'} ${savingPurchaseModeration ? 'opacity-50' : ''}`}
+            loading={savingPurchaseModeration}
+            onLabel="ON (AUTO-SEND)"
+            offLabel="OFF (MODERASI)"
+            size="md"
             title="Toggle moderasi event Purchase Meta CAPI"
-          >
-            <div className={`absolute top-0.5 left-0.5 bg-white h-5 w-5 rounded-full transition-all ${autoSendPurchaseCapi ? 'translate-x-6' : ''}`}></div>
-          </button>
+          />
         </div>
       </div>
     </div>

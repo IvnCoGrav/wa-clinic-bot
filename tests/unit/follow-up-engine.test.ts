@@ -91,6 +91,51 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
+  it('5b. queueFollowUp & bulkQueueFollowUps transition status from PENDING to QUEUED', async () => {
+    const updateManySpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValueOnce({ count: 1 } as any);
+    const success = await followUpService.queueFollowUp('fu-test-1', DEFAULT_TENANT_ID);
+    expect(success).toBe(true);
+    expect(updateManySpy).toHaveBeenCalledWith({
+      where: { id: 'fu-test-1', tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
+      data: { status: 'QUEUED' },
+    });
+
+    const bulkSpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValueOnce({ count: 4 } as any);
+    const count = await followUpService.bulkQueueFollowUps(DEFAULT_TENANT_ID);
+    expect(count).toBe(4);
+    expect(bulkSpy).toHaveBeenCalledWith({
+      where: { tenant_id: DEFAULT_TENANT_ID, status: 'PENDING' },
+      data: { status: 'QUEUED' },
+    });
+  });
+
+  it('5c. processDueFollowUps processes QUEUED follow-ups when scheduled_at is due', async () => {
+    const mockDueFollowUp = {
+      id: 'fu-queued-1',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-1',
+      type: 'NO_PURCHASE',
+      stage: 1,
+      scheduled_at: new Date(Date.now() - 1000), // due
+      status: 'QUEUED',
+      customer: {
+        id: 'cust-1',
+        name: 'Bunda Queued',
+        phone: '62812345678',
+        status: 'active',
+        is_sandbox_test: false,
+        children: [],
+      },
+    };
+
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValueOnce([mockDueFollowUp] as any);
+    const executeSpy = vi.spyOn(followUpService, 'executeFollowUp').mockResolvedValueOnce(true);
+
+    const processed = await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+    expect(processed).toBe(1);
+    expect(executeSpy).toHaveBeenCalledWith(mockDueFollowUp, DEFAULT_TENANT_ID);
+  });
+
   it('6. getAllTemplates returns merged list (DB custom + default fallback)', async () => {
     const templates = await followUpService.getAllTemplates(DEFAULT_TENANT_ID);
     expect(templates.length).toBeGreaterThanOrEqual(27); // 9 types x 3 variants

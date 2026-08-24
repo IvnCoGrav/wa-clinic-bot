@@ -4,6 +4,61 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Standardisasi Seluruh Kontrol & Tombol ON/OFF Menjadi ToggleSwitch Interaktif (2026-08-24)
+
+- **Latar Belakang & Kebutuhan UI/UX:**
+  1. **Inkonsistensi Kontrol ON/OFF**: Sebelumnya, kontrol status aktif/nonaktif dan fitur boolean di seluruh admin dashboard tersebar dalam berbagai bentuk yang membingungkan: tombol teks biasa berstatus `ENABLED (ON)` / `DISABLED (OFF)`, checkbox HTML kecil tanpa penanda teks, sakelar dot slider tanpa label ON/OFF, dropdown `<select>` status akun staf, dan tombol aksi "Putuskan Aliran".
+  2. **Kebutuhan Status Visual yang Tegas**: User membutuhkan kepastian visual yang langsung dapat dipahami dalam 1 lirikan mata (apakah suatu fitur sedang ON / Aktif atau OFF / Nonaktif).
+- **Implementasi Komponen & Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  - **Komponen Universal `ToggleSwitch` (`src/components/common/ToggleSwitch.tsx`)**:
+    - Membuat komponen sakelar interaktif dengan pill track slider halus (`#008069` saat ON vs `#cbd5e1` saat OFF).
+    - Dilengkapi badge status teks & warna yang tegas (`ON (AKTIF)` / `OFF (NONAKTIF)`), indikator status loading (`Loader2` spinner), dukungan multi-ukuran (`sm`, `md`, `lg`), dan aksesibilitas keyboard (`role="switch"`).
+  - **Standardisasi Modul Settings & Bot Engine (`packages/admin-dashboard`):**
+    - **`AiRouterPanel.tsx`**: Mengganti tombol status `Status AI Router` dan `AI Output Verifier (QC Guardrail)` dengan `ToggleSwitch`.
+    - **`Settings.tsx`**: Mengganti sakelar dot polos `Global Chatbot Toggle` dengan `ToggleSwitch` berlabel status jelas.
+    - **`MetaCapiPanel.tsx`**: Mengganti sakelar auto-send `Auto-send Purchase CAPI` dengan `ToggleSwitch`.
+    - **`DailyReportPanel.tsx`**: Mengganti checkbox `Aktifkan Jadwal Cron Otomatis` dengan `ToggleSwitch`.
+    - **`MqlSettingsPanel.tsx`**: Mengganti checkbox `Otomatisasi Auto-Lead` dengan `ToggleSwitch`.
+    - **`GoogleIntegrationPanel.tsx`**: Menambahkan kontrol `ToggleSwitch` untuk `Auto-Sync Saat Chat Pertama (MQL)` dan `Auto-Sync Saat Booking Reservasi`.
+    - **`WhatsAppProviderPanel.tsx`**: Mengganti tombol pemutus aliran `Internal Outbound Cut-Off (Emergency Kill-Switch)` dengan `ToggleSwitch` berlabel `CUT-OFF AKTIF (TERPUTUS)` vs `NORMAL (TERHUBUNG)`.
+  - **Standardisasi Modul Manajemen Data, Tabel & Form Modal:**
+    - **`ClinicServices.tsx`**: Mengganti toggle baris tabel layanan dan checkbox modal form dengan `ToggleSwitch` (`Aktif` vs `Nonaktif`).
+    - **`LandingPage.tsx`**: Mengganti badge tombol baris tabel dan checkbox modal form landing page dengan `ToggleSwitch` (`Aktif` vs `Nonaktif`).
+    - **`StaffManagement.tsx`**: Mengganti dropdown `<select>` status akun staf pada modal edit dengan `ToggleSwitch` (`Aktif` vs `Nonaktif`).
+    - **`CreateReservationModal.tsx`**: Mengganti checkbox custom treatment addon dengan `ToggleSwitch` (`Add-on (0m)` vs `Standar`).
+- **Verifikasi & Pengujian:**
+  - `npm run build` pada `packages/admin-dashboard`: 100% lulus (0 error, TypeScript & Vite bundle lolos).
+  - `npm run build` pada root backend: 100% lulus (0 error, TypeScript compiler lolos).
+
+
+### Enhanced & Fixed — Follow-Up & Reminder Queue: Dari 'Kirim Sekarang' ke 'Jadwalkan' (Status QUEUED) (2026-08-24)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Transisi Tombol Aksi**: Di halaman Follow-Up & Reminder Queue (`/admin/follow-ups`), tombol aksi sebelumnya bertuliskan *"Kirim"* yang mengeksekusi `send-now` langsung ke WhatsApp saat itu juga.
+  2. **Kesesuaian Jadwal Ter-Setup**: Pengguna menginginkan pesan follow-up tidak langsung ditembakkan seketika, melainkan dijadwalkan masuk ke antrian (`QUEUED`) dan dikirim otomatis oleh background worker tepat saat tanggal & jam yang sudah disetup (`scheduled_at <= NOW()`) tiba.
+- **Implementasi Backend Service & REST API:**
+  - **`src/services/follow-up.service.ts`**:
+    - Menambahkan `queueFollowUp(id, tenantId)` untuk mengubah status follow-up tunggal dari `PENDING` menjadi `QUEUED`.
+    - Menambahkan `bulkQueueFollowUps(tenantId)` untuk menjadwalkan seluruh antrian `PENDING` ke status `QUEUED` secara massal.
+    - Memperbarui `processDueFollowUps(tenantId)` agar secara konsisten mengeksekusi item berstatus `QUEUED` yang telah tiba jadwalnya (`scheduled_at <= NOW()`), serta tetap mendukung mode `AUTO_FOLLOWUP_ENABLED=true` jika ingin auto-process `PENDING`.
+    - Memperbarui `rescheduleFollowUp(id, newDate, tenantId)` agar dapat mengubah tanggal/jam jadwal kirim dan mempertahankan integritas status.
+  - **`src/routes/admin/follow-up.subroute.ts`**:
+    - Menambahkan endpoint `POST /api/admin/follow-ups/:id/queue` dengan audit logging `QUEUE_FOLLOWUP`.
+    - Menambahkan endpoint `POST /api/admin/follow-ups/bulk-queue` dengan audit logging `BULK_QUEUE_FOLLOWUP`.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  - **`FollowUpQueue.tsx`**:
+    - Mengubah tombol aksi baris `PENDING` dari *"Kirim"* (`Send`) menjadi **"Jadwalkan"** (`CalendarCheck`).
+    - Menambahkan tombol header **"Jadwalkan Semua Pending"** (`CalendarCheck`) untuk menyetujui seluruh antrian sekaligus.
+    - Menambahkan badge visual dan filter status **`QUEUED`** (*"Terjadwal di Antrian"* dengan warna biru).
+    - Memperbarui modal konfirmasi untuk membedakan aksi Jadwalkan tunggal dan massal dengan penjelasan waktu jadwal.
+    - Memperbarui safety notice header.
+- **Verifikasi & Pengujian:**
+  - Unit tests di `tests/unit/follow-up-engine.test.ts` (7/7 tests PASS).
+  - Integration tests di `tests/integration/follow-up-admin.test.ts` (7/7 tests PASS).
+  - Test suites follow-up lengkap: **53 tests PASS**.
+  - TypeScript build backend (`npm run build`) & Vite build frontend (`admin-dashboard: npm run build`) 100% lulus (0 error).
+  - Knowledge graph `graphify update .` berhasil diperbarui (3972 node, 7935 edge).
+
 ### Added & Enhanced — Dynamic Peak-Hour Pricing & Tenant-Aware MiniMax NLU Model Transition (2026-08-24)
 
 - **Latar Belakang & Investigasi Masalah:**

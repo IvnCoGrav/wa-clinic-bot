@@ -16,6 +16,7 @@ import {
   FileClock,
   FileX
 } from 'lucide-react';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 
 interface Props {
   provider: 'WAHA' | 'WABA';
@@ -214,38 +215,19 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center space-x-1 ${
-                  wahaOutboundCutoff
-                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                }`}>
-                  {wahaOutboundCutoff ? <ZapOff size={11} /> : <Zap size={11} />}
-                  <span>{wahaOutboundCutoff ? 'CUT-OFF AKTIF (TERPUTUS)' : 'TERHUBUNG (NORMAL)'}</span>
-                </span>
-
+              <div className="flex items-center gap-3 flex-shrink-0">
                 {handleToggleOutboundCutoff && (
-                  <button
-                    onClick={() => handleToggleOutboundCutoff(!wahaOutboundCutoff)}
+                  <ToggleSwitch
+                    checked={wahaOutboundCutoff}
+                    onChange={(next) => handleToggleOutboundCutoff(next)}
                     disabled={togglingCutoff}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 ${
-                      wahaOutboundCutoff
-                        ? 'bg-[#008069] hover:bg-[#00a884] text-white'
-                        : 'bg-rose-600 hover:bg-rose-700 text-white'
-                    }`}
-                  >
-                    {wahaOutboundCutoff ? (
-                      <>
-                        <Zap size={12} />
-                        <span>{togglingCutoff ? 'Menyambungkan...' : 'Sambungkan Aliran Internal'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <ZapOff size={12} />
-                        <span>{togglingCutoff ? 'Memutus...' : 'Putuskan Aliran Internal'}</span>
-                      </>
-                    )}
-                  </button>
+                    loading={togglingCutoff}
+                    variant="rose"
+                    onLabel="CUT-OFF AKTIF (TERPUTUS)"
+                    offLabel="NORMAL (TERHUBUNG)"
+                    size="md"
+                    title="Toggle Internal Outbound Cut-Off"
+                  />
                 )}
               </div>
             </div>
