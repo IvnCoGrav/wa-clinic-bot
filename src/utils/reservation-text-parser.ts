@@ -307,14 +307,23 @@ export function parseReservationText(rawText: string): ParseResult {
   if (!hasAddress) missingFields.push('Alamat');
 
   if (missingFields.length > 0) {
-    // Fallback: coba ekstraksi teks percakapan bebas (Free-form conversational reservation)
-    const conversationalParsed = parseConversationalReservation(rawText);
-    if (conversationalParsed) {
-      console.log(`[CONVERSATIONAL RESERVATION PARSED] Successfully extracted reservation from free-form text for "${conversationalParsed.name}".`);
-      return {
-        success: true,
-        reservation: conversationalParsed,
-      };
+    // Fallback: coba ekstraksi teks percakapan bebas (HANYA jika input BUKAN format form terstruktur)
+    const lowerRaw = rawText.toLowerCase();
+    const hasFormStructure =
+      lowerRaw.includes('list untuk reservasi') ||
+      lowerRaw.includes('format reservasi') ||
+      lowerRaw.includes('form reservasi') ||
+      lowerRaw.includes('pilihan treatment');
+
+    if (!hasFormStructure) {
+      const conversationalParsed = parseConversationalReservation(rawText);
+      if (conversationalParsed) {
+        console.log(`[CONVERSATIONAL RESERVATION PARSED] Successfully extracted reservation from free-form text for "${conversationalParsed.name}".`);
+        return {
+          success: true,
+          reservation: conversationalParsed,
+        };
+      }
     }
 
     return {

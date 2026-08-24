@@ -22,6 +22,10 @@ export class SelfLearningService {
     replyText: string,
     tenantId: string
   ): Promise<void> {
+    if (process.env.ENABLE_SELF_LEARNING !== 'true') {
+      return;
+    }
+
     const existing = this.buffers.get(conversationId);
     if (existing) {
       clearTimeout(existing.timer);

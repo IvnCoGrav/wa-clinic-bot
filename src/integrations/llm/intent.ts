@@ -209,7 +209,7 @@ Intent definitions:
     // 6. Deteksi Tertarik — word-boundary (hindari "ya" dalam "kayaknya/saya").
     const isMauTanya = /\bmau\s+(tanya|nanya|konsultasi|tau|tahu|cek)\b/i.test(lower);
     const interestedWord = /\b(iya+|iyaa+|ya|bener|betul|setuju|sip|gpp|oke|ok|tertarik|boleh|yes|booking|daftar|reservasi|kirim\s+list|ambil\s+paket)\b/i.test(lower) ||
-      (!isMauTanya && /\bmau\b/i.test(lower) && /\b(booking|daftar|ambil|pesan|coba|paket|treatment)\b/i.test(lower));
+      (!isMauTanya && /\bmau\b/i.test(lower) && /\b(booking|daftar|ambil|pesan|coba|paket|treatment|pijat|massage|spa)\b/i.test(lower));
 
     if (interestedWord) {
       return { intent: 'interested', confidence: 0.95 };

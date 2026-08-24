@@ -725,7 +725,7 @@ export class AIRouterLLMClient {
     return this.breaker.wasFallbackUsed();
   }
 
-  private get model(): string {
+  public get model(): string {
     if (process.env.AI_MODEL_ROUTER) return process.env.AI_MODEL_ROUTER;
     if (process.env.AI_MODEL_NLU) return process.env.AI_MODEL_NLU;
     try {
@@ -953,6 +953,26 @@ export class AIRouterService {
       console.log(
         `[AI ROUTER SHADOW] match=${matches} llm_intent=${response.intent} rule_intent=${ruleBased.intent} llm_escalate=${response.needs_human_escalation} rule_escalate=${ruleBased.needs_human_escalation}`
       );
+      try {
+        const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'AI_ROUTER',
+          customerPhone: input.customerPhone,
+          customerInput: `[State: ${input.currentState}] "${input.lastCustomerMessage}"`,
+          reasoning: response.reasoning_note || `Shadow Match: ${matches} | LLM vs Rule: ${response.intent} vs ${ruleBased.intent}`,
+          groundTruthUsed: {
+            currentState: input.currentState,
+            extractedData: response.extracted_data,
+            affirmationSignal: response.affirmation_signal,
+            escalate: response.needs_human_escalation,
+            shadowMatch: matches,
+          },
+          finalReply: `Intent: ${response.intent} (Confidence: ${response.confidence_score}) | Escalate: ${response.needs_human_escalation ? response.escalation_reason : 'No'}`,
+          confidenceScore: response.confidence_score,
+          modelUsed: this.client.model,
+          status: source === 'fallback' ? 'FALLBACK' : 'SUCCESS',
+        });
+      } catch {}
       return {
         enabled: true,
         shadowMode: true,
@@ -961,6 +981,26 @@ export class AIRouterService {
         legacyFallbackResponse: ruleBased,
       };
     }
+
+    try {
+      const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+      recordLlmExecution({
+        flowType: 'AI_ROUTER',
+        customerPhone: input.customerPhone,
+        customerInput: `[State: ${input.currentState}] "${input.lastCustomerMessage}"`,
+        reasoning: response.reasoning_note,
+        groundTruthUsed: {
+          currentState: input.currentState,
+          extractedData: response.extracted_data,
+          affirmationSignal: response.affirmation_signal,
+          escalate: response.needs_human_escalation,
+        },
+        finalReply: `Intent: ${response.intent} (Confidence: ${response.confidence_score}) | Escalate: ${response.needs_human_escalation ? response.escalation_reason : 'No'}`,
+        confidenceScore: response.confidence_score,
+        modelUsed: this.client.model,
+        status: source === 'fallback' ? 'FALLBACK' : 'SUCCESS',
+      });
+    } catch {}
 
     return { enabled: true, shadowMode: false, source, response };
   }

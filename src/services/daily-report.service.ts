@@ -3,6 +3,7 @@ import { alertService, AlertType, AlertSeverity } from './alert.service';
 import { getStringSimilarity } from '../utils/similarity';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../integrations/llm/model-fallback';
+import { parsePositiveInt } from '../utils/env-numeric';
 
 export interface DailyReportData {
   reportDateStr: string;
@@ -488,7 +489,7 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
           apiKey,
           model: modelConfig.modelName,
           fallbackModel: getFallbackModel(),
-          timeoutMs: 15000,
+          timeoutMs: parsePositiveInt(process.env.LLM_TIMEOUT_REPORT_MS, 60000),
           payload: {
             temperature: modelConfig.temperature,
             max_tokens: 150,

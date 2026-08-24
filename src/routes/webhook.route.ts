@@ -333,8 +333,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 } catch (_) {}
               }
 
-              // 3. Self Learning Capture (hanya jika ada teks)
-              if (adminReplyText.trim()) {
+              // 3. Self Learning Capture (hanya jika diaktifkan & ada teks)
+              if (process.env.ENABLE_SELF_LEARNING === 'true' && adminReplyText.trim()) {
                 const { selfLearningService } = await import('../services/self-learning.service');
                 selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
                   .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
