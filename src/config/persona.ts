@@ -289,13 +289,17 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   askKelurahanRetry: (params: { textLocation: string; currentAttempts: number }) =>
     `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`,
 
-  askKelurahanAmbiguous: (params: { kecamatanName?: string; kelurahanName?: string; options?: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
-    const areaName = params.kecamatanName || params.kelurahanName || 'tersebut';
-    const sampleKelurahans = params.options && params.options.length > 0
-      ? Array.from(new Set(params.options.map(opt => opt.Kelurahan_Desa))).slice(0, 3).join(', ')
-      : '';
-    const exampleText = sampleKelurahans ? ` (seperti Kel. ${sampleKelurahans}, dll.)` : '';
-    return `Untuk area Kecamatan ${areaName} ada beberapa kelurahan nih Bund${exampleText}. Kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
+  askKelurahanAmbiguous: (params: { kecamatanName?: string; kelurahanName?: string; cityName?: string; isCity?: boolean; options?: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
+    const rawName = params.cityName || params.kecamatanName || params.kelurahanName || 'tersebut';
+    const lower = rawName.toLowerCase().trim();
+    const isCity = params.isCity || lower === 'sidoarjo' || lower === 'surabaya' || lower.includes('kabupaten') || lower.includes('kota');
+
+    if (isCity) {
+      const displayCity = lower.includes('sidoarjo') ? 'Sidoarjo' : lower.includes('surabaya') ? 'Surabaya' : rawName;
+      return `Di ${displayCity} kelurahan atau kecamatan mana ya Bunda? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
+    }
+
+    return `Untuk area Kecamatan ${rawName}, kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
   },
 
   outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>
