@@ -99,7 +99,7 @@ export class FollowUpService {
   }
 
   /**
-   * Mengambil daftar antrian follow-up dengan pagination, filter, dan search.
+   * Mengambil daftar antrian follow-up dengan pagination, filter, search, dan sorting.
    */
   public async listFollowUps(
     tenantId: string = DEFAULT_TENANT_ID,
@@ -109,6 +109,8 @@ export class FollowUpService {
       search?: string;
       page?: number;
       pageSize?: number;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
     } = {}
   ): Promise<{
     data: any[];
@@ -145,6 +147,33 @@ export class FollowUpService {
       };
     }
 
+    const sortOrder = options.sortOrder === 'desc' ? 'desc' : 'asc';
+    let orderBy: any[] = [];
+
+    switch (options.sortBy) {
+      case 'scheduled_at':
+        orderBy = [{ scheduled_at: sortOrder }, { created_at: 'desc' }];
+        break;
+      case 'created_at':
+        orderBy = [{ created_at: sortOrder }];
+        break;
+      case 'status':
+        orderBy = [{ status: sortOrder }, { scheduled_at: 'asc' }];
+        break;
+      case 'type':
+        orderBy = [{ type: sortOrder }, { stage: sortOrder }, { scheduled_at: 'asc' }];
+        break;
+      case 'customer_name':
+      case 'name':
+        orderBy = [{ customer: { name: sortOrder } }, { scheduled_at: 'asc' }];
+        break;
+      default:
+        orderBy = options.sortBy
+          ? [{ [options.sortBy]: sortOrder }]
+          : [{ scheduled_at: sortOrder }, { created_at: 'desc' }];
+        break;
+    }
+
     try {
       const [total, data] = await Promise.all([
         prisma.followUp.count({ where }),
@@ -164,7 +193,7 @@ export class FollowUpService {
               },
             },
           },
-          orderBy: [{ scheduled_at: 'desc' }, { created_at: 'desc' }],
+          orderBy,
           skip,
           take: pageSize,
         }),
@@ -452,6 +481,87 @@ export class FollowUpService {
         customer: true,
       },
     });
+  }
+
+  /**
+   * Majukan seluruh follow-up PENDING yang tanggalnya sebelum tanggal target (overdue)
+   * dan jadwalkan merata dengan kuota maksimal per hari (default: 10 pesan/hari) pada jam kerja (09:00 - 16:00 WIB).
+   */
+  public async rescheduleOverdueFollowUps(
+    tenantId: string = DEFAULT_TENANT_ID,
+    options: {
+      maxPerDay?: number;
+      startDate?: Date;
+    } = {}
+  ): Promise<{
+    rescheduledCount: number;
+    daysCount: number;
+    distribution: Record<string, number>;
+  }> {
+    const maxPerDay = Math.max(1, options.maxPerDay || 10);
+
+    let baseDate: Date;
+    if (options.startDate) {
+      baseDate = new Date(options.startDate);
+    } else {
+      baseDate = new Date();
+      // jika jam sekarang sudah >= 16:00 WIB, mulai dari besok pagi
+      const currentWibHour = (baseDate.getUTCHours() + 7) % 24;
+      if (currentWibHour >= 16) {
+        baseDate.setDate(baseDate.getDate() + 1);
+      }
+    }
+    baseDate.setHours(9, 0, 0, 0);
+
+    const overdueFollowUps = await prisma.followUp.findMany({
+      where: {
+        tenant_id: tenantId,
+        status: 'PENDING',
+        scheduled_at: { lt: baseDate },
+      },
+      orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
+    });
+
+    if (overdueFollowUps.length === 0) {
+      return { rescheduledCount: 0, daysCount: 0, distribution: {} };
+    }
+
+    const distribution: Record<string, number> = {};
+    let currentDayIndex = 0;
+    let countInCurrentDay = 0;
+
+    // Stagger hours during the day (09:00, 09:40, 10:20, 11:00, 11:40, 13:00, 13:40, 14:20, 15:00, 15:40)
+    const slotMinutes = [0, 40, 80, 120, 160, 240, 280, 320, 360, 400];
+
+    for (const fu of overdueFollowUps) {
+      if (countInCurrentDay >= maxPerDay) {
+        currentDayIndex++;
+        countInCurrentDay = 0;
+      }
+
+      const targetDate = new Date(baseDate);
+      targetDate.setDate(targetDate.getDate() + currentDayIndex);
+
+      const offsetMin = slotMinutes[countInCurrentDay % slotMinutes.length] || (countInCurrentDay * 30);
+      targetDate.setHours(9, 0, 0, 0);
+      targetDate.setMinutes(targetDate.getMinutes() + offsetMin);
+
+      await prisma.followUp.update({
+        where: { id: fu.id },
+        data: { scheduled_at: targetDate },
+      });
+
+      const dateStr = targetDate.toISOString().split('T')[0];
+      distribution[dateStr] = (distribution[dateStr] || 0) + 1;
+      countInCurrentDay++;
+    }
+
+    console.log(`[FollowUp Service] Rescheduled ${overdueFollowUps.length} overdue follow-ups across ${currentDayIndex + 1} days (max ${maxPerDay}/day).`);
+    return {
+      rescheduledCount: overdueFollowUps.length,
+      daysCount: currentDayIndex + 1,
+      distribution,
+    };
   }
 
   /**

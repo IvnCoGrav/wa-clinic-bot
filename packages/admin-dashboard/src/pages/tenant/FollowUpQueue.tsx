@@ -17,6 +17,10 @@ import {
   Edit2,
   ShieldCheck,
   Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  FastForward,
 } from 'lucide-react';
 
 interface Customer {
@@ -45,12 +49,17 @@ export const FollowUpQueue: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<string>('scheduled_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ type: 'cancel' | 'send' | 'bulk-cancel' | 'queue' | 'bulk-queue'; id?: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'cancel' | 'send' | 'bulk-cancel' | 'queue' | 'bulk-queue' | 'reschedule-overdue';
+    id?: string;
+  } | null>(null);
 
   // Reschedule Modal
   const [rescheduleModal, setRescheduleModal] = useState<{ open: boolean; item?: FollowUpItem; newDate?: string }>({ open: false });
@@ -64,6 +73,8 @@ export const FollowUpQueue: React.FC = () => {
       if (statusFilter) params.append('status', statusFilter);
       if (typeFilter) params.append('type', typeFilter);
       if (search) params.append('search', search);
+      if (sortBy) params.append('sortBy', sortBy);
+      if (sortOrder) params.append('sortOrder', sortOrder);
       params.append('page', String(page));
       params.append('pageSize', String(PAGE_SIZE));
 
@@ -82,12 +93,41 @@ export const FollowUpQueue: React.FC = () => {
 
   useEffect(() => {
     loadFollowUps();
-  }, [statusFilter, typeFilter, page]);
+  }, [statusFilter, typeFilter, page, sortBy, sortOrder]);
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
     loadFollowUps();
+  };
+
+  const handleRescheduleOverdue = async () => {
+    setActionLoading('reschedule-overdue');
+    try {
+      const res = await apiRequest('follow-ups/reschedule-overdue', {
+        method: 'POST',
+        body: JSON.stringify({ maxPerDay: 10 }),
+      });
+      setToastMsg({
+        type: 'success',
+        text: res.message || 'Follow-up overdue berhasil dimajukan dan dijadwalkan (maks 10 blast/hari)!',
+      });
+      loadFollowUps();
+    } catch (err: any) {
+      setToastMsg({ type: 'error', text: `Gagal memajukan jadwal: ${err.message}` });
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleQueue = async (id: string) => {
@@ -263,9 +303,18 @@ export const FollowUpQueue: React.FC = () => {
             Antrian follow-up belum purchase dan treatment lanjutan (Sesuai tanggal & jam jadwal setup).
           </p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           {statusFilter === 'PENDING' && totalItems > 0 && (
             <>
+              <button
+                onClick={() => setConfirmAction({ type: 'reschedule-overdue' })}
+                disabled={actionLoading === 'reschedule-overdue'}
+                className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 transition flex items-center space-x-1.5 shadow-xs text-xs font-bold"
+                title="Majukan follow-up yang lewat tanggal dan jadwalkan merata maks 10/hari"
+              >
+                <FastForward size={13} className="text-amber-700" />
+                <span>Majukan Overdue (Maks 10/Hari)</span>
+              </button>
               <button
                 onClick={() => setConfirmAction({ type: 'bulk-queue' })}
                 disabled={actionLoading === 'bulk-queue'}
@@ -300,14 +349,14 @@ export const FollowUpQueue: React.FC = () => {
         <div>
           <p className="font-bold text-[#111b21]">Sistem Penjadwalan Antrian Follow-Up</p>
           <p className="text-[#54656f] mt-0.5">
-            Pesan berstatus <strong>PENDING</strong> menunggu konfirmasi admin. Klik tombol <strong>Jadwalkan</strong> untuk memasukkan pesan ke antrian (<strong>QUEUED</strong>) agar terkirim otomatis tepat pada tanggal & jam yang sudah disetup.
+            Pesan berstatus <strong>PENDING</strong> menunggu konfirmasi admin. Klik tombol <strong>Jadwalkan</strong> untuk memasukkan pesan ke antrian (<strong>QUEUED</strong>) agar terkirim otomatis tepat pada tanggal & jam yang sudah disetup (maksimal 10 blast per hari pada jam kerja).
           </p>
         </div>
       </div>
 
       {/* Filters & Search Bar */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+      <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <Filter size={15} className="text-[#008069] flex-shrink-0" />
           
           <select
@@ -339,10 +388,32 @@ export const FollowUpQueue: React.FC = () => {
             <option value="NO_PURCHASE">Belum Purchase (+3, +7, +14 Hari)</option>
             <option value="NEXT_TREATMENT">Treatment Lanjutan (+1, +2, +3 Bulan)</option>
           </select>
+
+          <div className="flex items-center space-x-1 border border-[#d1d7db] rounded-xl px-2 py-1 bg-white shadow-xs">
+            <ArrowUpDown size={13} className="text-[#8696a0]" />
+            <select
+              value={`${sortBy}:${sortOrder}`}
+              onChange={(e) => {
+                const [sb, so] = e.target.value.split(':');
+                setSortBy(sb);
+                setSortOrder(so as 'asc' | 'desc');
+                setPage(1);
+              }}
+              className="bg-transparent text-xs text-[#111b21] focus:outline-none cursor-pointer py-1"
+            >
+              <option value="scheduled_at:asc">Urutkan: Jadwal Terdekat (ASC)</option>
+              <option value="scheduled_at:desc">Urutkan: Jadwal Terjauh (DESC)</option>
+              <option value="customer_name:asc">Urutkan: Nama Customer (A-Z)</option>
+              <option value="customer_name:desc">Urutkan: Nama Customer (Z-A)</option>
+              <option value="type:asc">Urutkan: Tipe Follow-Up</option>
+              <option value="status:asc">Urutkan: Status</option>
+              <option value="created_at:desc">Urutkan: Terbaru Dibuat</option>
+            </select>
+          </div>
         </div>
 
-        <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full md:w-auto">
-          <div className="relative w-full md:w-64">
+        <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full lg:w-auto">
+          <div className="relative w-full lg:w-64">
             <Search size={14} className="absolute left-3 top-2.5 text-[#8696a0]" />
             <input
               type="text"
@@ -367,12 +438,64 @@ export const FollowUpQueue: React.FC = () => {
           <table className="w-full text-left text-xs text-[#111b21]">
             <thead>
               <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px]">
-                <th className="px-4 py-3.5">Tanggal Jadwal</th>
+                <th
+                  onClick={() => handleSort('scheduled_at')}
+                  className="px-4 py-3.5 cursor-pointer select-none hover:text-[#008069] transition-colors"
+                  title="Klik untuk urutkan berdasarkan Tanggal Jadwal"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Tanggal Jadwal</span>
+                    {sortBy === 'scheduled_at' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={12} className="text-[#008069]" /> : <ArrowDown size={12} className="text-[#008069]" />
+                    ) : (
+                      <ArrowUpDown size={12} className="text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3.5">Jam</th>
-                <th className="px-4 py-3.5">Tipe & Stage</th>
-                <th className="px-4 py-3.5">Customer & No. HP</th>
+                <th
+                  onClick={() => handleSort('type')}
+                  className="px-4 py-3.5 cursor-pointer select-none hover:text-[#008069] transition-colors"
+                  title="Klik untuk urutkan berdasarkan Tipe & Stage"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Tipe & Stage</span>
+                    {sortBy === 'type' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={12} className="text-[#008069]" /> : <ArrowDown size={12} className="text-[#008069]" />
+                    ) : (
+                      <ArrowUpDown size={12} className="text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('customer_name')}
+                  className="px-4 py-3.5 cursor-pointer select-none hover:text-[#008069] transition-colors"
+                  title="Klik untuk urutkan berdasarkan Nama Customer"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Customer & No. HP</span>
+                    {sortBy === 'customer_name' || sortBy === 'name' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={12} className="text-[#008069]" /> : <ArrowDown size={12} className="text-[#008069]" />
+                    ) : (
+                      <ArrowUpDown size={12} className="text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3.5">Varian Template</th>
-                <th className="px-4 py-3.5">Status</th>
+                <th
+                  onClick={() => handleSort('status')}
+                  className="px-4 py-3.5 cursor-pointer select-none hover:text-[#008069] transition-colors"
+                  title="Klik untuk urutkan berdasarkan Status"
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Status</span>
+                    {sortBy === 'status' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={12} className="text-[#008069]" /> : <ArrowDown size={12} className="text-[#008069]" />
+                    ) : (
+                      <ArrowUpDown size={12} className="text-slate-400 opacity-60" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3.5 text-right">Aksi</th>
               </tr>
             </thead>
@@ -569,7 +692,9 @@ export const FollowUpQueue: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
-              {confirmAction.type === 'bulk-cancel' ? (
+              {confirmAction.type === 'reschedule-overdue' ? (
+                <><FastForward className="text-amber-600" size={18} /><span>Majukan & Rapikan Jadwal Overdue?</span></>
+              ) : confirmAction.type === 'bulk-cancel' ? (
                 <><Trash2 className="text-rose-600" size={18} /><span>Batalkan Semua Antrian Pending?</span></>
               ) : confirmAction.type === 'bulk-queue' ? (
                 <><CalendarCheck className="text-blue-600" size={18} /><span>Jadwalkan Semua Antrian Pending?</span></>
@@ -582,7 +707,9 @@ export const FollowUpQueue: React.FC = () => {
               )}
             </h3>
             <p className="text-xs text-[#54656f]">
-              {confirmAction.type === 'bulk-cancel'
+              {confirmAction.type === 'reschedule-overdue'
+                ? 'Seluruh follow-up berstatus PENDING yang jadwalnya sebelum hari ini akan dimajukan mulai dari hari ini/besok, dan dibagi merata maksimal 10 blast per hari pada jam kerja (09:00 - 16:00 WIB).'
+                : confirmAction.type === 'bulk-cancel'
                 ? 'Seluruh follow-up berstatus PENDING akan dibatalkan sekaligus dan tidak akan dikirim.'
                 : confirmAction.type === 'bulk-queue'
                 ? 'Seluruh follow-up berstatus PENDING akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam jadwal masing-masing.'
@@ -603,7 +730,8 @@ export const FollowUpQueue: React.FC = () => {
                 onClick={() => {
                   const { type, id } = confirmAction;
                   setConfirmAction(null);
-                  if (type === 'bulk-cancel') handleBulkCancel();
+                  if (type === 'reschedule-overdue') handleRescheduleOverdue();
+                  else if (type === 'bulk-cancel') handleBulkCancel();
                   else if (type === 'bulk-queue') handleBulkQueue();
                   else if (type === 'cancel' && id) handleCancel(id);
                   else if (type === 'queue' && id) handleQueue(id);
@@ -611,7 +739,9 @@ export const FollowUpQueue: React.FC = () => {
                 }}
                 disabled={actionLoading !== null}
                 className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs ${
-                  confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel'
+                  confirmAction.type === 'reschedule-overdue'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel'
                     ? 'bg-rose-600 hover:bg-rose-700'
                     : confirmAction.type === 'bulk-queue' || confirmAction.type === 'queue'
                     ? 'bg-blue-600 hover:bg-blue-700'
@@ -620,6 +750,8 @@ export const FollowUpQueue: React.FC = () => {
               >
                 {actionLoading !== null
                   ? 'Memproses...'
+                  : confirmAction.type === 'reschedule-overdue'
+                  ? 'Ya, Majukan & Rapikan'
                   : confirmAction.type === 'bulk-cancel'
                   ? 'Ya, Batalkan Semua'
                   : confirmAction.type === 'bulk-queue'

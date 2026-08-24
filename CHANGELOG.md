@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Fitur Sorting Antrian Follow-Up & Rescheduling Overdue Otomatis (Maks 10 Blast/Hari) (2026-08-24)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Kebutuhan Sorting Antrian**: Di menu Follow-Up Queue (`/admin/follow-ups`), admin membutuhkan fleksibilitas dalam menyortir antrian berdasarkan Tanggal Jadwal (`scheduled_at`), Nama Customer (`customer_name`), Tipe & Stage (`type`), Status (`status`), dan Waktu Dibuat (`created_at`).
+  2. **Pembersihan Jadwal Terlewat (Overdue Rescheduling)**: Follow-up yang dibuat untuk cohort sebelumnya (misal Juli 2026 yang jadwal Stage 1 jatuh sebelum hari ini) perlu dimajukan ke hari aktif berikutnya (mulai 25 Agustus 2026) dan dibatasi maksimal 10 blast per hari pada jam kerja (09:00 - 15:40 WIB) untuk menjaga kepatuhan Anti-Ban & Rate-Limit Meta WhatsApp.
+- **Implementasi Backend Service & REST API:**
+  - **`src/services/follow-up.service.ts`**:
+    - Memperbarui `listFollowUps` agar mendukung query parameter dinamis `sortBy` (`scheduled_at`, `customer_name`, `type`, `status`, `created_at`) dan `sortOrder` (`asc` / `desc`) dengan fallback sorting terdekat terlebih dahulu.
+    - Menambahkan method `rescheduleOverdueFollowUps(tenantId, options)` yang mendistribusikan follow-up overdue berstatus `PENDING` ke hari-hari ke depan dengan kuota maksimal $X$ per hari (default 10 blast/hari) yang disebar di jam kerja (09:00, 09:40, 10:20, 11:00, 11:40, 13:00, 13:40, 14:20, 15:00, 15:40 WIB).
+  - **`src/routes/admin/follow-up.subroute.ts`**:
+    - Menambahkan parameter `sortBy` dan `sortOrder` pada endpoint `GET /api/admin/follow-ups`.
+    - Menambahkan endpoint baru `POST /api/admin/follow-ups/reschedule-overdue` dengan audit logging `RESCHEDULE_OVERDUE_FOLLOWUPS`.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  - **`FollowUpQueue.tsx`**:
+    - Menambahkan tombol header **"Majukan Overdue (Maks 10/Hari)"** (`FastForward`) lengkap dengan konfirmasi modal.
+    - Menambahkan dropdown **Quick Sort** di filter toolbar (Jadwal Terdekat ASC, Jadwal Terjauh DESC, Nama Customer A-Z / Z-A, Status, Tipe, Terbaru Dibuat).
+    - Menjadikan kolom tabel (*Tanggal Jadwal*, *Tipe & Stage*, *Customer & No. HP*, *Status*) interaktif dapat diklik langsung dengan indikator visual sorting (`ArrowUpDown`, `ArrowUp`, `ArrowDown`).
+- **Verifikasi, Eksekusi Live Database & Pengujian:**
+  - Menjalankan penataan jadwal 64 antrian pending bulan Agustus di database live server (`wa_clinic_db`) sehingga tersebar teratur:
+    - 25 Agustus 2026: 10 blast (09:00 - 15:40 WIB)
+    - 26 Agustus 2026: 10 blast (09:00 - 15:40 WIB)
+    - 27 Agustus 2026: 10 blast (09:00 - 15:40 WIB)
+    - 28 Agustus 2026: 10 blast (09:00 - 15:40 WIB)
+    - 29 Agustus 2026: 10 blast (09:00 - 15:40 WIB)
+    - 30 Agustus 2026: 10 blast (09:00 - 15:40 WIB)
+    - 31 Agustus 2026: 4 blast (09:00 - 11:00 WIB)
+  - Unit & Integration Tests: **18/18 tests PASS** (`follow-up-engine.test.ts` & `follow-up-admin.test.ts`).
+  - TypeScript build backend (`npm run build`) & Vite frontend build (`admin-dashboard: npm run build`) 100% lolos (0 error).
+
 ### Added & Enhanced — Standardisasi Seluruh Kontrol & Tombol ON/OFF Menjadi ToggleSwitch Interaktif (2026-08-24)
 
 - **Latar Belakang & Kebutuhan UI/UX:**
