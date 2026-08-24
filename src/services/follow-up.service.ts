@@ -384,6 +384,31 @@ export class FollowUpService {
   }
 
   /**
+   * Menjadwalkan follow-up tunggal ke antrian (status QUEUED).
+   * Pesan akan dikirim otomatis oleh background worker saat waktu scheduled_at tiba.
+   */
+  public async queueFollowUp(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const res = await prisma.followUp.updateMany({
+      where: { id, tenant_id: tenantId, status: 'PENDING' },
+      data: { status: 'QUEUED' },
+    });
+    console.log(`[FollowUp Service] Queued follow-up #${id} (status: QUEUED).`);
+    return res.count > 0;
+  }
+
+  /**
+   * Menjadwalkan seluruh follow-up PENDING ke antrian (status QUEUED).
+   */
+  public async bulkQueueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
+    const res = await prisma.followUp.updateMany({
+      where: { tenant_id: tenantId, status: 'PENDING' },
+      data: { status: 'QUEUED' },
+    });
+    console.log(`[FollowUp Service] Bulk queued ${res.count} follow-ups to status QUEUED.`);
+    return res.count;
+  }
+
+  /**
    * Cancel single follow-up
    */
   public async cancelFollowUp(id: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
@@ -395,7 +420,7 @@ export class FollowUpService {
   }
 
   /**
-   * Bulk cancel follow-ups (misal semua PENDING)
+   * Bulk cancel follow-ups (misal semua PENDING atau QUEUED)
    */
   public async bulkCancelFollowUps(tenantId: string = DEFAULT_TENANT_ID, status: string = 'PENDING'): Promise<number> {
     const res = await prisma.followUp.updateMany({
@@ -407,14 +432,21 @@ export class FollowUpService {
   }
 
   /**
-   * Reschedule follow-up
+   * Reschedule follow-up (ubah tanggal/jam jadwal kirim).
    */
   public async rescheduleFollowUp(id: string, newDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
+    const existing = await prisma.followUp.findFirst({
+      where: { id, tenant_id: tenantId },
+    });
+
+    if (!existing) {
+      throw new Error(`Follow-up #${id} tidak ditemukan.`);
+    }
+
     return prisma.followUp.update({
       where: { id },
       data: {
         scheduled_at: newDate,
-        status: 'PENDING',
       },
       include: {
         customer: true,
@@ -424,18 +456,17 @@ export class FollowUpService {
 
   /**
    * Dipanggil oleh CronWorker (misal setiap 15 menit) untuk mencari & mengeksekusi
-   * follow-up PENDING yang waktunya sudah tiba.
+   * follow-up yang waktunya sudah tiba (scheduled_at <= NOW()).
    * 
-   * KEBIJAKAN KEAMANAN (MANUAL APPROVAL POLICY):
-   * Pengiriman pesan otomatis HANYA berjalan jika AUTO_FOLLOWUP_ENABLED === 'true'.
-   * Secara default (tanpa env atau false), worker hanya me-refresh status antrian
-   * dan TIDAK mengirimkan pesan otomatis ke WhatsApp tanpa persetujuan Admin di Dashboard.
+   * KEBIJAKAN PENJADWALAN & APPROVAL:
+   * - Status 'QUEUED': Selalu diproses saat scheduled_at tiba, karena sudah disetujui / dijadwalkan oleh admin.
+   * - Status 'PENDING': Hanya diproses otomatis jika AUTO_FOLLOWUP_ENABLED === 'true'.
+   *   Jika AUTO_FOLLOWUP_ENABLED !== 'true', status PENDING menunggu admin mengklik "Jadwalkan" di Dashboard.
    */
   public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
-    // 1. Guard Manual Approval
-    if (process.env.AUTO_FOLLOWUP_ENABLED !== 'true') {
-      return 0;
-    }
+    const targetStatuses = process.env.AUTO_FOLLOWUP_ENABLED === 'true'
+      ? ['QUEUED', 'PENDING']
+      : ['QUEUED'];
 
     try {
       const now = new Date();
@@ -444,7 +475,7 @@ export class FollowUpService {
       const dueFollowUps = await prisma.followUp.findMany({
         where: {
           tenant_id: tenantId,
-          status: 'PENDING',
+          status: { in: targetStatuses as any },
           scheduled_at: { lte: now },
           customer: {
             status: { not: 'blocked' },
@@ -466,7 +497,7 @@ export class FollowUpService {
         return 0;
       }
 
-      console.log(`[FollowUp Worker] Found ${dueFollowUps.length} due follow-ups to process (Auto-send mode).`);
+      console.log(`[FollowUp Worker] Found ${dueFollowUps.length} due follow-ups to process (${targetStatuses.join('/')} mode, scheduled_at <= now).`);
       let processed = 0;
 
       for (const fu of dueFollowUps) {

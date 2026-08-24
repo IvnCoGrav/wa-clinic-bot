@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
+import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { 
   Activity, 
   Plus, 
@@ -634,23 +635,14 @@ export const ClinicServices: React.FC = () => {
                       </td>
 
                       <td className="px-4 py-3.5">
-                        <button
-                          onClick={() => handleToggleActive(srv)}
-                          className="flex items-center space-x-1.5 text-xs font-bold"
-                          title={srv.isActive ? "Nonaktifkan Layanan" : "Aktifkan Layanan"}
-                        >
-                          {srv.isActive ? (
-                            <>
-                              <ToggleRight className="text-[#008069]" size={20} />
-                              <span className="text-emerald-700">Aktif</span>
-                            </>
-                          ) : (
-                            <>
-                              <ToggleLeft className="text-[#8696a0]" size={20} />
-                              <span className="text-[#8696a0]">Nonaktif</span>
-                            </>
-                          )}
-                        </button>
+                        <ToggleSwitch
+                          checked={srv.isActive}
+                          onChange={() => handleToggleActive(srv)}
+                          size="sm"
+                          onLabel="Aktif"
+                          offLabel="Nonaktif"
+                          title={srv.isActive ? "Klik untuk nonaktifkan layanan" : "Klik untuk aktifkan layanan"}
+                        />
                       </td>
 
                       <td className="px-4 py-3.5">
@@ -1019,17 +1011,20 @@ export const ClinicServices: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center space-x-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="formIsActive"
-                  checked={formIsActive}
-                  onChange={(e) => setFormIsActive(e.target.checked)}
-                  className="rounded border-[#d1d7db] text-[#008069] focus:ring-[#008069]"
-                />
-                <label htmlFor="formIsActive" className="text-xs text-[#111b21] font-semibold cursor-pointer">
-                  Aktifkan layanan ini di katalog WhatsApp AI Bot & Kalender Reservasi
-                </label>
+              <div className="pt-2">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                  <div>
+                    <span className="text-xs font-bold text-[#111b21] block">Status Layanan</span>
+                    <span className="text-[11px] text-[#667781]">Tampilkan di katalog WhatsApp AI Bot & Kalender Reservasi</span>
+                  </div>
+                  <ToggleSwitch
+                    checked={formIsActive}
+                    onChange={(next) => setFormIsActive(next)}
+                    size="sm"
+                    onLabel="Aktif"
+                    offLabel="Nonaktif"
+                  />
+                </div>
               </div>
 
               {/* Modal Actions */}

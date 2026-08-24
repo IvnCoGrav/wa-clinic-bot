@@ -9,6 +9,7 @@ import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
 import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
 import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 import { GoogleIntegrationPanel } from '../../components/settings/GoogleIntegrationPanel';
+import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
 const CAPI_TOKEN_MASK = '••••••••••••••••••••••••••••••••';
@@ -830,13 +831,17 @@ export const Settings: React.FC = () => {
               Aktifkan atau nonaktifkan bot AI secara global. Saat dinonaktifkan, semua pesan WhatsApp masuk akan otomatis dialihkan ke antrian manusia (Staff / Bidan).
             </p>
             <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] mt-2">
-              <span className="text-xs font-semibold text-[#111b21]">AI Auto-Responder Bot</span>
-              <button
-                onClick={() => handleSaveGlobalToggle(!globalBotActive)}
-                className={`w-12 h-6 rounded-full transition-all relative ${globalBotActive ? 'bg-[#008069]' : 'bg-[#d1d7db]'}`}
-              >
-                <div className={`absolute top-0.5 left-0.5 bg-white h-5 w-5 rounded-full transition-all ${globalBotActive ? 'translate-x-6' : ''}`}></div>
-              </button>
+              <div>
+                <span className="text-xs font-bold text-[#111b21] block">AI Auto-Responder Bot</span>
+                <span className="text-[11px] text-[#667781]">Respon otomatis pesan baru oleh bot</span>
+              </div>
+              <ToggleSwitch
+                checked={globalBotActive}
+                onChange={(next) => handleSaveGlobalToggle(next)}
+                onLabel="BOT ON (AKTIF)"
+                offLabel="BOT OFF (NONAKTIF)"
+                size="md"
+              />
             </div>
           </div>
 

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { ExternalIntegrationModal } from '../../components/modals/ExternalIntegrationModal';
+import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import {
   Globe,
   Plus,
@@ -442,18 +443,14 @@ export const LandingPage: React.FC = () => {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleToggleActive(item)}
-                          className={`px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow-xs ${
-                            item.isActive
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                          }`}
+                        <ToggleSwitch
+                          checked={item.isActive}
+                          onChange={() => handleToggleActive(item)}
+                          size="sm"
+                          onLabel="Aktif"
+                          offLabel="Nonaktif"
                           title={item.isActive ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${item.isActive ? 'bg-emerald-600' : 'bg-slate-500'}`} />
-                          {item.isActive ? 'Aktif' : 'Nonaktif'}
-                        </button>
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1.5">
@@ -680,17 +677,20 @@ export const LandingPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex items-center space-x-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="formIsActive"
-                  checked={formIsActive}
-                  onChange={(e) => setFormIsActive(e.target.checked)}
-                  className="rounded bg-white border-[#d1d7db] text-[#008069] focus:ring-[#008069]"
-                />
-                <label htmlFor="formIsActive" className="text-xs text-[#111b21] font-semibold cursor-pointer">
-                  Aktifkan landing page ini (aktif = bisa diakses via slug)
-                </label>
+              <div className="pt-2">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                  <div>
+                    <span className="text-xs font-bold text-[#111b21] block">Status Landing Page</span>
+                    <span className="text-[11px] text-[#667781]">Landing page aktif dapat diakses publik via slug URL</span>
+                  </div>
+                  <ToggleSwitch
+                    checked={formIsActive}
+                    onChange={(next) => setFormIsActive(next)}
+                    size="sm"
+                    onLabel="Aktif"
+                    offLabel="Nonaktif"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-4 border-t border-[#e9edef]">

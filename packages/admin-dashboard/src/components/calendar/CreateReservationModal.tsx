@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 import { 
   X, 
   Calendar as CalendarIcon, 
@@ -813,7 +814,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     autoComplete="off"
                     className="p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21]"
                   />
-                  <div className="flex items-center space-x-1">
+                  <div className="flex items-center space-x-2">
                     <input
                       type="number"
                       value={customServiceDuration}
@@ -822,15 +823,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       className="w-20 p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21]"
                     />
                     <span className="text-xs text-[#667781]">mnt</span>
-                    <label className="flex items-center space-x-1 text-[11px] text-[#54656f] cursor-pointer ml-1">
-                      <input
-                        type="checkbox"
-                        checked={customIsAddon}
-                        onChange={(e) => setCustomIsAddon(e.target.checked)}
-                        className="rounded text-[#008069]"
-                      />
-                      <span>Add-on (0m buffer)</span>
-                    </label>
+                    <ToggleSwitch
+                      checked={customIsAddon}
+                      onChange={(next) => setCustomIsAddon(next)}
+                      size="sm"
+                      onLabel="Add-on (0m)"
+                      offLabel="Standar"
+                      title="Add-on: treatment tambahan tanpa buffer perjalanan (0 menit)"
+                    />
                   </div>
                   <button
                     type="button"

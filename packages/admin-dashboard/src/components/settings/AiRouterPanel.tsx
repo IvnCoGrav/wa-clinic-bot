@@ -1,5 +1,6 @@
 import React from 'react';
 import { Cpu, Zap, Calendar, Check, Loader2, Clock } from 'lucide-react';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 
 interface Props {
   aiRouterEnabled: boolean;
@@ -80,16 +81,15 @@ export const AiRouterPanel: React.FC<Props> = ({
           <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#111b21]">Status AI Router</span>
-              <button
-                type="button"
-                onClick={() => handleToggleAiRouter('enabled', !aiRouterEnabled)}
+              <ToggleSwitch
+                checked={aiRouterEnabled}
+                onChange={(next) => handleToggleAiRouter('enabled', next)}
+                loading={savingAiRouter}
                 disabled={savingAiRouter}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-xs ${
-                  aiRouterEnabled ? 'bg-[#008069] text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                }`}
-              >
-                {aiRouterEnabled ? 'ENABLED (ON)' : 'DISABLED (OFF)'}
-              </button>
+                onLabel="ON (AKTIF)"
+                offLabel="OFF (NONAKTIF)"
+                size="md"
+              />
             </div>
             <p className="text-xs text-[#667781] leading-relaxed">
               Jika aktif, pesan masuk diklasifikasikan oleh AI Router sebelum diarahkan ke state machine.
@@ -99,17 +99,16 @@ export const AiRouterPanel: React.FC<Props> = ({
           {/* AI Output Verifier Activation (QC Guardrail) */}
           <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#111b21]">AI Output Verifier (Quality Control)</span>
-              <button
-                type="button"
-                onClick={() => handleToggleAiRouter('shadowMode', !aiRouterShadowMode)}
+              <span className="text-xs font-bold text-[#111b21]">AI Output Verifier (QC Guardrail)</span>
+              <ToggleSwitch
+                checked={aiRouterShadowMode}
+                onChange={(next) => handleToggleAiRouter('shadowMode', next)}
+                loading={savingAiRouter}
                 disabled={savingAiRouter}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition shadow-xs ${
-                  aiRouterShadowMode ? 'bg-[#008069] text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                }`}
-              >
-                {aiRouterShadowMode ? 'QC ACTIVE (GUARDRAIL ON)' : 'QC DISABLED (OFF)'}
-              </button>
+                onLabel="QC ON (GUARDRAIL)"
+                offLabel="QC OFF"
+                size="md"
+              />
             </div>
             <p className="text-xs text-[#667781] leading-relaxed">
               Memeriksa draf balasan AI terhadap Ground Truth (kategori usia, SOP klinik, validasi lokasi) sebelum pesan dikirim ke customer.

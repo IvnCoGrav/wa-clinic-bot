@@ -1,6 +1,7 @@
 import React from 'react';
 import { Volume2, ImageIcon, Save } from 'lucide-react';
 import { PricelistImagePanel } from './PricelistImagePanel';
+import { ToggleSwitch } from '../common/ToggleSwitch';
 
 interface Props {
   initialPricelistUrl: string | null;
@@ -66,13 +67,17 @@ export const MqlSettingsPanel: React.FC<Props> = ({
             />
           </div>
 
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
-            <span className="text-xs font-semibold text-[#111b21]">Otomatisasi Auto-Lead</span>
-            <input
-              type="checkbox"
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+            <div>
+              <span className="text-xs font-bold text-[#111b21] block">Otomatisasi Auto-Lead</span>
+              <span className="text-[11px] text-[#667781]">Tandai customer sebagai MQL otomatis saat batas tercapai</span>
+            </div>
+            <ToggleSwitch
               checked={mqlAutoLeadEnabled}
-              onChange={(e) => setMqlAutoLeadEnabled(e.target.checked)}
-              className="w-4 h-4 text-[#008069] rounded focus:ring-[#008069] cursor-pointer"
+              onChange={(next) => setMqlAutoLeadEnabled(next)}
+              onLabel="ON (AKTIF)"
+              offLabel="OFF (NONAKTIF)"
+              size="md"
             />
           </div>
 
