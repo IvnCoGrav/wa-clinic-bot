@@ -443,6 +443,33 @@ export class MessageService {
   }
 
   /**
+   * Mengambil satu pesan berdasarkan ID internal atau wa_message_id (DB dengan in-memory fallback).
+   */
+  public async getMessageById(messageId: string, tenantId: string): Promise<any | null> {
+    if (!messageId) return null;
+    try {
+      const message = await prisma.message.findFirst({
+        where: {
+          OR: [
+            { id: messageId },
+            { wa_message_id: messageId },
+          ],
+          tenant_id: tenantId,
+        },
+      });
+      if (message) return message;
+    } catch (_) {}
+
+    // Fallback memory store
+    const found = memoryMessages.find(
+      (m) =>
+        (m.id === messageId || m.wa_message_id === messageId) &&
+        m.tenant_id === tenantId
+    );
+    return found || null;
+  }
+
+  /**
    * Mengambil pesan-pesan terakhir untuk percakapan tertentu (terurut kronologis).
    */
   public async getRecentMessages(conversationId: string, limit: number, tenantId: string): Promise<any[]> {

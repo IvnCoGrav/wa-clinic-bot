@@ -49,10 +49,10 @@ export interface IWahaClient {
   sendSeen(chatId: string, messageId?: string): Promise<boolean>;
   startTyping(chatId: string): Promise<boolean>;
   stopTyping(chatId: string): Promise<boolean>;
-  sendText(chatId: string, text: string): Promise<boolean>;
-  sendTextDetailed?(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }>;
-  sendImage(chatId: string, url: string, caption?: string): Promise<boolean>;
-  sendImageDetailed?(chatId: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string }>;
+  sendText(chatId: string, text: string, replyTo?: string): Promise<boolean>;
+  sendTextDetailed?(chatId: string, text: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
+  sendImage(chatId: string, url: string, caption?: string, replyTo?: string): Promise<boolean>;
+  sendImageDetailed?(chatId: string, url: string, caption?: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
   addLabel(chatId: string, labelName: string): Promise<boolean>;
   removeLabel(chatId: string, labelName: string): Promise<boolean>;
   getChatLabels(chatId: string): Promise<string[]>;
@@ -507,31 +507,36 @@ export class WahaClient implements IWahaClient {
   /**
    * Pengiriman pesan teks utama ke WAHA API (/api/sendText)
    */
-  public async sendText(chatId: string, text: string): Promise<boolean> {
-    const res = await this.sendTextDetailed(chatId, text);
+  public async sendText(chatId: string, text: string, replyTo?: string): Promise<boolean> {
+    const res = await this.sendTextDetailed(chatId, text, replyTo);
     return res.success;
   }
 
-  public async sendTextDetailed(chatId: string, text: string): Promise<{ success: boolean; messageId?: string }> {
+  public async sendTextDetailed(chatId: string, text: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }> {
     const targetChatId = await this.resolveActiveJid(chatId);
     // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
     const normalizedText = normalizeWhatsAppFormat(text);
 
     if (this.shouldMock) {
-      console.log(`[MOCK WAHA OUTBOUND] sendText -> chatId: ${targetChatId} | text: "${normalizedText}"`);
+      console.log(`[MOCK WAHA OUTBOUND] sendText -> chatId: ${targetChatId} | text: "${normalizedText}"${replyTo ? ` | reply_to: ${replyTo}` : ''}`);
       return { success: true, messageId: `mock_${Date.now()}` };
     }
 
     try {
+      const payload: any = {
+        chatId: targetChatId,
+        text: normalizedText,
+        session: this.session,
+      };
+      if (replyTo) {
+        payload.reply_to = replyTo;
+      }
+
       const response = await this.runSerialized(() =>
         this.withRetry('sendText', () =>
           axios.post(
             `${this.baseUrl}/api/sendText`,
-            {
-              chatId: targetChatId,
-              text: normalizedText,
-              session: this.session,
-            },
+            payload,
             { headers: this.headers, timeout: this.timeoutMs }
           )
         )
@@ -554,12 +559,17 @@ export class WahaClient implements IWahaClient {
    * Mengirim media/gambar ke WAHA API (/api/sendImage)
    * Mendukung konversi URL (remote) dan File Path (lokal) menjadi Base64 Payload secara otomatis
    */
-  public async sendImage(chatId: string, url: string, caption?: string): Promise<boolean> {
+  public async sendImage(chatId: string, url: string, caption?: string, replyTo?: string): Promise<boolean> {
+    const res = await this.sendImageDetailed(chatId, url, caption, replyTo);
+    return res.success;
+  }
+
+  public async sendImageDetailed(chatId: string, url: string, caption?: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }> {
     const targetChatId = await this.resolveActiveJid(chatId);
 
     if (this.shouldMock) {
-      console.log(`[MOCK WAHA OUTBOUND] sendImage -> chatId: ${targetChatId} | url: "${url}" | caption: "${caption || ''}"`);
-      return true;
+      console.log(`[MOCK WAHA OUTBOUND] sendImage -> chatId: ${targetChatId} | url: "${url}" | caption: "${caption || ''}"${replyTo ? ` | reply_to: ${replyTo}` : ''}`);
+      return { success: true, messageId: `mock_img_${Date.now()}` };
     }
 
     try {
@@ -583,80 +593,6 @@ export class WahaClient implements IWahaClient {
         const { existsSync } = await import('fs');
         const path = await import('path');
 
-        let resolvedPath = path.resolve(url);
-        if (!existsSync(resolvedPath)) {
-          if (url.startsWith('/media/') || url.startsWith('media/')) {
-            const relClean = url.replace(/^\/?media\//, '');
-            resolvedPath = path.join(process.cwd(), 'storage', 'media', relClean);
-          } else if (url.startsWith('/storage/') || url.startsWith('storage/')) {
-            const relClean = url.replace(/^\/?storage\//, '');
-            resolvedPath = path.join(process.cwd(), 'storage', relClean);
-          } else if (!path.isAbsolute(url)) {
-            resolvedPath = path.join(process.cwd(), url);
-          }
-        }
-
-        if (!existsSync(resolvedPath)) {
-          throw new Error(`File media lokal tidak ditemukan di: ${resolvedPath} (input original: ${url})`);
-        }
-
-        const fileBuffer = await fs.readFile(resolvedPath);
-        base64Data = fileBuffer.toString('base64');
-
-        const ext = path.extname(resolvedPath).toLowerCase();
-        if (ext === '.png') mimetype = 'image/png';
-        else if (ext === '.gif') mimetype = 'image/gif';
-        else if (ext === '.webp') mimetype = 'image/webp';
-        filename = path.basename(resolvedPath);
-      }
-
-      const response = await axios.post(
-        `${this.baseUrl}/api/sendImage`,
-        {
-          chatId: targetChatId,
-          file: {
-            mimetype,
-            data: base64Data,
-            filename,
-          },
-          caption,
-          session: this.session,
-        },
-        { headers: this.headers, timeout: this.mediaTimeoutMs }
-      );
-      return response.status === 200 || response.status === 201;
-    } catch (error: any) {
-      console.error(`[WAHA API ERROR] sendImage failed for ${targetChatId}:`, error?.response?.data || error.message);
-      return false;
-    }
-  }
-
-  public async sendImageDetailed(chatId: string, url: string, caption?: string): Promise<{ success: boolean; messageId?: string }> {
-    const targetChatId = await this.resolveActiveJid(chatId);
-
-    if (this.shouldMock) {
-      console.log(`[MOCK WAHA OUTBOUND] sendImage -> chatId: ${targetChatId} | url: "${url}" | caption: "${caption || ''}"`);
-      return { success: true, messageId: `mock_img_${Date.now()}` };
-    }
-
-    try {
-      let base64Data = '';
-      let mimetype = 'image/jpeg';
-      let filename = 'image.jpg';
-
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        const response = await axios.get(url, { responseType: 'arraybuffer', timeout: this.mediaTimeoutMs });
-        base64Data = Buffer.from(response.data, 'binary').toString('base64');
-        mimetype = String(response.headers['content-type'] || 'image/jpeg');
-
-        const urlPathname = new URL(url).pathname;
-        const lastSegment = urlPathname.substring(urlPathname.lastIndexOf('/') + 1);
-        if (lastSegment) filename = lastSegment;
-      } else {
-        const fs = await import('fs/promises');
-        const { existsSync } = await import('fs');
-        const path = await import('path');
-
         let resolvedPath = url;
         if (!existsSync(resolvedPath)) {
           const fallbackPath = path.resolve(process.cwd(), url.replace(/^\//, ''));
@@ -675,18 +611,23 @@ export class WahaClient implements IWahaClient {
         filename = path.basename(resolvedPath);
       }
 
+      const payload: any = {
+        chatId: targetChatId,
+        file: {
+          mimetype,
+          data: base64Data,
+          filename,
+        },
+        caption: caption ? normalizeWhatsAppFormat(caption) : undefined,
+        session: this.session,
+      };
+      if (replyTo) {
+        payload.reply_to = replyTo;
+      }
+
       const response = await axios.post(
         `${this.baseUrl}/api/sendImage`,
-        {
-          chatId: targetChatId,
-          file: {
-            mimetype,
-            data: base64Data,
-            filename,
-          },
-          caption,
-          session: this.session,
-        },
+        payload,
         { headers: this.headers, timeout: this.mediaTimeoutMs }
       );
       const ok = response.status === 200 || response.status === 201;

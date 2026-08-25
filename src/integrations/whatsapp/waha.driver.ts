@@ -18,7 +18,7 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     this.tenantId = tenantId;
   }
 
-  async sendTextMessage(to: string, text: string): Promise<SendResult> {
+  async sendTextMessage(to: string, text: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
     const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
     const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
     if (isCutOff) {
@@ -33,10 +33,14 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     const chatId = this.toChatId(to);
     try {
       if (typeof this.client.sendTextDetailed === 'function') {
-        const res = await this.client.sendTextDetailed(chatId, text);
+        const res = options?.replyToMessageId
+          ? await this.client.sendTextDetailed(chatId, text, options.replyToMessageId)
+          : await this.client.sendTextDetailed(chatId, text);
         return { success: res.success, messageId: res.messageId, provider: 'WAHA' };
       }
-      const ok = await this.client.sendText(chatId, text);
+      const ok = options?.replyToMessageId
+        ? await this.client.sendText(chatId, text, options.replyToMessageId)
+        : await this.client.sendText(chatId, text);
       return { success: ok, provider: 'WAHA' };
     } catch (err: any) {
       return {
@@ -77,7 +81,7 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     return this.sendTextMessage(to, text);
   }
 
-  async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<SendResult> {
+  async sendImageMessage(to: string, imageUrl: string, caption?: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
     const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
     const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
     if (isCutOff) {
@@ -92,10 +96,14 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     const chatId = this.toChatId(to);
     try {
       if (typeof this.client.sendImageDetailed === 'function') {
-        const res = await this.client.sendImageDetailed(chatId, imageUrl, caption);
+        const res = options?.replyToMessageId
+          ? await this.client.sendImageDetailed(chatId, imageUrl, caption, options.replyToMessageId)
+          : await this.client.sendImageDetailed(chatId, imageUrl, caption);
         return { success: res.success, messageId: res.messageId, provider: 'WAHA' };
       }
-      const ok = await this.client.sendImage(chatId, imageUrl, caption);
+      const ok = options?.replyToMessageId
+        ? await this.client.sendImage(chatId, imageUrl, caption, options.replyToMessageId)
+        : await this.client.sendImage(chatId, imageUrl, caption);
       return { success: ok, provider: 'WAHA' };
     } catch (err: any) {
       return {

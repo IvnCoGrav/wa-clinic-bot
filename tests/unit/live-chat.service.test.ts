@@ -110,6 +110,44 @@ describe('LiveChatService — monitor & balas admin', () => {
     expect(messages.some((m) => m.sender_type === 'ADMIN' && m.content === 'Baik Bunda, kami proses ya')).toBe(true);
   });
 
+  it('sendAdminReply dengan replyToMessageId: meneruskan replyToMessageId ke gateway dan menyimpan quoted_message', async () => {
+    const fake = makeFakeGateway('WAHA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const phone = `628201${Date.now()}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Reply', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    // Inbound customer message yang akan di-reply
+    const inboundMsg = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.INBOUND,
+      content: 'Berapa harga paket imunisasi?',
+      waMessageId: 'false_628201_WA_MSG_123',
+    });
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      text: 'Harga paket imunisasi mulai dari Rp 150.000 Bunda',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Bidan Kala',
+      replyToMessageId: inboundMsg.id,
+    });
+
+    expect(result.success).toBe(true);
+    expect(fake.sendTextMessage).toHaveBeenCalledWith(
+      phone,
+      'Harga paket imunisasi mulai dari Rp 150.000 Bunda',
+      { replyToMessageId: 'false_628201_WA_MSG_123' }
+    );
+
+    const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
+    const replyMsg = messages.find((m) => m.content === 'Harga paket imunisasi mulai dari Rp 150.000 Bunda');
+    expect(replyMsg).toBeDefined();
+    expect(replyMsg?.payload_raw?.quoted_message?.content).toBe('Berapa harga paket imunisasi?');
+  });
+
   it('getConversationList: mode memisahkan sandbox/test vs WhatsApp asli', async () => {
     const phoneReal = `628800${Date.now()}`;
     const phoneSand = `628900${Date.now()}`;

@@ -211,12 +211,13 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           fileName?: string;
           adminName?: string;
           acknowledgeOutsideWindow?: boolean;
+          replyToMessageId?: string;
         };
       }>,
       reply
     ) => {
       const { id } = request.params;
-      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow } = request.body || {};
+      const { text, imageB64, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId } = request.body || {};
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
@@ -228,6 +229,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         tenantId: DEFAULT_TENANT_ID,
         adminName,
         acknowledgeOutsideWindow,
+        replyToMessageId,
       });
 
       if (!result.success) {
