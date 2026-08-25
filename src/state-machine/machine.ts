@@ -530,6 +530,68 @@ export class ConversationStateMachine {
         console.warn('[AI VERIFIER HOOK ERROR]', verifierErr.message);
       }
 
+      // --- STEP 1: SEND PRICELIST IMAGE FIRST (JIKA DIAKTIFKAN) ---
+      // Sesuai alur: kirim gambar katalog/pricelist terlebih dahulu agar customer melihat opsi treatment,
+      // kemudian disusul bubble teks informasi ongkir & pertanyaan pilihan treatment.
+      if (result.sendPricelistImage) {
+        let sendOk = false;
+        try {
+          const { prisma } = await import('../db/client');
+          const dbCustomer = await prisma.customer.findUnique({
+            where: { id: customer.id },
+          });
+          const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
+
+          if (!alreadySent || result.forcePricelistResend) {
+            const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+            const gateway = await resolveGatewayForTenant(tenantId);
+            const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+            const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
+
+            if (!pricelistTarget) {
+              console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}.`);
+            } else if (customer.is_sandbox_test) {
+              console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
+              sendOk = true;
+            } else {
+              const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+              sendOk = sendResult.success;
+            }
+
+            if (sendOk && dbCustomer && !dbCustomer.pricelist_sent) {
+              await prisma.customer.update({
+                where: { id: customer.id },
+                data: { pricelist_sent: true },
+              });
+              customer.pricelist_sent = true;
+            }
+
+            // Beri jeda singkat agar gambar sampai terlebih dahulu di WhatsApp sebelum bubble teks masuk
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            console.log(`[PRICELIST SKIPPED] Pricelist image was already sent to customer ${customer.phone}. Skipping duplicate send.`);
+          }
+        } catch (dbErr: any) {
+          console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
+          // Best-effort tetap kirim walaupun DB offline (misal environment test / mock DB)
+          if (!sendOk) {
+            try {
+              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+              const gateway = await resolveGatewayForTenant(tenantId);
+              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+              const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
+              if (pricelistTarget) {
+                if (customer.is_sandbox_test) {
+                  console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
+                } else {
+                  await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // --- STEP 2: SEND TEXT REPLY (INFO ONGKIR & PERTANYAAN TREATMENT) ---
       // Selalu gunakan nomor HP asli customer (customer.phone@c.us) sebagai target chatId
       // agar pesan tidak terkirim ke JID palsu (mis. LID number@c.us) jika resolusi LID WAHA gagal.
       const chatId = `${customer.phone}@c.us`;
@@ -549,11 +611,7 @@ export class ConversationStateMachine {
         },
       });
 
-      // Audit Log Pesan Outbound (Keluar): dicatat SELALU — baik terkirim maupun
-      // gagal. Sebelumnya kegagalan sendText (WAHA down/timeout) tidak tercatat sama
-      // sekali (success=false → log dilewati), sehingga chat tidak terkirim tapi log
-      // pengiriman tidak menunjukkan jejak kegagalan. Kini gagal → delivery_status.
-      // Tambahkan error send ke payload_raw agar traceable.
+      // Audit Log Pesan Outbound (Keluar): dicatat SELALU — baik terkirim maupun gagal.
       const reason = result.aiReasoning ? { aiReasoning: result.aiReasoning } : undefined;
       await messageService.logMessage({
         tenantId,
@@ -567,69 +625,6 @@ export class ConversationStateMachine {
         metaErrorCode: resultHuman.success ? undefined : 'WAHA_SEND_TEXT',
         metaErrorDesc: resultHuman.success ? undefined : resultHuman.error || 'WAHA sendText failed',
       });
-
-      if (resultHuman.success) {
-        // Kirim Pricelist Image jika diinstruksikan oleh state handler.
-        // Default hanya 1x per customer; boleh dikirim ulang jika handler set forcePricelistResend
-        // (mis. saat customer minta pricelist lagi karena hilang / tidak terkirim).
-        // Sumber gambar dibaca per-tenant (tenants.pricelist_image_url → env → aset default)
-        // dan dikirim via gateway tenant (WAHA path/URL, WABA URL publik).
-        // Gambar dikirim HD asli (tanpa kompresi server-side).
-        if (result.sendPricelistImage) {
-          let sendOk = false;
-          try {
-            const { prisma } = await import('../db/client');
-            const dbCustomer = await prisma.customer.findUnique({
-              where: { id: customer.id }
-            });
-            const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
-
-            if (!alreadySent || result.forcePricelistResend) {
-              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
-              const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
-              const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
-
-              if (!pricelistTarget) {
-                console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}. Spring source image perlu URL publik/media outbound.`);
-              } else if (customer.is_sandbox_test) {
-                console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
-                sendOk = true;
-              } else {
-                const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
-                sendOk = sendResult.success;
-              }
-
-              // Tandai terkirim HANYA jika pengiriman benar-benar sukses.
-              if (sendOk && dbCustomer && !dbCustomer.pricelist_sent) {
-                await prisma.customer.update({
-                  where: { id: customer.id },
-                  data: { pricelist_sent: true }
-                });
-                customer.pricelist_sent = true;
-              }
-            } else {
-              console.log(`[PRICELIST SKIPPED] Pricelist image was already sent to customer ${customer.phone}. Skipping duplicate send.`);
-            }
-          } catch (dbErr: any) {
-            console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
-            // Best-effort tetap kirim walaupun DB offline (tidak membalikkan transaksi).
-            if (!sendOk) {
-              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
-              const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
-              const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
-              if (pricelistTarget) {
-                if (customer.is_sandbox_test) {
-                  console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
-                } else {
-                  await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
-                }
-              }
-            }
-          }
-        }
-      }
     }
 
     return result;

@@ -325,8 +325,8 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   // =======================================================================
   // JAWABAN HARGA & PRICELIST (fitur "tanya harga -> beri tahu")
   // =======================================================================
-  // CTA assumptive-close (yes-yes, bukan yes-no): arahkan ke jadwal terapis secara luwes.
-  priceCta: (_name?: string) => `Kira-kira mau dijadwalkan di hari apa ya Bunda? Biar sekalian kami bantu cekkan slot terapisnya 🤗`,
+  // CTA penawaran jadwal treatment
+  priceCta: (_name?: string) => `Rencana mau treatment di hari apa Bunda ? 😊`,
   // Format harga yang NATURAL/ngobrol (bukan brosur): deterministik, tanpa LLM,
   // dibungkus kalimat percakapan hangat dan manusiawi.
   priceInfo: (params: {
