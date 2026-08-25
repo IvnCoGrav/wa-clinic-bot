@@ -334,6 +334,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           include: {
             customer: {
               include: {
+                adClick: true,
                 children: true,
                 reservations: {
                   where: { status: { notIn: ['cancelled', 'rejected'] } },

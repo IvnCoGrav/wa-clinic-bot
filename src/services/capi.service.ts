@@ -375,13 +375,22 @@ export class CapiService {
     }
 
     let effectiveAdClick = adClick || (customer as any)?.adClick;
-    if (!effectiveAdClick && customer?.id) {
+    let fullCustomer = customer;
+    if (customer?.id || customer?.phone) {
       try {
         const { prisma } = await import('../db/client');
-        effectiveAdClick = await prisma.adClick.findFirst({
-          where: { customerId: customer.id },
-          orderBy: { matchedAt: 'desc' },
+        const dbCust = await prisma.customer.findFirst({
+          where: customer.id ? { id: customer.id } : { phone: customer.phone },
         });
+        if (dbCust) {
+          fullCustomer = { ...dbCust, ...customer };
+        }
+        if (!effectiveAdClick && fullCustomer?.id) {
+          effectiveAdClick = await prisma.adClick.findFirst({
+            where: { customerId: fullCustomer.id },
+            orderBy: { matchedAt: 'desc' },
+          });
+        }
       } catch {}
     }
 
@@ -419,14 +428,14 @@ export class CapiService {
     try {
       // 2. NORMALIZE & HASH PII (Nomor HP, Nama, External ID, Kota, Zipcode, Country) menggunakan Meta ParamBuilder
       const builder = new ParamBuilder();
-      const rawPhone = customer.phone || effectiveAdClick?.phone || '';
+      const rawPhone = fullCustomer?.phone || effectiveAdClick?.phone || '';
       const normalizedPhone = normalizePhoneToE164(rawPhone);
       const hashedPhone = builder.getNormalizedAndHashedPII(normalizedPhone, PII_DATA_TYPE.PHONE);
 
       // Advanced Matching: Nama Depan & Nama Belakang dari Customer / AdClick
       let hashedFn: string | undefined;
       let hashedLn: string | undefined;
-      const rawName = (customer.name || customer.pushName || effectiveAdClick?.name || '').trim();
+      const rawName = (fullCustomer?.name || fullCustomer?.pushName || effectiveAdClick?.name || '').trim();
       if (rawName) {
         // Strip honorifics seperti "Bunda", "Ibu", "Mama", "Mom" di awal nama
         const cleanedName = rawName.replace(/^(?:bunda|ibu|mama|mom|ny|ny\.|mrs|mrs\.)\s+/i, '').trim();
@@ -447,20 +456,20 @@ export class CapiService {
 
       // Advanced Matching: External ID (hashed customer.id / phone ID)
       let hashedExternalId: string | undefined;
-      const rawExternalId = customer.id ? String(customer.id) : undefined;
+      const rawExternalId = fullCustomer?.id ? String(fullCustomer.id) : undefined;
       if (rawExternalId) {
         hashedExternalId = builder.getNormalizedAndHashedPII(rawExternalId, PII_DATA_TYPE.EXTERNAL_ID) || undefined;
       }
 
-      // Advanced Matching: City (Kota), Zipcode (Kode Pos), & Country (Negara)
+      // Advanced Matching: City (Kota), Zipcode (Kode Pos), & Country (Negara) langsung dari Database
       let hashedCity: string | undefined;
       let hashedZip: string | undefined;
       let hashedCountry: string | undefined;
-      const rawCity = (customer.kota || customer.pending_kota || '').trim();
+      const rawCity = (fullCustomer?.kota || fullCustomer?.pending_kota || '').trim();
       if (rawCity) {
         hashedCity = builder.getNormalizedAndHashedPII(rawCity, PII_DATA_TYPE.CITY) || undefined;
       }
-      const rawZip = (customer.zipcode || customer.pending_zipcode || '').trim();
+      const rawZip = (fullCustomer?.zipcode || fullCustomer?.pending_zipcode || '').trim();
       if (rawZip) {
         hashedZip = builder.getNormalizedAndHashedPII(rawZip, PII_DATA_TYPE.ZIP_CODE) || undefined;
       }
