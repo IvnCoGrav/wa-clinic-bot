@@ -558,16 +558,51 @@ export class ConversationStateMachine {
               sendOk = sendResult.success;
             }
 
-            if (sendOk && dbCustomer && !dbCustomer.pricelist_sent) {
-              await prisma.customer.update({
-                where: { id: customer.id },
-                data: { pricelist_sent: true },
-              });
-              customer.pricelist_sent = true;
+            if (sendOk) {
+              if (dbCustomer && !dbCustomer.pricelist_sent) {
+                await prisma.customer.update({
+                  where: { id: customer.id },
+                  data: { pricelist_sent: true },
+                }).catch(() => {});
+                customer.pricelist_sent = true;
+              }
+
+              // Log pesan gambar pricelist ke tabel messages & siarkan ke Live Chat
+              try {
+                const { messageService } = await import('../services/message.service');
+                const path = await import('path');
+                const rawUrl = await (await import('../services/pricelist-config.service')).getPricelistImageUrl(tenantId);
+                let mediaUrl = rawUrl;
+                if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://') && !rawUrl.startsWith('/media/')) {
+                  const filename = path.basename(rawUrl);
+                  mediaUrl = `/media/asset/${filename}`;
+                }
+                await messageService.logMessage({
+                  tenantId,
+                  conversationId: conversation.id,
+                  direction: 'OUTBOUND',
+                  content: caption || `[IMAGE: Pricelist ${getBrandIdentity().businessName}]`,
+                  senderType: 'BOT',
+                  senderName: `Bot (${getBrandIdentity().businessName})`,
+                  payloadRaw: {
+                    type: 'image',
+                    caption: caption || `Pricelist ${getBrandIdentity().businessName}`,
+                    media: {
+                      url: mediaUrl,
+                      hdUrl: mediaUrl,
+                      caption,
+                      mimetype: 'image/jpeg',
+                    },
+                  },
+                });
+              } catch (logErr: any) {
+                console.warn('[PRICELIST LOG ERROR] Failed to log pricelist message to DB:', logErr.message);
+              }
             }
 
             // Beri jeda singkat agar gambar sampai terlebih dahulu di WhatsApp sebelum bubble teks masuk
             await new Promise((resolve) => setTimeout(resolve, 800));
+          } else {
             console.log(`[PRICELIST SKIPPED] Pricelist image was already sent to customer ${customer.phone}. Skipping duplicate send.`);
           }
         } catch (dbErr: any) {

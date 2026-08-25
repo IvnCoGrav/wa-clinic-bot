@@ -107,6 +107,26 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /media/asset/:filename
+   * Endpoint publik asset statis (misal gambar pricelist default) agar dapat dimuat di dashboard Live Chat.
+   */
+  fastify.get('/media/asset/:filename', async (request: FastifyRequest<{
+    Params: { filename: string };
+  }>, reply: FastifyReply) => {
+    const { filename } = request.params;
+    const sanitized = path.basename(filename);
+    const assetPath = path.join(process.cwd(), 'assets', sanitized);
+    if (!fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) {
+      return reply.status(404).send({ error: 'Asset Not Found' });
+    }
+    const ext = (path.extname(sanitized) || '').replace(/^\./, '').toLowerCase();
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Cache-Control', 'public, max-age=86400');
+    reply.type(MIME_MAP[ext] || 'image/jpeg');
+    return reply.send(fs.createReadStream(assetPath));
+  });
+
+  /**
    * GET /media/avatar/:customerId
    * Endpoint publik foto profil customer (atau avatar inisial).
    * Menjadi CDN avatar lokal agar Apple APNs & Google FCM dapat mengunduh foto tanpa terkena blokir hotlinking 403 Meta.
