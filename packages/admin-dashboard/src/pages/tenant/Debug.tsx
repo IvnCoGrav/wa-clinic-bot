@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { apiRequest } from '../../services/api';
+import { useUiFeedback } from '../../components/common/UiFeedback';
 import {
   Bug,
   RefreshCw,
@@ -13,6 +14,7 @@ import {
   XCircle,
   Clock,
   ShieldAlert,
+  ShieldCheck,
   Cpu,
   Terminal,
   Sparkles,
@@ -20,6 +22,16 @@ import {
   ChevronRight,
   Copy,
   Check,
+  Trash2,
+  Download,
+  Pause,
+  Play,
+  Filter,
+  Layers,
+  ArrowRight,
+  HelpCircle,
+  Zap,
+  CheckCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -692,37 +704,49 @@ interface GroupedCustomerLlmLogs {
 const getFlowBadge = (flowType: string) => {
   switch (flowType) {
     case 'NLU_CLASSIFICATION':
-      return { label: '🔍 1. NLU Intent & Entity', cls: 'bg-cyan-100 text-cyan-800 border-cyan-200' };
+      return { label: '1. NLU Intent & Entitas', short: 'NLU', icon: '🔍', cls: 'bg-cyan-50 text-cyan-800 border-cyan-200' };
     case 'AI_ROUTER':
-      return { label: '🧭 2. AI Router Decision', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
+      return { label: '2. AI Router Decision', short: 'ROUTER', icon: '🧭', cls: 'bg-indigo-50 text-indigo-800 border-indigo-200' };
     case 'CHATBOT_AUTO':
-      return { label: '🤖 3. Chatbot RAG Generator', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+      return { label: '3. RAG Generator', short: 'GENERATOR', icon: '🤖', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
     case 'AI_VERIFIER':
-      return { label: '🛡️ 4. AI Output Verifier (QC)', cls: 'bg-amber-100 text-amber-900 border-amber-300' };
+      return { label: '4. AI QC Verifier', short: 'QC VERIFIER', icon: '🛡️', cls: 'bg-amber-50 text-amber-900 border-amber-300' };
     case 'COPILOT_DRAFT':
-      return { label: '💡 AI Copilot Draft', cls: 'bg-purple-100 text-purple-800 border-purple-200' };
+      return { label: 'AI Copilot Draft', short: 'COPILOT', icon: '💡', cls: 'bg-purple-50 text-purple-800 border-purple-200' };
     case 'PHRASING':
-      return { label: '✍️ Persona Phrasing', cls: 'bg-teal-100 text-teal-800 border-teal-200' };
+      return { label: 'Persona Phrasing', short: 'PHRASING', icon: '✍️', cls: 'bg-teal-50 text-teal-800 border-teal-200' };
     default:
-      return { label: `⚡ ${flowType}`, cls: 'bg-slate-100 text-slate-800 border-slate-200' };
+      return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 text-slate-800 border-slate-200' };
   }
 };
 
+function formatPhoneDisplay(phone?: string): string {
+  if (!phone || phone === 'Unknown / General' || phone === 'unknown') return 'Umum / Tidak Dikenal';
+  const clean = phone.replace(/[^\d+]/g, '');
+  if (clean.startsWith('+')) return clean;
+  if (clean.startsWith('62')) return `+${clean.slice(0, 2)} ${clean.slice(2, 5)}-${clean.slice(5, 9)}-${clean.slice(9)}`;
+  return `+${clean}`;
+}
+
 function LlmLogsSection() {
+  const { toast, confirm } = useUiFeedback();
   const [groupedData, setGroupedData] = useState<GroupedCustomerLlmLogs[]>([]);
   const [flatLogs, setFlatLogs] = useState<LlmLogEntry[]>([]);
   const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
   const [loading, setLoading] = useState(true);
+  const [autoSync, setAutoSync] = useState(true);
   const [flowFilter, setFlowFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Accordion state
+  // Accordion & detail states
   const [expandedPhones, setExpandedPhones] = useState<Record<string, boolean>>({});
   const [expandedBubbles, setExpandedBubbles] = useState<Record<string, boolean>>({});
+  const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
+  const loadLogs = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [groupedRes, flatRes] = await Promise.allSettled([
         apiRequest(`/api/admin/debug/llm-grouped-logs?limit=300&flow=${flowFilter}`),
@@ -732,7 +756,7 @@ function LlmLogsSection() {
       if (groupedRes.status === 'fulfilled' && groupedRes.value?.data) {
         const data = groupedRes.value.data;
         setGroupedData(Array.isArray(data) ? data : []);
-        // Auto-expand first customer if nothing expanded
+        // Auto-expand first customer on initial load if nothing expanded
         if (Array.isArray(data) && data.length > 0 && Object.keys(expandedPhones).length === 0) {
           setExpandedPhones({ [data[0].customerPhone]: true });
           if (data[0].bubbles?.length > 0) {
@@ -747,15 +771,22 @@ function LlmLogsSection() {
     } catch (err) {
       console.warn('Gagal memuat LLM execution logs:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [flowFilter]);
+  }, [flowFilter, expandedPhones]);
 
   useEffect(() => {
-    loadLogs();
-    const interval = setInterval(loadLogs, 6000);
+    loadLogs(false);
+  }, [flowFilter]);
+
+  // Polling interval (silent auto-sync)
+  useEffect(() => {
+    if (!autoSync) return;
+    const interval = setInterval(() => {
+      loadLogs(true);
+    }, 6000);
     return () => clearInterval(interval);
-  }, [loadLogs]);
+  }, [autoSync, loadLogs]);
 
   const togglePhone = (phone: string) => {
     setExpandedPhones((prev) => ({ ...prev, [phone]: !prev[phone] }));
@@ -765,61 +796,253 @@ function LlmLogsSection() {
     setExpandedBubbles((prev) => ({ ...prev, [corrId]: !prev[corrId] }));
   };
 
-  const copyReasoning = (id: string, text: string) => {
+  const toggleDetail = (key: string) => {
+    setExpandedDetails((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleAllAccordions = (expand: boolean) => {
+    if (!expand) {
+      setExpandedPhones({});
+      setExpandedBubbles({});
+      return;
+    }
+    const newPhones: Record<string, boolean> = {};
+    const newBubbles: Record<string, boolean> = {};
+    for (const cust of groupedData) {
+      newPhones[cust.customerPhone] = true;
+      for (const b of cust.bubbles) {
+        newBubbles[b.correlationId] = true;
+      }
+    }
+    setExpandedPhones(newPhones);
+    setExpandedBubbles(newBubbles);
+  };
+
+  const copyText = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleClearBuffer = async () => {
+    const ok = await confirm({
+      title: 'Hapus Buffer Log LLM',
+      message: 'Apakah Anda yakin ingin mengosongkan semua riwayat LLM execution logs di memori? Log yang terhapus tidak dapat dikembalikan.',
+      confirmText: 'Hapus Buffer',
+      cancelText: 'Batal',
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      const res = await apiRequest('/api/admin/debug/llm-logs', { method: 'DELETE' });
+      if (res.success) {
+        setGroupedData([]);
+        setFlatLogs([]);
+        setExpandedPhones({});
+        setExpandedBubbles({});
+        toast('Buffer LLM execution logs berhasil dikosongkan.', 'success');
+      }
+    } catch (err: any) {
+      toast(err?.message || 'Gagal mengosongkan buffer log.', 'error');
+    }
+  };
+
+  const handleExportJson = () => {
+    const dataToExport = viewMode === 'grouped' ? groupedData : flatLogs;
+    const jsonStr = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `llm_execution_logs_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '_')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Filter grouped data
   const filteredGrouped = useMemo(() => {
-    if (!searchQuery) return groupedData;
-    const q = searchQuery.toLowerCase();
-    return groupedData
-      .map((cust) => {
-        const matchPhone = cust.customerPhone.toLowerCase().includes(q);
-        const matchName = cust.customerName.toLowerCase().includes(q);
-        const matchingBubbles = cust.bubbles.filter((b) => {
-          const matchInput = b.customerInput.toLowerCase().includes(q);
-          const matchCalls = b.aiCalls.some(
-            (call) =>
-              (call.reasoning && call.reasoning.toLowerCase().includes(q)) ||
-              (call.rawReasoning && call.rawReasoning.toLowerCase().includes(q)) ||
-              (call.finalReply && call.finalReply.toLowerCase().includes(q))
-          );
-          return matchInput || matchCalls;
-        });
+    let list = groupedData;
 
-        if (matchPhone || matchName) {
-          return cust;
-        }
-        if (matchingBubbles.length > 0) {
-          return { ...cust, bubbles: matchingBubbles };
-        }
-        return null;
-      })
-      .filter((c): c is GroupedCustomerLlmLogs => c !== null);
-  }, [groupedData, searchQuery]);
+    // Filter by Status
+    if (statusFilter !== 'all') {
+      list = list
+        .map((cust) => {
+          const matchingBubbles = cust.bubbles
+            .map((b) => ({
+              ...b,
+              aiCalls: b.aiCalls.filter((c) => c.status === statusFilter),
+            }))
+            .filter((b) => b.aiCalls.length > 0);
+          return matchingBubbles.length > 0 ? { ...cust, bubbles: matchingBubbles } : null;
+        })
+        .filter((c): c is GroupedCustomerLlmLogs => c !== null);
+    }
+
+    // Filter by Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list
+        .map((cust) => {
+          const matchPhone = cust.customerPhone.toLowerCase().includes(q);
+          const matchName = cust.customerName.toLowerCase().includes(q);
+          const matchingBubbles = cust.bubbles.filter((b) => {
+            const matchInput = b.customerInput.toLowerCase().includes(q);
+            const matchCalls = b.aiCalls.some(
+              (call) =>
+                (call.reasoning && call.reasoning.toLowerCase().includes(q)) ||
+                (call.rawReasoning && call.rawReasoning.toLowerCase().includes(q)) ||
+                (call.finalReply && call.finalReply.toLowerCase().includes(q)) ||
+                (call.modelUsed && call.modelUsed.toLowerCase().includes(q))
+            );
+            return matchInput || matchCalls;
+          });
+
+          if (matchPhone || matchName) {
+            return cust;
+          }
+          if (matchingBubbles.length > 0) {
+            return { ...cust, bubbles: matchingBubbles };
+          }
+          return null;
+        })
+        .filter((c): c is GroupedCustomerLlmLogs => c !== null);
+    }
+
+    return list;
+  }, [groupedData, statusFilter, searchQuery]);
+
+  // Aggregate stats
+  const totalCustomers = groupedData.length;
+  const totalBubbles = groupedData.reduce((acc, c) => acc + c.totalBubbles, 0);
+  const totalAiSteps = groupedData.reduce((acc, c) => acc + c.totalAiCalls, 0);
 
   return (
     <div className="space-y-4">
-      <SectionHeader title="🧠 Dedicated LLM Execution Tracing (Hierarkis 3-Level)" onRefresh={loadLogs} loading={loading} auto />
+      {/* Top Header with Live Indicator & Action Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-extrabold text-[#111b21] flex items-center gap-2">
+              <span>🧠 Dedicated LLM Execution Tracing</span>
+            </h3>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              autoSync ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              {autoSync ? 'Auto-Sync 6s' : 'Jeda'}
+            </span>
+          </div>
+          <p className="text-xs text-[#667781] mt-0.5">
+            Observability alur penuh: <span className="font-semibold text-[#111b21]">NLU Intent ➔ AI Router ➔ RAG Generator ➔ QC Verifier</span>.
+          </p>
+        </div>
 
-      {/* Filter Flow, Search & View Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setAutoSync(!autoSync)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-xs ${
+              autoSync
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+            }`}
+            title={autoSync ? 'Jeda Sinkronisasi Otomatis' : 'Aktifkan Sinkronisasi Otomatis'}
+          >
+            {autoSync ? <Pause size={13} className="text-emerald-700" /> : <Play size={13} className="text-slate-600" />}
+            <span>{autoSync ? 'Pause' : 'Play'}</span>
+          </button>
+
+          <button
+            onClick={() => loadLogs(false)}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-xs font-bold text-[#111b21] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+            title="Refresh Manual"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-slate-600'} />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            onClick={handleExportJson}
+            disabled={groupedData.length === 0}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-xs font-bold text-[#111b21] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+            title="Export Debug Data as JSON"
+          >
+            <Download size={13} className="text-slate-600" />
+            <span>Export JSON</span>
+          </button>
+
+          <button
+            onClick={handleClearBuffer}
+            disabled={groupedData.length === 0}
+            className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
+            title="Hapus / Reset Buffer LLM Logs"
+          >
+            <Trash2 size={13} />
+            <span>Reset Buffer</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Aggregate Stats Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700">
+            <Phone size={15} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Pasien Aktif</p>
+            <p className="text-base font-extrabold text-slate-900">{totalCustomers}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700">
+            <MessageSquare size={15} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Bubble Diproses</p>
+            <p className="text-base font-extrabold text-slate-900">{totalBubbles}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700">
+            <BrainCircuit size={15} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total AI Steps</p>
+            <p className="text-base font-extrabold text-purple-900">{totalAiSteps}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+            <ShieldCheck size={15} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">QC Verifier Active</p>
+            <p className="text-base font-extrabold text-amber-900">4 Pilar Aktif</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Controls & Search */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-white p-3 rounded-2xl border border-[#e9edef] shadow-xs">
+        {/* Flow Filters */}
+        <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'all', label: 'Semua Flow' },
-            { id: 'NLU_CLASSIFICATION', label: '🔍 NLU Intent' },
-            { id: 'AI_ROUTER', label: '🧭 AI Router' },
-            { id: 'CHATBOT_AUTO', label: '🤖 RAG Generator' },
-            { id: 'AI_VERIFIER', label: '🛡️ AI Verifier (QC)' },
-            { id: 'COPILOT_DRAFT', label: '💡 AI Copilot' },
+            { id: 'NLU_CLASSIFICATION', label: '🔍 1. NLU Intent' },
+            { id: 'AI_ROUTER', label: '🧭 2. AI Router' },
+            { id: 'CHATBOT_AUTO', label: '🤖 3. Generator' },
+            { id: 'AI_VERIFIER', label: '🛡️ 4. QC Verifier' },
+            { id: 'COPILOT_DRAFT', label: '💡 Copilot' },
           ].map((f) => (
             <button
               key={f.id}
               onClick={() => setFlowFilter(f.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs ${
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition shadow-2xs ${
                 flowFilter === f.id
                   ? 'bg-[#008069] text-white border border-[#008069]'
                   : 'bg-white text-[#54656f] border border-[#d1d7db] hover:bg-[#f0f2f5]'
@@ -830,15 +1053,30 @@ function LlmLogsSection() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {/* Status Filter, Search & View Switcher */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-2xs"
+          >
+            <option value="all">Semua Status</option>
+            <option value="SUCCESS">✅ SUCCESS</option>
+            <option value="FALLBACK">⚠️ FALLBACK</option>
+            <option value="ERROR">❌ ERROR</option>
+          </select>
+
+          {/* Search Box */}
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nomor, reasoning, chat..."
-            className="w-full sm:w-56 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            placeholder="Cari nomor, reasoning, teks..."
+            className="w-full sm:w-44 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-2xs"
           />
 
+          {/* View Switcher */}
           <div className="flex bg-[#e9edef] p-0.5 rounded-xl text-xs font-bold shrink-0">
             <button
               onClick={() => setViewMode('grouped')}
@@ -857,15 +1095,30 @@ function LlmLogsSection() {
               Flat Feed
             </button>
           </div>
+
+          {/* Quick Expand All Toggle */}
+          {viewMode === 'grouped' && (
+            <button
+              type="button"
+              onClick={() => {
+                const anyOpen = Object.keys(expandedPhones).length > 0;
+                toggleAllAccordions(!anyOpen);
+              }}
+              className="px-2 py-1.5 rounded-xl bg-white border border-[#d1d7db] hover:bg-slate-50 text-[11px] font-semibold text-slate-700 transition"
+              title="Buka / Tutup Semua Accordion"
+            >
+              {Object.keys(expandedPhones).length > 0 ? 'Tutup Semua' : 'Buka Semua'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* VIEW MODE 1: HIERARCHICAL 3-LEVEL ACCORDION */}
+      {/* VIEW MODE 1: HIERARCHICAL 3-LEVEL PIPELINE VIEW */}
       {viewMode === 'grouped' && (
         <div className="space-y-3">
           {filteredGrouped.length === 0 ? (
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-xs text-[#8696a0] shadow-xs">
-              {searchQuery ? 'Tidak ada riwayat chat/LLM yang cocok.' : 'Belum ada eksekusi LLM yang tercatat di buffer.'}
+            <div className="bg-white border border-[#e9edef] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
+              {searchQuery ? 'Tidak ada riwayat chat/LLM yang cocok dengan pencarian.' : 'Belum ada eksekusi LLM yang tercatat di buffer.'}
             </div>
           ) : (
             filteredGrouped.map((cust) => {
@@ -882,108 +1135,137 @@ function LlmLogsSection() {
                     className="p-4 bg-[#f8fafc] hover:bg-[#f0f4f7] cursor-pointer flex items-center justify-between gap-3 border-b border-[#e9edef] select-none"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#e8f5f2] border border-[#008069]/30 flex items-center justify-center text-[#008069] font-bold text-xs">
-                        <Phone size={14} />
+                      <div className="w-9 h-9 rounded-full bg-[#e8f5f2] border border-[#008069]/30 flex items-center justify-center text-[#008069] font-bold text-xs shadow-2xs">
+                        <Phone size={15} />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-extrabold text-sm text-[#111b21]">
-                            {cust.customerName || 'Customer'}
+                            {cust.customerName || 'Pasien'}
                           </span>
-                          <span className="font-mono text-xs text-[#667781] bg-white px-2 py-0.5 rounded-md border border-[#d1d7db]">
-                            +{cust.customerPhone}
+                          <span className="font-mono text-xs text-[#008069] bg-white px-2 py-0.5 rounded-md border border-[#b4ded5] font-semibold">
+                            {formatPhoneDisplay(cust.customerPhone)}
                           </span>
                         </div>
-                        <p className="text-[11px] text-[#8696a0] mt-0.5">
-                          {cust.totalBubbles} Bubble Chat Terproses · {cust.totalAiCalls} Panggilan AI · Terakhir: {fmtTime(cust.latestTimestamp)}
+                        <p className="text-[11px] text-[#8696a0] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span>{cust.totalBubbles} Percakapan Masuk</span>
+                          <span>•</span>
+                          <span>{cust.totalAiCalls} Panggilan AI</span>
+                          <span>•</span>
+                          <span>Aktivitas Terakhir: {fmtTime(cust.latestTimestamp)}</span>
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-3 py-1 rounded-full border border-[#008069]/20">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-3 py-1 rounded-full border border-[#008069]/20 hidden sm:inline-block">
                         {cust.totalBubbles} Percakapan
                       </span>
                       {isPhoneExpanded ? <ChevronDown size={18} className="text-[#667781]" /> : <ChevronRight size={18} className="text-[#667781]" />}
                     </div>
                   </div>
 
-                  {/* LEVEL 2: CHAT BUBBLES LIST */}
+                  {/* LEVEL 2: CHAT BUBBLES WITH PIPELINE STEPPERS */}
                   {isPhoneExpanded && (
-                    <div className="p-4 space-y-3 bg-[#fdfefe]">
+                    <div className="p-4 space-y-3.5 bg-[#fdfefe]">
                       {cust.bubbles.map((bubble, bIdx) => {
                         const isBubbleExpanded = !!expandedBubbles[bubble.correlationId];
+                        const totalBubbleDuration = bubble.aiCalls.reduce((acc, c) => acc + (c.durationMs || 0), 0);
+                        const lastModel = bubble.aiCalls[bubble.aiCalls.length - 1]?.modelUsed;
+                        const qcStep = bubble.aiCalls.find((c) => c.flowType === 'AI_VERIFIER');
 
                         return (
                           <div
                             key={bubble.correlationId}
-                            className="border border-[#e2e8f0] rounded-xl bg-white shadow-xs overflow-hidden"
+                            className="border border-[#e2e8f0] rounded-2xl bg-white shadow-xs overflow-hidden transition"
                           >
-                            {/* BUBBLE HEADER */}
+                            {/* BUBBLE HEADER WITH PIPELINE PREVIEW */}
                             <div
                               onClick={() => toggleBubble(bubble.correlationId)}
-                              className="p-3.5 bg-white hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-3 border-b border-slate-100 select-none"
+                              className="p-3.5 bg-white hover:bg-slate-50 cursor-pointer flex flex-col gap-2.5 border-b border-slate-100 select-none"
                             >
-                              <div className="flex items-start gap-2.5 max-w-[75%]">
-                                <div className="p-1 rounded-md bg-sky-100 text-sky-800 mt-0.5 shrink-0">
-                                  <MessageSquare size={13} />
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-slate-900">
-                                      Bubble #{bIdx + 1}: &ldquo;{bubble.customerInput.length > 85 ? bubble.customerInput.slice(0, 85) + '...' : bubble.customerInput}&rdquo;
-                                    </span>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2.5">
+                                  <div className="p-1.5 rounded-lg bg-sky-100 text-sky-800 shrink-0 mt-0.5">
+                                    <MessageSquare size={14} />
                                   </div>
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <span className="text-[10px] font-mono text-slate-500">
-                                      {fmtTime(bubble.timestamp)}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400">•</span>
-                                    <div className="flex items-center gap-1">
-                                      {bubble.aiCalls.map((c, i) => (
-                                        <span
-                                          key={i}
-                                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                                            c.flowType === 'AI_VERIFIER'
-                                              ? 'bg-amber-50 text-amber-900 border-amber-200'
-                                              : c.flowType === 'CHATBOT_AUTO'
-                                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                              : 'bg-cyan-50 text-cyan-800 border-cyan-200'
-                                          }`}
-                                        >
-                                          {c.flowType === 'NLU_CLASSIFICATION' ? 'NLU' : c.flowType === 'AI_ROUTER' ? 'ROUTER' : c.flowType === 'CHATBOT_AUTO' ? 'GENERATOR' : c.flowType === 'AI_VERIFIER' ? 'QC VERIFIER' : c.flowType}
-                                        </span>
-                                      ))}
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-xs font-extrabold text-slate-900">
+                                        Bubble #{bIdx + 1}: &ldquo;{bubble.customerInput}&rdquo;
+                                      </span>
                                     </div>
+                                    <span className="text-[10px] font-mono text-slate-500 mt-0.5 block">
+                                      Waktu Masuk: {fmtTime(bubble.timestamp)}
+                                    </span>
                                   </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {totalBubbleDuration > 0 && (
+                                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                      ⏱️ Total {totalBubbleDuration}ms
+                                    </span>
+                                  )}
+                                  {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[11px] font-semibold text-slate-500">
-                                  {bubble.aiCalls.length} Tahap AI
-                                </span>
-                                {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+                              {/* PIPELINE STEPPER VISUALIZATION */}
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100/80">
+                                {bubble.aiCalls.map((step, sIdx) => {
+                                  const badge = getFlowBadge(step.flowType);
+                                  const isSuccess = step.status === 'SUCCESS';
+                                  const isFallback = step.status === 'FALLBACK';
+
+                                  return (
+                                    <React.Fragment key={step.id || sIdx}>
+                                      <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border ${badge.cls}`}>
+                                        <span>{badge.icon}</span>
+                                        <span>{badge.short}</span>
+                                        <span className={`w-1.5 h-1.5 rounded-full ml-0.5 ${
+                                          isSuccess ? 'bg-emerald-500' : isFallback ? 'bg-amber-500' : 'bg-rose-500'
+                                        }`} />
+                                      </div>
+                                      {sIdx < bubble.aiCalls.length - 1 && (
+                                        <ArrowRight size={11} className="text-slate-300 shrink-0" />
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+
+                                {qcStep && (
+                                  <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                    qcStep.reasoning?.includes('VIOLATION')
+                                      ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  }`}>
+                                    {qcStep.reasoning?.includes('VIOLATION') ? '⚠️ QC: Terkoreksi' : '🛡️ QC: Lolos Aman'}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
-                            {/* LEVEL 3: INDIVIDUAL AI CALLS (NLU -> ROUTER -> GENERATOR -> QC VERIFIER) */}
+                            {/* LEVEL 3: INDIVIDUAL AI CALLS (TAILORED DETAIL CARDS) */}
                             {isBubbleExpanded && (
-                              <div className="p-3.5 bg-slate-50/50 space-y-3">
+                              <div className="p-4 bg-slate-50/60 space-y-3.5">
                                 {bubble.aiCalls.map((call, cIdx) => {
                                   const badge = getFlowBadge(call.flowType);
                                   const displayReasoning = call.rawReasoning || call.reasoning || 'Tidak ada reasoning teks terpisah.';
+                                  const detailKey = `${call.id || cIdx}_detail`;
+                                  const isDetailOpen = !!expandedDetails[detailKey];
 
                                   return (
                                     <div
                                       key={call.id || cIdx}
                                       className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3"
                                     >
-                                      {/* AI Call Header */}
-                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                      {/* AI Step Header Bar */}
+                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${badge.cls}`}>
-                                            {badge.label}
+                                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${badge.cls} flex items-center gap-1`}>
+                                            <span>{badge.icon}</span>
+                                            <span>{badge.label}</span>
                                           </span>
 
                                           {call.modelUsed && (
@@ -997,12 +1279,17 @@ function LlmLogsSection() {
                                               ⏱️ {call.durationMs}ms
                                             </span>
                                           )}
+
+                                          {call.confidenceScore !== undefined && (
+                                            <span className="text-[10px] font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-md border border-cyan-200 font-bold">
+                                              Confidence: {Math.round(call.confidenceScore * 100)}%
+                                            </span>
+                                          )}
                                         </div>
 
                                         <div className="flex items-center gap-2">
-                                          <span className="text-[10px] font-mono text-slate-400">{fmtTime(call.timestamp)}</span>
                                           <span
-                                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                                               call.status === 'SUCCESS'
                                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                                 : call.status === 'FALLBACK'
@@ -1012,70 +1299,208 @@ function LlmLogsSection() {
                                           >
                                             {call.status}
                                           </span>
-                                        </div>
-                                      </div>
 
-                                      {/* Visual Blocks */}
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                                        {/* Block 1: Input / Customer Message */}
-                                        <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3 space-y-1">
-                                          <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
-                                            💬 Input &amp; Prompt Terkirim
-                                          </span>
-                                          <p className="text-sky-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
-                                        </div>
-
-                                        {/* Block 2: Ground Truth */}
-                                        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 space-y-1">
-                                          <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                                            📚 Ground Truth &amp; Konteks Injected
-                                          </span>
-                                          {call.groundTruthUsed ? (
-                                            <pre className="text-[11px] font-mono text-amber-950 whitespace-pre-wrap overflow-x-auto max-h-36">
-                                              {typeof call.groundTruthUsed === 'string'
-                                                ? call.groundTruthUsed
-                                                : JSON.stringify(call.groundTruthUsed, null, 2)}
-                                            </pre>
-                                          ) : (
-                                            <p className="text-amber-800/80 italic text-[11px]">Tidak ada data database khusus.</p>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Block 3: Full AI Reasoning & Chain-of-Thought */}
-                                      <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-2">
-                                        <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
-                                          <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                                            <BrainCircuit size={13} className="text-purple-600" />
-                                            <span>🔍 AI Reasoning &amp; Chain-of-Thought Lengkap</span>
-                                          </span>
                                           <button
                                             type="button"
-                                            onClick={() => copyReasoning(call.id, displayReasoning)}
-                                            className="text-[11px] font-semibold text-purple-700 hover:text-purple-950 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs"
+                                            onClick={() => copyText(call.id, JSON.stringify(call, null, 2))}
+                                            className="text-[10px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 bg-slate-50 hover:bg-slate-100 px-2 py-0.5 rounded border border-slate-200"
+                                            title="Salin JSON Langkah Ini"
                                           >
-                                            {copiedId === call.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                                            <span>{copiedId === call.id ? 'Tersalin!' : 'Salin Reasoning'}</span>
+                                            {copiedId === call.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                                            <span>{copiedId === call.id ? 'Tersalin' : 'JSON'}</span>
                                           </button>
                                         </div>
-                                        <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-96">
-                                          {displayReasoning}
-                                        </pre>
                                       </div>
 
-                                      {/* Block 4: Final Reply / Output / Decision */}
-                                      <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
-                                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                                          {call.flowType === 'AI_VERIFIER'
-                                            ? '🛡️ Hasil Keputusan QC Verifier'
-                                            : call.flowType === 'NLU_CLASSIFICATION'
-                                            ? '🎯 Intent & Entitas Terdeteksi'
-                                            : call.flowType === 'AI_ROUTER'
-                                            ? '🎯 Keputusan AI Router'
-                                            : '✉️ Balasan Akhir (Outbound Reply)'}
-                                        </span>
-                                        <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
-                                      </div>
+                                      {/* STEP BODY BY FLOW TYPE */}
+
+                                      {/* FLOW TYPE 1: NLU_CLASSIFICATION */}
+                                      {call.flowType === 'NLU_CLASSIFICATION' && (
+                                        <div className="space-y-2.5 text-xs">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block mb-1">
+                                                💬 Input Teks Customer
+                                              </span>
+                                              <p className="text-sky-950 font-medium">{call.customerInput || '-'}</p>
+                                            </div>
+
+                                            <div className="bg-cyan-50/70 border border-cyan-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-cyan-800 uppercase tracking-wider block mb-1">
+                                                🎯 Intent &amp; Entitas Terdeteksi
+                                              </span>
+                                              <p className="text-cyan-950 font-bold">{call.finalReply || '-'}</p>
+                                              {call.groundTruthUsed?.extractedEntities && (
+                                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                                  {Object.entries(call.groundTruthUsed.extractedEntities).map(([k, v]) => (
+                                                    <span key={k} className="text-[10px] font-mono bg-white text-cyan-900 px-1.5 py-0.5 rounded border border-cyan-200">
+                                                      {k}: {String(v)}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {call.reasoning && (
+                                            <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block mb-1">
+                                                🧠 NLU Reasoning Note
+                                              </span>
+                                              <p className="text-purple-950 text-[11px] font-mono">{call.reasoning}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* FLOW TYPE 2: AI_ROUTER */}
+                                      {call.flowType === 'AI_ROUTER' && (
+                                        <div className="space-y-2.5 text-xs">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block mb-1">
+                                                💬 Snapshot State &amp; Pesan
+                                              </span>
+                                              <p className="text-sky-950 font-medium">{call.customerInput || '-'}</p>
+                                            </div>
+
+                                            <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block mb-1">
+                                                🧭 Keputusan Rute AI
+                                              </span>
+                                              <p className="text-indigo-950 font-bold">{call.finalReply || '-'}</p>
+                                              {call.groundTruthUsed?.shadowMatch !== undefined && (
+                                                <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                                  call.groundTruthUsed.shadowMatch
+                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                    : 'bg-amber-50 text-amber-900 border-amber-200'
+                                                }`}>
+                                                  Shadow Mode: {call.groundTruthUsed.shadowMatch ? '✅ Cocok dengan Rule' : '⚠️ Berbeda dari Rule'}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {call.reasoning && (
+                                            <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block mb-1">
+                                                🧠 Alasan Rute (Reasoning)
+                                              </span>
+                                              <p className="text-purple-950 text-[11px] font-mono">{call.reasoning}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* FLOW TYPE 3: CHATBOT_AUTO & COPILOT_DRAFT */}
+                                      {(call.flowType === 'CHATBOT_AUTO' || call.flowType === 'COPILOT_DRAFT') && (
+                                        <div className="space-y-2.5 text-xs">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block mb-1">
+                                                💬 Pertanyaan / Prompt Masuk
+                                              </span>
+                                              <p className="text-sky-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                            </div>
+
+                                            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3">
+                                              <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                                                📚 Ground Truth &amp; KB Chunks
+                                              </span>
+                                              {call.groundTruthUsed?.contextChunks ? (
+                                                <div className="space-y-1">
+                                                  <span className="text-[11px] font-semibold text-amber-900">
+                                                    {call.groundTruthUsed.contextChunks.length} Referensi KB Digunakan:
+                                                  </span>
+                                                  <div className="flex flex-wrap gap-1">
+                                                    {call.groundTruthUsed.contextChunks.map((chunk: string, idx: number) => (
+                                                      <span key={idx} className="text-[10px] font-mono bg-white text-amber-900 px-1.5 py-0.5 rounded border border-amber-200">
+                                                        {chunk}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <p className="text-amber-800/80 italic text-[11px]">Konteks standar persona.</p>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Full AI Reasoning & Chain-of-Thought */}
+                                          <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-2">
+                                            <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
+                                              <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                                                <BrainCircuit size={13} className="text-purple-600" />
+                                                <span>🔍 AI Reasoning &amp; Chain-of-Thought Lengkap</span>
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() => copyText(call.id, displayReasoning)}
+                                                className="text-[11px] font-semibold text-purple-700 hover:text-purple-950 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs"
+                                              >
+                                                {copiedId === call.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                                <span>{copiedId === call.id ? 'Tersalin!' : 'Salin Reasoning'}</span>
+                                              </button>
+                                            </div>
+                                            <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-64">
+                                              {displayReasoning}
+                                            </pre>
+                                          </div>
+
+                                          {/* Final Reply */}
+                                          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
+                                            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                                              ✉️ Balasan Akhir (Outbound Reply)
+                                            </span>
+                                            <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* FLOW TYPE 4: AI_VERIFIER (QC) */}
+                                      {call.flowType === 'AI_VERIFIER' && (
+                                        <div className="space-y-2.5 text-xs">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                            {/* QC Status & Violations */}
+                                            <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
+                                                🛡️ Evaluasi 4 Pilar QC Verifier
+                                              </span>
+                                              <p className="text-amber-950 font-bold text-[11px]">{call.reasoning || '-'}</p>
+                                            </div>
+
+                                            {/* Final QC Verdict Reply */}
+                                            <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                                                ✉️ Output Draf Terverifikasi / Terkoreksi
+                                              </span>
+                                              <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                            </div>
+                                          </div>
+
+                                          {/* Raw QC Reasoning */}
+                                          {call.rawReasoning && (
+                                            <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3 space-y-1.5">
+                                              <div className="flex items-center justify-between border-b border-purple-200/60 pb-1">
+                                                <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider">
+                                                  🔍 Raw QC JSON Output
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => copyText(`${call.id}_raw`, call.rawReasoning || '')}
+                                                  className="text-[10px] font-semibold text-purple-700 flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-purple-200"
+                                                >
+                                                  {copiedId === `${call.id}_raw` ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                                                  <span>Salin</span>
+                                                </button>
+                                              </div>
+                                              <pre className="text-purple-950 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-48">
+                                                {call.rawReasoning}
+                                              </pre>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1097,7 +1522,7 @@ function LlmLogsSection() {
       {viewMode === 'flat' && (
         <div className="space-y-3">
           {flatLogs.length === 0 ? (
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-xs text-[#8696a0] shadow-xs">
+            <div className="bg-white border border-[#e9edef] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
               Belum ada log LLM flat tercatat.
             </div>
           ) : (
@@ -1106,24 +1531,69 @@ function LlmLogsSection() {
               const displayReasoning = log.rawReasoning || log.reasoning || '-';
 
               return (
-                <div key={log.id} className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3 text-left">
+                <div key={log.id} className="bg-white border border-[#e9edef] hover:border-slate-300 rounded-2xl p-4 shadow-xs space-y-3 text-left transition">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls}`}>{badge.label}</span>
-                      <span className="text-xs font-bold text-[#111b21]">{log.customerName || log.customerPhone || 'Pasien'}</span>
-                      {log.modelUsed && <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">{log.modelUsed}</span>}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls} flex items-center gap-1`}>
+                        <span>{badge.icon}</span>
+                        <span>{badge.label}</span>
+                      </span>
+                      <span className="text-xs font-bold text-[#111b21]">
+                        {log.customerName || formatPhoneDisplay(log.customerPhone)}
+                      </span>
+                      {log.modelUsed && (
+                        <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-semibold">
+                          {log.modelUsed}
+                        </span>
+                      )}
+                      {log.durationMs !== undefined && (
+                        <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                          ⏱️ {log.durationMs}ms
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[10px] font-mono text-[#8696a0]">{fmtTime(log.timestamp)}</span>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-[#8696a0]">{fmtTime(log.timestamp)}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          log.status === 'SUCCESS'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : log.status === 'FALLBACK'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}
+                      >
+                        {log.status}
+                      </span>
+                    </div>
                   </div>
 
+                  {log.customerInput && (
+                    <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
+                      <span className="text-[10px] font-bold text-sky-800 uppercase block mb-1">Input / Prompt</span>
+                      <p className="text-sky-950 text-xs font-medium whitespace-pre-wrap">{log.customerInput}</p>
+                    </div>
+                  )}
+
                   <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
-                    <span className="text-[10px] font-bold text-purple-800 uppercase block mb-1">Reasoning &amp; CoT</span>
-                    <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap">{displayReasoning}</pre>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-purple-800 uppercase block">Reasoning &amp; CoT</span>
+                      <button
+                        type="button"
+                        onClick={() => copyText(log.id, displayReasoning)}
+                        className="text-[10px] font-semibold text-purple-700 flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-purple-200"
+                      >
+                        {copiedId === log.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                        <span>Salin</span>
+                      </button>
+                    </div>
+                    <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap overflow-x-auto max-h-48">{displayReasoning}</pre>
                   </div>
 
                   <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">Output</span>
-                    <p className="text-emerald-950 font-medium whitespace-pre-wrap">{log.finalReply || '-'}</p>
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">Output Akhir</span>
+                    <p className="text-emerald-950 font-medium text-xs whitespace-pre-wrap">{log.finalReply || '-'}</p>
                   </div>
                 </div>
               );

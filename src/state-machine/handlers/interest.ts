@@ -559,7 +559,9 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         treatmentNameForFollowUp,
         customer.id,
         isLocationKnown,
-        additionalContextText
+        additionalContextText,
+        customer.phone,
+        customer.name
       );
 
       // 4b. Simpan memori pelanggan jika LLM mengekstrak fakta permanen baru

@@ -96,6 +96,32 @@ export function getLlmExecutionLogs(limit = 100, flowFilter?: string): LlmExecut
 }
 
 /**
+ * Normalisasi input customer untuk mencocokkan teks asli yang diekstrak
+ * dari berbagai wrapper metadata (misal Router [State: ...] atau Verifier [DRAFT QC] ... (User: "...")).
+ */
+export function normalizeCustomerInput(input: string): string {
+  if (!input) return '';
+  let cleaned = input.trim();
+
+  // Pattern 1: Router '[State: INITIAL] "Halo mau tanya"'
+  const routerMatch = cleaned.match(/^\[State:[^\]]+\]\s*"([\s\S]*)"$/);
+  if (routerMatch && routerMatch[1]) {
+    cleaned = routerMatch[1].trim();
+  }
+
+  // Pattern 2: Verifier '[DRAFT QC] "..." (User: "Halo mau tanya")'
+  const verifierMatch = cleaned.match(/\(User:\s*"([\s\S]*?)"\)/);
+  if (verifierMatch && verifierMatch[1]) {
+    cleaned = verifierMatch[1].trim();
+  }
+
+  // Pattern 3: Hapus tanda petik ganda/tunggal di awal & akhir jika tersisa
+  cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
+
+  return cleaned;
+}
+
+/**
  * Ambil riwayat log eksekusi LLM terkelompok secara hierarkis 3-Level:
  * Level 1: Nomor Telepon Customer
  * Level 2: Bubble Chat / Input Masuk Pasien
@@ -115,6 +141,15 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
 
   const result: GroupedCustomerLlmLogs[] = [];
 
+  const FLOW_ORDER: Record<string, number> = {
+    NLU_CLASSIFICATION: 1,
+    AI_ROUTER: 2,
+    CHATBOT_AUTO: 3,
+    COPILOT_DRAFT: 3,
+    AI_VERIFIER: 4,
+    PHRASING: 5,
+  };
+
   for (const [phone, phoneLogs] of phoneMap.entries()) {
     // Sort phone logs ascending in time to cluster bubbles
     const sorted = [...phoneLogs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -124,35 +159,41 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
 
     for (const log of sorted) {
       const logTime = new Date(log.timestamp).getTime();
-      const isDraftQc = log.customerInput.startsWith('[DRAFT QC]');
+      const cleanInput = normalizeCustomerInput(log.customerInput);
 
-      // Determine clean input text
-      let cleanInput = log.customerInput;
-      if (isDraftQc) {
-        const match = log.customerInput.match(/\(User:\s*"([^"]+)"\)/);
-        if (match && match[1]) {
-          cleanInput = match[1];
-        }
-      }
+      // Cek apakah log ini dapat digabung ke bubble yang sedang aktif
+      // (Berdasarkan correlation ID yang sama ATAU input teks yang sama/inklusif dalam rentang waktu <= 35s)
+      const isTimeClose = currentBubble ? Math.abs(logTime - new Date(currentBubble.timestamp).getTime()) < 35000 : false;
+      const isInputMatching = currentBubble ? (
+        cleanInput === currentBubble.customerInput ||
+        !cleanInput ||
+        !currentBubble.customerInput ||
+        cleanInput.includes(currentBubble.customerInput) ||
+        currentBubble.customerInput.includes(cleanInput)
+      ) : false;
 
-      // Check if this belongs to current bubble (either same correlationId or within 25s with same/similar input)
-      const canMerge =
-        currentBubble &&
-        ((log.bubbleCorrelationId && log.bubbleCorrelationId === currentBubble.correlationId) ||
-          (!log.bubbleCorrelationId &&
-            Math.abs(logTime - new Date(currentBubble.timestamp).getTime()) < 25000 &&
-            (cleanInput === currentBubble.customerInput || cleanInput.length === 0 || isDraftQc)));
+      const canMerge = currentBubble && (
+        (log.bubbleCorrelationId && log.bubbleCorrelationId === currentBubble.correlationId) ||
+        (!log.bubbleCorrelationId && isTimeClose && isInputMatching)
+      );
 
       if (canMerge && currentBubble) {
         currentBubble.aiCalls.push(log);
         if (!currentBubble.customerName && log.customerName) {
           currentBubble.customerName = log.customerName;
         }
+        if (cleanInput && (!currentBubble.customerInput || currentBubble.customerInput.startsWith('[DRAFT QC]'))) {
+          currentBubble.customerInput = cleanInput;
+        }
       } else {
+        const bubbleHash = cleanInput ? crypto.createHash('md5').update(cleanInput).digest('hex').slice(0, 6) : log.id;
+        const timeBucket = Math.floor(logTime / 30000);
+        const deterministicId = log.bubbleCorrelationId || `bubble_${phone.replace(/[^\w]/g, '_')}_${bubbleHash}_${timeBucket}`;
+
         currentBubble = {
-          correlationId: log.bubbleCorrelationId || `bubble_${log.id}`,
+          correlationId: deterministicId,
           timestamp: log.timestamp,
-          customerInput: cleanInput || log.customerInput,
+          customerInput: cleanInput || log.customerInput || '(Input)',
           customerName: log.customerName,
           aiCalls: [log],
         };
@@ -160,8 +201,18 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
       }
     }
 
+    // Urutkan tahapan AI di dalam setiap bubble secara sekuensial logis (NLU -> Router -> Generator -> QC)
+    for (const b of bubbles) {
+      b.aiCalls.sort((a, b) => {
+        const orderA = FLOW_ORDER[a.flowType] || 99;
+        const orderB = FLOW_ORDER[b.flowType] || 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      });
+    }
+
     const latestTs = sorted[sorted.length - 1]?.timestamp || new Date().toISOString();
-    const customerName = phoneLogs.find((l) => Boolean(l.customerName))?.customerName || phone;
+    const customerName = phoneLogs.find((l) => Boolean(l.customerName))?.customerName || (phone.startsWith('62') || phone.startsWith('+') ? 'Pasien' : phone);
 
     result.push({
       customerPhone: phone,

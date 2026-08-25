@@ -936,6 +936,7 @@ export class AIRouterService {
 
     const ruleBased = ruleBasedClassify(input);
 
+    const startedAt = Date.now();
     let response: AIRouterResponse;
     let source: 'llm' | 'fallback';
     try {
@@ -947,6 +948,8 @@ export class AIRouterService {
       response = ruleBased;
       source = 'fallback';
     }
+
+    const durationMs = Date.now() - startedAt;
 
     if (this.isShadowMode(tenantId)) {
       const matches = compareRouterDecisions(response, ruleBased);
@@ -970,6 +973,7 @@ export class AIRouterService {
           finalReply: `Intent: ${response.intent} (Confidence: ${response.confidence_score}) | Escalate: ${response.needs_human_escalation ? response.escalation_reason : 'No'}`,
           confidenceScore: response.confidence_score,
           modelUsed: this.client.model,
+          durationMs,
           status: source === 'fallback' ? 'FALLBACK' : 'SUCCESS',
         });
       } catch {}
@@ -998,6 +1002,7 @@ export class AIRouterService {
         finalReply: `Intent: ${response.intent} (Confidence: ${response.confidence_score}) | Escalate: ${response.needs_human_escalation ? response.escalation_reason : 'No'}`,
         confidenceScore: response.confidence_score,
         modelUsed: this.client.model,
+        durationMs,
         status: source === 'fallback' ? 'FALLBACK' : 'SUCCESS',
       });
     } catch {}

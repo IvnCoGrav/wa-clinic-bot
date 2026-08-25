@@ -4,6 +4,48 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Enhanced & Fixed — LLM Execution Logs Pipeline & UX Overhaul (2026-08-25)
+
+- **Latar Belakang & Masalah Sebelumnya:**
+  1. **ID Telepon Terfragmentasi**: `generator.ts` mencatat `customerPhone: customerId` (UUID database internal) sementara modul lain (NLU, Router, Verifier) mencatat nomor WhatsApp asli (`628...`), menyebabkan tahap Generator terlempar ke kartu customer terpisah.
+  2. **Bubble Chat Terpecah**: Format input pesan di berbagai layer memiliki prefix metadata berbeda (misal `[State: ...]` dan `[DRAFT QC] ... (User: "...")`), sehingga 1 pesan pasien terpecah menjadi 3–4 kartu bubble terpisah.
+  3. **Auto-Refresh Stuttering**: Interval 6 detik memicu `setLoading(true)` yang membuat layar berkedip (*flicker*) terus-menerus dan ID korelasi dinamis menyebabkan accordion tertutup sendiri saat user sedang membaca reasoning.
+  4. **UX Clutter**: Visual 4 kotak berwarna raksasa yang padat menyebabkan *scroll fatigue*, tidak ada visualisasi urutan pipeline (*Stepper*), dan ketiadaan fitur reset buffer log serta export JSON.
+- **Implementasi Perbaikan Backend & Data Logging:**
+  1. **`src/utils/llm-execution-logger.ts`**:
+     - Menambahkan fungsi `normalizeCustomerInput(input)` untuk mengekstrak teks inti customer dari prefix metadata Router dan Verifier.
+     - Memperbaiki pengelompokan `getGroupedLlmExecutionLogs`:
+       - Mengelompokkan bubble berdasarkan input ternormalisasi + kedekatan waktu ($< 35\text{ s}$) + ID korelasi deterministik.
+       - Mengurutkan tahapan AI di dalam setiap bubble secara logis: `1. NLU` $\rightarrow$ `2. AI Router` $\rightarrow$ `3. RAG Generator` $\rightarrow$ `4. AI QC Verifier`.
+       - Normalisasi nama dan format nomor telepon customer.
+  2. **`src/integrations/llm/generator.ts` & `src/state-machine/handlers/interest.ts`**:
+     - Menerima dan meneruskan parameter `customerPhone` & `customerName` asli ke `generateFaqResponseWithDetails`.
+     - Mencatat nomor telepon valid, nama customer, `modelUsed`, dan `durationMs` ke `recordLlmExecution`.
+  3. **`src/integrations/llm/ai-router.ts`**:
+     - Menambahkan pengukuran `durationMs` dan mencatatnya ke `recordLlmExecution` pada mode shadow maupun mode produksi.
+  4. **`src/routes/admin/evaluations.subroute.ts`**:
+     - Menambahkan endpoint `DELETE /api/admin/debug/llm-logs` untuk mengosongkan buffer log LLM di memori secara aman.
+- **Implementasi Perbaikan Frontend UI/UX (`Debug.tsx`):**
+  1. **Silent Background Auto-Sync**: Background interval (6s) berjalan tanpa memicu kedipan (*flicker*) atau toggle loader fullscreen, dilengkapi tombol Play/Pause Auto-Sync.
+  2. **Interactive Pipeline Stepper (Level 2 Bubble Card)**:
+     - Header bubble interaktif yang menampilkan visual stepper alur AI: `[1. NLU] ➔ [2. Router] ➔ [3. Generator] ➔ [4. QC Verifier]`.
+     - Ringkasan latency total round-trip (`⏱️ Total X ms`), Model akhir, dan badge status QC (`🛡️ Lolos Aman` / `⚠️ Terkoreksi`).
+  3. **Tailored AI Step Detail Cards (Level 3)**:
+     - Kartu khusus per-tahapan yang ringkas, terstruktur, dan tidak memakan ruang berlebih.
+     - **NLU**: Intent tag list dengan confidence %, tag entitas, dan reasoning note.
+     - **Router**: Keputusan rute, tag komparasi shadow mode (`✅ Cocok dengan Rule` / `⚠️ Berbeda`), dan reasoning.
+     - **Generator**: Prompt input, KB chunks yang diinjeksi, full reasoning CoT (scrollable + 1-click copy), dan output reply.
+     - **Verifier (QC)**: Evaluasi 4 pilar QC, daftar pelanggaran ontologi, dan raw JSON output.
+  4. **Kontrol & Aksi Tambahan**:
+     - Tombol **Reset Buffer** (dengan modal konfirmasi aman `useUiFeedback`).
+     - Tombol **Export JSON** untuk mengunduh log debug.
+     - Filter status: `Semua Status`, `✅ SUCCESS`, `⚠️ FALLBACK`, `❌ ERROR`.
+     - Tombol **Buka Semua / Tutup Semua** accordion.
+- **Pengujian & Verifikasi:**
+  - Unit tests `tests/unit/hierarchical-debug-logs.test.ts` (2/2 tests PASS, termasuk verifikasi auto-clustering metadata wrapper dan step pipeline ordering).
+  - Full Vitest suite: **191 test files PASS, 1,748 tests PASS (100%)**.
+  - TypeScript build backend (`npm run build`) & Vite frontend build (`npm --prefix packages/admin-dashboard run build`) 100% lolos (0 error).
+
 ### Added & Enhanced — Live Chat Date Separators & WhatsApp Reply Feature via WAHA (2026-08-25)
 
 - **Latar Belakang & Kebutuhan:**
