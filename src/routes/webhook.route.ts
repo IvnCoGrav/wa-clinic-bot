@@ -243,7 +243,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               adminReplyText.startsWith('[AUTOMATED]') ||
               isDeviceAutoGreeting;
 
-            if ((adminReplyText.trim() || isOutboundImage) && !isBotAutoReply) {
+            if (adminReplyText.trim() || isOutboundImage) {
               const customer = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
               const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -320,37 +320,38 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 return reply.status(200).send({ status: 'OUTBOUND_DUPLICATE_SKIPPED' });
               }
 
-              // JIKA BUKAN DUPLIKAT: Pesan ini benar-benar dikirim secara manual oleh Admin/CS dari HP WhatsApp asli!
-
-              // 2. Jika percakapan sedang human handling, reset timer 6 jam
-              if (conversation.is_human_handling) {
-                conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
-                  .catch((err) => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
-              } else {
-                // Jika admin membalas langsung dari HP saat bot aktif, eskalasi ke human handling (takeover)
-                try {
-                  const tenantConfig = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
-                  if (tenantConfig?.manual_reply_escalates !== false) {
-                    await conversationService.escalateToHumanHandling(
-                      conversation,
-                      phone,
-                      'Admin membalas manual via aplikasi WhatsApp HP',
-                      DEFAULT_TENANT_ID,
-                      'manual_reply'
-                    );
-                  }
-                } catch (_) {}
+              // JIKA BUKAN DUPLIKAT: Pesan ini berasal dari WhatsApp HP asli / bot echo
+              // 2. Jika bukan auto-reply bot, proses human handling takeover / timer
+              if (!isBotAutoReply) {
+                if (conversation.is_human_handling) {
+                  conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
+                    .catch((err) => console.error('[AUTO-RELEASE RESET ERROR] Failed to reset human handling timer:', err));
+                } else {
+                  // Jika admin membalas langsung dari HP saat bot aktif, eskalasi ke human handling (takeover)
+                  try {
+                    const tenantConfig = await prisma.tenant.findUnique({ where: { id: DEFAULT_TENANT_ID } });
+                    if (tenantConfig?.manual_reply_escalates !== false) {
+                      await conversationService.escalateToHumanHandling(
+                        conversation,
+                        phone,
+                        'Admin membalas manual via aplikasi WhatsApp HP',
+                        DEFAULT_TENANT_ID,
+                        'manual_reply'
+                      );
+                    }
+                  } catch (_) {}
+                }
               }
 
-              // 3. Self Learning Capture (hanya jika diaktifkan & ada teks)
-              if (process.env.ENABLE_SELF_LEARNING === 'true' && adminReplyText.trim()) {
+              // 3. Self Learning Capture (hanya jika diaktifkan, ada teks, & bukan auto-reply)
+              if (process.env.ENABLE_SELF_LEARNING === 'true' && adminReplyText.trim() && !isBotAutoReply) {
                 const { selfLearningService } = await import('../services/self-learning.service');
                 selfLearningService.processAdminReply(customer.id, conversation.id, adminReplyText, DEFAULT_TENANT_ID)
                   .catch((err) => console.error('[SELF-LEARNING ERROR] Failed to process admin reply:', err));
               }
 
               // 4. MedicalFaqStaging Capture Hook
-              if (conversation.escalation_reason === 'medical_concern' && adminReplyText.trim()) {
+              if (conversation.escalation_reason === 'medical_concern' && adminReplyText.trim() && !isBotAutoReply) {
                 try {
                   const lastInbound = await messageService.getLastInboundMessage(conversation.id, DEFAULT_TENANT_ID);
                   const rawQuestion = lastInbound?.content || 'Pertanyaan medis customer';
@@ -369,7 +370,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
               }
 
-              // 5. Log outbound manual reply ke tabel Messages & broadcast SSE ke Live Chat Panel
+              // 5. Log outbound reply ke tabel Messages & broadcast SSE ke Live Chat Panel
               let msgDate: Date | undefined = undefined;
               if (payload.timestamp) {
                 const rawTs = Number(payload.timestamp);
@@ -385,13 +386,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 direction: 'OUTBOUND',
                 content: outboundContent,
                 waMessageId: payload.id,
-                senderType: 'ADMIN',
-                senderName: 'Admin (WhatsApp HP)',
+                senderType: isBotAutoReply ? 'BOT' : 'ADMIN',
+                senderName: isBotAutoReply ? 'Bot (Kala Spa)' : 'Admin (WhatsApp HP)',
                 createdAt: msgDate,
                 payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
-              }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log admin manual outbound reply:', err));
+              }).catch((err) => console.error('[MESSAGE LOG ERROR] Failed to log outbound reply:', err));
 
-              console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp HP ke ${phone} (${isOutboundImage ? 'GAMBAR' : 'TEKS'}) tercatat & disiarkan ke Live Chat.`);
+              console.log(`[LIVE CHAT OUTBOUND] Balasan WhatsApp ke ${phone} (${isOutboundImage ? 'GAMBAR' : 'TEKS'}) (${isBotAutoReply ? 'BOT' : 'ADMIN'}) tercatat & disiarkan ke Live Chat.`);
 
               // 5. Background Auto-Capture Reservasi dari Konfirmasi Admin
               try {
