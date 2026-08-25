@@ -309,13 +309,13 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   // Sesuaikan dengan aturan ongkir final kamu (ingat: logic ongkir masih sementara).
   ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number; freeTierKm?: number; candidateTreatmentName?: string }) => {
     const ctaQuestion = params.candidateTreatmentName && params.candidateTreatmentName.trim()
-      ? `Jadi mau pilih treatment apa Bund untuk hari ini? Atau mau lanjut dijadwalkan *${params.candidateTreatmentName.trim()}*-nya? 🤗`
-      : `Jadi mau pilih treatment apa bunda ?🤗`;
+      ? `Mau pilih treatment apa Bunda untuk hari ini? Atau mau langsung dijadwalkan *${params.candidateTreatmentName.trim()}*-nya? 😊`
+      : `Mau pilih treatment apa Bunda? 😊`;
 
     if (params.promoPrice === 0) {
-      return `Wah, Deket Bunda, Dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya bund ☺️ ${ctaQuestion}`;
+      return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya bund ☺️ ${ctaQuestion}`;
     }
-    return `Jika kami cek bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️ ${ctaQuestion}`;
+    return `Kalau kami cek bund, jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km ya. Dari pricelist untuk jarak ini ongkirnya Rp ${params.normalPrice.toLocaleString("id-ID")}, tapi karena ada promo jadi cukup Rp ${params.promoPrice.toLocaleString("id-ID")} saja Bunda 😊 ${ctaQuestion}`;
   },
 
   scheduleCheckHandoff: () => `kami cek jadwal dulu ya bunda 🙏🏻😊`,
