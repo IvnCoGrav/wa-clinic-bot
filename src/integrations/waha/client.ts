@@ -253,11 +253,13 @@ export class WahaClient implements IWahaClient {
     if (chatId.includes('@lid')) {
       return await this.resolvePrimaryJid(chatId);
     }
-    const cleanId = chatId.replace(/@s\.whatsapp\.net$/, '');
-    if (!cleanId.includes('@c.us')) {
-      return `${cleanId}@c.us`;
+    const cleanId = chatId.replace(/@s\.whatsapp\.net$/, '').replace(/@c\.us$/, '');
+    // Cek apakah cleanId adalah LID yang terpetakan ke nomor HP asli di cache
+    const cachedPn = getCachedLidPhone(cleanId) || getCachedLidPhone(`${cleanId}@lid`);
+    if (cachedPn && cachedPn !== cleanId) {
+      return `${cachedPn}@c.us`;
     }
-    return cleanId;
+    return `${cleanId}@c.us`;
   }
 
   /**
@@ -274,17 +276,18 @@ export class WahaClient implements IWahaClient {
     if (chatId.includes('@lid')) {
       const pn = await this.getPhoneNumberFromLid(chatId);
       const rawLidUser = chatId.replace(/@.*$/, '');
-      if (pn && pn !== rawLidUser) {
+      if (pn && pn !== rawLidUser && !pn.startsWith('2160') && !pn.startsWith('7990')) {
         return `${pn}@c.us`;
       }
       return chatId;
     }
     
-    const cleanId = chatId.replace(/@s\.whatsapp\.net$/, '');
-    if (!cleanId.includes('@c.us')) {
-      return `${cleanId}@c.us`;
+    const cleanId = chatId.replace(/@s\.whatsapp\.net$/, '').replace(/@c\.us$/, '');
+    const cachedPn = getCachedLidPhone(cleanId) || getCachedLidPhone(`${cleanId}@lid`);
+    if (cachedPn && cachedPn !== cleanId && !cachedPn.startsWith('2160') && !cachedPn.startsWith('7990')) {
+      return `${cachedPn}@c.us`;
     }
-    return cleanId;
+    return `${cleanId}@c.us`;
   }
 
   /**
