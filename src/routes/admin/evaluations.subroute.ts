@@ -491,4 +491,21 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * DELETE /api/admin/debug/llm-logs
+   * Reset / bersihkan buffer log eksekusi LLM
+   */
+  fastify.delete(
+    '/api/admin/debug/llm-logs',
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { clearLlmExecutionLogs } = await import('../../utils/llm-execution-logger');
+        clearLlmExecutionLogs();
+        return reply.status(200).send({ success: true, message: 'Buffer LLM execution logs berhasil dibersihkan.' });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, message: err?.message });
+      }
+    }
+  );
 }

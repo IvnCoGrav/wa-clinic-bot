@@ -523,7 +523,7 @@ export class ConversationStateMachine {
           },
         });
 
-        if (qc.wasCorrected && qc.finalReply) {
+        if (qc.finalReply) {
           result.replyText = qc.finalReply;
         }
       } catch (verifierErr: any) {
