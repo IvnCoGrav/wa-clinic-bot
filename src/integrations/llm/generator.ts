@@ -570,7 +570,9 @@ ATURAN EKSTRAKSI PREFERENSI:
     treatmentNameForFollowUp?: string,
     customerId?: string,
     isLocationKnown?: boolean,
-    additionalContextText?: string
+    additionalContextText?: string,
+    customerPhone?: string | null,
+    customerName?: string | null
   ): Promise<FAQResponseResult> {
     const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
 
@@ -580,16 +582,22 @@ ATURAN EKSTRAKSI PREFERENSI:
       return { answer: fallback, reasoning: '[MOCK_KEY] Using fallback response', usedFallback: true };
     }
 
+    const startTime = Date.now();
+    const effectivePhone = customerPhone || (customerId && /^\+?\d{8,16}$/.test(customerId) ? customerId : undefined);
+    const effectiveName = customerName || undefined;
+
     try {
       const res = await measure('LLM_GENERATOR_API_CALL', () =>
         this.llmBreaker.execute(userQuestion, contextText, contextChunks, conversationId, tenantId, treatmentNameForFollowUp, customerId, isLocationKnown, additionalContextText)
       );
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
       const finalAnswer = truncateToMaxChars(res.answer, maxChars);
+      const durationMs = Date.now() - startTime;
 
       recordLlmExecution({
         flowType: 'CHATBOT_AUTO',
-        customerPhone: customerId,
+        customerPhone: effectivePhone,
+        customerName: effectiveName,
         customerInput: userQuestion,
         reasoning: res.reasoning,
         groundTruthUsed: {
@@ -598,6 +606,8 @@ ATURAN EKSTRAKSI PREFERENSI:
           contextChunks: contextChunks.map((c) => c.title),
         },
         finalReply: finalAnswer,
+        modelUsed: endpoint.model,
+        durationMs,
         status: res.usedFallback ? 'FALLBACK' : 'SUCCESS',
       });
 
@@ -608,16 +618,20 @@ ATURAN EKSTRAKSI PREFERENSI:
         usedFallback: res.usedFallback,
       };
     } catch (error) {
+      const durationMs = Date.now() - startTime;
       console.warn('[LLM GENERATOR ERROR] API call failed, using fallback FAQ response:', (error as Error).message);
       const maxChars = tenantId ? getMaxCharsPerReply(tenantId) : null;
       const fallbackAns = truncateToMaxChars(this.fallbackFaqResponse(userQuestion, contextChunks, treatmentNameForFollowUp), maxChars);
 
       recordLlmExecution({
         flowType: 'CHATBOT_AUTO',
-        customerPhone: customerId,
+        customerPhone: effectivePhone,
+        customerName: effectiveName,
         customerInput: userQuestion,
         reasoning: `[ERROR] ${(error as Error).message}`,
         finalReply: fallbackAns,
+        modelUsed: endpoint.model,
+        durationMs,
         status: 'FALLBACK',
       });
 

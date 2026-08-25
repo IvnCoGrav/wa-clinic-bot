@@ -51,7 +51,6 @@ const OPEN_ENDED_STATES = new Set<ConversationState>([
   ConversationState.INITIAL,
   ConversationState.AWAITING_INTEREST,
   ConversationState.COMPLETED,
-  ConversationState.AWAITING_LOCATION,
 ]);
 
 export class BurstCoalesceService {

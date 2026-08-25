@@ -20,7 +20,8 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     name: 'Perumahan Darmo Permai & Puri Darmo',
     patterns: [
       /\bdarmo\s*permai\s*(selatan|barat|timur|utara)?\b/i,
-      /\bpuri\s*darmo\b/i,
+      /\bperumahan\s*puri\s*darmo\b/i,
+      /\bpuri\s*darmo\s*permai\b/i,
       /\bdarmo\s*satelit\b/i,
     ],
     kelurahan: 'Pradah Kalikendal',
