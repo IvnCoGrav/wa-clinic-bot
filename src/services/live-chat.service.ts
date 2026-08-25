@@ -203,13 +203,17 @@ export class LiveChatService {
      * menonaktifkan bot agar tidak membalas menyela percakapan.
      */
     forceEscalate?: boolean;
+    /**
+     * ID pesan yang dibalas (Reply/Quote). Bisa berupa UUID pesan lokal atau wa_message_id.
+     */
+    replyToMessageId?: string;
   }): Promise<AdminReplyResult> {
-    const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate } = params;
+    const { conversationId, text, imageB64, thumbB64, mimeType, fileName, tenantId, adminName, acknowledgeOutsideWindow, forceEscalate, replyToMessageId } = params;
 
     const hasText = !!text && !!text.trim();
     
     // Idempotency Check: cegah pengiriman ganda dalam 2 detik
-    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64}`;
+    const hash = `${conversationId}:${hasText ? text!.trim() : ''}:${!!imageB64}:${replyToMessageId || ''}`;
     const now = Date.now();
     const lastSent = LiveChatService.recentReplies.get(hash);
     if (lastSent && now - lastSent < 2000) {
@@ -245,7 +249,34 @@ export class LiveChatService {
 
     const gateway = await resolveGatewayForTenant(tenantId);
 
-// WABA 24h window: hanya tenant ber-provider WABA yang membatasi teks bebas
+    // Resolusi quoted message / wa_message_id jika ada replyToMessageId
+    let replyToWaMessageId: string | undefined = undefined;
+    let quotedMeta: any = undefined;
+
+    if (replyToMessageId) {
+      try {
+        const quotedMsg = await messageService.getMessageById(replyToMessageId, tenantId);
+        if (quotedMsg) {
+          replyToWaMessageId = quotedMsg.wa_message_id || quotedMsg.id;
+          quotedMeta = {
+            id: quotedMsg.id,
+            wa_message_id: quotedMsg.wa_message_id,
+            direction: quotedMsg.direction,
+            sender_name: quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? customer.name || 'Customer' : 'Admin'),
+            sender_type: quotedMsg.sender_type,
+            content: quotedMsg.content,
+            media: (quotedMsg as any).payload_raw?.media || undefined,
+          };
+        } else {
+          replyToWaMessageId = replyToMessageId;
+        }
+      } catch (err: any) {
+        console.warn(`[Live Chat] Gagal mengambil detail quoted message:`, err.message);
+        replyToWaMessageId = replyToMessageId;
+      }
+    }
+
+    // WABA 24h window: hanya tenant ber-provider WABA yang membatasi teks bebas
     // (berlaku juga untuk gambar + caption, karena termasuk free-form content)
     if (gateway.providerType === 'WABA' && hasImage && !process.env.PUBLIC_BASE_URL) {
       // Gambar WABA butuh URL publik; tanpanya Meta tak bisa mengambil media.
@@ -312,12 +343,18 @@ export class LiveChatService {
     let attempts = 0;
     const maxAttempts = 2;
 
+    const sendOptions = replyToWaMessageId ? { replyToMessageId: replyToWaMessageId } : undefined;
+
     while (attempts < maxAttempts) {
       attempts++;
       if (hasImage) {
-        sendResult = await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined);
+        sendResult = sendOptions
+          ? await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined, sendOptions)
+          : await gateway.sendImageMessage(customer.phone, sendTarget, content || undefined);
       } else {
-        sendResult = await gateway.sendTextMessage(customer.phone, content);
+        sendResult = sendOptions
+          ? await gateway.sendTextMessage(customer.phone, content, sendOptions)
+          : await gateway.sendTextMessage(customer.phone, content);
       }
 
       if (sendResult.success) {
@@ -356,6 +393,12 @@ export class LiveChatService {
       };
     }
 
+    // Bangun payload_raw
+    const payloadRaw: Record<string, any> = {};
+    if (mediaMeta) payloadRaw.media = mediaMeta;
+    if (quotedMeta) payloadRaw.quoted_message = quotedMeta;
+    if (replyToWaMessageId) payloadRaw.reply_to = replyToWaMessageId;
+
     // Audit Trail + Live Chat publish (message.created)
     const logged = await messageService.logMessage({
       tenantId,
@@ -365,7 +408,7 @@ export class LiveChatService {
       waMessageId: sendResult.messageId,
       senderType: 'ADMIN',
       senderName: adminName || 'Admin',
-      payloadRaw: mediaMeta ? { media: mediaMeta } : undefined,
+      payloadRaw: Object.keys(payloadRaw).length > 0 ? payloadRaw : undefined,
     });
 
     // Auto-escalation: balasan admin menandakan percakapan ditangani manusia.

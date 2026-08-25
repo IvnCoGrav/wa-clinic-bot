@@ -51,6 +51,7 @@ const OPEN_ENDED_STATES = new Set<ConversationState>([
   ConversationState.INITIAL,
   ConversationState.AWAITING_INTEREST,
   ConversationState.COMPLETED,
+  ConversationState.AWAITING_LOCATION,
 ]);
 
 export class BurstCoalesceService {
@@ -61,7 +62,7 @@ export class BurstCoalesceService {
   }
 
   private getWindowMs(): number {
-    const parsed = parseInt(process.env.BURST_COALESCE_MS || '0', 10);
+    const parsed = parseInt(process.env.BURST_COALESCE_MS || '2500', 10);
     return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
   }
 
