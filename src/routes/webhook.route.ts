@@ -18,7 +18,7 @@ import { prisma } from '../db/client';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { normalizeWahaJid } from '../utils/jid';
+import { normalizeWahaJid, extractRealPhoneFromWahaPayload } from '../utils/jid';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
 dotenv.config();
 
@@ -196,11 +196,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             return reply.status(200).send({ status: 'IGNORED_OUTBOUND_GROUP' });
           }
 
-          let phone: string | null = null;
-          if (customerJid.includes('@lid')) {
-            try {
-              phone = await wahaClient.getPhoneNumberFromLid(customerJid);
-            } catch (_) {}
+          let { phone } = extractRealPhoneFromWahaPayload(payload);
+          if (!phone || phone.startsWith('2160') || phone.startsWith('7990')) {
+            if (customerJid.includes('@lid')) {
+              try {
+                const pn = await wahaClient.getPhoneNumberFromLid(customerJid);
+                if (pn && !pn.startsWith('2160') && !pn.startsWith('7990')) {
+                  phone = pn;
+                }
+              } catch (_) {}
+            }
           }
           if (!phone) {
             phone = customerJid.replace(/@.*$/, '');
@@ -227,12 +232,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               '';
             const adminReplyText = imageCaption || payload.body || '';
 
-            // CRITICAL FILTER: Ignore bot automated emergency/waiting templates if echoed back
+            // CRITICAL FILTER: Ignore bot automated emergency/waiting templates & device welcome greetings if echoed back
+            const isDeviceAutoGreeting = 
+              (adminReplyText.includes('Terima kasih sudah menghubungi kami') && (adminReplyText.includes('Bidan Yusi') || adminReplyText.includes('Homecare') || adminReplyText.includes('rumah')));
+
             const isBotAutoReply = 
               adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
               adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
               adminReplyText.startsWith('Pricelist ') ||
-              adminReplyText.startsWith('[AUTOMATED]');
+              adminReplyText.startsWith('[AUTOMATED]') ||
+              isDeviceAutoGreeting;
 
             if ((adminReplyText.trim() || isOutboundImage) && !isBotAutoReply) {
               const customer = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
@@ -500,7 +509,19 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_NON_PERSONAL' });
       }
 
-      const resolvedJid = await wahaClient.resolvePrimaryJid(chatId);
+      // Resolusi Real Phone Number & Primary JID dari Payload
+      const { phone: extractedPhone, resolvedJid: payloadResolvedJid } = extractRealPhoneFromWahaPayload(payload);
+      let resolvedJid = payloadResolvedJid;
+      let phone = extractedPhone;
+
+      if (!phone || phone.startsWith('2160') || phone.startsWith('7990')) {
+        const jidFromWaha = await wahaClient.resolvePrimaryJid(chatId);
+        const phoneFromWaha = jidFromWaha.replace(/@.*$/, '');
+        if (phoneFromWaha && !phoneFromWaha.startsWith('2160') && !phoneFromWaha.startsWith('7990')) {
+          phone = phoneFromWaha;
+          resolvedJid = `${phone}@c.us`;
+        }
+      }
 
       const waMessageId = payload.id;
       if (!waMessageId) {
@@ -514,11 +535,6 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'IGNORED_DUPLICATE' });
       }
 
-      // --- REVISI USER: BYPASS EMPLOYEE/ADMIN CHATS ---
-      // Fast path: baca Customer.is_admin_labeled dari DB (nol HTTP ke WAHA).
-      // Fallback: customer belum punya record / DB offline → tanya WAHA (dengan
-      // cache TTL 15s dari label-cache, jadi murah).
-      const phone = resolvedJid.replace(/@.*$/, '') || normalizeWahaJid(chatId);
       // Guard: JID yang tidak bisa diekstrak jadi nomor HP (junk/status) jangan sampai
       // membuat customer ber-phone kosong/aneh di database.
       if (!phone) {
