@@ -230,6 +230,8 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
       finalReply = finalReply
         .replace(/([a-zA-Z])(Rp\s*[\d.]+)/g, '$1 $2')
         .replace(/Rp\s*(\d)/g, 'Rp $1')
+        .replace(/\bUntukjarak\b/gi, 'Untuk jarak')
+        .replace(/\bDarijarak\b/gi, 'Dari jarak')
         .replace(/\bJadi\s+bisa\s+ya[,\s]+Bunda\s*[☺️😊]?\s*Jadi\s+/gi, 'Jadi ')
         .trim();
 
