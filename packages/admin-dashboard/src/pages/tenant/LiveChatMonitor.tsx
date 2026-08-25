@@ -47,12 +47,23 @@ import {
   MapPin,
   Eye,
   Ban,
+  Reply,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { emitBootPhase } from '../../lib/bootProgress';
+
+interface QuotedMessageData {
+  id?: string;
+  wa_message_id?: string | null;
+  direction?: 'INBOUND' | 'OUTBOUND';
+  sender_name?: string | null;
+  sender_type?: string | null;
+  content?: string;
+  media?: ChatMediaData;
+}
 
 interface ChatMessage {
   id: string;
@@ -66,8 +77,67 @@ interface ChatMessage {
   read_at?: string | null;
   created_at: string;
   media?: ChatMediaData;
+  quoted_message?: QuotedMessageData;
   is_revoked?: boolean;
   is_edited?: boolean;
+  payload_raw?: any;
+}
+
+function extractQuotedMessage(msg: any): QuotedMessageData | undefined {
+  const q = msg?.quoted_message ??
+            msg?.payload_raw?.quoted_message ??
+            msg?.payloadRaw?.quoted_message ??
+            msg?.payload_raw?.quotedMsg ??
+            msg?.payload_raw?._data?.quotedMsg;
+  if (!q) return undefined;
+
+  const content = q.content ?? q.body ?? q.text ?? (q.message?.conversation || q.message?.extendedTextMessage?.text) ?? '';
+  const senderName = q.sender_name ?? q.senderName ?? q.pushName ?? (q.fromMe ? 'Bidan / CS' : undefined);
+  const media = extractMedia(q);
+
+  return {
+    id: q.id ?? q.messageId ?? q.key?.id,
+    wa_message_id: q.wa_message_id ?? q.id ?? q.key?.id,
+    direction: q.direction ?? (q.fromMe ? 'OUTBOUND' : 'INBOUND'),
+    sender_name: senderName,
+    sender_type: q.sender_type ?? (q.fromMe ? 'ADMIN' : 'CUSTOMER'),
+    content,
+    media,
+  };
+}
+
+function formatChatDateSeparator(dateStr: string): string {
+  if (!dateStr) return '';
+  const msgDate = new Date(dateStr);
+  const now = new Date();
+
+  // Reset to midnight for exact calendar day comparison
+  const msgMidnight = new Date(msgDate.getFullYear(), msgDate.getMonth(), msgDate.getDate()).getTime();
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  const diffDays = Math.round((nowMidnight - msgMidnight) / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) {
+    return 'Hari ini';
+  } else if (diffDays === 1) {
+    return 'Kemarin';
+  } else if (diffDays >= 2 && diffDays < 7) {
+    const dayName = msgDate.toLocaleDateString('id-ID', { weekday: 'long' });
+    return dayName.charAt(0).toUpperCase() + dayName.slice(1);
+  } else {
+    return msgDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
+  }
+}
+
+function isDifferentDay(d1Str: string, d2Str?: string | null): boolean {
+  if (!d2Str) return true;
+  const d1 = new Date(d1Str);
+  const d2 = new Date(d2Str);
+  return (
+    d1.getFullYear() !== d2.getFullYear() ||
+    d1.getMonth() !== d2.getMonth() ||
+    d1.getDate() !== d2.getDate()
+  );
 }
 
 function extractMedia(msg: any): ChatMediaData | undefined {
@@ -150,6 +220,72 @@ export const LiveChatMonitor: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [replyText, setReplyText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const bubbleLongPressTimerRef = useRef<any>(null);
+  const bubbleLongPressTriggeredRef = useRef(false);
+  const bubbleTouchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleSelectReply = (msg: ChatMessage) => {
+    if (msg.is_revoked || (msg as any).isRevoked) return;
+    setReplyingTo(msg);
+    setTimeout(() => {
+      if (chatInputRef.current) {
+        chatInputRef.current.focus();
+      }
+    }, 50);
+  };
+
+  const handleBubbleTouchStart = (msg: ChatMessage, e: React.TouchEvent) => {
+    bubbleLongPressTriggeredRef.current = false;
+    const touch = e.touches[0];
+    if (!touch) return;
+    bubbleTouchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    if (bubbleLongPressTimerRef.current) clearTimeout(bubbleLongPressTimerRef.current);
+    bubbleLongPressTimerRef.current = setTimeout(() => {
+      bubbleLongPressTriggeredRef.current = true;
+      handleSelectReply(msg);
+    }, 400);
+  };
+
+  const handleBubbleTouchMove = (e: React.TouchEvent) => {
+    if (!bubbleTouchStartPosRef.current || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - bubbleTouchStartPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - bubbleTouchStartPosRef.current.y);
+    if (deltaX > 10 || deltaY > 10) {
+      if (bubbleLongPressTimerRef.current) {
+        clearTimeout(bubbleLongPressTimerRef.current);
+        bubbleLongPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleBubbleTouchEnd = () => {
+    if (bubbleLongPressTimerRef.current) {
+      clearTimeout(bubbleLongPressTimerRef.current);
+      bubbleLongPressTimerRef.current = null;
+    }
+    bubbleTouchStartPosRef.current = null;
+  };
+
+  const handleBubbleMouseDown = (msg: ChatMessage, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    bubbleLongPressTriggeredRef.current = false;
+    if (bubbleLongPressTimerRef.current) clearTimeout(bubbleLongPressTimerRef.current);
+    bubbleLongPressTimerRef.current = setTimeout(() => {
+      bubbleLongPressTriggeredRef.current = true;
+      handleSelectReply(msg);
+    }, 400);
+  };
+
+  const handleBubbleMouseUp = () => {
+    if (bubbleLongPressTimerRef.current) {
+      clearTimeout(bubbleLongPressTimerRef.current);
+      bubbleLongPressTimerRef.current = null;
+    }
+  };
+
   const [sending, setSending] = useState(false);
   const [generatingDraft, setGeneratingDraft] = useState(false);
   const [customerDetailModalOpen, setCustomerDetailModalOpen] = useState(false);
@@ -452,6 +588,7 @@ export const LiveChatMonitor: React.FC = () => {
 
   const resetChatInput = () => {
     setReplyText('');
+    setReplyingTo(null);
     if (chatInputRef.current) {
       chatInputRef.current.innerText = '';
     }
@@ -627,7 +764,7 @@ export const LiveChatMonitor: React.FC = () => {
   const loadThread = async (conversationId: string) => {    try {
       const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages`);
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-      setMessages(list.map((m) => ({ ...m, media: extractMedia(m) })));
+      setMessages(list.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) })));
     } catch (err: any) {
       console.error('Failed to load conversation thread:', err);
       setMessages([]);
@@ -861,6 +998,7 @@ export const LiveChatMonitor: React.FC = () => {
             created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
             delivery_status: payload.deliveryStatus || 'sent',
             media: extractMedia(payload),
+            quoted_message: extractQuotedMessage(payload),
           };
 
           // Append ke thread yang sedang dibuka / replace optimistic message
@@ -1004,7 +1142,7 @@ export const LiveChatMonitor: React.FC = () => {
             .then((res) => {
               if (selectedIdRef.current !== activeId) return;
               const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-              const mapped = list.map((m) => ({ ...m, media: extractMedia(m) }));
+              const mapped = list.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
               setMessages((prev) => {
                 const hasTemp = prev.some((m) => m.id.startsWith('temp_'));
                 if (hasTemp) return prev;
@@ -1273,6 +1411,7 @@ export const LiveChatMonitor: React.FC = () => {
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     notifyTyping(false);
 
+    const currentReplyingTo = replyingTo;
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg: ChatMessage = {
       id: tempId,
@@ -1283,6 +1422,15 @@ export const LiveChatMonitor: React.FC = () => {
       created_at: new Date().toISOString(),
       delivery_status: 'sent',
       media: image ? { url: image.preview, hdUrl: image.preview, mimeType: image.file.type } : undefined,
+      quoted_message: currentReplyingTo ? {
+        id: currentReplyingTo.id,
+        wa_message_id: currentReplyingTo.wa_message_id,
+        direction: currentReplyingTo.direction,
+        sender_name: currentReplyingTo.sender_name || (currentReplyingTo.direction === 'INBOUND' ? (selectedChat?.customerName || 'Customer') : 'Admin'),
+        sender_type: currentReplyingTo.sender_type,
+        content: currentReplyingTo.content,
+        media: currentReplyingTo.media,
+      } : undefined,
     };
 
     // 1. Instan tampil di thread pesan (0ms delay)
@@ -1305,9 +1453,10 @@ export const LiveChatMonitor: React.FC = () => {
       return sorted;
     });
 
-    // 3. Instan kosongkan form input & pratinjau gambar
+    // 3. Instan kosongkan form input, pratinjau gambar, dan reply state
     resetChatInput();
     setSelectedImage(null);
+    setReplyingTo(null);
     setTimeout(() => scrollToBottom(true), 50);
 
     setSending(true);
@@ -1316,6 +1465,9 @@ export const LiveChatMonitor: React.FC = () => {
         adminName: user?.email || 'Admin',
       };
       if (text) body.text = text;
+      if (currentReplyingTo) {
+        body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
+      }
       if (image) {
         const imageB64 = await fileToDataUrl(image.file);
         const thumbB64 = await makeThumbnail(imageB64);
@@ -2204,7 +2356,7 @@ export const LiveChatMonitor: React.FC = () => {
                       <p>Belum ada pesan di percakapan ini.</p>
                     </div>
                   ) : (
-                    messages.map((msg) => {
+                    messages.map((msg, idx) => {
                       const isCustomer = msg.direction === 'INBOUND';
                       const senderTypeUpper = (msg.sender_type || '').toUpperCase();
                       const isAdmin = msg.direction === 'OUTBOUND' && (senderTypeUpper === 'ADMIN' || senderTypeUpper === 'HUMAN' || senderTypeUpper === 'STAFF');
@@ -2214,6 +2366,9 @@ export const LiveChatMonitor: React.FC = () => {
                       const isWithin15Mins = msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false;
                       const canEdit = !isCustomer && !isRevoked && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
                       const hasMedia = !!msg.media;
+                      const quotedMsg = msg.quoted_message || extractQuotedMessage(msg);
+                      const showDateSeparator = isDifferentDay(msg.created_at, messages[idx - 1]?.created_at);
+
                       // Lokasi valid = latitude/longitude ada dan bukan 0,0 (image WA Web sering kebawa location kosong)
                       const rawLoc = (msg as any).payload_raw?.location || (msg as any).payloadRaw?.location;
                       const hasValidLocation = !!(
@@ -2243,130 +2398,201 @@ export const LiveChatMonitor: React.FC = () => {
                       }
 
                       return (
-                        <div key={msg.id} className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}>
-                          <div className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs ${
-                            isRevoked
-                              ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
-                              : isCustomer
-                                ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                                : isAdmin
-                                  ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                                  : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
-                          }`}>
-                            {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
-                              <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
-                                isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
-                              }`}>
-                                {!isCustomer && !isAdmin && <Bot size={10} />}
-                                <span>{senderLabel(msg)}</span>
-                              </span>
-                            )}
-                            {!isRevoked && msg.media && (
-                              <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                <MediaImage
-                                  src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
-                                  downloadSrc={msg.media.hdUrl || msg.media.url}
-                                  thumbUrl={msg.media.thumbUrl}
-                                  caption={msg.media.caption || undefined}
-                                />
+                        <React.Fragment key={msg.id}>
+                          {showDateSeparator && (
+                            <div className="flex justify-center my-2 sm:my-2.5">
+                              <div className="bg-white/95 backdrop-blur-xs px-3 py-1 rounded-lg text-[11px] font-semibold text-[#54656f] shadow-2xs border border-black/5 select-none tracking-wide">
+                                {formatChatDateSeparator(msg.created_at)}
                               </div>
-                            )}
-                            {isRevoked ? (
-                              <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
-                                <Ban size={12} className="text-[#8696a0] shrink-0" />
-                                <span>Pesan ini telah ditarik</span>
-                              </p>
-                            ) : (
-                              <>
-                                {effectiveIsLocationMsg && (
-                                  <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
-                                    <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                                      <MapPin size={17} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="font-bold text-[12px] text-[#111b21] leading-tight">Share Location</p>
-                                      <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
-                                        {locLat && locLng ? `${locLat}, ${locLng}` : 'Titik koordinat diterima'}
-                                      </p>
-                                    </div>
-                                    {locLat && locLng && (
-                                      <a
-                                        href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
-                                        title="Buka lokasi di Google Maps"
-                                      >
-                                        <span>Peta</span>
-                                        <ExternalLink size={12} />
-                                      </a>
-                                    )}
-                                  </div>
-                                )}
-                                {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
-                                  <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
-                                )}
-                              </>
-                            )}
-                            <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
-                              {isEdited && !isRevoked && (
-                                <span className="text-[9px] text-[#667781] italic mr-0.5">diedit</span>
-                              )}
-                              <span>
-                                {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.') : ''}
-                              </span>
-                              {!isCustomer && (
-                                <span
-                                  className="inline-flex items-center ml-0.5"
-                                  title={
-                                    msg.delivery_status === 'read'
-                                      ? `Dibaca ${msg.read_at ? new Date(msg.read_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
-                                      : msg.delivery_status === 'delivered'
-                                      ? `Diterima di HP ${msg.delivered_at ? new Date(msg.delivered_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
-                                      : msg.delivery_status === 'failed'
-                                      ? 'Gagal terkirim'
-                                      : 'Terkirim'
-                                  }
-                                >
-                                  {msg.delivery_status === 'read' ? (
-                                    <CheckCheck size={13} className="text-[#53bdeb] stroke-[2.5]" />
-                                  ) : msg.delivery_status === 'delivered' ? (
-                                    <CheckCheck size={13} className="text-[#8696a0]" />
-                                  ) : msg.delivery_status === 'failed' ? (
-                                    <AlertCircle size={12} className="text-rose-500" />
-                                  ) : (
-                                    <Check size={12} className="text-[#8696a0]" />
-                                  )}
+                            </div>
+                          )}
+                          <div
+                            id={`msg-${msg.id}`}
+                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300`}
+                          >
+                            <div
+                              onTouchStart={(e) => handleBubbleTouchStart(msg, e)}
+                              onTouchMove={handleBubbleTouchMove}
+                              onTouchEnd={handleBubbleTouchEnd}
+                              onMouseDown={(e) => handleBubbleMouseDown(msg, e)}
+                              onMouseUp={handleBubbleMouseUp}
+                              onMouseLeave={handleBubbleMouseUp}
+                              className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs transition-all ${
+                                isRevoked
+                                  ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
+                                  : isCustomer
+                                    ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                                    : isAdmin
+                                      ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                                      : 'bg-white text-[#111b21] rounded-tr-none border-l-4 border-[#008069]'
+                              }`}
+                            >
+                              {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
+                                <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
+                                  isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
+                                }`}>
+                                  {!isCustomer && !isAdmin && <Bot size={10} />}
+                                  <span>{senderLabel(msg)}</span>
                                 </span>
                               )}
-                              {canEdit && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEdit(msg)}
-                                  className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
-                                  title="Edit pesan (maksimal 15 menit)"
+
+                              {/* Quoted Message / WhatsApp Reply preview inside bubble */}
+                              {quotedMsg && !isRevoked && (
+                                <div
+                                  className={`mb-1.5 p-1.5 rounded-md border-l-[3px] text-[11px] leading-snug cursor-pointer transition select-none ${
+                                    isCustomer
+                                      ? 'bg-black/[0.04] hover:bg-black/[0.07] border-[#008069]'
+                                      : 'bg-black/[0.05] hover:bg-black/[0.08] border-[#008069]'
+                                  }`}
+                                  onClick={() => {
+                                    if (quotedMsg.id || quotedMsg.wa_message_id) {
+                                      const targetElem = document.getElementById(`msg-${quotedMsg.id}`) || document.getElementById(`msg-${quotedMsg.wa_message_id}`);
+                                      if (targetElem) {
+                                        targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        targetElem.classList.add('ring-2', 'ring-[#008069]');
+                                        setTimeout(() => targetElem.classList.remove('ring-2', 'ring-[#008069]'), 1200);
+                                      }
+                                    }
+                                  }}
+                                  title="Klik untuk melihat pesan asli"
                                 >
-                                  <PenLine size={11} />
-                                </button>
+                                  <p className="font-bold text-[10px] text-[#008069] truncate mb-0.5">
+                                    {quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS')}
+                                  </p>
+                                  <p className="text-[11px] text-[#54656f] truncate font-sans">
+                                    {quotedMsg.media ? (
+                                      <span className="flex items-center gap-1">
+                                        <span>📷</span>
+                                        <span>Foto</span>
+                                        {quotedMsg.content && !/^\[(IMAGE|MEDIA)/.test(quotedMsg.content) && <span>{quotedMsg.content}</span>}
+                                      </span>
+                                    ) : (
+                                      quotedMsg.content || 'Pesan'
+                                    )}
+                                  </p>
+                                </div>
                               )}
-                              {canRevoke && (
-                                <button
-                                  type="button"
-                                  disabled={revokingId === msg.id}
-                                  onClick={() => handleRevokeMessage(msg)}
-                                  className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-rose-600 hover:bg-rose-50 transition active:scale-90"
-                                  title="Tarik / Hapus pesan untuk semua orang (Delete for Everyone)"
-                                >
-                                  {revokingId === msg.id ? (
-                                    <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent" />
-                                  ) : (
-                                    <Trash2 size={11} />
+
+                              {!isRevoked && msg.media && (
+                                <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
+                                  <MediaImage
+                                    src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
+                                    downloadSrc={msg.media.hdUrl || msg.media.url}
+                                    thumbUrl={msg.media.thumbUrl}
+                                    caption={msg.media.caption || undefined}
+                                  />
+                                </div>
+                              )}
+                              {isRevoked ? (
+                                <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
+                                  <Ban size={12} className="text-[#8696a0] shrink-0" />
+                                  <span>Pesan ini telah ditarik</span>
+                                </p>
+                              ) : (
+                                <>
+                                  {effectiveIsLocationMsg && (
+                                    <div className="my-1 p-2 bg-[#f0f2f5] hover:bg-[#e8f5f2] rounded-xl border border-[#d1d7db] transition flex items-center space-x-2.5 text-left">
+                                      <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                                        <MapPin size={17} />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-[12px] text-[#111b21] leading-tight">Share Location</p>
+                                        <p className="text-[10px] text-[#667781] font-mono truncate mt-0.5">
+                                          {locLat && locLng ? `${locLat}, ${locLng}` : 'Titik koordinat diterima'}
+                                        </p>
+                                      </div>
+                                      {locLat && locLng && (
+                                        <a
+                                          href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="px-2.5 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-lg text-[11px] font-bold transition shadow-xs flex items-center space-x-1 shrink-0 active:scale-95"
+                                          title="Buka lokasi di Google Maps"
+                                        >
+                                          <span>Peta</span>
+                                          <ExternalLink size={12} />
+                                        </a>
+                                      )}
+                                    </div>
                                   )}
-                                </button>
+                                  {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
+                                    <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
+                                  )}
+                                </>
                               )}
+                              <div className="flex items-center justify-end space-x-1 mt-0.5 text-right select-none text-[10px] text-[#667781]">
+                                {isEdited && !isRevoked && (
+                                  <span className="text-[9px] text-[#667781] italic mr-0.5">diedit</span>
+                                )}
+                                <span>
+                                  {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.') : ''}
+                                </span>
+                                {!isCustomer && (
+                                  <span
+                                    className="inline-flex items-center ml-0.5"
+                                    title={
+                                      msg.delivery_status === 'read'
+                                        ? `Dibaca ${msg.read_at ? new Date(msg.read_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                                        : msg.delivery_status === 'delivered'
+                                        ? `Diterima di HP ${msg.delivered_at ? new Date(msg.delivered_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                                        : msg.delivery_status === 'failed'
+                                        ? 'Gagal terkirim'
+                                        : 'Terkirim'
+                                    }
+                                  >
+                                    {msg.delivery_status === 'read' ? (
+                                      <CheckCheck size={13} className="text-[#53bdeb] stroke-[2.5]" />
+                                    ) : msg.delivery_status === 'delivered' ? (
+                                      <CheckCheck size={13} className="text-[#8696a0]" />
+                                    ) : msg.delivery_status === 'failed' ? (
+                                      <AlertCircle size={12} className="text-rose-500" />
+                                    ) : (
+                                      <Check size={12} className="text-[#8696a0]" />
+                                    )}
+                                  </span>
+                                )}
+                                {!isRevoked && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectReply(msg);
+                                    }}
+                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                    title="Balas pesan ini (atau tahan/hold bubble)"
+                                  >
+                                    <Reply size={11} />
+                                  </button>
+                                )}
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEdit(msg)}
+                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
+                                    title="Edit pesan (maksimal 15 menit)"
+                                  >
+                                    <PenLine size={11} />
+                                  </button>
+                                )}
+                                {canRevoke && (
+                                  <button
+                                    type="button"
+                                    disabled={revokingId === msg.id}
+                                    onClick={() => handleRevokeMessage(msg)}
+                                    className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-rose-600 hover:bg-rose-50 transition active:scale-90"
+                                    title="Tarik / Hapus pesan untuk semua orang (Delete for Everyone)"
+                                  >
+                                    {revokingId === msg.id ? (
+                                      <div className="h-2.5 w-2.5 animate-spin rounded-full border border-rose-500 border-t-transparent" />
+                                    ) : (
+                                      <Trash2 size={11} />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        </React.Fragment>
                       );
                     })
                   )}
@@ -2381,6 +2607,31 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   ) : (
                   <>
+                  {/* Active Quoted Message Banner (WhatsApp-Style Replying Bar) */}
+                  {replyingTo && (
+                    <div className="flex items-center justify-between bg-white px-3 py-2 border-l-4 border-[#008069] rounded-t-xl mb-1 shadow-xs border border-b-0 border-[#e9edef] animate-fadeIn">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="flex items-center space-x-1.5">
+                          <Reply size={12} className="text-[#008069] shrink-0" />
+                          <span className="text-[11px] font-bold text-[#008069] truncate">
+                            Membalas {replyingTo.direction === 'INBOUND' ? (selectedChat.customerName || 'Customer') : 'Bidan / CS'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#54656f] truncate mt-0.5 pl-4">
+                          {replyingTo.media ? '📷 Foto' : (replyingTo.content || 'Pesan')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReplyingTo(null)}
+                        className="p-1 text-[#8696a0] hover:text-rose-500 hover:bg-rose-50 rounded-full transition active:scale-90"
+                        title="Batal membalas"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
                   {selectedImage && (
                     <div className="relative inline-block mb-2">
                       <img
@@ -2397,7 +2648,7 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 rounded-xl border border-[#e9edef] w-full">
+                  <div className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 border border-[#e9edef] w-full ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'}`}>
                     <input
                       ref={fileInputRef}
                       type="file"

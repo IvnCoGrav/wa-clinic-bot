@@ -61,18 +61,23 @@ export class WabaGatewayDriver implements WhatsAppGateway {
     };
   }
 
-  async sendTextMessage(to: string, text: string): Promise<SendResult> {
+  async sendTextMessage(to: string, text: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
     try {
+      const payload: any = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'text',
+        // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
+        text: { preview_url: false, body: normalizeWhatsAppFormat(text) },
+      };
+      if (options?.replyToMessageId) {
+        payload.context = { message_id: options.replyToMessageId };
+      }
+
       const response = await axios.post(
         this.messagesUrl,
-        {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to,
-          type: 'text',
-          // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
-          text: { preview_url: false, body: normalizeWhatsAppFormat(text) },
-        },
+        payload,
         { headers: this.headers, timeout: 10000 }
       );
       const msgId = response.data?.messages?.[0]?.id;
@@ -125,18 +130,23 @@ export class WabaGatewayDriver implements WhatsAppGateway {
     }
   }
 
-  async sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<SendResult> {
+  async sendImageMessage(to: string, imageUrl: string, caption?: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
     try {
       const imagePayload: Record<string, unknown> = { link: imageUrl };
+      const payload: any = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'image',
+        image: { ...imagePayload, caption: caption || undefined },
+      };
+      if (options?.replyToMessageId) {
+        payload.context = { message_id: options.replyToMessageId };
+      }
+
       const response = await axios.post(
         this.messagesUrl,
-        {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to,
-          type: 'image',
-          image: { ...imagePayload, caption: caption || undefined },
-        },
+        payload,
         { headers: this.headers, timeout: 15000 }
       );
       const msgId = response.data?.messages?.[0]?.id;

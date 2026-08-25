@@ -4,6 +4,41 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### Added & Enhanced — Live Chat Date Separators & WhatsApp Reply Feature via WAHA (2026-08-25)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Pemisah Tanggal WhatsApp-Style**: Tampilan pesan di Live Chat sebelumnya tidak memiliki penanda tanggal percakapan, sehingga membingungkan admin dalam membedakan percakapan hari ini, kemarin, beberapa hari lalu, atau minggu lalu.
+  2. **Fitur WhatsApp Reply / Quote (Hold to Reply)**: Admin menginginkan kemampuan untuk membalas pesan customer tertentu secara langsung (*quoted message* / *reply context*) sebagaimana di aplikasi WhatsApp asli, baik dengan menahan/hold bubble chat customer (400ms) maupun tombol quick-action ↩️.
+- **Implementasi Backend & Gateway Integration:**
+  1. **`src/integrations/waha/client.ts`**:
+     - Memperluas interface `IWahaClient` dan implementasi `WahaClient` (`sendText`, `sendTextDetailed`, `sendImage`, `sendImageDetailed`) dengan parameter opsional `replyTo?: string`.
+     - Menginjeksi `reply_to: replyTo` ke payload POST WAHA `/api/sendText` dan `/api/sendImage`.
+  2. **`src/integrations/whatsapp/gateway.types.ts`, `waha.driver.ts`, `waba.driver.ts`**:
+     - Menambahkan parameter opsional `options?: { replyToMessageId?: string }` pada `sendTextMessage` dan `sendImageMessage`.
+     - Meneruskan `options.replyToMessageId` ke WAHA client dan Meta Cloud API context (`{ message_id: options.replyToMessageId }`).
+  3. **`src/services/live-chat.service.ts` & `src/services/message.service.ts`**:
+     - Menambahkan method `getMessageById(messageId, tenantId)` di `MessageService` yang mendukung pencarian ID internal atau `wa_message_id` lengkap dengan in-memory fallback store.
+     - Memperbarui `sendAdminReply` untuk mengekstrak dan menyimpan data `quoted_message` ke dalam `payload_raw.quoted_message` pada pesan yang dikirimkan.
+  4. **`src/routes/admin/livechat.subroute.ts`**:
+     - Menambahkan penerimaan `replyToMessageId?: string` pada endpoint `POST /api/admin/live-chat/conversations/:id/reply`.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  1. **Date Separator Badges (`LiveChatMonitor.tsx`)**:
+     - Menambahkan helper `formatChatDateSeparator(dateStr)` dan `isDifferentDay(d1, d2)`:
+       - Hari ini $\rightarrow$ `"Hari ini"`
+       - 1 hari lalu $\rightarrow$ `"Kemarin"`
+       - 2–6 hari lalu $\rightarrow$ Nama hari bahasa Indonesia (`"Senin"`, `"Selasa"`, dll.)
+       - $\ge 7$ hari lalu $\rightarrow$ Format tanggal tanpa tahun (`"18 Agustus"`, `"3 Juli"`).
+     - Merender badge pemisah tanggal di tengah bubble container saat berganti hari.
+  2. **WhatsApp Reply UI & Quoted Preview (`LiveChatMonitor.tsx`)**:
+     - Fitur **Hold / Long-press (400ms)** pada bubble pesan untuk langsung memicu mode reply.
+     - Tombol hover quick reply (↩️ `Reply`) pada desktop.
+     - Komponen floating **Replying Bar** di atas composer input dengan nama pengirim, kutipan pesan, dan tombol batalkan (✕).
+     - Render kotak kutipan pesan (*quoted message box*) di dalam bubble chat yang dapat diklik untuk auto-scroll & highlight ke pesan asli di thread.
+- **Pengujian & Verifikasi:**
+  - Unit tests `tests/unit/live-chat.service.test.ts` (17/17 tests PASS, termasuk skenario reply/quote).
+  - Gateway tests `tests/unit/whatsapp-gateway.test.ts` (12/12 tests PASS).
+  - TypeScript build backend (`npm run build`) & Vite frontend build (`admin-dashboard: npm run build`) 100% lolos (0 error).
+
 ### Enhanced & Hardened — Disable Passive Self-Learning & Extend LLM Timeouts to 60s/120s (2026-08-24)
 
 - **Latar Belakang & Investigasi Masalah:**

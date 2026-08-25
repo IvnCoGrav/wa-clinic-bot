@@ -23,7 +23,7 @@ export interface WhatsAppGateway {
   readonly supportsRevoke: boolean;
   readonly supportsEdit: boolean;
 
-  sendTextMessage(to: string, text: string): Promise<SendResult>;
+  sendTextMessage(to: string, text: string, options?: { replyToMessageId?: string }): Promise<SendResult>;
 
   sendTemplateMessage(
     to: string,
@@ -32,7 +32,7 @@ export interface WhatsAppGateway {
     components: TemplateComponent[]
   ): Promise<SendResult>;
 
-  sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<SendResult>;
+  sendImageMessage(to: string, imageUrl: string, caption?: string, options?: { replyToMessageId?: string }): Promise<SendResult>;
 
   sendTypingIndicator(to: string, incomingMessageId?: string, durationMs?: number): Promise<void>;
 
