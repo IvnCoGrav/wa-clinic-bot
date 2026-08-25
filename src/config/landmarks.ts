@@ -15,6 +15,32 @@ export interface LandmarkEntry {
 }
 
 export const POPULAR_LANDMARKS: LandmarkEntry[] = [
+  // --- PERUMAHAN & LANDMARK SURABAYA BARAT ---
+  {
+    name: 'Perumahan Darmo Permai & Puri Darmo',
+    patterns: [
+      /\bdarmo\s*permai\s*(selatan|barat|timur|utara)?\b/i,
+      /\bpuri\s*darmo\b/i,
+      /\bdarmo\s*satelit\b/i,
+    ],
+    kelurahan: 'Pradah Kalikendal',
+    kecamatan: 'Dukuh Pakis',
+    kota: 'Kota Surabaya',
+    lat: -7.281389,
+    lng: 112.684754,
+  },
+  {
+    name: 'Perumahan Darmo Indah & Darmo Harapan',
+    patterns: [
+      /\bdarmo\s*(indah|harapan)\b/i,
+    ],
+    kelurahan: 'Tandes',
+    kecamatan: 'Tandes',
+    kota: 'Kota Surabaya',
+    lat: -7.266200,
+    lng: 112.684100,
+  },
+
   // --- APARTEMEN SURABAYA (REVISI KOORDINAT PRESISI) ---
   {
     name: 'City of Tomorrow (CITO / Paparazzi)',
