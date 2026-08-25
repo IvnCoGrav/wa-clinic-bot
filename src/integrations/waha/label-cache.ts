@@ -23,6 +23,8 @@ const CACHE_TTL_MS = parseInt(process.env.WAHA_LABEL_CACHE_TTL_MS || '15000', 10
 const cache = new Map<string, CacheEntry>();
 const lidCache = new Map<string, LidEntry>();
 
+const LID_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam (mapping LID -> nomor HP bersifat permanen)
+
 export function getCachedLabels(chatId: string): string[] | null {
   const entry = cache.get(chatId);
   if (!entry || entry.expiresAt < Date.now()) return null;
@@ -38,13 +40,17 @@ export function invalidateCachedLabels(chatId: string): void {
 }
 
 export function getCachedLidPhone(lid: string): string | null {
-  const entry = lidCache.get(lid);
+  const cleanLid = lid.replace(/@lid$/, '');
+  const entry = lidCache.get(cleanLid) || lidCache.get(`${cleanLid}@lid`);
   if (!entry || entry.expiresAt < Date.now()) return null;
   return entry.pn;
 }
 
 export function setCachedLidPhone(lid: string, pn: string): void {
-  lidCache.set(lid, { pn, expiresAt: Date.now() + CACHE_TTL_MS });
+  const cleanLid = lid.replace(/@lid$/, '');
+  const entry = { pn, expiresAt: Date.now() + LID_CACHE_TTL_MS };
+  lidCache.set(cleanLid, entry);
+  lidCache.set(`${cleanLid}@lid`, entry);
 }
 
 /** Bersihkan seluruh cache (dipakai test & saat perlu reset deterministik). */
