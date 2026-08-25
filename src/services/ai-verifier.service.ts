@@ -93,18 +93,27 @@ GROUND TRUTH DATA:
 - Layanan yang Cocok: ${JSON.stringify(input.groundTruth.allowedServices || [])}
 - Treatment Terakhir Dibahas: ${input.groundTruth.lastDiscussedTreatment || 'None'}
 
-4 PILAR PEMERIKSAAN QC:
-1. AGE & CATEGORY COMPLIANCE:
+6 PILAR PEMERIKSAAN QC:
+1. CLINICAL & SYMPTOM INDICATION MATCH:
+   - Jika customer mengeluhkan respiratori/saluran napas (grok-grok, napas buntu, lendir/dahak, batuk, pilek): Terapi yang TEPAT adalah Pijat Bayi Pulih Ceria + Sinar Moksa (Inframerah Hangat) atau Nebulizer.
+   - DILARANG KERAS menolak Sinar Moksa untuk keluhan grok-grok! Sinar Moksa SANGAT COCOK untuk grok-grok dan mengencerkan dahak saluran napas.
+   - DILARANG KERAS mengartikan kata "buntu" sebagai "sembelit/susah BAB" jika customer sedang membahas napas atau suara grok-grok bayi.
+   - Jika customer mengeluh kembung/kolik/susah BAB: Terapi yang TEPAT adalah Pijat Pulih Ceria (fokus perut/ILU).
+2. AGE & CATEGORY COMPLIANCE:
    - DILARANG KERAS merekomendasikan treatment kategori MOMS (Prenatal Yoga, Pijat Induksi, Pijat Oksitosin, Laktasi) untuk pasien anak/bayi!
    - Untuk anak usia > 24 bulan (misal 3 tahun = 36 bulan), layanan yang benar adalah "Pijat Kids Ceria" (kategori KIDS), BUKAN Prenatal Yoga atau Pijat Bayi Baru Lahir.
    - Untuk ibu hamil/nifas, jangan tawarkan pijat bayi jika konteksnya untuk ibu.
-2. ANTI-HALLUCINATION LOCATION:
+3. STANDARDIZED PHRASING (NO E-COMMERCE JARGON):
+   - DILARANG menggunakan kata marketplace "pesan", "order", "mau pesan hari apa".
+   - Gunakan frasa bernuansa treatment: "Rencana mau treatment di hari apa Bunda ? 😊".
+4. PERSONA & SMILE EMOJI GUARANTEE:
+   - Tetap hangat, sopan, memanggil "Bunda" khas Bidan Yusi.
+   - Wajib menyertakan setidaknya satu emoji senyum "😊".
+5. ANTI-HALLUCINATION LOCATION:
    - DILARANG KERAS menebak/menyisipkan nama kelurahan, desa, kecamatan, atau kota luar (misal: "Bintara", "Bintaro", dll) jika customer TIDAK PERNAH menyebutkannya dalam chat.
    - Jika menanyakan lokasi, gunakan formula netral: "kelurahan atau kecamatan mana".
-3. PRICING & TREATMENT ACCURACY:
+6. PRICING & TREATMENT ACCURACY:
    - Jangan sebutkan harga atau nama paket yang tidak ada dalam daftar layanan resmi klinik.
-4. PERSONA COMPLIANCE:
-   - Tetap hangat, sopan, dan menggunakan panggilan "Bunda" khas Bidan Yusi.
 
 OUTPUT WAJIB JSON VALID DENGAN SKEMA:
 {
@@ -161,8 +170,10 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
           recordLlmExecution({
             flowType: 'AI_VERIFIER',
             customerPhone: input.customerPhone,
-            customerInput: `[DRAFT QC] ${input.customerMessage}`,
+            customerInput: `[DRAFT QC] "${input.draftReply.slice(0, 120)}..." (User: "${input.customerMessage.slice(0, 80)}")`,
+            promptPayload: { systemPrompt, userContent },
             reasoning: `[ERROR] ${err.message}`,
+            rawReasoning: err.stack || err.message,
             finalReply: input.draftReply,
             modelUsed: verifierConfig.modelName,
             durationMs: Date.now() - startedAt,
@@ -200,7 +211,7 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
 
       if (validated.success) {
         const result = validated.data;
-        reasoningNote = result.reasoning || (result.is_valid ? 'QC PASSED: Draf balasan sesuai ground truth dan aman.' : 'QC VIOLATIONS DETECTED');
+        reasoningNote = result.reasoning || (result.is_valid ? 'QC PASSED: Draf balasan 100% aman dan sesuai ontologi klinis.' : 'QC VIOLATIONS DETECTED');
         if (!result.is_valid && result.corrected_reply && result.corrected_reply.trim().length > 0) {
           console.warn(
             `[AI VERIFIER CORRECTION] Draft reply corrected for ${input.customerPhone}. Violations: ${result.violation_reasons.join(', ')}`
@@ -215,13 +226,20 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
         reasoningNote = 'QC JSON output invalid / unparseable, passed original draft';
       }
 
+      // Ensure smile emoji is present in final verified reply
+      if (!finalReply.includes('😊') && !finalReply.includes('☺️') && !finalReply.includes('🤗')) {
+        finalReply = `${finalReply} 😊`;
+      }
+
       try {
         const { recordLlmExecution } = await import('../utils/llm-execution-logger');
         recordLlmExecution({
           flowType: 'AI_VERIFIER',
           customerPhone: input.customerPhone,
-          customerInput: `[DRAFT QC] "${input.draftReply.slice(0, 150)}..." (User: "${input.customerMessage.slice(0, 80)}")`,
+          customerInput: `[DRAFT QC] "${input.draftReply.slice(0, 120)}..." (User: "${input.customerMessage.slice(0, 80)}")`,
+          promptPayload: { systemPrompt, userContent },
           reasoning: reasoningNote + (reasons.length > 0 ? ` | Pelanggaran: ${reasons.join(', ')}` : ''),
+          rawReasoning: rawContent,
           groundTruthUsed: {
             customerAgeMonths: input.groundTruth.customerAgeMonths,
             customerLocation: input.groundTruth.customerLocation,

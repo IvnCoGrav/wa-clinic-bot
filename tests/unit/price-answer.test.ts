@@ -64,7 +64,7 @@ describe('buildPriceAnswer — Resolusi Anaphora', () => {
     expect(res.replyText).toContain('Durasinya 45 menit');
     expect(res.replyText).toContain('Rp 70.000');
     expect(res.replyText).toContain('Rp 90.000');
-    expect(res.replyText).toContain('Kira-kira mau dijadwalkan di hari apa ya Bunda? Biar sekalian kami bantu cekkan slot terapisnya 🤗');
+    expect(res.replyText).toContain('Rencana mau treatment di hari apa Bunda ? 😊');
     // Must NOT include bubble spa
     expect(res.replyText).not.toContain('Bubble Spa');
   });

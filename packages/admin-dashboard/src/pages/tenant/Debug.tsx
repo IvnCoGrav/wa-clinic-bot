@@ -16,6 +16,10 @@ import {
   Cpu,
   Terminal,
   Sparkles,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -655,7 +659,10 @@ interface LlmLogEntry {
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
+  bubbleCorrelationId?: string;
+  promptPayload?: any;
   reasoning: string | null;
+  rawReasoning?: string | null;
   groundTruthUsed?: any;
   contextSummary?: string;
   finalReply: string;
@@ -665,16 +672,33 @@ interface LlmLogEntry {
   status: 'SUCCESS' | 'FALLBACK' | 'ERROR';
 }
 
+interface GroupedBubbleChat {
+  correlationId: string;
+  timestamp: string;
+  customerInput: string;
+  customerName?: string;
+  aiCalls: LlmLogEntry[];
+}
+
+interface GroupedCustomerLlmLogs {
+  customerPhone: string;
+  customerName: string;
+  totalBubbles: number;
+  totalAiCalls: number;
+  latestTimestamp: string;
+  bubbles: GroupedBubbleChat[];
+}
+
 const getFlowBadge = (flowType: string) => {
   switch (flowType) {
     case 'NLU_CLASSIFICATION':
-      return { label: '🔍 NLU Intent & Entity', cls: 'bg-cyan-100 text-cyan-800 border-cyan-200' };
+      return { label: '🔍 1. NLU Intent & Entity', cls: 'bg-cyan-100 text-cyan-800 border-cyan-200' };
     case 'AI_ROUTER':
-      return { label: '🧭 AI Router Decision', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
+      return { label: '🧭 2. AI Router Decision', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
     case 'CHATBOT_AUTO':
-      return { label: '🤖 Chatbot RAG Generator', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+      return { label: '🤖 3. Chatbot RAG Generator', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
     case 'AI_VERIFIER':
-      return { label: '🛡️ AI Output Verifier (QC)', cls: 'bg-amber-100 text-amber-900 border-amber-300' };
+      return { label: '🛡️ 4. AI Output Verifier (QC)', cls: 'bg-amber-100 text-amber-900 border-amber-300' };
     case 'COPILOT_DRAFT':
       return { label: '💡 AI Copilot Draft', cls: 'bg-purple-100 text-purple-800 border-purple-200' };
     case 'PHRASING':
@@ -685,21 +709,43 @@ const getFlowBadge = (flowType: string) => {
 };
 
 function LlmLogsSection() {
-  const [logs, setLogs] = useState<LlmLogEntry[]>([]);
+  const [groupedData, setGroupedData] = useState<GroupedCustomerLlmLogs[]>([]);
+  const [flatLogs, setFlatLogs] = useState<LlmLogEntry[]>([]);
+  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
   const [loading, setLoading] = useState(true);
   const [flowFilter, setFlowFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  // Accordion state
+  const [expandedPhones, setExpandedPhones] = useState<Record<string, boolean>>({});
+  const [expandedBubbles, setExpandedBubbles] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiRequest(`/api/admin/debug/llm-logs?limit=100&flow=${flowFilter}`);
-      if (res && res.success && Array.isArray(res.data)) {
-        setLogs(res.data);
+      const [groupedRes, flatRes] = await Promise.allSettled([
+        apiRequest(`/api/admin/debug/llm-grouped-logs?limit=300&flow=${flowFilter}`),
+        apiRequest(`/api/admin/debug/llm-logs?limit=150&flow=${flowFilter}`),
+      ]);
+
+      if (groupedRes.status === 'fulfilled' && groupedRes.value?.data) {
+        const data = groupedRes.value.data;
+        setGroupedData(Array.isArray(data) ? data : []);
+        // Auto-expand first customer if nothing expanded
+        if (Array.isArray(data) && data.length > 0 && Object.keys(expandedPhones).length === 0) {
+          setExpandedPhones({ [data[0].customerPhone]: true });
+          if (data[0].bubbles?.length > 0) {
+            setExpandedBubbles({ [data[0].bubbles[0].correlationId]: true });
+          }
+        }
+      }
+
+      if (flatRes.status === 'fulfilled' && flatRes.value?.data) {
+        setFlatLogs(Array.isArray(flatRes.value.data) ? flatRes.value.data : []);
       }
     } catch (err) {
-      console.warn('Gagal memuat LLM logs:', err);
+      console.warn('Gagal memuat LLM execution logs:', err);
     } finally {
       setLoading(false);
     }
@@ -711,31 +757,62 @@ function LlmLogsSection() {
     return () => clearInterval(interval);
   }, [loadLogs]);
 
-  const filteredLogs = useMemo(() => {
-    if (!searchQuery) return logs;
+  const togglePhone = (phone: string) => {
+    setExpandedPhones((prev) => ({ ...prev, [phone]: !prev[phone] }));
+  };
+
+  const toggleBubble = (corrId: string) => {
+    setExpandedBubbles((prev) => ({ ...prev, [corrId]: !prev[corrId] }));
+  };
+
+  const copyReasoning = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Filter grouped data
+  const filteredGrouped = useMemo(() => {
+    if (!searchQuery) return groupedData;
     const q = searchQuery.toLowerCase();
-    return logs.filter(
-      (l) =>
-        (l.customerInput && l.customerInput.toLowerCase().includes(q)) ||
-        (l.reasoning && l.reasoning.toLowerCase().includes(q)) ||
-        (l.finalReply && l.finalReply.toLowerCase().includes(q)) ||
-        (l.customerName && l.customerName.toLowerCase().includes(q)) ||
-        (l.customerPhone && l.customerPhone.includes(q))
-    );
-  }, [logs, searchQuery]);
+    return groupedData
+      .map((cust) => {
+        const matchPhone = cust.customerPhone.toLowerCase().includes(q);
+        const matchName = cust.customerName.toLowerCase().includes(q);
+        const matchingBubbles = cust.bubbles.filter((b) => {
+          const matchInput = b.customerInput.toLowerCase().includes(q);
+          const matchCalls = b.aiCalls.some(
+            (call) =>
+              (call.reasoning && call.reasoning.toLowerCase().includes(q)) ||
+              (call.rawReasoning && call.rawReasoning.toLowerCase().includes(q)) ||
+              (call.finalReply && call.finalReply.toLowerCase().includes(q))
+          );
+          return matchInput || matchCalls;
+        });
+
+        if (matchPhone || matchName) {
+          return cust;
+        }
+        if (matchingBubbles.length > 0) {
+          return { ...cust, bubbles: matchingBubbles };
+        }
+        return null;
+      })
+      .filter((c): c is GroupedCustomerLlmLogs => c !== null);
+  }, [groupedData, searchQuery]);
 
   return (
     <div className="space-y-4">
-      <SectionHeader title="🧠 Dedicated LLM Execution & Reasoning Logs" onRefresh={loadLogs} loading={loading} auto />
+      <SectionHeader title="🧠 Dedicated LLM Execution Tracing (Hierarkis 3-Level)" onRefresh={loadLogs} loading={loading} auto />
 
-      {/* Filter Flow & Search */}
+      {/* Filter Flow, Search & View Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="flex flex-wrap gap-1.5">
           {[
             { id: 'all', label: 'Semua Flow' },
             { id: 'NLU_CLASSIFICATION', label: '🔍 NLU Intent' },
             { id: 'AI_ROUTER', label: '🧭 AI Router' },
-            { id: 'CHATBOT_AUTO', label: '🤖 Chatbot Reply' },
+            { id: 'CHATBOT_AUTO', label: '🤖 RAG Generator' },
             { id: 'AI_VERIFIER', label: '🛡️ AI Verifier (QC)' },
             { id: 'COPILOT_DRAFT', label: '💡 AI Copilot' },
           ].map((f) => (
@@ -753,148 +830,307 @@ function LlmLogsSection() {
           ))}
         </div>
 
-        <div className="w-full sm:w-64">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari prompt, reasoning, reply..."
-            className="w-full px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            placeholder="Cari nomor, reasoning, chat..."
+            className="w-full sm:w-56 px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           />
+
+          <div className="flex bg-[#e9edef] p-0.5 rounded-xl text-xs font-bold shrink-0">
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-2.5 py-1 rounded-lg transition ${
+                viewMode === 'grouped' ? 'bg-white text-[#008069] shadow-xs' : 'text-[#667781]'
+              }`}
+            >
+              Pohon 3-Level
+            </button>
+            <button
+              onClick={() => setViewMode('flat')}
+              className={`px-2.5 py-1 rounded-lg transition ${
+                viewMode === 'flat' ? 'bg-white text-[#008069] shadow-xs' : 'text-[#667781]'
+              }`}
+            >
+              Flat Feed
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Log Feed */}
-      <div className="space-y-3">
-        {filteredLogs.length === 0 ? (
-          <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-xs text-[#8696a0] shadow-xs">
-            {searchQuery ? 'Tidak ada log yang cocok dengan pencarian.' : 'Belum ada eksekusi LLM tercatat di buffer.'}
-          </div>
-        ) : (
-          filteredLogs.map((log) => {
-            const isExpanded = expandedId === log.id;
-            const badge = getFlowBadge(log.flowType);
+      {/* VIEW MODE 1: HIERARCHICAL 3-LEVEL ACCORDION */}
+      {viewMode === 'grouped' && (
+        <div className="space-y-3">
+          {filteredGrouped.length === 0 ? (
+            <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-xs text-[#8696a0] shadow-xs">
+              {searchQuery ? 'Tidak ada riwayat chat/LLM yang cocok.' : 'Belum ada eksekusi LLM yang tercatat di buffer.'}
+            </div>
+          ) : (
+            filteredGrouped.map((cust) => {
+              const isPhoneExpanded = !!expandedPhones[cust.customerPhone];
 
-            return (
-              <div
-                key={log.id}
-                className="bg-white border border-[#e9edef] hover:border-[#c2e7e0] rounded-2xl p-4 shadow-xs transition space-y-3 text-left"
-              >
-                {/* Header Meta */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] pb-2.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls}`}
-                    >
-                      {badge.label}
-                    </span>
-
-                    <span className="text-xs font-bold text-[#111b21]">
-                      {log.customerName || log.customerPhone || 'Pasien'}
-                    </span>
-
-                    {log.durationMs !== undefined && (
-                      <span className="text-[10px] font-mono text-[#667781] bg-[#f0f2f5] px-2 py-0.5 rounded-md">
-                        ⏱️ {log.durationMs}ms
-                      </span>
-                    )}
-
-                    {log.modelUsed && (
-                      <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                        {log.modelUsed}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-[#8696a0]">{fmtTime(log.timestamp)}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        log.status === 'SUCCESS'
-                          ? 'bg-emerald-50 text-[#008069] border border-emerald-200'
-                          : log.status === 'FALLBACK'
-                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}
-                    >
-                      {log.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Grid 4 Visual Blocks */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  {/* Block 1: Input Pasien */}
-                  <div className="bg-sky-50/60 border border-sky-200/80 rounded-xl p-3 space-y-1">
-                    <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
-                      💬 Input Pasien / Prompt
-                    </span>
-                    <p className="text-sky-950 whitespace-pre-wrap font-medium">{log.customerInput || '-'}</p>
-                  </div>
-
-                  {/* Block 2: Ground Truth Injected */}
-                  <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1">
-                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                      📚 Ground Truth &amp; Konteks Injected
-                    </span>
-                    {log.groundTruthUsed ? (
-                      <pre className="text-[11px] font-mono text-amber-950 whitespace-pre-wrap overflow-x-auto">
-                        {typeof log.groundTruthUsed === 'string'
-                          ? log.groundTruthUsed
-                          : JSON.stringify(log.groundTruthUsed, null, 2)}
-                      </pre>
-                    ) : (
-                      <p className="text-amber-800/80 italic text-[11px]">Tidak ada data database khusus.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Block 3: AI Reasoning & Chain-of-Thought */}
-                {log.reasoning && (
-                  <div className="bg-purple-50/60 border border-purple-200/80 rounded-xl p-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider flex items-center gap-1">
-                        <BrainCircuit size={12} className="text-purple-600" />
-                        <span>🔍 AI Reasoning &amp; Chain-of-Thought</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
-                        className="text-[11px] font-semibold text-purple-700 hover:text-purple-900"
-                      >
-                        {isExpanded ? 'Sembunyikan' : 'Lihat Penuh'}
-                      </button>
+              return (
+                <div
+                  key={cust.customerPhone}
+                  className="bg-white border border-[#e9edef] hover:border-[#b4ded5] rounded-2xl shadow-xs transition overflow-hidden text-left"
+                >
+                  {/* LEVEL 1: CUSTOMER HEADER */}
+                  <div
+                    onClick={() => togglePhone(cust.customerPhone)}
+                    className="p-4 bg-[#f8fafc] hover:bg-[#f0f4f7] cursor-pointer flex items-center justify-between gap-3 border-b border-[#e9edef] select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#e8f5f2] border border-[#008069]/30 flex items-center justify-center text-[#008069] font-bold text-xs">
+                        <Phone size={14} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm text-[#111b21]">
+                            {cust.customerName || 'Customer'}
+                          </span>
+                          <span className="font-mono text-xs text-[#667781] bg-white px-2 py-0.5 rounded-md border border-[#d1d7db]">
+                            +{cust.customerPhone}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#8696a0] mt-0.5">
+                          {cust.totalBubbles} Bubble Chat Terproses · {cust.totalAiCalls} Panggilan AI · Terakhir: {fmtTime(cust.latestTimestamp)}
+                        </p>
+                      </div>
                     </div>
-                    <p
-                      className={`text-purple-950 font-mono text-[11px] whitespace-pre-wrap ${
-                        isExpanded ? '' : 'line-clamp-3'
-                      }`}
-                    >
-                      {log.reasoning}
-                    </p>
-                  </div>
-                )}
 
-                {/* Block 4: Final Reply / Output / Decision */}
-                <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 space-y-1">
-                  <span className="text-[10px] font-bold text-[#008069] uppercase tracking-wider block">
-                    {log.flowType === 'COPILOT_DRAFT'
-                      ? '✉️ Draf Balasan AI Copilot'
-                      : log.flowType === 'NLU_CLASSIFICATION'
-                      ? '🎯 Klasifikasi Intent & Entitas'
-                      : log.flowType === 'AI_ROUTER'
-                      ? '🎯 Keputusan AI Router & Eskalasi'
-                      : log.flowType === 'AI_VERIFIER'
-                      ? '🛡️ Hasil Evaluasi QC Verifier'
-                      : '✉️ Final AI Auto-Reply'}
-                  </span>
-                  <p className="text-emerald-950 whitespace-pre-wrap font-medium">{log.finalReply || '-'}</p>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-3 py-1 rounded-full border border-[#008069]/20">
+                        {cust.totalBubbles} Percakapan
+                      </span>
+                      {isPhoneExpanded ? <ChevronDown size={18} className="text-[#667781]" /> : <ChevronRight size={18} className="text-[#667781]" />}
+                    </div>
+                  </div>
+
+                  {/* LEVEL 2: CHAT BUBBLES LIST */}
+                  {isPhoneExpanded && (
+                    <div className="p-4 space-y-3 bg-[#fdfefe]">
+                      {cust.bubbles.map((bubble, bIdx) => {
+                        const isBubbleExpanded = !!expandedBubbles[bubble.correlationId];
+
+                        return (
+                          <div
+                            key={bubble.correlationId}
+                            className="border border-[#e2e8f0] rounded-xl bg-white shadow-xs overflow-hidden"
+                          >
+                            {/* BUBBLE HEADER */}
+                            <div
+                              onClick={() => toggleBubble(bubble.correlationId)}
+                              className="p-3.5 bg-white hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-3 border-b border-slate-100 select-none"
+                            >
+                              <div className="flex items-start gap-2.5 max-w-[75%]">
+                                <div className="p-1 rounded-md bg-sky-100 text-sky-800 mt-0.5 shrink-0">
+                                  <MessageSquare size={13} />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-900">
+                                      Bubble #{bIdx + 1}: &ldquo;{bubble.customerInput.length > 85 ? bubble.customerInput.slice(0, 85) + '...' : bubble.customerInput}&rdquo;
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <span className="text-[10px] font-mono text-slate-500">
+                                      {fmtTime(bubble.timestamp)}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">•</span>
+                                    <div className="flex items-center gap-1">
+                                      {bubble.aiCalls.map((c, i) => (
+                                        <span
+                                          key={i}
+                                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                            c.flowType === 'AI_VERIFIER'
+                                              ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                              : c.flowType === 'CHATBOT_AUTO'
+                                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                              : 'bg-cyan-50 text-cyan-800 border-cyan-200'
+                                          }`}
+                                        >
+                                          {c.flowType === 'NLU_CLASSIFICATION' ? 'NLU' : c.flowType === 'AI_ROUTER' ? 'ROUTER' : c.flowType === 'CHATBOT_AUTO' ? 'GENERATOR' : c.flowType === 'AI_VERIFIER' ? 'QC VERIFIER' : c.flowType}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[11px] font-semibold text-slate-500">
+                                  {bubble.aiCalls.length} Tahap AI
+                                </span>
+                                {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+                              </div>
+                            </div>
+
+                            {/* LEVEL 3: INDIVIDUAL AI CALLS (NLU -> ROUTER -> GENERATOR -> QC VERIFIER) */}
+                            {isBubbleExpanded && (
+                              <div className="p-3.5 bg-slate-50/50 space-y-3">
+                                {bubble.aiCalls.map((call, cIdx) => {
+                                  const badge = getFlowBadge(call.flowType);
+                                  const displayReasoning = call.rawReasoning || call.reasoning || 'Tidak ada reasoning teks terpisah.';
+
+                                  return (
+                                    <div
+                                      key={call.id || cIdx}
+                                      className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3"
+                                    >
+                                      {/* AI Call Header */}
+                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${badge.cls}`}>
+                                            {badge.label}
+                                          </span>
+
+                                          {call.modelUsed && (
+                                            <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-semibold">
+                                              {call.modelUsed}
+                                            </span>
+                                          )}
+
+                                          {call.durationMs !== undefined && (
+                                            <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                              ⏱️ {call.durationMs}ms
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] font-mono text-slate-400">{fmtTime(call.timestamp)}</span>
+                                          <span
+                                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                              call.status === 'SUCCESS'
+                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                : call.status === 'FALLBACK'
+                                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                            }`}
+                                          >
+                                            {call.status}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Visual Blocks */}
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                        {/* Block 1: Input / Customer Message */}
+                                        <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3 space-y-1">
+                                          <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
+                                            💬 Input &amp; Prompt Terkirim
+                                          </span>
+                                          <p className="text-sky-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                        </div>
+
+                                        {/* Block 2: Ground Truth */}
+                                        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 space-y-1">
+                                          <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                                            📚 Ground Truth &amp; Konteks Injected
+                                          </span>
+                                          {call.groundTruthUsed ? (
+                                            <pre className="text-[11px] font-mono text-amber-950 whitespace-pre-wrap overflow-x-auto max-h-36">
+                                              {typeof call.groundTruthUsed === 'string'
+                                                ? call.groundTruthUsed
+                                                : JSON.stringify(call.groundTruthUsed, null, 2)}
+                                            </pre>
+                                          ) : (
+                                            <p className="text-amber-800/80 italic text-[11px]">Tidak ada data database khusus.</p>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Block 3: Full AI Reasoning & Chain-of-Thought */}
+                                      <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-2">
+                                        <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
+                                          <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
+                                            <BrainCircuit size={13} className="text-purple-600" />
+                                            <span>🔍 AI Reasoning &amp; Chain-of-Thought Lengkap</span>
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => copyReasoning(call.id, displayReasoning)}
+                                            className="text-[11px] font-semibold text-purple-700 hover:text-purple-950 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs"
+                                          >
+                                            {copiedId === call.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                            <span>{copiedId === call.id ? 'Tersalin!' : 'Salin Reasoning'}</span>
+                                          </button>
+                                        </div>
+                                        <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-96">
+                                          {displayReasoning}
+                                        </pre>
+                                      </div>
+
+                                      {/* Block 4: Final Reply / Output / Decision */}
+                                      <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
+                                        <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                                          {call.flowType === 'AI_VERIFIER'
+                                            ? '🛡️ Hasil Keputusan QC Verifier'
+                                            : call.flowType === 'NLU_CLASSIFICATION'
+                                            ? '🎯 Intent & Entitas Terdeteksi'
+                                            : call.flowType === 'AI_ROUTER'
+                                            ? '🎯 Keputusan AI Router'
+                                            : '✉️ Balasan Akhir (Outbound Reply)'}
+                                        </span>
+                                        <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* VIEW MODE 2: FLAT TIMELINE FEED */}
+      {viewMode === 'flat' && (
+        <div className="space-y-3">
+          {flatLogs.length === 0 ? (
+            <div className="bg-white border border-[#e9edef] rounded-2xl p-8 text-center text-xs text-[#8696a0] shadow-xs">
+              Belum ada log LLM flat tercatat.
+            </div>
+          ) : (
+            flatLogs.map((log) => {
+              const badge = getFlowBadge(log.flowType);
+              const displayReasoning = log.rawReasoning || log.reasoning || '-';
+
+              return (
+                <div key={log.id} className="bg-white border border-[#e9edef] rounded-2xl p-4 shadow-xs space-y-3 text-left">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls}`}>{badge.label}</span>
+                      <span className="text-xs font-bold text-[#111b21]">{log.customerName || log.customerPhone || 'Pasien'}</span>
+                      {log.modelUsed && <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">{log.modelUsed}</span>}
+                    </div>
+                    <span className="text-[10px] font-mono text-[#8696a0]">{fmtTime(log.timestamp)}</span>
+                  </div>
+
+                  <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
+                    <span className="text-[10px] font-bold text-purple-800 uppercase block mb-1">Reasoning &amp; CoT</span>
+                    <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap">{displayReasoning}</pre>
+                  </div>
+
+                  <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">Output</span>
+                    <p className="text-emerald-950 font-medium whitespace-pre-wrap">{log.finalReply || '-'}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
