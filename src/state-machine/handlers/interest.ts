@@ -222,6 +222,15 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
   // dari location handler (intercept FAQ) — mencegah pantulan tak terbatas.
   const interceptDepth = ctx._interceptDepth || 0;
   if (interceptDepth === 0 && isLocationQueryMessage(incomingMessage, userText)) {
+    const hasExplicitLocationChange = /(ganti|pindah|salah|ubah|bukan\s+di|yang\s+bener)/i.test(userText);
+    if (customer.kelurahan && !hasExplicitLocationChange) {
+      console.log(`[ADDRESS DETAIL SUPPLEMENT] Customer provided detailed street address "${userText}" while kelurahan is already confirmed (${customer.kelurahan}). Acknowledging without recalculation.`);
+      return {
+        nextState: ConversationState.AWAITING_INTEREST,
+        replyText: `Terima kasih Bunda, detail alamatnya (*${userText.trim()}*) sudah kami catat yaa 😊 Mau pilih treatment apa untuk Bunda atau si kecil? 😊`,
+        shouldSendReply: true,
+      };
+    }
     console.log(`[LOCATION REDIRECT] Redirecting location query/change "${userText}" to handleLocationState.`);
     const { handleLocationState } = await import('./location');
     return handleLocationState({ ...ctx, _interceptDepth: interceptDepth + 1 });
