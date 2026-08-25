@@ -226,6 +226,13 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
         reasoningNote = 'QC JSON output invalid / unparseable, passed original draft';
       }
 
+      // Format cleanup: perbaiki spasi sebelum simbol rupiah (contoh: bisaRp25.000 -> bisa Rp 25.000)
+      finalReply = finalReply
+        .replace(/([a-zA-Z])(Rp\s*[\d.]+)/g, '$1 $2')
+        .replace(/Rp\s*(\d)/g, 'Rp $1')
+        .replace(/\bJadi\s+bisa\s+ya[,\s]+Bunda\s*[☺️😊]?\s*Jadi\s+/gi, 'Jadi ')
+        .trim();
+
       // Ensure smile emoji is present in final verified reply
       if (!finalReply.includes('😊') && !finalReply.includes('☺️') && !finalReply.includes('🤗')) {
         finalReply = `${finalReply} 😊`;
