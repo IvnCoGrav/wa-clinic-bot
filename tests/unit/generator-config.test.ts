@@ -80,7 +80,7 @@ describe('LLMResponseGenerator - AiModelConfigService Integration', () => {
     // Pastikan default behavior dari AiModelConfigService untuk CHAT_REPLY
     const defaultModel = AiModelConfigService.getModelConfig('CHAT_REPLY').modelName;
     expect(payload.model).toBe(defaultModel);
-    expect(payload.temperature).toBe(0.7);
+    expect(payload.temperature).toBe(0.6);
     expect(payload.max_tokens).toBe(1024);
   });
 });

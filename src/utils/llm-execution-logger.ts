@@ -10,7 +10,8 @@ export type LlmFlowType =
   | 'AI_VERIFIER'
   | 'PHRASING'
   | 'SLOT_EXTRACTOR'
-  | 'SLOT_GENERATOR';
+  | 'SLOT_GENERATOR'
+  | 'SLOT_FAST_FAQ';
 
 export interface LlmExecutionRecord {
   id: string;
