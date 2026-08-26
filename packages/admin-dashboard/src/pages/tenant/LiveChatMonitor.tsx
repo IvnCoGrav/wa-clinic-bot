@@ -1418,21 +1418,24 @@ export const LiveChatMonitor: React.FC = () => {
       distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
     } : null);
 
-    const bookingD = resItem.booking_date ? new Date(resItem.booking_date) : new Date();
-    const timeStr = resItem.booking_date
-      ? new Date(resItem.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')
-      : '12.00-12.30';
+    const bookingD = resItem?.booking_date ? new Date(resItem.booking_date) : new Date();
+    let timeStr = '12.00-12.30';
+    try {
+      if (resItem?.booking_date && !isNaN(bookingD.getTime())) {
+        timeStr = bookingD.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.');
+      }
+    } catch {}
 
     const mappedData: ExtractedScheduleData = {
-      bookingDate: bookingD,
+      bookingDate: !isNaN(bookingD.getTime()) ? bookingD : new Date(),
       dateDisplay: formatIndonesianDate(bookingD),
       timeDisplay: timeStr,
-      treatmentName: resItem.treatment_detail || resItem.treatment_name || 'pijat ceria',
-      treatmentPrice: resItem.purchase_value || resItem.treatment_price || 60000,
-      treatmentCategory: resItem.treatment_category === 'MOMS' ? 'MOMS' : 'BABY',
-      childName: resItem.child_name || custData?.children?.[0]?.name || 'leo',
-      childAge: resItem.child_age || custData?.children?.[0]?.current_age || '3tahun 7 bulan',
-      bundaName: (custData?.name || 'Karmila').replace(/^(bunda|ibu|mama)\s+/i, '').trim(),
+      treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'pijat ceria',
+      treatmentPrice: Number(resItem?.purchase_value || resItem?.treatment_price) || 60000,
+      treatmentCategory: resItem?.treatment_category === 'MOMS' ? 'MOMS' : 'BABY',
+      childName: resItem?.child_name || custData?.children?.[0]?.name || 'leo',
+      childAge: resItem?.child_age || custData?.children?.[0]?.current_age || '3tahun 7 bulan',
+      bundaName: (custData?.name || selectedChat?.customerName || 'Karmila').replace(/^(bunda|ibu|mama)\s+/i, '').trim(),
       phone: custData?.phone || selectedChat?.customerPhone || '',
       address: custData?.address || custData?.preferences?.address || '',
       kecamatan: custData?.kecamatan || '',
