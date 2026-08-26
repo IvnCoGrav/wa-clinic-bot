@@ -122,6 +122,13 @@ export const ALL_MODULES: ModuleDefinition[] = [
     category: 'CRM & KOMUNIKASI',
     description: 'Basis data pengetahuan dan artikel Tanya Jawab untuk bot AI',
   },
+  {
+    id: 'telegram',
+    path: '/admin/telegram',
+    name: 'Koneksi Telegram',
+    category: 'CRM & KOMUNIKASI',
+    description: 'Integrasi Telegram untuk briefing jadwal harian bidan/terapis dan laporan operasional klinik',
+  },
 
   // 4. Marketing & Ads
   {
@@ -258,6 +265,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
       '/admin/follow-ups',
       '/admin/follow-up-templates',
       '/admin/knowledge-base',
+      '/admin/telegram',
     ],
     defaultRedirect: '/admin/overview',
   },
@@ -280,6 +288,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
       '/admin/follow-ups',
       '/admin/follow-up-templates',
       '/admin/knowledge-base',
+      '/admin/telegram',
       '/admin/live-chat',
     ],
     defaultRedirect: '/admin/overview',

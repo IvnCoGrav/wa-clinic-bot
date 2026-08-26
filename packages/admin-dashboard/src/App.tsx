@@ -38,6 +38,7 @@ const StaffLogin = lazy(() => import('./pages/staff/StaffLogin').then(m => ({ de
 const StaffToday = lazy(() => import('./pages/staff/StaffToday').then(m => ({ default: m.StaffToday })));
 const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m => ({ default: m.StaffSchedule })));
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
+const TelegramIntegration = lazy(() => import('./pages/tenant/TelegramIntegration').then(m => ({ default: m.TelegramIntegration })));
 
 /** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. */
 const IndexRedirect: React.FC = () => {
@@ -229,6 +230,13 @@ export const App: React.FC = () => {
               <ProtectedRoute>
                 <Layout>
                   <Settings />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/telegram" element={
+              <ProtectedRoute>
+                <Layout>
+                  <TelegramIntegration />
                 </Layout>
               </ProtectedRoute>
             } />
