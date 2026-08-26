@@ -5,6 +5,10 @@
  */
 
 import { getBrandIdentity } from './brand';
+import {
+  sanitizeCustomerNameForGreeting,
+  formatGreetingBunda,
+} from '../utils/name-sanitizer';
 
 export interface FollowUpTemplateParams {
   name: string;
@@ -129,7 +133,7 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
     ({ name, babyName }) =>
       `Halo Bunda ${name}! 🌸 Si kecil (${babyName || 'dek kecil'}) sudah 3 bulan, saatnya stimulasi tummy time & pijat bayi demi tumbuh kembang optimal. Mau Bidan jadwalkan? 😊`,
     ({ name }) =>
-      `Selamat tuan Bunda ${name}! Di usia 3 bulan si kecil mulai banyak tidur & aktif bergerak. Pijat bayi rutin membantu relaksasi otot & kualitas tidurnya. Bidan siap datang lho bund! 🥰`,
+      `Selamat pagi Bunda ${name}! Di usia 3 bulan si kecil mulai banyak tidur & aktif bergerak. Pijat bayi rutin membantu relaksasi otot & kualitas tidurnya. Bidan siap datang lho bund! 🥰`,
     ({ name }) =>
       `Pagi Bunda ${name}! Usia 3 bulan itu golden moment tummy time & interaksi. Yuk amankan slot pijat stimulasi tumbuh kembang bersama ${getBrandIdentity().businessName}! ✨`,
   ],
@@ -184,8 +188,16 @@ export function getRollingFollowUpMessage(
   params: FollowUpTemplateParams
 ): { text: string; templateIndex: number } {
   const templates = FOLLOWUP_ROLLING_TEMPLATES[type];
+  const cleanName = sanitizeCustomerNameForGreeting(params.name);
+  const normalizedParams: FollowUpTemplateParams = {
+    ...params,
+    name: cleanName,
+    babyName: params.babyName ? params.babyName.trim() : 'si kecil',
+  };
+
   if (!templates || templates.length === 0) {
-    return { text: `Halo Bunda ${params.name}!`, templateIndex: 0 };
+    const greeting = formatGreetingBunda(cleanName);
+    return { text: `Halo ${greeting}!`, templateIndex: 0 };
   }
 
   let idx = 0;
@@ -197,8 +209,21 @@ export function getRollingFollowUpMessage(
   }
 
   const fn = templates[idx];
+  const rawText = fn(normalizedParams);
+
+  // Post-processing cleanup for flawless Indonesian phrasing
+  const text = rawText
+    .replace(/Bunda\s+Bunda/gi, 'Bunda')
+    .replace(/Bunda\s+!/gi, 'Bunda!')
+    .replace(/Bunda\s+,/gi, 'Bunda,')
+    .replace(/dek\s+dek\s+/gi, 'dek ')
+    .replace(/dek\s+si kecil/gi, 'si kecil')
+    .replace(/\(si kecil\)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
   return {
-    text: fn(params),
+    text,
     templateIndex: idx + 1, // 1-indexed for UI display
   };
 }

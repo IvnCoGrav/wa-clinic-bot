@@ -3,6 +3,10 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { TEMPLATES } from '../config/persona';
 import { typingService } from './typing.service';
 import { followUpService } from './follow-up.service';
+import {
+  sanitizeCustomerNameForGreeting,
+  formatBabyNamesForGreeting,
+} from '../utils/name-sanitizer';
 
 export class CronService {
   /**
@@ -180,7 +184,7 @@ export class CronService {
         console.log(`[Cron Service] Bypassing throttle for urgent reminder: booking at ${res.booking_date.toISOString()}`);
       }
 
-      const customerName = res.customer.name || 'Bunda';
+      const customerName = sanitizeCustomerNameForGreeting(res.customer.name);
       const timeStr = this.formatTime(res.booking_date);
 
       const messageText = TEMPLATES.morningReminder({
@@ -188,7 +192,7 @@ export class CronService {
         time: timeStr,
       });
 
-      console.log(`[Cron Service] Sending morning reminder to ${res.customer.phone} (${customerName})`);
+      console.log(`[Cron Service] Sending morning reminder to ${res.customer.phone} (${customerName || 'Bunda'})`);
       await typingService.simulateHumanReply({
         chatId: res.customer.phone,
         replyText: messageText,
@@ -217,7 +221,11 @@ export class CronService {
         },
         tenant_id: DEFAULT_TENANT_ID,
       },
-      include: { customer: true },
+      include: {
+        customer: {
+          include: { children: true },
+        },
+      },
     });
 
     console.log(`[Cron Service] Found ${yesterdayReservations.length} confirmed reservations completed yesterday.`);
@@ -225,18 +233,12 @@ export class CronService {
     for (const res of yesterdayReservations) {
       if (!res.customer || !res.booking_date) continue;
 
-      const customerName = res.customer.name || 'Bunda';
+      const customerName = sanitizeCustomerNameForGreeting(res.customer.name);
       let messageText = '';
 
       // 1. Tentukan template review berdasarkan kategori
       if (res.treatment_category === 'BABY' || res.treatment_category === 'BOTH') {
-        let babyName = 'Adek';
-        if (res.raw_text) {
-          const match = res.raw_text.match(/Nama Bayi\s*:\s*([^\n]+)/i);
-          if (match && match[1]) {
-            babyName = match[1].trim();
-          }
-        }
+        const babyName = formatBabyNamesForGreeting(res.customer.children, res.raw_text, { prefixDek: true });
         messageText = TEMPLATES.followUpReviewBaby({
           name: customerName,
           babyName,
@@ -249,7 +251,7 @@ export class CronService {
       }
 
       // 2. Kirim pesan review H+1
-      console.log(`[Cron Service] Sending H+1 review to ${res.customer.phone} (${customerName})`);
+      console.log(`[Cron Service] Sending H+1 review to ${res.customer.phone} (${customerName || 'Bunda'}, Baby: ${res.treatment_category === 'MOMS' ? '-' : 'bayi'})`);
       await typingService.simulateHumanReply({
         chatId: res.customer.phone,
         replyText: messageText,

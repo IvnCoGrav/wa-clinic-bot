@@ -7,6 +7,11 @@ import { wabaTemplateService } from './waba-template.service';
 import { wabaConsentService } from './waba-consent.service';
 import { parsePositiveInt } from '../utils/env-numeric';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import {
+  sanitizeCustomerNameForGreeting,
+  formatGreetingBunda,
+  formatBabyNamesForGreeting,
+} from '../utils/name-sanitizer';
 
 // Parameter batch/throttle follow-up — env-drivable (Fase 4.3 docs/HARDCODED_FIX_PLAN.md)
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
@@ -278,7 +283,7 @@ export class FollowUpService {
                 type: 'NO_PURCHASE',
                 stage,
                 scheduled_at: scheduledAt,
-                status: 'PENDING',
+                status: 'QUEUED',
               },
             });
           } catch (_) {}
@@ -381,7 +386,7 @@ export class FollowUpService {
                 type: 'NEXT_TREATMENT',
                 stage,
                 scheduled_at: scheduledAt,
-                status: 'PENDING',
+                status: 'QUEUED',
               },
             });
           } catch (_) {}
@@ -755,12 +760,14 @@ export class FollowUpService {
         templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
       }
 
-      const name = fu.customer.name || 'Bunda';
+      const cleanName = sanitizeCustomerNameForGreeting(fu.customer?.name);
+      const greetingName = formatGreetingBunda(cleanName);
+      const babyName = formatBabyNamesForGreeting(fu.customer?.children, null, { prefixDek: true });
 
       // Provider-aware send: WABA → HSM template + consent gatekeeper; WAHA → rolling text (existing)
       const gateway = await resolveGatewayForTenant(tenantId);
       if (gateway.providerType === 'WABA') {
-        return this.executeFollowUpWaba(fu, templateType, name, tenantId);
+        return this.executeFollowUpWaba(fu, templateType, cleanName || 'Bunda', tenantId);
       }
 
       let messageText: string;
@@ -771,14 +778,21 @@ export class FollowUpService {
           where: { tenant_id: tenantId, type: templateType, variant: fu.stage, is_active: true },
         });
         if (custom) {
-          // Replacing placeholders in custom template
+          // Replacing placeholders in custom template with smart context
           messageText = custom.text
-            .replace(/\{name\}/g, name)
+            .replace(/Bunda\s*\{name\}/gi, greetingName)
+            .replace(/\{name\}/g, cleanName || 'Bunda')
             .replace(/\{time\}/g, '')
-            .replace(/\{babyName\}/g, 'si kecil');
+            .replace(/\{babyName\}/g, babyName)
+            .replace(/Bunda\s+Bunda/gi, 'Bunda')
+            .replace(/dek\s+dek\s+/gi, 'dek ')
+            .replace(/dek\s+si kecil/gi, 'si kecil')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
         } else {
           const { text } = getRollingFollowUpMessage(templateType, {
-            name,
+            name: cleanName,
+            babyName,
             index: fu.stage - 1,
           });
           messageText = text;
@@ -786,13 +800,14 @@ export class FollowUpService {
       } catch (err) {
         // DB fallback -> gunakan default
         const { text } = getRollingFollowUpMessage(templateType, {
-          name,
+          name: cleanName,
+          babyName,
           index: fu.stage - 1,
         });
         messageText = text;
       }
 
-      console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${name})`);
+      console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${greetingName}, Baby: ${babyName})`);
       
       // Throttling acak antar customer (env: FOLLOWUP_THROTTLE_BASE_MS s/d +FOLLOWUP_THROTTLE_BASE_MS*10, default 5-15 detik)
       const isTest = process.env.NODE_ENV === 'test';
