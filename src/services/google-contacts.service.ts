@@ -345,6 +345,17 @@ export class GoogleContactsService {
         return { success: true, action: 'skipped' };
       }
 
+      // 4b. Dirty Checking: Lewati jika kontak sudah pernah di-sync dan belum ada perubahan data customer sejak sync terakhir
+      if (
+        options?.trigger !== 'manual' &&
+        customer.google_resource_name &&
+        customer.google_synced_at &&
+        customer.updated_at &&
+        customer.google_synced_at.getTime() >= customer.updated_at.getTime()
+      ) {
+        return { success: true, action: 'skipped' };
+      }
+
       // 5. Inisialisasi authenticated Google People API
       const authClient = await googleOAuthClientManager.getAuthenticatedClient(tenantId);
       if (!authClient) {

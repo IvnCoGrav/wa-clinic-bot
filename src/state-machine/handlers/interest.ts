@@ -74,6 +74,10 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
           tenantId,
           chatId: ctx.incomingMessage.chatId || `${customer.phone}@c.us`,
           babies: parsed.babies || [],
+          customerName: parsed.name,
+          kecamatan: parsed.kec,
+          kota: parsed.kota,
+          kelurahan: parsed.address,
         });
 
         // CAPI InitiateCheckout: Customer mengirimkan formulir reservasi yang sudah diisi
@@ -329,6 +333,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     intentResult = await llmIntentService.detectIntent(userText, {
       conversationId: conversation.id,
       customerPhone: customer.phone,
+      bubbleCorrelationId: ctx.bubbleCorrelationId,
     });
     console.log(`[INTENT DETECTED] (Legacy LLM) Customer Message: "${userText}" → Intent: ${intentResult.intent}`);
     stageLog('INTENT', `Intent (Legacy): [${intentResult.intent}]`, customer.phone);
@@ -561,7 +566,8 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         isLocationKnown,
         additionalContextText,
         customer.phone,
-        customer.name
+        customer.name,
+        ctx.bubbleCorrelationId
       );
 
       // 4b. Simpan memori pelanggan jika LLM mengekstrak fakta permanen baru

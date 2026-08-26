@@ -435,12 +435,33 @@ export class CapiService {
       // Advanced Matching: Nama Depan & Nama Belakang dari Customer / AdClick
       let hashedFn: string | undefined;
       let hashedLn: string | undefined;
-      const rawName = (fullCustomer?.name || fullCustomer?.pushName || effectiveAdClick?.name || '').trim();
+      let rawName = (fullCustomer?.name || fullCustomer?.pushName || effectiveAdClick?.name || '').trim();
+
+      // Self-heal: jika rawName kosong atau hanya honorific/generic (misal "Mbak", "Bunda", "Pasien")
+      const lowerRaw = rawName.toLowerCase();
+      const isRawGeneric = !rawName || ['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'ny', 'pasien', 'customer', '-'].includes(lowerRaw);
+      if (isRawGeneric && fullCustomer?.id) {
+        try {
+          const { prisma } = await import('../db/client');
+          const latestRes = await prisma.reservation.findFirst({
+            where: { customer_id: fullCustomer.id, status: { not: 'cancelled' } },
+            orderBy: { created_at: 'desc' },
+          });
+          if (latestRes?.raw_text) {
+            const { parseReservationText } = await import('../utils/reservation-text-parser');
+            const pr = parseReservationText(latestRes.raw_text);
+            if (pr.success && pr.reservation?.name) {
+              rawName = pr.reservation.name;
+            }
+          }
+        } catch {}
+      }
+
       if (rawName) {
-        // Strip honorifics seperti "Bunda", "Ibu", "Mama", "Mom" di awal nama
-        const cleanedName = rawName.replace(/^(?:bunda|ibu|mama|mom|ny|ny\.|mrs|mrs\.)\s+/i, '').trim();
+        // Strip honorifics seperti "Bunda", "Ibu", "Mama", "Mom", "Mbak", "Mas", "Kak", "Kakak" di awal nama
+        const cleanedName = rawName.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.|mrs|mrs\.)\s+/i, '').trim();
         const lowerClean = cleanedName.toLowerCase();
-        const isGenericAlone = ['bunda', 'ibu', 'mama', 'mom', 'pasien', 'customer', '-'].includes(lowerClean);
+        const isGenericAlone = ['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(lowerClean);
         if (cleanedName && !isGenericAlone && cleanedName.length > 1) {
           const parts = cleanedName.split(/\s+/);
           const firstName = parts[0];
@@ -461,19 +482,43 @@ export class CapiService {
         hashedExternalId = builder.getNormalizedAndHashedPII(rawExternalId, PII_DATA_TYPE.EXTERNAL_ID) || undefined;
       }
 
-      // Advanced Matching: City (Kota), Zipcode (Kode Pos), & Country (Negara) langsung dari Database
+      // Advanced Matching: City (Kota), State (Provinsi), Zipcode (Kode Pos), Country (Negara), & Gender
       let hashedCity: string | undefined;
+      let hashedState: string | undefined;
       let hashedZip: string | undefined;
       let hashedCountry: string | undefined;
+      let hashedGender: string | undefined;
+
       const rawCity = (fullCustomer?.kota || fullCustomer?.pending_kota || '').trim();
       if (rawCity) {
         hashedCity = builder.getNormalizedAndHashedPII(rawCity, PII_DATA_TYPE.CITY) || undefined;
       }
+      hashedState = builder.getNormalizedAndHashedPII('jawa timur', PII_DATA_TYPE.STATE) || undefined;
       const rawZip = (fullCustomer?.zipcode || fullCustomer?.pending_zipcode || '').trim();
       if (rawZip) {
         hashedZip = builder.getNormalizedAndHashedPII(rawZip, PII_DATA_TYPE.ZIP_CODE) || undefined;
       }
       hashedCountry = builder.getNormalizedAndHashedPII('id', PII_DATA_TYPE.COUNTRY) || undefined;
+
+      // Gender: kirim 'f' (female) jika treatment berkaitan dengan Moms / Ibu Hamil / Postpartum
+      const treatmentText = (
+        (customData?.treatment || '') + ' ' +
+        (customData?.content_name || '') + ' ' +
+        (fullCustomer?.last_discussed_treatment || '')
+      ).toLowerCase();
+      const isMomsTreatment =
+        customData?.treatmentCategory === 'MOMS' ||
+        customData?.treatmentCategory === 'BOTH' ||
+        treatmentText.includes('moms') ||
+        treatmentText.includes('ibu') ||
+        treatmentText.includes('hamil') ||
+        treatmentText.includes('laktasi') ||
+        treatmentText.includes('nifas') ||
+        treatmentText.includes('postpartum');
+
+      if (isMomsTreatment) {
+        hashedGender = builder.getNormalizedAndHashedPII('f', PII_DATA_TYPE.GENDER) || undefined;
+      }
 
       // Gunakan server-side ParamBuilder untuk memproses parameter browser/IP & menambahkan appendix
       const mockCookies: Record<string, string> = {};
@@ -504,7 +549,7 @@ export class CapiService {
       const fbp = builder.getFbp() || effectiveAdClick?.fbp;
       const clientIp = builder.getClientIpAddress() || effectiveAdClick?.ipAddress;
 
-      // 3. CONSTRUCT USER DATA (Meta specs: hash phone/name/external_id/city/zip/country, keep IP/UA/Cookies clean)
+      // 3. CONSTRUCT USER DATA (Meta specs: hash phone/name/external_id/city/state/zip/country/gender, keep IP/UA/Cookies clean)
       const userData: any = {};
       if (hashedPhone) {
         userData.ph = [hashedPhone];
@@ -521,11 +566,17 @@ export class CapiService {
       if (hashedCity) {
         userData.ct = [hashedCity];
       }
+      if (hashedState) {
+        userData.st = [hashedState];
+      }
       if (hashedZip) {
         userData.zp = [hashedZip];
       }
       if (hashedCountry) {
         userData.country = [hashedCountry];
+      }
+      if (hashedGender) {
+        userData.ge = [hashedGender];
       }
       if (clientIp) {
         userData.client_ip_address = clientIp;
@@ -565,6 +616,7 @@ export class CapiService {
         user_data: userData,
         custom_data: {
           ...(customData || {}),
+          delivery_category: 'home_delivery',
           traffic_source: isPaid ? 'paid' : 'organic',
           ...(effectiveAdClick?.utmSource ? { utm_source: effectiveAdClick.utmSource } : {}),
           ...(effectiveAdClick?.utmMedium ? { utm_medium: effectiveAdClick.utmMedium } : {}),
