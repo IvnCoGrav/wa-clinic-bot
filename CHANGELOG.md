@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & UI — Live Chat Quick Reservation & 1-Click WhatsApp Payment Invoice Generator (2026-08-26)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Pembuatan Reservasi Langsung dari Live Chat**: Admin CS / Bidan membutuhkan akses instan untuk membuat reservasi baru dari tombol `+` di kolom chat tanpa harus berpindah ke menu lain, dengan data profil pasien (nama Bunda, alamat, anak, kelurahan/kecamatan, dan ongkir) yang langsung terisi otomatis.
+  2. **1-Click WhatsApp Payment Invoice Generator (`🧾`)**: Admin CS memerlukan tombol generator invoice format WhatsApp resmi yang otomatis menarik data tanggal booking, nama anak/ibu, rincian treatment, perhitungan ongkir (free $\le 3$ km / berbayar), dan total biaya, yang langsung terisi ke input chat dan tersalin ke clipboard.
+- **Implementasi Fitur & Arsitektur (`packages/admin-dashboard/src/utils/paymentInvoiceFormatter.ts`, `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx`, `packages/admin-dashboard/src/components/modals/ReservationDetailModal.tsx`, `tests/unit/payment-invoice-formatter.test.ts`):**
+  1. **Utilitas `paymentInvoiceFormatter.ts`**:
+     - `generateReservationInvoiceText`: Memformat pesan rincian booking & invoice rapi dengan emoji `🐣`, format tanggal & jam Indonesia WIB, kategori treatment (Baby/Moms/Bundle), nama & usia anak, breakdown harga treatment, rincian ongkir jarak km, total bayar, dan reminder H-1.
+  2. **Menu Tombol `+` (Tools Bar di Live Chat)**:
+     - Menambahkan opsi **`📅 Buat Reservasi Baru`** (`CalendarPlus`): Membuka `CreateReservationModal` dengan `initialCustomer` aktif.
+     - Menambahkan opsi **`🧾 Generate Invoice / Payment`** (`Receipt`): Otomatis mengisi box chat dengan rincian invoice reservasi aktif.
+  3. **Sidebar Kanan & Modal Detail**:
+     - Menambahkan tombol icon `🧾` pada setiap kartu reservasi di sidebar percakapan aktif untuk 1-klik generate & copy invoice.
+     - Menambahkan tombol **"Salin Format Invoice WA"** pada `ReservationDetailModal.tsx`.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/payment-invoice-formatter.test.ts`: 4/4 tests PASS (baby treatment, charged ongkir, moms category, fallback rawText).
+  - Kompilasi frontend Vite (`packages/admin-dashboard`) & backend TypeScript `tsc` lolos 100% (0 error).
+
 #### Feature & Enhanced — Automated Telegram Morning Briefing & Dedicated Telegram Hub UI (2026-08-26)
 
 - **Latar Belakang & Kebutuhan:**

@@ -23,8 +23,10 @@ import {
   Eye,
   Receipt,
   Loader,
+  Copy,
 } from 'lucide-react';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { Reservation } from '../../types';
 
 interface StaffOption {
@@ -246,6 +248,23 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         return <span className="px-2.5 py-0.5 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold">Cancelled</span>;
       default:
         return <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold">Pending</span>;
+    }
+  };
+
+  const [copiedInvoice, setCopiedInvoice] = useState(false);
+
+  const handleCopyInvoice = async () => {
+    try {
+      const text = generateReservationInvoiceText({
+        reservation,
+        customer: reservation.customer as any,
+      });
+      await navigator.clipboard.writeText(text);
+      setCopiedInvoice(true);
+      toast('Format invoice WhatsApp berhasil disalin ke clipboard!', 'success');
+      setTimeout(() => setCopiedInvoice(false), 3000);
+    } catch {
+      toast('Gagal menyalin invoice ke clipboard.', 'error');
     }
   };
 
@@ -589,6 +608,19 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
           </button>
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={handleCopyInvoice}
+              className={`w-full sm:w-auto justify-center px-4 py-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition ${
+                copiedInvoice
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                  : 'bg-white border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] shadow-xs'
+              }`}
+              title="Salin rincian format reservasi & payment untuk WhatsApp"
+            >
+              <Receipt size={14} className={copiedInvoice ? 'text-emerald-600' : 'text-[#008069]'} />
+              <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Format Invoice WA'}</span>
+            </button>
+
             {reservation.status === 'pending' && (() => {
               const purchaseSentAt = reservation.purchase_event_sent_at ? new Date(reservation.purchase_event_sent_at) : null;
               const purchaseWindowOpen = purchaseSentAt && Date.now() - purchaseSentAt.getTime() < 7 * 24 * 60 * 60 * 1000;
