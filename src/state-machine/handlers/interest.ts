@@ -333,7 +333,6 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
     intentResult = await llmIntentService.detectIntent(userText, {
       conversationId: conversation.id,
       customerPhone: customer.phone,
-      bubbleCorrelationId: ctx.bubbleCorrelationId,
     });
     console.log(`[INTENT DETECTED] (Legacy LLM) Customer Message: "${userText}" → Intent: ${intentResult.intent}`);
     stageLog('INTENT', `Intent (Legacy): [${intentResult.intent}]`, customer.phone);
@@ -566,8 +565,7 @@ export async function handleInterestState(ctx: StateHandlerContext): Promise<Sta
         isLocationKnown,
         additionalContextText,
         customer.phone,
-        customer.name,
-        ctx.bubbleCorrelationId
+        customer.name
       );
 
       // 4b. Simpan memori pelanggan jika LLM mengekstrak fakta permanen baru
