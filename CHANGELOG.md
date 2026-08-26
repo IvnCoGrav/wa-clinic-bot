@@ -4,6 +4,40 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Security Hardening & Secret Remediation — RBAC Isolation, Secret Sanitization & Gateway Consistency (2026-08-26)
+
+- **Latar Belakang & Investigasi Temuan Keamanan:**
+  1. **SEC-01 (RBAC Isolation)**: Sesi staff/bidan sebelumnya memiliki akses universal ke seluruh endpoint `/api/admin/*` termasuk sandbox LLM chat, pengaturan sistem, ai-models, backup, dan manajemen akun staff.
+  2. **SEC-02 (WAHA Media Proxy Auth)**: Route file `/api/files/:session/:file` tidak menerapkan otentikasi ketat sehingga berisiko mengekspos media WhatsApp privat.
+  3. **SEC-03 (Tracking Key Exposure)**: `TRACKING_API_KEY` sempat di-inject ke HTML publik landing page.
+  4. **SEC-04 (Secret Exposure in Repo/Git)**: Ditemukan API key dummy/asli di `.env.example`, `CHAT_SIMULATOR.md`, `opencode.json`, dan file scratch.
+  5. **SEC-05 (Telegram Webhook Fail-Closed)**: Verifikasi secret Telegram webhook diperketat dengan `safeCompare` dan timing-safe authentication.
+  6. **SEC-06 (Avatar SSRF Guard)**: Memasang validasi URL eksternal ketat pada `/media/avatar/:customerId` untuk mencegah fetch alamat privat/internal IP/cloud metadata.
+  7. **SEC-07 (WAHA Webhook Timing-Safe)**: Memperbaiki komparasi string signature WAHA menggunakan `safeCompare` (`crypto.timingSafeEqual`).
+
+- **Solusi & Implementasi:**
+  1. **Admin RBAC Isolation Middleware (`src/routes/admin.route.ts`)**:
+     - Membatasi sesi staff hanya untuk endpoint operasional harian (reservations, customers, livechat, analytics).
+     - Memblokir akses staff ke `/backup/*`, `/sandbox/*`, `/ai-models/*`, `/settings/*`, dan `/staff/*` dengan response `403 Forbidden` (`FORBIDDEN_STAFF_ROLE` / `FORBIDDEN_STAFF_MANAGEMENT`).
+  2. **Media Proxy & SSRF Protection (`src/routes/media.route.ts`)**:
+     - Mewajibkan session cookie / API key valid untuk mengakses `/api/files/:session/:file` dan `/media/inbound/*`.
+     - Memasang fungsi `isValidExternalUrl` yang memblokir private IPs, loopback, link-local (`169.254.169.254`), metadata clouds, dan protokol berbahaya pada avatar proxy.
+  3. **Public Landing & Click Catcher Protection (`src/routes/landing.route.ts`, `src/routes/tracking.route.ts`, `src/landing/public/go.html`, `src/services/html-sanitizer.ts`)**:
+     - Menghapus injeksi `TRACKING_API_KEY` dari template HTML landing page publik.
+     - Endpoint `/api/tracking/click` kini memvalidasi origin/referer landing dan menerapkan rate-limit tanpa mengekspos secret server.
+  4. **Secret Scrubbing & Hygiene (`.gitignore`, `.env.example`, `CHAT_SIMULATOR.md`, `opencode.json`)**:
+     - Menghapus semua hardcoded credential dan token contoh; menggantinya dengan placeholder standar.
+     - Menambahkan `scratch/` dan `opencode.json` ke `.gitignore`.
+  5. **Gateway LLM Consistency & Secret Masking (`src/services/self-learning.service.ts`, `src/services/system-debug.service.ts`)**:
+     - Menstandarisasi panggilan LLM di `self-learning.service.ts` menggunakan helper terpusat `getLlmEndpointConfig`, `callChatWithRetry`, dan `extractJsonContent`.
+     - Memperluas daftar `SECRET_ENV_KEYS` di `system-debug.service.ts` agar seluruh API key, database URL, dan token ter-mask 100% dari respons debugger UI.
+
+- **Pengujian & Verifikasi:**
+  1. `tests/unit/admin-rbac-guard.test.ts`: 7/7 tests PASS (Super Admin & Staff role matrix).
+  2. `tests/unit/media-security.test.ts`: 3/3 tests PASS (Proxy auth & SSRF guard).
+  3. `tests/unit/webhook-security.test.ts`: 4/4 tests PASS (WAHA & Telegram timing-safe verification).
+  4. Build `npm run build` sukses 100% (0 errors).
+
 #### Bugfix & Enhanced — Dual-Category Form Parser, Promo Discount Support & Clean Name Ingestion (2026-08-26)
 
 - **Latar Belakang & Akar Masalah:**

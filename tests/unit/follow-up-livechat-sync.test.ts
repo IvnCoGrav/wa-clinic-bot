@@ -133,6 +133,8 @@ describe('Follow-Up & Automated Broadcast Live Chat Synchronization Tests', () =
     // Mock Date so it falls within business hours (e.g. 10:00)
     const fakeNow = new Date('2026-08-26T03:00:00.000Z'); // 10:00 WIB
     vi.setSystemTime(fakeNow);
+    process.env.BROADCAST_THROTTLE_MIN_SECONDS = '0';
+    process.env.BROADCAST_THROTTLE_MAX_SECONDS = '0';
 
     vi.spyOn(prisma.followUp, 'findUnique').mockResolvedValue({
       id: 'fu-bq-1',

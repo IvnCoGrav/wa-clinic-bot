@@ -62,10 +62,10 @@ Berikut adalah rekap kronologis seluruh revisi dan iterasi pengembangan dari awa
 ### 📍 Revisi 6: Integrasi Production Credentials
 - Mengonfigurasi kredensial produksi di `.env` dan `.env.example`:
   - `WAHA_BASE_URL="http://localhost:3001"`
-  - `WAHA_API_KEY="3659a2481bce46a2801173dc5ec7d668"`
+  - `WAHA_API_KEY="your_waha_api_key_secret"`
   - `OPENAI_BASE_URL="https://ai.sumopod.com/v1"`
   - `OPENAI_MODEL="MiniMax-M2.7-highspeed"`
-  - `LLM_API_KEY="sk-znFVknm5AgYRh8G4PzH7wQ"`
+  - `LLM_API_KEY="your_llm_api_key_here"`
 
 ### 📍 Revisi 7: CLI Chat Simulator Mode Standalone
 - Pembuatan **CLI Chat Simulator** (`npm run chat` / `src/cli/chat-simulator.ts`) untuk testing interaktif di terminal dengan animasi indikator mengetik real-time (`[bot sedang mengetik...]`) dan format warna ANSI.

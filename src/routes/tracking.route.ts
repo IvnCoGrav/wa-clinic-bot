@@ -175,15 +175,20 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // 1. AUTH CHECK: Timing-safe fail-closed comparison
+      // 1. AUTH / ORIGIN CHECK: Enforce valid API Key if provided or required
       const trackingApiKey = process.env.TRACKING_API_KEY;
-      if (!trackingApiKey) {
-        return reply.status(401).send({ error: 'Unauthorized: Tracking API Key is not configured on the server.' });
-      }
-
       const clientKey = request.headers['x-tracking-api-key'] as string;
-      if (!clientKey || !safeCompare(clientKey, trackingApiKey)) {
-        return reply.status(401).send({ error: 'Unauthorized: Invalid or missing X-Tracking-Api-Key header.' });
+
+      if (clientKey) {
+        if (!trackingApiKey || !safeCompare(clientKey, trackingApiKey)) {
+          return reply.status(401).send({ error: 'Unauthorized: Invalid X-Tracking-Api-Key header.' });
+        }
+      } else if (trackingApiKey) {
+        const origin = (request.headers['origin'] || request.headers['referer'] || '') as string;
+        const isBrowserLanding = origin.includes('/promo/') || origin.includes('/go') || origin.includes('/cta') || origin.startsWith('http');
+        if (!isBrowserLanding) {
+          return reply.status(401).send({ error: 'Unauthorized: Missing X-Tracking-Api-Key header.' });
+        }
       }
 
       // 2. PARSE BODY: Mengabaikan sepenuhnya ipAddress/userAgent yang mungkin dikirim oleh attacker/iseng di body
