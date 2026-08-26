@@ -177,7 +177,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   });
 
   // 3. Evaluasi Decision Matrix (0 Token, Pure TypeScript)
-  const decision = await DecisionMatrix.evaluate(initialSlate, extraction, { tenantId, incomingText });
+  const decision = await DecisionMatrix.evaluate(initialSlate, extraction, { tenantId, incomingText, history });
 
   // 4. Handle Kasus 1: Eskalasi Darurat Medis
   if (decision.action === 'ESCALATE_HUMAN_EMERGENCY') {
