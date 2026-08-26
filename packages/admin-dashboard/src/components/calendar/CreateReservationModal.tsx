@@ -24,6 +24,8 @@ import {
   Home,
   Copy,
   CheckCircle2,
+  Receipt,
+  Percent,
 } from 'lucide-react';
 import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
 import { Reservation } from '../../types';
@@ -158,6 +160,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [status, setStatus] = useState<'pending' | 'confirmed'>('pending');
   const [notes, setNotes] = useState('');
 
+  // Payment Breakdown & Discounts
+  const [ongkir, setOngkir] = useState<number>(0);
+  const [discount, setDiscount] = useState<number>(0);
+
+  // Live Reservations Synchronizer
+  const [loadedReservations, setLoadedReservations] = useState<Reservation[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
+
   // Children / Babies (Multi-Anak Support)
   const [babies, setBabies] = useState<Array<{ name: string; ageText: string }>>([]);
 
@@ -191,6 +201,28 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       loadCatalog();
     }
   }, [isOpen]);
+
+  // Synchronize active reservations from database on open
+  useEffect(() => {
+    if (isOpen) {
+      if (Array.isArray(existingReservations) && existingReservations.length > 0) {
+        setLoadedReservations(existingReservations);
+      } else {
+        setLoadingReservations(true);
+        apiRequest('/api/admin/reservations?pageSize=300')
+          .then((res) => {
+            const list = Array.isArray(res) ? res : res?.reservations || res?.data || [];
+            setLoadedReservations(list);
+          })
+          .catch((err) => {
+            console.error('Gagal memuat jadwal reservasi untuk modal:', err);
+          })
+          .finally(() => {
+            setLoadingReservations(false);
+          });
+      }
+    }
+  }, [isOpen, existingReservations]);
 
   // Sync initial target slot if opened via calendar slot click
   useEffect(() => {
@@ -259,6 +291,14 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           ageText: child.current_age || child.raw_age_text || '',
         }))
       );
+    }
+
+    // Auto calculate & fill ongkir from customer profile / distance
+    if (c.ongkir !== undefined && c.ongkir !== null && !isNaN(Number(c.ongkir))) {
+      setOngkir(Number(c.ongkir));
+    } else if (c.distance_km || c.distanceKm) {
+      const dist = Number(c.distance_km || c.distanceKm);
+      setOngkir(dist <= 3.0 ? 0 : Math.round((dist - 3.0) * 3000));
     }
   };
 
@@ -387,6 +427,17 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     return selectedTreatments.reduce((sum, t) => sum + (t.durationMinutes || 0), 0);
   }, [selectedTreatments]);
 
+  const subtotalTreatments = useMemo(() => {
+    return selectedTreatments.reduce((sum, t) => sum + (Number(t.price) || 0), 0);
+  }, [selectedTreatments]);
+
+  const totalPaymentAmount = useMemo(() => {
+    const sub = Number(subtotalTreatments) || 0;
+    const ong = Number(ongkir) || 0;
+    const disc = Number(discount) || 0;
+    return Math.max(0, sub + ong - disc);
+  }, [subtotalTreatments, ongkir, discount]);
+
   const mainTreatmentsCount = useMemo(() => {
     return selectedTreatments.filter((t) => !isAddonService(t)).length;
   }, [selectedTreatments]);
@@ -430,18 +481,28 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setBabies((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Filter existing reservations for selected date
+  // Filter existing reservations for selected date (accurately matching date across timezones and string formats)
   const bookedReservationsForDate = useMemo(() => {
     if (!bookingDate) return [];
-    return existingReservations.filter((r) => {
-      if (!r.booking_date || r.status === 'cancelled') return false;
+    const targetDateStr = bookingDate.trim(); // "YYYY-MM-DD"
+    const sourceList = loadedReservations.length > 0 ? loadedReservations : existingReservations;
+
+    return sourceList.filter((r) => {
+      if (!r.booking_date || (r.status as string) === 'cancelled' || (r.status as string) === 'rejected') return false;
+      
+      if (typeof r.booking_date === 'string' && r.booking_date.startsWith(targetDateStr)) {
+        return true;
+      }
+
       const rDate = new Date(r.booking_date);
+      if (isNaN(rDate.getTime())) return false;
+
       const yyyy = rDate.getFullYear();
       const mm = String(rDate.getMonth() + 1).padStart(2, '0');
       const dd = String(rDate.getDate()).padStart(2, '0');
-      return `${yyyy}-${mm}-${dd}` === bookingDate;
+      return `${yyyy}-${mm}-${dd}` === targetDateStr;
     });
-  }, [existingReservations, bookingDate]);
+  }, [loadedReservations, existingReservations, bookingDate]);
 
   // Smart Slot Recommendation Generator with Accurate Midwife Arrival & Departure
   const handleGenerateRecommendations = () => {
@@ -671,6 +732,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           status,
           notes: notes.trim() || undefined,
           babies: babies.filter((b) => b.name.trim().length > 0),
+          purchaseValue: totalPaymentAmount,
         }),
       });
 
@@ -1377,6 +1439,140 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               )}
             </div>
           )}
+
+          {/* Section: Rincian Biaya & Total Pembayaran */}
+          <div className="p-3.5 bg-gradient-to-br from-[#f8fafc] to-emerald-50/40 border border-[#e9edef] rounded-xl space-y-3 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
+                <Receipt size={14} />
+                <span>Rincian Biaya & Total Pembayaran</span>
+              </span>
+              <span className="text-xs font-mono font-extrabold text-[#008069]">
+                Total: Rp {totalPaymentAmount.toLocaleString('id-ID')}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Subtotal Treatments */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
+                  Subtotal Layanan ({selectedTreatments.length})
+                </label>
+                <div className="px-3 py-1.5 bg-white border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] font-mono">
+                  Rp {subtotalTreatments.toLocaleString('id-ID')}
+                </div>
+              </div>
+
+              {/* Ongkir */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
+                  Ongkos Kirim (Rp)
+                </label>
+                <input
+                  type="number"
+                  value={ongkir}
+                  onChange={(e) => setOngkir(Number(e.target.value) || 0)}
+                  step={5000}
+                  min={0}
+                  className="w-full px-3 py-1.5 bg-white border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:border-[#008069] focus:outline-none transition font-mono"
+                />
+              </div>
+
+              {/* Diskon / Promo */}
+              <div>
+                <label className="block text-[11px] font-semibold text-rose-600 mb-1 flex items-center gap-1">
+                  <Percent size={11} />
+                  <span>Diskon / Promo (Rp)</span>
+                </label>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                  step={5000}
+                  min={0}
+                  className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 focus:border-rose-500 focus:outline-none transition font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Quick Shortcuts */}
+            <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-[#e9edef]/80 text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[#8696a0] font-semibold">Ongkir:</span>
+                <button
+                  type="button"
+                  onClick={() => setOngkir(0)}
+                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
+                    ongkir === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-50'
+                  }`}
+                >
+                  Free (0)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOngkir(10000)}
+                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
+                    ongkir === 10000 ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                  }`}
+                >
+                  10.000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOngkir(15000)}
+                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
+                    ongkir === 15000 ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                  }`}
+                >
+                  15.000
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-rose-600 font-semibold">Promo:</span>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(0)}
+                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
+                    discount === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(5000)}
+                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
+                    discount === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                  }`}
+                >
+                  -5.000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(10000)}
+                  className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
+                    discount === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                  }`}
+                >
+                  -10.000
+                </button>
+              </div>
+            </div>
+
+            {/* Grand Total Bar */}
+            <div className="pt-2 border-t border-[#e9edef] flex items-center justify-between text-xs">
+              <div className="text-[#667781]">
+                <span>Total tagihan: </span>
+                <span className="text-[11px] italic text-[#8696a0]">
+                  (Layanan Rp {subtotalTreatments.toLocaleString('id-ID')} + Ongkir Rp {ongkir.toLocaleString('id-ID')}{discount > 0 ? ` - Promo Rp ${discount.toLocaleString('id-ID')}` : ''})
+                </span>
+              </div>
+              <div className="text-sm sm:text-base font-extrabold text-[#008069] font-mono">
+                Rp {totalPaymentAmount.toLocaleString('id-ID')}
+              </div>
+            </div>
+          </div>
 
           {/* Section 6: Notes */}
           <div className="space-y-1">

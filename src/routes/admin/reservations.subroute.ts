@@ -217,11 +217,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           status?: 'pending' | 'confirmed';
           notes?: string;
           babies?: Array<{ name: string; ageText?: string }>;
+          purchaseValue?: number;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies } = request.body || {};
+      const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
 
       if (!customerId || !treatmentCategory || !treatmentDetail) {
         return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
@@ -255,6 +256,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       const reservationStatus = status === 'confirmed' ? 'confirmed' : 'pending';
       const rawNotes = notes ? `\nCatatan: ${notes}` : '';
+      const finalPurchaseValue = purchaseValue !== undefined && purchaseValue !== null && !isNaN(Number(purchaseValue)) ? Number(purchaseValue) : null;
 
       try {
         const reservation = await prisma.reservation.create({
@@ -265,6 +267,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             treatment_detail: treatmentDetail,
             booking_date: parsedDate,
             assigned_staff_id: assignedStaffId || null,
+            purchase_value: finalPurchaseValue,
             raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
             status: reservationStatus,
           },

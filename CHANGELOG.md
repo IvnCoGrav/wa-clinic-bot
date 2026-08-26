@@ -4,7 +4,26 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### Bugfix & UI — Conversational Greeting Filter for Child Names & Service Catalog Chip Pricing (2026-08-26)
+#### Feature & Sync — Live Calendar Peek Synchronization & Total Payment Calculator in Reservation Modal (2026-08-26)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Jadwal Terisi Menampilkan (0) pada Modal Buat Reservasi dari Live Chat**:
+     - Ketika membuka modal buat reservasi langsung dari sidebar Live Chat, data `existingReservations` tidak diteruskan dan modal tidak memiliki mekanisme mandiri untuk memuat daftar reservasi aktif, sehingga badge *"Lihat Jadwal Terisi"* selalu menunjukkan 0 dan drawer jadwal kosong.
+  2. **Kebutuhan Rincian Biaya & Total yang Harus Dibayarkan**:
+     - Belum ada kartu kalkulasi pembayaran terstruktur (Subtotal Treatment, Ongkir, Diskon Promo, dan Total Tagihan) di dalam formulir reservasi, serta nominal total (`purchaseValue`) belum tersimpan ke database reservasi saat pembuatan manual.
+- **Solusi & Implementasi:**
+  1. **Auto-Synchronization Jadwal Aktif (`CreateReservationModal.tsx`)**:
+     - Menambahkan *auto-fetcher* yang otomatis memuat seluruh reservasi aktif dari `/api/admin/reservations` saat modal dibuka.
+     - Memperbaiki algoritma filter tanggal `bookedReservationsForDate` agar mencocokkan format `YYYY-MM-DD` secara presisi lintas zona waktu (ISO & lokal).
+     - Badge *"Lihat Jadwal Terisi (N)"* kini langsung menampilkan jumlah reservasi yang sebenarnya dan drawer menampilkan detail jam & pasien secara akurat.
+  2. **Kartu Rincian Biaya & Total Pembayaran (`CreateReservationModal.tsx`)**:
+     - Menampilkan rincian: **Subtotal Layanan** (terhitung otomatis dari seluruh paket layanan & multi-anak yang dipilih), **Ongkos Kirim** (pre-fill dari profil jarak customer dengan shortcut Free/10k/15k), dan **Diskon / Promo** (dengan shortcut -5k/-10k).
+     - Menghitung **Total Tagihan**: $\text{Subtotal} + \text{Ongkir} - \text{Diskon}$.
+  3. **Penyimpanan `purchaseValue` ke Database (`src/routes/admin/reservations.subroute.ts`)**:
+     - Menambahkan penanganan `purchaseValue` pada `POST /api/admin/reservation` sehingga nilai tagihan tersimpan langsung di database PostgreSQL.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/admin-create-reservation.test.ts`: 6/6 tests PASS.
+  - Kompilasi `admin-dashboard` & backend engine `tsc` lolos 100% (0 errors).
 
 - **Latar Belakang & Akar Masalah:**
   1. **Frasa Doa/Salam Tertangkap Sebagai Nama Bayi (`"sehat selalu yaa"`)**:
