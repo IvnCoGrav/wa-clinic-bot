@@ -1,8 +1,8 @@
 import { prisma } from '../db/client';
 import { knowledgeBaseService } from './knowledge.service';
-import axios from 'axios';
 import { BOT_PERSONA_PROMPT } from '../config/persona';
 import { getBrandIdentity } from '../config/brand';
+import { getLlmEndpointConfig, callChatWithRetry, extractJsonContent } from '../integrations/llm/llm-gateway';
 
 interface AdminReplyBuffer {
   text: string;
@@ -138,11 +138,9 @@ export class SelfLearningService {
     question: string,
     answer: string
   ): Promise<{ question: string; answer: string } | null> {
-    const apiKey = process.env.LLM_API_KEY || '';
-    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-    const model = process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed';
+    const config = getLlmEndpointConfig({ modelConfigKey: 'SUMMARIZATION' });
 
-    if (!apiKey || apiKey.startsWith('mock')) {
+    if (!config.apiKey || config.apiKey.startsWith('mock')) {
       // Offline fallback: filter out obvious noise, otherwise learn directly
       const lowerQ = question.toLowerCase();
       const lowerA = answer.toLowerCase();
@@ -167,37 +165,35 @@ Input:
 Q: "${question}"
 A: "${answer}"`;
 
-      const response = await axios.post(
-        `${baseUrl}/chat/completions`,
-        {
-          model,
+      const response = await callChatWithRetry({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        fallbackModel: config.fallbackModel,
+        payload: {
+          messages: [{ role: 'system', content: systemPrompt }],
+          temperature: 0.2,
           response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt }
-          ]
         },
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 15000,
-        }
-      );
+        timeoutMs: config.timeoutMs || 15000,
+      });
 
-      const content = response.data.choices[0].message.content.trim();
-      const parsed = JSON.parse(content);
-      if (parsed.isGeneralFaq && parsed.question && parsed.answer) {
-        return {
-          question: parsed.question,
-          answer: parsed.answer
-        };
+      const rawContent = response.data?.choices?.[0]?.message?.content || '';
+      const jsonStr = extractJsonContent(rawContent);
+      if (jsonStr) {
+        const parsed = JSON.parse(jsonStr);
+        if (parsed?.isGeneralFaq && parsed?.question && parsed?.answer) {
+          return {
+            question: parsed.question,
+            answer: parsed.answer,
+          };
+        }
       }
       return null;
     } catch (err: any) {
       const status = err?.response?.status || err?.status || 'ERR';
       const briefError = err?.response?.data?.error?.message || err?.message || String(err);
-      console.warn(`[SELF-LEARNING LLM ERROR] HTTP ${status}: ${briefError} (model: ${model}). Skipping FAQ staging.`);
+      console.warn(`[SELF-LEARNING LLM ERROR] HTTP ${status}: ${briefError} (model: ${config.model}). Skipping FAQ staging.`);
       return null;
     }
   }

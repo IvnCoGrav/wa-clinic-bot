@@ -20,6 +20,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { normalizeWahaJid, extractRealPhoneFromWahaPayload } from '../utils/jid';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
+import { safeCompare } from '../utils/auth';
 dotenv.config();
 
 /**
@@ -68,11 +69,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     const startTime = Date.now();
     const correlationId = crypto.randomUUID();
     return contextStorage.run({ correlationId }, async () => {
-      // --- SECURITY VERIFICATION (X-Webhook-Secret) ---
+      // --- SECURITY VERIFICATION (X-Webhook-Secret) (SEC-07 Fix) ---
       const webhookSecret = process.env.WAHA_WEBHOOK_SECRET;
       if (webhookSecret) {
-        const clientSecret = request.headers['x-webhook-secret'] || request.headers['x-waha-signature'];
-        if (!clientSecret || clientSecret !== webhookSecret) {
+        const clientSecret = (request.headers['x-webhook-secret'] || request.headers['x-waha-signature'] || '') as string;
+        if (!clientSecret || !safeCompare(clientSecret, webhookSecret)) {
           console.warn(`[SECURITY WARNING] Unauthorized webhook access attempt from IP: ${request.ip}`);
           return reply.status(401).send({ error: 'Unauthorized: Invalid or missing webhook secret token.' });
         }

@@ -58,7 +58,7 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
       nonce,
       {
         trackingApiBaseUrl: '',
-        trackingApiKey: process.env.TRACKING_API_KEY || '',
+        trackingApiKey: '',
         whatsappNumber: content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
         tenantId: content.tenant_id,
         tenantSlug: content.slug || slug,
@@ -97,7 +97,7 @@ async function renderLanding(reply: FastifyReply, content: LandingContent, slug:
     .replace(/__SUBHEADLINE__/g, content.subheadline || 'Bidan bersertifikasi resmi datang ke lokasi Anda.')
     .replace(/__BENEFITS_HTML__/g, benefitsHtml)
     .replace(/__TRACKING_API_BASE_URL__/g, '')
-    .replace(/__TRACKING_API_KEY__/g, process.env.TRACKING_API_KEY || '')
+    .replace(/__TRACKING_API_KEY__/g, '')
     .replace(/__FB_PIXEL_ID__/g, content.meta_pixel_id || process.env.FB_PIXEL_ID || '')
     .replace(/__DEFAULT_WHATSAPP_PHONE__/g, content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '')
     .replace(/__TENANT_ID__/g, content.tenant_id)

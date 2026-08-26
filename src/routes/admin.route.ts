@@ -107,6 +107,50 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     (request as any).adminKeyUsed = clientKey || 'COOKIE_SESSION';
     (request as any).adminIdentity = identity;
+
+    // 4. Role-Based Access Control (RBAC) Guard for Staff Sessions (SEC-01 Fix)
+    const staffRole = (request as any).staffRole;
+    if (staffRole && staffRole !== 'SUPER_ADMIN') {
+      const urlPath = request.url.split('?')[0];
+
+      // Sensitive endpoints that MUST be restricted to Super Admin only
+      const superAdminOnlyPrefixes = [
+        '/api/admin/backup',
+        '/api/admin/settings',
+        '/api/admin/ai-models',
+        '/api/admin/evaluations',
+        '/api/admin/ai-evaluations',
+        '/api/admin/sandbox',
+        '/api/admin/debug',
+        '/api/admin/migration',
+        '/api/admin/persona',
+        '/api/admin/export',
+        '/api/admin/google',
+        '/api/admin/waba',
+        '/api/admin/roles',
+      ];
+
+      if (superAdminOnlyPrefixes.some((prefix) => urlPath.startsWith(prefix))) {
+        console.warn(`[RBAC GUARD] Blocked unauthorized access attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
+        return reply.status(403).send({
+          error: 'Forbidden: Insufficient role privileges for this administrative resource.',
+          code: 'FORBIDDEN_STAFF_ROLE',
+        });
+      }
+
+      // Prohibit staff modification (creating, deleting, patching staff accounts or resetting password)
+      if (urlPath.startsWith('/api/admin/staff') && request.method !== 'GET') {
+        const isSelfProfileUpdate = urlPath === '/api/admin/staff/me' || urlPath === '/api/admin/staff/profile';
+        const isSelfPushRegister = urlPath.includes('/push');
+        if (!isSelfProfileUpdate && !isSelfPushRegister) {
+          console.warn(`[RBAC GUARD] Blocked staff modification attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
+          return reply.status(403).send({
+            error: 'Forbidden: Only Super Admin can modify staff accounts.',
+            code: 'FORBIDDEN_STAFF_MANAGEMENT',
+          });
+        }
+      }
+    }
   });
 
   // Register all modular admin sub-routes
