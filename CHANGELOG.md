@@ -4,6 +4,25 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & UI — Smart Chat Schedule Extractor & Interactive Invoice Generator Modal (2026-08-26)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Ekstraksi Otomatis Jadwal & Biaya dari Riwayat Chat**: Bidan/CS membutuhkan sistem yang dapat memindai obrolan percakapan terakhir untuk otomatis mendeteksi hari/tanggal kunjungan (*"besok"*, *"kamis tgl 27"*), jam (*"jam 12.00-12.30"*, *"jam 1 siang"*), layanan yang disepakati, data anak, dan ongkir tanpa perlu mengetik ulang dari awal.
+  2. **Modal Draft Preview & Live WhatsApp Invoice Editor**: CS/Bidan menginginkan tampilan pop-up dialog ringkas sebelum teks invoice dimasukkan ke chat, di mana mereka dapat mengoreksi jam, memilih layanan klinik, menyesuaikan ongkir (dengan shortcut tombol `Free`, `10k`, `15k`, `20k`, dsb.), dan melihat live preview pesan WhatsApp secara real-time.
+- **Implementasi Fitur & Arsitektur (`packages/admin-dashboard/src/utils/chatScheduleExtractor.ts`, `packages/admin-dashboard/src/components/modals/InvoiceGeneratorModal.tsx`, `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `tests/unit/chat-schedule-extractor.test.ts`):**
+  1. **Smart Context Extractor Engine (`chatScheduleExtractor.ts`)**:
+     - Memindai riwayat 10 pesan terakhir percakapan aktif.
+     - Ekstraksi tanggal relatif (`besok`, `lusa`, `hari ini`) & absolut (`27 agustus`, `tgl 27`), rentang jam (`12.00-12.30`) atau jam wacana (`jam 1 siang`), pencocokan katalog layanan klinik, data anak (nama & usia), dan nominal ongkir dari chat atau jarak km.
+  2. **Komponen `InvoiceGeneratorModal.tsx`**:
+     - Tampilan 2 kolom (*Impeccable UI*): Kolom kiri untuk edit cepat tanggal, jam, Bunda, anak, layanan, dan ongkir; Kolom kanan untuk *Live WhatsApp Message Preview* lengkap dengan total kalkulasi harga.
+     - Aksi footer: **Salin Format Saja** (`Copy`) dan **Masukkan ke Chat WA** (`Send`).
+  3. **Integrasi Live Chat (`LiveChatMonitor.tsx`)**:
+     - Menghubungkan menu `+` -> `🧾 Generate Invoice / Payment` dan icon `🧾` pada kartu reservasi sidebar untuk membuka `InvoiceGeneratorModal` dengan data prefill cerdas.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/chat-schedule-extractor.test.ts`: 3/3 tests PASS.
+  - `tests/unit/payment-invoice-formatter.test.ts`: 4/4 tests PASS.
+  - Kompilasi frontend Vite (`packages/admin-dashboard`) & backend `tsc` lolos 100%.
+
 #### Feature & UI — Live Chat Quick Reservation & 1-Click WhatsApp Payment Invoice Generator (2026-08-26)
 
 - **Latar Belakang & Kebutuhan:**
