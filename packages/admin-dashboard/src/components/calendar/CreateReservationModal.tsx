@@ -102,9 +102,11 @@ export interface SlotRecommendation {
 interface CreateReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (newReservation?: any) => void;
   staffList: StaffOption[];
   initialSlotTarget?: QuickSlotTarget | null;
+  initialCustomer?: any | null;
+  initialCustomerId?: string;
   existingReservations?: Reservation[];
 }
 
@@ -114,6 +116,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   onSuccess,
   staffList,
   initialSlotTarget,
+  initialCustomer,
+  initialCustomerId,
   existingReservations = [],
 }) => {
   const { user } = useAuth();
@@ -208,6 +212,20 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setBookingTime('09:00');
     }
   }, [isOpen, initialSlotTarget]);
+
+  // Auto-populate customer if initialCustomer is provided
+  useEffect(() => {
+    if (isOpen && initialCustomer) {
+      handleSelectCustomer(initialCustomer);
+    } else if (isOpen && initialCustomerId && !customerId) {
+      apiRequest(`/api/admin/customers/${initialCustomerId}`)
+        .then((res) => {
+          const c = res?.customer || res?.data || res;
+          if (c?.id) handleSelectCustomer(c);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, initialCustomer, initialCustomerId]);
 
   // Customer search
   const handleCustomerSearch = async (query: string) => {
@@ -642,7 +660,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     setSubmitting(true);
     try {
-      await apiRequest('/api/admin/reservation', {
+      const res = await apiRequest('/api/admin/reservation', {
         method: 'POST',
         body: JSON.stringify({
           customerId,
@@ -657,7 +675,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       });
 
       toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
-      onSuccess();
+      onSuccess(res?.reservation || res?.data || res);
       onClose();
     } catch (err: any) {
       toast(`Gagal membuat jadwal: ${err.message || 'Terjadi kesalahan'}`, 'error');
