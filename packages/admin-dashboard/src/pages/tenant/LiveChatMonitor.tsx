@@ -56,7 +56,9 @@ import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
+import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate } from '../../utils/chatScheduleExtractor';
 import { emitBootPhase } from '../../lib/bootProgress';
 
 interface QuotedMessageData {
@@ -246,6 +248,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
   const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
+  // Invoice Generator Modal (Draft Preview)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceModalData, setInvoiceModalData] = useState<ExtractedScheduleData | null>(null);
+  const [clinicServices, setClinicServices] = useState<any[]>([]);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<HTMLDivElement>(null);
@@ -1376,11 +1382,34 @@ export const LiveChatMonitor: React.FC = () => {
     setShowQuickBookingModal(true);
   };
 
+  const handleInsertInvoiceToChat = (text: string) => {
+    if (chatInputRef.current) {
+      chatInputRef.current.innerText = text;
+      setReplyText(text);
+      chatInputRef.current.focus();
+    }
+  };
+
   const handleGenerateAndInsertInvoice = async (resItem: any) => {
+    let currentServices = clinicServices;
+    if (currentServices.length === 0) {
+      try {
+        const sRes = await apiRequest('/api/admin/services');
+        if (sRes?.data && Array.isArray(sRes.data)) {
+          currentServices = sRes.data;
+          setClinicServices(sRes.data);
+        } else if (Array.isArray(sRes)) {
+          currentServices = sRes;
+          setClinicServices(sRes);
+        }
+      } catch {}
+    }
+
     const custData = customerDetailData || (selectedChat ? {
       id: selectedChat.customerId,
       name: selectedChat.customerName,
       phone: selectedChat.customerPhone,
+      address: (selectedChat as any).address || '',
       kelurahan: (selectedChat as any).kelurahan || null,
       kecamatan: (selectedChat as any).kecamatan || null,
       kota: (selectedChat as any).kota || null,
@@ -1389,45 +1418,85 @@ export const LiveChatMonitor: React.FC = () => {
       distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
     } : null);
 
-    const invoiceText = generateReservationInvoiceText({
-      reservation: resItem,
-      customer: custData,
-    });
+    const bookingD = resItem.booking_date ? new Date(resItem.booking_date) : new Date();
+    const timeStr = resItem.booking_date
+      ? new Date(resItem.booking_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')
+      : '12.00-12.30';
 
-    if (chatInputRef.current) {
-      chatInputRef.current.innerText = invoiceText;
-      setReplyText(invoiceText);
-      chatInputRef.current.focus();
-    }
+    const mappedData: ExtractedScheduleData = {
+      bookingDate: bookingD,
+      dateDisplay: formatIndonesianDate(bookingD),
+      timeDisplay: timeStr,
+      treatmentName: resItem.treatment_detail || resItem.treatment_name || 'pijat ceria',
+      treatmentPrice: resItem.purchase_value || resItem.treatment_price || 60000,
+      treatmentCategory: resItem.treatment_category === 'MOMS' ? 'MOMS' : 'BABY',
+      childName: resItem.child_name || custData?.children?.[0]?.name || 'leo',
+      childAge: resItem.child_age || custData?.children?.[0]?.current_age || '3tahun 7 bulan',
+      bundaName: (custData?.name || 'Karmila').replace(/^(bunda|ibu|mama)\s+/i, '').trim(),
+      phone: custData?.phone || selectedChat?.customerPhone || '',
+      address: custData?.address || custData?.preferences?.address || '',
+      kecamatan: custData?.kecamatan || '',
+      kota: custData?.kota || '',
+      distanceKm: Number(custData?.distance_km ?? custData?.distanceKm ?? 3.0),
+      ongkir: Number(custData?.ongkir ?? 0),
+      isExtractedFromChat: false,
+      confidenceScore: 1.0,
+    };
 
-    try {
-      await navigator.clipboard.writeText(invoiceText);
-      toast('Format rincian invoice WhatsApp berhasil dimasukkan ke box chat & disalin ke clipboard! 🐣', 'success');
-    } catch {
-      toast('Format rincian invoice berhasil dimasukkan ke box chat!', 'info');
-    }
+    setInvoiceModalData(mappedData);
+    setShowInvoiceModal(true);
   };
 
   const handleGenerateActiveReservationInvoice = async () => {
-    let reservations = customerDetailData?.reservations;
-    if (!reservations && selectedChat?.customerId) {
+    if (!selectedChat) {
+      toast('Pilih percakapan customer terlebih dahulu.', 'info');
+      return;
+    }
+
+    let currentServices = clinicServices;
+    if (currentServices.length === 0) {
       try {
-        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
-        if (res?.data) {
-          setCustomerDetailData(res.data);
-          reservations = res.data.reservations;
+        const sRes = await apiRequest('/api/admin/services');
+        if (sRes?.data && Array.isArray(sRes.data)) {
+          currentServices = sRes.data;
+          setClinicServices(sRes.data);
+        } else if (Array.isArray(sRes)) {
+          currentServices = sRes;
+          setClinicServices(sRes);
         }
       } catch {}
     }
 
-    if (!reservations || reservations.length === 0) {
-      toast('Customer ini belum memiliki jadwal reservasi tersimpan. Klik "Buat Reservasi Baru" terlebih dahulu.', 'info');
-      return;
+    let custData = customerDetailData;
+    if (!custData && selectedChat?.customerId) {
+      try {
+        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
+        if (res?.data) {
+          custData = res.data;
+          setCustomerDetailData(res.data);
+        }
+      } catch {}
     }
 
-    // Gunakan reservasi teratas (paling mutakhir)
-    const latestRes = reservations[0];
-    await handleGenerateAndInsertInvoice(latestRes);
+    if (!custData && selectedChat) {
+      custData = {
+        id: selectedChat.customerId,
+        name: selectedChat.customerName,
+        phone: selectedChat.customerPhone,
+        address: (selectedChat as any).address || '',
+        kelurahan: (selectedChat as any).kelurahan || null,
+        kecamatan: (selectedChat as any).kecamatan || null,
+        kota: (selectedChat as any).kota || null,
+        children: (selectedChat as any).children || [],
+        ongkir: (selectedChat as any).ongkir ?? 0,
+        distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
+      };
+    }
+
+    // Ekstraksi pintar jadwal & rincian dari obrolan chat
+    const extracted = extractScheduleFromMessages(messages, custData, currentServices);
+    setInvoiceModalData(extracted);
+    setShowInvoiceModal(true);
   };
 
   const handleSendReply = async () => {
@@ -3104,6 +3173,17 @@ export const LiveChatMonitor: React.FC = () => {
               handleGenerateAndInsertInvoice(newRes);
             }
           }}
+        />
+      )}
+
+      {/* Draft Preview & Invoice Generator Modal */}
+      {showInvoiceModal && invoiceModalData && (
+        <InvoiceGeneratorModal
+          isOpen={showInvoiceModal}
+          onClose={() => setShowInvoiceModal(false)}
+          initialData={invoiceModalData}
+          clinicServices={clinicServices}
+          onInsertToChat={handleInsertInvoiceToChat}
         />
       )}
 
