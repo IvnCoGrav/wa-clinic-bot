@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Receipt,
@@ -8,20 +8,19 @@ import {
   Clock,
   User,
   Phone,
-  MapPin,
   Baby,
   Sparkles,
   Check,
   Truck,
   Sparkle,
 } from 'lucide-react';
-import { ExtractedScheduleData } from '../../utils/chatScheduleExtractor';
+import { ExtractedScheduleData, formatIndonesianDate } from '../../utils/chatScheduleExtractor';
 import { useUiFeedback } from '../common/UiFeedback';
 
 interface InvoiceGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialData: ExtractedScheduleData;
+  initialData?: ExtractedScheduleData | null;
   clinicServices?: Array<{ id?: string; name: string; price: number; category?: string }>;
   onInsertToChat: (formattedText: string) => void;
 }
@@ -35,62 +34,88 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
 }) => {
   const { toast } = useUiFeedback();
 
-  // Form State
-  const [dateDisplay, setDateDisplay] = useState(initialData.dateDisplay || '');
-  const [timeDisplay, setTimeDisplay] = useState(initialData.timeDisplay || '12.00-12.30');
-  const [bundaName, setBundaName] = useState(initialData.bundaName || '');
-  const [phone, setPhone] = useState(initialData.phone || '');
-  const [address, setAddress] = useState(initialData.address || '');
-  const [kecamatan, setKecamatan] = useState(initialData.kecamatan || '');
-  const [kota, setKota] = useState(initialData.kota || '');
-  const [category, setCategory] = useState<'BABY' | 'MOMS'>(
-    initialData.treatmentCategory === 'MOMS' ? 'MOMS' : 'BABY'
-  );
-  const [childName, setChildName] = useState(initialData.childName || 'leo');
-  const [childAge, setChildAge] = useState(initialData.childAge || '3tahun 7 bulan');
-  const [treatmentName, setTreatmentName] = useState(initialData.treatmentName || 'pijat ceria');
-  const [treatmentPrice, setTreatmentPrice] = useState<number>(initialData.treatmentPrice || 60000);
-  const [distanceKm, setDistanceKm] = useState<number>(initialData.distanceKm || 3.0);
-  const [ongkir, setOngkir] = useState<number>(initialData.ongkir ?? 0);
+  // Safe Helper Formatters
+  const formatRp = (num: any) => {
+    if (num === null || num === undefined || isNaN(Number(num))) return '0';
+    return Number(num).toLocaleString('id-ID');
+  };
+
+  const formatKm = (km: any) => {
+    if (km === null || km === undefined || isNaN(Number(km))) return '3,0';
+    return Number(km).toFixed(1).replace('.', ',');
+  };
+
+  // Form State with bulletproof defaults
+  const [dateDisplay, setDateDisplay] = useState('');
+  const [timeDisplay, setTimeDisplay] = useState('12.00-12.30');
+  const [bundaName, setBundaName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [kecamatan, setKecamatan] = useState('');
+  const [kota, setKota] = useState('');
+  const [category, setCategory] = useState<'BABY' | 'MOMS'>('BABY');
+  const [childName, setChildName] = useState('leo');
+  const [childAge, setChildAge] = useState('3tahun 7 bulan');
+  const [treatmentName, setTreatmentName] = useState('pijat ceria');
+  const [treatmentPrice, setTreatmentPrice] = useState<number>(60000);
+  const [distanceKm, setDistanceKm] = useState<number>(3.0);
+  const [ongkir, setOngkir] = useState<number>(0);
   const [copied, setCopied] = useState(false);
 
-  // Auto total
+  // Sync state whenever initialData or isOpen changes
+  useEffect(() => {
+    if (isOpen && initialData) {
+      setDateDisplay(initialData.dateDisplay || formatIndonesianDate(initialData.bookingDate || new Date()));
+      setTimeDisplay(initialData.timeDisplay || '12.00-12.30');
+      setBundaName((initialData.bundaName || '').trim());
+      setPhone((initialData.phone || '').trim());
+      setAddress((initialData.address || '').trim());
+      setKecamatan((initialData.kecamatan || '').trim());
+      setKota((initialData.kota || '').trim());
+      setCategory(initialData.treatmentCategory === 'MOMS' ? 'MOMS' : 'BABY');
+      setChildName(initialData.childName || 'leo');
+      setChildAge(initialData.childAge || '3tahun 7 bulan');
+      setTreatmentName(initialData.treatmentName || 'pijat ceria');
+      setTreatmentPrice(Number(initialData.treatmentPrice) || 60000);
+      setDistanceKm(Number(initialData.distanceKm) || 3.0);
+      setOngkir(Number(initialData.ongkir) || 0);
+    }
+  }, [isOpen, initialData]);
+
+  // Auto total calculation
   const totalPrice = useMemo(() => {
-    return Math.max(0, (treatmentPrice || 0) + (ongkir || 0));
+    const p = Number(treatmentPrice) || 0;
+    const o = Number(ongkir) || 0;
+    return Math.max(0, p + o);
   }, [treatmentPrice, ongkir]);
-
-  // Format Ribuan Indonesia (e.g. 60.000)
-  const formatRp = (num: number) => {
-    return num.toLocaleString('id-ID');
-  };
-
-  // Format Jarak KM desimal koma Indonesia (e.g. 3,0 km)
-  const formatKm = (km: number) => {
-    return km.toFixed(1).replace('.', ',');
-  };
 
   // Generate WhatsApp Invoice Text
   const generatedInvoiceText = useMemo(() => {
-    // Normalisasi Hari dan Tanggal & Jam
-    let dateTimeLine = dateDisplay.trim();
-    if (timeDisplay.trim()) {
-      const cleanTime = timeDisplay.trim().replace(/^jam\s*/i, '');
-      dateTimeLine = `${dateTimeLine} jam ${cleanTime}`;
+    const cleanDate = (dateDisplay || '').trim();
+    const cleanTime = (timeDisplay || '').trim().replace(/^jam\s*/i, '');
+    let dateTimeLine = cleanDate;
+    if (cleanTime) {
+      dateTimeLine = cleanDate ? `${cleanDate} jam ${cleanTime}` : `jam ${cleanTime}`;
     }
 
-    // Ongkir string
     const kmStr = formatKm(distanceKm);
-    const ongkirStr = ongkir === 0 ? 'free' : formatRp(ongkir);
+    const ongkirVal = Number(ongkir) || 0;
+    const ongkirStr = ongkirVal === 0 ? 'free' : formatRp(ongkirVal);
+    const safeBunda = (bundaName || '').trim();
+    const safeAddress = (address || '').trim();
+    const safeKec = (kecamatan || '').trim();
+    const safeKota = (kota || '').trim();
+    const safePhone = (phone || '').trim();
 
     const lines: string[] = [
       'Berikut reservasi 🐣',
       '',
       `Hari dan tanggal :  ${dateTimeLine}`,
-      `Nama Bunda:  ${bundaName}`,
-      `Alamat & Shareloc : ${address}`,
-      `Kec : ${kecamatan}`,
-      `Kota : ${kota}`,
-      `No. Hp : ${phone}`,
+      `Nama Bunda:  ${safeBunda}`,
+      `Alamat & Shareloc : ${safeAddress}`,
+      `Kec : ${safeKec}`,
+      `Kota : ${safeKota}`,
+      `No. Hp : ${safePhone}`,
       '',
     ];
 
@@ -98,15 +123,15 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
       lines.push(
         'Pilihan treatment (Baby & Kids)',
         '',
-        `Nama Bayi : ${childName}`,
-        `Usia Bayi/Anak : ${childAge}`,
-        `Treatment : ${treatmentName}`
+        `Nama Bayi : ${(childName || '').trim()}`,
+        `Usia Bayi/Anak : ${(childAge || '').trim()}`,
+        `Treatment : ${(treatmentName || '').trim()}`
       );
     } else {
       lines.push(
         'Pilihan treatment (Moms & Hamil)',
         '',
-        `Treatment : ${treatmentName}`
+        `Treatment : ${(treatmentName || '').trim()}`
       );
     }
 
@@ -160,10 +185,11 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   };
 
   const handleSelectService = (s: { name: string; price: number; category?: string }) => {
-    setTreatmentName(s.name);
-    setTreatmentPrice(s.price);
+    if (!s) return;
+    setTreatmentName(s.name || '');
+    setTreatmentPrice(Number(s.price) || 0);
     if (s.category) {
-      const c = s.category.toUpperCase();
+      const c = String(s.category).toUpperCase();
       if (c.includes('MOM') || c.includes('HAMIL') || c.includes('LAKTASI') || c.includes('NIFAS')) {
         setCategory('MOMS');
       } else {
@@ -179,7 +205,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="px-5 py-3.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs">
+        <div className="px-5 py-3.5 bg-gradient-to-r from-[#008069] to-[#00a884] text-white flex items-center justify-between shadow-xs shrink-0">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-xs">
               <Receipt size={18} className="text-white" />
@@ -187,7 +213,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
             <div>
               <h3 className="font-bold text-sm sm:text-base leading-tight flex items-center gap-2">
                 <span>Draft Rincian Reservasi & Invoice WA</span>
-                {initialData.isExtractedFromChat && (
+                {initialData?.isExtractedFromChat && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400 text-amber-950 font-extrabold flex items-center gap-1 shadow-2xs">
                     <Sparkles size={10} />
                     <span>Auto-Extracted dari Chat</span>
@@ -336,7 +362,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setCategory('BABY')}
-                    className={`px-2.5 py-1 rounded-md transition ${
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
                       category === 'BABY'
                         ? 'bg-white text-[#008069] shadow-xs'
                         : 'text-[#667781] hover:text-[#111b21]'
@@ -347,7 +373,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setCategory('MOMS')}
-                    className={`px-2.5 py-1 rounded-md transition ${
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
                       category === 'MOMS'
                         ? 'bg-white text-[#008069] shadow-xs'
                         : 'text-[#667781] hover:text-[#111b21]'
@@ -417,15 +443,15 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
 
                 {/* Quick Catalog Chips */}
-                {clinicServices.length > 0 && (
+                {Array.isArray(clinicServices) && clinicServices.length > 0 && (
                   <div className="flex flex-wrap gap-1 pt-1">
                     {clinicServices.slice(0, 6).map((srv) => (
                       <button
-                        key={srv.name}
+                        key={srv.name || srv.id}
                         type="button"
                         onClick={() => handleSelectService(srv)}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-medium border transition cursor-pointer ${
-                          treatmentName.toLowerCase() === srv.name.toLowerCase()
+                          (treatmentName || '').toLowerCase() === (srv.name || '').toLowerCase()
                             ? 'bg-[#008069] text-white border-[#008069]'
                             : 'bg-white text-[#54656f] border-[#d1d7db] hover:border-[#008069]'
                         }`}
@@ -459,7 +485,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     type="number"
                     value={distanceKm}
                     onChange={(e) => {
-                      const val = Number(e.target.value);
+                      const val = Number(e.target.value) || 0;
                       setDistanceKm(val);
                       if (val <= 3.0) setOngkir(0);
                       else setOngkir(Math.round((val - 3.0) * 3000));
@@ -602,7 +628,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="px-5 py-3.5 bg-white border-t border-[#e9edef] flex flex-wrap items-center justify-between gap-2.5">
+        <div className="px-5 py-3.5 bg-white border-t border-[#e9edef] flex flex-wrap items-center justify-between gap-2.5 shrink-0">
           <button
             type="button"
             onClick={onClose}
