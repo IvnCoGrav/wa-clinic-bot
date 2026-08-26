@@ -4,6 +4,70 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & Policy — Manual CS Bypass for Legacy & Repeat Patients with Admin Dashboard Toggles (2026-08-27)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Penanganan Manual Personal untuk Pasien Legacy & Pasien yang Pernah Treatment**:
+     - Pemilik klinik menghendaki agar seluruh kontak legacy (arsip chat lama & kontak terdaftar sebelum tanggal cutoff) serta seluruh pasien yang sudah pernah melakukan treatment/reservasi terkonfirmasi selalu ditangani secara personal oleh CS manusia (bot senyap/tidak membalas).
+  2. **Kebutuhan Kontrol Fleksibel (Toggle Switch) di Admin Dashboard**:
+     - Pengaturan penanganan manual ini harus dapat diaktifkan atau dinonaktifkan sewaktu-waktu oleh admin/owner klinik melalui tampilan antarmuka Admin Dashboard.
+  3. **Penegasan Keamanan WhatsApp Business**:
+     - Fitur label WhatsApp Business (WAHA label mutation API) tetap dinonaktifkan sepenuhnya untuk menjaga kepatuhan dan stabilitas koneksi WhatsApp.
+- **Solusi & Implementasi:**
+  1. **Konfigurasi & Evaluasi AI Eligibility Resolver (`src/config/ai-eligibility-config.ts` & `src/services/ai-eligibility.service.ts`)**:
+     - Menambahkan properti `legacy_bypass_bot` dan `repeat_patient_bypass_bot` (default: `true`) pada `AiEligibilityConfig`.
+     - Memperluas `resolveAiEligibilityWithReason` untuk mendeteksi:
+       * Pasien yang sudah pernah treatment / repeat order (`has_confirmed_reservation = true`, `purchase_count > 0`, status `repeat`) ➔ dialihkan ke `EXISTING_PATIENT_MANUAL`.
+       * Kontak legacy (`is_legacy_source = true`, status `legacy`) ➔ dialihkan ke `LEGACY_CUSTOMER_MANUAL`.
+  2. **Gerbang Bypass & Penanganan Pesan Masuk (`src/services/ai-scope-gate.service.ts` & `src/services/conversation.service.ts`)**:
+     - Saat pesan dari customer kategori ini masuk, bot langsung senyap (`silence`), mencatat pesan ke riwayat chat dan Live Chat, serta mengalihkan status ke `HUMAN_HANDLING` dengan pesan notifikasi eskalasi yang informatif.
+     - Mengecualikan eskalasi `LEGACY_CUSTOMER_MANUAL` dan `EXISTING_PATIENT_MANUAL` dari timer auto-release 6 jam agar tidak kembali ke bot secara tidak sengaja.
+  3. **API Endpoint Pengaturan Tenant (`src/routes/admin/settings.subroute.ts`)**:
+     - Memperbarui `GET /api/admin/ai-rollout-scope` dan `PATCH /api/admin/ai-rollout-scope` untuk membaca dan memperbarui nilai `legacyBypassBot` dan `repeatPatientBypassBot`.
+  4. **Toggle Switch di Admin Dashboard (`AiRouterPanel.tsx` & `Settings.tsx`)**:
+     - Menambahkan 2 kartu toggle switch modern pada panel **Target Pelanggan AI**:
+       * *"Pasien Legacy (CS Manual)"* (Bypass bot untuk kontak arsip lama/impor).
+       * *"Pasien Pernah Treatment (CS Manual)"* (Bypass bot untuk pasien yang sudah pernah reservasi/treatment).
+- **Pengujian & Verifikasi:**
+  - `tests/unit/legacy-and-repeat-bypass.test.ts`: 8/8 tests PASS.
+  - `tests/integration/ai-scope-gate.test.ts` & `tests/unit/ai-scope-gate.test.ts`: 12/12 tests PASS.
+  - Kompilasi `admin-dashboard` (`npm run build` via Vite): 100% lulus (0 errors).
+  - TypeScript build backend (`npm run build` via tsc): 100% lulus (0 errors).
+  - Full automated regression test suite: 211/211 test files PASS (1,885 tests PASS, 0 failures).
+
+#### Fix & Integration — Slot Engine Reservation Form Pipeline, Schedule Guardrails, History Isolation & AI Scope Harmonization (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Looping Form Reservasi & Hilangnya Penanganan Human Handling pada Slot Engine**:
+     - Ketika customer mengisi dan mengirim formulir reservasi lengkap, `Slot-Filling Engine` (`processSlotEngine`) sebelumnya tidak memiliki interseptor `isReservationFormMessage`. Akibatnya, `DecisionMatrix` mengevaluasi `isBookingReady = true` dan mengulang pengiriman formulir reservasi kosong (`SEND_RESERVATION_FORM`) tanpa henti. Reservasi tidak tersimpan ke database dan tidak dialihkan ke `HUMAN_HANDLING`.
+  2. **Halusinasi Ketersediaan Slot Jadwal (*"Jumat bisa Bunda!"*)**:
+     - Bot tidak memiliki akses ke kalender live terapis namun LLM merespons sendiri konfirmasi ketersediaan jadwal, melanggar SOP klinik di mana penentuan jadwal fix harus diverifikasi oleh staf manusia/bidan.
+  3. **Pengulangan Template Ongkir pada Pertanyaan Rekomendasi Treatment (History Leak)**:
+     - Pada percakapan multi-turn, `EntityExtractor` menarik kembali `locationText` dari riwayat chat lama sehingga `DecisionMatrix` mengeksekusi ulang `RESOLVE_LOCATION_AND_DELIVERY` (mengirim template ongkir 9.2 km) alih-alih menjawab pertanyaan rekomendasi untuk bayi 1 bulan.
+  4. **Pembungkaman Otomatis Customer Legacy (`LEGACY_AI_SCOPE_DISABLED`)**:
+     - Tenant scope default `NEW_ONLY` membungkam customer lama secara senyap saat mengirim pesan tanpa pemberitahuan yang jelas ke pemilik klinik.
+
+- **Solusi & Implementasi:**
+  1. **Integrasi Form Reservasi di Slot Engine (`src/slot-engine/slot-engine.ts` & `src/slot-engine/decision-matrix.ts`)**:
+     - Menambahkan gerbang `isReservationFormMessage` di awal `processSlotEngine`.
+     - Mem-parse formulir reservasi via `parseReservationText`, menyimpan data booking ke `prisma.reservation.create` (`status: 'pending'`), menyinkronkan data anak via `reservationLifecycleService.onReservationCreated`, memperbarui nama kontak (`Bunda [Nama] [Kecamatan]`), memicu CAPI `InitiateCheckout` (`CUSTOMER_FORM_SUBMITTED`), dan mengalihkan status percakapan ke `HUMAN_HANDLING` (`is_human_handling = true`).
+     - Mengirim balasan konfirmasi resmi disertai permintaan *share location pin* (jika belum pernah dikirim).
+     - Menambahkan trigger CAPI `InitiateCheckout` (`BOT_FORM_SENT`) saat formulir reservasi pertama kali dikirim oleh bot.
+  2. **Guard Anti-Halusinasi Jadwal & Dynamic Closer (`src/slot-engine/persona-composer.ts`, `src/slot-engine/dynamic-closer.service.ts`, `src/slot-engine/entity-extractor.ts`)**:
+     - Menambahkan aturan persona ketat pada `PersonaComposer` dan instruksi `DynamicCloserService` (case `SCHEDULE`) yang melarang keras bot mengonfirmasi ketersediaan slot secara sepihak.
+     - Menambahkan intent `ask_schedule` pada klasifikasi semantik `EntityExtractor`.
+  3. **Isolasi Riwayat Lokasi & Anti-Loop Ongkir (`src/slot-engine/entity-extractor.ts` & `src/slot-engine/decision-matrix.ts`)**:
+     - Memperketat prompt `EntityExtractor` agar hanya mengekstrak lokasi dari pesan terbaru customer.
+     - Pada `DecisionMatrix` Priority 5, geocoding dan template ongkir hanya dijalankan jika lokasi belum terkonfirmasi atau customer secara eksplisit meminta ubah/ganti alamat.
+  4. **Harmonisasi AI Customer Scope (`src/config/ai-eligibility-config.ts`)**:
+     - Menambahkan dukungan variabel lingkungan `AI_CUSTOMER_SCOPE=ALL` pada fallback fail-closed.
+
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-form-and-schedule-integration.test.ts`: 5/5 tests PASS.
+  - `tests/unit/slot-engine-transcript-e2e.test.ts`: Simulasi multi-turn turn-by-turn persis sesuai transkrip customer lolos 100%.
+  - Full automated suite: 210/210 test files PASS (1,877 unit & integration tests).
+  - TypeScript build check (`npm run build`): 100% lulus (0 errors).
+
 #### Feature & Sync — Live Calendar Peek Synchronization & Total Payment Calculator in Reservation Modal (2026-08-26)
 
 - **Latar Belakang & Kebutuhan:**

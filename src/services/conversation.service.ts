@@ -229,10 +229,14 @@ export class ConversationService {
       return { released: false, updatedConversation: conversation };
     }
 
-    // EXPLICIT GUARD: Legacy customer non-AI (AI Rollout Scope) TIDAK boleh auto-release
+    // EXPLICIT GUARD: Legacy & Repeat customer non-AI (AI Rollout Scope) TIDAK boleh auto-release
     // kembali ke bot — customer ini memang diarahkan ke human handling permanen.
-    if (conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON) {
-      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${AI_ELIGIBILITY_ESCALATION_REASON}. Auto-release is DISABLED.`);
+    if (
+      conversation.escalation_reason === AI_ELIGIBILITY_ESCALATION_REASON ||
+      conversation.escalation_reason === 'LEGACY_CUSTOMER_MANUAL' ||
+      conversation.escalation_reason === 'EXISTING_PATIENT_MANUAL'
+    ) {
+      console.log(`[AUTO-RELEASE EXEMPTION] Conversation ${conversation.id} is in HUMAN_HANDLING due to ${conversation.escalation_reason}. Auto-release is DISABLED.`);
       return { released: false, updatedConversation: conversation };
     }
 
