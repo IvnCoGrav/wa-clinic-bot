@@ -58,11 +58,24 @@ const DAY_MAP: Record<string, number> = {
 /**
  * Format tanggal dalam bahasa Indonesia (e.g. "Kamis 27 Agustus 2026")
  */
-export function formatIndonesianDate(d: Date): string {
-  const dayName = DAY_NAMES[d.getDay()];
-  const dayNum = d.getDate();
-  const monthName = MONTH_NAMES[d.getMonth()];
-  const year = d.getFullYear();
+export function formatIndonesianDate(d?: Date | string | null): string {
+  if (!d) {
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+    d = today;
+  }
+  const dateObj = typeof d === 'string' ? new Date(d) : d;
+  if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+    const today = new Date();
+    today.setDate(today.getDate() + 1);
+    const dayName = DAY_NAMES[today.getDay()] || 'Kamis';
+    const monthName = MONTH_NAMES[today.getMonth()] || 'Agustus';
+    return `${dayName} ${today.getDate()} ${monthName} ${today.getFullYear()}`;
+  }
+  const dayName = DAY_NAMES[dateObj.getDay()] || 'Kamis';
+  const dayNum = dateObj.getDate();
+  const monthName = MONTH_NAMES[dateObj.getMonth()] || 'Agustus';
+  const year = dateObj.getFullYear();
   return `${dayName} ${dayNum} ${monthName} ${year}`;
 }
 
