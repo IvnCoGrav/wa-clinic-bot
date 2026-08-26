@@ -21,6 +21,8 @@ import {
   ArrowUp,
   ArrowDown,
   FastForward,
+  MessageSquare,
+  ExternalLink,
 } from 'lucide-react';
 
 interface Customer {
@@ -31,6 +33,10 @@ interface Customer {
   kecamatan: string | null;
   kota: string | null;
   status: string;
+  conversations?: Array<{
+    last_message_at: string;
+    is_human_handling: boolean;
+  }>;
 }
 
 interface FollowUpItem {
@@ -224,6 +230,19 @@ export const FollowUpQueue: React.FC = () => {
     return { date, time };
   };
 
+  const formatLastChat = (lastMessageAt?: string | null) => {
+    if (!lastMessageAt) return null;
+    const d = new Date(lastMessageAt);
+    if (isNaN(d.getTime())) return null;
+    const diffHours = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60));
+    if (diffHours < 1) return 'Baru saja';
+    if (diffHours < 24) return `${diffHours}j lalu`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Kemarin';
+    if (diffDays < 30) return `${diffDays}h lalu`;
+    return `${Math.floor(diffDays / 30)}bln lalu`;
+  };
+
   const getTypeLabel = (type: string, stage: number) => {
     if (type === 'NO_PURCHASE') {
       const days = [3, 7, 14];
@@ -261,20 +280,20 @@ export const FollowUpQueue: React.FC = () => {
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center space-x-1 w-fit">
             <CheckCircle size={10} />
-            <span>Terkirim</span>
+            <span>Sudah Terkirim</span>
           </span>
         );
       case 'CANCELLED':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-600 border border-slate-200 flex items-center space-x-1 w-fit">
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 flex items-center space-x-1 w-fit">
             <XCircle size={10} />
             <span>Dibatalkan</span>
           </span>
         );
       case 'SKIPPED':
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center space-x-1 w-fit">
-            <ShieldCheck size={10} />
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200 flex items-center space-x-1 w-fit">
+            <FastForward size={10} />
             <span>Dilewati (Kadaluarsa)</span>
           </span>
         );
@@ -282,60 +301,64 @@ export const FollowUpQueue: React.FC = () => {
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center space-x-1 w-fit">
             <AlertCircle size={10} />
-            <span>Gagal Kirim</span>
+            <span>Gagal Terkirim</span>
           </span>
         );
       default:
-        return <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-50 text-slate-600">{status}</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">{status}</span>;
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-[#111b21] flex items-center space-x-2">
-            <Clock className="text-[#008069]" size={22} />
-            <span>Follow-Up & Reminder Queue</span>
-          </h2>
-          <p className="text-xs text-[#667781] mt-0.5">
-            Antrian follow-up belum purchase dan treatment lanjutan (Sesuai tanggal & jam jadwal setup).
+          <h1 className="text-xl font-bold text-[#111b21]">Follow-Up & Reminder Queue</h1>
+          <p className="text-xs text-[#54656f] mt-0.5">
+            Daftar antrian pesan follow-up otomatis untuk pelanggan baru dan jadwal perawatan rutin.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {statusFilter === 'PENDING' && totalItems > 0 && (
-            <>
-              <button
-                onClick={() => setConfirmAction({ type: 'reschedule-overdue' })}
-                disabled={actionLoading === 'reschedule-overdue'}
-                className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 transition flex items-center space-x-1.5 shadow-xs text-xs font-bold"
-                title="Majukan follow-up yang lewat tanggal dan jadwalkan merata maks 10/hari"
-              >
-                <FastForward size={13} className="text-amber-700" />
-                <span>Majukan Overdue (Maks 10/Hari)</span>
-              </button>
-              <button
-                onClick={() => setConfirmAction({ type: 'bulk-queue' })}
-                disabled={actionLoading === 'bulk-queue'}
-                className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 transition flex items-center space-x-1.5 shadow-xs text-xs font-semibold"
-              >
-                <CalendarCheck size={13} />
-                <span>Jadwalkan Semua Pending</span>
-              </button>
-              <button
-                onClick={() => setConfirmAction({ type: 'bulk-cancel' })}
-                disabled={actionLoading === 'bulk-cancel'}
-                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 transition flex items-center space-x-1.5 shadow-xs text-xs font-semibold"
-              >
-                <Trash2 size={13} />
-                <span>Batalkan Semua Pending</span>
-              </button>
-            </>
-          )}
+
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Tombol Bulk Queue: Jadwalkan Semua PENDING */}
+          <button
+            onClick={() => setConfirmAction({ type: 'bulk-queue' })}
+            disabled={actionLoading === 'bulk-queue'}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5"
+            title="Jadwalkan semua pesan berstatus PENDING ke antrian otomatis"
+          >
+            <CalendarCheck size={14} className={actionLoading === 'bulk-queue' ? 'animate-spin' : ''} />
+            <span>Jadwalkan Semua Pending</span>
+          </button>
+
+          {/* Tombol Memajukan Overdue */}
+          <button
+            onClick={() => setConfirmAction({ type: 'reschedule-overdue' })}
+            disabled={actionLoading === 'reschedule-overdue'}
+            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5"
+            title="Majukan follow-up yang lewat jadwal ke hari ini/besok (maks 10 pesan/hari)"
+          >
+            <FastForward size={14} className={actionLoading === 'reschedule-overdue' ? 'animate-spin' : ''} />
+            <span>Majukan Overdue</span>
+          </button>
+
+          {/* Tombol Bulk Cancel */}
+          <button
+            onClick={() => setConfirmAction({ type: 'bulk-cancel' })}
+            disabled={actionLoading === 'bulk-cancel'}
+            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold transition shadow-xs flex items-center space-x-1.5"
+            title="Batalkan semua antrian follow-up berstatus PENDING"
+          >
+            <Trash2 size={14} />
+            <span>Batalkan Semua</span>
+          </button>
+
           <button
             onClick={loadFollowUps}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] transition flex items-center space-x-1.5 shadow-xs"
+            disabled={loading}
+            className="p-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl transition shadow-xs flex items-center space-x-1"
+            title="Refresh Data"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
             <span className="text-xs font-semibold">Refresh</span>
@@ -347,9 +370,10 @@ export const FollowUpQueue: React.FC = () => {
       <div className="bg-[#e8f5f2] border border-[#c2e7e0] rounded-2xl p-3.5 flex items-start space-x-3 text-xs text-[#005c4b]">
         <ShieldCheck size={18} className="text-[#008069] flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-bold text-[#111b21]">Sistem Penjadwalan Antrian Follow-Up</p>
+          <p className="font-bold text-[#111b21]">Sistem Penjadwalan Antrian & Smart Context Guard</p>
           <p className="text-[#54656f] mt-0.5">
             Pesan berstatus <strong>PENDING</strong> menunggu konfirmasi admin. Klik tombol <strong>Jadwalkan</strong> untuk memasukkan pesan ke antrian (<strong>QUEUED</strong>) agar terkirim otomatis tepat pada tanggal & jam yang sudah disetup (maksimal 10 blast per hari pada jam kerja).
+            Dilengkapi <strong>Smart Context Guard</strong>: jika customer baru saja aktif chat (&lt;3 hari terakhir), jadwal otomatis dimundurkan agar tidak menimpa obrolan baru.
           </p>
         </div>
       </div>
@@ -546,8 +570,28 @@ export const FollowUpQueue: React.FC = () => {
                         <div className="flex items-center space-x-1.5">
                           <User size={13} className="text-[#8696a0] flex-shrink-0" />
                           <span className="font-bold text-[#111b21]">{c?.name || 'Bunda'}</span>
+                          {c?.conversations?.[0]?.is_human_handling && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300" title="Sedang/Pernah dikelola manual oleh Admin">
+                              Human Handling
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[10px] text-[#667781] font-mono ml-4">{c?.phone}</div>
+                        <div className="flex items-center space-x-2 text-[10px] text-[#667781] font-mono ml-4 mt-0.5">
+                          <span>{c?.phone}</span>
+                          {c?.conversations?.[0]?.last_message_at && (
+                            <span
+                              className={`flex items-center space-x-0.5 px-1 py-0.2 rounded text-[9px] ${
+                                (Date.now() - new Date(c.conversations[0].last_message_at).getTime()) < 72 * 60 * 60 * 1000
+                                  ? 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200'
+                                  : 'text-[#8696a0]'
+                              }`}
+                              title={`Chat terakhir: ${new Date(c.conversations[0].last_message_at).toLocaleString('id-ID')}`}
+                            >
+                              <MessageSquare size={9} />
+                              <span>{formatLastChat(c.conversations[0].last_message_at)}</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Template Rolling */}
@@ -575,6 +619,15 @@ export const FollowUpQueue: React.FC = () => {
                                 <CalendarCheck size={12} />
                                 <span>Jadwalkan</span>
                               </button>
+                              <a
+                                href="/admin/live-chat"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#008069] text-xs font-semibold transition shadow-xs flex items-center"
+                                title="Buka Live Chat (Sapa Manual)"
+                              >
+                                <MessageSquare size={12} />
+                              </a>
                               <button
                                 onClick={() => setRescheduleModal({ open: true, item: fu, newDate: fu.scheduled_at.slice(0, 16) })}
                                 disabled={actionLoading === fu.id}
@@ -595,6 +648,15 @@ export const FollowUpQueue: React.FC = () => {
                           )}
                           {fu.status === 'QUEUED' && (
                             <>
+                              <a
+                                href="/admin/live-chat"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#008069] text-xs font-semibold transition shadow-xs flex items-center"
+                                title="Buka Live Chat (Sapa Manual)"
+                              >
+                                <MessageSquare size={12} />
+                              </a>
                               <button
                                 onClick={() => setRescheduleModal({ open: true, item: fu, newDate: fu.scheduled_at.slice(0, 16) })}
                                 disabled={actionLoading === fu.id}

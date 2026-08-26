@@ -12,6 +12,7 @@ import { isDummyOrTestContact } from '../utils/dummy-filter';
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
 const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE_BASE_MS, 1500);
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
+const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
 
 export class FollowUpService {
   /**
@@ -190,6 +191,14 @@ export class FollowUpService {
                 kota: true,
                 status: true,
                 is_sandbox_test: true,
+                conversations: {
+                  select: {
+                    last_message_at: true,
+                    is_human_handling: true,
+                  },
+                  take: 1,
+                  orderBy: { last_message_at: 'desc' },
+                },
               },
             },
           },
@@ -582,7 +591,7 @@ export class FollowUpService {
       const now = new Date();
       const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
-      const dueFollowUps = await prisma.followUp.findMany({
+      const rawDueFollowUps = await prisma.followUp.findMany({
         where: {
           tenant_id: tenantId,
           status: { in: targetStatuses as any },
@@ -596,19 +605,30 @@ export class FollowUpService {
           customer: {
             include: {
               children: true,
+              conversations: {
+                select: {
+                  last_message_at: true,
+                  is_human_handling: true,
+                },
+                take: 1,
+                orderBy: { last_message_at: 'desc' },
+              },
             },
           },
         },
         orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
         take: FOLLOWUP_BATCH_LIMIT,
       });
+      const dueFollowUps = rawDueFollowUps || [];
 
-      if (dueFollowUps.length === 0) {
+      if (!dueFollowUps || dueFollowUps.length === 0) {
         return 0;
       }
 
       console.log(`[FollowUp Worker] Found ${dueFollowUps.length} due follow-ups to process (${targetStatuses.join('/')} mode, scheduled_at <= now).`);
       let processed = 0;
+      const cooldownHours = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
+      const cooldownMs = cooldownHours * 60 * 60 * 1000;
 
       for (const fu of dueFollowUps) {
         // Anti-blast overdue protection: jika jadwal sudah terlewat lebih dari 48 jam, tandai SKIPPED
@@ -618,6 +638,32 @@ export class FollowUpService {
             where: { id: fu.id },
             data: { status: 'SKIPPED' },
           });
+          continue;
+        }
+
+        // Smart Context Guard: Jeda interaksi chat terakhir (cooldown)
+        const lastConv = fu.customer?.conversations?.[0];
+        const lastMsgAt = lastConv?.last_message_at ? new Date(lastConv.last_message_at) : null;
+        if (lastMsgAt && (now.getTime() - lastMsgAt.getTime()) < cooldownMs) {
+          const newScheduledAt = new Date(lastMsgAt.getTime() + cooldownMs);
+          const targetWib = new Date(newScheduledAt.getTime() + 7 * 60 * 60 * 1000);
+          const year = targetWib.getUTCFullYear();
+          const month = targetWib.getUTCMonth();
+          const date = targetWib.getUTCDate();
+          // Jam 09:40 WIB = 02:40 UTC
+          const adjustedDate = new Date(Date.UTC(year, month, date, 2, 40, 0, 0));
+
+          const finalDate = adjustedDate.getTime() > now.getTime()
+            ? adjustedDate
+            : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+          try {
+            await prisma.followUp.update({
+              where: { id: fu.id },
+              data: { scheduled_at: finalDate },
+            });
+          } catch (_) {}
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) postponed to ${finalDate.toISOString()} due to recent chat at ${lastMsgAt.toISOString()} (cooldown: ${cooldownHours}h).`);
           continue;
         }
 
