@@ -15,10 +15,9 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   2. **Menu Tombol `+` (Tools Bar di Live Chat)**:
      - Menambahkan opsi **`📅 Buat Reservasi Baru`** (`CalendarPlus`): Membuka `CreateReservationModal` dengan `initialCustomer` aktif.
      - Menambahkan opsi **`🧾 Generate Invoice / Payment`** (`Receipt`): Otomatis mengisi box chat dengan rincian invoice reservasi aktif.
-  3. **Sidebar Kanan & Modal Detail**:
-     - Menambahkan tombol icon `🧾` pada setiap kartu reservasi di sidebar percakapan aktif untuk 1-klik generate & copy invoice.
-     - Menambahkan tombol **"Salin Format Invoice WA"** pada `ReservationDetailModal.tsx`.
-- **Pengujian & Verifikasi:**
+- **Perbaikan Masalah Seleksi Teks di Live Chat**:
+  - **Akar Masalah**: Terdapat event listener *mouse down long-press* 400ms (`handleBubbleMouseDown`) pada wadah bubble chat yang otomatis memicu `handleSelectReply` dan memindahkan fokus kursor ke box input chat saat pengguna menahan klik mouse untuk men-drag/menyeleksi teks.
+  - **Solusi**: Menghapus pembajakan event mouse down dari bubble chat dan menambahkan atribut styling `select-text cursor-text` pada elemen teks pesan, sehingga pengguna dapat bebas memblok, menyalin (Ctrl+C), atau memilih teks pesan di Live Chat. Balas pesan (reply) dilakukan secara bersih melalui tombol balas (`↩️`).
   - `tests/unit/payment-invoice-formatter.test.ts`: 4/4 tests PASS (baby treatment, charged ongkir, moms category, fallback rawText).
   - Kompilasi frontend Vite (`packages/admin-dashboard`) & backend TypeScript `tsc` lolos 100% (0 error).
 
