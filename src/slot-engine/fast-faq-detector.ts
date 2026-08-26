@@ -29,6 +29,8 @@ const FAQ_PATTERNS = [
  * yang WAJIB diarahkan ke jalur 2-Call Deep Engine demi menjaga akurasi perhitungan Maps & katalog rekomendasi.
  */
 const DYNAMIC_CONSTRAINTS_PATTERNS = [
+  // Pesan Greeting / Lead Iklan Meta (Wajib melalui Onboarding Alamat, bukan dibajak FAQ)
+  /\b(tertarik dengan layanan|tertarik layanan|tertarik treatment|promo\[|iklan|mau tanya promo)\b/i,
   // Form reservasi terstruktur
   /\b(format reservasi|list untuk reservasi|nama bunda|nama bayi|usia bayi|alamat & shareloc)\b/i,
   // Alamat jalan / gang / nomor rumah / RT-RW
@@ -54,7 +56,14 @@ export class FastFaqDetector {
     if (!text || text.trim().length === 0) return false;
     const cleanText = text.trim();
 
-    // 1. Jika terdeteksi sinyal transaksi/geocoding/form dinamis -> TOLAK Fast Track
+    // 0. Jika customer di state INITIAL dan belum konfirmasi lokasi -> prioritaskan onboarding
+    if (slate && slate.projectedState === 'INITIAL' && !slate.isLocationConfirmed) {
+      if (/\b(tertarik|halo|siang|pagi|sore|malam|permisi|promo)\b/i.test(cleanText)) {
+        return false;
+      }
+    }
+
+    // 1. Jika terdeteksi sinyal transaksi/geocoding/form dinamis/lead ads -> TOLAK Fast Track
     if (this.hasDynamicGeocodingOrBookingConstraints(cleanText)) {
       return false;
     }

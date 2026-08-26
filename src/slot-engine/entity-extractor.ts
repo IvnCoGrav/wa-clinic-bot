@@ -166,7 +166,7 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
       const callResult = await callChatCompletionsWithFallback({
         baseUrl: endpoint.baseUrl,
         apiKey: endpoint.apiKey,
-        model: modelConfig.modelName || 'MiniMax-M2.7-highspeed',
+        model: modelConfig.modelName || 'gpt-4o-mini',
         fallbackModel: endpoint.fallbackModel,
         timeoutMs: endpoint.timeoutMs || 25000,
         payload: {
@@ -248,7 +248,7 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
           customer_phone: context?.customerPhone || 'unknown',
           tenant_id: context?.tenantId,
           task_type: 'SLOT_EXTRACTOR',
-          model_name: modelConfig.modelName || 'MiniMax-M2.7-highspeed',
+          model_name: modelConfig.modelName || 'gpt-4o-mini',
           baseUrl: endpoint.baseUrl,
           startedAt,
           error: { message: err?.message },

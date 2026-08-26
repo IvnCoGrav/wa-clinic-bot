@@ -130,14 +130,108 @@ export function sanitizeEmDash(text: string): string {
 export function sanitizeStrayBackslashes(text: string): string {
   if (!text) return text;
   return text
-    // Perbaiki pola "\Bundlebih" atau "\Bund lebih" -> "Bunda lebih"
     .replace(/\\(?:Bundlebih|Bund\s*lebih)\b/gi, 'Bunda lebih')
     .replace(/\\Bund\b/gi, 'Bunda')
-    // Buang backslash liar sebelum karakter alfabet (\Bunda -> Bunda, \text -> text)
     .replace(/\\([a-zA-Z])/g, '$1')
-    // Buang backslash ganda atau menggantung di akhir/tengah kata
     .replace(/\\\\+/g, '')
     .trim();
 }
+
+/**
+ * Membersihkan kata ganti non-standar (saya/aku -> kami) dan singkatan slang (Bund -> Bunda).
+ */
+export function sanitizePronounsAndSlang(text: string): string {
+  if (!text) return text;
+  return text
+    // Perbaiki singkatan slang "Bund" menjadi "Bunda"
+    .replace(/\bBund\b/g, 'Bunda')
+    // Perbaiki kata ganti orang pertama tunggal menjadi jamak tim "kami"
+    .replace(/\b(biar|agar|akan|mau|nanti|bisa)\s+saya\b/gi, '$1 kami')
+    .replace(/\b(?:bantuan|arahan)\s+saya\b/gi, '$1 kami')
+    .replace(/\bsaya\s+(bantu|sarankan|siapkan|cekkan|arahkan|jadwalkan|dampingi|lihat|rekomendasikan)\b/gi, 'kami $1')
+    .replace(/\bsaya\s+pribadi\b/gi, 'kami')
+    .replace(/\baku\s+(cek|bantu|jadwalkan|sarankan|siapkan)\b/gi, 'kami $1')
+    // Normalisasi QRIS e-wallet spesifik ke QRIS Universal
+    .replace(/\bQRIS\s+(?:ShopeePay|GoPay|OVO|Dana|BCA)\b/gi, 'QRIS')
+    .replace(/\bShopeePay\b/gi, 'QRIS')
+    // Anti-overclaim medis
+    .replace(/\bmenyembuhkan\b/gi, 'membantu meredakan')
+    .replace(/\bpasti\s+sembuh\b/gi, 'membantu proses pemulihan')
+    .replace(/\bmenghilangkan\s+(batuk|pilek|grok-grok|lendir)\b/gi, 'membantu melegakan $1')
+    .replace(/\bmembuat\s+(si\s+kecil|adik|bayi|anak)\s+tidur\s+(?:lebih\s+)?pulas\b/gi, 'membantu $1 tidur lebih nyaman')
+    .trim();
+}
+
+/**
+ * Memangkas sapaan pembuka ganda (Halo Bunda! / Selamat siang Bunda!) jika percakapan sedang berlangsung aktif.
+ */
+export function sanitizeGreetingRepetitionForFollowUp(text: string, isFollowUp: boolean = false): string {
+  if (!text || !isFollowUp) return text;
+  return text
+    .replace(/^Halo\s+Bunda[!\.,\s]*/i, '')
+    .replace(/^Selamat\s+(?:pagi|siang|sore|malam)[!\.,\s]*(?:Bunda[!\.,\s]*)?/i, '')
+    .trim();
+}
+
+export interface UnifiedSanitizerOptions {
+  isFollowUp?: boolean;
+  historyCount?: number;
+}
+
+/**
+ * UnifiedResponseSanitizer
+ * Satu gerbang sentral pembersihan untuk seluruh teks outbound bot ke WhatsApp.
+ */
+export class UnifiedResponseSanitizer {
+  public static sanitize(text: string, options?: UnifiedSanitizerOptions): string {
+    if (!text) return '';
+
+    const isFollowUp = Boolean(options?.isFollowUp || (options?.historyCount ?? 0) > 0);
+
+    let cleaned = text;
+
+    // 1. Aksara Asing & RAG Leakage
+    cleaned = stripNonIndonesianScripts(cleaned);
+    cleaned = sanitizeRagLeakage(cleaned);
+
+    // 2. English Slop & Hallucinated Terms
+    cleaned = sanitizeForbiddenEnglishWords(cleaned);
+    cleaned = sanitizeHallucinatedTerms(cleaned);
+
+    // 3. Pronouns ("saya" -> "kami") & Slang ("Bund" -> "Bunda")
+    cleaned = sanitizePronounsAndSlang(cleaned);
+
+    // 4. Repetitive Greetings & Typo
+    cleaned = sanitizeRepetitiveGreetings(cleaned);
+    cleaned = sanitizeEmDash(cleaned);
+    cleaned = sanitizeStrayBackslashes(cleaned);
+
+    // 5. WhatsApp Format & Markdown
+    cleaned = cleaned
+      .replace(/\*\*([^*]+)\*\*/g, '*$1*') // Ubah **teks** menjadi *teks*
+      .replace(/([a-zA-Z])(Rp\s*[\d.]+)/g, '$1 $2') // Spasi antara huruf dan Rp
+      .replace(/Rp\s*(\d)/g, 'Rp $1') // Standar "Rp 25.000"
+      .replace(/Rp\s*(\d{1,3})(\d{3})\b/g, 'Rp $1.$2') // Format ribuan Rp 25000 -> Rp 25.000
+      .replace(/\bUntukjarak\b/gi, 'Untuk jarak')
+      .replace(/\bDarijarak\b/gi, 'Dari jarak')
+      .replace(/\bJadi\s+bisa\s+ya[,\s]+Bunda\s*[☺️😊]?\s*Jadi\s+/gi, 'Jadi ')
+      .replace(/\b(?:Insya\s*Allah|Alhamdulillah|Bismillah|Puji\s*Tuhan)\b[,.\s]*/gi, '') // Netralitas agama
+      .replace(/\b(?:Btw|btw)\b[,.\s]*/gi, 'Kalau boleh tahu, ')
+      .replace(/\bBinti\b/g, 'Bunda')
+      .replace(/\bdiformulasi\s+khusus\b/gi, 'khusus')
+      .trim();
+
+    // 6. Header Greeting Stripper jika percakapan lanjutan aktif
+    cleaned = sanitizeGreetingRepetitionForFollowUp(cleaned, isFollowUp);
+
+    // 7. Jamin setidaknya ada 1 emoji senyum hangat jika belum ada emoji sama sekali
+    if (!/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[😊☺️🥰🌸]/u.test(cleaned)) {
+      cleaned = `${cleaned} 😊`;
+    }
+
+    return cleaned;
+  }
+}
+
 
 

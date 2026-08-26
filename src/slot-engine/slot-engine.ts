@@ -89,9 +89,13 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   // 6. Handle Kasus 3 & 4: Template Balasan Deterministik (Form Reservasi / Out of Coverage)
   if (decision.deterministicTemplateReply) {
     await SlateStore.persistSlate(decision.updatedSlate);
+    const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
+    const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply, {
+      historyCount: history?.length || 0,
+    });
     return {
       nextState: decision.updatedSlate.projectedState,
-      replyText: decision.deterministicTemplateReply,
+      replyText: sanitizedReply,
       shouldSendReply: true,
       sendPricelistImage: decision.shouldSendPricelistImage,
       pricelistCaption: decision.pricelistCaption,

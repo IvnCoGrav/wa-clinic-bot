@@ -1,11 +1,13 @@
 import { StateHandlerContext, StateHandlerResult } from '../state-machine/types';
 import { CustomerSlate } from './types';
 import { FastFaqDetector } from './fast-faq-detector';
-import { sanitizeFinalReply } from './reply-generator';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
 import { callChatCompletionsWithFallback } from '../integrations/llm/model-fallback';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { PersonaComposer } from './persona-composer';
+import { DynamicCloserService } from './dynamic-closer.service';
+import { UnifiedResponseSanitizer } from '../utils/language-sanitizer';
 
 function extractJsonContent(raw: string): string {
   const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -30,6 +32,7 @@ export class FastFaqGenerator {
     const { customer, incomingMessage, history } = ctx;
     const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
     const incomingText = incomingMessage?.text?.body || '';
+    const historyCount = history?.length || 0;
 
     const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
     const endpoint = getLlmEndpointConfig();
@@ -38,35 +41,21 @@ export class FastFaqGenerator {
       return null;
     }
 
-    // 1. Ambil knowledge base grounding terkait
+    // 1. Ambil knowledge base grounding terkait dari database
     const relevantFaqs = await FastFaqDetector.retrieveFaqGrounding(incomingText, tenantId);
     const faqContext = relevantFaqs.length > 0
-      ? `\nKNOWLEDGE BASE RESMI KLINIK:\n${relevantFaqs.map((f) => `[${f.title}]:\n${f.content}`).join('\n\n')}`
-      : '\nINFORMASI KLINIK: Layanan Mom & Baby Homecare (Bidan Yusi). Bidan bersertifikat datang ke rumah Bunda. Buka setiap hari (weekday & weekend). Area Surabaya & Sidoarjo.';
+      ? relevantFaqs.map((f) => `• [${f.title}]:\n  ${f.content}`).join('\n\n')
+      : 'Layanan Mom & Baby Homecare (Bidan Yusi). Bidan bersertifikat datang ke rumah Bunda. Buka setiap hari (weekday & weekend). Area Surabaya & Sidoarjo.';
 
-    // 2. Susun System Prompt Persona Bidan Yusi + Unified JSON Output
-    const systemPrompt = `Anda adalah "Bidan Yusi", pemilik dan bidan konsultan ramah dari Kala Moms and Baby Care (Layanan Homecare Ibu & Bayi di Surabaya & Sidoarjo).
+    // 2. Kalimat Penutup Dinamis berbasis Missing Slots
+    const dynamicCloser = DynamicCloserService.getCloserInstruction(slate);
 
-TUGAS UTAMA:
-Jawab pertanyaan customer dengan ramah, empatik, hangat, dan solutif dalam 1 kali balasan WhatsApp.
-Gunakan panggilan "Bunda". Berikan informasi akurat sesuai Knowledge Base resmi di bawah.
-
-PANDUAN GAYA BAHASA:
-1. Selalu sapa dengan hangat (contoh: "Halo Bunda!", "Selamat siang Bunda!").
-2. Gunakan kata "kami" untuk merujuk tim/klinik (bukan "saya" atau "aku").
-3. Jangan overclaim medis (gunakan kata "membantu meredakan" bukan "menyembuhkan total").
-4. Di akhir balasan, ajukan 1 pertanyaan pembuka lembut untuk memandu Bunda (contoh: "Ada yang ingin Bunda konsultasikan untuk si kecil?" atau "Boleh tahu usia si kecil berapa bulan Bunda?").
-
-${faqContext}
-
-OUTPUT WAJIB FORMAT JSON:
-{
-  "intents": ["ask_faq"],
-  "reply_text": "Teks balasan ramah lengkap Bidan Yusi",
-  "needs_deeper_processing": false
-}
-
-*Catatan: Set "needs_deeper_processing": true HANYA jika pertanyaan membutuhkan kalkulasi ongkir alamat gang spesifik atau form reservasi multi-data yang tidak bisa dijawab lewat FAQ umum.*`;
+    // 3. Susun System Prompt via Single Source of Truth PersonaComposer
+    const systemPrompt = PersonaComposer.composeFastFaqPrompt({
+      knowledgeContext: faqContext,
+      historyCount,
+      dynamicCloser,
+    });
 
     const historyContext = history && history.length > 0
       ? `\nRIWAYAT CHAT TERAKHIR:\n${history.slice(-4).map((h) => `${h.role}: ${h.content}`).join('\n')}`
@@ -79,7 +68,7 @@ OUTPUT WAJIB FORMAT JSON:
       const callResult = await callChatCompletionsWithFallback({
         baseUrl: endpoint.baseUrl,
         apiKey: endpoint.apiKey,
-        model: modelConfig.modelName || 'MiniMax-M2.7-highspeed',
+        model: modelConfig.modelName || 'gpt-4o-mini',
         fallbackModel: endpoint.fallbackModel,
         timeoutMs: endpoint.timeoutMs || 25000,
         payload: {
@@ -112,7 +101,7 @@ OUTPUT WAJIB FORMAT JSON:
         return null; // Fallthrough jika balasan kosong
       }
 
-      const finalReply = sanitizeFinalReply(rawReply);
+      const finalReply = UnifiedResponseSanitizer.sanitize(rawReply, { historyCount });
 
       // Audit LLM Call
       try {

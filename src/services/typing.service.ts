@@ -401,11 +401,9 @@ export class TypingService {
       const errMsg = error?.message || 'Unknown error during human reply simulation';
       return { success: false, bubblesSent, error: errMsg };
     } finally {
-      // Hapus registrasi in-flight bot outbound untuk chat ini setelah selesai
-      try {
-        const { messageService } = await import('./message.service');
-        messageService.clearInFlightBotOutbound(chatId, tenantId);
-      } catch (_) {}
+      // Catatan: inFlightBotOutbounds dibiarkan kedaluwarsa secara otomatis sesuai TTL (default 45 detik)
+      // di messageService. Ini mencegah race condition di mana webhook echo WAHA untuk bubble terakhir
+      // tiba sesaat setelah fungsi ini return dan disalahartikan sebagai balasan baru dari admin HP.
 
       // SAFETY NET: HANYA panggil stopTyping di blok finally jika typing belum di-stop (menghindari redundant call)!
       if (isEnabled) {

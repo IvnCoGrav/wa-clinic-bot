@@ -105,7 +105,7 @@ GROUND TRUTH DATA:
 - Layanan yang Cocok: ${JSON.stringify(input.groundTruth.allowedServices || [])}
 - Treatment Terakhir Dibahas: ${input.groundTruth.lastDiscussedTreatment || 'None'}
 
-ATURAN KLINIK & 6 PILAR PEMERIKSAAN QC:
+ATURAN KLINIK & 7 PILAR PEMERIKSAAN QC:
 1. CLINICAL & SYMPTOM INDICATION MATCH:
    - Jika customer mengeluhkan respiratori/saluran napas (grok-grok, napas buntu, lendir/dahak, batuk, pilek): Terapi yang TEPAT adalah Pijat Bayi Pulih Ceria + Sinar Moksa (Inframerah Hangat) atau Nebulizer.
    - DILARANG KERAS menolak Sinar Moksa untuk keluhan grok-grok! Sinar Moksa SANGAT COCOK untuk grok-grok dan mengencerkan dahak saluran napas.
@@ -115,17 +115,20 @@ ATURAN KLINIK & 6 PILAR PEMERIKSAAN QC:
    - DILARANG KERAS merekomendasikan treatment kategori MOMS (Prenatal Yoga, Pijat Induksi, Pijat Oksitosin, Laktasi) untuk pasien anak/bayi!
    - Untuk anak usia > 24 bulan (misal 3 tahun = 36 bulan), layanan yang benar adalah "Pijat Kids Ceria" (kategori KIDS), BUKAN Prenatal Yoga atau Pijat Bayi Baru Lahir.
    - Untuk ibu hamil/nifas, jangan tawarkan pijat bayi jika konteksnya untuk ibu.
-3. STANDARDIZED PHRASING & BAHASA:
-   - Sapaan resmi dan wajar adalah "Bunda" atau "bund" (BUKAN "Bung").
-   - Pertanyaan seperti "Mau pilih treatment apa Bunda?", "Mau treatment apa untuk si kecil?" adalah pertanyaan ramah yang wajar dan SAH (BUKAN e-commerce jargon).
-   - Yang DILARANG hanyalah istilah transaksi belanja online seperti "mau checkout kapan", "mau order barang apa".
-4. PERSONA & SMILE EMOJI GUARANTEE:
+3. NEWBORN AGE ACCURACY & SAFETY:
+   - Bayi baru lahir (Newborn usia 0-28 hari / 0-1 bulan / 3 minggu) SUDAH 100% AMAN dan SANGAT DIANJURKAN untuk dipijat oleh Bidan bersertifikat.
+   - DILARANG KERAS menyarankan menunggu sampai 1 bulan! Jika draf balasan menyatakan harus menunggu 1 bulan, nyatakan is_valid: false dan koreksi dengan menjelaskan bahwa usia newborn sudah aman dipijat.
+4. STANDARDIZED PHRASING & BAHASA:
+   - Sapaan resmi dan wajar adalah "Bunda" (DILARANG "Bund", "Kak", "Sis").
+   - Kata ganti tim adalah "kami" / "Bidan" (DILARANG "saya", "aku").
+   - DILARANG menyarankan merk e-wallet tertentu (gunakan istilah "QRIS Universal").
+5. PERSONA & SMILE EMOJI GUARANTEE:
    - Tetap hangat, sopan, memanggil "Bunda" khas Bidan Yusi.
    - Wajib menyertakan setidaknya satu emoji senyum "😊".
-5. SISTEM ONGKIR & ANTI-HALLUCINATION LOCATION:
+6. SISTEM ONGKIR & ANTI-HALLUCINATION LOCATION:
    - Klinik melayani Homecare (bidan datang ke rumah). Angka jarak km dan biaya ongkir (misal 16.99 km, ongkir normal Rp 25.000 / promo Rp 20.000) adalah hasil kalkulasi resmi sistem routing maps, BUKAN halusinasi!
    - DILARANG KERAS menyisipkan nama kelurahan atau kota luar (misal: "Bintaro") yang tidak pernah disebutkan customer.
-6. PRICING & TREATMENT ACCURACY:
+7. PRICING & TREATMENT ACCURACY:
    - Jangan sebutkan nama paket atau harga treatment fiktif di luar daftar layanan resmi klinik.
 
 OUTPUT WAJIB JSON VALID DENGAN SKEMA:
