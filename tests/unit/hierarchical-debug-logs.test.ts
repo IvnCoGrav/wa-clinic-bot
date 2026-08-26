@@ -163,4 +163,47 @@ describe('Hierarchical 3-Level LLM Debug Logger', () => {
       'AI_VERIFIER',
     ]);
   });
+
+  it('should track PHRASING and FALLBACK statuses accurately under correlation ID', () => {
+    const correlationId = 'corr_phrasing_fallback_002';
+    const phone = '628991234567';
+    const rawText = 'Ongkir ke Rungkut berapa ya?';
+    const now = Date.now();
+
+    // 1. NLU (Low Confidence Fallback)
+    recordLlmExecution({
+      timestamp: new Date(now).toISOString(),
+      flowType: 'NLU_CLASSIFICATION',
+      customerPhone: phone,
+      customerInput: rawText,
+      bubbleCorrelationId: correlationId,
+      reasoning: '[LOW CONFIDENCE FALLBACK] Confidence 0.3 < 0.6',
+      finalReply: 'Intents: [faq_question] [FALLBACK]',
+      confidenceScore: 0.3,
+      status: 'FALLBACK',
+    });
+
+    // 2. Phrasing Service
+    recordLlmExecution({
+      timestamp: new Date(now + 500).toISOString(),
+      flowType: 'PHRASING',
+      customerPhone: phone,
+      customerInput: '[Intent: ongkir_info] Template: "Untuk ke Rungkut ongkirnya..."',
+      bubbleCorrelationId: correlationId,
+      reasoning: 'Variasi natural untuk intent: ongkir_info',
+      groundTruthUsed: { kecamatan: 'Rungkut', ongkir: 15000 },
+      finalReply: 'Untuk Bunda di Rungkut, ongkir homecare kami hanya Rp 15.000 ya Bunda 🌸',
+      status: 'SUCCESS',
+    });
+
+    const grouped = getGroupedLlmExecutionLogs();
+    expect(grouped.length).toBe(1);
+    const bubble = grouped[0].bubbles[0];
+    expect(bubble.correlationId).toBe(correlationId);
+    expect(bubble.aiCalls.length).toBe(2);
+    expect(bubble.aiCalls[0].status).toBe('FALLBACK');
+    expect(bubble.aiCalls[1].status).toBe('SUCCESS');
+    expect(bubble.aiCalls[1].flowType).toBe('PHRASING');
+    expect(bubble.aiCalls[1].groundTruthUsed).toEqual({ kecamatan: 'Rungkut', ongkir: 15000 });
+  });
 });

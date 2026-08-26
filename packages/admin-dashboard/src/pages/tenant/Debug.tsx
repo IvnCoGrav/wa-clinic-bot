@@ -667,7 +667,9 @@ interface LlmLogEntry {
     | 'NLU_CLASSIFICATION'
     | 'AI_ROUTER'
     | 'AI_VERIFIER'
-    | 'PHRASING';
+    | 'PHRASING'
+    | 'SLOT_EXTRACTOR'
+    | 'SLOT_GENERATOR';
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
@@ -714,7 +716,13 @@ const getFlowBadge = (flowType: string) => {
     case 'COPILOT_DRAFT':
       return { label: 'AI Copilot Draft', short: 'COPILOT', icon: '💡', cls: 'bg-purple-50 text-purple-800 border-purple-200' };
     case 'PHRASING':
-      return { label: 'Persona Phrasing', short: 'PHRASING', icon: '✍️', cls: 'bg-teal-50 text-teal-800 border-teal-200' };
+      return { label: '5. Persona Phrasing', short: 'PHRASING', icon: '✍️', cls: 'bg-teal-50 text-teal-800 border-teal-200' };
+    case 'SLOT_EXTRACTOR':
+      return { label: 'Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 text-violet-800 border-violet-200' };
+    case 'SLOT_GENERATOR':
+      return { label: 'Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200' };
+    case 'CLINICAL_ESCALATION':
+      return { label: 'Clinical Escalation', short: 'ESCALATE', icon: '🚨', cls: 'bg-rose-50 text-rose-800 border-rose-200' };
     default:
       return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 text-slate-800 border-slate-200' };
   }
@@ -1037,6 +1045,7 @@ function LlmLogsSection() {
             { id: 'AI_ROUTER', label: '🧭 2. AI Router' },
             { id: 'CHATBOT_AUTO', label: '🤖 3. Generator' },
             { id: 'AI_VERIFIER', label: '🛡️ 4. QC Verifier' },
+            { id: 'PHRASING', label: '✍️ 5. Phrasing' },
             { id: 'COPILOT_DRAFT', label: '💡 Copilot' },
           ].map((f) => (
             <button
@@ -1501,6 +1510,86 @@ function LlmLogsSection() {
                                           )}
                                         </div>
                                       )}
+
+                                      {/* FLOW TYPE 5: PHRASING */}
+                                      {call.flowType === 'PHRASING' && (
+                                        <div className="space-y-2.5 text-xs">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                            {/* Acuan & Fakta Template */}
+                                            <div className="bg-teal-50/70 border border-teal-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider block">
+                                                📝 Template Acuan & Fakta
+                                              </span>
+                                              <p className="text-teal-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                              {call.groundTruthUsed && (
+                                                <div className="pt-1.5 border-t border-teal-200/60 text-[10px] text-teal-800 font-mono">
+                                                  Fakta: {JSON.stringify(call.groundTruthUsed)}
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Output Variasi Natural */}
+                                            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                                                ✍️ Hasil Variasi Natural Persona
+                                              </span>
+                                              <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* FLOW TYPE: SLOT_EXTRACTOR & SLOT_GENERATOR */}
+                                      {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR') && (
+                                        <div className="space-y-2.5 text-xs">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                            <div className="bg-violet-50/70 border border-violet-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-violet-800 uppercase tracking-wider block">
+                                                🎰 Input Pasien / Slot State
+                                              </span>
+                                              <p className="text-violet-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                            </div>
+                                            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                                                🎯 Output Keputusan Slot
+                                              </span>
+                                              <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* GENERIC FALLBACK FOR OTHER FLOW TYPES */}
+                                      {call.flowType !== 'NLU_CLASSIFICATION' &&
+                                        call.flowType !== 'AI_ROUTER' &&
+                                        call.flowType !== 'CHATBOT_AUTO' &&
+                                        call.flowType !== 'COPILOT_DRAFT' &&
+                                        call.flowType !== 'AI_VERIFIER' &&
+                                        call.flowType !== 'PHRASING' &&
+                                        call.flowType !== 'SLOT_EXTRACTOR' &&
+                                        call.flowType !== 'SLOT_GENERATOR' && (
+                                          <div className="space-y-2.5 text-xs">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                                                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                                                  📥 Input
+                                                </span>
+                                                <p className="text-slate-900 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                              </div>
+                                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                                                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                                                  📤 Output
+                                                </span>
+                                                <p className="text-slate-900 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                              </div>
+                                            </div>
+                                            {call.reasoning && (
+                                              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-purple-950 font-mono text-[11px] whitespace-pre-wrap">
+                                                {call.reasoning}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                     </div>
                                   );
                                 })}
