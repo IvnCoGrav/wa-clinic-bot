@@ -29,6 +29,7 @@ export interface NluClassificationResult {
 export interface NluAuditContext {
   conversationId?: string | null;
   customerPhone?: string;
+  correlationId?: string;
 }
 
 export const VALID_INTENTS = [
@@ -64,7 +65,30 @@ export class NluClassifierService {
     if (!this.llmBreaker) {
       this.llmBreaker = new CircuitBreaker(
         async (text, history, auditCtx) => this.classifyWithLLM(text, history, auditCtx),
-        async (text) => this.fallbackClassify(text),
+        async (text, history, auditCtx) => {
+          const fallbackRes = this.fallbackClassify(text);
+          try {
+            const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+            recordLlmExecution({
+              flowType: 'NLU_CLASSIFICATION',
+              customerPhone: auditCtx?.customerPhone,
+              customerInput: text,
+              bubbleCorrelationId: auditCtx?.correlationId,
+              reasoning: '[CIRCUIT BREAKER FALLBACK] LLM NLU offline/tripped. Regex deterministic rules used.',
+              groundTruthUsed: {
+                extractedEntities: fallbackRes.entities,
+                historyCount: history?.length || 0,
+                isCircuitBreaker: true,
+              },
+              finalReply: `Intents: [${fallbackRes.intents.join(', ')}] (Confidence: ${fallbackRes.confidence})`,
+              confidenceScore: fallbackRes.confidence,
+              modelUsed: 'rule-based-fallback',
+              durationMs: 5,
+              status: 'FALLBACK',
+            });
+          } catch {}
+          return fallbackRes;
+        },
         { name: 'LLM NLU Classifier', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
       );
     }
@@ -437,6 +461,27 @@ You MUST end your response with this complete JSON block (values may be null/omi
           `[NLU CLASSIFICATION] Low confidence (${confidence} < ${confidenceThreshold}) for text: "${incomingText}". Fallback triggered.`
         );
         const fallbackRes = this.fallbackClassify(incomingText);
+        try {
+          const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+          recordLlmExecution({
+            flowType: 'NLU_CLASSIFICATION',
+            customerPhone: auditCtx?.customerPhone,
+            customerInput: incomingText,
+            bubbleCorrelationId: auditCtx?.correlationId,
+            reasoning: `[LOW CONFIDENCE FALLBACK] Confidence score ${confidence} < ${confidenceThreshold}. Regex fallback used. LLM reasoning: ${reasoning || '-'}`,
+            rawReasoning: rawContent,
+            groundTruthUsed: {
+              rawIntents: intents,
+              extractedEntities: fallbackRes.entities,
+              historyCount: historyMessages.length,
+            },
+            finalReply: `Intents: [${fallbackRes.intents.join(', ')}] (Confidence: ${confidence}) [FALLBACK]`,
+            confidenceScore: confidence,
+            modelUsed: callResult.model,
+            durationMs: Date.now() - startedAt,
+            status: 'FALLBACK',
+          });
+        } catch {}
         return {
           ...fallbackRes,
           confidence,
@@ -465,10 +510,12 @@ You MUST end your response with this complete JSON block (values may be null/omi
           flowType: 'NLU_CLASSIFICATION',
           customerPhone: auditCtx?.customerPhone,
           customerInput: incomingText,
+          bubbleCorrelationId: auditCtx?.correlationId,
           reasoning: reasoning || `Confidence score: ${result.confidence}`,
+          rawReasoning: rawContent,
           groundTruthUsed: {
             extractedEntities: result.entities,
-            historyCount: history.length,
+            historyCount: historyMessages.length,
           },
           finalReply: `Intents: [${result.intents.join(', ')}] (Confidence: ${result.confidence})`,
           confidenceScore: result.confidence,

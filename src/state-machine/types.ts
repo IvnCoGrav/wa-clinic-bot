@@ -16,6 +16,8 @@ export interface StateHandlerContext {
   extractedLocationForGeocode?: string;
   /** Teks konteks tambahan (misal info ongkir) yang wajib disampaikan LLM saat merespons FAQ. */
   additionalContextText?: string;
+  /** Correlation ID untuk tracing eksekusi LLM per-bubble pesan masuk. */
+  bubbleCorrelationId?: string;
   /**
    * INTERNAL guard: kedalaman hop antar-handler (intercept FAQ ↔ redirect lokasi).
    * Dipakai mencegah mutual recursion tak terbatas — caller eksternal JANGAN mengisi.

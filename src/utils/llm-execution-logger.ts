@@ -8,7 +8,9 @@ export type LlmFlowType =
   | 'NLU_CLASSIFICATION'
   | 'AI_ROUTER'
   | 'AI_VERIFIER'
-  | 'PHRASING';
+  | 'PHRASING'
+  | 'SLOT_EXTRACTOR'
+  | 'SLOT_GENERATOR';
 
 export interface LlmExecutionRecord {
   id: string;
@@ -110,9 +112,15 @@ export function normalizeCustomerInput(input: string): string {
   }
 
   // Pattern 2: Verifier '[DRAFT QC] "..." (User: "Halo mau tanya")'
-  const verifierMatch = cleaned.match(/\(User:\s*"([\s\S]*?)"\)/);
+  const verifierMatch = cleaned.match(/\(User:\s*"([\s\S]*)"\)\s*$/);
   if (verifierMatch && verifierMatch[1]) {
     cleaned = verifierMatch[1].trim();
+  } else {
+    // Fallback if closed differently
+    const verifierMatchAlt = cleaned.match(/\(User:\s*"([\s\S]*?)"\)/);
+    if (verifierMatchAlt && verifierMatchAlt[1]) {
+      cleaned = verifierMatchAlt[1].trim();
+    }
   }
 
   // Pattern 3: Hapus tanda petik ganda/tunggal di awal & akhir jika tersisa
@@ -142,8 +150,10 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
   const result: GroupedCustomerLlmLogs[] = [];
 
   const FLOW_ORDER: Record<string, number> = {
+    SLOT_EXTRACTOR: 1,
     NLU_CLASSIFICATION: 1,
     AI_ROUTER: 2,
+    SLOT_GENERATOR: 3,
     CHATBOT_AUTO: 3,
     COPILOT_DRAFT: 3,
     AI_VERIFIER: 4,
@@ -155,49 +165,62 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
     const sorted = [...phoneLogs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     const bubbles: GroupedBubbleChat[] = [];
-    let currentBubble: GroupedBubbleChat | null = null;
+    const correlationMap = new Map<string, GroupedBubbleChat>();
 
     for (const log of sorted) {
       const logTime = new Date(log.timestamp).getTime();
       const cleanInput = normalizeCustomerInput(log.customerInput);
 
-      // Cek apakah log ini dapat digabung ke bubble yang sedang aktif
-      // (Berdasarkan correlation ID yang sama ATAU input teks yang sama/inklusif dalam rentang waktu <= 35s)
-      const isTimeClose = currentBubble ? Math.abs(logTime - new Date(currentBubble.timestamp).getTime()) < 35000 : false;
-      const isInputMatching = currentBubble ? (
-        cleanInput === currentBubble.customerInput ||
-        !cleanInput ||
-        !currentBubble.customerInput ||
-        cleanInput.includes(currentBubble.customerInput) ||
-        currentBubble.customerInput.includes(cleanInput)
-      ) : false;
+      let targetBubble: GroupedBubbleChat | null = null;
 
-      const canMerge = currentBubble && (
-        (log.bubbleCorrelationId && log.bubbleCorrelationId === currentBubble.correlationId) ||
-        (!log.bubbleCorrelationId && isTimeClose && isInputMatching)
-      );
+      if (log.bubbleCorrelationId && correlationMap.has(log.bubbleCorrelationId)) {
+        targetBubble = correlationMap.get(log.bubbleCorrelationId)!;
+      } else {
+        // Fallback: check most recent bubble for heuristic merge
+        const lastBubble = bubbles[0] || null; // bubbles is unshifted, so bubbles[0] is latest
+        if (lastBubble) {
+          const isTimeClose = Math.abs(logTime - new Date(lastBubble.timestamp).getTime()) < 35000;
+          const isInputMatching =
+            cleanInput === lastBubble.customerInput ||
+            !cleanInput ||
+            !lastBubble.customerInput ||
+            cleanInput.includes(lastBubble.customerInput) ||
+            lastBubble.customerInput.includes(cleanInput);
 
-      if (canMerge && currentBubble) {
-        currentBubble.aiCalls.push(log);
-        if (!currentBubble.customerName && log.customerName) {
-          currentBubble.customerName = log.customerName;
+          if (!log.bubbleCorrelationId && isTimeClose && isInputMatching) {
+            targetBubble = lastBubble;
+          }
         }
-        if (cleanInput && (!currentBubble.customerInput || currentBubble.customerInput.startsWith('[DRAFT QC]'))) {
-          currentBubble.customerInput = cleanInput;
+      }
+
+      if (targetBubble) {
+        targetBubble.aiCalls.push(log);
+        if (!targetBubble.customerName && log.customerName) {
+          targetBubble.customerName = log.customerName;
+        }
+        if (cleanInput && (!targetBubble.customerInput || targetBubble.customerInput.startsWith('[DRAFT QC]') || targetBubble.customerInput === '(Input)')) {
+          targetBubble.customerInput = cleanInput;
+        }
+        if (log.bubbleCorrelationId) {
+          correlationMap.set(log.bubbleCorrelationId, targetBubble);
         }
       } else {
         const bubbleHash = cleanInput ? crypto.createHash('md5').update(cleanInput).digest('hex').slice(0, 6) : log.id;
         const timeBucket = Math.floor(logTime / 30000);
         const deterministicId = log.bubbleCorrelationId || `bubble_${phone.replace(/[^\w]/g, '_')}_${bubbleHash}_${timeBucket}`;
 
-        currentBubble = {
+        const newBubble: GroupedBubbleChat = {
           correlationId: deterministicId,
           timestamp: log.timestamp,
           customerInput: cleanInput || log.customerInput || '(Input)',
           customerName: log.customerName,
           aiCalls: [log],
         };
-        bubbles.unshift(currentBubble); // newest bubble first
+
+        if (log.bubbleCorrelationId) {
+          correlationMap.set(log.bubbleCorrelationId, newBubble);
+        }
+        bubbles.unshift(newBubble); // newest bubble first
       }
     }
 

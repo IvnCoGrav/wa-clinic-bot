@@ -572,7 +572,8 @@ ATURAN EKSTRAKSI PREFERENSI:
     isLocationKnown?: boolean,
     additionalContextText?: string,
     customerPhone?: string | null,
-    customerName?: string | null
+    customerName?: string | null,
+    bubbleCorrelationId?: string
   ): Promise<FAQResponseResult> {
     const contextText = contextChunks.map((c, i) => `[Referensi ${i + 1} - ${c.title}]:\n${c.content}`).join('\n\n');
 
@@ -599,6 +600,7 @@ ATURAN EKSTRAKSI PREFERENSI:
         customerPhone: effectivePhone,
         customerName: effectiveName,
         customerInput: userQuestion,
+        bubbleCorrelationId,
         reasoning: res.reasoning,
         groundTruthUsed: {
           customerId,
@@ -628,6 +630,7 @@ ATURAN EKSTRAKSI PREFERENSI:
         customerPhone: effectivePhone,
         customerName: effectiveName,
         customerInput: userQuestion,
+        bubbleCorrelationId,
         reasoning: `[ERROR] ${(error as Error).message}`,
         finalReply: fallbackAns,
         modelUsed: endpoint.model,
@@ -650,9 +653,13 @@ ATURAN EKSTRAKSI PREFERENSI:
     conversationId: string;
     tenantId: string;
     customerId?: string;
+    bubbleCorrelationId?: string;
   }): Promise<{ draft: string; reasoning: string | null; latencyMs: number }> {
-    const { conversationId, tenantId, customerId } = params;
+    const { conversationId, tenantId, customerId, bubbleCorrelationId } = params;
     const startTime = Date.now();
+    let customerPhone: string | undefined = undefined;
+    let customerName: string = 'Bunda';
+    let lastInboundMsg: string = '';
 
     try {
       const { prisma } = await import('../../db/client');
@@ -677,12 +684,12 @@ ATURAN EKSTRAKSI PREFERENSI:
       }
 
       const customer = conv.customer;
-      const customerName = customer?.name || 'Bunda';
-      const customerPhone = customer?.phone || undefined;
+      customerName = customer?.name || 'Bunda';
+      customerPhone = customer?.phone || undefined;
       const childrenList = (customer?.children || []).map((c: any) => `${c.name || 'Anak'}${c.age_months ? ` (${c.age_months} bln)` : ''}`).join(', ') || '-';
       const reservationsList = (customer?.reservations || []).map((r: any) => `${r.treatment_detail || r.raw_text || 'Treatment'} [${r.status}]`).join(', ') || '-';
       const messagesAsc = (conv.messages || []).slice().reverse();
-      const lastInboundMsg = messagesAsc.filter((m: any) => m.direction === 'INBOUND').pop()?.content || '';
+      lastInboundMsg = messagesAsc.filter((m: any) => m.direction === 'INBOUND').pop()?.content || '';
 
       // 1. RAG Knowledge Retrieval dari katalog/SOP klinik
       let knowledgeText = '';
@@ -763,6 +770,7 @@ Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda
         customerPhone,
         customerName,
         customerInput: lastInboundMsg,
+        bubbleCorrelationId,
         reasoning,
         groundTruthUsed: { customerName, children: childrenList, reservations: reservationsList },
         finalReply: cleanDraft,
@@ -803,7 +811,10 @@ Buatkan draf balasan profesional dari Bidan untuk merespons pesan terakhir Bunda
 
       recordLlmExecution({
         flowType: 'COPILOT_DRAFT',
-        customerInput: 'Draft generation request',
+        customerPhone,
+        customerName,
+        customerInput: lastInboundMsg || 'Draft generation request',
+        bubbleCorrelationId,
         reasoning: `[ERROR] ${err?.message}`,
         finalReply: '',
         durationMs: latencyMs,

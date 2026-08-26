@@ -22,6 +22,7 @@ export interface VerifierInput {
   conversationId?: string;
   customerMessage: string;
   draftReply: string;
+  bubbleCorrelationId?: string;
   groundTruth: VerifierGroundTruth;
   conversationHistory?: Array<{ role: string; content: string }>;
 }
@@ -182,10 +183,16 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
           recordLlmExecution({
             flowType: 'AI_VERIFIER',
             customerPhone: input.customerPhone,
-            customerInput: `[DRAFT QC] "${input.draftReply.slice(0, 120)}..." (User: "${input.customerMessage.slice(0, 80)}")`,
+            customerInput: input.customerMessage,
+            bubbleCorrelationId: input.bubbleCorrelationId,
             promptPayload: { systemPrompt, userContent },
             reasoning: `[ERROR] ${err.message}`,
             rawReasoning: err.stack || err.message,
+            groundTruthUsed: {
+              draftReply: input.draftReply,
+              customerAgeMonths: input.groundTruth.customerAgeMonths,
+              customerLocation: input.groundTruth.customerLocation,
+            },
             finalReply: input.draftReply,
             modelUsed: verifierConfig.modelName,
             durationMs: Date.now() - startedAt,
@@ -257,11 +264,13 @@ Evaluasi draf balasan di atas sekarang. Kembalikan HANYA JSON.`;
         recordLlmExecution({
           flowType: 'AI_VERIFIER',
           customerPhone: input.customerPhone,
-          customerInput: `[DRAFT QC] "${input.draftReply.slice(0, 120)}..." (User: "${input.customerMessage.slice(0, 80)}")`,
+          customerInput: input.customerMessage,
+          bubbleCorrelationId: input.bubbleCorrelationId,
           promptPayload: { systemPrompt, userContent },
           reasoning: reasoningNote + (reasons.length > 0 ? ` | Pelanggaran: ${reasons.join(', ')}` : ''),
           rawReasoning: rawContent,
           groundTruthUsed: {
+            draftReply: input.draftReply,
             customerAgeMonths: input.groundTruth.customerAgeMonths,
             customerLocation: input.groundTruth.customerLocation,
             allowedServicesCount: input.groundTruth.allowedServices?.length,

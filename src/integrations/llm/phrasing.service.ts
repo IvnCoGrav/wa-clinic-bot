@@ -15,6 +15,8 @@ export interface PhrasingRequest {
   facts?: Record<string, string | number>;
   intent: string;
   conversationId?: string;
+  customerPhone?: string;
+  bubbleCorrelationId?: string;
   tenantId?: string;
   fallbackTemplate: string;
 }
@@ -107,6 +109,7 @@ ${templateConstraint}`;
         const tenantId = req.tenantId || DEFAULT_TENANT_ID;
         const endpoint = getLlmEndpointConfig({ model: this.model });
         const startedAt = Date.now();
+        const effectivePhone = req.customerPhone || (req.facts?.customerPhone as string) || (req.facts?.phone as string) || undefined;
         let callResult: Awaited<ReturnType<typeof callChatCompletionsWithFallback>>;
         try {
           callResult = await callChatCompletionsWithFallback({
@@ -128,7 +131,7 @@ ${templateConstraint}`;
             const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
             auditLlmCall({
               tenant_id: tenantId,
-              customer_phone: 'phrasing-audit',
+              customer_phone: effectivePhone || 'phrasing-audit',
               conversation_id: req.conversationId,
               task_type: 'PHRASING',
               model_name: this.model,
@@ -148,7 +151,7 @@ ${templateConstraint}`;
           const { auditLlmCall } = await import('../../utils/llm-audit-buffer');
           auditLlmCall({
             tenant_id: tenantId,
-            customer_phone: 'phrasing-audit',
+            customer_phone: effectivePhone || 'phrasing-audit',
             conversation_id: req.conversationId,
             task_type: 'PHRASING',
             model_name: callResult.model,
@@ -264,9 +267,40 @@ ${templateConstraint}`;
           openerTracker.record(req.conversationId, finalContent);
         }
 
+        try {
+          const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+          recordLlmExecution({
+            flowType: 'PHRASING',
+            customerPhone: effectivePhone,
+            customerInput: `[Intent: ${req.intent}] Template: "${req.fallbackTemplate.slice(0, 120)}..."`,
+            bubbleCorrelationId: req.bubbleCorrelationId,
+            reasoning: `Variasi natural untuk intent: ${req.intent} | Fakta: ${JSON.stringify(req.facts || {})}`,
+            groundTruthUsed: req.facts,
+            finalReply: finalContent,
+            modelUsed: callResult.model || this.model,
+            durationMs: Date.now() - startedAt,
+            status: 'SUCCESS',
+          });
+        } catch {}
+
         return finalContent;
       },
       async (req: PhrasingRequest) => {
+        try {
+          const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+          recordLlmExecution({
+            flowType: 'PHRASING',
+            customerPhone: req.customerPhone,
+            customerInput: `[Intent: ${req.intent}] Template: "${req.fallbackTemplate.slice(0, 120)}..."`,
+            bubbleCorrelationId: req.bubbleCorrelationId,
+            reasoning: `Fallback ke template standar (Circuit Breaker / Outage)`,
+            groundTruthUsed: req.facts,
+            finalReply: req.fallbackTemplate,
+            modelUsed: this.model,
+            durationMs: 5,
+            status: 'FALLBACK',
+          });
+        } catch {}
         return req.fallbackTemplate;
       },
       { name: 'LLM Phrasing', failureThreshold: 0.7, slidingWindowSize: 20, cooldownPeriodMs: 60000 }
