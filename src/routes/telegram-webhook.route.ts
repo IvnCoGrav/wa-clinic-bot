@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db/client';
 import { telegramService } from '../services/telegram.service';
 import { parsePositiveInt } from '../utils/env-numeric';
+import { safeCompare } from '../utils/auth';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -23,11 +24,14 @@ export async function telegramWebhookRoutes(fastify: FastifyInstance) {
    * Handles inbound updates from Telegram Bot API
    */
   const handleWebhook = async (request: FastifyRequest, reply: FastifyReply) => {
-    // 1. Optional Secret Token validation
-    const secretTokenHeader = request.headers['x-telegram-bot-api-secret-token'];
+    // 1. Timing-safe Secret Token validation (SEC-05 Fix)
+    const secretTokenHeader = (request.headers['x-telegram-bot-api-secret-token'] || '') as string;
     const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-    if (expectedSecret && secretTokenHeader !== expectedSecret) {
-      return reply.status(403).send({ error: 'Unauthorized: Invalid Telegram secret token' });
+    if (expectedSecret) {
+      if (!secretTokenHeader || !safeCompare(secretTokenHeader, expectedSecret)) {
+        console.warn(`[TELEGRAM WEBHOOK] Blocked unauthorized request with invalid secret token from ${request.ip}`);
+        return reply.status(403).send({ error: 'Unauthorized: Invalid Telegram secret token' });
+      }
     }
 
     const body = request.body as any;

@@ -59,6 +59,8 @@ packages/click-catcher/dist/
 packages/click-catcher/.env
 
 # Local agent tools & credentials (ignore from git)
+opencode.json
+opencode.*.json
 .agents/
 .rtk/
 caveman/

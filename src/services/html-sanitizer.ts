@@ -211,12 +211,6 @@ ${pixelOnloadLines}
                 executeFallbackRedirect(defaultPhone);
               }, 2000);
 
-              if (!trackingApiKey) {
-                clearTimeout(safetyTimeout);
-                executeFallbackRedirect(defaultPhone);
-                return;
-              }
-
               const payload = {
                 fbclid: fbclid || null,
                 fbp: fbp || null,
@@ -229,12 +223,14 @@ ${pixelOnloadLines}
                 slug: tenantSlug,
               };
 
+              const fetchHeaders = { 'Content-Type': 'application/json' };
+              if (trackingApiKey) {
+                fetchHeaders['X-Tracking-Api-Key'] = trackingApiKey;
+              }
+
               fetch((trackingApiBaseUrl ? trackingApiBaseUrl.replace(/\/+$/, '') : '') + '/api/tracking/click', {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-Tracking-Api-Key': trackingApiKey,
-                },
+                headers: fetchHeaders,
                 body: JSON.stringify(payload),
               })
               .then(function(res) {
