@@ -4,7 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### Feature & UI — Smart Chat Schedule Extractor & Interactive Invoice Generator Modal (2026-08-26)
+#### Bugfix & Enhanced — Robust GPS Location Pin Ingestion & Zero-Leak Schedule Extractor (2026-08-26)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Share Location Native WA Tidak Tersimpan Koordinat & Ongkir**:
+     - Di `src/routes/webhook.route.ts`, pesan lokasi dari WAHA Noweb menyertakan thumbnail peta (`hasMedia: true`), yang secara keliru ditandai sebagai `isInboundImage = true`. Hal ini menyebabkan `hasRealLocation` menjadi `false`, `incomingMessage.type` menjadi `'image'` (bukan `'location'`), dan koordinat `latitude`/`longitude` tidak pernah diekstrak atau dihitung reverse geocoding/ongkirnya ke database PostgreSQL.
+     - Saat sesi dalam penanganan manual (`HUMAN_HANDLING`), pengiriman pin lokasi dari customer tidak memiliki handler *background capture*.
+  2. **Data Bocor / Tidak Sesuai pada Invoice Generator Modal (Kasus Vita Sidoarjo & Template Kosong)**:
+     - Terdapat fallback teks *hardcoded* (`'leo'`, `'3tahun 7 bulan'`, `'Karmila'`, `'081280482533'`, `'infesta residense...'`) di `chatScheduleExtractor.ts`.
+     - Regex ekstraksi anak menangkap string baris berikutnya (*"Usia Bayi"*) saat customer/bot mengirim template reservasi kosong karena `\s*` melintasi karakter newline (`\n`).
+     - Teks `"Ongkir 6,8km = 15.000"` menangkap angka `6,8` sebagai ongkir Rp 68.000 dan jarak menjadi default 3,0 km, alih-alih jarak 6,8 km dan ongkir Rp 15.000.
+- **Solusi & Implementasi:**
+  1. **Webhook Location & Image Disambiguation (`src/routes/webhook.route.ts`, `src/state-machine/handlers/human.ts`)**:
+     - Memastikan pesan tipe `location` atau payload koordinat nyata diprioritaskan sebelum pengecekan image media.
+     - Menambahkan *Background Location Pin Capture* di `human.ts` agar pin GPS yang dikirim customer saat mode CS tetap otomatis di-reverse geocode, dihitung jarak & ongkirnya, dan disimpan ke tabel `Customer`.
+  2. **Zero-Leak Resilient Extractor (`chatScheduleExtractor.ts`)**:
+     - Menghapus 100% data hardcoded dan menggantinya dengan prioritas data database aktif (`Customer.children`, `Customer.reservations`, `Customer.address/kelurahan/kecamatan/kota/ongkir`).
+     - Regex berbasis batas baris (`[ \t]*([^\r\n\t]+)`) dengan perlindungan label template form agar tidak pernah menangkap label kosong sebagai data.
+     - Ekstraksi blok rincian pembayaran pintar: mengenali pola `"Treatment = [nominal]"`, `"Ongkir [jarak]km = [nominal]"`, dan `"Total = [nominal]"`.
+  3. **Customer Detail Modal UI (`LiveChatMonitor.tsx`)**:
+     - Menambahkan card **Alamat & Lokasi** di Customer Detail Modal (Alamat, Kecamatan, Kota, Jarak & Ongkir, serta link Google Maps koordinat GPS).
+     - Menampilkan `raw_age_text` pada data anak secara tepat.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/chat-schedule-extractor.test.ts`: 6/6 tests PASS.
+  - `tests/unit/payment-invoice-formatter.test.ts`: 4/4 tests PASS.
+  - Kompilasi `admin-dashboard` & backend `tsc` sukses 100% (0 errors).
 
 - **Latar Belakang & Kebutuhan:**
   1. **Ekstraksi Otomatis Jadwal & Biaya dari Riwayat Chat**: Bidan/CS membutuhkan sistem yang dapat memindai obrolan percakapan terakhir untuk otomatis mendeteksi hari/tanggal kunjungan (*"besok"*, *"kamis tgl 27"*), jam (*"jam 12.00-12.30"*, *"jam 1 siang"*), layanan yang disepakati, data anak, dan ongkir tanpa perlu mengetik ulang dari awal.
