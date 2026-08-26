@@ -128,14 +128,29 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
         aiReasoning: 'Customer submitted valid reservation form -> Saved reservation to DB & escalated to human handling.',
       };
     } else {
-      const missing = parseResult.missingFields || [];
-      const missingStr = missing.join(', ');
-      return {
-        nextState: ConversationState.RESERVATION_SENT,
-        replyText: `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`,
-        shouldSendReply: true,
-        aiReasoning: 'Customer submitted incomplete reservation form -> Prompted to fill missing fields.',
-      };
+      // Hanya prompt kekurangan field jika pesan benar-benar percobaan mengisi template form resmi
+      // (memiliki header form resmi atau minimal 2 label field ber-titik dua)
+      const hasFormHeaderOrColonFields =
+        lowerText.includes('list untuk reservasi') ||
+        lowerText.includes('format reservasi') ||
+        lowerText.includes('form reservasi') ||
+        lowerText.includes('form booking') ||
+        lowerText.includes('pilihan treatment (') ||
+        (lowerText.includes('nama') && lowerText.includes(':') && (lowerText.includes('alamat') || lowerText.includes('treatment')));
+
+      if (hasFormHeaderOrColonFields) {
+        const missing = parseResult.missingFields || [];
+        const missingStr = missing.join(', ');
+        return {
+          nextState: ConversationState.RESERVATION_SENT,
+          replyText: `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`,
+          shouldSendReply: true,
+          aiReasoning: 'Customer submitted incomplete reservation form -> Prompted to fill missing fields.',
+        };
+      }
+      // Jika bukan template form terstruktur (misal pertanyaan chat biasa),
+      // jangan tolak customer! Lanjutkan ke alur normal Slot Engine / NLU.
+      console.log(`[SLOT ENGINE] Message was not a structured form template attempt. Falling through to standard slot engine.`);
     }
   }
 
