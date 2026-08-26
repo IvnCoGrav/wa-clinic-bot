@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Sparkles,
   ChevronLeft,
+  Send,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
@@ -183,6 +184,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     {
       title: 'Pengaturan & Sistem',
       items: [
+        { name: 'Koneksi Telegram', path: '/admin/telegram', icon: Send },
         { name: 'Operational Settings', path: '/admin/settings', icon: SettingsIcon },
         { name: 'System Debug', path: '/admin/debug', icon: Bug },
       ],

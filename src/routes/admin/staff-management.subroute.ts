@@ -336,4 +336,52 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * GET /api/admin/staff/:id/telegram-pairing
+   * Mengambil token dan tautan pairing Telegram unik staf untuk dibagikan admin ke staf
+   */
+  fastify.get(
+    '/api/admin/staff/:id/telegram-pairing',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const { staffNotificationService } = await import('../../services/staff-notification.service');
+        const info = await staffNotificationService.getStaffPairingInfo(id);
+
+        if (!info) {
+          return reply.status(404).send({ success: false, error: 'Staff tidak ditemukan.' });
+        }
+
+        return reply.status(200).send({ success: true, data: info });
+      } catch (err: any) {
+        console.error('[ADMIN STAFF API] Error fetching staff telegram pairing:', err.message);
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/staff/:id/telegram-pairing/regenerate
+   * Membuat ulang token pairing Telegram staf
+   */
+  fastify.post(
+    '/api/admin/staff/:id/telegram-pairing/regenerate',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const { staffNotificationService } = await import('../../services/staff-notification.service');
+        const info = await staffNotificationService.regenerateStaffPairingToken(id);
+
+        if (!info) {
+          return reply.status(404).send({ success: false, error: 'Staff tidak ditemukan.' });
+        }
+
+        return reply.status(200).send({ success: true, data: info });
+      } catch (err: any) {
+        console.error('[ADMIN STAFF API] Error regenerating staff telegram pairing token:', err.message);
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
 }
