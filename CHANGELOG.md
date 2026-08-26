@@ -4,7 +4,23 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### Security Hardening & Secret Remediation — RBAC Isolation, Secret Sanitization & Gateway Consistency (2026-08-26)
+#### Bugfix & UI — Conversational Greeting Filter for Child Names & Service Catalog Chip Pricing (2026-08-26)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Frasa Doa/Salam Tertangkap Sebagai Nama Bayi (`"sehat selalu yaa"`)**:
+     - Percakapan penutup obrolan seperti *"semoga si kecil sehat selalu yaa"* atau *"dedek sehat selalu yaa"* tertangkap oleh fallback regex `/(?:dedek|adik|si\s*kecil)\s+([a-zA-Z\s]{2,25})/i`, sehingga teks doa `"sehat selalu yaa"` terekstrak sebagai nama bayi dan menimpa data nama bayi asli dari database (`Arviano Rizqi Al-Fatih`).
+  2. **Harga Layanan Cepat Menampilkan `(Rp 0)` pada Chip Modal**:
+     - Komponen `InvoiceGeneratorModal.tsx` sebelumnya mengakses properti `srv.price` secara langsung. Karena endpoint katalog `/api/admin/services` mengembalikan format `promoPrice` dan `originalPrice`, variabel `srv.price` bernilai `undefined` sehingga terformat sebagai `(Rp 0)`.
+- **Solusi & Implementasi:**
+  1. **Strict Child Name Validation (`isValidChildName` di `chatScheduleExtractor.ts`)**:
+     - Menambahkan daftar filter kata percakapan/salam/doa (*sehat, selalu, yaa, semoga, lekas, sembuh, bobo, bapil, dsb.*).
+     - Menolak frasa percakapan non-nama dan mengutamakan data anak resmi dari database (`customer.children[0].name`).
+  2. **Service Catalog Price Resolver (`InvoiceGeneratorModal.tsx` & `chatScheduleExtractor.ts`)**:
+     - Menambahkan helper `getServicePrice(s)` yang secara cerdas membaca `promoPrice ?? price ?? originalPrice ?? 0`.
+     - Chip pilihan layanan di modal kini menampilkan harga asli/promo dengan benar (e.g. `Pijat Bayi Ceria (Rp 60.000)`) dan menetapkan harga yang sesuai saat diklik.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/chat-schedule-extractor.test.ts`: 8/8 tests PASS (termasuk pengujian penolakan frasa *"sehat selalu yaa"*).
+  - Kompilasi `admin-dashboard` & backend engine `tsc` lolos 100% (0 errors).
 
 - **Latar Belakang & Investigasi Temuan Keamanan:**
   1. **SEC-01 (RBAC Isolation)**: Sesi staff/bidan sebelumnya memiliki akses universal ke seluruh endpoint `/api/admin/*` termasuk sandbox LLM chat, pengaturan sistem, ai-models, backup, dan manajemen akun staff.
