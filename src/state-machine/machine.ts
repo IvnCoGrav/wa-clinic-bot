@@ -143,6 +143,7 @@ export class ConversationStateMachine {
 
     // --- GATE KELAS 🏥: MEDICAL CONCERN DETECTION ENGINE ---
     const incomingText = incomingMessage.text?.body || '';
+    const bubbleCorrelationId = incomingMessage.id || `msg_${customer.phone}_${Date.now()}`;
     const { MedicalDetectionService } = await import('../services/medical-detection.service');
     const medicalResult = MedicalDetectionService.detectMedicalConcern(incomingText);
 
@@ -275,157 +276,179 @@ export class ConversationStateMachine {
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
     }
 
-    // --- BYPASS LLM / NLU UNTUK PESAN GREETING LEAD MURNI ---
-    const { checkLeadGreetingText } = await import('./utils/greeting-checker');
-    const rawMsgBody = (incomingMessage as any)._rawBody || rawInboundText;
-    const greetingCheck = activeConversation.current_state === ConversationState.INITIAL
-      ? await checkLeadGreetingText(incomingText, rawMsgBody, tenantId)
-      : undefined;
-    const isPureGreetingLead = activeConversation.current_state === ConversationState.INITIAL && greetingCheck?.isPureGreeting;
-
-    if (isPureGreetingLead) {
-      console.log(`[GREETING BYPASS] Pure lead greeting matched for customer ${customer.phone}. Bypassing NLU & LLM router.`);
-    }
-
-    // --- GATE 2 🧠: STRUCTURED NLU INTENT & ENTITY CLASSIFICATION ---
-    let nluResult = undefined;
+    let nluResult: any = undefined;
+    let routerDecision: any = undefined;
     let historyFormatted: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-    if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead) {
-      try {
-        const { NluClassifierService } = await import('../services/nlu-classifier.service');
-        const { messageService } = await import('../services/message.service');
-        const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
-        historyFormatted = recentDbMsgs.map((m) => ({
-          role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
-          content: m.content || '',
-        }));
-        nluResult = await NluClassifierService.classifyMessage(incomingText, historyFormatted, {
-          conversationId: activeConversation.id,
-          customerPhone: customer.phone,
-        });
-      } catch (err: any) {
-        console.error('[NLU CLASSIFICATION ERROR IN MACHINE]:', err.message);
-      }
-    }
-
-    // --- GATE 2.1 🩺: MEDICAL DETECTION VIA NLU (SEMUA state, tanpa extra LLM call) ---
-    // Gate keyword (di atas) hanya mencakup frasa statis. NLU sudah dipanggil di GATE 2 untuk
-    // setiap pesan text non-human-handling, di state manapun (INITIAL / AWAITING_LOCATION / dst).
-    // Jika NLU menyimpulkan intent medical_query, eskalasi senyap — konsisten dgn gate medis.
-    if (!activeConversation.is_human_handling && nluResult && (nluResult.intents || []).includes('medical_query')) {
-      console.log(`[MEDICAL NLU ESCALATION] NLU intent medical_query detected for customer ${customer.phone}. Escalating silently.`);
-      conversation.is_human_handling = true;
-      conversation.human_handling_since = new Date();
-      conversation.escalation_reason = 'medical_concern';
-      await conversationService.escalateToHumanHandling(
-        activeConversation,
-        customer.phone,
-        `Keluhan medis terdeteksi via NLU classifier (intent medical_query): "${incomingText}"`,
-        tenantId,
-        'medical_concern'
-      );
-      try {
-        const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
-        const alertService = new AlertService();
-        await alertService.notifyAlert({
-          type: AlertType.MEDICAL_CONCERN_MEDIUM,
-          severity: AlertSeverity.WARNING,
-          message: `[MEDICAL ALERT via NLU] Customer: ${customer.phone}. Text: "${incomingText}"`,
-          metadata: { customerPhone: customer.phone, incomingText },
-        });
-      } catch (alertErr: any) {
-        console.error('[MEDICAL NLU ALERT ERROR] Failed to trigger alert:', alertErr.message);
-      }
-      return {
-        nextState: ConversationState.HUMAN_HANDLING,
-        shouldSendReply: false,
-        isHumanHandling: true,
-      };
-    }
-
-    // --- GATE 2.5 🧭: AI ROUTER ENGINE (default ON per tenant, shadow-first) ---
-    // Konfigurasi per tenant (tenants.ai_router_enabled / ai_router_shadow_mode)
-    // dimuat dari DB saat boot. Shadow mode hanya LOG perbandingan LLM router vs
-    // fallback legacy — TIDAK mengubah keputusan state. Konsumsi penuh (full mode)
-    // hanya saat shadow mode dimatikan lewat dashboard (setelah gate akurasi lolos).
-    let routerDecision = undefined;
     const routerStateSnapshot = activeConversation.current_state;
-    if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead && AiRouterConfigService.isEnabled(tenantId)) {
-      try {
-        const { aiRouterService } = await import('../integrations/llm/ai-router');
-        routerDecision = await aiRouterService.classify({
-          currentState: activeConversation.current_state,
-          conversationHistory: historyFormatted,
-          lastCustomerMessage: incomingText,
-          conversationId: activeConversation.id,
-          customerPhone: customer.phone,
-        }, tenantId);
-      } catch (err: any) {
-        console.error('[AI ROUTER ERROR IN MACHINE]:', err.message);
+
+    // --- GATE 🚀: CONTEXT-GROUNDED SLOT-FILLING ENGINE (FEATURE FLAGGED) ---
+    const { isSlotFillingEnabledForCustomer } = await import('../config/feature-flags');
+    if (isSlotFillingEnabledForCustomer(customer.phone, tenantId)) {
+      const { messageService } = await import('../services/message.service');
+      const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
+      historyFormatted = recentDbMsgs.map((m) => ({
+        role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+        content: m.content || '',
+      }));
+      const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
+      const { processSlotEngine } = await import('../slot-engine/slot-engine');
+      result = await processSlotEngine(handlerCtx);
+    } else {
+      // =========================================================================
+      // LEGACY ENGINE PIPELINE (UNTUK CUSTOMER NON-WHITELIST)
+      // =========================================================================
+      // --- BYPASS LLM / NLU UNTUK PESAN GREETING LEAD MURNI ---
+      const { checkLeadGreetingText } = await import('./utils/greeting-checker');
+      const rawMsgBody = (incomingMessage as any)._rawBody || rawInboundText;
+      const greetingCheck = activeConversation.current_state === ConversationState.INITIAL
+        ? await checkLeadGreetingText(incomingText, rawMsgBody, tenantId)
+        : undefined;
+      const isPureGreetingLead = activeConversation.current_state === ConversationState.INITIAL && greetingCheck?.isPureGreeting;
+
+      if (isPureGreetingLead) {
+        console.log(`[GREETING BYPASS] Pure lead greeting matched for customer ${customer.phone}. Bypassing NLU & LLM router.`);
       }
 
-      // Eskalasi human otomatis berdasarkan flag router (HANYA mode konsumsi penuh).
-      // Shadow mode TIDAK boleh mengubah keputusan produksi sama sekali.
-      // Di-honor: UNKNOWN_REPEATED (berulang), MEDICAL_KEYWORD_SUSPECTED (safety),
-      // SCHEDULE_REQUEST (butuh pengecekan slot manusia).
-      if (routerDecision?.response && !AiRouterConfigService.isShadowMode(tenantId)) {
+      // --- GATE 2 🧠: STRUCTURED NLU INTENT & ENTITY CLASSIFICATION ---
+      if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead) {
         try {
-          const { handleRouterResult } = await import('../services/ai-router-evaluation.service');
-          const processed = await handleRouterResult(activeConversation, routerDecision.response, tenantId);
-          const escalateReasons: Record<string, string> = {
-            UNKNOWN_REPEATED: 'unknown_repeated',
-            MEDICAL_KEYWORD_SUSPECTED: 'medical_concern',
-            SCHEDULE_REQUEST: 'schedule_request',
-          };
-          if (processed.needs_human_escalation && escalateReasons[processed.escalation_reason]) {
-            console.warn(`[ROUTER ESCALATION] Customer ${customer.phone} auto-escalated (${processed.escalation_reason}). ${processed.reasoning_note || ''}`);
-            await conversationService.escalateToHumanHandling(
-              activeConversation,
-              customer.phone,
-              processed.reasoning_note || `Router flag ${processed.escalation_reason}`,
-              tenantId,
-              escalateReasons[processed.escalation_reason]
-            );
-          }
+          const { NluClassifierService } = await import('../services/nlu-classifier.service');
+          const { messageService } = await import('../services/message.service');
+          const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
+          historyFormatted = recentDbMsgs.map((m) => ({
+            role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+            content: m.content || '',
+          }));
+          nluResult = await NluClassifierService.classifyMessage(incomingText, historyFormatted, {
+            conversationId: activeConversation.id,
+            customerPhone: customer.phone,
+            correlationId: bubbleCorrelationId,
+          });
         } catch (err: any) {
-          console.error('[AI ROUTER ESCALATION ERROR]:', err.message);
+          console.error('[NLU CLASSIFICATION ERROR IN MACHINE]:', err.message);
         }
       }
-    }
 
-    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision, history: historyFormatted };
-    if (activeConversation.is_human_handling) {
-      result = await handleHumanHandlingState(handlerCtx);
-    } else {
-      switch (activeConversation.current_state) {
-        case ConversationState.INITIAL:
-          result = await handleGreetingState(handlerCtx);
-          break;
+      // --- GATE 2.1 🩺: MEDICAL DETECTION VIA NLU (SEMUA state, tanpa extra LLM call) ---
+      if (!activeConversation.is_human_handling && nluResult && (nluResult.intents || []).includes('medical_query')) {
+        console.log(`[MEDICAL NLU ESCALATION] NLU intent medical_query detected for customer ${customer.phone}. Escalating silently.`);
+        conversation.is_human_handling = true;
+        conversation.human_handling_since = new Date();
+        conversation.escalation_reason = 'medical_concern';
+        await conversationService.escalateToHumanHandling(
+          activeConversation,
+          customer.phone,
+          `Keluhan medis terdeteksi via NLU classifier (intent medical_query): "${incomingText}"`,
+          tenantId,
+          'medical_concern'
+        );
+        try {
+          const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+          const alertService = new AlertService();
+          await alertService.notifyAlert({
+            type: AlertType.MEDICAL_CONCERN_MEDIUM,
+            severity: AlertSeverity.WARNING,
+            message: `[MEDICAL ALERT via NLU] Customer: ${customer.phone}. Text: "${incomingText}"`,
+            metadata: { customerPhone: customer.phone, incomingText },
+          });
+        } catch (alertErr: any) {
+          console.error('[MEDICAL NLU ALERT ERROR] Failed to trigger alert:', alertErr.message);
+        }
+        return {
+          nextState: ConversationState.HUMAN_HANDLING,
+          shouldSendReply: false,
+          isHumanHandling: true,
+        };
+      }
 
-        case ConversationState.AWAITING_LOCATION:
-          result = await handleLocationState(handlerCtx);
-          break;
+      // --- GATE 2.5 🧭: AI ROUTER ENGINE (default ON per tenant, shadow-first) ---
+      if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead && AiRouterConfigService.isEnabled(tenantId)) {
+        try {
+          const { aiRouterService } = await import('../integrations/llm/ai-router');
+          routerDecision = await aiRouterService.classify({
+            currentState: activeConversation.current_state,
+            conversationHistory: historyFormatted,
+            lastCustomerMessage: incomingText,
+            conversationId: activeConversation.id,
+            customerPhone: customer.phone,
+            bubbleCorrelationId,
+          }, tenantId);
+        } catch (err: any) {
+          console.error('[AI ROUTER ERROR IN MACHINE]:', err.message);
+        }
 
-        case ConversationState.LOCATION_CONFIRMED:
-          result = await handleLocationConfirmationState(handlerCtx);
-          break;
+        if (routerDecision?.response && !AiRouterConfigService.isShadowMode(tenantId)) {
+          try {
+            const { handleRouterResult } = await import('../services/ai-router-evaluation.service');
+            const processed = await handleRouterResult(activeConversation, routerDecision.response, tenantId);
+            const escalateReasons: Record<string, string> = {
+              UNKNOWN_REPEATED: 'unknown_repeated',
+              MEDICAL_KEYWORD_SUSPECTED: 'medical_concern',
+              SCHEDULE_REQUEST: 'schedule_request',
+            };
+            if (processed.needs_human_escalation && escalateReasons[processed.escalation_reason]) {
+              console.warn(`[ROUTER ESCALATION] Customer ${customer.phone} auto-escalated (${processed.escalation_reason}). ${processed.reasoning_note || ''}`);
+              await conversationService.escalateToHumanHandling(
+                activeConversation,
+                customer.phone,
+                processed.reasoning_note || `Router flag ${processed.escalation_reason}`,
+                tenantId,
+                escalateReasons[processed.escalation_reason]
+              );
+              return {
+                nextState: ConversationState.HUMAN_HANDLING,
+                shouldSendReply: false,
+                isHumanHandling: true,
+              };
+            }
+          } catch (err: any) {
+            console.error('[AI ROUTER ESCALATION ERROR]:', err.message);
+          }
+        }
+      }
 
-        case ConversationState.AWAITING_INTEREST:
-          result = await handleInterestState(handlerCtx);
-          break;
+      const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision, history: historyFormatted, bubbleCorrelationId };
 
-        case ConversationState.RESERVATION_SENT:
-        case ConversationState.COMPLETED:
-          result = await handleInterestState(handlerCtx);
-          break;
+      if (activeConversation.is_human_handling) {
+        result = await handleHumanHandlingState(handlerCtx);
+      } else {
+        switch (activeConversation.current_state) {
+          case ConversationState.INITIAL:
+            result = await handleGreetingState(handlerCtx);
+            break;
 
-        case ConversationState.HUMAN_HANDLING:
-          result = await handleHumanHandlingState(handlerCtx);
-          break;
+          case ConversationState.AWAITING_LOCATION:
+            result = await handleLocationState(handlerCtx);
+            break;
 
-        default:
-          result = await handleGreetingState(handlerCtx);
-          break;
+          case ConversationState.LOCATION_CONFIRMED:
+            result = await handleLocationConfirmationState(handlerCtx);
+            break;
+
+          case ConversationState.AWAITING_INTEREST:
+            result = await handleInterestState(handlerCtx);
+            break;
+
+          case ConversationState.RESERVATION_SENT:
+          case ConversationState.COMPLETED:
+            result = await handleInterestState(handlerCtx);
+            break;
+
+          case ConversationState.HUMAN_HANDLING:
+            result = await handleHumanHandlingState(handlerCtx);
+            break;
+
+          default:
+            console.warn(`[STATE MACHINE] Unhandled state: ${activeConversation.current_state}. Defaulting to handleGreetingState.`);
+            result = await handleGreetingState(handlerCtx);
+            break;
+        }
+      }
+
+      // Kalibrasi State Pasca Intercept (Location/Greeting)
+      if (result && result.nextState && result.nextState !== activeConversation.current_state) {
+        console.log(`[STATE MACHINE] State updated from ${activeConversation.current_state} to ${result.nextState} via handler output.`);
+        activeConversation.current_state = result.nextState;
       }
     }
 
@@ -486,6 +509,7 @@ export class ConversationStateMachine {
       );
       if (finalReply === null) {
         result.shouldSendReply = false;
+        console.log(`[TERMINAL ABORT] Pesan untuk ${customer.phone} dibatalkan pengirimannya.`);
       } else {
         result.replyText = finalReply;
       }
@@ -496,38 +520,44 @@ export class ConversationStateMachine {
       const incomingBody = incomingMessage.text?.body || '';
       result.replyText = formatIslamicReply(result.replyText, incomingBody);
 
-      // --- AI OUTPUT VERIFIER (QUALITY CONTROL GUARDRAIL) ---
-      try {
-        const { AiResponseVerifierService } = await import('../services/ai-verifier.service');
-        const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
-        const allowedCatalog = treatmentCatalogService.getAllServices().map((s) => ({
-          name: s.name,
-          category: s.category,
-          minAgeMonths: s.ageTier.minAgeMonths,
-          maxAgeMonths: s.ageTier.maxAgeMonths,
-          promoPrice: s.promoPrice,
-        }));
+      // --- AI OUTPUT VERIFIER (QUALITY CONTROL GUARDRAIL - HANYA UNTUK LEGACY ENGINE) ---
+      const { isSlotFillingEnabledForCustomer: isSlotActive } = await import('../config/feature-flags');
+      const isSlotFillingActive = isSlotActive(customer.phone, tenantId);
 
-        const qc = await AiResponseVerifierService.verifyAndCorrect({
-          tenantId,
-          customerPhone: customer.phone,
-          conversationId: activeConversation.id,
-          customerMessage: incomingBody,
-          draftReply: result.replyText,
-          groundTruth: {
-            customerAgeMonths: (customer as any).age_months || (customer as any).preferences?.childAgeMonths || null,
-            customerLocation: customer.kelurahan ? `${customer.kelurahan}, ${customer.kecamatan || ''}` : null,
-            isLocationConfirmed: !!customer.kelurahan,
-            lastDiscussedTreatment: activeConversation.last_discussed_treatment,
-            allowedServices: allowedCatalog,
-          },
-        });
+      if (!isSlotFillingActive) {
+        try {
+          const { AiResponseVerifierService } = await import('../services/ai-verifier.service');
+          const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
+          const allowedCatalog = treatmentCatalogService.getAllServices().map((s) => ({
+            name: s.name,
+            category: s.category,
+            minAgeMonths: s.ageTier.minAgeMonths,
+            maxAgeMonths: s.ageTier.maxAgeMonths,
+            promoPrice: s.promoPrice,
+          }));
 
-        if (qc.finalReply) {
-          result.replyText = qc.finalReply;
+          const qc = await AiResponseVerifierService.verifyAndCorrect({
+            tenantId,
+            customerPhone: customer.phone,
+            conversationId: activeConversation.id,
+            customerMessage: incomingBody,
+            draftReply: result.replyText,
+            bubbleCorrelationId,
+            groundTruth: {
+              customerAgeMonths: (customer as any).age_months || (customer as any).preferences?.childAgeMonths || null,
+              customerLocation: customer.kelurahan ? `${customer.kelurahan}, ${customer.kecamatan || ''}` : null,
+              isLocationConfirmed: !!customer.kelurahan,
+              lastDiscussedTreatment: activeConversation.last_discussed_treatment,
+              allowedServices: allowedCatalog,
+            },
+          });
+
+          if (qc.finalReply) {
+            result.replyText = qc.finalReply;
+          }
+        } catch (verifierErr: any) {
+          console.warn('[AI VERIFIER HOOK ERROR]', verifierErr.message);
         }
-      } catch (verifierErr: any) {
-        console.warn('[AI VERIFIER HOOK ERROR]', verifierErr.message);
       }
 
       // --- STEP 1: SEND PRICELIST IMAGE FIRST (JIKA DIAKTIFKAN) ---

@@ -4,6 +4,38 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhanced & Hardened — End-to-End LLM Execution Logging, Correlation ID & Flow Cards (2026-08-25)
+
+- **Latar Belakang & Masalah yang Ditemukan:**
+  1. **Bubble Chat Terpecah & Misalignment**: Log input di layer Router (`[State: ...]`) dan Verifier (`[DRAFT QC] ...`) menyisipkan metadata sistem langsung ke `customerInput`, sehingga pemisahan bubble dan pencarian rentan gagal atau terpecah.
+  2. **Ketiadaan Correlation ID**: Pengelompokan log hanya mengandalkan kemiripan teks & window waktu. Jika customer mengirim pesan yang sama dalam waktu berdekatan, atau beberapa pesan masuk cepat, log tahapan LLM berisiko tertukar.
+  3. **Module Logging Gap (Blindspots)**: Alur `PHRASING` (parafrase natural), `SLOT_EXTRACTOR`, `SLOT_GENERATOR`, serta fallback circuit-breaker pada NLU dan legacy Intent belum tercatat ke Execution Log.
+  4. **Frontend UI Cards Terbatas**: Dashboard debug belum memiliki filter & visual card representatif untuk modul baru seperti `PHRASING`, `SLOT_EXTRACTOR`, dan `SLOT_GENERATOR`.
+- **Implementasi Perbaikan Backend & Data Logging:**
+  1. **Propagasi `bubbleCorrelationId`**:
+     - Ditambahkan ke `StateHandlerContext` (`src/state-machine/types.ts`).
+     - Diinisialisasi di ingress `machine.ts` (`incomingMessage.id || msg_...`) dan diteruskan ke: `NluClassifierService.classifyMessage`, `aiRouterService.classify`, `generateFaqResponseWithDetails`, `generateCopilotDraft`, `AiResponseVerifierService.verifyAndCorrect`, `phrasingService`, dan `llmIntentService`.
+     - `src/utils/llm-execution-logger.ts`: Ditambahkan pencocokan $O(1)$ via `correlationMap` untuk pengelompokan bubble yang presisi 100%.
+  2. **Sanitasi Pure `customerInput` & Ground Truth**:
+     - `src/integrations/llm/ai-router.ts`: `customerInput` mencatat teks murni customer (`input.lastCustomerMessage`), `currentState` dipindahkan ke `groundTruthUsed`.
+     - `src/services/ai-verifier.service.ts`: `customerInput` mencatat teks murni customer (`input.customerMessage`), `draftReply` dipindahkan ke `groundTruthUsed`.
+     - `src/utils/llm-execution-logger.ts`: Peningkatan regex `normalizeCustomerInput()` agar kebal terhadap kutipan bersarang dan format multiline.
+  3. **Pencatatan Fallback & Modul Tambahan**:
+     - `src/services/nlu-classifier.service.ts`: Mencatat `status: 'FALLBACK'` ke execution logger saat confidence $< \text{threshold}$ atau saat Circuit Breaker aktif.
+     - `src/integrations/llm/phrasing.service.ts`: Mencatat `flowType: 'PHRASING'` pada execution logger baik pada eksekusi sukses maupun fallback.
+     - `src/integrations/llm/intent.ts`: Mencatat `NLU_CLASSIFICATION` legacy saat eksekusi dan fallback.
+  4. **State Machine & Router Auto-Escalation Hardening**:
+     - Perbaikan variable shadowing pada `nluResult` dan `historyFormatted`.
+     - Router auto-escalation pada `machine.ts` mengembalikan `HUMAN_HANDLING` secara instan dan deterministik.
+- **Implementasi Perbaikan Frontend UI/UX (`Debug.tsx`):**
+  1. Menambahkan tipe union dan badge visual untuk `PHRASING`, `SLOT_EXTRACTOR`, `SLOT_GENERATOR`, `CLINICAL_ESCALATION`.
+  2. Menyediakan tombol filter flow untuk `PHRASING` dan `SLOT ENGINE`.
+  3. Membangun kartu Level 3 khusus untuk `PHRASING` (menampilkan template acuan, fakta kunci, dan hasil parafrase natural) serta kartu untuk modul `SLOT`.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/hierarchical-debug-logs.test.ts` (3/3 tests PASS, termasuk verifikasi PHRASING dan fallback tracking).
+  - Full Vitest suite: **198 test files PASS, 1,792 tests PASS (100%)**.
+  - Backend typecheck (`npm run build`) & frontend build (`npm --prefix packages/admin-dashboard run build`) 100% lolos (0 error).
+
 ### Enhanced & Fixed — LLM Execution Logs Pipeline & UX Overhaul (2026-08-25)
 
 - **Latar Belakang & Masalah Sebelumnya:**

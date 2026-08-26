@@ -78,7 +78,8 @@ describe('LLMResponseGenerator - AiModelConfigService Integration', () => {
     const payload = vi.mocked(axios.post).mock.calls[0][1] as any;
 
     // Pastikan default behavior dari AiModelConfigService untuk CHAT_REPLY
-    expect(payload.model).toBe('deepseek-v4-flash');
+    const defaultModel = AiModelConfigService.getModelConfig('CHAT_REPLY').modelName;
+    expect(payload.model).toBe(defaultModel);
     expect(payload.temperature).toBe(0.7);
     expect(payload.max_tokens).toBe(1024);
   });

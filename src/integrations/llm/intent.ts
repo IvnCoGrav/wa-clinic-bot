@@ -18,6 +18,7 @@ export interface IntentDetectionResult {
 export interface IntentAuditContext {
   conversationId?: string | null;
   customerPhone?: string;
+  bubbleCorrelationId?: string;
 }
 
 /**
@@ -145,14 +146,52 @@ Intent definitions:
       }
 
       const parsed = JSON.parse(cleanContent);
+      const detectedIntent: IntentType = parsed.intent || 'other';
+
+      try {
+        const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'NLU_CLASSIFICATION',
+          customerPhone: auditCtx?.customerPhone,
+          customerInput: userMessageText,
+          bubbleCorrelationId: auditCtx?.bubbleCorrelationId,
+          reasoning: `Legacy LLM Intent Classifier detected intent: ${detectedIntent}`,
+          rawReasoning: cleanContent,
+          groundTruthUsed: { legacyIntent: detectedIntent },
+          finalReply: `Intent: [${detectedIntent}]`,
+          confidenceScore: 0.95,
+          modelUsed: this.model,
+          durationMs: Date.now() - startedAt,
+          status: 'SUCCESS',
+        });
+      } catch {}
 
       return {
-        intent: parsed.intent || 'other',
+        intent: detectedIntent,
         confidence: 0.95,
       };
     } catch (error) {
       console.warn('[LLM INTENT ERROR] Using fallback rule-based classifier:', (error as Error).message);
-      return this.ruleBasedFallbackIntent(userMessageText);
+      const fallbackResult = this.ruleBasedFallbackIntent(userMessageText);
+
+      try {
+        const { recordLlmExecution } = await import('../../utils/llm-execution-logger');
+        recordLlmExecution({
+          flowType: 'NLU_CLASSIFICATION',
+          customerPhone: auditCtx?.customerPhone,
+          customerInput: userMessageText,
+          bubbleCorrelationId: auditCtx?.bubbleCorrelationId,
+          reasoning: `[LEGACY INTENT FALLBACK] Error: ${(error as Error).message}. Rule-based intent: ${fallbackResult.intent}`,
+          groundTruthUsed: { ruleFallback: fallbackResult.intent },
+          finalReply: `Intent: [${fallbackResult.intent}] [FALLBACK]`,
+          confidenceScore: fallbackResult.confidence,
+          modelUsed: 'rule-based-fallback',
+          durationMs: 5,
+          status: 'FALLBACK',
+        });
+      } catch {}
+
+      return fallbackResult;
     }
   }
 

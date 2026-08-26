@@ -64,6 +64,8 @@ export interface AIRouterInput {
   conversationId?: string | null;
   /** Opsional: atribusi audit LLM (llm_audit_logs.customer_phone). */
   customerPhone?: string;
+  /** Opsional: korelasi log per-bubble percakapan. */
+  bubbleCorrelationId?: string;
 }
 
 export interface AIRouterDecision {
@@ -961,7 +963,8 @@ export class AIRouterService {
         recordLlmExecution({
           flowType: 'AI_ROUTER',
           customerPhone: input.customerPhone,
-          customerInput: `[State: ${input.currentState}] "${input.lastCustomerMessage}"`,
+          customerInput: input.lastCustomerMessage,
+          bubbleCorrelationId: input.bubbleCorrelationId,
           reasoning: response.reasoning_note || `Shadow Match: ${matches} | LLM vs Rule: ${response.intent} vs ${ruleBased.intent}`,
           groundTruthUsed: {
             currentState: input.currentState,
@@ -991,7 +994,8 @@ export class AIRouterService {
       recordLlmExecution({
         flowType: 'AI_ROUTER',
         customerPhone: input.customerPhone,
-        customerInput: `[State: ${input.currentState}] "${input.lastCustomerMessage}"`,
+        customerInput: input.lastCustomerMessage,
+        bubbleCorrelationId: input.bubbleCorrelationId,
         reasoning: response.reasoning_note,
         groundTruthUsed: {
           currentState: input.currentState,
