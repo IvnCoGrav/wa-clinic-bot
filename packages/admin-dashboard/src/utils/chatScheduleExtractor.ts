@@ -24,6 +24,15 @@ export interface ExtractedScheduleData {
   confidenceScore: number;
 }
 
+export interface ClinicServiceCatalogItem {
+  id?: string;
+  name: string;
+  price?: number;
+  promoPrice?: number;
+  originalPrice?: number;
+  category?: string;
+}
+
 const MONTH_NAMES = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -46,15 +55,38 @@ const MONTH_MAP: Record<string, number> = {
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
-const DAY_MAP: Record<string, number> = {
-  minggu: 0, ahad: 0,
-  senin: 1,
-  selasa: 2,
-  rabu: 3,
-  kamis: 4,
-  jumat: 5, "jum'at": 5,
-  sabtu: 6
-};
+const INVALID_CHILD_NAME_WORDS = new Set([
+  'sehat', 'selalu', 'yaa', 'ya', 'semoga', 'lekas', 'sembuh', 'pintar', 'pinter',
+  'lucu', 'ganteng', 'cantik', 'bobo', 'tidur', 'nangis', 'bapil', 'batuk', 'pilek',
+  'kembung', 'demam', 'pijat', 'treatment', 'usia', 'umur', 'bulan', 'tahun',
+  'terimakasih', 'makasih', 'bunda', 'mama', 'ibu', 'kak', 'kakak', 'oke', 'baik',
+  'siang', 'sore', 'pagi', 'malam', 'amin', 'aamiin', 'si', 'kecil', 'anak', 'bayi',
+  'dedek', 'adik', 'sayang', 'iya', 'tidak', 'gak', 'bisa', 'jadwal', 'booking',
+  'alamat', 'kec', 'kota', 'kab', 'no', 'hp'
+]);
+
+/**
+ * Validasi ketat nama bayi/anak agar percakapan salam/doa ("sehat selalu yaa") tidak tertangkap sebagai nama anak
+ */
+export function isValidChildName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const clean = name.trim().replace(/^[-:.,\s]+|[-:.,\s]+$/g, '');
+  if (clean.length < 2 || clean.length > 40) return false;
+  if (/^(?:usia|umur|treatment|layanan|pilihan|nama|alamat|kec|kota|no|jam|tgl|hari|payment|total|ongkir)\b/i.test(clean)) return false;
+  
+  const words = clean.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return false;
+
+  // Reject if it contains obvious greetings/well-wishes
+  if (words.some(w => ['sehat', 'selalu', 'semoga', 'lekas', 'sembuh', 'bobo', 'bapil', 'terimakasih', 'makasih'].includes(w))) {
+    return false;
+  }
+
+  const invalidCount = words.filter(w => INVALID_CHILD_NAME_WORDS.has(w)).length;
+  if (invalidCount >= words.length) return false;
+
+  return true;
+}
 
 /**
  * Format tanggal dalam bahasa Indonesia (e.g. "Kamis 27 Agustus 2026")
@@ -126,7 +158,7 @@ export function cleanBundaName(name?: string | null, kecamatan?: string | null, 
 export function extractScheduleFromMessages(
   messages: Array<{ content?: string; direction?: string; created_at?: string }>,
   customer?: any,
-  clinicServices: Array<{ name: string; price: number; category?: string }> = []
+  clinicServices: ClinicServiceCatalogItem[] = []
 ): ExtractedScheduleData {
   const baseDate = new Date();
   let extractedDate: Date | null = null;
@@ -315,15 +347,6 @@ export function extractScheduleFromMessages(
   }
 
   // H. Ekstraksi Bagian Per Kategori: (Baby & Kids) vs (Moms)
-  // Bentuk umum form:
-  // Pilihan treatment (Baby & Kids)
-  // Nama Bayi : ...
-  // Usia Bayi/Anak : ...
-  // Treatment : ...
-  // Pilihan treatment (Moms) :
-  // Usia Kehamilan (Jika hamil): ...
-  // Treatment : ...
-
   let babySectionText = '';
   let momsSectionText = '';
 
@@ -343,26 +366,34 @@ export function extractScheduleFromMessages(
   } else if (momsIndex !== -1) {
     momsSectionText = fullChatText.slice(momsIndex);
   } else {
-    // Jika tidak ada header kategori, gunakan seluruh teks
     babySectionText = fullChatText;
   }
 
-  // Ekstraksi Data Bayi dari babySectionText (atau fullChatText)
-  const childLineMatch = babySectionText.match(/(?:nama\s*bayi|nama\s*anak)\s*[:=][ \t]*([^\r\n\t]+)/i)
-    || fullChatText.match(/(?:dedek|adik|si\s*kecil)\s+([a-zA-Z\s]{2,25})/i);
+  // Ekstraksi Data Bayi dari babySectionText (Formulir eksplisit)
+  const childLineMatch = babySectionText.match(/(?:nama\s*bayi|nama\s*anak)\s*[:=][ \t]*([^\r\n\t]+)/i);
   if (childLineMatch && childLineMatch[1].trim()) {
     let candidateName = childLineMatch[1].trim();
     candidateName = candidateName.replace(/\s+(?:usia|umur)\s+.*$/i, '').trim();
-    if (
-      candidateName &&
-      candidateName !== '-' &&
-      !/^(?:usia|umur|treatment|layanan|pilihan|nama)\b/i.test(candidateName)
-    ) {
+    if (isValidChildName(candidateName)) {
       extractedChildName = candidateName;
       isExtracted = true;
     }
   }
 
+  // Jika belum dapat dari form, coba cari dari frasa percakapan (misal: "dedek leo", "adik kenzo")
+  if (!extractedChildName) {
+    const convoMatch = fullChatText.match(/(?:dedek|adik|si\s*kecil)\s+([a-zA-Z\s]{2,20})/i);
+    if (convoMatch && convoMatch[1].trim()) {
+      let candidateName = convoMatch[1].trim();
+      candidateName = candidateName.replace(/\s+(?:usia|umur|lagi|mau|bisa|nya)\s+.*$/i, '').trim();
+      if (isValidChildName(candidateName)) {
+        extractedChildName = candidateName;
+        isExtracted = true;
+      }
+    }
+  }
+
+  // Ekstraksi Usia Bayi
   const ageLineMatch = babySectionText.match(/(?:usia\s*(?:bayi\/anak|anak|bayi)?|umur)\s*[:=][ \t]*([^\r\n\t]+)/i)
     || fullChatText.match(/(?:usia|umur)\s+([0-9]+\s*(?:tahun|thn|bln|bulan)(?:\s*[0-9]+\s*(?:bln|bulan))?)/i);
   if (ageLineMatch && ageLineMatch[1].trim()) {
@@ -487,10 +518,10 @@ export function extractScheduleFromMessages(
     }
   }
 
-  // 2. Data Anak dari Database
+  // 2. Data Anak dari Database (Prioritas jika chat tidak punya nama anak valid)
   if (customer?.children && customer.children.length > 0) {
     const firstChild = customer.children[0];
-    if (!extractedChildName && firstChild.name) {
+    if (!extractedChildName && isValidChildName(firstChild.name)) {
       extractedChildName = firstChild.name;
     }
     if (!extractedChildAge) {
@@ -558,8 +589,9 @@ export function extractScheduleFromMessages(
   // 5. Pencocokan Treatment dengan Katalog Layanan
   if (!extractedTreatment) {
     if (clinicServices.length > 0) {
-      extractedTreatment = clinicServices[0].name;
-      extractedPrice = clinicServices[0].price;
+      const s0 = clinicServices[0];
+      extractedTreatment = s0.name;
+      extractedPrice = Number(s0.promoPrice ?? s0.price ?? s0.originalPrice ?? 60000);
     } else {
       extractedTreatment = 'Pijat Ceria';
       extractedPrice = 60000;
@@ -570,7 +602,11 @@ export function extractScheduleFromMessages(
       (s) => s.name.toLowerCase() === extractedTreatment.toLowerCase() ||
              extractedTreatment.toLowerCase().includes(s.name.toLowerCase())
     );
-    extractedPrice = matchedService?.price || 60000;
+    if (matchedService) {
+      extractedPrice = Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000);
+    } else {
+      extractedPrice = 60000;
+    }
   }
 
   // Tentukan Kategori Layanan jika belum terdefinisi

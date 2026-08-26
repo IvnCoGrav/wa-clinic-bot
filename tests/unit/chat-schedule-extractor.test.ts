@@ -210,6 +210,28 @@ Terimakasih.  ☺️`;
     expect(extracted.phone).toBe('082140771756');
   });
 
+  it('should not extract conversational well-wishes like "sehat selalu yaa" as child name', () => {
+    const messages = [
+      { direction: 'INBOUND', content: 'Kak mau tanya treatment baby' },
+      { direction: 'OUTBOUND', content: 'Halo bunda! Ada promo baby massage ya' },
+      { direction: 'INBOUND', content: 'Oke kak besok kamis jam 15.00 ya' },
+      { direction: 'OUTBOUND', content: 'Baik bunda, semoga si kecil sehat selalu yaa 🥰' },
+    ];
+
+    const customer = {
+      name: 'Bunda Vita Sidoarjo',
+      phone: '6282140771756',
+      children: [
+        { name: 'Arviano Rizqi Al-Fatih', raw_age_text: '1 bulan' },
+      ],
+    };
+
+    const extracted = extractScheduleFromMessages(messages, customer);
+
+    expect(extracted.childName).toBe('Arviano Rizqi Al-Fatih'); // MUST be database child name, NOT "sehat selalu yaa"
+    expect(extracted.childName).not.toContain('sehat');
+  });
+
   it('should parse various price strings accurately', () => {
     expect(parsePriceText('80.000')).toBe(80000);
     expect(parsePriceText('80rb')).toBe(80000);
