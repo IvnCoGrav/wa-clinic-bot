@@ -13,8 +13,9 @@ import {
   Check,
   Truck,
   Sparkle,
+  Percent,
 } from 'lucide-react';
-import { ExtractedScheduleData, formatIndonesianDate } from '../../utils/chatScheduleExtractor';
+import { ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
 import { useUiFeedback } from '../common/UiFeedback';
 
 interface InvoiceGeneratorModalProps {
@@ -45,7 +46,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     return Number(km).toFixed(1).replace('.', ',');
   };
 
-  // Form State with bulletproof defaults
+  // Form State with clean empty defaults
   const [dateDisplay, setDateDisplay] = useState('');
   const [timeDisplay, setTimeDisplay] = useState('12.00-12.30');
   const [bundaName, setBundaName] = useState('');
@@ -54,12 +55,13 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const [kecamatan, setKecamatan] = useState('');
   const [kota, setKota] = useState('');
   const [category, setCategory] = useState<'BABY' | 'MOMS'>('BABY');
-  const [childName, setChildName] = useState('leo');
-  const [childAge, setChildAge] = useState('3tahun 7 bulan');
-  const [treatmentName, setTreatmentName] = useState('pijat ceria');
+  const [childName, setChildName] = useState('');
+  const [childAge, setChildAge] = useState('');
+  const [treatmentName, setTreatmentName] = useState('Pijat Ceria');
   const [treatmentPrice, setTreatmentPrice] = useState<number>(60000);
   const [distanceKm, setDistanceKm] = useState<number>(3.0);
   const [ongkir, setOngkir] = useState<number>(0);
+  const [discount, setDiscount] = useState<number>(0);
   const [copied, setCopied] = useState(false);
 
   // Sync state whenever initialData or isOpen changes
@@ -67,18 +69,19 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     if (isOpen && initialData) {
       setDateDisplay(initialData.dateDisplay || formatIndonesianDate(initialData.bookingDate || new Date()));
       setTimeDisplay(initialData.timeDisplay || '12.00-12.30');
-      setBundaName((initialData.bundaName || '').trim());
+      setBundaName(cleanBundaName(initialData.bundaName, initialData.kecamatan, initialData.kota));
       setPhone((initialData.phone || '').trim());
       setAddress((initialData.address || '').trim());
       setKecamatan((initialData.kecamatan || '').trim());
       setKota((initialData.kota || '').trim());
       setCategory(initialData.treatmentCategory === 'MOMS' ? 'MOMS' : 'BABY');
-      setChildName(initialData.childName || 'leo');
-      setChildAge(initialData.childAge || '3tahun 7 bulan');
-      setTreatmentName(initialData.treatmentName || 'pijat ceria');
+      setChildName(initialData.childName || '');
+      setChildAge(initialData.childAge || '');
+      setTreatmentName(initialData.treatmentName || 'Pijat Ceria');
       setTreatmentPrice(Number(initialData.treatmentPrice) || 60000);
       setDistanceKm(Number(initialData.distanceKm) || 3.0);
       setOngkir(Number(initialData.ongkir) || 0);
+      setDiscount(Number(initialData.discount) || 0);
     }
   }, [isOpen, initialData]);
 
@@ -86,8 +89,9 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const totalPrice = useMemo(() => {
     const p = Number(treatmentPrice) || 0;
     const o = Number(ongkir) || 0;
-    return Math.max(0, p + o);
-  }, [treatmentPrice, ongkir]);
+    const d = Number(discount) || 0;
+    return Math.max(0, p + o - d);
+  }, [treatmentPrice, ongkir, discount]);
 
   // Generate WhatsApp Invoice Text
   const generatedInvoiceText = useMemo(() => {
@@ -106,6 +110,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     const safeKec = (kecamatan || '').trim();
     const safeKota = (kota || '').trim();
     const safePhone = (phone || '').trim();
+    const safeDiscount = Number(discount) || 0;
 
     const lines: string[] = [
       'Berikut reservasi 🐣',
@@ -139,7 +144,14 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
       '',
       'Payment : ',
       `Treatment = ${formatRp(treatmentPrice)}`,
-      `Ongkir ${kmStr} km = ${ongkirStr}`,
+      `Ongkir ${kmStr} km = ${ongkirStr}`
+    );
+
+    if (safeDiscount > 0) {
+      lines.push(`Promo ongkir = - ${formatRp(safeDiscount)}`);
+    }
+
+    lines.push(
       `Total = ${formatRp(totalPrice)}`,
       '',
       'H-1 sebelum treatment akan kami reminder kembali bunda 🥰',
@@ -162,6 +174,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     treatmentPrice,
     distanceKm,
     ongkir,
+    discount,
     totalPrice,
   ]);
 
@@ -221,33 +234,33 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 )}
               </h3>
               <p className="text-[11px] text-white/80">
-                Periksa & sesuaikan tanggal, jam, atau ongkir sebelum dikirim ke Bunda
+                Verifikasi atau edit rincian reservasi sebelum dikirim ke box chat WhatsApp.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl hover:bg-white/20 text-white/90 hover:text-white transition active:scale-95 cursor-pointer"
+            className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* Modal Body: Two Columns */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 bg-[#f8fafc]">
-          {/* Left Column: Form Controls (7 Cols) */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* Section 1: Jadwal & Waktu */}
+        {/* Modal Body: 2 Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 flex-1 overflow-y-auto divide-y lg:divide-y-0 lg:divide-x divide-[#e9edef] bg-[#f8fafc]">
+          {/* Left Column: Form Controls */}
+          <div className="lg:col-span-7 p-4 sm:p-5 space-y-4 overflow-y-auto max-h-[70vh]">
+            {/* Section 1: Tanggal & Waktu */}
             <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
               <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
                 <Calendar size={14} />
-                <span>Jadwal Kunjungan</span>
+                <span>Jadwal Reservasi</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
-                    Hari dan Tanggal
+                    Hari & Tanggal
                   </label>
                   <input
                     type="text"
@@ -259,27 +272,24 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
-                    Jam Kunjungan
+                    Jam Treatment
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={timeDisplay}
-                      onChange={(e) => setTimeDisplay(e.target.value)}
-                      placeholder="e.g. 12.00-12.30"
-                      className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
-                    />
-                    <Clock size={13} className="absolute right-2.5 top-2.5 text-[#8696a0]" />
-                  </div>
+                  <input
+                    type="text"
+                    value={timeDisplay}
+                    onChange={(e) => setTimeDisplay(e.target.value)}
+                    placeholder="e.g. 12.00-12.30"
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Section 2: Data Bunda & Alamat */}
+            {/* Section 2: Data Pelanggan */}
             <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
               <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
                 <User size={14} />
-                <span>Data Bunda & Lokasi</span>
+                <span>Data Pasien & Lokasi</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
@@ -290,22 +300,21 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     type="text"
                     value={bundaName}
                     onChange={(e) => setBundaName(e.target.value)}
+                    placeholder="Nama Bunda..."
                     className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
-                    No. WhatsApp
+                    No. Handphone
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition font-mono"
-                    />
-                    <Phone size={13} className="absolute right-2.5 top-2.5 text-[#8696a0]" />
-                  </div>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="08..."
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
+                  />
                 </div>
               </div>
 
@@ -317,8 +326,8 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                   rows={2}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Alamat lengkap / patokan..."
-                  className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition resize-none"
+                  placeholder="Alamat lengkap..."
+                  className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition resize-none"
                 />
               </div>
 
@@ -331,20 +340,20 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     type="text"
                     value={kecamatan}
                     onChange={(e) => setKecamatan(e.target.value)}
-                    placeholder="e.g. Sedati"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
+                    placeholder="Kecamatan..."
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
-                    Kota
+                    Kota / Kab
                   </label>
                   <input
                     type="text"
                     value={kota}
                     onChange={(e) => setKota(e.target.value)}
-                    placeholder="e.g. Sidoarjo"
-                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
+                    placeholder="Kota..."
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-semibold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition"
                   />
                 </div>
               </div>
@@ -394,7 +403,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                       type="text"
                       value={childName}
                       onChange={(e) => setChildName(e.target.value)}
-                      placeholder="e.g. leo"
+                      placeholder="e.g. Arviano"
                       className="w-full px-3 py-1.5 bg-white border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:border-[#008069] focus:outline-none transition"
                     />
                   </div>
@@ -406,7 +415,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                       type="text"
                       value={childAge}
                       onChange={(e) => setChildAge(e.target.value)}
-                      placeholder="e.g. 3tahun 7 bulan"
+                      placeholder="e.g. 1 bulan"
                       className="w-full px-3 py-1.5 bg-white border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:border-[#008069] focus:outline-none transition"
                     />
                   </div>
@@ -464,22 +473,22 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
               </div>
             </div>
 
-            {/* Section 4: Ongkir & Kalkulasi Jarak */}
+            {/* Section 4: Ongkir & Potongan Promo */}
             <div className="p-3.5 bg-white rounded-xl border border-[#e9edef] shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-[#008069] font-bold text-xs">
                   <Truck size={14} />
-                  <span>Ongkos Kirim & Jarak</span>
+                  <span>Ongkos Kirim & Promo</span>
                 </div>
                 <span className="text-[11px] text-[#667781] font-mono">
                   Jarak: <strong className="text-[#111b21]">{formatKm(distanceKm)} km</strong>
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
-                    Jarak Tempuh (km)
+                    Jarak (km)
                   </label>
                   <input
                     type="number"
@@ -497,7 +506,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-[#54656f] mb-1">
-                    Nominal Ongkir (Rp)
+                    Ongkir (Rp)
                   </label>
                   <input
                     type="number"
@@ -508,11 +517,25 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     className="w-full px-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:bg-white focus:border-[#008069] focus:outline-none transition font-mono"
                   />
                 </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-rose-600 mb-1 flex items-center gap-1">
+                    <Percent size={11} />
+                    <span>Diskon / Promo (Rp)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={discount}
+                    onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                    step={5000}
+                    min={0}
+                    className="w-full px-3 py-1.5 bg-[#f8fafc] border border-rose-200 rounded-lg text-xs font-bold text-rose-600 focus:bg-white focus:border-rose-500 focus:outline-none transition font-mono"
+                  />
+                </div>
               </div>
 
-              {/* Quick Ongkir Shortcuts */}
+              {/* Quick Ongkir & Promo Shortcuts */}
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[10px] text-[#8696a0] font-semibold">Pilih Cepat:</span>
+                <span className="text-[10px] text-[#8696a0] font-semibold">Shortcut Ongkir:</span>
                 <button
                   type="button"
                   onClick={() => setOngkir(0)}
@@ -546,111 +569,129 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                 >
                   15.000
                 </button>
+
+                <div className="h-3 w-px bg-gray-300 mx-1"></div>
+
+                <span className="text-[10px] text-rose-600 font-semibold">Promo:</span>
                 <button
                   type="button"
-                  onClick={() => setOngkir(20000)}
+                  onClick={() => setDiscount(0)}
                   className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition cursor-pointer ${
-                    ongkir === 20000
-                      ? 'bg-sky-600 text-white border-sky-600'
-                      : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'
+                    discount === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-200'
                   }`}
                 >
-                  20.000
+                  Tanpa Diskon
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOngkir(25000)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition cursor-pointer ${
-                    ongkir === 25000
-                      ? 'bg-sky-600 text-white border-sky-600'
-                      : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'
+                  onClick={() => setDiscount(5000)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                    discount === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 text-rose-700 border-rose-200'
                   }`}
                 >
-                  25.000
+                  -5.000
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscount(10000)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition cursor-pointer ${
+                    discount === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}
+                >
+                  -10.000
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Live WhatsApp Preview (5 Cols) */}
-          <div className="lg:col-span-5 flex flex-col space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold text-[#54656f] uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkle size={13} className="text-emerald-600" />
-                <span>Live Preview Pesan WhatsApp</span>
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
-                Total: Rp {formatRp(totalPrice)}
-              </span>
-            </div>
-
-            {/* WhatsApp Bubble Mockup */}
-            <div className="flex-1 bg-[#efeae2] p-3 sm:p-4 rounded-2xl border border-[#d1d7db] shadow-inner flex flex-col justify-between relative overflow-hidden min-h-[380px]">
-              {/* WhatsApp Wallpaper Texture Overlay */}
-              <div
-                className="absolute inset-0 opacity-[0.04] pointer-events-none"
-                style={{
-                  backgroundImage: `radial-gradient(#000 1px, transparent 1px)`,
-                  backgroundSize: '16px 16px',
-                }}
-              />
-
-              {/* Message Bubble */}
-              <div className="bg-white rounded-2xl rounded-tl-none p-3.5 shadow-md border border-black/5 max-w-[96%] relative z-10 space-y-2">
-                <p className="text-[11px] font-bold text-[#008069] flex items-center gap-1">
-                  <span>Klinik Homecare</span>
-                  <span className="text-[9px] px-1 bg-emerald-100 rounded text-emerald-800">CS</span>
-                </p>
-                <div className="text-xs text-[#111b21] leading-relaxed whitespace-pre-wrap font-sans select-text">
-                  {generatedInvoiceText}
+          {/* Right Column: Live WhatsApp Preview */}
+          <div className="lg:col-span-5 p-4 sm:p-5 flex flex-col justify-between bg-[#efeae2]/40 relative">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-[#111b21]">
+                  <Sparkles size={14} className="text-[#008069]" />
+                  <span>Live Preview WhatsApp</span>
                 </div>
-                <div className="flex justify-end items-center space-x-1 pt-1 text-[10px] text-[#8696a0]">
-                  <span>{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')}</span>
-                  <Check size={12} className="text-[#53bdeb]" />
-                </div>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-[#d1d7db] text-[11px] font-semibold text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] transition flex items-center space-x-1 shadow-2xs cursor-pointer"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={12} className="text-emerald-600" />
+                      <span className="text-emerald-600 font-bold">Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} />
+                      <span>Salin Format</span>
+                    </>
+                  )}
+                </button>
               </div>
 
-              {/* Summary Bottom Bar */}
-              <div className="mt-3 p-3 bg-white/95 backdrop-blur-xs rounded-xl border border-black/10 shadow-sm relative z-10 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold text-[#667781]">Total Biaya</p>
-                  <p className="text-sm font-extrabold text-[#008069]">
-                    Rp {formatRp(totalPrice)}
-                  </p>
+              {/* WhatsApp Bubble Simulation */}
+              <div className="p-4 bg-white rounded-2xl rounded-tr-none shadow-md border border-[#e2ddd5] font-sans text-xs text-[#111b21] leading-relaxed whitespace-pre-wrap select-text relative">
+                {generatedInvoiceText}
+                <div className="text-[10px] text-[#8696a0] text-right mt-2 flex items-center justify-end space-x-1">
+                  <span>{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')}</span>
+                  <Check size={12} className="text-sky-500" />
                 </div>
-                <div className="text-right text-[10px] text-[#667781]">
-                  <p>Layanan: Rp {formatRp(treatmentPrice)}</p>
-                  <p>Ongkir: {ongkir === 0 ? 'Free' : `Rp ${formatRp(ongkir)}`}</p>
+              </div>
+            </div>
+
+            {/* Total Summary Card */}
+            <div className="mt-4 p-3 bg-white rounded-xl border border-[#d1d7db] shadow-xs space-y-1.5">
+              <div className="flex justify-between text-xs text-[#667781]">
+                <span>Harga Treatment:</span>
+                <span className="font-semibold text-[#111b21]">Rp {formatRp(treatmentPrice)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-[#667781]">
+                <span>Ongkos Kirim:</span>
+                <span className="font-semibold text-[#111b21]">
+                  {Number(ongkir) === 0 ? 'Free' : `Rp ${formatRp(ongkir)}`}
+                </span>
+              </div>
+              {Number(discount) > 0 && (
+                <div className="flex justify-between text-xs text-rose-600">
+                  <span>Potongan / Promo:</span>
+                  <span className="font-semibold">- Rp {formatRp(discount)}</span>
                 </div>
+              )}
+              <div className="pt-1.5 border-t border-[#e9edef] flex justify-between text-sm font-bold text-[#008069]">
+                <span>Total Pembayaran:</span>
+                <span>Rp {formatRp(totalPrice)}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Modal Footer Actions */}
-        <div className="px-5 py-3.5 bg-white border-t border-[#e9edef] flex flex-wrap items-center justify-between gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-[#d1d7db] hover:bg-[#f8fafc] text-xs font-semibold text-[#54656f] transition active:scale-95 cursor-pointer"
-          >
-            Batal
-          </button>
-
-          <div className="flex items-center space-x-2">
+        {/* Modal Footer */}
+        <div className="px-5 py-3 bg-[#f0f2f5] border-t border-[#e9edef] flex flex-col sm:flex-row justify-between items-center gap-2 shrink-0">
+          <div className="text-[11px] text-[#667781] text-center sm:text-left">
+            Total Tagihan: <strong className="text-[#008069] font-bold">Rp {formatRp(totalPrice)}</strong>
+          </div>
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#54656f] hover:bg-[#f8fafc] hover:text-[#111b21] transition cursor-pointer shadow-2xs"
+            >
+              Batal
+            </button>
             <button
               type="button"
               onClick={handleCopy}
-              className="px-3.5 py-2 bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-xs font-bold rounded-xl transition shadow-2xs flex items-center space-x-1.5 active:scale-95 cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-[#e8f5f2] border border-[#c2e7e0] text-xs font-bold text-[#008069] hover:bg-[#c2e7e0] transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
             >
-              <Copy size={14} className={copied ? 'text-emerald-600' : 'text-[#54656f]'} />
-              <span>{copied ? 'Tersalin!' : 'Salin Format Saja'}</span>
+              <Copy size={14} />
+              <span>Salin Format Saja</span>
             </button>
-
             <button
               type="button"
               onClick={handleInsert}
-              className="px-5 py-2 bg-[#008069] hover:bg-[#00a884] text-white text-xs font-extrabold rounded-xl transition shadow-md flex items-center space-x-2 active:scale-95 cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95"
             >
               <Send size={14} />
               <span>Masukkan ke Chat WA</span>
