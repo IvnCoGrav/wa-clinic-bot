@@ -48,11 +48,15 @@ import {
   Eye,
   Ban,
   Reply,
+  CalendarPlus,
+  Receipt,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
+import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
+import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { emitBootPhase } from '../../lib/bootProgress';
 
 interface QuotedMessageData {
@@ -295,6 +299,7 @@ export const LiveChatMonitor: React.FC = () => {
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
+  const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<HTMLDivElement>(null);
@@ -1401,6 +1406,82 @@ export const LiveChatMonitor: React.FC = () => {
         if (data) setSelectedReservation(data);
       } catch {}
     }
+  };
+
+  const handleOpenQuickReservation = async () => {
+    if (!selectedChat) {
+      toast('Pilih percakapan customer terlebih dahulu.', 'info');
+      return;
+    }
+    if (reservationStaffList.length === 0) {
+      try {
+        const staffRes = await apiRequest('/api/admin/staff');
+        if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
+        else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
+      } catch {}
+    }
+    // Pastikan customer detail terbaru termuat
+    if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
+      try {
+        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
+        if (res?.data) setCustomerDetailData(res.data);
+      } catch {}
+    }
+    setShowQuickBookingModal(true);
+  };
+
+  const handleGenerateAndInsertInvoice = async (resItem: any) => {
+    const custData = customerDetailData || (selectedChat ? {
+      id: selectedChat.customerId,
+      name: selectedChat.customerName,
+      phone: selectedChat.customerPhone,
+      kelurahan: (selectedChat as any).kelurahan || null,
+      kecamatan: (selectedChat as any).kecamatan || null,
+      kota: (selectedChat as any).kota || null,
+      children: (selectedChat as any).children || [],
+      ongkir: (selectedChat as any).ongkir ?? 0,
+      distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
+    } : null);
+
+    const invoiceText = generateReservationInvoiceText({
+      reservation: resItem,
+      customer: custData,
+    });
+
+    if (chatInputRef.current) {
+      chatInputRef.current.innerText = invoiceText;
+      setReplyText(invoiceText);
+      chatInputRef.current.focus();
+    }
+
+    try {
+      await navigator.clipboard.writeText(invoiceText);
+      toast('Format rincian invoice WhatsApp berhasil dimasukkan ke box chat & disalin ke clipboard! 🐣', 'success');
+    } catch {
+      toast('Format rincian invoice berhasil dimasukkan ke box chat!', 'info');
+    }
+  };
+
+  const handleGenerateActiveReservationInvoice = async () => {
+    let reservations = customerDetailData?.reservations;
+    if (!reservations && selectedChat?.customerId) {
+      try {
+        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
+        if (res?.data) {
+          setCustomerDetailData(res.data);
+          reservations = res.data.reservations;
+        }
+      } catch {}
+    }
+
+    if (!reservations || reservations.length === 0) {
+      toast('Customer ini belum memiliki jadwal reservasi tersimpan. Klik "Buat Reservasi Baru" terlebih dahulu.', 'info');
+      return;
+    }
+
+    // Gunakan reservasi teratas (paling mutakhir)
+    const latestRes = reservations[0];
+    await handleGenerateAndInsertInvoice(latestRes);
   };
 
   const handleSendReply = async () => {
@@ -2703,7 +2784,45 @@ export const LiveChatMonitor: React.FC = () => {
                             </div>
                           </button>
 
-                          {/* Option 2: Image Attachment */}
+                          {/* Option 2: Quick Create Reservation */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              handleOpenQuickReservation();
+                            }}
+                            disabled={!selectedChat || sending}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-emerald-50/80 hover:text-[#008069] transition text-left group disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-emerald-100/80 text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <CalendarPlus size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">Buat Reservasi Baru</p>
+                              <p className="text-[10px] text-[#667781] truncate">Auto-fill data pasien & anak</p>
+                            </div>
+                          </button>
+
+                          {/* Option 3: Generate Invoice / Payment */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              handleGenerateActiveReservationInvoice();
+                            }}
+                            disabled={!selectedChat || sending}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-sky-50/80 hover:text-sky-700 transition text-left group disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-sky-100/80 text-sky-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <Receipt size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">Generate Invoice / Payment</p>
+                              <p className="text-[10px] text-[#667781] truncate">Isi format rincian ke chat</p>
+                            </div>
+                          </button>
+
+                          {/* Option 4: Image Attachment */}
                           <button
                             type="button"
                             onClick={() => {
@@ -2915,19 +3034,32 @@ export const LiveChatMonitor: React.FC = () => {
                                   <span>Bidan: {r.assigned_staff?.name || r.assigned_staff_name || 'Belum ditugaskan'}</span>
                                 </p>
                               </div>
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase shrink-0 ml-2 ${
-                                r.status === 'confirmed'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.status === 'pending'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {r.status}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-[#8696a0] italic flex items-center space-x-1"><Eye size={10} /><span>Klik card untuk lihat detail lengkap</span></p>
+                              <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGenerateAndInsertInvoice(r);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition shadow-2xs group-hover:border-sky-300"
+                                  title="Generate & Masukkan Format Invoice ke Box Chat WhatsApp"
+                                >
+                                  <Receipt size={13} />
+                                </button>
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                                  r.status === 'confirmed'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : r.status === 'pending'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {r.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-[#8696a0] italic flex items-center space-x-1"><Eye size={10} /><span>Klik card untuk lihat detail lengkap</span></p>
                       </>
                     )}
                   </div>
@@ -3004,6 +3136,34 @@ export const LiveChatMonitor: React.FC = () => {
           onOpenEditLocation={() => toast('Edit lokasi via menu Reservations untuk akses penuh.', 'info')}
           onProofView={(r) => window.open(r.proof_url!, '_blank')}
           onHousePhotoView={(url) => window.open(url, '_blank')}
+        />
+      )}
+
+      {/* Quick Create Reservation Modal dari Live Chat */}
+      {showQuickBookingModal && (
+        <CreateReservationModal
+          isOpen={showQuickBookingModal}
+          onClose={() => setShowQuickBookingModal(false)}
+          staffList={reservationStaffList}
+          initialCustomer={customerDetailData || (selectedChat?.customerId ? {
+            id: selectedChat.customerId,
+            name: selectedChat.customerName,
+            phone: selectedChat.customerPhone,
+            kelurahan: (selectedChat as any).kelurahan || null,
+            kecamatan: (selectedChat as any).kecamatan || null,
+            kota: (selectedChat as any).kota || null,
+            children: (selectedChat as any).children || [],
+            ongkir: (selectedChat as any).ongkir ?? 0,
+            distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
+          } : null)}
+          initialCustomerId={selectedChat?.customerId}
+          onSuccess={async (newRes) => {
+            setShowQuickBookingModal(false);
+            await handleReservationUpdate();
+            if (newRes) {
+              handleGenerateAndInsertInvoice(newRes);
+            }
+          }}
         />
       )}
 
