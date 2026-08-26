@@ -225,9 +225,6 @@ export const LiveChatMonitor: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [replyText, setReplyText] = useState('');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
-  const bubbleLongPressTimerRef = useRef<any>(null);
-  const bubbleLongPressTriggeredRef = useRef(false);
-  const bubbleTouchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleSelectReply = (msg: ChatMessage) => {
     if (msg.is_revoked || (msg as any).isRevoked) return;
@@ -237,57 +234,6 @@ export const LiveChatMonitor: React.FC = () => {
         chatInputRef.current.focus();
       }
     }, 50);
-  };
-
-  const handleBubbleTouchStart = (msg: ChatMessage, e: React.TouchEvent) => {
-    bubbleLongPressTriggeredRef.current = false;
-    const touch = e.touches[0];
-    if (!touch) return;
-    bubbleTouchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-
-    if (bubbleLongPressTimerRef.current) clearTimeout(bubbleLongPressTimerRef.current);
-    bubbleLongPressTimerRef.current = setTimeout(() => {
-      bubbleLongPressTriggeredRef.current = true;
-      handleSelectReply(msg);
-    }, 400);
-  };
-
-  const handleBubbleTouchMove = (e: React.TouchEvent) => {
-    if (!bubbleTouchStartPosRef.current || e.touches.length === 0) return;
-    const touch = e.touches[0];
-    const deltaX = Math.abs(touch.clientX - bubbleTouchStartPosRef.current.x);
-    const deltaY = Math.abs(touch.clientY - bubbleTouchStartPosRef.current.y);
-    if (deltaX > 10 || deltaY > 10) {
-      if (bubbleLongPressTimerRef.current) {
-        clearTimeout(bubbleLongPressTimerRef.current);
-        bubbleLongPressTimerRef.current = null;
-      }
-    }
-  };
-
-  const handleBubbleTouchEnd = () => {
-    if (bubbleLongPressTimerRef.current) {
-      clearTimeout(bubbleLongPressTimerRef.current);
-      bubbleLongPressTimerRef.current = null;
-    }
-    bubbleTouchStartPosRef.current = null;
-  };
-
-  const handleBubbleMouseDown = (msg: ChatMessage, e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    bubbleLongPressTriggeredRef.current = false;
-    if (bubbleLongPressTimerRef.current) clearTimeout(bubbleLongPressTimerRef.current);
-    bubbleLongPressTimerRef.current = setTimeout(() => {
-      bubbleLongPressTriggeredRef.current = true;
-      handleSelectReply(msg);
-    }, 400);
-  };
-
-  const handleBubbleMouseUp = () => {
-    if (bubbleLongPressTimerRef.current) {
-      clearTimeout(bubbleLongPressTimerRef.current);
-      bubbleLongPressTimerRef.current = null;
-    }
   };
 
   const [sending, setSending] = useState(false);
@@ -2492,13 +2438,7 @@ export const LiveChatMonitor: React.FC = () => {
                             className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300`}
                           >
                             <div
-                              onTouchStart={(e) => handleBubbleTouchStart(msg, e)}
-                              onTouchMove={handleBubbleTouchMove}
-                              onTouchEnd={handleBubbleTouchEnd}
-                              onMouseDown={(e) => handleBubbleMouseDown(msg, e)}
-                              onMouseUp={handleBubbleMouseUp}
-                              onMouseLeave={handleBubbleMouseUp}
-                              className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs transition-all ${
+                              className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs transition-all select-text cursor-text ${
                                 isRevoked
                                   ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
                                   : isCustomer
@@ -2597,7 +2537,7 @@ export const LiveChatMonitor: React.FC = () => {
                                     </div>
                                   )}
                                   {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
-                                    <p className="font-sans whitespace-pre-wrap">{msg.content}</p>
+                                    <p className="font-sans whitespace-pre-wrap select-text cursor-text">{msg.content}</p>
                                   )}
                                 </>
                               )}
@@ -2640,7 +2580,7 @@ export const LiveChatMonitor: React.FC = () => {
                                       handleSelectReply(msg);
                                     }}
                                     className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
-                                    title="Balas pesan ini (atau tahan/hold bubble)"
+                                    title="Balas pesan ini"
                                   >
                                     <Reply size={11} />
                                   </button>
