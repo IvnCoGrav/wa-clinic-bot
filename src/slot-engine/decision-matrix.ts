@@ -1,6 +1,7 @@
 import { CustomerSlate, ExtractedEntities, DecisionResult } from './types';
 import { SlateStore } from './slate-store';
 import { TEMPLATES } from '../config/persona';
+import { ConversationState } from '@prisma/client';
 
 export class DecisionMatrix {
   /**
@@ -9,7 +10,7 @@ export class DecisionMatrix {
   public static async evaluate(
     slate: CustomerSlate,
     extraction: ExtractedEntities,
-    context?: { tenantId?: string; incomingText?: string }
+    context?: { tenantId?: string; incomingText?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> }
   ): Promise<DecisionResult> {
     const updatedSlate = SlateStore.updateSlateWithExtraction(slate, extraction);
     const rawText = (context?.incomingText || '').toLowerCase().trim();
@@ -58,6 +59,30 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
+    // PRIORITY 2B: INITIAL LEAD GREETING / SAPAAN PEMBUKA IKLAN PERTAMA
+    // Mengirim template greeting resmi Kala Spa jika pesan pertama customer adalah sapaan umum/lead iklan
+    // =========================================================================
+    const isInitialConversation = (context?.history?.length ?? 0) === 0 || updatedSlate.projectedState === ConversationState.INITIAL;
+    const isLeadGreeting =
+      isInitialConversation &&
+      !extraction.locationText &&
+      !extraction.treatmentReferenced &&
+      extraction.symptoms.length === 0 &&
+      (/\b(tertarik|home-?treatment|home-?care|layanan\s+home|info\s+lengkap|halo\s+bu\s+bidan|halo\s+bunda|selamat\s+(pagi|siang|sore|malam)|assalamu'?alaikum)\b/i.test(rawText) ||
+        (rawText.length <= 80 && /\b(halo|hi|hei|p|assalamualaikum|pagi|siang|sore|malam)\b/i.test(rawText)));
+
+    if (isLeadGreeting) {
+      const isIslamic = /\b(assalamu'?alaikum|assalamualaikum)\b/i.test(rawText);
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Sapaan pembuka lead pertama -> Kirim template greeting resmi Kala Spa.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.greeting({ isIslamic }),
+      };
+    }
+
+    // =========================================================================
     // PRIORITY 4: PERTANYAAN KEBIJAKAN OPERASIONAL DETERMINISTIK (0 Token)
     // =========================================================================
     // A. Kebijakan Transport / Ongkir Multi-Anak
@@ -83,7 +108,10 @@ export class DecisionMatrix {
     }
 
     // C. Kebijakan Kualifikasi Terapis (Bidan Resmi STR)
-    if (/\b(terapisnya|bidan\s*(resmi|asli)?|punya\s*str|tersertifikasi|lulusan\s*kebidanan)\b/i.test(rawText) && (rawText.includes('terapis') || rawText.includes('bidan') || rawText.includes('str'))) {
+    if (
+      /\b(terapisnya\s+bidan|apakah\s+bidan\s*(resmi|asli)?|bidannya\s+(resmi|asli|punya\s+str)|punya\s+str|kualifikasi\s+terapis|lulusan\s+kebidanan|tersertifikasi)\b/i.test(rawText) &&
+      (rawText.includes('terapis') || rawText.includes('str') || rawText.includes('resmi') || rawText.includes('asli') || rawText.includes('lulusan') || rawText.includes('sertifik'))
+    ) {
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
         reason: 'Customer bertanya kualifikasi bidan/terapis -> Kirim template kualifikasi resmi.',
