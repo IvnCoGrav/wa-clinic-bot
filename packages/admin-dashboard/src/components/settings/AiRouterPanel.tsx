@@ -9,6 +9,8 @@ interface Props {
   handleToggleAiRouter: (val: 'enabled' | 'shadowMode', next: boolean) => void;
   aiScope: 'NEW_ONLY' | 'ALL';
   aiScopeCutoffAt: string; // format YYYY-MM-DD
+  legacyBypassBot: boolean;
+  repeatPatientBypassBot: boolean;
   aiScopeSummary: {
     totalCustomers: number;
     newCustomers: number;
@@ -16,7 +18,12 @@ interface Props {
     silencedByScope: number;
   };
   savingAiScope: boolean;
-  handleUpdateAiScope: (scope?: 'NEW_ONLY' | 'ALL', cutoffDate?: string) => Promise<void>;
+  handleUpdateAiScope: (
+    scope?: 'NEW_ONLY' | 'ALL',
+    cutoffDate?: string,
+    legacyBypass?: boolean,
+    repeatBypass?: boolean
+  ) => Promise<void>;
 }
 
 export const AiRouterPanel: React.FC<Props> = ({
@@ -26,6 +33,8 @@ export const AiRouterPanel: React.FC<Props> = ({
   handleToggleAiRouter,
   aiScope,
   aiScopeCutoffAt,
+  legacyBypassBot,
+  repeatPatientBypassBot,
   aiScopeSummary,
   savingAiScope,
   handleUpdateAiScope,
@@ -190,6 +199,47 @@ export const AiRouterPanel: React.FC<Props> = ({
                 />
                 <span>ALL (Semua Pelanggan Lama &amp; Baru)</span>
               </label>
+            </div>
+          </div>
+
+          {/* Direct Manual CS Handoff Toggles (Legacy & Repeat Customer) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {/* Legacy Customer Bypass Toggle */}
+            <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#111b21]">Pasien Legacy (CS Manual)</span>
+                <ToggleSwitch
+                  checked={legacyBypassBot}
+                  onChange={(next) => handleUpdateAiScope(undefined, undefined, next, undefined)}
+                  loading={savingAiScope}
+                  disabled={savingAiScope}
+                  onLabel="CS MANUAL"
+                  offLabel="DIBALAS BOT"
+                  size="md"
+                />
+              </div>
+              <p className="text-xs text-[#667781] leading-relaxed">
+                Semua kontak legacy (arsip chat lama &amp; impor kontak) otomatis dialihkan ke penanganan CS manusia. Bot tidak akan membalas.
+              </p>
+            </div>
+
+            {/* Repeat Patient Bypass Toggle */}
+            <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#111b21]">Pasien Pernah Treatment (CS Manual)</span>
+                <ToggleSwitch
+                  checked={repeatPatientBypassBot}
+                  onChange={(next) => handleUpdateAiScope(undefined, undefined, undefined, next)}
+                  loading={savingAiScope}
+                  disabled={savingAiScope}
+                  onLabel="CS MANUAL"
+                  offLabel="DIBALAS BOT"
+                  size="md"
+                />
+              </div>
+              <p className="text-xs text-[#667781] leading-relaxed">
+                Pasien yang sudah pernah reservasi/treatment terkonfirmasi otomatis dialihkan ke penanganan personal CS manusia. Bot tidak akan membalas.
+              </p>
             </div>
           </div>
 

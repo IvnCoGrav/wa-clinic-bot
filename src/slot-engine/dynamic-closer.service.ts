@@ -44,7 +44,7 @@ export class DynamicCloserService {
       case 'TREATMENT':
         return `PANDUAN PENUTUP: Tawarkan bantuan perawatan di kalimat penutup: "Mau kami bantu rekomendasikan perawatan terbaik untuk si kecil, Bunda? 😊"`;
       case 'SCHEDULE':
-        return `PANDUAN PENUTUP: Tanyakan jadwal kunjungan di kalimat penutup: "Bunda lebih nyaman kami jadwalkan kunjungan Bidan hari apa dan jam berapa yaa? 😊"`;
+        return `PANDUAN PENUTUP: Tanyakan preferensi jadwal kunjungan di kalimat penutup dengan santun: "Kira-kira Bunda lebih nyaman kami jadwalkan kunjungan Bidan hari apa dan jam berapa yaa? 😊" (DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia, tanyakan saja preferensi waktu Bunda).`;
     }
   }
 

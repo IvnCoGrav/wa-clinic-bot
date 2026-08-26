@@ -95,6 +95,8 @@ export const Settings: React.FC = () => {
   // AI Rollout Scope (AI hanya untuk customer baru)
   const [aiScope, setAiScope] = useState<'NEW_ONLY' | 'ALL'>('NEW_ONLY');
   const [aiScopeCutoffAt, setAiScopeCutoffAt] = useState('');
+  const [legacyBypassBot, setLegacyBypassBot] = useState(true);
+  const [repeatPatientBypassBot, setRepeatPatientBypassBot] = useState(true);
   const [aiScopeSummary, setAiScopeSummary] = useState<{
     totalCustomers: number;
     newCustomers: number;
@@ -319,6 +321,8 @@ export const Settings: React.FC = () => {
       const d = res?.data;
       if (d) {
         setAiScope(d.ai_customer_scope === 'ALL' ? 'ALL' : 'NEW_ONLY');
+        setLegacyBypassBot(d.legacy_bypass_bot !== false);
+        setRepeatPatientBypassBot(d.repeat_patient_bypass_bot !== false);
         if (d.ai_scope_cutoff_at) {
           const dt = new Date(d.ai_scope_cutoff_at);
           const y = dt.getFullYear();
@@ -333,16 +337,29 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleUpdateAiScope = async (newScope?: 'NEW_ONLY' | 'ALL', newCutoffDate?: string) => {
+  const handleUpdateAiScope = async (
+    newScope?: 'NEW_ONLY' | 'ALL',
+    newCutoffDate?: string,
+    newLegacyBypass?: boolean,
+    newRepeatBypass?: boolean
+  ) => {
     const targetScope = newScope !== undefined ? newScope : aiScope;
     const targetCutoff = newCutoffDate !== undefined ? newCutoffDate : aiScopeCutoffAt;
+    const targetLegacyBypass = newLegacyBypass !== undefined ? newLegacyBypass : legacyBypassBot;
+    const targetRepeatBypass = newRepeatBypass !== undefined ? newRepeatBypass : repeatPatientBypassBot;
 
     if (newScope !== undefined) setAiScope(newScope);
     if (newCutoffDate !== undefined) setAiScopeCutoffAt(newCutoffDate);
+    if (newLegacyBypass !== undefined) setLegacyBypassBot(newLegacyBypass);
+    if (newRepeatBypass !== undefined) setRepeatPatientBypassBot(newRepeatBypass);
 
     setSavingAiScope(true);
     try {
-      const body: any = { aiCustomerScope: targetScope };
+      const body: any = {
+        aiCustomerScope: targetScope,
+        legacyBypassBot: targetLegacyBypass,
+        repeatPatientBypassBot: targetRepeatBypass,
+      };
       if (targetCutoff) {
         const dt = new Date(`${targetCutoff}T00:00:00`);
         if (!isNaN(dt.getTime())) {
@@ -361,13 +378,15 @@ export const Settings: React.FC = () => {
         const day = String(dt.getDate()).padStart(2, '0');
         setAiScopeCutoffAt(`${y}-${m}-${day}`);
       }
+      if (d?.legacy_bypass_bot !== undefined) setLegacyBypassBot(d.legacy_bypass_bot);
+      if (d?.repeat_patient_bypass_bot !== undefined) setRepeatPatientBypassBot(d.repeat_patient_bypass_bot);
       if (res?.summary) setAiScopeSummary(res.summary);
-      toast(res?.message || 'AI Rollout Scope tersimpan.', 'success');
-      if (targetScope === 'ALL') {
+      toast(res?.message || 'Pengaturan Target Pelanggan AI tersimpan.', 'success');
+      if (targetScope === 'ALL' && newScope === 'ALL') {
         toast('Semua customer kini eligible AI. Conversation legacy yang tersenyap tetap di HUMAN_HANDLING — release manual via panel per-customer.', 'info');
       }
     } catch (err: any) {
-      toast(`Gagal menyimpan AI Rollout Scope: ${err.message}`, 'error');
+      toast(`Gagal menyimpan Target Pelanggan AI: ${err.message}`, 'error');
     } finally {
       setSavingAiScope(false);
     }
@@ -769,6 +788,8 @@ export const Settings: React.FC = () => {
         handleToggleAiRouter={handleToggleAiRouter}
         aiScope={aiScope}
         aiScopeCutoffAt={aiScopeCutoffAt}
+        legacyBypassBot={legacyBypassBot}
+        repeatPatientBypassBot={repeatPatientBypassBot}
         aiScopeSummary={aiScopeSummary}
         savingAiScope={savingAiScope}
         handleUpdateAiScope={handleUpdateAiScope}

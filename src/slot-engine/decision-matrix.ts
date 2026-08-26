@@ -106,13 +106,14 @@ export class DecisionMatrix {
 
     // =========================================================================
     // PRIORITY 5: RESOLUSI LOKASI BARU & KALKULASI ONGKIR DETERMINISTIK
-    // Dipicu jika ada locationText baru DAN (lokasi belum terkonfirmasi ATAU ada intent provide_location)
+    // Dipicu jika ada locationText baru DAN (lokasi belum terkonfirmasi ATAU ada pergantian lokasi eksplisit)
     // =========================================================================
     const hasNewLocationText = Boolean(extraction.locationText && extraction.locationText.trim().length > 0);
-    const isExplicitLocationIntent = extraction.intents.includes('provide_location');
+    const isExplicitLocationChange = /\b(ganti|pindah|salah|ubah|bukan\s+di|yang\s+bener)\b/i.test(rawText);
     const isUnconfirmedLocation = !updatedSlate.isLocationConfirmed;
+    const shouldResolveLocation = hasNewLocationText && (isUnconfirmedLocation || isExplicitLocationChange);
 
-    if (hasNewLocationText && (isUnconfirmedLocation || isExplicitLocationIntent)) {
+    if (shouldResolveLocation) {
       try {
         const { geocodingService } = await import('../integrations/google-maps/geocoding');
         const { deliveryService } = await import('../services/delivery.service');
@@ -208,6 +209,22 @@ export class DecisionMatrix {
       (Boolean(updatedSlate.preferredDate) || extraction.intents.includes('request_booking'));
 
     if (isBookingReady) {
+      try {
+        const { fireCapiEvent } = await import('../services/capi.service');
+        const { DEFAULT_TENANT_ID } = await import('../config/tenant');
+        fireCapiEvent({
+          eventName: 'InitiateCheckout',
+          customer: { id: updatedSlate.customerId, phone: updatedSlate.phone } as any,
+          tenantId: context?.tenantId || updatedSlate.tenantId || DEFAULT_TENANT_ID,
+          customData: {
+            source: 'BOT_FORM_SENT',
+            treatment: updatedSlate.selectedTreatmentName || undefined,
+          },
+        });
+      } catch (capiErr: any) {
+        console.warn('[CAPI] InitiateCheckout (BOT_FORM_SENT) skipped in decision matrix:', capiErr.message);
+      }
+
       const reservationForm = TEMPLATES.reservationFormRequest({
         name: updatedSlate.name || undefined,
         address: updatedSlate.streetDetail
