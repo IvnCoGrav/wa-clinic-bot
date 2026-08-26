@@ -2997,6 +2997,54 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Detail Alamat & Lokasi */}
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                      <MapPin size={12} />
+                      <span>Alamat & Lokasi</span>
+                    </h4>
+                    <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
+                      <div>
+                        <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat / Kelurahan</p>
+                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
+                        <div>
+                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Kecamatan</p>
+                          <p className="font-medium text-[#111b21]">{customerDetailData?.kecamatan || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Kota / Kabupaten</p>
+                          <p className="font-medium text-[#111b21]">{customerDetailData?.kota || '-'}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
+                        <div>
+                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Jarak & Ongkir</p>
+                          <p className="font-bold text-[#008069]">
+                            {customerDetailData?.distance_km != null ? `${customerDetailData.distance_km} km` : '-'} (Rp {Number(customerDetailData?.ongkir || 0).toLocaleString('id-ID')})
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-[#667781] font-semibold uppercase">Koordinat GPS</p>
+                          {customerDetailData?.lat && customerDetailData?.lng ? (
+                            <a
+                              href={`https://maps.google.com/?q=${customerDetailData.lat},${customerDetailData.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] font-bold text-sky-600 hover:underline flex items-center space-x-1"
+                            >
+                              <span>{Number(customerDetailData.lat).toFixed(4)}, {Number(customerDetailData.lng).toFixed(4)}</span>
+                              <ExternalLink size={10} />
+                            </a>
+                          ) : (
+                            <p className="text-[11px] text-[#8696a0] italic">Belum shareloc</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Children / Anak Data */}
                   <div className="space-y-2">
                     <h4 className="font-bold text-[#667781] uppercase tracking-wider text-[11px]">
@@ -3010,7 +3058,7 @@ export const LiveChatMonitor: React.FC = () => {
                           <div key={ch.id} className="p-2.5 rounded-xl border border-[#e9edef] bg-white space-y-0.5">
                             <p className="font-bold text-[#111b21]">{ch.name || 'Anak'}</p>
                             <p className="text-[#667781] text-[11px]">
-                              {ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : '-'}
+                              {ch.raw_age_text ? `Usia: ${ch.raw_age_text}` : ch.current_age ? `Usia: ${ch.current_age}` : ch.age_months ? `Usia: ${ch.age_months} bulan` : ch.birth_date ? `Lahir: ${new Date(ch.birth_date).toLocaleDateString('id-ID')}` : '-'}
                             </p>
                           </div>
                         ))}

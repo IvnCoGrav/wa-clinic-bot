@@ -105,6 +105,44 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
     }
   }
 
+  // 3b. BACKGROUND LOCATION PIN CAPTURE: Jika customer mengirim Pin Lokasi GPS saat Human Handling
+  if (ctx.incomingMessage.type === 'location' && ctx.incomingMessage.location) {
+    try {
+      const { latitude, longitude } = ctx.incomingMessage.location;
+      const numLat = Number(latitude);
+      const numLng = Number(longitude);
+      if (!isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0) {
+        const { geocodingService } = await import('../../integrations/google-maps/geocoding');
+        const { deliveryService } = await import('../../services/delivery.service');
+        const { customerService } = await import('../../services/customer.service');
+
+        const resolved = await geocodingService.reverseGeocode(numLat, numLng);
+        const delivery = await deliveryService.calculateDelivery({ lat: numLat, lng: numLng });
+
+        await customerService.updateCustomerLocation(
+          customer.id,
+          {
+            kelurahan: resolved.kelurahan,
+            kecamatan: resolved.kecamatan,
+            kota: resolved.kota,
+            lat: numLat,
+            lng: numLng,
+            distanceKm: delivery.distanceKm,
+            ongkir: delivery.ongkir,
+            isOutOfCoverage: delivery.isOutOfCoverage,
+            zipcode: resolved.zipcode,
+            isNativePin: true,
+          },
+          tenantId
+        );
+        await customerService.markShareLocationSent(customer.id, tenantId);
+        console.log(`[HUMAN HANDLER LOCATION CAPTURE] Captured GPS pin for customer ${customer.phone}: Lat ${numLat}, Lng ${numLng}, Distance ${delivery.distanceKm}km, Ongkir ${delivery.ongkir}`);
+      }
+    } catch (locErr: any) {
+      console.warn('[HUMAN HANDLER LOCATION CAPTURE ERROR]', locErr.message);
+    }
+  }
+
   // 4. Jika MASIH dalam Human Handling (< 6 jam):
   // BOT TIDAK BOLEH MEMBALAS OTOMATIS KE THREAD INI!
   console.log(`[HUMAN HANDLING ACTIVE] Conversation ${conversation.id} is managed by human agent. Bot stays silent.`);

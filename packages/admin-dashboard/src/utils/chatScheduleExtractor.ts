@@ -80,7 +80,24 @@ export function formatIndonesianDate(d?: Date | string | null): string {
 }
 
 /**
- * Ekstraksi entitas jadwal dari deretan pesan obrolan terakhir.
+ * Helper untuk parsing nominal harga (e.g. "80.000", "80rb", "80k", "free")
+ */
+export function parsePriceText(val: string | null | undefined): number | null {
+  if (!val) return null;
+  const str = val.trim().toLowerCase();
+  if (str.includes('free') || str.includes('gratis') || str === '0') return 0;
+  const cleaned = str.replace(/[^\d]/g, '');
+  if (!cleaned) return null;
+  const num = parseInt(cleaned, 10);
+  if (isNaN(num)) return null;
+  if (num < 1000 && (str.includes('k') || str.includes('rb') || str.includes('ribu'))) {
+    return num * 1000;
+  }
+  return num;
+}
+
+/**
+ * Ekstraksi entitas jadwal dari deretan pesan obrolan terakhir dan database customer.
  */
 export function extractScheduleFromMessages(
   messages: Array<{ content?: string; direction?: string; created_at?: string }>,
@@ -92,258 +109,401 @@ export function extractScheduleFromMessages(
   let rawDateText = '';
   let extractedTime = '';
   let extractedTreatment = '';
-  let extractedPrice = 60000;
+  let extractedPrice: number | null = null;
   let extractedCategory: 'BABY' | 'MOMS' | 'BUNDLE' = 'BABY';
   let extractedChildName = '';
   let extractedChildAge = '';
+  let extractedBundaName = '';
+  let extractedPhone = '';
+  let extractedAddress = '';
+  let extractedKecamatan = '';
+  let extractedKota = '';
+  let extractedDistanceKm: number | null = null;
   let extractedOngkir: number | null = null;
   let isExtracted = false;
 
-  // 1. Ambil 10 pesan terakhir dan gabungkan / analisis per bubble
-  const recentMessages = (messages || []).slice(-10);
+  // 1. Ambil 15 pesan terakhir (dari terbaru ke terlama untuk prioritas data terkini)
+  const recentMessages = (messages || []).slice(-15);
   const fullChatText = recentMessages
     .map((m) => m.content || '')
     .filter(Boolean)
     .join('\n');
 
-  const textLower = fullChatText.toLowerCase();
+  // =========================================================================
+  // TAHAP 1: EKSTRAKSI DARI STRUKTUR FORM / TEMPLATE RESERVASI DI CHAT
+  // =========================================================================
 
-  // 2. Ekstraksi Waktu / Jam
-  // Pola rentang jam: "jam 12.00-12.30", "12.00 - 12.30", "12:00-12:30", "jam 12.00 - 13.00"
-  const rangeMatch = fullChatText.match(/(?:jam|pukul)?\s*([0-2]?\d)[.:]([0-5]\d)\s*[-–]\s*([0-2]?\d)[.:]([0-5]\d)/i);
-  if (rangeMatch) {
-    const startH = rangeMatch[1].padStart(2, '0');
-    const startM = rangeMatch[2];
-    const endH = rangeMatch[3].padStart(2, '0');
-    const endM = rangeMatch[4];
-    extractedTime = `${startH}.${startM}-${endH}.${endM}`;
-    isExtracted = true;
-  } else {
-    // Pola jam tunggal: "jam 12.00", "jam 12:30", "pukul 14.00"
-    const singleTimeMatch = fullChatText.match(/(?:jam|pukul)\s*([0-2]?\d)[.:]([0-5]\d)/i);
-    if (singleTimeMatch) {
-      const h = singleTimeMatch[1].padStart(2, '0');
-      const m = singleTimeMatch[2];
-      extractedTime = `${h}.${m}`;
+  // A. Ekstraksi "Hari dan tanggal : Kamis, 27 Agustus 2026 jam 16.30-17.00"
+  const formDateMatch = fullChatText.match(/(?:hari\s*dan\s*tanggal|hari\/tgl|jadwal|tanggal)\s*[:=][ \t]*([^\r\n]+)/i);
+  if (formDateMatch && formDateMatch[1].trim()) {
+    const rawLine = formDateMatch[1].trim();
+    // Cek apakah ada jam di baris tanggal
+    const inlineTimeMatch = rawLine.match(/(?:jam|pukul)?\s*([0-2]?\d)[.:]([0-5]\d)\s*[-–]\s*([0-2]?\d)[.:]([0-5]\d)/i);
+    if (inlineTimeMatch) {
+      extractedTime = `${inlineTimeMatch[1].padStart(2, '0')}.${inlineTimeMatch[2]}-${inlineTimeMatch[3].padStart(2, '0')}.${inlineTimeMatch[4]}`;
       isExtracted = true;
     } else {
-      // Pola jam wacana: "jam 1 siang", "jam 10 pagi", "jam 2 sore", "jam 7 malam"
-      const wordTimeMatch = fullChatText.match(/(?:jam|pukul)\s*([0-1]?\d)\s*(pagi|siang|sore|malam)/i);
-      if (wordTimeMatch) {
-        let hour = parseInt(wordTimeMatch[1], 10);
-        const period = wordTimeMatch[2].toLowerCase();
-        if (period === 'siang' && hour < 12) hour += 12;
-        if (period === 'sore' && hour < 12) hour += 12;
-        if (period === 'malam' && hour < 12) hour += 12;
-        extractedTime = `${String(hour).padStart(2, '0')}.00`;
+      const singleInline = rawLine.match(/(?:jam|pukul)\s*([0-2]?\d)[.:]([0-5]\d)/i);
+      if (singleInline) {
+        extractedTime = `${singleInline[1].padStart(2, '0')}.${singleInline[2]}`;
+        isExtracted = true;
+      }
+    }
+
+    // Parse tanggal absolut dari baris form
+    const absMatch = rawLine.match(/([0-3]?\d)\s+([a-zA-Z]+)(?:\s+(\d{4}))?/i);
+    if (absMatch) {
+      const day = parseInt(absMatch[1], 10);
+      const mStr = absMatch[2].toLowerCase();
+      const month = MONTH_MAP[mStr];
+      if (month !== undefined) {
+        const year = absMatch[3] ? parseInt(absMatch[3], 10) : baseDate.getFullYear();
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) {
+          extractedDate = d;
+          rawDateText = formatIndonesianDate(d);
+          isExtracted = true;
+        }
+      }
+    }
+  }
+
+  // B. Ekstraksi Jam Mandiri jika belum didapat
+  if (!extractedTime) {
+    const rangeMatch = fullChatText.match(/(?:jam|pukul)?\s*([0-2]?\d)[.:]([0-5]\d)\s*[-–]\s*([0-2]?\d)[.:]([0-5]\d)/i);
+    if (rangeMatch) {
+      extractedTime = `${rangeMatch[1].padStart(2, '0')}.${rangeMatch[2]}-${rangeMatch[3].padStart(2, '0')}.${rangeMatch[4]}`;
+      isExtracted = true;
+    } else {
+      const singleTimeMatch = fullChatText.match(/(?:jam|pukul)\s*([0-2]?\d)[.:]([0-5]\d)/i);
+      if (singleTimeMatch) {
+        extractedTime = `${singleTimeMatch[1].padStart(2, '0')}.${singleTimeMatch[2]}`;
+        isExtracted = true;
+      } else {
+        const wordTimeMatch = fullChatText.match(/(?:jam|pukul)\s*([0-1]?\d)\s*(pagi|siang|sore|malam)/i);
+        if (wordTimeMatch) {
+          let hour = parseInt(wordTimeMatch[1], 10);
+          const period = wordTimeMatch[2].toLowerCase();
+          if (period === 'siang' && hour < 12) hour += 12;
+          if (period === 'sore' && hour < 12) hour += 12;
+          if (period === 'malam' && hour < 12) hour += 12;
+          extractedTime = `${String(hour).padStart(2, '0')}.00`;
+          isExtracted = true;
+        }
+      }
+    }
+  }
+
+  // C. Ekstraksi Tanggal Percakapan jika belum didapat
+  if (!extractedDate) {
+    const textLower = fullChatText.toLowerCase();
+    if (/\b(?:besok\s*lusa|lusa)\b/i.test(textLower)) {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + 2);
+      extractedDate = d;
+      rawDateText = formatIndonesianDate(d);
+      isExtracted = true;
+    } else if (/\b(?:besok|bsk|bso)\b/i.test(textLower)) {
+      const d = new Date(baseDate);
+      d.setDate(d.getDate() + 1);
+      extractedDate = d;
+      rawDateText = formatIndonesianDate(d);
+      isExtracted = true;
+    } else if (/\b(?:hari\s*ini)\b/i.test(textLower)) {
+      const d = new Date(baseDate);
+      extractedDate = d;
+      rawDateText = formatIndonesianDate(d);
+      isExtracted = true;
+    } else {
+      const absDateMatch = textLower.match(/(?:tgl|tanggal)?\s*([0-3]?\d)\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|mei|jun|jul|agu|ags|sep|okt|nov|des)(?:\s+(\d{4}))?/i);
+      if (absDateMatch) {
+        const day = parseInt(absDateMatch[1], 10);
+        const mStr = absDateMatch[2].toLowerCase();
+        const month = MONTH_MAP[mStr];
+        if (month !== undefined) {
+          const year = absDateMatch[3] ? parseInt(absDateMatch[3], 10) : baseDate.getFullYear();
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) {
+            extractedDate = d;
+            rawDateText = formatIndonesianDate(d);
+            isExtracted = true;
+          }
+        }
+      }
+    }
+  }
+
+  // D. Ekstraksi Nama Bunda dari baris: "Nama Bunda: Vita", "Nama: Vita"
+  const bundaLineMatch = fullChatText.match(/(?:nama\s*bunda|nama\s*pasien|nama\s*ibu|nama\s*lengkap)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  if (bundaLineMatch && bundaLineMatch[1].trim()) {
+    const rawVal = bundaLineMatch[1].trim().replace(/^(bunda|ibu|mama|ny\.?)\s+/i, '').trim();
+    if (
+      rawVal &&
+      rawVal !== '-' &&
+      rawVal !== ':' &&
+      !/^(?:alamat|kec|kota|no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawVal)
+    ) {
+      extractedBundaName = rawVal;
+      isExtracted = true;
+    }
+  }
+
+  // E. Ekstraksi Alamat dari baris: "Alamat & Shareloc :Jln gang sempati...", "Alamat : ..."
+  const addressLineMatch = fullChatText.match(/(?:alamat\s*&(?:amp;)?\s*shareloc|alamat\s*lengkap|alamat)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  if (addressLineMatch && addressLineMatch[1].trim()) {
+    const rawAddr = addressLineMatch[1].trim();
+    if (
+      rawAddr &&
+      rawAddr !== '-' &&
+      rawAddr.length > 3 &&
+      !/^(?:kec|kota|kab|no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawAddr)
+    ) {
+      extractedAddress = rawAddr;
+      isExtracted = true;
+    }
+  }
+
+  // F. Ekstraksi Kecamatan & Kota
+  const kecLineMatch = fullChatText.match(/(?:kec\s*&(?:amp;)?\s*kota|kecamatan)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  if (kecLineMatch && kecLineMatch[1].trim()) {
+    const rawKec = kecLineMatch[1].trim();
+    if (rawKec && rawKec !== '-' && !/^(?:kota|kab|no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawKec)) {
+      extractedKecamatan = rawKec;
+      isExtracted = true;
+    }
+  }
+
+  const kotaLineMatch = fullChatText.match(/(?:kota|kabupaten|kab)\s*[:=][ \t]*([^\r\n\t]+)/i);
+  if (kotaLineMatch && kotaLineMatch[1].trim()) {
+    const rawKota = kotaLineMatch[1].trim();
+    if (rawKota && rawKota !== '-' && !/^(?:no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawKota)) {
+      extractedKota = rawKota;
+      isExtracted = true;
+    }
+  }
+
+  // G. Ekstraksi No HP
+  const phoneLineMatch = fullChatText.match(/(?:no\.?\s*hp|nomor\s*hp|wa|telepon|phone)\s*[:=][ \t]*([0-9\s+-]{9,20})/i);
+  if (phoneLineMatch && phoneLineMatch[1].trim()) {
+    extractedPhone = phoneLineMatch[1].replace(/[^\d+]/g, '').trim();
+    isExtracted = true;
+  }
+
+  // H. Ekstraksi Nama Anak & Usia (Garis tunggal yang aman, cegah newline matching!)
+  const childLineMatch = fullChatText.match(/(?:nama\s*bayi|nama\s*anak)\s*[:=][ \t]*([^\r\n\t]+)/i)
+    || fullChatText.match(/(?:dedek|adik|si\s*kecil)\s+([a-zA-Z\s]{2,25})/i);
+  if (childLineMatch && childLineMatch[1].trim()) {
+    let candidateName = childLineMatch[1].trim();
+    // Jika ada kata 'usia' atau 'umur' setelah nama anak, potong
+    candidateName = candidateName.replace(/\s+(?:usia|umur)\s+.*$/i, '').trim();
+    if (
+      candidateName &&
+      candidateName !== '-' &&
+      !/^(?:usia|umur|treatment|layanan|pilihan|nama)\b/i.test(candidateName)
+    ) {
+      extractedChildName = candidateName;
+      isExtracted = true;
+    }
+  }
+
+  const ageLineMatch = fullChatText.match(/(?:usia\s*(?:bayi\/anak|anak|bayi)?|umur)\s*[:=][ \t]*([^\r\n\t]+)/i)
+    || fullChatText.match(/(?:usia|umur)\s+([0-9]+\s*(?:tahun|thn|bln|bulan)(?:\s*[0-9]+\s*(?:bln|bulan))?)/i);
+  if (ageLineMatch && ageLineMatch[1].trim()) {
+    const candidateAge = ageLineMatch[1].trim();
+    if (candidateAge && candidateAge !== '-' && !/^(?:treatment|layanan|pilihan)\b/i.test(candidateAge)) {
+      extractedChildAge = candidateAge;
+      isExtracted = true;
+    }
+  }
+
+  // H. Ekstraksi Layanan Treatment
+  const treatLineMatch = fullChatText.match(/(?:treatment|layanan|pilihan\s*treatment)\s*[:=]\s*([^\r\n]+)/i);
+  if (treatLineMatch && treatLineMatch[1].trim()) {
+    const rawTreat = treatLineMatch[1].trim().replace(/^(?:baby|moms|anak)\s*:\s*/i, '');
+    if (rawTreat && rawTreat !== '-' && !/^(?:payment|harga|total|ongkir)\b/i.test(rawTreat)) {
+      extractedTreatment = rawTreat;
+      isExtracted = true;
+    }
+  }
+
+  // I. Ekstraksi Payment Block: "Treatment = 80.000", "Ongkir 6,8km = 15.000", "Ongkir 3,0 km = free"
+  const treatPriceMatch = fullChatText.match(/treatment\s*=\s*([\d.,]+(?:\s*k|\s*rb|\s*ribu)?)/i);
+  if (treatPriceMatch) {
+    const p = parsePriceText(treatPriceMatch[1]);
+    if (p !== null) {
+      extractedPrice = p;
+      isExtracted = true;
+    }
+  }
+
+  // Match: "Ongkir 6,8km = 15.000" atau "Ongkir 6.8 km = free"
+  const ongkirKmMatch = fullChatText.match(/ongkir\s*([0-9]+(?:[.,][0-9]+)?)\s*km\s*=\s*(free|gratis|[\d.,]+(?:\s*k|\s*rb|\s*ribu)?)/i);
+  if (ongkirKmMatch) {
+    const kmStr = ongkirKmMatch[1].replace(',', '.');
+    const parsedKm = parseFloat(kmStr);
+    if (!isNaN(parsedKm)) {
+      extractedDistanceKm = parsedKm;
+    }
+    const parsedO = parsePriceText(ongkirKmMatch[2]);
+    if (parsedO !== null) {
+      extractedOngkir = parsedO;
+    }
+    isExtracted = true;
+  } else {
+    // Match sederhana: "Ongkir = 15.000", "Ongkir: 15rb", "ongkir ke lokasi bunda 15rb"
+    const simpleOngkirMatch = fullChatText.match(/ongkir\s*(?:ke\s*[^:\n\r\d]+|nya)?\s*[:=]?\s*(free|gratis|[0-9]+(?:[.,][0-9]+)?(?:\s*k|\s*rb|\s*ribu|\.000)?)/i);
+    if (simpleOngkirMatch) {
+      const parsedO = parsePriceText(simpleOngkirMatch[1]);
+      if (parsedO !== null) {
+        extractedOngkir = parsedO;
         isExtracted = true;
       }
     }
   }
 
-  // 3. Ekstraksi Hari & Tanggal
-  // Pola Relatif: "besok lusa", "lusa", "besok", "bsk", "hari ini"
-  if (/\b(?:besok\s*lusa|lusa)\b/i.test(textLower)) {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + 2);
-    extractedDate = d;
-    rawDateText = formatIndonesianDate(d);
-    isExtracted = true;
-  } else if (/\b(?:besok|bsk|bso)\b/i.test(textLower)) {
+  // =========================================================================
+  // TAHAP 2: FALLBACK & INTEGRASI DATABASE PRIORITAS
+  // =========================================================================
+
+  // 1. Data Reservasi Terakhir dari Database
+  const activeReservation = customer?.reservations?.[0];
+  if (activeReservation) {
+    if (!extractedDate && activeReservation.booking_date) {
+      const bDate = new Date(activeReservation.booking_date);
+      if (!isNaN(bDate.getTime())) {
+        extractedDate = bDate;
+        rawDateText = formatIndonesianDate(bDate);
+      }
+    }
+    if (!extractedTreatment && activeReservation.treatment_detail) {
+      extractedTreatment = activeReservation.treatment_detail.replace(/^(?:baby|moms)\s*:\s*/i, '');
+    }
+    if (extractedPrice === null && activeReservation.purchase_value) {
+      extractedPrice = Number(activeReservation.purchase_value);
+    }
+  }
+
+  // 2. Data Anak dari Database
+  if (customer?.children && customer.children.length > 0) {
+    const firstChild = customer.children[0];
+    if (!extractedChildName && firstChild.name) {
+      extractedChildName = firstChild.name;
+    }
+    if (!extractedChildAge) {
+      if (firstChild.raw_age_text) {
+        extractedChildAge = firstChild.raw_age_text;
+      } else if (firstChild.current_age) {
+        extractedChildAge = firstChild.current_age;
+      } else if (firstChild.age_months) {
+        const yrs = Math.floor(firstChild.age_months / 12);
+        const mos = firstChild.age_months % 12;
+        extractedChildAge = yrs > 0 ? `${yrs} tahun ${mos} bulan` : `${mos} bulan`;
+      }
+    }
+  }
+
+  // 3. Data Pelanggan & Lokasi dari Database
+  if (!extractedBundaName) {
+    const rawName = customer?.name || customer?.customer_name || '';
+    extractedBundaName = rawName.replace(/^(bunda|ibu|mama|ny\.?)\s+/i, '').trim();
+  }
+
+  if (!extractedPhone) {
+    extractedPhone = customer?.phone || customer?.customer_phone || '';
+  }
+
+  if (!extractedAddress) {
+    extractedAddress = customer?.address || customer?.preferences?.address || customer?.kelurahan || '';
+  }
+
+  if (!extractedKecamatan) {
+    extractedKecamatan = customer?.kecamatan || '';
+  }
+
+  if (!extractedKota) {
+    extractedKota = customer?.kota || '';
+  }
+
+  if (extractedDistanceKm === null) {
+    extractedDistanceKm = Number(customer?.distance_km ?? customer?.distanceKm ?? 3.0);
+    if (isNaN(extractedDistanceKm)) extractedDistanceKm = 3.0;
+  }
+
+  if (extractedOngkir === null) {
+    if (customer?.ongkir != null) {
+      extractedOngkir = Number(customer.ongkir);
+    } else if (extractedDistanceKm <= 3.0) {
+      extractedOngkir = 0;
+    } else {
+      extractedOngkir = Math.round((extractedDistanceKm - 3.0) * 3000);
+    }
+  }
+
+  // 4. Default Tanggal & Jam jika benar-benar belum terisi
+  if (!extractedDate) {
     const d = new Date(baseDate);
     d.setDate(d.getDate() + 1);
     extractedDate = d;
     rawDateText = formatIndonesianDate(d);
-    isExtracted = true;
-  } else if (/\b(?:hari\s*ini)\b/i.test(textLower)) {
-    const d = new Date(baseDate);
-    extractedDate = d;
-    rawDateText = formatIndonesianDate(d);
-    isExtracted = true;
   }
 
-  // Pola Tanggal Absolut: "27 agustus", "tgl 27 agustus 2026", "27-08-2026", "27/08"
-  if (!extractedDate) {
-    const absDateMatch = textLower.match(/(?:tgl|tanggal)?\s*([0-3]?\d)\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|mei|jun|jul|agu|ags|sep|okt|nov|des)(?:\s+(\d{4}))?/i);
-    if (absDateMatch) {
-      const day = parseInt(absDateMatch[1], 10);
-      const monthStr = absDateMatch[2].toLowerCase();
-      const month = MONTH_MAP[monthStr] ?? baseDate.getMonth();
-      const year = absDateMatch[3] ? parseInt(absDateMatch[3], 10) : baseDate.getFullYear();
-
-      const d = new Date(year, month, day);
-      if (!isNaN(d.getTime())) {
-        extractedDate = d;
-        rawDateText = formatIndonesianDate(d);
-        isExtracted = true;
-      }
-    }
-  }
-
-  // Pola Nama Hari: "hari kamis", "kamis depan", "rabu besok"
-  if (!extractedDate) {
-    const dayMatch = textLower.match(/(?:hari\s*)?(senin|selasa|rabu|kamis|jumat|jum'at|sabtu|minggu)/i);
-    if (dayMatch) {
-      const targetDay = DAY_MAP[dayMatch[1].toLowerCase()];
-      if (targetDay !== undefined) {
-        const currentDay = baseDate.getDay();
-        let daysAhead = targetDay - currentDay;
-        if (daysAhead <= 0) daysAhead += 7; // Hari di minggu depan jika sudah lewat
-        const d = new Date(baseDate);
-        d.setDate(d.getDate() + daysAhead);
-        extractedDate = d;
-        rawDateText = formatIndonesianDate(d);
-        isExtracted = true;
-      }
-    }
-  }
-
-  // Fallback Tanggal jika tidak terdeteksi di chat: gunakan besok
-  if (!extractedDate) {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + 1);
-    extractedDate = d;
-    rawDateText = formatIndonesianDate(d);
-  }
-
-  // Fallback Jam jika tidak terdeteksi di chat
   if (!extractedTime) {
     extractedTime = '12.00-12.30';
   }
 
-  // 4. Ekstraksi Layanan Treatment
-  // Cek katalog klinik jika tersedia
-  if (clinicServices.length > 0) {
-    for (const s of clinicServices) {
-      const sNameLower = s.name.toLowerCase();
-      if (textLower.includes(sNameLower)) {
-        extractedTreatment = s.name;
-        extractedPrice = s.price || 60000;
-        if (s.category) {
-          const cat = s.category.toUpperCase();
-          if (cat.includes('MOM') || cat.includes('HAMIL') || cat.includes('NIFAS') || cat.includes('LAKTASI')) {
-            extractedCategory = 'MOMS';
-          } else {
-            extractedCategory = 'BABY';
-          }
-        }
-        isExtracted = true;
-        break;
-      }
-    }
-  }
-
-  // Fallback pattern keyword layanan
+  // 5. Pencocokan Treatment dengan Katalog Layanan
   if (!extractedTreatment) {
-    if (textLower.includes('pijat ceria') || textLower.includes('ceria')) {
-      extractedTreatment = 'pijat ceria';
+    if (clinicServices.length > 0) {
+      extractedTreatment = clinicServices[0].name;
+      extractedPrice = clinicServices[0].price;
+    } else {
+      extractedTreatment = 'Pijat Ceria';
       extractedPrice = 60000;
-      extractedCategory = 'BABY';
-    } else if (textLower.includes('baby gym') || textLower.includes('gym')) {
-      extractedTreatment = 'Baby Massage & Gym';
-      extractedPrice = 75000;
-      extractedCategory = 'BABY';
-    } else if (textLower.includes('batuk pilek') || textLower.includes('bapil')) {
-      extractedTreatment = 'Pijat Batuk Pilek & Flu';
-      extractedPrice = 80000;
-      extractedCategory = 'BABY';
-    } else if (textLower.includes('laktasi') || textLower.includes('breast')) {
-      extractedTreatment = 'Pijat Laktasi & Breast Care';
-      extractedPrice = 120000;
-      extractedCategory = 'MOMS';
-    } else if (textLower.includes('hamil') || textLower.includes('prenatal') || textLower.includes('yoga')) {
-      extractedTreatment = 'Prenatal Gentle Yoga / Massage';
-      extractedPrice = 135000;
-      extractedCategory = 'MOMS';
-    } else {
-      extractedTreatment = 'pijat ceria';
-      extractedPrice = 60000;
-      extractedCategory = 'BABY';
     }
+  } else if (extractedPrice === null) {
+    // Cari kecocokan harga di katalog layanan
+    const matchedService = clinicServices.find(
+      (s) => s.name.toLowerCase() === extractedTreatment.toLowerCase() ||
+             extractedTreatment.toLowerCase().includes(s.name.toLowerCase())
+    );
+    extractedPrice = matchedService?.price || 60000;
   }
 
-  // 5. Ekstraksi Data Anak / Bayi
-  // Cek database customer terlebih dahulu
-  if (customer?.children && customer.children.length > 0) {
-    const firstChild = customer.children[0];
-    extractedChildName = firstChild.name || '';
-    if (firstChild.current_age) {
-      extractedChildAge = firstChild.current_age;
-    } else if (firstChild.age_months) {
-      const yrs = Math.floor(firstChild.age_months / 12);
-      const mos = firstChild.age_months % 12;
-      extractedChildAge = yrs > 0 ? `${yrs} tahun ${mos} bulan` : `${mos} bulan`;
-    }
+  // Tentukan Kategori Layanan
+  const treatLower = extractedTreatment.toLowerCase();
+  if (
+    treatLower.includes('mom') ||
+    treatLower.includes('ibu') ||
+    treatLower.includes('hamil') ||
+    treatLower.includes('nifas') ||
+    treatLower.includes('laktasi') ||
+    treatLower.includes('breast') ||
+    treatLower.includes('prenatal') ||
+    treatLower.includes('postpartum') ||
+    treatLower.includes('yoga')
+  ) {
+    extractedCategory = 'MOMS';
+  } else {
+    extractedCategory = 'BABY';
   }
-
-  // Cek apakah ada nama anak disebut di chat: "nama bayi : leo", "anak saya leo", "adik arkaan"
-  const childMatch = fullChatText.match(/(?:nama\s*bayi|nama\s*anak|dedek|adik|si\s*kecil)\s*[:=]?\s*([a-zA-Z\s]{2,20})/i);
-  if (childMatch && childMatch[1].trim()) {
-    extractedChildName = childMatch[1].trim();
-  }
-
-  const ageMatch = fullChatText.match(/(?:usia|umur)\s*[:=]?\s*([0-9]+\s*(?:tahun|thn|bln|bulan)(?:\s*[0-9]+\s*(?:bln|bulan))?)/i);
-  if (ageMatch && ageMatch[1].trim()) {
-    extractedChildAge = ageMatch[1].trim();
-  }
-
-  if (!extractedChildName && extractedCategory === 'BABY') {
-    extractedChildName = 'leo';
-  }
-  if (!extractedChildAge && extractedCategory === 'BABY') {
-    extractedChildAge = '3tahun 7 bulan';
-  }
-
-  // 6. Ekstraksi Ongkir
-  // Cek apakah ada ongkir disebut di chat: "ongkir 15rb", "ongkir: 10.000", "ongkir ke lokasi bunda 15rb", "ongkir free"
-  const ongkirMatch = fullChatText.match(/ongkir\s*(?:ke\s*[^:\n\r\d]+|nya)?\s*[:=]?\s*(free|gratis|\d+(?:[.,]\d+)?(?:\s*k|\s*rb|\s*ribu|\.000)?)/i);
-  if (ongkirMatch) {
-    const rawOngkir = ongkirMatch[1].toLowerCase();
-    if (rawOngkir.includes('free') || rawOngkir.includes('gratis') || rawOngkir === '0') {
-      extractedOngkir = 0;
-    } else {
-      const numStr = rawOngkir.replace(/[^\d]/g, '');
-      const parsed = parseInt(numStr, 10);
-      if (!isNaN(parsed)) {
-        extractedOngkir = parsed < 100 ? parsed * 1000 : parsed;
-      }
-    }
-  }
-
-  // Jika tidak ditemukan di chat, gunakan customer profile ongkir & jarak km
-  const distanceKm = Number(customer?.distance_km ?? customer?.distanceKm ?? 3.0);
-  if (extractedOngkir === null) {
-    if (customer?.ongkir != null) {
-      extractedOngkir = Number(customer.ongkir);
-    } else if (distanceKm <= 3.0) {
-      extractedOngkir = 0;
-    } else {
-      // Default tier: Rp 3.000 / km diatas 3km
-      extractedOngkir = Math.round((distanceKm - 3.0) * 3000);
-    }
-  }
-
-  // 7. Sanitasi Nama Bunda
-  let bundaName = customer?.name || customer?.customer_name || 'Karmila';
-  bundaName = bundaName.replace(/^(bunda|ibu|mama|mrs\.?)\s+/i, '').trim();
 
   return {
     bookingDate: extractedDate,
     dateDisplay: rawDateText,
     timeDisplay: extractedTime,
     treatmentName: extractedTreatment,
-    treatmentPrice: extractedPrice,
+    treatmentPrice: extractedPrice || 60000,
     treatmentCategory: extractedCategory,
     childName: extractedChildName,
     childAge: extractedChildAge,
-    bundaName,
-    phone: customer?.phone || customer?.customer_phone || '081280482533',
-    address: customer?.address || customer?.preferences?.address || 'infesta residense/homestay alas tipis pabean lantai 3 no 301',
-    kecamatan: customer?.kecamatan || '',
-    kota: customer?.kota || '',
-    distanceKm: isNaN(distanceKm) ? 3.0 : distanceKm,
-    ongkir: extractedOngkir ?? 0,
+    bundaName: extractedBundaName,
+    phone: extractedPhone,
+    address: extractedAddress,
+    kecamatan: extractedKecamatan,
+    kota: extractedKota,
+    distanceKm: extractedDistanceKm,
+    ongkir: extractedOngkir,
     isExtractedFromChat: isExtracted,
-    confidenceScore: isExtracted ? 0.9 : 0.5,
+    confidenceScore: isExtracted ? 0.95 : 0.6,
   };
 }
