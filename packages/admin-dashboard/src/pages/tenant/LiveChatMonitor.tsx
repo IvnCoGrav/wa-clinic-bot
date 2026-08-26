@@ -58,7 +58,7 @@ import { ReservationDetailModal } from '../../components/modals/ReservationDetai
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
-import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate } from '../../utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
 import { emitBootPhase } from '../../lib/bootProgress';
 
 interface QuotedMessageData {
@@ -1430,18 +1430,19 @@ export const LiveChatMonitor: React.FC = () => {
       bookingDate: !isNaN(bookingD.getTime()) ? bookingD : new Date(),
       dateDisplay: formatIndonesianDate(bookingD),
       timeDisplay: timeStr,
-      treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'pijat ceria',
+      treatmentName: resItem?.treatment_detail || resItem?.treatment_name || 'Pijat Ceria',
       treatmentPrice: Number(resItem?.purchase_value || resItem?.treatment_price) || 60000,
-      treatmentCategory: resItem?.treatment_category === 'MOMS' ? 'MOMS' : 'BABY',
-      childName: resItem?.child_name || custData?.children?.[0]?.name || 'leo',
-      childAge: resItem?.child_age || custData?.children?.[0]?.current_age || '3tahun 7 bulan',
-      bundaName: (custData?.name || selectedChat?.customerName || 'Karmila').replace(/^(bunda|ibu|mama)\s+/i, '').trim(),
+      treatmentCategory: (resItem?.treatment_category === 'MOMS' || resItem?.treatment_detail?.toLowerCase()?.includes('mom')) ? 'MOMS' : 'BABY',
+      childName: resItem?.child_name || custData?.children?.[0]?.name || '',
+      childAge: resItem?.child_age || custData?.children?.[0]?.raw_age_text || custData?.children?.[0]?.current_age || '',
+      bundaName: cleanBundaName(custData?.name || selectedChat?.customerName || '', custData?.kecamatan, custData?.kota),
       phone: custData?.phone || selectedChat?.customerPhone || '',
-      address: custData?.address || custData?.preferences?.address || '',
+      address: custData?.address || custData?.preferences?.address || custData?.kelurahan || '',
       kecamatan: custData?.kecamatan || '',
       kota: custData?.kota || '',
       distanceKm: Number(custData?.distance_km ?? custData?.distanceKm ?? 3.0),
       ongkir: Number(custData?.ongkir ?? 0),
+      discount: 0,
       isExtractedFromChat: false,
       confidenceScore: 1.0,
     };

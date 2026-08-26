@@ -19,6 +19,7 @@ export interface ExtractedScheduleData {
   kota: string;
   distanceKm: number;
   ongkir: number;
+  discount: number;
   isExtractedFromChat: boolean;
   confidenceScore: number;
 }
@@ -97,6 +98,29 @@ export function parsePriceText(val: string | null | undefined): number | null {
 }
 
 /**
+ * Helper untuk membersihkan nama Bunda dari prefix (Bunda, Ibu) dan suffix kota/kecamatan (e.g. "Bunda Vita Sidoarjo" -> "Vita")
+ */
+export function cleanBundaName(name?: string | null, kecamatan?: string | null, kota?: string | null): string {
+  if (!name) return '';
+  let clean = name.replace(/^(?:bunda|ibu|mama|moms?|ny\.?|mrs\.?|kak|kakak)\s+/i, '').trim();
+  if (kecamatan) {
+    const kecClean = kecamatan.trim().replace(/^(?:kec\.?|kecamatan)\s+/i, '').trim();
+    if (kecClean) {
+      const kecRegex = new RegExp(`\\s+${kecClean}$`, 'i');
+      clean = clean.replace(kecRegex, '').trim();
+    }
+  }
+  if (kota) {
+    const kotaClean = kota.trim().replace(/^(?:kab\.?|kabupaten|kota)\s+/i, '').trim();
+    if (kotaClean) {
+      const kotaRegex = new RegExp(`\\s+${kotaClean}$`, 'i');
+      clean = clean.replace(kotaRegex, '').trim();
+    }
+  }
+  return clean;
+}
+
+/**
  * Ekstraksi entitas jadwal dari deretan pesan obrolan terakhir dan database customer.
  */
 export function extractScheduleFromMessages(
@@ -120,6 +144,7 @@ export function extractScheduleFromMessages(
   let extractedKota = '';
   let extractedDistanceKm: number | null = null;
   let extractedOngkir: number | null = null;
+  let extractedDiscount: number = 0;
   let isExtracted = false;
 
   // 1. Ambil 15 pesan terakhir (dari terbaru ke terlama untuk prioritas data terkini)
@@ -236,14 +261,14 @@ export function extractScheduleFromMessages(
   // D. Ekstraksi Nama Bunda dari baris: "Nama Bunda: Vita", "Nama: Vita"
   const bundaLineMatch = fullChatText.match(/(?:nama\s*bunda|nama\s*pasien|nama\s*ibu|nama\s*lengkap)\s*[:=][ \t]*([^\r\n\t]+)/i);
   if (bundaLineMatch && bundaLineMatch[1].trim()) {
-    const rawVal = bundaLineMatch[1].trim().replace(/^(bunda|ibu|mama|ny\.?)\s+/i, '').trim();
+    const rawVal = bundaLineMatch[1].trim();
     if (
       rawVal &&
       rawVal !== '-' &&
       rawVal !== ':' &&
       !/^(?:alamat|kec|kota|no|nomor|pilihan|treatment|usia|nama)\b/i.test(rawVal)
     ) {
-      extractedBundaName = rawVal;
+      extractedBundaName = cleanBundaName(rawVal);
       isExtracted = true;
     }
   }
@@ -289,12 +314,44 @@ export function extractScheduleFromMessages(
     isExtracted = true;
   }
 
-  // H. Ekstraksi Nama Anak & Usia (Garis tunggal yang aman, cegah newline matching!)
-  const childLineMatch = fullChatText.match(/(?:nama\s*bayi|nama\s*anak)\s*[:=][ \t]*([^\r\n\t]+)/i)
+  // H. Ekstraksi Bagian Per Kategori: (Baby & Kids) vs (Moms)
+  // Bentuk umum form:
+  // Pilihan treatment (Baby & Kids)
+  // Nama Bayi : ...
+  // Usia Bayi/Anak : ...
+  // Treatment : ...
+  // Pilihan treatment (Moms) :
+  // Usia Kehamilan (Jika hamil): ...
+  // Treatment : ...
+
+  let babySectionText = '';
+  let momsSectionText = '';
+
+  const babyIndex = fullChatText.search(/pilihan\s*treatment\s*\(\s*baby/i);
+  const momsIndex = fullChatText.search(/pilihan\s*treatment\s*\(\s*moms/i);
+
+  if (babyIndex !== -1 && momsIndex !== -1) {
+    if (babyIndex < momsIndex) {
+      babySectionText = fullChatText.slice(babyIndex, momsIndex);
+      momsSectionText = fullChatText.slice(momsIndex);
+    } else {
+      momsSectionText = fullChatText.slice(momsIndex, babyIndex);
+      babySectionText = fullChatText.slice(babyIndex);
+    }
+  } else if (babyIndex !== -1) {
+    babySectionText = fullChatText.slice(babyIndex);
+  } else if (momsIndex !== -1) {
+    momsSectionText = fullChatText.slice(momsIndex);
+  } else {
+    // Jika tidak ada header kategori, gunakan seluruh teks
+    babySectionText = fullChatText;
+  }
+
+  // Ekstraksi Data Bayi dari babySectionText (atau fullChatText)
+  const childLineMatch = babySectionText.match(/(?:nama\s*bayi|nama\s*anak)\s*[:=][ \t]*([^\r\n\t]+)/i)
     || fullChatText.match(/(?:dedek|adik|si\s*kecil)\s+([a-zA-Z\s]{2,25})/i);
   if (childLineMatch && childLineMatch[1].trim()) {
     let candidateName = childLineMatch[1].trim();
-    // Jika ada kata 'usia' atau 'umur' setelah nama anak, potong
     candidateName = candidateName.replace(/\s+(?:usia|umur)\s+.*$/i, '').trim();
     if (
       candidateName &&
@@ -306,7 +363,7 @@ export function extractScheduleFromMessages(
     }
   }
 
-  const ageLineMatch = fullChatText.match(/(?:usia\s*(?:bayi\/anak|anak|bayi)?|umur)\s*[:=][ \t]*([^\r\n\t]+)/i)
+  const ageLineMatch = babySectionText.match(/(?:usia\s*(?:bayi\/anak|anak|bayi)?|umur)\s*[:=][ \t]*([^\r\n\t]+)/i)
     || fullChatText.match(/(?:usia|umur)\s+([0-9]+\s*(?:tahun|thn|bln|bulan)(?:\s*[0-9]+\s*(?:bln|bulan))?)/i);
   if (ageLineMatch && ageLineMatch[1].trim()) {
     const candidateAge = ageLineMatch[1].trim();
@@ -316,17 +373,44 @@ export function extractScheduleFromMessages(
     }
   }
 
-  // H. Ekstraksi Layanan Treatment
-  const treatLineMatch = fullChatText.match(/(?:treatment|layanan|pilihan\s*treatment)\s*[:=]\s*([^\r\n]+)/i);
-  if (treatLineMatch && treatLineMatch[1].trim()) {
-    const rawTreat = treatLineMatch[1].trim().replace(/^(?:baby|moms|anak)\s*:\s*/i, '');
-    if (rawTreat && rawTreat !== '-' && !/^(?:payment|harga|total|ongkir)\b/i.test(rawTreat)) {
-      extractedTreatment = rawTreat;
-      isExtracted = true;
+  // Ekstraksi Treatment Baby
+  let babyTreatment = '';
+  const babyTreatMatch = babySectionText.match(/treatment\s*[:=][ \t]*([^\r\n\t]+)/i);
+  if (babyTreatMatch && babyTreatMatch[1].trim()) {
+    const rawT = babyTreatMatch[1].trim().replace(/^(?:baby|anak)\s*:\s*/i, '');
+    if (rawT && rawT !== '-' && !/^(?:pilihan|payment|harga|total|ongkir)\b/i.test(rawT)) {
+      babyTreatment = rawT;
     }
   }
 
-  // I. Ekstraksi Payment Block: "Treatment = 80.000", "Ongkir 6,8km = 15.000", "Ongkir 3,0 km = free"
+  // Ekstraksi Treatment Moms
+  let momsTreatment = '';
+  if (momsSectionText) {
+    const momsTreatMatch = momsSectionText.match(/treatment\s*[:=][ \t]*([^\r\n\t]+)/i);
+    if (momsTreatMatch && momsTreatMatch[1].trim()) {
+      const rawT = momsTreatMatch[1].trim().replace(/^moms?\s*:\s*/i, '');
+      if (rawT && rawT !== '-' && !/^(?:pilihan|payment|harga|total|ongkir|usia)\b/i.test(rawT)) {
+        momsTreatment = rawT;
+      }
+    }
+  }
+
+  // Tentukan Kategori & Nama Treatment gabungan
+  if (babyTreatment && momsTreatment) {
+    extractedTreatment = `${babyTreatment} + ${momsTreatment}`;
+    extractedCategory = 'BUNDLE';
+    isExtracted = true;
+  } else if (babyTreatment) {
+    extractedTreatment = babyTreatment;
+    extractedCategory = 'BABY';
+    isExtracted = true;
+  } else if (momsTreatment) {
+    extractedTreatment = momsTreatment;
+    extractedCategory = 'MOMS';
+    isExtracted = true;
+  }
+
+  // I. Ekstraksi Payment Block: "Treatment = 80.000", "Ongkir 6,8km = 15.000", "Promo ongkir = - 5.000"
   const treatPriceMatch = fullChatText.match(/treatment\s*=\s*([\d.,]+(?:\s*k|\s*rb|\s*ribu)?)/i);
   if (treatPriceMatch) {
     const p = parsePriceText(treatPriceMatch[1]);
@@ -361,6 +445,16 @@ export function extractScheduleFromMessages(
     }
   }
 
+  // Match: Promo / Potongan Ongkir ("Promo ongkir = - 5.000", "Promo = 5.000", "Diskon = 5rb")
+  const promoMatch = fullChatText.match(/(?:promo\s*ongkir|promo|diskon|potongan)\s*=\s*-?\s*([\d.,]+(?:\s*k|\s*rb|\s*ribu)?)/i);
+  if (promoMatch) {
+    const parsedPromo = parsePriceText(promoMatch[1]);
+    if (parsedPromo !== null && parsedPromo > 0) {
+      extractedDiscount = parsedPromo;
+      isExtracted = true;
+    }
+  }
+
   // =========================================================================
   // TAHAP 2: FALLBACK & INTEGRASI DATABASE PRIORITAS
   // =========================================================================
@@ -380,6 +474,16 @@ export function extractScheduleFromMessages(
     }
     if (extractedPrice === null && activeReservation.purchase_value) {
       extractedPrice = Number(activeReservation.purchase_value);
+    }
+    if (activeReservation.treatment_category) {
+      const cat = activeReservation.treatment_category.toUpperCase();
+      if (cat === 'MOMS' || cat.includes('MOM')) {
+        extractedCategory = 'MOMS';
+      } else if (cat === 'BOTH' || cat.includes('BUNDLE')) {
+        extractedCategory = 'BUNDLE';
+      } else {
+        extractedCategory = 'BABY';
+      }
     }
   }
 
@@ -405,7 +509,7 @@ export function extractScheduleFromMessages(
   // 3. Data Pelanggan & Lokasi dari Database
   if (!extractedBundaName) {
     const rawName = customer?.name || customer?.customer_name || '';
-    extractedBundaName = rawName.replace(/^(bunda|ibu|mama|ny\.?)\s+/i, '').trim();
+    extractedBundaName = cleanBundaName(rawName, customer?.kecamatan, customer?.kota);
   }
 
   if (!extractedPhone) {
@@ -469,22 +573,23 @@ export function extractScheduleFromMessages(
     extractedPrice = matchedService?.price || 60000;
   }
 
-  // Tentukan Kategori Layanan
+  // Tentukan Kategori Layanan jika belum terdefinisi
   const treatLower = extractedTreatment.toLowerCase();
   if (
-    treatLower.includes('mom') ||
-    treatLower.includes('ibu') ||
-    treatLower.includes('hamil') ||
-    treatLower.includes('nifas') ||
-    treatLower.includes('laktasi') ||
-    treatLower.includes('breast') ||
-    treatLower.includes('prenatal') ||
-    treatLower.includes('postpartum') ||
-    treatLower.includes('yoga')
+    extractedCategory !== 'BUNDLE' &&
+    (
+      treatLower.includes('mom') ||
+      treatLower.includes('ibu') ||
+      treatLower.includes('hamil') ||
+      treatLower.includes('nifas') ||
+      treatLower.includes('laktasi') ||
+      treatLower.includes('breast') ||
+      treatLower.includes('prenatal') ||
+      treatLower.includes('postpartum') ||
+      treatLower.includes('yoga')
+    )
   ) {
     extractedCategory = 'MOMS';
-  } else {
-    extractedCategory = 'BABY';
   }
 
   return {
@@ -503,6 +608,7 @@ export function extractScheduleFromMessages(
     kota: extractedKota,
     distanceKm: extractedDistanceKm,
     ongkir: extractedOngkir,
+    discount: extractedDiscount,
     isExtractedFromChat: isExtracted,
     confidenceScore: isExtracted ? 0.95 : 0.6,
   };

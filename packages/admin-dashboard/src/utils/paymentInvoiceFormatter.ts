@@ -45,11 +45,32 @@ export interface GenerateInvoiceParams {
     raw_text?: string;
   };
   customer?: InvoiceCustomerData | null;
+  discount?: number;
 }
 
 function formatThousand(num: number | null | undefined): string {
   if (num === null || num === undefined || isNaN(num)) return '0';
   return new Intl.NumberFormat('id-ID').format(Math.round(num));
+}
+
+export function cleanBundaName(name?: string | null, kecamatan?: string | null, kota?: string | null): string {
+  if (!name) return '';
+  let clean = name.replace(/^(?:bunda|ibu|mama|moms?|ny\.?|mrs\.?|kak|kakak)\s+/i, '').trim();
+  if (kecamatan) {
+    const kecClean = kecamatan.trim().replace(/^(?:kec\.?|kecamatan)\s+/i, '').trim();
+    if (kecClean) {
+      const kecRegex = new RegExp(`\\s+${kecClean}$`, 'i');
+      clean = clean.replace(kecRegex, '').trim();
+    }
+  }
+  if (kota) {
+    const kotaClean = kota.trim().replace(/^(?:kab\.?|kabupaten|kota)\s+/i, '').trim();
+    if (kotaClean) {
+      const kotaRegex = new RegExp(`\\s+${kotaClean}$`, 'i');
+      clean = clean.replace(kotaRegex, '').trim();
+    }
+  }
+  return clean;
 }
 
 /**
@@ -93,10 +114,14 @@ function formatIndonesianDateTime(dateStr?: string | null, rawText?: string): st
  * Mengenerate teks rincian booking & invoice pembayaran WhatsApp secara presisi
  */
 export function generateReservationInvoiceText(params: GenerateInvoiceParams): string {
-  const { reservation, customer } = params;
+  const { reservation, customer, discount = 0 } = params;
 
   // 1. Hari dan Tanggal
   const dateTimeStr = formatIndonesianDateTime(reservation.booking_date, reservation.raw_text);
+
+  const kec = customer?.kecamatan || (reservation.customer as any)?.kecamatan || '';
+  const kota = customer?.kota || (reservation.customer as any)?.kota || '';
+  const phone = customer?.phone || (reservation.customer as any)?.phone || '';
 
   // 2. Data Bunda
   let bundaName = customer?.name || (reservation.customer as any)?.name || '';
@@ -104,7 +129,7 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     const match = reservation.raw_text.match(/(?:nama(?:\s*bunda|\s*ibu)?)\s*[:=]\s*([^\n]+)/i);
     if (match) bundaName = match[1].trim();
   }
-  bundaName = bundaName.replace(/^(bunda|ibu|moms?)\s+/i, '').trim();
+  bundaName = cleanBundaName(bundaName, kec, kota);
 
   // 3. Alamat & Shareloc
   let address =
@@ -117,10 +142,6 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     const match = reservation.raw_text.match(/(?:alamat(?:\s*dan\s*shareloc|\s*lengkap)?)\s*[:=]\s*([^\n]+)/i);
     if (match) address = match[1].trim();
   }
-
-  const kec = customer?.kecamatan || (reservation.customer as any)?.kecamatan || '';
-  const kota = customer?.kota || (reservation.customer as any)?.kota || '';
-  const phone = customer?.phone || (reservation.customer as any)?.phone || '';
 
   // 4. Pilihan Treatment Category
   const categoryRaw = (reservation.treatment_category || '').toUpperCase();
@@ -181,7 +202,8 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
   }
 
   const effectiveOngkir = (distanceKm !== null && distanceKm <= 3.0) ? 0 : ongkirVal;
-  const totalVal = (treatmentPrice || 0) + (effectiveOngkir || 0);
+  const effectiveDiscount = Number(discount) || 0;
+  const totalVal = Math.max(0, (treatmentPrice || 0) + (effectiveOngkir || 0) - effectiveDiscount);
 
   // 8. Susun Template Teks Bersih
   const lines: string[] = [
@@ -208,6 +230,9 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
   lines.push('Payment : ');
   lines.push(`Treatment = ${formatThousand(treatmentPrice)}`);
   lines.push(ongkirLine);
+  if (effectiveDiscount > 0) {
+    lines.push(`Promo ongkir = - ${formatThousand(effectiveDiscount)}`);
+  }
   lines.push(`Total = ${formatThousand(totalVal || treatmentPrice)}`);
   lines.push('');
   lines.push('H-1 sebelum treatment akan kami reminder kembali bunda 🥰');

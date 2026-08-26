@@ -161,6 +161,55 @@ Treatment :`;
     expect(str).toContain('Kamis');
   });
 
+  it('should accurately parse customer filled dual-section form (Baby filled, Moms empty)', () => {
+    const rawCustomerMessage = `Berikut list untuk reservasi : 
+
+Hari dan tanggal :  Kamis, 27 Agustus 2026
+Nama Bunda: Vita
+Alamat & Shareloc :Jln gang sempati 158c, kec. Gedangan, kec. Gedangan, kab. Sidoarjo 
+Kec & Kota : Sidoarjo 
+No. Hp : 082140771756
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi : Arviano Rizqi Al-Fatih
+Usia Bayi/Anak : 1 bulan
+Treatment : pijat bayi pulih ceria & sinar moksa
+
+Pilihan treatment (Moms) : 
+
+Usia Kehamilan (Jika hamil): 
+Treatment :
+
+
+Mohon bisa diisi Bunda 😊
+Cancel / Pembatalan Harap minimal H-3 jam
+
+H-1 sebelum treatment akan kami reminder kembali bunda 🥰
+Terimakasih.  ☺️`;
+
+    const messages = [
+      { direction: 'INBOUND', content: rawCustomerMessage },
+    ];
+
+    const customer = {
+      name: 'Bunda Vita Sidoarjo',
+      phone: '6282140771756',
+      kecamatan: 'Gedangan',
+      kota: 'Sidoarjo',
+    };
+
+    const extracted = extractScheduleFromMessages(messages, customer);
+
+    expect(extracted.bundaName).toBe('Vita'); // Cleaned, NOT "Vita Sidoarjo"
+    expect(extracted.treatmentCategory).toBe('BABY'); // NOT MOMS!
+    expect(extracted.treatmentName).toBe('pijat bayi pulih ceria & sinar moksa');
+    expect(extracted.childName).toBe('Arviano Rizqi Al-Fatih');
+    expect(extracted.childAge).toBe('1 bulan');
+    expect(extracted.address).toContain('Jln gang sempati 158c');
+    expect(extracted.phone).toBe('082140771756');
+  });
+
   it('should parse various price strings accurately', () => {
     expect(parsePriceText('80.000')).toBe(80000);
     expect(parsePriceText('80rb')).toBe(80000);
