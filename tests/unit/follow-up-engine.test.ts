@@ -125,6 +125,12 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
         status: 'active',
         is_sandbox_test: false,
         children: [],
+        conversations: [
+          {
+            last_message_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago (> 72h)
+            is_human_handling: false,
+          },
+        ],
       },
     };
 
@@ -136,9 +142,54 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(executeSpy).toHaveBeenCalledWith(mockDueFollowUp, DEFAULT_TENANT_ID);
   });
 
+  it('5d. processDueFollowUps postpones follow-up when customer had recent chat (<72h)', async () => {
+    const recentChatTime = new Date(Date.now() - 10 * 60 * 60 * 1000); // 10 hours ago (< 72h)
+    const mockDueFollowUp = {
+      id: 'fu-queued-recent-1',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-recent-1',
+      type: 'NEXT_TREATMENT',
+      stage: 1,
+      scheduled_at: new Date(Date.now() - 1000), // due
+      status: 'QUEUED',
+      customer: {
+        id: 'cust-recent-1',
+        name: 'Bunda Recent Chat',
+        phone: '6281234567899',
+        status: 'active',
+        is_sandbox_test: false,
+        children: [],
+        conversations: [
+          {
+            last_message_at: recentChatTime,
+            is_human_handling: true,
+          },
+        ],
+      },
+    };
+
+    vi.spyOn(prisma.followUp, 'findMany').mockResolvedValueOnce([mockDueFollowUp] as any);
+    const updateSpy = vi.spyOn(prisma.followUp, 'update').mockResolvedValueOnce({} as any);
+    const executeSpy = vi.spyOn(followUpService, 'executeFollowUp').mockResolvedValueOnce(true);
+
+    const processed = await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
+    // Not sent immediately, postponed instead
+    expect(processed).toBe(0);
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'fu-queued-recent-1' },
+        data: expect.objectContaining({
+          scheduled_at: expect.any(Date),
+        }),
+      })
+    );
+  });
+
   it('6. getAllTemplates returns merged list (DB custom + default fallback)', async () => {
     const templates = await followUpService.getAllTemplates(DEFAULT_TENANT_ID);
     expect(templates.length).toBeGreaterThanOrEqual(27); // 9 types x 3 variants
     expect(templates.every((t) => t.text.length > 0)).toBe(true);
   });
 });
+

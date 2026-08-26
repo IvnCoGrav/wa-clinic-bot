@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhanced — Smart Context Guard Follow-Up Queue (72-Hour Recent Chat Cooldown & Admin Context Visibility) (2026-08-26)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Pencegahan Pesan Follow-Up Canggung/Kaku**: Ketika customer baru saja berkirim pesan (baik dengan bot maupun staf admin via Live Chat), pengiriman pesan sapaan template follow-up yang tiba-tiba akan terasa kaku dan canggung.
+  2. **Dukungan Penuh Pelanggan Human Handling**: Pelanggan loyal yang dikelola manual oleh admin tetap memiliki siklus follow-up perawatan rutin (+1 bulan, +2 bulan, +3 bulan) dan tidak boleh diblokir hanya karena statusnya `HUMAN_HANDLING`.
+- **Implementasi Backend Engine (`src/services/follow-up.service.ts`):**
+  1. **72-Hour Recent Interaction Cooldown Guard (`FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS`, default 72 jam / 3 hari)**:
+     - Menggunakan pendekatan *Lazy Evaluation* tanpa overhead pada chatting real-time.
+     - Saat worker memeriksa follow-up yang jatuh tempo (`scheduled_at <= NOW()`), sistem mengecek `conversations.last_message_at`.
+     - Jika terdapat interaksi dalam 72 jam terakhir, jadwal follow-up otomatis dimundurkan $+3$ hari ke depan pada jam kerja (09:40 WIB) agar tidak menimpa obrolan yang baru selesai.
+     - Jika percakapan sudah hening $\ge 3$ hari, follow-up dikirimkan secara normal baik untuk customer `INITIAL` maupun `HUMAN_HANDLING`.
+  2. **Kueri Data Konteks Percakapan (`listFollowUps`)**:
+     - Menyertakan data relasi `conversations` (`last_message_at`, `is_human_handling`) pada kueri daftar follow-up untuk konsumsi Admin Dashboard.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  1. **`FollowUpQueue.tsx`**:
+     - Menambahkan badge status `👤 Human Handling` untuk menandai pelanggan yang dikelola manual.
+     - Menambahkan indikator interaksi chat terakhir (`💬 Chat: X hari lalu` / `Baru saja`) dengan highlight warna status.
+     - Menambahkan tombol aksi cepat **"Buka Live Chat"** di setiap baris antrian untuk memudahkan admin menyapa secara langsung dengan bahasa personal.
+     - Memperbarui panduan keselamatan header (*Smart Context Guard Notice*).
+- **Pengujian & Verifikasi:**
+  1. `tests/unit/follow-up-engine.test.ts`: 10/10 tests PASS (termasuk verifikasi penundaan otomatis saat ada chat $<72$ jam dan pengiriman normal saat $\ge 72$ jam).
+  2. `tests/integration/follow-up-admin.test.ts`: 9/9 tests PASS.
+  3. Backend compiler (`npm run build`) & frontend Vite bundle (`admin-dashboard: npm run build`) 100% lolos (0 error).
+
 #### [v1.17.0] — Hybrid Fast-Track FAQ Engine (FAQ 1-Call & Dynamic Booking 2-Call) (2026-08-26)
 
 - **Latar Belakang & Masalah yang Dipecahkan:**
