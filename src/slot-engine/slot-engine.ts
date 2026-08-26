@@ -22,6 +22,19 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   // 1. Hydrate Customer Slate dari database snapshot
   const initialSlate = SlateStore.hydrateSlate(ctx);
 
+  // 1b. Fast-Track ⚡: Single-Pass 1-Call FAQ & General Knowledge Inquiry
+  const { isFastFaq1CallEnabled } = await import('../config/feature-flags');
+  const { FastFaqDetector } = await import('./fast-faq-detector');
+  if (isFastFaq1CallEnabled(tenantId) && FastFaqDetector.isPotentialFastFaq(incomingText, initialSlate)) {
+    const { FastFaqGenerator } = await import('./fast-faq-generator');
+    const fastResult = await FastFaqGenerator.process(ctx, initialSlate);
+    if (fastResult) {
+      await SlateStore.persistSlate(fastResult.updatedSlate);
+      return fastResult.handlerResult;
+    }
+    console.log(`[SLOT ENGINE] Fast-Track FAQ fell through to 2-Call Deep Engine for customer ${customer.phone}`);
+  }
+
   // 2. Ekstrak seluruh entitas & intensi dalam Single-Pass LLM
   const extraction = await EntityExtractor.extract(incomingText, {
     history,

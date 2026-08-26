@@ -39,3 +39,12 @@ export function isSlotFillingEnabledForCustomer(phone: string, tenantId?: string
 export function isSlotFillingShadowMode(): boolean {
   return process.env.SLOT_FILLING_SHADOW_MODE === 'true';
 }
+
+/**
+ * Cek apakah Fast-Track 1-Call FAQ aktif pada Slot-Filling Engine.
+ * Default: true (aktif) kecuali jika disetel ke 'false' via env FAST_FAQ_1CALL_ENABLED.
+ */
+export function isFastFaq1CallEnabled(tenantId?: string): boolean {
+  return process.env.FAST_FAQ_1CALL_ENABLED !== 'false';
+}
+
