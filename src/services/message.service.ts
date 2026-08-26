@@ -199,7 +199,10 @@ export class MessageService {
         new Date(m.created_at) >= cutoff &&
         (
           (isImagePlaceholder && (!m.content || /^\[(IMAGE|MEDIA|GAMBAR)/i.test((m.content || '').trim()) || !!(m.payload_raw as any)?.media)) ||
-          (!isImagePlaceholder && (m.content || '').trim().toLowerCase() === normalizedContent.toLowerCase())
+          (!isImagePlaceholder && (
+            (m.content || '').trim().toLowerCase() === normalizedContent.toLowerCase() ||
+            (normalizedContent.length >= 20 && (m.content || '').toLowerCase().includes(normalizedContent.toLowerCase()))
+          ))
         )
     );
     if (memMsg) {
@@ -229,6 +232,11 @@ export class MessageService {
           { content: { startsWith: '[GAMBAR' } },
           { content: '[IMAGE]' },
           { content: '[MEDIA]' },
+        ];
+      } else if (normalizedContent.length >= 20) {
+        whereClause.OR = [
+          { content: { equals: normalizedContent, mode: 'insensitive' } },
+          { content: { contains: normalizedContent, mode: 'insensitive' } },
         ];
       } else {
         whereClause.content = {

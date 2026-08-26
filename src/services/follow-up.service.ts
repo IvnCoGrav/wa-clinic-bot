@@ -816,19 +816,43 @@ export class FollowUpService {
         await new Promise((r) => setTimeout(r, delay));
       }
 
+      // Pre-log / Catat pesan follow-up ke percakapan Live Chat
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(fu.customer_id, tenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: messageText,
+            senderType: 'BOT',
+            senderName: 'Bot (Follow-Up)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[FollowUp Worker] Failed to pre-log outbound message:', logErr.message);
+      }
+
       await typingService.simulateHumanReply({
         chatId: fu.customer.phone,
         replyText: messageText,
+        tenantId,
       });
 
       // Mark as SENT
-      await prisma.followUp.update({
-        where: { id: fu.id },
-        data: {
-          status: 'SENT',
-          sent_at: new Date(),
-        },
-      });
+      try {
+        await prisma.followUp.update({
+          where: { id: fu.id },
+          data: {
+            status: 'SENT',
+            sent_at: new Date(),
+          },
+        });
+      } catch (dbErr: any) {
+        console.warn(`[FollowUp Worker] FollowUp status update warning:`, dbErr.message);
+      }
 
       return true;
     } catch (err: any) {
@@ -894,6 +918,23 @@ export class FollowUpService {
       );
 
       if (result.success) {
+        try {
+          const { conversationService } = await import('./conversation.service');
+          const { messageService } = await import('./message.service');
+          const conv = await conversationService.getOrCreateConversation(fu.customer_id, tenantId);
+          if (conv) {
+            await messageService.logMessage({
+              tenantId,
+              conversationId: conv.id,
+              direction: 'OUTBOUND',
+              content: `[TEMPLATE: ${mapping.templateName}]`,
+              waMessageId: result.messageId,
+              senderType: 'BOT',
+              senderName: 'Bot (Follow-Up WABA)',
+            });
+          }
+        } catch (_) {}
+
         await prisma.followUp.update({
           where: { id: fu.id },
           data: { status: 'SENT', sent_at: new Date() },
