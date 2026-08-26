@@ -382,23 +382,35 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
   ongkirInclusionPolicy: (params?: { kelurahan?: string; ongkir?: number }) => {
     if (params?.kelurahan && params?.ongkir !== undefined) {
-      return `Iya betul Bunda, harga treatment kami belum termasuk ongkir ya bund. Untuk ke area Bunda di *${params.kelurahan}*, ongkirnya Rp ${params.ongkir.toLocaleString('id-ID')} ya Bunda 😊\n\nApakah mau langsung kami bantu jadwalkan perawatannya bund? 🤗`;
+      return `Iya betul Bunda, harga treatment kami belum termasuk ongkir ya Bunda. Untuk ke area Bunda di *${params.kelurahan}*, ongkirnya Rp ${params.ongkir.toLocaleString('id-ID')} ya Bunda 😊\n\nApakah mau langsung kami bantu jadwalkan perawatannya Bunda? 🤗`;
     }
-    return `Iya betul Bunda, harga treatment kami belum termasuk biaya transport/ongkir ya bund. Biaya ongkir dihitung sesuai jarak dari klinik kami di Waru. Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan ongkir presisinya? 😊`;
+    return `Iya betul Bunda, harga treatment kami belum termasuk biaya transport/ongkir ya Bunda. Biaya ongkir dihitung sesuai jarak dari klinik kami di Waru. Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan ongkir presisinya? 😊`;
   },
 
   paymentMethodPolicy: () =>
-    `Untuk metode pembayaran bisa melalui Transfer Bank (BCA / Mandiri), QRIS, atau Cash langsung saat bidan kami tiba di rumah ya Bunda 😊 Mau pakai metode yang mana bund?`,
+    `Untuk metode pembayaran bisa melalui Transfer Bank (BCA / Mandiri), QRIS, atau Cash langsung saat bidan kami tiba di rumah ya Bunda 😊 Mau pakai metode yang mana Bunda?`,
 
   therapistQualificationPolicy: () =>
-    `Seluruh terapis ${getBrandIdentity().businessName} adalah Bidan Resmi bersertifikat (memiliki STR aktif) dan terlatih khusus untuk baby massage, mom spa, dan perawatan anak ya Bunda 🩺🤗 Jadi dijamin aman, higienis, dan profesional bund.`,
+    `Seluruh terapis ${getBrandIdentity().businessName} adalah Bidan Resmi bersertifikat (memiliki STR aktif) dan terlatih khusus untuk baby massage, mom spa, dan perawatan anak ya Bunda 🩺🤗 Jadi dijamin aman, higienis, dan profesional Bunda.`,
 
   coverageAreaPolicy: () =>
-    `Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya ya Bunda 🚗✨ Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan jangkauan dan ongkir presisinya ya bund 😊`,
+    `Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya ya Bunda 🚗✨ Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan jangkauan dan ongkir presisinya ya Bunda 😊`,
 
-  notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya bund. Have a great day! 🤗✨`,
+  notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya Bunda. Have a great day! 🤗✨`,
 
-  reservationFormRequest: (params?: { kecamatan?: string; kota?: string; phone?: string; name?: string; address?: string; formatCheckout?: string }) => {
+  reservationFormRequest: (params?: {
+    kecamatan?: string;
+    kota?: string;
+    phone?: string;
+    name?: string;
+    address?: string;
+    formatCheckout?: string;
+    bookingDate?: string;
+    treatmentBaby?: string;
+    treatmentMoms?: string;
+    babyName?: string;
+    babyAge?: string;
+  }) => {
     const headerText = params?.formatCheckout && params.formatCheckout.trim().length > 0
       ? params.formatCheckout.trim()
       : 'Berikut list untuk reservasi :';
@@ -412,7 +424,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
     return `${headerText}
 
-Hari dan tanggal :
+${prefill('Hari dan tanggal', params?.bookingDate)}
 Nama Bunda:${params?.name ? ` ${params.name}` : ''}
 ${prefill('Alamat & Shareloc', params?.address)}
 ${prefill('Kec', params?.kecamatan)}
@@ -421,20 +433,20 @@ ${prefill('No. Hp', params?.phone)}
 
 Pilihan treatment (Baby & Kids)
 
-Nama Bayi :
-Usia Bayi/Anak :
-Treatment :
+${prefill('Nama Bayi', params?.babyName)}
+${prefill('Usia Bayi/Anak', params?.babyAge)}
+${prefill('Treatment', params?.treatmentBaby)}
 
 Pilihan treatment (Moms) :
 
 Usia Kehamilan (Jika hamil):
-Treatment :
+${prefill('Treatment', params?.treatmentMoms)}
 
 
 Mohon bisa diisi Bunda 😊
 Cancel / Pembatalan Harap minimal H-3 jam
 
-H-1 sebelum treatment akan kami reminder kembali bunda 🥰
+H-1 sebelum treatment akan kami reminder kembali Bunda 🥰
 Terimakasih.  ☺️`;
   },
 

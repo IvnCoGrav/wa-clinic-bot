@@ -20,11 +20,33 @@ export class GroundingComposer {
 
     // 1. TOKEN DIET: Ambil katalog layanan yang sah untuk usia anak pasien + DURASI MENIT
     const allServices = treatmentCatalogService.getAllServices();
-    const filteredServices = slate.childAgeMonths !== null
+    const inputLower = (context?.customerInput || '').toLowerCase();
+    const mentionsMoms =
+      /\b(ibu|moms?|bunda|laktasi|oksitosin|nifas|hamil|melahirkan|payudara|pijat ibu|relaksasi ibu)\b/i.test(inputLower) ||
+      (slate.selectedTreatmentName || '').toLowerCase().includes('laktasi') ||
+      (slate.selectedTreatmentName || '').toLowerCase().includes('oksitosin') ||
+      (slate.selectedTreatmentName || '').toLowerCase().includes('moms') ||
+      (extraction.treatmentReferenced || '').toLowerCase().includes('laktasi') ||
+      (extraction.treatmentReferenced || '').toLowerCase().includes('oksitosin');
+
+    let filteredServices = slate.childAgeMonths !== null
       ? treatmentCatalogService.filterServicesByAudience(allServices, { ageMonths: slate.childAgeMonths })
       : allServices.filter((s) => s.isActive && !s.isAddon);
 
-    const filteredCatalog = filteredServices.slice(0, 5).map((s) => ({
+    // Jika customer menanyakan layanan ibu/moms atau bundling, sertakan katalog Moms
+    if (mentionsMoms) {
+      const momsServices = allServices.filter((s) => s.category === 'MOMS' && s.isActive);
+      const combined = [...filteredServices, ...momsServices];
+      const seen = new Set<string>();
+      filteredServices = combined.filter((s) => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
+    }
+
+    const maxItems = mentionsMoms ? 6 : 5;
+    const filteredCatalog = filteredServices.slice(0, maxItems).map((s) => ({
       name: s.name,
       category: s.category,
       promoPrice: s.promoPrice,
@@ -75,6 +97,45 @@ export class GroundingComposer {
     const missingSlots = SlateStore.getMissingCriticalSlots(slate);
     const missingSlotsToPrompt = missingSlots[0] || null;
 
+    // 7. PRE-FILLED RESERVATION FORM GENERATOR
+    const effectiveTreatment = extraction.treatmentReferenced || slate.selectedTreatmentName;
+    const effectiveDate = extraction.preferredDateText || slate.preferredDate;
+    const isBookingReady = Boolean(
+      slate.isLocationConfirmed &&
+      effectiveTreatment &&
+      (effectiveDate || extraction.intents.includes('request_booking') || extraction.intents.includes('ask_schedule'))
+    );
+
+    let suggestedPreFilledForm: string | null = null;
+    if (isBookingReady) {
+      const { TEMPLATES } = await import('../config/persona');
+      let treatmentBaby: string | undefined = undefined;
+      let treatmentMoms: string | undefined = undefined;
+
+      if (effectiveTreatment) {
+        if (mentionsMoms) {
+          treatmentBaby = effectiveTreatment.includes('Pijat') ? effectiveTreatment : 'Pijat Bayi Ceria';
+          treatmentMoms = 'Bundling Pijat Laktasi + Oksitosin';
+        } else {
+          treatmentBaby = effectiveTreatment;
+        }
+      }
+
+      suggestedPreFilledForm = TEMPLATES.reservationFormRequest({
+        name: slate.name || undefined,
+        address: slate.streetDetail
+          ? `${slate.streetDetail}, ${slate.kelurahan}`
+          : slate.kelurahan || undefined,
+        kecamatan: slate.kecamatan || undefined,
+        kota: slate.kota || undefined,
+        phone: slate.phone || undefined,
+        bookingDate: effectiveDate || undefined,
+        treatmentBaby,
+        treatmentMoms,
+        babyAge: slate.childAgeMonths !== null ? `${slate.childAgeMonths} bulan` : undefined,
+      });
+    }
+
     return {
       filteredCatalog,
       deliveryFacts,
@@ -83,6 +144,8 @@ export class GroundingComposer {
       missingSlotsToPrompt,
       relevantFaqs: relevantFaqs.length > 0 ? relevantFaqs : undefined,
       customerPreferencesText,
+      isBookingReady,
+      suggestedPreFilledForm,
     };
   }
 }

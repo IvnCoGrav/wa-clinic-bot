@@ -38,6 +38,7 @@ export interface CustomerSlate {
 
   // 5. State & Flag Kompatibilitas
   pricelistSent: boolean;
+  reservationFormSent: boolean;
   isHumanHandling: boolean;
   humanHandlingReason: string | null;
   lastInteractionAt: Date;
@@ -57,6 +58,7 @@ export interface ExtractedEntities {
     | 'ask_clinic_origin'
     | 'select_treatment'
     | 'request_booking'
+    | 'ask_schedule'
     | 'affirmation'
     | 'negation'
     | 'medical_emergency'
@@ -125,4 +127,6 @@ export interface GroundingPackage {
     content: string;
   }>;
   customerPreferencesText?: string | null;
+  isBookingReady?: boolean;
+  suggestedPreFilledForm?: string | null;
 }

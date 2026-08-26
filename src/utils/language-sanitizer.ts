@@ -143,8 +143,8 @@ export function sanitizeStrayBackslashes(text: string): string {
 export function sanitizePronounsAndSlang(text: string): string {
   if (!text) return text;
   return text
-    // Perbaiki singkatan slang "Bund" menjadi "Bunda"
-    .replace(/\bBund\b/g, 'Bunda')
+    // Perbaiki singkatan slang "Bund" / "bund" menjadi "Bunda" (case-insensitive)
+    .replace(/\bbund\b/gi, 'Bunda')
     // Perbaiki kata ganti orang pertama tunggal menjadi jamak tim "kami"
     .replace(/\b(biar|agar|akan|mau|nanti|bisa)\s+saya\b/gi, '$1 kami')
     .replace(/\b(?:bantuan|arahan)\s+saya\b/gi, '$1 kami')

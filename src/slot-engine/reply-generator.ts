@@ -35,7 +35,9 @@ export class ReplyGenerator {
     const historyCount = context?.history?.length || 0;
 
     // Fallback template jika LLM offline
-    const baselineFallback = `Halo Bunda ${slate.name || ''}! Terima kasih sudah menghubungi Kala Moms and Baby Spa. Ada yang bisa kami bantu untuk si kecil hari ini? 😊`;
+    const baselineFallback = grounding.suggestedPreFilledForm
+      ? `Baik Bunda ${slate.name || ''}, berikut kami siapkan format reservasi untuk pencatatan jadwalnya ya Bunda:\n\n${grounding.suggestedPreFilledForm}`
+      : `Halo Bunda ${slate.name || ''}! Terima kasih sudah menghubungi Kala Moms and Baby Spa. Ada yang bisa kami bantu untuk si kecil hari ini? 😊`;
 
     if (!endpoint.apiKey) {
       return sanitizeFinalReply(baselineFallback, { historyCount });
@@ -68,8 +70,8 @@ export class ReplyGenerator {
         grounding.relevantFaqs.map((f) => `• ${f.title}\n  ${f.content}`).join('\n\n') + '\n'
       : '';
 
-    // 3. Kalimat Penutup Dinamis berbasis Missing Slots
-    const dynamicCloserInstruction = DynamicCloserService.getCloserInstruction(slate);
+    // 3. Kalimat Penutup Dinamis berbasis Missing Slots & Smart Form
+    const dynamicCloserInstruction = DynamicCloserService.getCloserInstruction(slate, grounding.suggestedPreFilledForm);
 
     // 4. Susun System Prompt via Single Source of Truth PersonaComposer
     const systemPrompt = PersonaComposer.composeSlotGeneratorPrompt({
