@@ -22,7 +22,14 @@ interface InvoiceGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialData?: ExtractedScheduleData | null;
-  clinicServices?: Array<{ id?: string; name: string; price: number; category?: string }>;
+  clinicServices?: Array<{
+    id?: string;
+    name: string;
+    price?: number;
+    promoPrice?: number;
+    originalPrice?: number;
+    category?: string;
+  }>;
   onInsertToChat: (formattedText: string) => void;
 }
 
@@ -44,6 +51,11 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
   const formatKm = (km: any) => {
     if (km === null || km === undefined || isNaN(Number(km))) return '3,0';
     return Number(km).toFixed(1).replace('.', ',');
+  };
+
+  const getServicePrice = (s: any): number => {
+    if (!s) return 0;
+    return Number(s.promoPrice ?? s.price ?? s.originalPrice ?? 0);
   };
 
   // Form State with clean empty defaults
@@ -197,10 +209,10 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     onClose();
   };
 
-  const handleSelectService = (s: { name: string; price: number; category?: string }) => {
+  const handleSelectService = (s: any) => {
     if (!s) return;
     setTreatmentName(s.name || '');
-    setTreatmentPrice(Number(s.price) || 0);
+    setTreatmentPrice(getServicePrice(s));
     if (s.category) {
       const c = String(s.category).toUpperCase();
       if (c.includes('MOM') || c.includes('HAMIL') || c.includes('LAKTASI') || c.includes('NIFAS')) {
@@ -465,7 +477,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                             : 'bg-white text-[#54656f] border-[#d1d7db] hover:border-[#008069]'
                         }`}
                       >
-                        {srv.name} (Rp {formatRp(srv.price)})
+                        {srv.name} (Rp {formatRp(getServicePrice(srv))})
                       </button>
                     ))}
                   </div>
