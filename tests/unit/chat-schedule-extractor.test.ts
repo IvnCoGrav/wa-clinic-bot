@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractScheduleFromMessages, formatIndonesianDate } from '../../packages/admin-dashboard/src/utils/chatScheduleExtractor';
+import { extractScheduleFromMessages, formatIndonesianDate, parsePriceText } from '../../packages/admin-dashboard/src/utils/chatScheduleExtractor';
 
 describe('Chat Schedule & Context Extractor Unit Tests', () => {
   it('should extract relative date "besok", time range "12.00-12.30", and treatment from conversation', () => {
@@ -64,10 +64,111 @@ describe('Chat Schedule & Context Extractor Unit Tests', () => {
     expect(extracted.bundaName).toBe('Maya');
   });
 
+  it('should accurately parse confirmed reservation block from Vita Sidoarjo without any hardcoded leaks', () => {
+    const confirmationText = `Berikut reservasi 🐣
+
+Hari dan tanggal :  Kamis, 27 Agustus 2026 jam 16.30-17.00
+Nama Bunda: Vita
+Alamat & Shareloc :Jln gang sempati 158c, kec. Gedangan, kec. Gedangan, kab. Sidoarjo
+Kec & Kota : Sidoarjo
+No. Hp : 082140771756
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi : Arviano Rizqi Al-Fatih
+Usia Bayi/Anak : 1 bulan
+Treatment : pijat bayi pulih ceria & sinar moksa
+
+Payment : 
+Treatment = 80.000
+Ongkir 6,8km = 15.000
+Promo ongkir = - 5.000
+*Total = 90.000*
+
+Terimakasih.  ☺️`;
+
+    const messages = [
+      { direction: 'INBOUND', content: 'Halo kak mau reservasi' },
+      { direction: 'OUTBOUND', content: confirmationText },
+    ];
+
+    const customer = {
+      id: 'c659eba2-14bd-4f8f-9b6f-5ae7a4eceb32',
+      name: 'Bunda Vita Sidoarjo',
+      phone: '6282140771756',
+      kelurahan: 'Jln gang sempati 158c, kec. Gedangan, kec. Gedangan, kab. Sidoarjo',
+      kecamatan: 'Sidoarjo',
+      children: [
+        { name: 'Arviano Rizqi Al-Fatih', raw_age_text: '1 bulan' },
+      ],
+    };
+
+    const extracted = extractScheduleFromMessages(messages, customer);
+
+    expect(extracted.bundaName).toBe('Vita');
+    expect(extracted.phone).toBe('082140771756');
+    expect(extracted.address).toBe('Jln gang sempati 158c, kec. Gedangan, kec. Gedangan, kab. Sidoarjo');
+    expect(extracted.childName).toBe('Arviano Rizqi Al-Fatih');
+    expect(extracted.childAge).toBe('1 bulan');
+    expect(extracted.treatmentName).toBe('pijat bayi pulih ceria & sinar moksa');
+    expect(extracted.treatmentPrice).toBe(80000);
+    expect(extracted.distanceKm).toBe(6.8);
+    expect(extracted.ongkir).toBe(15000);
+    expect(extracted.timeDisplay).toBe('16.30-17.00');
+    expect(extracted.dateDisplay).toContain('27 Agustus 2026');
+  });
+
+  it('should ignore empty form labels and not capture "Usia Bayi" as child name', () => {
+    const emptyFormText = `Berikut list untuk reservasi :
+
+Hari dan tanggal :
+Nama Bunda:
+Alamat & Shareloc :
+Kec & Kota :
+No. Hp :
+
+Pilihan treatment (Baby & Kids)
+
+Nama Bayi :
+Usia Bayi/Anak :
+Treatment :`;
+
+    const messages = [
+      { direction: 'OUTBOUND', content: emptyFormText },
+    ];
+
+    const customer = {
+      name: 'Fitri',
+      phone: '081999888777',
+      address: 'Jl Mawar 123',
+      children: [
+        { name: 'Kenzo', raw_age_text: '6 bulan' },
+      ],
+    };
+
+    const extracted = extractScheduleFromMessages(messages, customer);
+
+    expect(extracted.childName).toBe('Kenzo'); // Should fallback to DB child name, NOT "Usia Bayi"
+    expect(extracted.childAge).toBe('6 bulan');
+    expect(extracted.bundaName).toBe('Fitri');
+    expect(extracted.address).toBe('Jl Mawar 123');
+  });
+
   it('should format Indonesian date string accurately', () => {
     const testDate = new Date(2026, 7, 27); // 27 Agustus 2026
     const str = formatIndonesianDate(testDate);
     expect(str).toContain('27 Agustus 2026');
     expect(str).toContain('Kamis');
+  });
+
+  it('should parse various price strings accurately', () => {
+    expect(parsePriceText('80.000')).toBe(80000);
+    expect(parsePriceText('80rb')).toBe(80000);
+    expect(parsePriceText('80k')).toBe(80000);
+    expect(parsePriceText('80 ribu')).toBe(80000);
+    expect(parsePriceText('free')).toBe(0);
+    expect(parsePriceText('gratis')).toBe(0);
+    expect(parsePriceText('0')).toBe(0);
+    expect(parsePriceText('')).toBeNull();
   });
 });

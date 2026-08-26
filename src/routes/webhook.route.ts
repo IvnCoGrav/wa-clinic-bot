@@ -555,7 +555,19 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // Supaya image dari WA Web/Official tetap tersimpan ke storage/media/inbound
       // meski timestamp telat (reconnect/QR burst) dan tetap muncul di LiveChat.
       const pAny = payload as any;
-      const isInboundImage =
+
+      // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG)
+      const rawLoc = payload.location || pAny._data?.location || pAny.location;
+      const rawLat = rawLoc?.latitude != null ? Number(rawLoc.latitude) : NaN;
+      const rawLng = rawLoc?.longitude != null ? Number(rawLoc.longitude) : NaN;
+      const isLocationMsgType = payload.type === 'location' || pAny.type === 'location' || pAny._data?.type === 'location';
+      const hasRealLocation = (!isNaN(rawLat) && !isNaN(rawLng) && rawLat !== 0 && rawLng !== 0) || isLocationMsgType;
+
+      const isInboundImage = !hasRealLocation && (
+        payload.hasMedia ||
+        pAny.hasMedia ||
+        pAny.media ||
+        pAny._data?.hasMedia ||
         pAny.type === 'image' ||
         pAny._data?.type === 'image' ||
         !!(pAny.message && pAny.message.imageMessage) ||
@@ -563,13 +575,8 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         !!(pAny._data?.mimetype?.startsWith('image/')) ||
         !!(pAny.mimetype?.startsWith('image/')) ||
         !!(pAny._data?.directPath && pAny._data?.mediaKey) ||
-        !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url);
-
-      // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG)
-      const rawLoc = payload.location || pAny._data?.location;
-      const rawLat = rawLoc?.latitude != null ? Number(rawLoc.latitude) : NaN;
-      const rawLng = rawLoc?.longitude != null ? Number(rawLoc.longitude) : NaN;
-      const hasRealLocation = !isInboundImage && !isNaN(rawLat) && !isNaN(rawLng) && rawLat !== 0 && rawLng !== 0;
+        !!(pAny.mediaUrl || pAny._data?.mediaUrl || pAny.media?.url)
+      );
 
       // Caption WAHA NOWEB sering ada di body, bukan caption — fallback ke body
       const imageCaption = (pAny.message?.imageMessage?.caption) || pAny.caption || (isInboundImage ? pAny.body : '') || pAny._data?.caption || pAny._data?.body || '';
