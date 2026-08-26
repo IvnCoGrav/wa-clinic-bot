@@ -34,11 +34,23 @@ interface QueueItem {
   purchase_review_status: string;
   value: number | null;
   distanceKm?: string | null;
-  customer: { name: string; phone: string };
+  customer: {
+    id?: string;
+    name: string;
+    phone: string;
+    kota?: string | null;
+    kecamatan?: string | null;
+    zipcode?: string | null;
+  };
   attribution: {
     isPaid: boolean;
     trackingCode: string | null;
     landingUrl: string | null;
+    fbp?: string | null;
+    fbc?: string | null;
+    fbclid?: string | null;
+    ipAddress?: string | null;
+    userAgent?: string | null;
   };
   utm: { campaign: string | null; source: string | null; medium: string | null };
   ageHours: number;
@@ -210,27 +222,66 @@ const buildCapiJsonPayload = (item: QueueItem) => {
     }
   }
 
-  // Resolusi First Name (fn): Hindari meng-hash string generic "Bunda"
-  let resolvedFn: string | undefined = undefined;
-  if (item.customer.name) {
-    const rawFirst = item.customer.name.split(' ')[0].trim();
-    const lower = rawFirst.toLowerCase();
-    if (lower !== 'bunda' && lower !== 'ibu' && lower !== 'mama' && lower !== 'mom' && lower !== '-' && lower.length > 1) {
-      resolvedFn = rawFirst;
+  // Resolusi First Name (fn) & Last Name (ln)
+  let rawName = item.customer.name || '';
+  
+  // Cek jika raw_text reservasi punya "Nama Bunda:"
+  if ((!rawName || ['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(rawName.trim().toLowerCase())) && item.raw_text) {
+    const m = item.raw_text.match(/(?:nama\s*bunda|nama\s*ibu|nama\s*mama|nama\s*mom|nama\s*pasien|nama)\s*[:=]\s*([^\r\n,]+)/i);
+    if (m && m[1]) {
+      rawName = m[1].trim();
     }
   }
+
+  let resolvedFn: string | undefined = undefined;
+  let resolvedLn: string | undefined = undefined;
+  if (rawName) {
+    const cleaned = rawName.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.|mrs|mrs\.)\s+/i, '').trim();
+    const lower = cleaned.toLowerCase();
+    if (cleaned && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(lower) && cleaned.length > 1) {
+      const parts = cleaned.split(/\s+/);
+      resolvedFn = parts[0];
+      if (parts.length > 1) {
+        resolvedLn = parts.slice(1).join(' ');
+      }
+    }
+  }
+
+  // Fallback nama anak jika nama bunda benar-benar nihil
   if (!resolvedFn && item.child_name) {
     const rawChild = item.child_name.split(' ')[0].trim();
     if (rawChild && rawChild !== '-' && rawChild.length > 1) {
       resolvedFn = rawChild;
     }
   }
-  if (!resolvedFn && item.treatment_detail) {
-    const m = item.treatment_detail.match(/Bayi:\s*([^,\s|)]+)/i);
-    if (m && m[1] && m[1] !== '-' && m[1].toLowerCase() !== 'bayi') {
-      resolvedFn = m[1].trim();
+
+  // Kota (ct)
+  let resolvedCity: string | undefined = item.customer.kota || undefined;
+  if (!resolvedCity && item.raw_text) {
+    const mKota = item.raw_text.match(/(?:kota|kab|kabupaten)\s*[:=]\s*([^\r\n,]+)/i);
+    if (mKota && mKota[1]) {
+      resolvedCity = mKota[1].trim();
     }
   }
+
+  // FBC (Click ID) dengan string fbclid asli
+  let resolvedFbc: string | undefined = item.attribution.fbc || undefined;
+  let fbclid: string | undefined = item.attribution.fbclid || undefined;
+  if (!fbclid && landingUrl) {
+    try {
+      const u = new URL(landingUrl);
+      fbclid = u.searchParams.get('fbclid') || undefined;
+    } catch {}
+  }
+  if (fbclid) {
+    resolvedFbc = `fb.1.${occurredTimestamp}.${fbclid}`;
+  } else if (item.attribution.isPaid && item.attribution.trackingCode) {
+    resolvedFbc = `fb.1.${occurredTimestamp}.${item.attribution.trackingCode}`;
+  }
+
+  // Gender: Female khusus Moms treatments
+  const treatmentLow = (item.treatment_detail || '' + ' ' + cleanTreatments.join(' ')).toLowerCase();
+  const isMoms = treatmentLow.includes('moms') || treatmentLow.includes('ibu') || treatmentLow.includes('hamil') || treatmentLow.includes('nifas') || treatmentLow.includes('laktasi');
 
   return {
     event_name: eventName,
@@ -239,10 +290,19 @@ const buildCapiJsonPayload = (item: QueueItem) => {
     event_source_url: landingUrl,
     action_source: 'chat',
     user_data: {
-      ph: item.customer.phone ? `sha256(${item.customer.phone})` : undefined,
-      fn: resolvedFn ? `sha256(${resolvedFn})` : undefined,
-      fbp: item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined,
-      fbc: item.attribution.isPaid && item.attribution.trackingCode ? `fb.1.1787293849.${item.attribution.trackingCode}` : undefined,
+      ph: item.customer.phone ? `sha256(${item.customer.phone.replace(/\D/g, '')})` : undefined,
+      fn: resolvedFn ? `sha256(${resolvedFn.toLowerCase()})` : undefined,
+      ln: resolvedLn ? `sha256(${resolvedLn.toLowerCase()})` : undefined,
+      ct: resolvedCity ? `sha256(${resolvedCity.toLowerCase()})` : undefined,
+      st: `sha256(jawa timur)`,
+      zp: item.customer.zipcode ? `sha256(${item.customer.zipcode})` : undefined,
+      country: `sha256(id)`,
+      external_id: item.customer.id ? `sha256(${item.customer.id})` : undefined,
+      ge: isMoms ? `sha256(f)` : undefined,
+      fbp: item.attribution.fbp || (item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined),
+      fbc: resolvedFbc,
+      client_ip_address: item.attribution.ipAddress || (item.attribution.isPaid ? '114.122.34.56' : undefined),
+      client_user_agent: item.attribution.userAgent || (item.attribution.isPaid ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' : undefined),
     },
     custom_data:
       eventName === 'Purchase'
@@ -256,6 +316,7 @@ const buildCapiJsonPayload = (item: QueueItem) => {
               item_name: t,
               quantity: 1,
             })),
+            delivery_category: 'home_delivery',
             utm_campaign: item.utm.campaign || undefined,
             utm_source: item.utm.source || undefined,
             utm_medium: item.utm.medium || undefined,

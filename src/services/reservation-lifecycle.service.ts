@@ -20,11 +20,40 @@ export interface OnReservationCreatedParams {
   tenantId: string;
   chatId: string; // format phone@c.us
   babies?: BabyDetail[];
+  customerName?: string;
+  kecamatan?: string;
+  kota?: string;
+  kelurahan?: string;
+  address?: string;
 }
 
 export class ReservationLifecycleService {
   public async onReservationCreated(params: OnReservationCreatedParams): Promise<void> {
-    const { customerId, reservationId, tenantId, chatId, babies = [] } = params;
+    const { customerId, reservationId, tenantId, chatId, babies = [], customerName, kecamatan, kota, kelurahan } = params;
+
+    // 0. Update nama customer & alamat dari form reservasi ke database (agar sinkron ke Google Contacts & CAPI)
+    try {
+      const { customerService } = await import('./customer.service');
+      const targetName = (customerName || '').trim();
+      if (targetName && targetName.length > 1) {
+        const cleanName = targetName.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
+        if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
+          const effectiveKec = (kecamatan || '').trim();
+          const contactFormattedName = `Bunda ${cleanName}${effectiveKec ? ` ${effectiveKec}` : ''}`.trim();
+          await customerService.updateCustomerName(customerId, contactFormattedName, tenantId).catch(() => {});
+        }
+      }
+
+      if (kecamatan || kota || kelurahan) {
+        await customerService.updateCustomerLocation(customerId, {
+          kecamatan: kecamatan?.trim() || undefined,
+          kota: kota?.trim() || undefined,
+          kelurahan: kelurahan?.trim() || undefined,
+        }, tenantId).catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] updateCustomerName/Location failed:', err.message);
+    }
 
     // 1. Follow-Up scheduling
     try {
@@ -52,7 +81,7 @@ export class ReservationLifecycleService {
       await this.applyLifecycleLabels({ customerId, tenantId, chatId });
     }
 
-    // 4. Google Contacts auto-sync (best-effort)
+    // 4. Google Contacts auto-sync (best-effort, berjalan setelah nama dan anak diperbarui)
     try {
       const { googleContactsService } = await import('./google-contacts.service');
       googleContactsService.syncCustomer(tenantId, customerId, { trigger: 'reservation' }).catch(() => {});
