@@ -193,9 +193,31 @@ export class CronService {
       });
 
       console.log(`[Cron Service] Sending morning reminder to ${res.customer.phone} (${customerName || 'Bunda'})`);
+      const targetTenantId = res.tenant_id || DEFAULT_TENANT_ID;
+
+      // Pre-log pesan reminder ke tabel messages untuk Live Chat
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(res.customer_id, targetTenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId: targetTenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: messageText,
+            senderType: 'BOT',
+            senderName: 'Bot (Morning Reminder)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[Cron Service] Failed to log morning reminder to messages:', logErr.message);
+      }
+
       await typingService.simulateHumanReply({
         chatId: res.customer.phone,
         replyText: messageText,
+        tenantId: targetTenantId,
       });
     }
   }
@@ -252,9 +274,31 @@ export class CronService {
 
       // 2. Kirim pesan review H+1
       console.log(`[Cron Service] Sending H+1 review to ${res.customer.phone} (${customerName || 'Bunda'}, Baby: ${res.treatment_category === 'MOMS' ? '-' : 'bayi'})`);
+      const targetTenantId = res.tenant_id || DEFAULT_TENANT_ID;
+
+      // Pre-log pesan review H+1 ke tabel messages untuk Live Chat
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(res.customer_id, targetTenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId: targetTenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: messageText,
+            senderType: 'BOT',
+            senderName: 'Bot (Review H+1)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[Cron Service] Failed to log H+1 review to messages:', logErr.message);
+      }
+
       await typingService.simulateHumanReply({
         chatId: res.customer.phone,
         replyText: messageText,
+        tenantId: targetTenantId,
       });
 
       // 3. Daftarkan 3 row follow_ups NEXT_TREATMENT (+1, +2, +3 bulan)

@@ -227,11 +227,32 @@ export class BroadcastQueueService {
         throw new Error(`Failed to resolve template for follow-up: ${followUpId}`);
       }
 
+      // Pre-log pesan follow-up ke tabel messages untuk Live Chat
+      const targetTenantId = followUp.tenant_id || DEFAULT_TENANT_ID;
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(customer.id, targetTenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId: targetTenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: replyText,
+            senderType: 'BOT',
+            senderName: 'Bot (Follow-Up)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[Broadcast Queue] Failed to log follow-up message to DB:', logErr.message);
+      }
+
       // 4. Kirim pesan dengan simulasi human typing
       console.log(`[Broadcast Queue] Sending throttled follow-up (Stage ${followUp.stage}) to ${customer.phone}`);
       const res = await typingService.simulateHumanReply({
         chatId: customer.phone,
         replyText,
+        tenantId: targetTenantId,
       });
 
       if (!res.success) {

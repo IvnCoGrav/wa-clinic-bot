@@ -53,7 +53,7 @@ export class DecisionMatrix {
         reason: 'Customer izin konsultasi -> Sambut ramah dan tanyakan kebutuhan perawatan.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: `${greetingHeader}\nTentu boleh sekali, Bunda! 😊 Mau tanya seputar perawatan apa untuk si kecil atau Bunda? Silakan, saya siap bantu jelaskan yaa 🤗`,
+        deterministicTemplateReply: `${greetingHeader}\nTentu boleh sekali, Bunda! 😊 Mau tanya seputar perawatan apa untuk si kecil atau Bunda? Silakan, kami siap bantu jelaskan yaa 🤗`,
       };
     }
 

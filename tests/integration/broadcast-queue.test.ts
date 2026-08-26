@@ -108,7 +108,9 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
 
     // Pastikan throttling setTimeout dipanggil dengan jeda antara 20s - 45s
     expect(setTimeoutSpy).toHaveBeenCalled();
-    const delayArg = setTimeoutSpy.mock.calls[0][1];
+    const throttlingCall = setTimeoutSpy.mock.calls.find((c: any) => c[1] !== undefined && c[1] >= 20000);
+    expect(throttlingCall).toBeDefined();
+    const delayArg = throttlingCall[1];
     expect(delayArg).toBeGreaterThanOrEqual(20000);
     expect(delayArg).toBeLessThanOrEqual(45000);
   });

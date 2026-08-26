@@ -4,6 +4,59 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Architecture & Enhanced — Centralized PersonaComposer, Unified Sanitizer, & Anti-Patchwork Engine (2026-08-26)
+
+- **Latar Belakang & Masalah yang Dipecahkan:**
+  1. **Solusi Tambal-Sulam & Fragmentasi Prompt**: Sebelumnya terdapat 5 prompt terpisah di 5 file berbeda (`generator.ts`, `fast-faq-generator.ts`, `reply-generator.ts`, `ai-verifier.service.ts`, `phrasing.service.ts`) dan sanitizer tersebar secara acak, sehingga perbaikan aturan di satu file bocor di file lain.
+  2. **Halusinasi Medis Usia Newborn**: Modul Fast-Track FAQ berhalusinasi menyuruh customer newborn (usia 3 minggu) menunggu minimal 1 bulan, padahal SOP resmi klinik menyatakan newborn (0–28 hari / 0 bulan) 100% aman dan sangat dianjurkan dipijat oleh Bidan ber-STR.
+  3. **Looping Monoton Kalimat Penutup**: AI mengulang kalimat statis *"Ada yang ingin Bunda konsultasikan untuk si kecil?"* di hampir setiap balasan.
+  4. **Greeting Overuse & Slang Leakage**: Sapaan *"Halo Bunda!"* berulang di percakapan lanjutan, kata slang *"Bund"*, kata ganti *"saya"*, dan merk spesifik e-wallet (*"QRIS ShopeePay"*) lolos ke chat customer.
+  5. **Pembajakan Alur Iklan Meta**: Regex FAQ mencocokkan kata *"home-treatment"* dari pesan klik iklan Meta di state `INITIAL`, memotong alur onboarding kelurahan.
+- **Implementasi Arsitektur Terpusat (`src/slot-engine/persona-composer.ts`, `src/utils/language-sanitizer.ts`, `src/slot-engine/dynamic-closer.service.ts`, `src/slot-engine/fast-faq-detector.ts`, `src/slot-engine/fast-faq-generator.ts`, `src/slot-engine/reply-generator.ts`, `src/services/ai-verifier.service.ts`, `.agents/rules/anti-patchwork-architecture.md`):**
+  1. **`PersonaComposer` (Single Source of Truth Prompt Engine)**:
+     - Modul sentral perakit system prompt untuk seluruh pemanggilan LLM.
+     - Mengunci identitas Bidan Yusi, sapaan wajib *"Bunda"* (anti-"Bund"), kata ganti *"kami"* (anti-"saya"), nama brand resmi *"Kala Moms and Baby Spa"*, dan batasan anti-overclaim kuratif.
+     - Mengunci fakta klinis baku: **Newborn usia 0–28 hari / 0–1 bulan / 3 minggu 100% aman & sangat dianjurkan dipijat Bidan** (larangan keras menunda 1 bulan), durasi layanan standar (Bayi ~40m, Kids ~45m, Moms ~60m), homebase Waru, dan kebijakan ongkir 1x per kunjungan.
+  2. **`UnifiedResponseSanitizer` (Centralized Outbound Pipeline)**:
+     - Gerbang pembersih sentral sebelum pesan dikirim ke WhatsApp: normalisasi *"Bund"* $\rightarrow$ *"Bunda"*, *"saya bantu"* $\rightarrow$ *"kami bantu"*, pembersihan aksara asing/em-dash/backslash, normalisasi QRIS universal (menghapus merk e-wallet spesifik), dan perapian format angka rupiah (`Rp 25.000`).
+     - **Header Greeting Stripper**: Memangkas otomatis sapaan pembuka ganda (`^Halo Bunda!`) pada sesi percakapan lanjutan yang sedang aktif.
+  3. **`DynamicCloserService` (Slot-Aware Guidance)**:
+     - Menghasilkan kalimat penutup dinamis cerdas berdasarkan *missing slots* dari `CustomerSlate`:
+       - Belum ada lokasi $\rightarrow$ Tanya kelurahan/daerah untuk cek jadwal & ongkir.
+       - Belum ada usia anak $\rightarrow$ Tanya usia si kecil.
+       - Belum ada jadwal $\rightarrow$ Tanya preferensi hari & jam kunjungan Bidan.
+  4. **Proteksi Struktural State Machine & Fast-Track Detector**:
+     - `FastFaqDetector.isPotentialFastFaq` memproteksi state `INITIAL` dari pembajakan pesan lead iklan Meta agar customer baru selalu diarahkan ke alur onboarding kelurahan (`AWAITING_LOCATION`).
+  5. **QC Pilar 7 pada `AiResponseVerifierService`**:
+     - Menambahkan verifikasi keamanan usia newborn untuk memastikan draf AI tidak melarang pijat newborn.
+  6. **Mandat Anti-Tambal-Sulam di `.agents/rules/anti-patchwork-architecture.md` & `AGENTS.md`**:
+     - Menetapkan aturan baku permanen bagi seluruh agen AI agar tidak lagi menggunakan regex rapuh atau prompt terisolasi.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/centralized-persona-architecture.test.ts`: 13/13 tests PASS.
+  - Vitest test suite proyek: 201 test files PASS (1839 tests PASS).
+  - TypeScript build `npm run build`: 100% lolos (0 error).
+
+#### Fixed & Enhanced — Full Live Chat Outbound Sync for Automated Broadcasts & Follow-Ups (2026-08-26)
+
+- **Latar Belakang & Masalah yang Dipecahkan:**
+  1. **Hilangnya Bubble Awal di Live Chat**: Pesan follow-up otomatis (`NEXT_TREATMENT`, `NO_PURCHASE`, `Review H+1`, `Morning Reminder`) yang dipecah oleh engine Humanizer menjadi 2 bubble terkirim utuh ke WhatsApp customer, namun di database `messages` dan tampilan Live Chat Admin Dashboard hanya bubble terakhir yang tersimpan.
+  2. **Penyebab Teknis**:
+     - Ketiadaan pencatatan pesan (`messageService.logMessage`) pada modul background worker sebelum/sesudah pengiriman.
+     - Pembersihan registry `inFlightBotOutbound` yang terlalu cepat secara sinkron di blok `finally` `simulateHumanReply`, sehingga webhook echo untuk bubble terakhir disalahartikan sebagai pesan eksternal baru yang terpisah.
+     - Webhook WAHA mengabaikan bubble 1 karena menganggap bot sudah mencatatnya ke database.
+- **Implementasi Perbaikan Backend (`src/services/follow-up.service.ts`, `src/services/cron.service.ts`, `src/services/broadcast-queue.service.ts`, `src/services/typing.service.ts`, `src/services/message.service.ts`):**
+  1. **Explicit Pre-Logging pada Background Services**:
+     - Menambahkan pencatatan resmi ke `messageService.logMessage` pada `FollowUpService.executeFollowUp` (WAHA & WABA), `CronService.sendMorningReminders`, `CronService.sendYesterdayReviewsAndScheduleNextFollowups`, dan `BroadcastQueueService.processBroadcastJob`.
+     - Pesan tercatat lengkap dengan atribut `direction: 'OUTBOUND'`, `senderType: 'BOT'`, dan sender name yang deskriptif (`Bot (Follow-Up)`, `Bot (Morning Reminder)`, `Bot (Review H+1)`).
+  2. **In-Flight Registry TTL Preservation**:
+     - Menghapus penghapusan sinkron prematur di `typing.service.ts` `finally`, sehingga TTL default 45 detik (`ttlMs = 45000`) di `messageService` melindungi seluruh echo webhook WAHA dari false-positive.
+  3. **Multi-Bubble Fragment Matching di Anti-Duplication Webhook**:
+     - Memperbarui `checkAndAttachOutboundDuplicate` agar mampu mencocokkan potongan bubble (`existing.content.includes(normalizedContent)`) ke pesan gabungan yang sudah ada di database tanpa menciptakan duplikasi baris di Live Chat.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/follow-up-livechat-sync.test.ts`: 4/4 tests PASS.
+  - Seluruh suite unit & integration follow-up (36/36 tests PASS).
+  - TypeScript compilation `npm run build` 100% lolos (0 error).
+
 #### Enhanced — Natural Name & Multi-Baby Sanitizer + Auto-Queued Follow-Up Pipeline (2026-08-26)
 
 - **Latar Belakang & Masalah yang Dipecahkan:**

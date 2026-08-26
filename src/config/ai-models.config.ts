@@ -233,8 +233,8 @@ export class AiModelConfigService {
     if (!config) {
       return {
         task,
-        provider: 'MiniMax',
-        modelName: 'MiniMax-M2.7-highspeed',
+        provider: 'OpenAI',
+        modelName: 'gpt-4o-mini',
         description: 'Default Fallback Model',
         maxTokens: 1024,
         temperature: 0.3,
