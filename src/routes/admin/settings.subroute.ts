@@ -674,23 +674,40 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/ai-rollout-scope',
     async (
       request: FastifyRequest<{
-        Body: { aiCustomerScope?: 'NEW_ONLY' | 'ALL'; aiScopeCutoffAt?: string };
+        Body: {
+          aiCustomerScope?: 'NEW_ONLY' | 'ALL';
+          aiScopeCutoffAt?: string;
+          legacyBypassBot?: boolean;
+          repeatPatientBypassBot?: boolean;
+        };
       }>,
       reply: FastifyReply
     ) => {
       const body = request.body || {};
-      const patch: { ai_customer_scope?: 'NEW_ONLY' | 'ALL'; ai_scope_cutoff_at?: Date } = {};
+      const patch: {
+        ai_customer_scope?: 'NEW_ONLY' | 'ALL';
+        ai_scope_cutoff_at?: Date;
+        legacy_bypass_bot?: boolean;
+        repeat_patient_bypass_bot?: boolean;
+      } = {};
+
       if (body.aiCustomerScope === 'NEW_ONLY' || body.aiCustomerScope === 'ALL') {
         patch.ai_customer_scope = body.aiCustomerScope;
       }
       if (body.aiScopeCutoffAt && !isNaN(Date.parse(body.aiScopeCutoffAt))) {
         patch.ai_scope_cutoff_at = new Date(body.aiScopeCutoffAt);
       }
+      if (typeof body.legacyBypassBot === 'boolean') {
+        patch.legacy_bypass_bot = body.legacyBypassBot;
+      }
+      if (typeof body.repeatPatientBypassBot === 'boolean') {
+        patch.repeat_patient_bypass_bot = body.repeatPatientBypassBot;
+      }
 
       if (Object.keys(patch).length === 0) {
         return reply
           .status(400)
-          .send({ error: 'Body harus berisi aiCustomerScope (NEW_ONLY|ALL) dan/atau aiScopeCutoffAt (ISO date).' });
+          .send({ error: 'Body harus berisi aiCustomerScope, aiScopeCutoffAt, legacyBypassBot, atau repeatPatientBypassBot.' });
       }
 
       try {
@@ -708,7 +725,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({
           success: true,
-          message: `AI Rollout Scope diperbarui: scope=${cfg.ai_customer_scope}, cutoff=${cfg.ai_scope_cutoff_at.toISOString()}.`,
+          message: `AI Rollout Scope diperbarui: scope=${cfg.ai_customer_scope}, cutoff=${cfg.ai_scope_cutoff_at.toISOString()}, legacyBypass=${cfg.legacy_bypass_bot}, repeatBypass=${cfg.repeat_patient_bypass_bot}.`,
           data: cfg,
         });
       } catch (err: any) {

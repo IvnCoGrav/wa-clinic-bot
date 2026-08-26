@@ -129,6 +129,7 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "consult_symptom": Mengeluhkan kondisi anak (grok-grok, batuk, pilek, kembung, kolik, susah makan/GTM, susah tidur/rewel, pegal/capek).
 - "ask_price": Menanyakan harga, tarif, promo, atau minta pricelist.
 - "ask_clinic_origin": Menanyakan klinik/bidan berasal dari daerah/lokasi mana.
+- "ask_schedule": Menanyakan ketersediaan hari/jam/slot (misal "Jumat apakah bisa?", "bisa besok jam 3?", "ada slot kosong hari minggu?").
 - "select_treatment": Memilih treatment tertentu (misal "Pijat Pulih", "Sinar Moksa", atau rujukan anaphora seperti "yang tadi", "paket kedua").
 - "request_booking": Mengajukan reservasi/minta dijadwalkan hari/jam tertentu.
 - "affirmation": Persetujuan/jawaban positif singkat (boleh, iya, siap, mau).
@@ -137,10 +138,12 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "chitchat": Sapaan atau basa-basi umum.
 
 ATURAN EKSTRAKSI:
-1. Jika customer menyebut nama perumahan/gang (misal: "Darmo permai selatan gang 17") setelah kelurahan diketahui, masukkan ke "street_detail".
-2. Konversikan usia ke total bulan pada "child_age_months" (contoh: "2 bulan" -> 2, "1 tahun" -> 12, "3 tahun" -> 36).
-3. Tangkap semua keluhan fisik/anak ke dalam array "symptoms".
-4. Pecahkan rujukan anaphora ("yang tadi", "yang kedua") ke "treatment_referenced" jika ada riwayat percakapan.
+1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah pada PESAN CUSTOMER TERBARU. DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain (seperti rekomendasi usia, tanya treatment, atau tanya jadwal).
+2. Jika customer menyebut nama perumahan/gang (misal: "Darmo permai selatan gang 17") setelah kelurahan diketahui, masukkan ke "street_detail".
+3. Konversikan usia ke total bulan pada "child_age_months" (contoh: "1 bulan" -> 1, "2 bulan" -> 2, "1 tahun" -> 12, "3 tahun" -> 36).
+4. Tangkap semua keluhan fisik/anak ke dalam array "symptoms".
+5. Pecahkan rujukan anaphora ("yang tadi", "yang kedua") ke "treatment_referenced" jika ada riwayat percakapan.
+6. Jika pesan terbaru menanyakan ketersediaan jadwal ("Jumat apakah bisa?"), masukkan intent "ask_schedule" dan waktu ke "preferred_date_text".
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {

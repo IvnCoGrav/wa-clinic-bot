@@ -8,6 +8,7 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
   beforeAll(() => {
     process.env.HUMANIZER_ENABLED = 'false';
     process.env.ENABLE_FOLLOWUP_WORKER = 'true';
+    process.env.ENABLE_BROADCAST_THROTTLING_TEST = 'true';
   });
 
   let setTimeoutSpy: any;

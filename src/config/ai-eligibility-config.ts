@@ -15,6 +15,8 @@ import { DEFAULT_TENANT_ID } from './tenant';
 export interface AiEligibilityConfig {
   ai_customer_scope: AiCustomerScope;
   ai_scope_cutoff_at: Date;
+  legacy_bypass_bot: boolean;
+  repeat_patient_bypass_bot: boolean;
 }
 
 // Kolom DB NOT NULL (default now()). Default fail-closed: scope NEW_ONLY + cutoff
@@ -22,9 +24,14 @@ export interface AiEligibilityConfig {
 // kalau di-cache saat boot, cutoff yang beku tidak representatif untuk keputusan
 // fail-closed yang konsisten sepanjang uptime server.
 function buildFailClosedConfig(): AiEligibilityConfig {
+  const envScope = process.env.AI_CUSTOMER_SCOPE === 'ALL' ? AiCustomerScope.ALL : AiCustomerScope.NEW_ONLY;
+  const legacyBypass = process.env.LEGACY_BYPASS_BOT !== 'false';
+  const repeatBypass = process.env.REPEAT_PATIENT_BYPASS_BOT !== 'false';
   return {
-    ai_customer_scope: AiCustomerScope.NEW_ONLY,
+    ai_customer_scope: envScope,
     ai_scope_cutoff_at: new Date(),
+    legacy_bypass_bot: legacyBypass,
+    repeat_patient_bypass_bot: repeatBypass,
   };
 }
 
@@ -57,9 +64,13 @@ export class AiEligibilityConfigService {
       const { prisma } = await import('../db/client');
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
       if (tenant) {
+        const legacyBypass = process.env.LEGACY_BYPASS_BOT !== 'false';
+        const repeatBypass = process.env.REPEAT_PATIENT_BYPASS_BOT !== 'false';
         configCache.set(tenantId, {
           ai_customer_scope: tenant.ai_customer_scope,
           ai_scope_cutoff_at: tenant.ai_scope_cutoff_at,
+          legacy_bypass_bot: legacyBypass,
+          repeat_patient_bypass_bot: repeatBypass,
         });
         return true;
       }

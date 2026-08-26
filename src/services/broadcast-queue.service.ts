@@ -270,9 +270,9 @@ export class BroadcastQueueService {
 
 
 
-      // 7. Jeda Acak (Random Jitter) Throttling 20 - 45 detik (0s in test mode)
-      const isTestEnv = process.env.NODE_ENV === 'test';
-      const randomDelayMs = isTestEnv ? 0 : Math.floor(Math.random() * (45000 - 20000 + 1)) + 20000;
+      // 7. Jeda Acak (Random Jitter) Throttling 20 - 45 detik (0s in test mode unless overridden)
+      const isTestEnv = process.env.NODE_ENV === 'test' && process.env.ENABLE_BROADCAST_THROTTLING_TEST !== 'true';
+      const randomDelayMs = Math.floor(Math.random() * (45000 - 20000 + 1)) + 20000;
       if (!isTestEnv) {
         console.log(`[Broadcast Queue] Throttling: Waiting for ${randomDelayMs / 1000}s before next job.`);
         await new Promise((resolve) => setTimeout(resolve, randomDelayMs));
