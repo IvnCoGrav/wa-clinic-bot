@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & Enhanced — Automated Telegram Morning Briefing for On-Duty Midwives (2026-08-26)
+
+- **Latar Belakang & Kebutuhan:**
+  1. **Briefing Jadwal Kunjungan Bidan Lapangan**: Diperlukan notifikasi otomatis setiap pagi (06:00 / 07:00 WIB) langsung ke akun Telegram pribadi masing-masing Bidan/Terapis yang bertugas, berisi rangkuman jadwal kunjungan hari tersebut secara terstruktur, urut jam, lengkap dengan data anak/ibu, link navigasi rute Maps motor, dan rincian biaya.
+- **Implementasi Fitur & Arsitektur (`src/services/staff-notification.service.ts`, `src/services/cron.service.ts`, `src/routes/admin/staff-management.subroute.ts`, `tests/unit/staff-daily-briefing.test.ts`):**
+  1. **`StaffNotificationService.generateDailyBriefingText`**:
+     - Membangun layout pesan briefing Markdown persis sesuai kebutuhan: header tanggal WIB, urutan nomor emoji (`1️⃣`, `2️⃣`, `3️⃣`), data si kecil/ibu hamil, rincian layanan, alamat kelurahan/kecamatan, tautan navigasi motor Google Maps, format total harga (`200k`), tautan portal internal staf, dan kalimat penyemangat.
+     - Sanitasi karakter markdown (`*`, `_`, `[`, `]`) untuk mencegah *parse error* Telegram API.
+  2. **`StaffNotificationService.sendStaffDailyBriefing` & `sendAllStaffMorningBriefings`**:
+     - Perhitungan rentang hari UTC+7 WIB (`getWibDayRange`).
+     - Pengambilan reservasi terkonfirmasi (`status != 'CANCELLED'`) yang ditugaskan ke staf pada tanggal terkait.
+     - Pengiriman otomatis via `telegramService.sendMessage` ke `telegram_chat_id` staf.
+  3. **Integrasi Morning Jobs di `CronService.runMorningJobs`**:
+     - Briefing otomatis terpicu setiap pagi bersamaan dengan siklus morning jobs (06:00/07:00 WIB).
+  4. **Admin Trigger & Testing Endpoints (`src/routes/admin/staff-management.subroute.ts`)**:
+     - `POST /api/admin/staff/:id/send-briefing`: Trigger manual pengiriman briefing ke staf tertentu dengan opsi parameter tanggal.
+     - `POST /api/admin/staff/trigger-morning-briefing`: Re-dispatch briefing ke seluruh staf bertugas hari ini.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/staff-daily-briefing.test.ts`: 8/8 tests PASS (formatting, day range, sanitasi markdown, multi-staff aggregation, graceful fallback saat Telegram belum terhubung).
+  - TypeScript compilation `npm run build` lolos 100% (0 error).
+
 #### Architecture & Enhanced — Centralized PersonaComposer, Unified Sanitizer, & Anti-Patchwork Engine (2026-08-26)
 
 - **Latar Belakang & Masalah yang Dipecahkan:**

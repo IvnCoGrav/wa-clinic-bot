@@ -270,10 +270,12 @@ export class BroadcastQueueService {
 
 
 
-      // 7. Jeda Acak (Random Jitter) Throttling 20 - 45 detik
-      const randomDelayMs = Math.floor(Math.random() * (45000 - 20000 + 1)) + 20000;
-      console.log(`[Broadcast Queue] Throttling: Waiting for ${randomDelayMs / 1000}s before next job.`);
-      await new Promise((resolve) => setTimeout(resolve, randomDelayMs));
+      // 7. Jeda Acak (Random Jitter) Throttling 20 - 45 detik (dilewati saat test environment)
+      if (process.env.NODE_ENV !== 'test') {
+        const randomDelayMs = Math.floor(Math.random() * (45000 - 20000 + 1)) + 20000;
+        console.log(`[Broadcast Queue] Throttling: Waiting for ${randomDelayMs / 1000}s before next job.`);
+        await new Promise((resolve) => setTimeout(resolve, randomDelayMs));
+      }
 
     } catch (err: any) {
       console.error(`[Broadcast Queue] Error processing job ${followUpId}:`, err.message);
