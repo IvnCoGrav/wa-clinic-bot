@@ -33,40 +33,54 @@ export interface ParseResult {
 
 /**
  * Mengecek apakah sebuah pesan WhatsApp merupakan form reservasi / booking layanan
- * secara toleran terhadap berbagai variasi penulisan.
+ * secara toleran terhadap berbagai variasi penulisan tanpa false-positive pada chat biasa.
  */
 export function isReservationFormMessage(rawText: string): boolean {
   if (!rawText || typeof rawText !== 'string') return false;
   const lower = rawText.toLowerCase().replace(/\s+/g, ' ');
 
-  // 1. Explicit Header / Label Signals
-  const hasFormHeader =
-    lower.includes('pilihan treatment') ||
+  // 1. Explicit Form Header Signals (Kala Spa official booking format)
+  const hasExplicitFormHeader =
     lower.includes('list untuk reservasi') ||
+    lower.includes('berikut list untuk reservasi') ||
     lower.includes('format reservasi') ||
     lower.includes('form reservasi') ||
     lower.includes('form booking') ||
     lower.includes('format booking') ||
-    lower.includes('berikut list untuk reservasi') ||
-    lower.includes('berikut reservasi') ||
     lower.includes('list reservasi') ||
-    lower.includes('pilihan paket') ||
-    lower.includes('jadwal treatment') ||
-    lower.includes('jadwal reservasi');
+    lower.includes('pilihan treatment :') ||
+    lower.includes('pilihan treatment (') ||
+    lower.includes('pilihan paket :') ||
+    lower.includes('jadwal treatment :') ||
+    lower.includes('jadwal reservasi :');
 
-  if (hasFormHeader) return true;
+  if (hasExplicitFormHeader) return true;
 
-  // 2. Field Combination Signals (e.g. Nama Bunda + (Alamat or Treatment or Bayi or Anak))
-  const hasName = lower.includes('nama bunda') || lower.includes('nama ibu') || lower.includes('nama pasien') || lower.includes('nama:') || lower.includes('nama anak') || lower.includes('atas nama');
-  const hasAddress = lower.includes('alamat') || lower.includes('shareloc') || lower.includes('kec :') || lower.includes('kota :') || lower.includes('lokasi');
-  const hasTreatment = lower.includes('treatment') || lower.includes('pijat bayi') || lower.includes('pijat hamil') || lower.includes('baby spa') || lower.includes('paket') || lower.includes('booking') || lower.includes('reservasi');
-  const hasBaby = lower.includes('nama bayi') || lower.includes('nama anak') || lower.includes('usia bayi') || lower.includes('usia anak') || lower.includes('anak saya') || lower.includes('bayi saya') || lower.includes('newborn');
+  // 2. Structured Colon-Based Field Signals (minimal 2 explicit structured form field keys with colons)
+  const hasNameField = /nama\s*(bunda|ibu|pasien|anak|bayi)?\s*[:]/i.test(lower) || /atas\s*nama\s*[:]/i.test(lower);
+  const hasAddressField = /alamat(\s*&\s*shareloc)?\s*[:]/i.test(lower) || /kec\s*[:]/i.test(lower) || /kota\s*[:]/i.test(lower) || /shareloc\s*[:]/i.test(lower);
+  const hasTreatmentField = /treatment\s*[:]/i.test(lower) || /pilihan\s*treatment/i.test(lower) || /paket\s*[:]/i.test(lower);
+  const hasScheduleField = /hari\s*(dan|\&)?\s*tanggal\s*[:]/i.test(lower) || /tgl\s*[:]/i.test(lower) || /jadwal\s*[:]/i.test(lower);
+  const hasBabyField = /nama\s*(bayi|anak)\s*[:]/i.test(lower) || /usia\s*(bayi|anak)\s*[:]/i.test(lower);
+  const hasPhoneField = /no\.?\s*(hp|wa|telepon)\s*[:]/i.test(lower);
 
-  const matchCount = (hasName ? 1 : 0) + (hasAddress ? 1 : 0) + (hasTreatment ? 1 : 0) + (hasBaby ? 1 : 0);
-  if (matchCount >= 2) return true;
+  const structuredMatchCount =
+    (hasNameField ? 1 : 0) +
+    (hasAddressField ? 1 : 0) +
+    (hasTreatmentField ? 1 : 0) +
+    (hasScheduleField ? 1 : 0) +
+    (hasBabyField ? 1 : 0) +
+    (hasPhoneField ? 1 : 0);
 
-  // 3. Conversational Booking Pattern (e.g. "Mau booking buat anak saya ... alamat ...")
-  if ((lower.includes('booking') || lower.includes('pesan paket') || lower.includes('reservasi')) && hasAddress && (hasBaby || hasName)) {
+  if (structuredMatchCount >= 2) return true;
+
+  // 3. Explicit Free-Form Paragraph Booking Pattern (e.g. "Mau booking buat anak saya ... alamat ...")
+  // Wajib memiliki kata aksi booking + penunjuk alamat spesifik + info pasien anak
+  const hasBookingAction = /\b(mau|ingin|tolong|bisa)?\s*(booking|pesan\s+paket|reservasi)\b/i.test(lower);
+  const hasExplicitAddressWord = /\b(alamat\s*(di|:)?|jalan|jl\.|gang|blok|komplek|perumahan)\b/i.test(lower);
+  const hasChildPatientWord = /\b(anak\s+saya|bayi\s+saya|usia\s+\d+|newborn)\b/i.test(lower);
+
+  if (hasBookingAction && hasExplicitAddressWord && hasChildPatientWord) {
     return true;
   }
 

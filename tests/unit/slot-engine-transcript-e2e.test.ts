@@ -3,32 +3,28 @@ import { processSlotEngine } from '../../src/slot-engine/slot-engine';
 import { ConversationState } from '@prisma/client';
 
 describe('Slot Engine Turn-by-Turn User Transcript E2E Simulation', () => {
-  it('Simulasi Multi-Turn: Dari penentuan lokasi, tanya rekomendasi bayi 1 bulan, pemilihan paket, hingga submit form reservasi', async () => {
+  it('Simulasi Lengkap Multi-Turn Turn-by-Turn: Alana Tambakoso Waru -> Bayi 1 Bulan -> Treatment -> Jadwal -> Submit Form', async () => {
     let customer: any = {
       id: 'cust_transcript_123',
       phone: '6282167281657',
-      name: 'Bunda Yosefin',
+      name: 'Bunda',
       tenant_id: 'default-tenant',
-      kelurahan: 'Tambakoso',
-      kecamatan: 'Waru',
-      kota: 'Kabupaten Sidoarjo',
-      lat: -7.362,
-      lng: 112.784,
+      kelurahan: null,
+      kecamatan: null,
+      kota: null,
+      lat: null,
+      lng: null,
       share_location_sent: false,
-      pricelist_sent: true,
+      pricelist_sent: false,
       status: 'active',
-      preferences: {
-        distanceKm: 9.2,
-        ongkirFee: 15000,
-        ongkirPromoFee: 10000,
-      },
+      preferences: {},
     };
 
     let conversation: any = {
       id: 'conv_transcript_123',
       customer_id: customer.id,
       tenant_id: 'default-tenant',
-      current_state: ConversationState.AWAITING_INTEREST,
+      current_state: ConversationState.INITIAL,
       is_human_handling: false,
       last_discussed_treatment: null,
       last_message_at: new Date(),
@@ -37,13 +33,56 @@ describe('Slot Engine Turn-by-Turn User Transcript E2E Simulation', () => {
     let history: Array<{ role: 'user' | 'assistant'; content: string }> = [
       {
         role: 'user',
-        content: 'Saya lokasinya di alana tambak oso waru bisa pijat bayi 1 bulan gak ya',
+        content: 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment',
       },
       {
         role: 'assistant',
-        content: 'Kalau kami cek bund, jaraknya kurang lebih 9.2 km ya. Dari pricelist untuk jarak ini ongkirnya Rp 15.000, tapi karena ada promo jadi cukup Rp 10.000 saja Bunda 😊 Mau pilih treatment apa Bunda? 😊',
+        content:
+          'Seluruh terapis Kala Moms and Baby Spa adalah Bidan Resmi bersertifikat (memiliki STR aktif) dan terlatih khusus untuk bayi massage, mom spa, dan perawatan anak ya Bunda 🩺🤗 Jadi dijamin aman, higienis, dan profesional bund.',
       },
     ];
+
+    // --- TURN 2: Customer memberikan lokasi dan menanyakan pijat bayi 1 bulan ---
+    const turn2Ctx = {
+      customer,
+      conversation,
+      incomingMessage: {
+        id: 'msg_t2',
+        chatId: `${customer.phone}@c.us`,
+        from: customer.phone,
+        text: { body: 'Saya lokasinya di alana tambak oso waru bisa pijat bayi 1 bulan gak ya' },
+        type: 'text',
+      },
+      tenantId: 'default-tenant',
+      history,
+    };
+
+    const turn2Result = await processSlotEngine(turn2Ctx as any);
+
+    // Turn 2 HARUS:
+    // 1. Menghitung ongkir dan jarak (Tambakoso, Waru -> ~9.2 km, ongkir normal/promo)
+    // 2. Menjawab tentang pijat bayi 1 bulan
+    // 3. TIDAK salah deteksi sebagai form reservasi ("Mohon maaf Bunda, mohon diisi bagian...")
+    expect(turn2Result.replyText).not.toContain('pada list reservasi');
+    expect(turn2Result.shouldSendReply).toBe(true);
+    expect(turn2Result.replyText.toLowerCase()).toMatch(/jarak|km|ongkir|promo|tambakoso|waru|alana/);
+
+    // Slate tersimpan ke state customer
+    customer.kelurahan = 'Tambakoso';
+    customer.kecamatan = 'Waru';
+    customer.kota = 'Kabupaten Sidoarjo';
+    customer.lat = -7.362;
+    customer.lng = 112.784;
+    customer.preferences = {
+      distanceKm: 9.2,
+      ongkirFee: 15000,
+      ongkirPromoFee: 10000,
+    };
+
+    history.push(
+      { role: 'user', content: 'Saya lokasinya di alana tambak oso waru bisa pijat bayi 1 bulan gak ya' },
+      { role: 'assistant', content: turn2Result.replyText }
+    );
 
     // --- TURN 3: Customer menanyakan rekomendasi untuk bayi 1 bulan ---
     const turn3Ctx = {
@@ -64,6 +103,8 @@ describe('Slot Engine Turn-by-Turn User Transcript E2E Simulation', () => {
     // Pastikan Turn 3 TIDAK mengulang template ongkir (bukan "Kalau kami cek bund, jaraknya kurang lebih 9.2 km")
     expect(turn3Result.replyText).not.toContain('jaraknya kurang lebih 9.2 km');
     expect(turn3Result.shouldSendReply).toBe(true);
+    // Dynamic closer tidak boleh bertanya kelurahan lagi karena lokasi sudah diketahui
+    expect(turn3Result.replyText).not.toContain('rumah Bunda di daerah atau kelurahan mana');
 
     history.push(
       { role: 'user', content: 'Hm biasa untuk bayi 1 bulan apa ya' },
@@ -87,14 +128,36 @@ describe('Slot Engine Turn-by-Turn User Transcript E2E Simulation', () => {
 
     const turn4Result = await processSlotEngine(turn4Ctx as any);
     expect(turn4Result.shouldSendReply).toBe(true);
-    expect(turn4Result.replyText.toLowerCase()).toMatch(/bisa|tersedia|laktasi/);
+    expect(turn4Result.replyText.toLowerCase()).toMatch(/bisa|tersedia|laktasi|oksitosin/);
+    // Dynamic closer bertanya preferensi jadwal (SCHEDULE), bukan menanyakan lokasi lagi
+    expect(turn4Result.replyText).not.toContain('rumah Bunda di daerah atau kelurahan mana');
 
     history.push(
       { role: 'user', content: 'Pijat bayi ceria aja sm kalo untuk saya yg paket bundling pijat laktasi+oksitosin bisa kan ya' },
       { role: 'assistant', content: turn4Result.replyText }
     );
 
-    // --- TURN 7: Customer mengirimkan formulir reservasi yang sudah diisi ---
+    // --- TURN 5: Customer menanyakan ketersediaan hari Jumat ---
+    const turn5Ctx = {
+      customer,
+      conversation,
+      incomingMessage: {
+        id: 'msg_t5',
+        chatId: `${customer.phone}@c.us`,
+        from: customer.phone,
+        text: { body: 'Jumat apakah bisa' },
+        type: 'text',
+      },
+      tenantId: 'default-tenant',
+      history,
+    };
+
+    const turn5Result = await processSlotEngine(turn5Ctx as any);
+    expect(turn5Result.shouldSendReply).toBe(true);
+    // Dynamic closer tidak boleh bertanya kelurahan lagi
+    expect(turn5Result.replyText).not.toContain('rumah Bunda di daerah atau kelurahan mana');
+
+    // --- TURN 6: Customer mengirimkan formulir reservasi yang sudah diisi ---
     const filledFormText = `Berikut list untuk reservasi :
 
 Hari dan tanggal : jumat 28 Juli
@@ -115,11 +178,11 @@ Pilihan treatment (Moms) :bundling pijat laktasi dan oksitosin
 Usia Kehamilan (Jika hamil):
 Treatment : -`;
 
-    const turn7Ctx = {
+    const turn6Ctx = {
       customer,
       conversation,
       incomingMessage: {
-        id: 'msg_t7',
+        id: 'msg_t6',
         chatId: `${customer.phone}@c.us`,
         from: customer.phone,
         text: { body: filledFormText },
@@ -129,16 +192,16 @@ Treatment : -`;
       history,
     };
 
-    const turn7Result = await processSlotEngine(turn7Ctx as any);
+    const turn6Result = await processSlotEngine(turn6Ctx as any);
 
     // Bot HARUS:
     // 1. Pindah ke HUMAN_HANDLING
     // 2. Set isHumanHandling: true
-    // 3. Mengirimkan konfirmasi penerimaan data reservasi (BUKAN form kosong lagi!)
-    expect(turn7Result.nextState).toBe(ConversationState.HUMAN_HANDLING);
-    expect(turn7Result.isHumanHandling).toBe(true);
-    expect(turn7Result.shouldSendReply).toBe(true);
-    expect(turn7Result.replyText).toContain('data reservasi sudah kami terima');
-    expect(turn7Result.replyText).not.toContain('Berikut list untuk reservasi :');
+    // 3. Mengirimkan konfirmasi penerimaan data reservasi
+    expect(turn6Result.nextState).toBe(ConversationState.HUMAN_HANDLING);
+    expect(turn6Result.isHumanHandling).toBe(true);
+    expect(turn6Result.shouldSendReply).toBe(true);
+    expect(turn6Result.replyText).toContain('data reservasi sudah kami terima');
+    expect(turn6Result.replyText).not.toContain('Berikut list untuk reservasi :');
   });
 });

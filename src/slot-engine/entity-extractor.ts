@@ -43,6 +43,18 @@ export class EntityExtractor {
       }
     }
 
+    // 1b. Deteksi teks lokasi langsung (misal: "Saya lokasinya di alana tambak oso waru bisa...")
+    const locMatch = lower.match(
+      /\b(?:lokasi(?:nya)?|alamat(?:nya)?|rumah(?:nya)?|daerah|posisi)\s+(?:saya\s+)?(?:di\s+|:\s*|\s+)?([a-z0-9\s,.-]+?)(?:\s+(?:bisa|mau|untuk|buat|apakah|ada|mohon)\b|$)/i
+    );
+    if (locMatch && locMatch[1] && locMatch[1].trim().length >= 3) {
+      result.locationText = locMatch[1].trim();
+      result.intents = result.intents || [];
+      if (!result.intents.includes('provide_location')) {
+        result.intents.push('provide_location');
+      }
+    }
+
     // 2. Usia Deterministik via Age Calculator
     const ageMonths = parseAgeTextToMonths(text);
     if (ageMonths !== null) {

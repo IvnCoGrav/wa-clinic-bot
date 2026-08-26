@@ -4,6 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Bugfix — Elimination of Reservation Form False-Positives on Conversational Inquiries (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Deteksi Palsu Form Reservasi pada Pertanyaan Chat Biasa**:
+     - Pada fungsi `isReservationFormMessage` (`src/utils/reservation-text-parser.ts`), pencocokan kata kunci signal 2 terlalu longgar (misal kata `lokasi` dan `pijat bayi` dianggap sebagai field form reservasi).
+     - Akibatnya, pesan pertanyaan biasa seperti *"Saya lokasinya di alana tambak oso waru bisa pijat bayi 1 bulan gak ya"* terdeteksi secara keliru sebagai formulir reservasi yang tidak lengkap, memicu balasan validasi *"Mohon maaf Bunda, mohon diisi bagian Nama Bunda/Bayi, Alamat pada list reservasi ya bund. Terima kasih! 😊"*.
+  2. **Dampak Ikutan Hilangnya Ekstraksi Lokasi ke State Customer**:
+     - Karena terputus di gerbang form palsu, lokasi *"alana tambak oso waru"* tidak pernah diproses oleh `EntityExtractor` dan `DecisionMatrix`.
+     - Slate customer tidak menyimpan kelurahan/jarak terkonfirmasi, sehingga pada pesan-pesan berikutnya (*"Hm biasa untuk bayi 1 bulan apa ya"*, *"Pijat bayi ceria..."*, *"Jumat apakah bisa"*), `DynamicCloserService` terus mengulang pertanyaan alamat/kelurahan.
+- **Solusi & Implementasi:**
+  1. **Pengetatan `isReservationFormMessage` (`src/utils/reservation-text-parser.ts`)**:
+     - Mengganti pencocokan kata kunci umum dengan deteksi berbasis struktur titik dua (`:`), header form resmi (`list untuk reservasi :`, `format reservasi :`, `pilihan treatment :`), atau paragraf booking eksplisit (*mau booking* + *alamat di* + *anak saya/newborn*).
+  2. **Fallback Aman pada Interseptor Form (`src/slot-engine/slot-engine.ts`)**:
+     - Jika parsing form gagal dan pesan bukan berupa template form berstruktur (tidak memiliki header/label titik dua), bot tidak menolak pesan dan membiarkannya mengalir mulus ke alur normal `SlotEngine` / NLU.
+  3. **Ekstraksi Deterministik Lokasi Teks (`src/slot-engine/entity-extractor.ts`)**:
+     - Menambahkan regex penangkap lokasi langsung pada `preExtractDeterministic` agar lokasi teks dapat terekstraksi secara instan dan andal.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-transcript-e2e.test.ts`: Turn-by-turn simulation dari Turn 1 hingga Turn 6 lulus 100%.
+  - `tests/unit/hybrid-reservation-parser.test.ts` & `tests/unit/slot-engine-form-and-schedule-integration.test.ts`: 100% PASS.
+  - Full automated test suite: 211/211 test files PASS (1,885 tests PASS, 0 failures).
+  - TypeScript build (`npm run build`): 0 errors.
+
 #### Feature & Policy — Manual CS Bypass for Legacy & Repeat Patients with Admin Dashboard Toggles (2026-08-27)
 
 - **Latar Belakang & Kebutuhan:**
