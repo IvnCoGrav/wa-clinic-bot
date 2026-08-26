@@ -21,6 +21,11 @@ export class CronService {
       await this.cleanupOldAdClicks();
       await this.purgeOldLegacyStaging();
       await this.checkPendingPurchaseModerationAlerts();
+
+      // Kirim Morning Briefing Jadwal ke Telegram pribadi seluruh Bidan/Terapis yang bertugas hari ini
+      const { staffNotificationService } = await import('./staff-notification.service');
+      await staffNotificationService.sendAllStaffMorningBriefings(DEFAULT_TENANT_ID);
+
       console.log('[Cron Service] Morning Jobs Completed successfully.');
     } catch (err) {
       console.error('[Cron Service] Error running morning jobs:', err);

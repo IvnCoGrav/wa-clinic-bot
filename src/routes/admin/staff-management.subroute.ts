@@ -265,4 +265,75 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * POST /api/admin/staff/:id/send-briefing
+   * Mengirimkan briefing jadwal harian ke Telegram pribadi staf/bidan tertentu (bisa menentukan tanggal).
+   */
+  fastify.post(
+    '/api/admin/staff/:id/send-briefing',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body?: { date?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const targetDate = request.body?.date ? new Date(request.body.date) : new Date();
+
+      try {
+        const { staffNotificationService } = await import('../../services/staff-notification.service');
+        const result = await staffNotificationService.sendStaffDailyBriefing(id, targetDate);
+
+        if (!result.sent) {
+          return reply.status(400).send({
+            success: false,
+            error: result.reason || 'Gagal mengirimkan briefing jadwal ke Telegram staf.',
+            data: result,
+          });
+        }
+
+        return reply.status(200).send({
+          success: true,
+          message: `Briefing jadwal berhasil dikirim ke Telegram staf (${result.count || 0} jadwal).`,
+          data: result,
+        });
+      } catch (err: any) {
+        console.error('[ADMIN STAFF API] Error sending briefing to staff:', err.message);
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/staff/trigger-morning-briefing
+   * Memicu pengiriman Morning Briefing ke seluruh staf aktif yang bertugas hari ini.
+   */
+  fastify.post(
+    '/api/admin/staff/trigger-morning-briefing',
+    async (
+      request: FastifyRequest<{
+        Body?: { date?: string; tenant_id?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = request.body?.tenant_id || DEFAULT_TENANT_ID;
+      const targetDate = request.body?.date ? new Date(request.body.date) : new Date();
+
+      try {
+        const { staffNotificationService } = await import('../../services/staff-notification.service');
+        const stats = await staffNotificationService.sendAllStaffMorningBriefings(tenantId, targetDate);
+
+        return reply.status(200).send({
+          success: true,
+          message: `Morning Briefing selesai dikirim ke ${stats.briefedStaff}/${stats.totalStaff} staf (${stats.totalReservations} total jadwal).`,
+          data: stats,
+        });
+      } catch (err: any) {
+        console.error('[ADMIN STAFF API] Error triggering morning briefings:', err.message);
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
 }
