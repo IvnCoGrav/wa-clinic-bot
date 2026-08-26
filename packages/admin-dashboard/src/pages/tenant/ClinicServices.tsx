@@ -537,8 +537,10 @@ export const ClinicServices: React.FC = () => {
                   const isBundle = srv.category === 'BUNDLE' || srv.serviceType === 'BUNDLE' || (Array.isArray(srv.bundleItemIds) && srv.bundleItemIds.length >= 2);
                   const isAddon = srv.category === 'ADD_ON' || srv.serviceType === 'ADD_ON' || srv.isAddon === true;
                   const bundleComponents = isBundle && srv.bundleItemIds ? srv.bundleItemIds.map(id => serviceMap.get(id)).filter(Boolean) as ClinicServiceItem[] : [];
-                  const savings = srv.originalPrice - srv.promoPrice;
-                  const savingsPercent = srv.originalPrice > 0 ? Math.round((savings / srv.originalPrice) * 100) : 0;
+                  const origPrice = Number(srv.originalPrice) || 0;
+                  const promPrice = Number(srv.promoPrice) || 0;
+                  const savings = origPrice - promPrice;
+                  const savingsPercent = origPrice > 0 ? Math.round((savings / origPrice) * 100) : 0;
 
                   return (
                     <tr
@@ -575,7 +577,7 @@ export const ClinicServices: React.FC = () => {
                                   key={c.id}
                                   className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white text-indigo-800 border border-indigo-200"
                                 >
-                                  {c.name} (Rp {c.originalPrice.toLocaleString('id-ID')})
+                                  {c.name} (Rp {Number(c.originalPrice || 0).toLocaleString('id-ID')})
                                 </span>
                               ))}
                             </div>
@@ -614,18 +616,18 @@ export const ClinicServices: React.FC = () => {
                       <td className="px-4 py-3.5 text-xs text-[#54656f]">
                         <div className="flex items-center space-x-1">
                           <Clock size={12} className="text-[#8696a0]" />
-                          <span>{srv.durationMinutes} mnt</span>
+                          <span>{srv.durationMinutes || 0} mnt</span>
                         </div>
                       </td>
 
                       <td className="px-4 py-3.5 text-xs text-[#8696a0] text-right line-through">
-                        Rp {srv.originalPrice.toLocaleString('id-ID')}
+                        Rp {origPrice.toLocaleString('id-ID')}
                       </td>
 
                       <td className="px-4 py-3.5 text-xs text-right">
                         <div className="flex items-center justify-end space-x-0.5 font-bold text-[#008069]">
                           <Sparkles size={11} />
-                          <span>Rp {srv.promoPrice.toLocaleString('id-ID')}</span>
+                          <span>Rp {promPrice.toLocaleString('id-ID')}</span>
                         </div>
                         {savings > 0 && (
                           <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
