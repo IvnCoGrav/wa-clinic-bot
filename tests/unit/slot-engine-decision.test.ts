@@ -87,7 +87,7 @@ describe('Deterministic Decision Matrix & Grounding Package Composer (Part 4)', 
     expect(decision.deterministicTemplateReply).toContain('di luar jangkauan');
   });
 
-  it('Priority 5: should return reservation form when treatment and date are set', async () => {
+  it('Priority 5: should route booking-ready inquiries to AI response generation with smart pre-filled grounding', async () => {
     const readyBookingExtraction: ExtractedEntities = {
       ...emptyExtraction,
       treatmentReferenced: 'Pijat Bayi Pulih Ceria',
@@ -96,9 +96,16 @@ describe('Deterministic Decision Matrix & Grounding Package Composer (Part 4)', 
     };
 
     const decision = await DecisionMatrix.evaluate(baseSlate, readyBookingExtraction);
-    expect(decision.action).toBe('SEND_RESERVATION_FORM');
-    expect(decision.deterministicTemplateReply).toContain('list untuk reservasi');
+    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
+    expect(decision.reason).toMatch(/reservasi|booking/i);
     expect(decision.updatedSlate.selectedTreatmentName).toBe('Pijat Bayi Pulih Ceria');
+
+    // Test explicit form request
+    const explicitFormDecision = await DecisionMatrix.evaluate(baseSlate, readyBookingExtraction, {
+      incomingText: 'minta format reservasi booking dong',
+    });
+    expect(explicitFormDecision.action).toBe('SEND_RESERVATION_FORM');
+    expect(explicitFormDecision.deterministicTemplateReply).toContain('list untuk reservasi');
   });
 
   it('Priority 6: should route general inquiries to AI response generation', async () => {

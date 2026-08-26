@@ -229,14 +229,15 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
-    // PRIORITY 7: FORM RESERVASI LENGKAP (Treatment Terpilih + Niat Booking)
+    // PRIORITY 7: PERCAKAPAN RESERVASI & BOOKING READY
+    // Alirkan ke ReplyGenerator (LLM 2) untuk menyusun jawaban empatik & smart form
     // =========================================================================
     const isBookingReady =
       updatedSlate.isLocationConfirmed &&
       Boolean(updatedSlate.selectedTreatmentName) &&
-      (Boolean(updatedSlate.preferredDate) || extraction.intents.includes('request_booking'));
+      (Boolean(updatedSlate.preferredDate) || extraction.intents.includes('request_booking') || extraction.intents.includes('ask_schedule'));
 
-    if (isBookingReady) {
+    if (isBookingReady && !updatedSlate.reservationFormSent) {
       try {
         const { fireCapiEvent } = await import('../services/capi.service');
         const { DEFAULT_TENANT_ID } = await import('../config/tenant');
@@ -252,7 +253,11 @@ export class DecisionMatrix {
       } catch (capiErr: any) {
         console.warn('[CAPI] InitiateCheckout (BOT_FORM_SENT) skipped in decision matrix:', capiErr.message);
       }
+    }
 
+    // Jika customer SECARA EKSPLISIT meminta teks format saja (misal: "minta form booking", "kirim formatnya")
+    const isExplicitFormOnlyRequest = /\b(minta|kirim|mana|minta\s+teks)\s+(format|form|list)\s*(reservasi|booking)?\b/i.test(rawText);
+    if (isExplicitFormOnlyRequest) {
       const reservationForm = TEMPLATES.reservationFormRequest({
         name: updatedSlate.name || undefined,
         address: updatedSlate.streetDetail
@@ -261,11 +266,14 @@ export class DecisionMatrix {
         kecamatan: updatedSlate.kecamatan || undefined,
         kota: updatedSlate.kota || undefined,
         phone: updatedSlate.phone || undefined,
+        bookingDate: updatedSlate.preferredDate || undefined,
+        treatmentBaby: updatedSlate.selectedTreatmentName || undefined,
       });
 
+      updatedSlate.reservationFormSent = true;
       return {
         action: 'SEND_RESERVATION_FORM',
-        reason: 'Informasi treatment dan jadwal lengkap -> Mengirim format reservasi.',
+        reason: 'Customer secara eksplisit meminta format reservasi -> Mengirim format reservasi.',
         updatedSlate,
         shouldSendPricelistImage: false,
         deterministicTemplateReply: reservationForm,
@@ -277,7 +285,9 @@ export class DecisionMatrix {
     // =========================================================================
     return {
       action: 'GENERATE_AI_RESPONSE',
-      reason: 'Percakapan natural/konsultasi keluhan/tanya harga -> Generate via Single-Pass LLM.',
+      reason: isBookingReady
+        ? 'Customer siap reservasi / tanya bundling -> Rangkai balasan natural & smart form via ReplyGenerator.'
+        : 'Percakapan natural/konsultasi keluhan/tanya harga -> Generate via Single-Pass LLM.',
       updatedSlate,
       shouldSendPricelistImage: false,
     };

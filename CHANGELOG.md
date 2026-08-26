@@ -4,7 +4,36 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### Bugfix — Elimination of Reservation Form False-Positives on Conversational Inquiries (2026-08-27)
+#### Feature & Refactor — Conversational Booking Pipeline, Anti-Looping Forms & Strict Persona Enforcement (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Short-Circuit Template Kaku di `DecisionMatrix`**:
+     - Ketika customer memilih treatment atau bertanya kombinasi bundling (*"Pijat bayi ceria aja sm kalo untuk saya yg paket bundling pijat laktasi+oksitosin bisa kan ya"*), aturan kode deterministik `isBookingReady` di `DecisionMatrix` langsung memotong alur LLM (`ReplyGenerator`) dan menembakkan string template mentah `reservationFormRequest` yang kosong.
+     - Akibatnya, pertanyaan customer terkait ketersediaan bundling Moms & Baby tidak terjawab, dan respon terasa kaku seperti bot formulir otomatis.
+  2. **Looping Formulir Berulang pada Pertanyaan Jadwal Lanjutan**:
+     - Saat customer menanyakan hari (*"Jumat apakah bisa"*), ketiadaan flag pelacak `reservationFormSent` menyebabkan `DecisionMatrix` kembali menganggap data siap reservasi dan menembakkan string form kosong yang sama untuk kedua kalinya berturut-turut.
+  3. **Keterbatasan Grounding Katalog Multi-Kategori**:
+     - `GroundingComposer` hanya memfilter layanan usia anak (kategori Baby), sehingga saat customer bertanya paket bundling ibu/moms (*laktasi, oksitosin*), data katalog Moms tidak masuk ke konteks LLM.
+  4. **Kebocoran Kata Slang `"bund"` & Case-Sensitivity Bug**:
+     - Template statis di `src/config/persona.ts` (`therapistQualificationPolicy`) memuat teks mentah berakhiran *"...profesional bund."*, dan regex sanitizer di `language-sanitizer.ts` bersifat case-sensitive (`/\bBund\b/g`), sehingga kata `"bund"` huruf kecil lolos ke pesan outbound WhatsApp.
+- **Solusi & Implementasi:**
+  1. **Pengetatan Sanitizer & Template Persona (`src/utils/language-sanitizer.ts` & `src/config/persona.ts`)**:
+     - Mengubah regex slang menjadi `/\bbund\b/gi` (case-insensitive) sehingga semua variasi (`bund`, `Bund`, `BUND`) 100% dinormalisasi menjadi `Bunda`.
+     - Membersihkan kata `"bund"` dari seluruh template statis di `persona.ts`.
+  2. **Pelacak State Formulir Reservasi (`reservationFormSent`) (`src/slot-engine/types.ts` & `src/slot-engine/slate-store.ts`)**:
+     - Menambahkan properti `reservationFormSent: boolean` pada `CustomerSlate`, dihydrate dan dipersist ke database preferences.
+  3. **Grounding Multi-Kategori (Baby & Kids + Moms Bundling) (`src/slot-engine/grounding-composer.ts`)**:
+     - Mendeteksi kata kunci layanan ibu/moms (*laktasi, oksitosin, nifas, hamil*) dan menyertakan katalog Moms ke `filteredCatalog`.
+     - Menyusun `suggestedPreFilledForm` dengan field treatment dan jadwal yang sudah terisi otomatis (*smart pre-filled*).
+  4. **Transformasi `DecisionMatrix` & Conversational Booking di `ReplyGenerator` (`src/slot-engine/decision-matrix.ts`, `src/slot-engine/dynamic-closer.service.ts`, `src/slot-engine/reply-generator.ts`)**:
+     - Menghapus pemotongan template kaku di `DecisionMatrix`; percakapan booking dialirkan ke `ReplyGenerator` (LLM 2) untuk merangkai respon empatik Bidan Yusi.
+     - Menyisipkan panduan smart form pada `DynamicCloserService` saat `!slate.reservationFormSent`.
+     - Menambahkan panduan `FORM_ALREADY_SENT` untuk mencegah pengulangan formulir jika formulir sudah pernah dikirim di chat atas.
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-transcript-e2e.test.ts`: 100% PASS (seluruh 6 turn simulasi transkrip teruji lulus mulus).
+  - `tests/unit/slot-engine-decision.test.ts`, `tests/integration/slot-engine-rules.test.ts`, `tests/integration/slot-engine-replay.test.ts`: 100% PASS.
+  - Full regression test suite: 211/211 test files PASS (1,885 tests PASS, 0 failures).
+  - TypeScript compilation check (`npm run build`): 100% lulus (0 errors).
 
 - **Latar Belakang & Akar Masalah:**
   1. **Deteksi Palsu Form Reservasi pada Pertanyaan Chat Biasa**:

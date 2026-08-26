@@ -247,6 +247,16 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     tenantId,
   });
 
+  // Jika balasan LLM menyertakan format reservasi, tandai form telah terkirim
+  if (
+    replyText.toLowerCase().includes('list untuk reservasi') ||
+    replyText.toLowerCase().includes('format reservasi') ||
+    replyText.toLowerCase().includes('form reservasi')
+  ) {
+    decision.updatedSlate.reservationFormSent = true;
+    decision.updatedSlate.projectedState = ConversationState.RESERVATION_SENT;
+  }
+
   // Simpan update state ke DB
   await SlateStore.persistSlate(decision.updatedSlate);
 
