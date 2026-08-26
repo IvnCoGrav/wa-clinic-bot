@@ -3,7 +3,7 @@ import { processSlotEngine } from '../../src/slot-engine/slot-engine';
 import { ConversationState } from '@prisma/client';
 
 describe('Slot Engine Turn-by-Turn User Transcript E2E Simulation', () => {
-  it('Simulasi Lengkap Multi-Turn Turn-by-Turn: Alana Tambakoso Waru -> Bayi 1 Bulan -> Treatment -> Jadwal -> Submit Form', async () => {
+  it('Simulasi Lengkap Multi-Turn Turn-by-Turn: Greeting Lead -> Alana Tambakoso Waru -> Bayi 1 Bulan -> Treatment -> Jadwal -> Submit Form', async () => {
     let customer: any = {
       id: 'cust_transcript_123',
       phone: '6282167281657',
@@ -30,17 +30,37 @@ describe('Slot Engine Turn-by-Turn User Transcript E2E Simulation', () => {
       last_message_at: new Date(),
     };
 
-    let history: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      {
-        role: 'user',
-        content: 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment',
+    let history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+    // --- TURN 1: Customer mengirimkan greeting iklan pertama kali ---
+    const turn1Ctx = {
+      customer,
+      conversation,
+      incomingMessage: {
+        id: 'msg_t1',
+        chatId: `${customer.phone}@c.us`,
+        from: customer.phone,
+        text: { body: 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment' },
+        type: 'text',
       },
-      {
-        role: 'assistant',
-        content:
-          'Seluruh terapis Kala Moms and Baby Spa adalah Bidan Resmi bersertifikat (memiliki STR aktif) dan terlatih khusus untuk bayi massage, mom spa, dan perawatan anak ya Bunda 🩺🤗 Jadi dijamin aman, higienis, dan profesional bund.',
-      },
-    ];
+      tenantId: 'default-tenant',
+      history,
+    };
+
+    const turn1Result = await processSlotEngine(turn1Ctx as any);
+
+    // Turn 1 HARUS:
+    // Mengirim template greeting resmi Kala Spa (Bidan Yusi)
+    // BUKAN template kualifikasi terapis / STR
+    expect(turn1Result.replyText).toContain('Terima kasih sudah menghubungi kami');
+    expect(turn1Result.replyText).toContain('Bidan Yusi');
+    expect(turn1Result.replyText).not.toContain('Seluruh terapis Kala Moms');
+    expect(turn1Result.shouldSendReply).toBe(true);
+
+    history.push(
+      { role: 'user', content: 'Halo Bu Bidan, saya tertarik dengan layanan home-treatment' },
+      { role: 'assistant', content: turn1Result.replyText }
+    );
 
     // --- TURN 2: Customer memberikan lokasi dan menanyakan pijat bayi 1 bulan ---
     const turn2Ctx = {
