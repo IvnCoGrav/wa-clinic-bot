@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### [v1.17.0] — Hybrid Fast-Track FAQ Engine (FAQ 1-Call & Dynamic Booking 2-Call) (2026-08-26)
+
+- **Latar Belakang & Masalah yang Dipecahkan:**
+  1. **Optimalisasi Latensi FAQ Murni**: Pertanyaan informasi umum (*"homecare kah?", "buka hari minggu?", "durasi berapa lama?", "bisa transfer?"*) sebelumnya membutuhkan 2 kali LLM call (Extractor + Generator) padahal tidak membutuhkan kalkulasi geocoding rute Maps atau validasi slot form multi-baris.
+  2. **Perlindungan Akurasi Booking & Ongkir**: Menghindari risiko over-simplifikasi di mana pertanyaan alamat gang/kelurahan baru atau keluhan usia anak tetap wajib melalui komputasi deterministik (2-Call Deep Engine) agar terhindar dari halusinasi tarif atau salah pilih katalog usia.
+- **Implementasi Fitur & Arsitektur:**
+  1. **`FastFaqDetector` (`src/slot-engine/fast-faq-detector.ts`)**:
+     - Heuristic classifier (0 Token, <5ms) yang mencocokkan pola pertanyaan FAQ umum (jenis layanan homecare, jam buka/hari operasional, durasi, pembayaran/QRIS, asal klinik, kualifikasi bidan, syarat homecare, tanya paket).
+     - Guardrail `DYNAMIC_CONSTRAINTS_PATTERNS` yang menolak Fast-Track jika pesan mengandung: form pendaftaran, detail jalan/gang/nomor rumah, kata booking hari spesifik, angka usia anak eksplisit, keluhan fisik spesifik, atau sinyal darurat medis.
+     - Fungsi `retrieveFaqGrounding()` yang mengambil potongan SOP resmi dari database `knowledge_base`.
+  2. **`FastFaqGenerator` (`src/slot-engine/fast-faq-generator.ts`)**:
+     - Generator Single-Pass yang mengeksekusi 1 LLM request dengan Persona Bidan Yusi + potongan SOP Knowledge Base + 4 chat terakhir.
+     - Menghasilkan output JSON terpadu (`{ intents, reply_text, needs_deeper_processing }`). Jika LLM meminta pemrosesan lebih dalam atau JSON tidak valid, sistem otomatis *fallthrough* ke jalur 2-Call.
+     - Terintegrasi penuh dengan `auditLlmCall` (`task_type: 'SLOT_FAST_FAQ'`) dan `recordLlmExecution` (`flowType: 'SLOT_FAST_FAQ'`).
+  3. **Integrasi Slot-Filling Orchestrator (`src/slot-engine/slot-engine.ts`)**:
+     - Menyisipkan cabang Fast-Track sebelum Step 2. Jika FAQ match dan berhasil, langsung mengembalikan balasan dalam **1 LLM call (~1.5–2.0s)**.
+     - Menambahkan feature flag `FAST_FAQ_1CALL_ENABLED` (`src/config/feature-flags.ts`).
+  4. **Frontend UI Support (`Debug.tsx`)**:
+     - Menambahkan badge visual dan filter khusus untuk `SLOT_FAST_FAQ` (Fast-Track FAQ 1-Call).
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-fast-faq.test.ts`: 7/7 tests PASS (mencakup deteksi heuristik data riwayat customer asli, single-pass generator, dan orchestrator end-to-end).
+  - Seluruh test suite slot-engine (7 test files, 43 tests PASS).
+  - Backend compile (`npm run build`) & frontend Vite build 100% lolos (0 error).
+
 #### Enhanced & Hardened — End-to-End LLM Execution Logging, Correlation ID & Flow Cards (2026-08-25)
 
 - **Latar Belakang & Masalah yang Ditemukan:**

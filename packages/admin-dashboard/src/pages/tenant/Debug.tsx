@@ -669,7 +669,8 @@ interface LlmLogEntry {
     | 'AI_VERIFIER'
     | 'PHRASING'
     | 'SLOT_EXTRACTOR'
-    | 'SLOT_GENERATOR';
+    | 'SLOT_GENERATOR'
+    | 'SLOT_FAST_FAQ';
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
@@ -721,6 +722,8 @@ const getFlowBadge = (flowType: string) => {
       return { label: 'Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 text-violet-800 border-violet-200' };
     case 'SLOT_GENERATOR':
       return { label: 'Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200' };
+    case 'SLOT_FAST_FAQ':
+      return { label: 'Fast-Track FAQ (1-Call)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 text-amber-900 border-amber-300' };
     case 'CLINICAL_ESCALATION':
       return { label: 'Clinical Escalation', short: 'ESCALATE', icon: '🚨', cls: 'bg-rose-50 text-rose-800 border-rose-200' };
     default:
