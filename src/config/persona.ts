@@ -486,33 +486,43 @@ Hari H Pagi sebelum treatment akan kami reminder kembali bunda 🥰
 Terimakasih.  ☺️`;
   },
 
-  morningReminder: (params: { name: string; time: string }) =>
-    `Selamat Pagi bunda ${params.name}! 😊
+  morningReminder: (params: { name: string; time: string }) => {
+    const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
+    return `Selamat Pagi ${sapaan}! 😊
 
 Kami ingin mengingatkan untuk hari ini ada jadwal treatment dengan ${getBrandIdentity().businessName} 🤗
 
-Kami akan menuju rumah bunda, kemungkinan akan tiba di jam ${params.time} mohon ditunggu ya bund 🤗`,
+Kami akan menuju rumah bunda, kemungkinan akan tiba di jam ${params.time} mohon ditunggu ya bund 🤗`;
+  },
 
   // Follow-up H+1: versi BAYI/ANAK
-  followUpReviewBaby: (params: { name: string; babyName: string }) =>
-    `Halo Bunda ${params.name}! 🤍
+  followUpReviewBaby: (params: { name: string; babyName: string }) => {
+    const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
+    const anak = params.babyName && params.babyName !== 'si kecil'
+      ? (params.babyName.startsWith('dek ') ? params.babyName : `Adek ${params.babyName}`)
+      : 'si kecil';
 
-Mau tanya, gimana tidurnya Adek ${params.babyName} semalam setelah massage kemarin? Semoga mulai nyenyak yaa.. 😊
+    return `Halo ${sapaan}! 🤍
 
-Banyak bunda yang bilang anaknya jadi lebih rileks tidurnya setelah dipijat — semoga Adek ${params.babyName} juga mulai merasakan hal yang sama ya 🤗✨
+Mau tanya, gimana tidurnya ${anak} semalam setelah massage kemarin? Semoga mulai nyenyak yaa.. 😊
+
+Banyak bunda yang bilang anaknya jadi lebih rileks tidurnya setelah dipijat — semoga ${anak} juga mulai merasakan hal yang sama ya 🤗✨
 
 Kalau Bunda ada waktu, boleh banget sharing gimana perkembangan setelah dipijat ya Bunda.
 
-Terimakasih 🥰`,
+Terimakasih 🥰`;
+  },
 
   // Follow-up H+1: versi MOMS/hamil — beda konten, nanya kontraksi bukan tidur bayi
-  followUpReviewMoms: (params: { name: string }) =>
-    `Halo Bunda ${params.name}, Selamat Malam ! 🥰
+  followUpReviewMoms: (params: { name: string }) => {
+    const sapaan = params.name ? `Bunda ${params.name}` : 'Bunda';
+    return `Halo ${sapaan}, Selamat Malam ! 🥰
 
 Sekadar menyapa dan menanyakan kabar Bunda setelah treatment kemarin, bagaimana rasanya hari ini, Bunda? Apakah badan terasa lebih ringan, dan apakah sudah ada kontraksi lebih dari yang sebelumnya yang terasa?
 
 Semoga Bunda dan si Kecil selalu dalam keadaan sehat dan tenang ya🤗
-Apabila membutuhkan jadwal treatment lanjutan atau ada perkembangan lainnya, silakan kabari kami ya, Bunda 😊🙏`,
+Apabila membutuhkan jadwal treatment lanjutan atau ada perkembangan lainnya, silakan kabari kami ya, Bunda 😊🙏`;
+  },
 
   // Follow-up bulan ke-1 untuk treatment lanjutan (array varian)
   nextTreatmentFollowUp: [

@@ -418,7 +418,7 @@ model FollowUp {
   stage        Int // 1 | 2 | 3
   scheduled_at DateTime
   sent_at      DateTime?
-  status       FollowUpStatus @default(PENDING)
+  status       FollowUpStatus @default(QUEUED)
   created_at   DateTime       @default(now())
   updated_at   DateTime       @updatedAt
 

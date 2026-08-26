@@ -4,6 +4,37 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhanced — Natural Name & Multi-Baby Sanitizer + Auto-Queued Follow-Up Pipeline (2026-08-26)
+
+- **Latar Belakang & Masalah yang Dipecahkan:**
+  1. **Sanitasi Nama Kontak Buku Telepon**: Nama customer di database klinik sering kali memuat gelar awalan (`Bunda ...`), nama kelurahan/wilayah di buku kontak (`Viska rungkut`, `Bunda Karimah Sedati`), catatan admin (`+ Alamat`, `(Bunda Fatma)`), atau status WhatsApp. Tanpa pembersih otomatis, template pesan follow-up menghasilkan sapaan dobel *"Halo Bunda Bunda..."* atau menyebutkan nama kelurahan sebagai nama orang.
+  2. **Dukungan Anak Kembar / 2+ Bayi (`babyName`)**: Pesan follow-up (Review H+1 dan Milestone) sebelumnya hanya mengasumsikan 1 anak. Ketika customer memiliki anak kembar atau 2+ bayi, sistem kini memformat nama anak secara alami (*"dek Arka & dek Arki"*).
+  3. **Auto-Queued Follow-Up Default**: Menyetel status default follow-up baru langsung ke `QUEUED` (terjadwal di antrian) agar otomatis berjalan tanpa perlu manual approve satu per satu, dengan admin tetap leluasa mengubah/membatalkan jadwal dari antrian.
+- **Implementasi Backend & Utility (`src/utils/name-sanitizer.ts`, `src/services/follow-up.service.ts`, `src/services/cron.service.ts`, `src/config/persona.ts`, `src/config/followup-templates.ts`):**
+  1. **`sanitizeCustomerNameForGreeting(rawName)`**:
+     - Membuang emoji, status WA, catatan `+ Alamat`, `(Bunda ...)`.
+     - Membuang prefix gelar sapaan (`Bunda`, `Ibu`, `Mama`, `Moms`, `Ny.`, `~`, `Suami Bunda`).
+     - Membuang keyword `Kecamatan ...` / `Kelurahan ...` serta puluhan nama kecamatan/kelurahan Surabaya & Sidoarjo di ujung nama.
+     - Fallback cerdas jika nama berupa placeholder/generic (`Pelanggan`, `Sandbox`, `~`) $\rightarrow$ menghasilkan string kosong (sehingga disapa `"Halo Bunda!"` tanpa dobel spasi atau dobel kata).
+  2. **`formatBabyNamesForGreeting(children, rawText, options)`**:
+     - Membersihkan nama anak dari keterangan usia (`(3 bulan)`), awalan `Adek/Baby/Bayi`.
+     - 1 anak $\rightarrow$ `"dek Kenzo"`.
+     - 2 anak / kembar $\rightarrow$ `"dek Kenzo & dek Kenzie"`.
+     - 3+ anak $\rightarrow$ `"dek Kenzo, dek Kenzie & dek Kayla"`.
+     - Tanpa data anak $\rightarrow$ fallback natural `"si kecil"`.
+  3. **Post-Processing & Typo Hardening di Engine Rolling Template**:
+     - Filter regex otomatis membersihkan `Bunda Bunda` $\rightarrow$ `Bunda`, `Bunda !` $\rightarrow$ `Bunda!`, `dek dek` $\rightarrow$ `dek`, dan `dek si kecil` $\rightarrow$ `si kecil`.
+     - Memperbaiki typo `Selamat tuan Bunda` $\rightarrow$ `Selamat pagi Bunda`.
+  4. **Perubahan Status Default ke `QUEUED`**:
+     - `prisma/schema.prisma`: `status FollowUpStatus @default(QUEUED)`.
+     - `createNoPurchaseFollowUps` & `createNextTreatmentFollowUps` menyetel `status: 'QUEUED'`.
+- **Implementasi Frontend Admin Dashboard (`packages/admin-dashboard`):**
+  - Mengubah default tab filter di `FollowUpQueue.tsx` langsung membuka daftar `QUEUED` (terjadwal di antrian).
+- **Pengujian & Verifikasi:**
+  - `tests/unit/name-sanitizer.test.ts`: 19/19 tests PASS (mencakup 10+ variasi format kontak kotor, bayi kembar, multi-bayi, dan integrasi template).
+  - Vitest suite follow-up & admin: 38/38 tests PASS (100%).
+  - Backend typecheck & Frontend bundle: 100% lolos (0 error).
+
 #### Enhanced — Smart Context Guard Follow-Up Queue (72-Hour Recent Chat Cooldown & Admin Context Visibility) (2026-08-26)
 
 - **Latar Belakang & Kebutuhan:**
