@@ -1013,6 +1013,24 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               purchaseOccurredAt: occurredAt.toISOString(),
             };
 
+        // Jika nama customer masih generic (misal "Mbak" / "Bunda"), update nama customer di DB dari raw_text
+        if (existing.raw_text && existing.customer) {
+          try {
+            const { parseReservationText } = await import('../../utils/reservation-text-parser');
+            const pr = parseReservationText(existing.raw_text);
+            if (pr.success && pr.reservation?.name) {
+              const cleanName = pr.reservation.name.replace(/^(?:bunda|ibu|mama|mom|mbak|mas|kak|kakak|ny|ny\.)\s+/i, '').trim();
+              if (cleanName && !['bunda', 'ibu', 'mama', 'mom', 'mbak', 'mas', 'kak', 'kakak', 'pasien', 'customer', '-'].includes(cleanName.toLowerCase())) {
+                const kec = pr.reservation.kec || existing.customer.kecamatan || '';
+                const formattedName = `Bunda ${cleanName}${kec ? ` ${kec}` : ''}`.trim();
+                const { customerService } = await import('../../services/customer.service');
+                await customerService.updateCustomerName(existing.customer.id, formattedName, DEFAULT_TENANT_ID).catch(() => {});
+                existing.customer.name = formattedName;
+              }
+            }
+          } catch {}
+        }
+
         capiService
           .sendCapiEvent({
             eventName,
@@ -1261,13 +1279,22 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             value: value ?? 0,
             distanceKm,
             customer: {
+              id: r.customer?.id,
               name: r.customer?.name || 'Bunda',
               phone: r.customer?.phone || '',
+              kota: r.customer?.kota || (r.customer as any)?.pending_kota || null,
+              kecamatan: r.customer?.kecamatan || (r.customer as any)?.pending_kecamatan || null,
+              zipcode: r.customer?.zipcode || (r.customer as any)?.pending_zipcode || null,
             },
             attribution: {
               isPaid: !!r.customer?.adClick,
               trackingCode: r.customer?.adClick?.trackingCode || null,
               landingUrl: canonicalLandingUrl,
+              fbp: r.customer?.adClick?.fbp || null,
+              fbc: r.customer?.adClick?.fbc || null,
+              fbclid: r.customer?.adClick?.fbclid || null,
+              ipAddress: r.customer?.adClick?.ipAddress || null,
+              userAgent: r.customer?.adClick?.userAgent || null,
             },
             utm: {
               campaign: r.customer?.adClick?.utmCampaign || null,

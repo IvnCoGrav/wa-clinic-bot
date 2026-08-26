@@ -77,6 +77,10 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
               tenantId,
               chatId: ctx.incomingMessage.chatId || `${customer.phone}@c.us`,
               babies: parsed.babies || [],
+              customerName: parsed.name,
+              kecamatan: parsed.kec,
+              kota: parsed.kota,
+              kelurahan: parsed.address,
             });
 
             // Meta CAPI InitiateCheckout — pastikan event ter-record walau via human handling
