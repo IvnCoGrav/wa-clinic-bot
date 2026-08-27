@@ -56,9 +56,9 @@ export class FastFaqDetector {
     if (!text || text.trim().length === 0) return false;
     const cleanText = text.trim();
 
-    // 0. Jika customer di state INITIAL dan belum konfirmasi lokasi -> prioritaskan onboarding
-    if (slate && slate.projectedState === 'INITIAL' && !slate.isLocationConfirmed) {
-      if (/\b(tertarik|halo|siang|pagi|sore|malam|permisi|promo)\b/i.test(cleanText)) {
+    // 0. Jika customer belum konfirmasi lokasi dan mengirimkan pesan sapaan/lead/pembuka -> prioritaskan onboarding Slot Engine
+    if (slate && !slate.isLocationConfirmed) {
+      if (/\b(tertarik|halo|hola|hi|hei|p|assalamu'?alaikum|assalamualaikum|siang|pagi|sore|malam|permisi|promo|booking|reservasi|info)\b/i.test(cleanText)) {
         return false;
       }
     }
