@@ -13,7 +13,12 @@ export class DecisionMatrix {
     context?: { tenantId?: string; incomingText?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> }
   ): Promise<DecisionResult> {
     const updatedSlate = SlateStore.updateSlateWithExtraction(slate, extraction);
-    const rawText = (context?.incomingText || '').toLowerCase().trim();
+    const rawIncoming = context?.incomingText || '';
+    const cleanText = rawIncoming.replace(/(?:Promo|ID|Iklan|Diskon)?\s*\[\s*[\w\s]{1,10}?\s*\]/gi, '').trim();
+    const rawText = cleanText.toLowerCase();
+
+    const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+    const isIslamic = hasIslamicGreeting(rawIncoming);
 
     // =========================================================================
     // PRIORITY 1: DARURAT MEDIS KRITIS (Silent Handoff ke CS Manusia)
@@ -42,12 +47,26 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
+    // PRIORITY 2C: JANGKAUAN MELEBIHI BATAS WILAYAH (Out of Coverage)
+    // =========================================================================
+    if (updatedSlate.isOutOfCoverage) {
+      return {
+        action: 'REJECT_OUT_OF_COVERAGE',
+        reason: 'Lokasi customer berada di luar wilayah operasional klinik.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.outOfCoverage({
+          distanceKm: updatedSlate.distanceKm || 30,
+        }),
+      };
+    }
+
+    // =========================================================================
     // PRIORITY 3: IZIN BERTANYA / KONSULTASI AWAL
     // Sambut ramah secara terbuka, DILARANG menutup obrolan
     // =========================================================================
     const isConsultationInquiry = /\b(mau\s+tanya-?tanya|boleh\s+tanya|bisa\s+konsultasi|mau\s+konsultasi|tanya\s+dulu|konsul\s+dulu)\b/i.test(rawText);
     if (isConsultationInquiry && !rawText.includes('ongkir') && !rawText.includes('harga') && extraction.symptoms.length === 0) {
-      const isIslamic = /\b(assalamu'?alaikum|assalamualaikum)\b/i.test(rawText);
       const greetingHeader = isIslamic ? 'Waalaikumsalam Bunda! ✨' : 'Halo Bunda! ✨';
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
@@ -62,17 +81,36 @@ export class DecisionMatrix {
     // PRIORITY 2B: INITIAL LEAD GREETING / SAPAAN PEMBUKA IKLAN PERTAMA
     // Mengirim template greeting resmi Kala Spa jika pesan pertama customer adalah sapaan umum/lead iklan
     // =========================================================================
-    const isInitialConversation = (context?.history?.length ?? 0) === 0 || updatedSlate.projectedState === ConversationState.INITIAL;
+    const isInitialConversation =
+      (context?.history?.length ?? 0) === 0 ||
+      !updatedSlate.isLocationConfirmed ||
+      updatedSlate.projectedState === ConversationState.INITIAL;
+
+    const { checkLeadGreetingText } = await import('../state-machine/utils/greeting-checker');
+    const greetingCheck = await checkLeadGreetingText(cleanText, rawIncoming, context?.tenantId);
+
+    const hasSpecificQuestion =
+      extraction.intents.includes('ask_price') ||
+      extraction.intents.includes('consult_symptom') ||
+      extraction.intents.includes('ask_clinic_origin') ||
+      extraction.intents.includes('ask_schedule') ||
+      extraction.intents.includes('select_treatment') ||
+      extraction.childAgeMonths !== null ||
+      extraction.symptoms.length > 0 ||
+      /\b(berapa|brp|harga|tarif|biaya|ongkir|pricelist|usia|umur|bulan|tahun|jadwal|slot|kapan|bisa\s+gak|bisa\s+kah)\b/i.test(rawText);
+
     const isLeadGreeting =
+      cleanText.length > 0 &&
       isInitialConversation &&
+      !updatedSlate.isOutOfCoverage &&
+      !hasSpecificQuestion &&
       !extraction.locationText &&
       !extraction.treatmentReferenced &&
-      extraction.symptoms.length === 0 &&
-      (/\b(tertarik|home-?treatment|home-?care|layanan\s+home|info\s+lengkap|halo\s+bu\s+bidan|halo\s+bunda|selamat\s+(pagi|siang|sore|malam)|assalamu'?alaikum)\b/i.test(rawText) ||
+      (greetingCheck.isPureGreeting ||
+        /\b(tertarik|home[-\s]?treatment|home[-\s]?care|homecare|layanan\s+home|info\s+lengkap|halo\s+bu\s+bidan|halo\s+bunda|selamat\s+(pagi|siang|sore|malam)|assalamu'?alaikum)\b/i.test(rawText) ||
         (rawText.length <= 80 && /\b(halo|hi|hei|p|assalamualaikum|pagi|siang|sore|malam)\b/i.test(rawText)));
 
     if (isLeadGreeting) {
-      const isIslamic = /\b(assalamu'?alaikum|assalamualaikum)\b/i.test(rawText);
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
         reason: 'Sapaan pembuka lead pertama -> Kirim template greeting resmi Kala Spa.',

@@ -186,13 +186,16 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               },
             };
           } else {
+            const strippedText = text.replace(/(?:Promo|ID|Iklan|Diskon)?\s*\[\s*[\w\s]{1,10}?\s*\]/gi, '').trim() || text;
             incomingMessage = {
               id: `msg_sandbox_${Date.now()}`,
               from: targetPhone,
               chatId: `${targetPhone}@c.us`,
               timestamp: String(Math.floor(Date.now() / 1000)),
               type: 'text',
-              text: { body: text },
+              text: { body: strippedText },
+              _rawBody: text,
+              originalText: text,
             };
           }
 
