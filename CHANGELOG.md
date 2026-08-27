@@ -4,6 +4,37 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & Hardening — Strict Greeting Persona & Lead Onboarding Standardization (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **False-Positive Ekstraksi Model Bisnis Umum pada `EntityExtractor`**:
+     - Pada pesan klik iklan Meta seperti *"Promo[tg] Halo Bu Bidan, saya tertarik dengan layanan home-treatment"*, NLU Extractor mengekstrak frasa umum `"layanan home-treatment"` ke dalam field `treatmentReferenced`.
+  2. **Bypass Sapaan Pembuka Resmi (`TEMPLATES.greeting`) di `DecisionMatrix`**:
+     - Aturan `isLeadGreeting` di `DecisionMatrix` memiliki syarat `!extraction.treatmentReferenced`. Akibatnya, keberadaan entitas palsu `"layanan home-treatment"` membatalkan pemotongan template greeting resmi Bidan Yusi dan mengalirkan percakapan ke `ReplyGenerator`.
+  3. **Ketiadaan Enforced Identity Bidan Yusi pada Turn-0**:
+     - Prompt `PersonaComposer` sebelumnya hanya memuat instruksi sapaan umum (*"Sapa dengan hangat di awal pesan"*) tanpa mewajibkan perkenalan nama Bidan Yusi dan brand klinik Kala Moms and Baby Spa saat `historyCount === 0`.
+  4. **Potensi Pembajakan Onboarding oleh Fast-Track FAQ**:
+     - Guard `slate.projectedState === 'INITIAL'` pada `FastFaqDetector` tidak pernah aktif karena default slate selalu `AWAITING_LOCATION`, sehingga pesan sapaan awal berisiko terintersepsi Fast FAQ 1-Call tanpa onboarding lokasi.
+
+- **Solusi & Implementasi:**
+  1. **Sanitasi Post-Extraction Entitas (`src/slot-engine/entity-extractor.ts`)**:
+     - Menambahkan fungsi terpusat `sanitizeExtractedEntities` untuk memfilter istilah model bisnis umum (*homecare, home-treatment, spa, pijat, layanan, paket*) dari `treatmentReferenced`, kata tempat generik (*rumah, klinik*) dari `locationText`, salam basa-basi dari `symptoms`, dan kata ganti (*Saya, Aku*) dari `customerName`.
+  2. **Integrasi Deteksi Lead Terpusat & Sanitasi Tag Iklan (`src/slot-engine/decision-matrix.ts` & `src/state-machine/utils/greeting-checker.ts`)**:
+     - Membersihkan tag tracking iklan (`Promo[...]`, `[ID: ...]`) di awal evaluasi `DecisionMatrix`.
+     - Mengintegrasikan `checkLeadGreetingText` terpusat dan memperluas `STANDARD_LEAD_TOKENS` agar seluruh variasi lead iklan Meta dikenali 100% secara deterministik (0 Token).
+     - Menambahkan guard `hasSpecificQuestion` agar pesan multi-intent (tanya harga/jadwal langsung) dialirkan ke `ReplyGenerator` dengan benar, sementara sapaan murni langsung dibalas dengan `TEMPLATES.greeting()`.
+  3. **Penegasan Identitas Turn-0 di `PersonaComposer` (`src/slot-engine/persona-composer.ts`)**:
+     - Mewajibkan pembukaan balasan Turn-0 dengan sapaan resmi, ucapan terima kasih, dan perkenalan: *"Perkenalkan, saya Bidan Yusi dari Kala Moms and Baby Spa."*.
+  4. **Pengamanan Fast FAQ & Sinkronisasi Sandbox (`src/slot-engine/fast-faq-detector.ts` & `src/routes/admin/evaluations.subroute.ts`)**:
+     - Mengamankan `FastFaqDetector` agar menolak pertanyaan pembuka saat lokasi customer belum terkonfirmasi.
+     - Membersihkan tag tracking iklan pada simulator `/api/admin/sandbox/chat` agar pengujian identik dengan lalu lintas WhatsApp live.
+
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-lead-greeting.test.ts`: 13/13 tests PASS (menguji pesan iklan, sapaan Islami, multi-intent turn-0, dan filter false positive).
+  - `tests/unit/centralized-persona-architecture.test.ts`, `tests/unit/slot-engine-decision.test.ts`, `tests/unit/slot-engine-transcript-e2e.test.ts`: 100% PASS.
+  - Full automated regression test suite: 212/212 test files PASS (1,898 tests PASS, 0 failures).
+  - TypeScript build check (`npm run build`): 100% lulus (0 errors).
+
 #### Feature & Refactor — Conversational Booking Pipeline, Anti-Looping Forms & Strict Persona Enforcement (2026-08-27)
 
 - **Latar Belakang & Akar Masalah:**

@@ -45,6 +45,8 @@ export interface WhatsAppIncomingMessage {
     body?: string;
     ctwa_clid?: string;
   };
+  originalText?: string;
+  _rawBody?: string;
 }
 
 export interface WhatsAppStatus {
