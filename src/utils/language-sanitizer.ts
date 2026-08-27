@@ -53,7 +53,7 @@ export function sanitizeForbiddenEnglishWords(text: string): string {
   if (!text) return text;
   return text
     .replace(/\blittle\s+one(?:-nya|nya)?\b/gi, 'si kecil')
-    .replace(/(?<!\bKala\s+Moms?\s+(?:and|&)\s+)baby(?:-nya|nya)?\b/gi, 'bayi')
+    .replace(/(?<!\b(?:Kala\s+)?Moms?\s+(?:and|&)\s+)baby(?:-nya|nya)?\b/gi, 'bayi')
     .replace(/\bmommy(?:-nya|nya)?\b/gi, 'Bunda')
     .replace(/\bschedule\b/gi, 'jadwal')
     .replace(/\bappointment(?:-nya|nya)?\b/gi, 'jadwal reservasi')
@@ -168,14 +168,15 @@ export function sanitizePronounsAndSlang(text: string): string {
 export function sanitizeGreetingRepetitionForFollowUp(text: string, isFollowUp: boolean = false): string {
   if (!text || !isFollowUp) return text;
   return text
-    .replace(/^Halo\s+Bunda[!\.,\s]*/i, '')
-    .replace(/^Selamat\s+(?:pagi|siang|sore|malam)[!\.,\s]*(?:Bunda[!\.,\s]*)?/i, '')
+    .replace(/^Halo\s+Bunda\s*[!✨🥰🌸\.,\s]*/i, '')
+    .replace(/^Selamat\s+(?:pagi|siang|sore|malam)\s*[!✨🥰🌸\.,\s]*(?:Bunda\s*[!✨🥰🌸\.,\s]*)?/i, '')
     .trim();
 }
 
 export interface UnifiedSanitizerOptions {
   isFollowUp?: boolean;
   historyCount?: number;
+  preserveGreeting?: boolean;
 }
 
 /**
@@ -186,7 +187,7 @@ export class UnifiedResponseSanitizer {
   public static sanitize(text: string, options?: UnifiedSanitizerOptions): string {
     if (!text) return '';
 
-    const isFollowUp = Boolean(options?.isFollowUp || (options?.historyCount ?? 0) > 0);
+    const isFollowUp = !options?.preserveGreeting && Boolean(options?.isFollowUp || (options?.historyCount ?? 0) > 0);
 
     let cleaned = text;
 
