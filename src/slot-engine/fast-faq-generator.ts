@@ -48,7 +48,7 @@ export class FastFaqGenerator {
       : 'Layanan Mom & Baby Homecare (Bidan Yusi). Bidan bersertifikat datang ke rumah Bunda. Buka setiap hari (weekday & weekend). Area Surabaya & Sidoarjo.';
 
     // 2. Kalimat Penutup Dinamis berbasis Missing Slots
-    const dynamicCloser = DynamicCloserService.getCloserInstruction(slate);
+    const dynamicCloser = DynamicCloserService.getCloserInstruction(slate, undefined, history, incomingText);
 
     // 3. Susun System Prompt via Single Source of Truth PersonaComposer
     const systemPrompt = PersonaComposer.composeFastFaqPrompt({

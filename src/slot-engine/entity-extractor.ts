@@ -146,6 +146,21 @@ export class EntityExtractor {
       }
     }
 
+    // 6. Deteksi Kombinasi Treatment atau Treatment Spesifik
+    if (/\bpijat\s+(?:bayi\s+)?ceria\b/i.test(lower) && /\bcukur\b/i.test(lower)) {
+      result.treatmentReferenced = 'Pijat Bayi Ceria + Cukur Rambut Bayi';
+      result.intents = result.intents || [];
+      if (!result.intents.includes('select_treatment')) {
+        result.intents.push('select_treatment');
+      }
+    } else if (/\bpijat\s+(?:bayi\s+)?pulih\s+ceria\b/i.test(lower) && /\bsinar\b/i.test(lower)) {
+      result.treatmentReferenced = 'Pijat Bayi Pulih Ceria + Sinar Moksa';
+      result.intents = result.intents || [];
+      if (!result.intents.includes('select_treatment')) {
+        result.intents.push('select_treatment');
+      }
+    }
+
     return result;
   }
 
@@ -213,7 +228,7 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "chitchat": Sapaan atau basa-basi umum.
 
 ATURAN EKSTRAKSI (SANGAT KETAT):
-1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah pada PESAN CUSTOMER TERBARU. DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain (seperti rekomendasi usia, tanya treatment, atau tanya jadwal). DILARANG mengekstrak kata generik "rumah", "ke rumah", "klinik" sebagai location_text.
+1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah pada PESAN CUSTOMER TERBARU. Jika customer memberikan alamat lengkap (contoh "Platuk tauladan 19a , sidotopo wetan , kenjeran"), masukkan nama kelurahan/desa/kecamatan ("Sidotopo Wetan, Kenjeran") ke "location_text", dan detail nomor/jalan/gang ("Platuk tauladan 19a") ke "street_detail". DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain. DILARANG mengekstrak kata generik "rumah", "ke rumah", "klinik" sebagai location_text.
 2. DILARANG KERAS mengekstrak istilah umum model bisnis ("home-treatment", "homecare", "home care", "layanan home", "perawatan", "treatment", "pijat", "spa", "promo") sebagai "treatment_referenced". Field "treatment_referenced" HANYA boleh diisi jika customer menyebut nama perawatan spesifik katalog (contoh: "Pijat Bayi Ceria", "Pijat Pulih", "Pijat Laktasi", "Sinar Moksa", "Pijat Gemoy").
 3. Jangan mengekstrak kata sapaan/basa-basi ("sehat selalu", "mau info", "konsultasi") sebagai "symptoms".
 4. Jangan mengekstrak kata ganti diri ("Saya", "Aku", "Bunda") sebagai "customer_name".
@@ -222,6 +237,8 @@ ATURAN EKSTRAKSI (SANGAT KETAT):
 7. Tangkap semua keluhan fisik/anak ke dalam array "symptoms".
 8. Pecahkan rujukan anaphora ("yang tadi", "yang kedua") ke "treatment_referenced" jika ada riwayat percakapan.
 9. Jika pesan terbaru menanyakan ketersediaan jadwal ("Jumat apakah bisa?"), masukkan intent "ask_schedule" dan waktu ke "preferred_date_text".
+10. Jika customer mengatakan peralihan target audiens (contoh "untuk baby aja kak", "buat adeknya aja", "ambil yg bayi aja"), dan di riwayat chat sebelumnya ada keluhan spesifik bayi (seperti flu, batuk, pilek, grok-grok) atau paket bayi yang dibahas (misal "Pijat Pulih Ceria"), masukkan paket atau keluhan tersebut ke "treatment_referenced" atau "symptoms" agar konteks tetap terjaga.
+11. Jika customer menyebutkan kombinasi lebih dari 1 treatment (contoh: "Pijat bayi ceria + cukur", "Pulih ceria dan sinar", "Laktasi plus oksitosin"), gabungkan nama treatment lengkapnya ke "treatment_referenced" (contoh: "Pijat Bayi Ceria + Cukur Rambut Bayi") dan sertakan intent "select_treatment".
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {

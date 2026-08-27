@@ -187,12 +187,22 @@ export const AiSandbox: React.FC = () => {
 
       const endTime = Date.now();
       
-      setMessages(prev => [...prev, {
-        sender: 'bot',
-        content: data.answer || 'Maaf, saya tidak mengerti maksud Bunda.',
-        timestamp: new Date(),
-        isError: Boolean(data.llmError)
-      }]);
+      if (data.sentBubbles && Array.isArray(data.sentBubbles) && data.sentBubbles.length > 0) {
+        const botBubbles = data.sentBubbles.map((bubbleText: string) => ({
+          sender: 'bot' as const,
+          content: bubbleText,
+          timestamp: new Date(),
+          isError: Boolean(data.llmError)
+        }));
+        setMessages(prev => [...prev, ...botBubbles]);
+      } else {
+        setMessages(prev => [...prev, {
+          sender: 'bot',
+          content: data.answer || 'Maaf, saya tidak mengerti maksud Bunda.',
+          timestamp: new Date(),
+          isError: Boolean(data.llmError)
+        }]);
+      }
 
       setInspectorData({
         query: data.query || userText,

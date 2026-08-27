@@ -127,6 +127,8 @@ export interface GroundingPackage {
     content: string;
   }>;
   customerPreferencesText?: string | null;
+  durationSummaryText?: string;
+  operationalFactsText?: string;
   isBookingReady?: boolean;
   suggestedPreFilledForm?: string | null;
 }

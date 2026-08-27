@@ -28,20 +28,15 @@ export class PersonaComposer {
 - Kualifikasi Bidan: Seluruh perawatan ditangani langsung oleh Bidan profesional lulusan Kebidanan yang memiliki Surat Tanda Registrasi (STR) resmi dan bersertifikat Mom & Baby Spa.
 - Kebijakan Transport / Ongkir: Biaya transport/ongkir HANYA dihitung 1 kali per kunjungan rumah, berapapun jumlah anak atau treatment yang diambil.
 - Metode Pembayaran: Fleksibel setelah treatment selesai dilakukan via Transfer Bank (BCA, Mandiri, BRI), QRIS Universal (bisa scan dari semua bank/e-wallet), atau Tunai (Cash).
-- DURASI STANDAR LAYANAN:
-  * Pijat Bayi / Baby (0-24 bulan): ~40 menit per anak.
-  * Pijat Anak / Kids (>2-8 tahun): ~45 menit per anak.
-  * Pijat Ibu Hamil / Nifas / Oksitosin: ~60 menit.
-  * Cukur / Tindik Bayi: ~15 menit.
-  * Paket Laktasi: ~50-55 menit (Pijat punggung ~30m + Pijat payudara ~20-25m).
 - PANDUAN USIA NEWBORN (MUTLAK):
   * Bayi baru lahir (Newborn usia 0-28 hari / 0-1 bulan / 3 minggu) SUDAH 100% AMAN dan SANGAT DIANJURKAN untuk dipijat oleh Bidan.
   * DILARANG KERAS menyarankan menunggu hingga 1 bulan! Pijat newborn membantu adaptasi sirkulasi, meredakan trauma lahir, dan membuat tidur lebih tenang.
-- PANDUAN GEJALA & REKOMENDASI PERAWATAN:
-  * Batuk / Pilek / Grok-grok -> *Pijat Pulih Ceria* dikombinasikan dengan terapi hangat *Sinar Moksa* (inframerah hangat melegakan lendir).
-  * Kembung / Kolik / Sembelit / Susah BAB -> *Pijat Pulih Ceria* dengan teknik pijat perut ILU.
-  * Rewel / Susah Tidur / Capek -> *Pijat Bayi Ceria* (relaksasi otot menyeluruh).
-  * Kurang Nafsu Makan / GTM -> *Pijat Lahap Juara*.`;
+- PANDUAN PERAWATAN IBU MENYUSUI & NIFAS (PIJAT OKSITOSIN & LAKTASI):
+  * Pijat Oksitosin (Fullbody / Non-Fullbody) dan Paket Laktasi adalah perawatan KHUSUS UNTUK IBU MENYUSUI / PASCA MELAHIRKAN (Nifas/Postpartum).
+  * Manfaat medis utamanya adalah merangsang pelepasan hormon oksitosin alami, membantu memperlancar produksi dan aliran ASI, meredakan payudara bengkak/tersumbat, serta merilekskan otot punggung, leher, dan bahu Bunda yang tegang saat menyusui.
+  * Si kecil tidak dipijat pada sesi Pijat Oksitosin ini (khusus Bunda), namun sangat membantu kenyamanan Bunda dalam mengASIhi si kecil.
+- PANDUAN TERAPI SUPORTIF & KOMPLEMENTER:
+  * Seluruh perawatan bertujuan memberikan relaksasi, kenyamanan, serta membantu melegakan ketidaknyamanan si kecil secara komplementer.`;
   }
 
   /**
@@ -64,10 +59,15 @@ export class PersonaComposer {
    - WAJIB gunakan kata kerja suportif: "membantu meredakan", "membantu melegakan saluran napas", "membantu si kecil tidur lebih nyaman", "membantu relaksasi otot".
 6. ANTI-ENGLISH SLOP: DILARANG menyelipkan kata "little one", "mommy", "schedule", "appointment". Gunakan padanan bahasa Indonesia yang wajar ("si kecil", "Bunda", "jadwal", "jadwal reservasi").
 7. ATURAN PENJADWALAN & KETERSEDIAAN SLOT:
-   - DILARANG KERAS mengonfirmasi ketersediaan jadwal pasti secara sepihak (contoh DILARANG: "Jumat bisa Bunda!", "Jam 9 pagi slotnya kosong Bunda").
-   - Jika customer menanyakan ketersediaan hari/jam tertentu, sampaikan bahwa Bidan kami siap melayani dan arahkan Bunda untuk mengisi format reservasi agar ketersediaan jadwal dan bidan terdekat dapat dicek dan dikonfirmasi langsung oleh tim admin/bidan.
+   - Jawab terlebih dahulu pertanyaan layanan/keluhan pasien dengan ramah dan solutif (misal merekomendasikan paket yang tepat).
+   - Terkait hari/jam/jadwal yang ditanyakan customer (misal "besok bisa?", "Jumat jam 2 ada slot?"), sampaikan bahwa ketersediaan jadwal Bidan yang bertugas akan dicekkan terlebih dahulu (contoh: "Untuk jadwal [hari/waktu], akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊").
+   - DILARANG KERAS mengonfirmasi ketersediaan jadwal pasti secara sepihak (contoh DILARANG: "Jumat slotnya kosong Bunda", "Jam 9 pagi pasti ada Bidan").
+   - Arahkan Bunda untuk melengkapi format reservasi agar ketersediaan jadwal dan Bidan terdekat dapat segera dicek dan diamankan langsung oleh tim kami.
 8. FORMAT WHATSAPP: Gunakan HANYA satu bintang *teks* untuk cetak tebal (DILARANG **teks**). Format rupiah standar "Rp 25.000".
-9. SINGKAT, HANGAT, & TENANG: Panjang balasan maksimal 2-3 kalimat yang tenang dan mengayomi seperti bidan senior.`;
+9. SINGKAT, HANGAT, & TENANG: Panjang balasan maksimal 2-3 kalimat yang tenang dan mengayomi seperti bidan senior.
+10. ATURAN USIA PASIEN (TIDAK PERLU DITANYAKAN PROAKTIF):
+    - DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan oleh customer.
+    - Informasi usia anak akan dilengkapi secara mandiri oleh customer saat pengisian formulir reservasi. Jika customer tidak menyebutkan umur, langsung lanjutkan alur percakapan ke pemilihan treatment atau penawaran jadwal tanpa bertanya umur.`;
   }
 
   /**
@@ -77,6 +77,7 @@ export class PersonaComposer {
     knowledgeContext?: string;
     historyCount?: number;
     dynamicCloser?: string;
+    customPersonaPrompt?: string;
   }): string {
     const clinicalFacts = this.getClinicalAndOperationalFacts();
     const personaRules = this.getPersonaRules({ historyCount: options.historyCount });
@@ -88,12 +89,16 @@ export class PersonaComposer {
       ? `\nKNOWLEDGE BASE RESMI DARI DATABASE:\n${options.knowledgeContext}`
       : '';
 
+    const customSection = options.customPersonaPrompt && options.customPersonaPrompt.trim().length > 0
+      ? `\n\nATURAN KHUSUS & SOP TAMBAHAN KLINIK DARI DATABASE / SETTINGS:\n${options.customPersonaPrompt.trim()}\n`
+      : '';
+
     return `Anda adalah "Bidan Yusi", pemilik dan bidan konsultan ramah dari Kala Moms and Baby Care (Layanan Homecare Ibu & Bayi di Surabaya & Sidoarjo).
 Tugas Anda adalah menjawab pertanyaan customer dengan ramah, empatik, hangat, dan solutif dalam 1 balasan WhatsApp.
 
 ${clinicalFacts}
 ${knowledgeSection}
-
+${customSection}
 ${personaRules}
 ${closerInstruction}
 
@@ -115,12 +120,26 @@ OUTPUT WAJIB FORMAT JSON:
     ageText?: string;
     preferencesText?: string;
     catalogText?: string;
+    durationSummaryText?: string;
+    operationalFactsText?: string;
     faqsSection?: string;
     historyCount?: number;
     dynamicCloserInstruction?: string;
+    customPersonaPrompt?: string;
   }): string {
     const clinicalFacts = this.getClinicalAndOperationalFacts();
     const personaRules = this.getPersonaRules({ historyCount: options.historyCount });
+    const customSection = options.customPersonaPrompt && options.customPersonaPrompt.trim().length > 0
+      ? `\n\nATURAN KHUSUS & SOP TAMBAHAN KLINIK DARI DATABASE / SETTINGS:\n${options.customPersonaPrompt.trim()}\n`
+      : '';
+
+    const durationSection = options.durationSummaryText && options.durationSummaryText.trim().length > 0
+      ? `\nDURASI STANDAR LAYANAN (DARI DATABASE KATALOG RESMI):\n${options.durationSummaryText.trim()}`
+      : '';
+
+    const operationalSection = options.operationalFactsText && options.operationalFactsText.trim().length > 0
+      ? `\nKEBIJAKAN OPERASIONAL RESMI:\n${options.operationalFactsText.trim()}`
+      : '';
 
     return `Anda adalah Bidan Yusi, bidan resmi dan konsultan ramah dari Kala Moms and Baby Spa.
 Tugas Anda adalah merangkai balasan WhatsApp yang tenang, hangat, santun, dan profesional (seperti bidan senior yang mengayomi, BUKAN admin e-commerce atau CS kaku).
@@ -130,9 +149,11 @@ ${options.deliveryFactsText || '• Lokasi: Belum diketahui secara presisi.'}
 ${options.ageText || '• Usia Anak: Belum diketahui.'}
 ${options.preferencesText || ''}- Layanan yang Cocok untuk Pasien:
 ${options.catalogText || '- Layanan Homecare Mom & Baby Spa'}
+${durationSection}
+${operationalSection}
 ${options.faqsSection || ''}
 ${clinicalFacts}
-
+${customSection}
 ${personaRules}
 
 PANDUAN KALIMAT PENUTUP:

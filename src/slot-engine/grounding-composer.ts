@@ -45,6 +45,26 @@ export class GroundingComposer {
       });
     }
 
+    // Prioritaskan treatment yang sudah dipilih atau sesuai gejala (misal Pulih Ceria) di urutan pertama
+    const effectiveSelectedTreatment = slate.selectedTreatmentName || extraction.treatmentReferenced;
+    if (effectiveSelectedTreatment) {
+      filteredServices.sort((a, b) => {
+        const aMatch = a.name.toLowerCase().includes(effectiveSelectedTreatment.toLowerCase());
+        const bMatch = b.name.toLowerCase().includes(effectiveSelectedTreatment.toLowerCase());
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    } else if ((slate.symptoms && slate.symptoms.length > 0) || (extraction.symptoms && extraction.symptoms.length > 0)) {
+      filteredServices.sort((a, b) => {
+        const aMatch = a.name.toLowerCase().includes('pulih');
+        const bMatch = b.name.toLowerCase().includes('pulih');
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        return 0;
+      });
+    }
+
     const maxItems = mentionsMoms ? 6 : 5;
     const filteredCatalog = filteredServices.slice(0, maxItems).map((s) => ({
       name: s.name,
@@ -89,7 +109,17 @@ export class GroundingComposer {
 
     // 5. PREFERENSI & CATATAN MEDIS KHUSUS
     let customerPreferencesText: string | null = null;
-    if (slate.medicalConcerns && slate.medicalConcerns.length > 0) {
+    const allSymptoms = Array.from(new Set([...(slate.symptoms || []), ...(extraction.symptoms || [])]));
+    const targetTreatment = slate.selectedTreatmentName || extraction.treatmentReferenced;
+    const isSwitchingToBaby = /\b(untuk\s+baby|buat\s+baby|baby\s+aja|anak\s+aja|buat\s+anak|bayi\s+aja)\b/i.test(inputLower);
+
+    if (allSymptoms.length > 0 || (targetTreatment && targetTreatment.toLowerCase().includes('pulih'))) {
+      const treatmentName = targetTreatment || 'Pijat Bayi Pulih Ceria';
+      const switchNote = isSwitchingToBaby
+        ? ' Customer mengonfirmasi memilih perawatan untuk baby saja, langsung arahkan ke *Pijat Bayi Pulih Ceria* (terapi flu) dan tanyakan jadwal kunjungannya.'
+        : '';
+      customerPreferencesText = `Catatan Medis Khusus: Pasien memiliki keluhan/gejala (${allSymptoms.join(', ') || 'keluhan fisik'}). Rekomendasi mutlak: *${treatmentName}*.${switchNote} DILARANG MEREKOMENDASIKAN PIJAT BIASA/CERIA UMUM jika pasien memiliki keluhan batuk, pilek, grok-grok, kembung, kolik, atau rewel!`;
+    } else if (slate.medicalConcerns && slate.medicalConcerns.length > 0) {
       customerPreferencesText = `Catatan Medis Khusus: ${slate.medicalConcerns.join(', ')}`;
     }
 
@@ -98,11 +128,15 @@ export class GroundingComposer {
     const missingSlotsToPrompt = missingSlots[0] || null;
 
     // 7. PRE-FILLED RESERVATION FORM GENERATOR
-    const effectiveTreatment = extraction.treatmentReferenced || slate.selectedTreatmentName;
+    const effectiveTreatment =
+      extraction.treatmentReferenced ||
+      slate.selectedTreatmentName ||
+      (allSymptoms.length > 0 ? 'Pijat Bayi Pulih Ceria' : null);
     const effectiveDate = extraction.preferredDateText || slate.preferredDate;
+    const intentsList = extraction.intents || [];
     const hasExplicitBookingIntent = Boolean(
-      extraction.intents.includes('request_booking') ||
-      (effectiveDate && (extraction.intents.includes('ask_schedule') || extraction.intents.includes('select_treatment') || extraction.intents.includes('affirmation') || extraction.intents.includes('chitchat'))) ||
+      intentsList.includes('request_booking') ||
+      (effectiveDate && (intentsList.includes('ask_schedule') || intentsList.includes('select_treatment') || intentsList.includes('affirmation') || intentsList.includes('chitchat') || intentsList.includes('consult_symptom'))) ||
       (effectiveDate && effectiveTreatment)
     );
     const isBookingReady = Boolean(
@@ -141,10 +175,15 @@ export class GroundingComposer {
       });
     }
 
+    const durationSummaryText = treatmentCatalogService.getServiceDurationSummary();
+    const operationalFactsText = '• Homebase & Layanan: Homecare Waru Sidoarjo (Surabaya & Sidoarjo maks 30 km)\n• Hari & Jam Operasional: Buka Setiap Hari (Senin - Minggu 08.00 - 17.00 WIB)\n• Tenaga Medis: Bidan Profesional Lulusan Kebidanan & Bersertifikat STR Aktif\n• Pembayaran: Transfer Bank (BCA, Mandiri, BRI), QRIS Universal, Cash di Tempat';
+
     return {
       filteredCatalog,
       deliveryFacts,
       clinicFacts,
+      durationSummaryText,
+      operationalFactsText,
       symptomsDiscussed: slate.symptoms,
       missingSlotsToPrompt,
       relevantFaqs: relevantFaqs.length > 0 ? relevantFaqs : undefined,

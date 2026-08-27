@@ -1183,6 +1183,48 @@ export class TreatmentCatalogService {
       })
       .join('\n\n');
   }
+
+  /**
+   * Menghasilkan ringkasan durasi dinamis dari seluruh layanan aktif
+   */
+  public getServiceDurationSummary(): string {
+    const services = this.getAllServices().filter((s) => s.isActive && !s.isAddon);
+    return services
+      .map((s) => `  * ${s.name} (${s.ageTier.label}): ~${s.durationMinutes} menit`)
+      .join('\n');
+  }
+
+  /**
+   * Mencocokkan keluhan gejala customer ke layanan yang relevan di katalog secara dinamis
+   */
+  public matchServicesBySymptoms(symptoms: string[]): ClinicServiceItem[] {
+    if (!symptoms || symptoms.length === 0) return [];
+    const all = this.getAllServices().filter((s) => s.isActive && !s.isAddon);
+    const symLower = symptoms.map((s) => s.toLowerCase());
+
+    const scored = all.map((service) => {
+      let score = 0;
+      const text = `${service.name} ${service.description}`.toLowerCase();
+      for (const sym of symLower) {
+        if (text.includes(sym)) score += 2;
+        if (sym.includes('batuk') || sym.includes('pilek') || sym.includes('flu') || sym.includes('grok')) {
+          if (service.name.toLowerCase().includes('pulih')) score += 3;
+        }
+        if (sym.includes('nafsu') || sym.includes('gtm') || sym.includes('makan')) {
+          if (service.name.toLowerCase().includes('lahap')) score += 3;
+        }
+        if (sym.includes('laktasi') || sym.includes('asi') || sym.includes('oksitosin')) {
+          if (service.category === 'MOMS' || service.name.toLowerCase().includes('laktasi')) score += 3;
+        }
+      }
+      return { service, score };
+    });
+
+    return scored
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((s) => s.service);
+  }
 }
 
 export const treatmentCatalogService = new TreatmentCatalogService();

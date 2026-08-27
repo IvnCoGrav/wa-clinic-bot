@@ -212,13 +212,15 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             DEFAULT_TENANT_ID
           );
 
+          const sentBubbles = sandboxClient.sentMessages.map((m) => m.text);
           const answer =
-            sandboxClient.sentMessages.length > 0
-              ? sandboxClient.sentMessages.map((m) => m.text).join('\n\n')
+            sentBubbles.length > 0
+              ? sentBubbles.join('\n\n')
               : '🌸 [Bot sedang diam - Percakapan dialihkan ke Human Handling / Bidan]';
 
           return {
             answer,
+            sentBubbles,
             chunks,
             query: text,
             timestamp: new Date(),

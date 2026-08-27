@@ -34,7 +34,16 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
     }
   }
 
-  // 3. BACKGROUND AUTO-CAPTURE: Tangkap jika customer mengirimkan form reservasi lengkap saat mode Human Handling
+  // 3. BACKGROUND ENRICHMENT: delegasikan ke human-background-enrichment service (silent, non-blocking)
+  try {
+    const { humanBackgroundEnrichmentService } = await import('../../services/human-background-enrichment.service');
+    const hist = (ctx as any).history || [];
+    await humanBackgroundEnrichmentService.enrichSync({ ...ctx, history: hist } as any, tenantId);
+  } catch (enrichErr: any) {
+    console.warn('[HUMAN HANDLER ENRICH ERROR]', enrichErr.message);
+  }
+
+  // 3b. Legacy reservation auto-capture sebagai backup idempoten 24h
   const userText = ctx.incomingMessage.text?.body || '';
   if (userText.trim()) {
     try {
@@ -44,8 +53,6 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
         if (parseResult.success && parseResult.reservation) {
           const parsed = parseResult.reservation;
           const { prisma } = await import('../../db/client');
-
-          // Idempotency: hindari duplikasi record reservasi dalam 24 jam untuk customer & detail yang sama
           const recentExisting = await prisma.reservation.findFirst({
             where: {
               customer_id: customer.id,
@@ -54,7 +61,6 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
               treatment_detail: parsed.treatmentDetail,
             },
           });
-
           if (!recentExisting) {
             const reservation = await prisma.reservation.create({
               data: {
@@ -67,9 +73,7 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
                 status: 'pending',
               },
             });
-
-            console.log(`[HUMAN HANDLER AUTO-CAPTURE] Created reservation ${reservation.id} for customer ${customer.phone} (${parsed.name})`);
-
+            console.log(`[HUMAN HANDLER AUTO-CAPTURE] Created reservation ${reservation.id} for customer ${customer.phone} (${parsed.treatmentDetail})`);
             const { reservationLifecycleService } = await import('../../services/reservation-lifecycle.service');
             await reservationLifecycleService.onReservationCreated({
               customerId: customer.id,
@@ -81,66 +85,22 @@ export async function handleHumanHandlingState(ctx: StateHandlerContext): Promis
               kecamatan: parsed.kec,
               kota: parsed.kota,
               kelurahan: parsed.address,
-            });
-
-            // Meta CAPI InitiateCheckout — pastikan event ter-record walau via human handling
+            }).catch(() => {});
             try {
               const { fireCapiEvent } = await import('../../services/capi.service');
               fireCapiEvent({ eventName: 'InitiateCheckout', customer, tenantId, customData: { source: 'HUMAN_HANDLER_FORM_CAPTURE', treatment: parsed.treatmentDetail } });
             } catch {}
-
-            // Update nama kontak jika terisi
-            const customerName = parsed.name?.trim();
-            if (customerName && customerName.length > 0 && customerName.toLowerCase() !== 'bunda') {
-              const kecamatan = customer.kecamatan || '';
-              const contactName = `Bunda ${customerName}${kecamatan ? ` ${kecamatan}` : ''}`.trim();
+            const cName = parsed.name?.trim();
+            if (cName && cName.length > 0 && cName.toLowerCase() !== 'bunda') {
+              const kec = customer.kecamatan || '';
+              const contactName = `Bunda ${cName}${kec ? ` ${kec}` : ''}`.trim();
               const { customerService } = await import('../../services/customer.service');
               await customerService.updateCustomerName(customer.id, contactName, tenantId).catch(() => {});
             }
           }
         }
       }
-    } catch (captureErr: any) {
-      console.warn('[HUMAN HANDLER AUTO-CAPTURE ERROR]', captureErr.message);
-    }
-  }
-
-  // 3b. BACKGROUND LOCATION PIN CAPTURE: Jika customer mengirim Pin Lokasi GPS saat Human Handling
-  if (ctx.incomingMessage.type === 'location' && ctx.incomingMessage.location) {
-    try {
-      const { latitude, longitude } = ctx.incomingMessage.location;
-      const numLat = Number(latitude);
-      const numLng = Number(longitude);
-      if (!isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0) {
-        const { geocodingService } = await import('../../integrations/google-maps/geocoding');
-        const { deliveryService } = await import('../../services/delivery.service');
-        const { customerService } = await import('../../services/customer.service');
-
-        const resolved = await geocodingService.reverseGeocode(numLat, numLng);
-        const delivery = await deliveryService.calculateDelivery({ lat: numLat, lng: numLng });
-
-        await customerService.updateCustomerLocation(
-          customer.id,
-          {
-            kelurahan: resolved.kelurahan,
-            kecamatan: resolved.kecamatan,
-            kota: resolved.kota,
-            lat: numLat,
-            lng: numLng,
-            distanceKm: delivery.distanceKm,
-            ongkir: delivery.ongkir,
-            isOutOfCoverage: delivery.isOutOfCoverage,
-            zipcode: resolved.zipcode,
-            isNativePin: true,
-          },
-          tenantId
-        );
-        await customerService.markShareLocationSent(customer.id, tenantId);
-        console.log(`[HUMAN HANDLER LOCATION CAPTURE] Captured GPS pin for customer ${customer.phone}: Lat ${numLat}, Lng ${numLng}, Distance ${delivery.distanceKm}km, Ongkir ${delivery.ongkir}`);
-      }
-    } catch (locErr: any) {
-      console.warn('[HUMAN HANDLER LOCATION CAPTURE ERROR]', locErr.message);
-    }
+    } catch {}
   }
 
   // 4. Jika MASIH dalam Human Handling (< 6 jam):

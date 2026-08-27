@@ -4,6 +4,268 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fixed — Perbaikan Drag-to-Scroll 2D View Mingguan Reservasi & Relaksasi Rate Limiting Admin Dashboard (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **2D Drag Scroll Kalender Mingguan Terblokir**: Pada `WeekScheduleGrid.tsx`, interaksi klik & geser mouse 2D (horizontal hari & vertikal jam) tidak berfungsi karena seluruh sel jam tertutup tombol transparan `<button>` berukuran penuh (100%) untuk fitur Quick-Add (+). Handler pointer membatalkan drag jika mengenai elemen `button`.
+  2. **Rate Limit Terlalu Ketat (300 req/menit)**: Saat admin/staff aktif beraktivitas di Admin Dashboard (memuat kalender, auto-refresh chat, simpan reservasi), akumulasi request mencapai batas 300 req/menit karena jalur `/api/admin/*` belum masuk allowlist rate-limiting global Fastify di `src/app.ts`.
+
+- **Solusi & Implementasi:**
+  1. **2D Drag-to-Scroll dengan Distance Threshold (`packages/admin-dashboard/src/components/calendar/WeekScheduleGrid.tsx`)**:
+     - Mengubah handler pointer event dengan ambang batas jarak pergerakan (*threshold* > 4px).
+     - Jika mouse digeser melampaui threshold, sistem mengaktifkan pointer capture dan melakukan 2D scrolling (`scrollLeft` & `scrollTop`) bebas secara mulus.
+     - Jika hanya diklik tanpa digeser, klik tombol Quick-Add (+) atau Card Reservasi tetap terpicu secara normal.
+     - Mencegah klik terpicu secara tidak sengaja saat mouse selesai melakukan drag gesture (`dragMovedRef`).
+  2. **Relaksasi Rate Limit & Allowlist Admin API (`src/app.ts`)**:
+     - Menambahkan `/api/admin` ke dalam `allowList` rate-limiting Fastify agar operasional Admin Dashboard, penyimpanan reservasi, upload bukti transfer, dan live chat tidak pernah terblokir dengan HTTP 429.
+     - Menaikkan kuota default global protection dari 300 menjadi 1.000 req/menit.
+
+- **Pengujian & Verifikasi:**
+  - `packages/admin-dashboard`: `npm run build` sukses (tsc + vite bundle).
+  - Backend `src/`: `npm run build` (`tsc`) sukses 100%.
+  - Seluruh test suite Vitest unit & integration test **PASS** (100% Green).
+
+
+#### Fixed — Integrasi Dynamic Closer ke Reply Generator & Fast FAQ serta Pencegahan Pengulangan Pertanyaan Hari (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  - Saat customer bertanya hari (*"Sabtu atau Minggu apa bisa kak"*), bot membalas: *"Untuk jadwal di hari Sabtu atau Minggu, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊. Rencana mau treatment di hari apa Bunda?"*.
+  - Pertanyaan penutup berulang dan kontradiktif karena `incomingText` dan `history` tidak diteruskan ke `DynamicCloserService.getCloserInstruction` di `fast-faq-generator.ts` dan `reply-generator.ts`, serta contoh kalimat penutup di prompt LLM masih memuat klausa *"di hari apa"*.
+
+- **Solusi & Implementasi:**
+  1. **Penerusan Parameter Lengkap (`src/slot-engine/fast-faq-generator.ts`, `src/slot-engine/reply-generator.ts`)**:
+     - Memastikan `DynamicCloserService.getCloserInstruction` menerima `context.history` dan `context.customerInput` / `incomingText` pada seluruh pemanggilan.
+  2. **Penyempurnaan Prompt Dynamic Closer (`src/slot-engine/dynamic-closer.service.ts`)**:
+     - Mengubah contoh penutup menjadi spesifik menanyakan preferensi jam (*"Kira-kira untuk hari Sabtu atau Minggu Bunda lebih nyaman di jam berapa yaa (pagi/siang/sore)..."*).
+     - Menambahkan larangan keras: `⚠️ DILARANG KERAS MENANYAKAN "DI HARI APA" LAGI KARENA BUNDA SUDAH MENYEBUTKAN HARI!`.
+
+- **Pengujian & Verifikasi:**
+  - Unit test `tests/unit/slot-engine-context-continuity-and-adaptive-closer.test.ts` (9/9 PASS).
+  - Seluruh 13 Test Suite Slot Engine (72/72 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Fixed — Eliminasi Kalimat Pengantar Jadwal Janggal pada Penanyaan Lokasi tanpa Hari (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  - Saat customer hanya bertanya seputar usia anak (seperti *"Usia 14 bulan bisa ?"*) tanpa menyebutkan hari kunjungan, bot sebelumnya menyisipkan kalimat pengantar jadwal yang canggung: *"Untuk ketersediaan jadwal di hari yang Bunda inginkan, akan kami bantu cekkan terlebih dahulu..."*.
+  - Hal ini terjadi karena template prompt `LOCATION` menyuntikkan instruksi pengecekan jadwal secara tanpa syarat (*unconditional*).
+
+- **Solusi & Implementasi:**
+  1. **Kondisional Pengecekan Hari di Dynamic Closer (`src/slot-engine/dynamic-closer.service.ts`)**:
+     - Memisahkan alur `case 'LOCATION'`:
+       - **Jika ada penyebutan hari**: Menjelaskan jadwal hari tersebut akan dicekkan dan menanyakan lokasi rumah.
+       - **Jika TIDAK ada penyebutan hari**: Langsung menjawab pertanyaan layanan/usia anak dan menanyakan daerah rumah secara santun tanpa embel-embel kalimat jadwal.
+     - Penambahan aturan: `⚠️ DILARANG menyebutkan kata pengantar jadwal jika Bunda belum menyebutkan hari/waktu kunjungan!`.
+
+- **Pengujian & Verifikasi:**
+  - Ditambahkan unit test 9 di `tests/unit/slot-engine-context-continuity-and-adaptive-closer.test.ts`.
+  - Seluruh 13 Test Suite Slot Engine (72/72 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Fixed — Penanganan Multi-Treatment Kombinasi & Eliminasi Conversational Backtrack pada Pemilihan Hari (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  - Saat customer menanyakan kombinasi multi-treatment (seperti *"Pijat bayi ceria + cukur bisa kak ?"*), lalu menanggapi penawaran jadwal dengan pilihan hari (*"Sabtu atau Minggu apa bisa kak"*), bot sebelumnya mengalami *conversational backtrack* dengan bertanya balik: *"apakah Bunda sudah memutuskan untuk mengambil paket Pijat Bayi Ceria dan cukur rambut si kecil?"*.
+  - Hal ini terjadi karena paket kombinasi belum langsung terikat sebagai `selectedTreatmentName` di state matrix dan format hari majemuk (*"Sabtu atau Minggu"*) belum diekstrak secara spesifik oleh Dynamic Closer.
+
+- **Solusi & Implementasi:**
+  1. **Ekstraksi Multi-Treatment Kombinasi (`src/slot-engine/entity-extractor.ts`)**:
+     - Deteksi deterministik dan semantik untuk kombinasi treatment umum (seperti `Pijat Bayi Ceria + Cukur Rambut Bayi`, `Pulih Ceria + Sinar Moksa`).
+  2. **Dynamic Date Extraction & Anti-Backtracking (`src/slot-engine/dynamic-closer.service.ts`)**:
+     - Ditambahkan helper `extractDateMention` untuk mengekstrak hari majemuk (*"Sabtu atau Minggu"*, *"hari Jumat"*, *"besok"*).
+     - Menambahkan aturan anti-backtracking tegas ke LLM: `⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika Bunda sudah menanyakan/memilih paket tersebut`.
+     - Mengarahkan alur percakapan langsung ke pertanyaan spesifik jam (pagi/siang/sore) atau penanyakan alamat rumah jika lokasi belum terkonfirmasi.
+
+- **Pengujian & Verifikasi:**
+  - Ditambahkan test case 7 & 8 di `tests/unit/slot-engine-context-continuity-and-adaptive-closer.test.ts`.
+  - Seluruh 13 Test Suite Slot Engine (71/71 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Improved — Dynamic Closer Adaptif & Anti-Repetisi, Kontinuitas Memori Keluhan Bayi, & Pengetahuan Klinis Pijat Oksitosin (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Pengulangan Kalimat Penutup (*Closing Loop*)**:
+     - Saat customer mengajukan serangkaian pertanyaan teknis berurutan (durasi, keamanan bayi < 3 bulan, add-on sinar moksa, metode pembayaran), bot mengulang pertanyaan penutup yang sama persis (*"Rencana mau treatment apa bunda ?"*) hingga 6x berturut-turut.
+  2. **Hilangnya Konteks Keluhan (*Context Amnesia*)**:
+     - Saat customer sempat menanyakan layanan Ibu (*Pijat Oksitosin*) lalu memutuskan beralih kembali *"Ooh yaudah untuk baby aja kak"*, bot melupakan diskusi keluhan flu sebelumnya dan bertanya ulang dari awal.
+  3. **Penegasan Pengetahuan Klinis Pijat Oksitosin**:
+     - Penjelasan Pijat Oksitosin perlu dipertegas fungsi medis utamanya untuk Ibu Menyusui / Nifas dalam merangsang hormon oksitosin dan melancarkan ASI.
+
+- **Solusi & Implementasi:**
+  1. **Dynamic Closer Adaptif & Anti-Repetisi (`src/slot-engine/dynamic-closer.service.ts`)**:
+     - Deteksi pertanyaan kontekstual (pembayaran, terapi sinar/alat, keamanan usia newborn, layanan ibu, dan konfirmasi fokus bayi).
+     - Menghasilkan panduan penutup spesifik yang mengalir secara alami dan memandu customer ke tahap berikutnya.
+     - Penambahan negative constraint tegas: `⚠️ ATURAN ANTI-REPETISI: DILARANG mengulang kalimat penutup yang sama persis jika sudah pernah ditanyakan di riwayat chat`.
+  2. **Kontinuitas Memori & Grounding Asosiasi Treatment (`grounding-composer.ts`, `entity-extractor.ts`)**:
+     - Menjaga keluhan aktif (`flu`, `batuk`, `pilek`) dan mengarahkan kembali ke *Pijat Bayi Pulih Ceria* saat customer beralih keputusan fokus ke anak (`"untuk baby aja kak"`).
+  3. **Penyempurnaan Pengetahuan Klinis di `PersonaComposer` (`persona-composer.ts`)**:
+     - Menegaskan bahwa Pijat Oksitosin & Paket Laktasi adalah perawatan khusus Ibu Menyusui / Pasca Melahirkan (Nifas) untuk merangsang produksi hormon oksitosin alami, memperlancar ASI, serta meredakan ketegangan tubuh Bunda.
+
+- **Pengujian & Verifikasi:**
+  - Menambahkan test suite baru `tests/unit/slot-engine-context-continuity-and-adaptive-closer.test.ts` (6 passing tests).
+  - Seluruh 13 Test Suite Slot Engine (69/69 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Added — Pemisahan Semantik 3-Bubble Khusus Pesan Formulir Reservasi (2026-08-27)
+
+- **Latar Belakang & Kebutuhan:**
+  - Saat bot mengirimkan rekomendasi treatment lengkap dengan formulir reservasi dan instruksi SOP, seluruh pesan sebelumnya digabung atau terpotong kaku.
+  - Untuk pengalaman pengguna WhatsApp yang optimal dan memudahkan customer menyalin (*copy*) format reservasi tanpa teks pengantar atau penutup, pesan harus dipisah rapi menjadi 3 gelembung pesan (*bubble chat*):
+    1. **Bubble 1**: Jawaban empati / konsultasi / konfirmasi pengecekan jadwal (*"Tentu bisa, Bunda. Untuk keluhan batuk dan pilek..."*).
+    2. **Bubble 2**: Format pendaftaran reservasi terstruktur (*"Berikut list untuk reservasi : ... "*).
+    3. **Bubble 3**: Panduan pengisian dan kebijakan pembatalan SOP (*"Mohon bisa diisi Bunda 😊 ... Cancel H-3 jam ... "*).
+
+- **Solusi & Implementasi:**
+  1. **Logika Semantik 3-Bubble di `TypingService` (`src/services/typing.service.ts`)**:
+     - Menambahkan deteksi format form reservasi berbasis batas semantik (`formHeaderIndex` dan `formFooterIndex`).
+     - Jika pesan memuat Intro + Form + Footer, otomatis dipisah menjadi 3 bubble terpisah.
+     - Setiap bubble dikirimkan secara berurutan dengan simulasi jeda mengetik manusiawi (*humanized typing & inter-bubble delay*).
+  2. **Dukungan AI Sandbox Simulator & Evaluasi Admin (`evaluations.subroute.ts`, `AiSandbox.tsx`)**:
+     - Endpoint `/api/admin/sandbox/chat` mengembalikan `sentBubbles` array sehingga tampilan AI Sandbox merender masing-masing bubble secara visual terpisah.
+
+- **Pengujian & Verifikasi:**
+  - Ditambahkan unit test di `tests/unit/typing.test.ts` untuk memvalidasi pemisahan tepat 3 bubble pada full consultation reply.
+  - Seluruh 11 Test Suite Slot Engine (52/52 tests) + Typing Tests (11/11 tests) **PASS**.
+  - `npm run build` backend dan frontend admin dashboard sukses 100%.
+
+#### Fixed — Penanganan Cerdas Pertanyaan Jadwal & Layanan (Jawab Layanan Dulu, Infokan Cek Jadwal) (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Pertanyaan Jadwal & Layanan**:
+     - Saat customer bertanya kombinasi layanan dan hari (misal *"Kalau mau pijat batuk pilek besok bisa ?"*), bot perlu menjawab pertanyaan seputar layanan terlebih dahulu dengan jelas dan solutif, kemudian menginfokan secara transparan bahwa ketersediaan jadwal Bidan yang bertugas akan dicekkan terlebih dahulu.
+     - Sebelumnya, jika formulir langsung dikirim tanpa kalimat pengantar pengecekan jadwal, percakapan terkesan melompati konfirmasi ketersediaan slot.
+
+- **Solusi & Implementasi:**
+  1. **Penyempurnaan Persona Rule & Dynamic Closer (`persona-composer.ts`, `dynamic-closer.service.ts`)**:
+     - **Aturan 1 (Jawab Layanan Dulu)**: Bot menjelaskan paket treatment yang tepat (*Pijat Bayi Pulih Ceria* untuk batuk/pilek/flu).
+     - **Aturan 2 (Infokan Cek Jadwal)**: Bot menginfokan bahwa ketersediaan jadwal di hari/waktu tersebut akan dicekkan terlebih dahulu oleh tim Bidan (*"Untuk ketersediaan jadwal besok, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊"*).
+     - **Aturan 3 (Lampirkan Form / Arahkan Jam)**: Bot menyertakan form reservasi pre-filled atau menanyakan perkiraan jam agar slot jadwal dapat segera dicek dan diamankan.
+  2. **Penyempurnaan `GroundingComposer` (`grounding-composer.ts`)**:
+     - Mengaitkan keluhan fisik (`allSymptoms > 0`) ke `Pijat Bayi Pulih Ceria` secara otomatis pada generator pre-filled form.
+
+- **Pengujian & Verifikasi:**
+  - Terverifikasi pada pengujian chat:
+    - *Bot Reply*: *"Tentu bisa, Bunda. Untuk keluhan batuk dan pilek, kami sarankan layanan Pijat Bayi Pulih Ceria yang dirancang khusus untuk membantu meredakan gejala tersebut. Untuk ketersediaan jadwal besok, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊."* + Lampiran list reservasi.
+  - Seluruh 11 Test Suite Slot Engine (52/52 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Fixed — Eliminasi False Trigger Double Ongkir Guard pada Pertanyaan Klinis & Treatment (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **False Trigger Double Ongkir Guard pada Turn Lanjutan**:
+     - Setelah bot mengirimkan rincian ongkir (misal: *"Jika dilihat dari jaraknya kurang lebih 22.6 km..."*) dan customer membalas dengan pertanyaan keluhan/treatment (*"Kalau mau pijat batuk pilek bisa ?"*), `EntityExtractor` mengekstrak `location_text` dari riwayat sebelumnya.
+     - `DecisionMatrix` mengecek `hasNewLocationText` dan `isRecentOngkirSent (< 45s)` secara agresif tanpa mengecek apakah customer sedang mengajukan pertanyaan klinis (`consult_symptom` / `batuk` / `pilek`).
+     - Akibatnya, `DecisionMatrix` membalas deterministik dengan template pengulangan lokasi:
+       `Baik Bunda, lokasi di Sidotopo Wetan sudah kami simpan yaa 😊\n\nRencana mau treatment apa bunda ?🤗`
+       sehingga mengabaikan pertanyaan klinis customer mengenai batuk dan pilek.
+
+- **Solusi & Implementasi:**
+  1. **Pengetatan Kriteria Double Ongkir Guard (`decision-matrix.ts`)**:
+     - Menambahkan deteksi `hasClinicalOrOtherInquiry` (`extraction.symptoms.length > 0`, `treatmentReferenced`, `consult_symptom`, `select_treatment`, `ask_price`, `ask_schedule`, dll.).
+     - Double Ongkir Guard **HANYA** dipicu jika customer murni mengirim ulang pesan lokasi/alamat tanpa pertanyaan klinis atau permohonan treatment/jadwal.
+     - Pertanyaan klinis/treatment dialirkan dengan mulus ke `GENERATE_AI_RESPONSE` (`GroundingComposer` + `ReplyGenerator`) untuk menghasilkan rekomendasi paket yang tepat (*Pijat Bayi Pulih Ceria*).
+
+- **Pengujian & Verifikasi:**
+  - Ditambahkan automated regression test di `tests/unit/multi-turn-symptom-ongkir-guard.test.ts`:
+    - Scenario: Alur Platuk Tauladan Sidotopo Wetan -> Turn 2 balas ongkir -> Turn 3 customer kirim *"Kalau mau pijat batuk pilek bisa ?"* -> Terverifikasi **TIDAK** memicu false guard dan mengalirkan ke rekomendasi `Pijat Bayi Pulih Ceria`.
+  - Seluruh 11 Test Suite Slot Engine (52/52 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Fixed — Kepatuhan Wajib Sapaan Pembuka Turn-0 & Perkenalan Bidan Yusi (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Bypass Sapaan Pembuka pada Kata Opener Pendek (`"bisa kah"` / `"bisa"` / `"halo"`)**:
+     - Pada `DecisionMatrix`, kata opener pendek seperti `"bisa kah"` atau `"bisa gak"` terdeteksi sebagai pertanyaan spesifik (`hasSpecificQuestion`), sehingga mem-bypass Priority 2B (`TEMPLATES.greeting`).
+     - Alur percakapan terlempar ke LLM `ReplyGenerator`, yang langsung menjawab isi pesan (*"Tentu bisa Bunda, kami siap membantu..."*) tanpa menyertakan sapaan resmi pembuka (`"Halo Bunda! ✨\nTerima kasih sudah menghubungi kami...\nPerkenalkan, saya Bidan Yusi..."`).
+  2. **Ketiadaan Enforcement Prefix Perkenalan Bidan Yusi di Turn-0**:
+     - Bila customer mengajukan pertanyaan spesifik pada Turn-0 (misal: *"Kalau mau pijat batuk pilek bisa?"*), LLM sering lupa menyertakan perkenalan resmi Bidan Yusi.
+
+- **Solusi & Implementasi:**
+  1. **Penyempurnaan Opener Phrase & Urutan Priority DecisionMatrix (`decision-matrix.ts`)**:
+     - Menjadikan frasa pembuka (`"bisa kah"`, `"bisa gak"`, `"halo"`, `"p"`, `"selamat malam"`, dll.) sebagai `isPureLeadOpener` yang deterministik membalas `TEMPLATES.greeting({ isIslamic })` bila tidak ada keluhan klinis / harga / lokasi spesifik.
+     - Menata ulang prioritas agar FAQ Kebijakan Operasional (metode pembayaran, kualifikasi bidan STR, asal klinik) dievaluasi dengan tepat.
+  2. **Turn-0 Mandatory Greeting Guard di `ReplyGenerator` (`reply-generator.ts`)**:
+     - Menambahkan guard deterministik pada `ReplyGenerator.generate`: Jika percakapan berada di Turn-0 (`historyCount === 0`) dan balasan LLM belum memuat perkenalan Bidan Yusi, sistem otomatis menambahkan header sapaan resmi `TEMPLATES.firstContactGreetingHeader` di awal pesan.
+  3. **Penambahan Token 'bisa' pada `greeting-checker.ts`**:
+     - Menambahkan token `'bisa'` ke `STANDARD_LEAD_TOKENS` agar pesan lead sapaan Meta Ads terdeteksi murni.
+
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-opener-greeting.test.ts` (3 tests):
+    - Test 1: Customer kirim `"bisa kah"` di awal chat -> membalas template greeting resmi Bidan Yusi (`Halo Bunda ! ✨... Perkenalkan, saya Bidan Yusi...`).
+    - Test 2: Customer kirim `"halo"`, `"Selmat malam"`, `"p"`, `"bisa homecare?"` -> membalas template greeting resmi.
+    - Test 3: Customer kirim pertanyaan klinis di Turn-0 -> `ReplyGenerator` otomatis menyertakan header perkenalan Bidan Yusi.
+  - Seluruh 11 Test Suite Slot Engine (51/51 tests) **PASS**.
+  - `npm run build` (`tsc`) sukses 100%.
+
+#### Fixed — Composite Geocoding Resolution & Format Balasan Ongkir Deterministik Resmi (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Geocoding Imprecise pada Alamat Multi-Komponen**: Saat customer mengirimkan alamat lengkap berisi jalan + kelurahan + kecamatan (`"Platuk tauladan 19a , sidotopo wetan , kenjeran"`), `EntityExtractor` memecah input menjadi `street_detail: "Platuk tauladan 19a, Sidotopo Wetan"` dan `location_text: "Kenjeran"`. `DecisionMatrix` sebelumnya hanya mem-pass `locationText` ("Kenjeran") ke geocoding, sehingga menghasilkan kecamatan (`isPrecise: false`) dan gagal mengonfirmasi lokasi secara deterministik.
+  2. **Format Balasan Ongkir Tidak Sesuai SOP Resmi**: Template balasan ongkir sebelumnya belum menggunakan formulasi SOP baku Kala Spa (*"Jika dilihat dari jaraknya kurang lebih X km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp Y tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp Z saja bunda. Jadi bisa ya bunda ☺️\n\nRencana mau treatment apa bunda ?🤗"*).
+
+- **Solusi & Implementasi:**
+  1. **Pencarian Geocoding Bertingkat & Composite Query (`DecisionMatrix`)**:
+     - Membangun `compositeQuery` bertingkat: gabungan `streetDetail + locationText`, `rawText` fallback, dan `locationText` di [`src/slot-engine/decision-matrix.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/decision-matrix.ts).
+     - Menambahkan *Smart Ambiguity Disambiguation* untuk mencocokkan kelurahan spesifik dari daftar kelurahan kecamatan jika kecamatan terdeteksi.
+     - Memperbarui `isPureLocationMessage` agar pesan lokasi (termasuk yang menanyakan ongkir seperti *"ada ongkir ga ya"*) langsung membalas template ongkir resmi deterministik.
+     - Menambahkan penanganan `isGenericCityOnly` agar bot meminta detail kelurahan/desa secara santun bila customer hanya menyebutkan nama kota umum (seperti *"Sidoarjo"* atau *"Surabaya"*).
+  2. **Standarisasi `TEMPLATES.ongkirInfo` (`persona.ts`)**:
+     - Menyesuaikan `TEMPLATES.ongkirInfo` di [`src/config/persona.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/config/persona.ts) dengan teks baku SOP resmi klinik Kala Spa.
+  3. **Penyempurnaan Dynamic Catalog Duration & Fact Grounding**:
+     - Menambahkan `getServiceDurationSummary()` dan `matchServicesBySymptoms()` pada `treatmentCatalogService` di [`src/services/treatment-catalog.service.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/services/treatment-catalog.service.ts).
+     - Menghubungkan durasi dinamis dan fakta grounding ke `PersonaComposer` dan `GroundingComposer`.
+
+- **Pengujian & Verifikasi:**
+  - Verifikasi Turn-2 reproduction script (`"pijat bisa ?"` -> `"Platuk tauladan 19a , sidotopo wetan , kenjeran"`) menghasilkan respon persis:
+    `"Jika dilihat dari jaraknya kurang lebih 22.6 km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp 35.000 tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp 25.000 saja bunda. Jadi bisa ya bunda ☺️\n\nRencana mau treatment apa bunda ?🤗"`.
+  - 10 Test Suite Unit & Integrasi (`slot-engine-conversational-flow`, `slot-engine-legacy-parity`, `slot-engine-form-and-schedule-integration`, `multi-turn-symptom-ongkir-guard`, `slot-engine-rules`, `slot-engine-transcript-e2e`, `wonorejo-tegalsari-e2e`, `slot-engine-no-proactive-age-prompt`, `slot-engine-dynamic-catalog-facts`, `slot-engine-response-validator`) 48/48 PASS.
+  - `npm run build` PASS (0 TypeScript errors).
+
+#### Fixed — Silent Background Location Enrichment saat Human Handling (Sawotratap 6283831256927) (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Gate Human Handling Memotong Geocoding**: `machine.ts#47` dan `decision-matrix P2 SILENT_HUMAN_ACTIVE` langsung `return shouldSendReply:false` saat `is_human_handling=true`, tanpa memanggil `EntityExtractor`/`geocodingService`/`deliveryService`. Akibatnya `customers.lat/lng/distance_km/ongkir` tetap NULL.
+  2. **Hanya 2 Kasus di `human.ts`**: Penanganan human handling sebelumnya hanya menyimpan reservasi form lengkap dan pin GPS native, tidak ada enrichment untuk teks alamat biasa (`Jl anusanata No.19 Sawotratap Gedangan Sidoarjo`).
+  3. **Case Live Sawotratap**: Customer `6283831256927` (Bunda Mukodimatul Hikma) alamat jelas ada di gazetteer `Sawotratap -7.3708486,112.7301098` tapi jarak tidak terekam; balasan admin `jaraknya 4km` hanya teks manual.
+- **Solusi & Implementasi:**
+  1. **Service Baru `human-background-enrichment.service.ts`**: Silent enrichment (fire-and-forget, `shouldSendReply:false`, fail-safe) — teks alamat via AI NLU `EntityExtractor` → `geocodingService.geocodeText` (gazetteer Tier-1) → `deliveryService.calculateDelivery` (ORS → Google → Haversine) → `customerService.updateCustomerLocation`; pin GPS via `reverseGeocode`; form reservasi via `parseReservationText` + geocode `kec/kota/address`. Hormati guard `share_location_sent`, hanya save jika `isPrecise=true`.
+  2. **Integrasi Gate `machine.ts`**: Gate `HUMAN_HANDLING` kini `enrichAsync` (tanpa `await` blocking) sebelum `return shouldSendReply:false`, sehingga webhook tetap cepat (<200ms) tapi DB tetap terisi.
+  3. **Refaktor `human.ts`**: Delegasi ke `humanBackgroundEnrichmentService.enrichSync` sebagai single source; legacy form capture tetap sebagai backup idempoten 24h.
+  4. **Backfill Live**: `Sawotratap` di live di-update `lat -7.3708486 lng 112.7301098 distance_km 5.03 ongkir 5000` (ORS buffered 1.1x, 4.57km raw).
+- **Pengujian & Verifikasi:**
+  - `tests/unit/human-background-enrichment.test.ts` 5/5 PASS (teks Sawotratap, GPS pin, form geocode, skip filler/already-has-location).
+  - `npm run build` pass, `docs/KNOWN_ISSUES.md#14b` ditambah.
+
+#### Feature & Refactor — Dynamic Persona DB Integration & Elimination of Proactive Age Prompting (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Gating Pertanyaan Usia Proaktif (`determineMissingSlot: 'AGE'`)**:
+     - Pada alur konsultasi keluhan (misalnya *"Kalau mau pijat batuk pilek bisa?"*), bot selalu menutup pesan dengan menanyakan usia si kecil secara proaktif (*"Kalau boleh tahu, berapa usia si kecil saat ini ya Bunda agar rekomendasinya tepat? 😊"*).
+     - Hal ini memperpanjang gesekan (*friction*) percakapan sebelum masuk ke tahap penawaran jadwal dan booking, padahal usia si kecil dapat dilengkapi secara otomatis atau mandiri saat pengisian formulir reservasi.
+  2. **Pemisahan Custom Persona Prompt DB dari Slot Engine Baru**:
+     - Aturan SOP / custom persona prompt dari Database (`TenantPersona` via `loadPersonaFromDb` / `persona_custom.txt`) belum terinjeksi ke dalam `composeSlotGeneratorPrompt` dan `composeFastFaqPrompt` di `PersonaComposer`.
+
+- **Solusi & Implementasi:**
+  1. **Eliminasi Total Pertanyaan Usia Proaktif & Prioritas Jadwal (`DynamicCloserService` & `PersonaComposer`)**:
+     - Menghapus tipe `'AGE'` dari `determineMissingSlot` di [`src/slot-engine/dynamic-closer.service.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/dynamic-closer.service.ts).
+     - Mengalihkan CTA penutup setelah pembahasan treatment/keluhan langsung ke penawaran jadwal kunjungan (`SCHEDULE`: *"Rencana mau treatment di hari apa Bunda ? 😊"*).
+     - Menambahkan `Rule 18: ATURAN USIA PASIEN (TIDAK PERLU DITANYAKAN PROAKTIF)` pada `PersonaComposer.getPersonaRules` di [`src/slot-engine/persona-composer.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/persona-composer.ts) dan negative constraint larangan tanya usia pada prompt sistem.
+  2. **Pencatatan Usia Secara Pasif (`CustomerSlate` & `GroundingComposer`)**:
+     - Usia anak tetap diekstrak pasif oleh `EntityExtractor` (`parseAgeTextToMonths`), disimpan di `CustomerSlate`, dan otomatis diisikan ke pre-filled form reservasi bila customer menyebutkannya secara sukarela.
+     - Memperbarui patient dossier di [`src/slot-engine/grounding-composer.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/grounding-composer.ts) dengan status `[STATUS: TIDAK PERLU DITANYAKAN PROAKTIF, AKAN DILENGKAPI SAAT RESERVASI]`.
+     - Menghapus `'AGE'` dari `getMissingCriticalSlots` di [`src/slot-engine/slate-store.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/slate-store.ts).
+  3. **Integrasi Custom Persona DB ke Slot Engine (`ReplyGenerator` & `FastFaqGenerator`)**:
+     - Memuat persona dari Database (`loadPersonaFromDb(tenantId)`) di [`src/slot-engine/reply-generator.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/reply-generator.ts) dan [`src/slot-engine/fast-faq-generator.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/src/slot-engine/fast-faq-generator.ts).
+     - Menginjeksi blok custom persona ke `composeSlotGeneratorPrompt` dan `composeFastFaqPrompt` di `PersonaComposer`.
+  4. **Penguatan Single Source of Truth `isOngkirAlreadySent` & Baseline Fallbacks**:
+     - Menggunakan riwayat chat (`historyText`) sebagai indikator pasti apakah paragraf ongkir sudah pernah dikirimkan untuk mencegah duplikasi ongkir berulang.
+     - Menyempurnakan `baselineFallback` di `ReplyGenerator` agar mengonfirmasi paket dan jadwal secara kontekstual saat offline.
+
+- **Pengujian & Verifikasi:**
+  - Unit test baru [`tests/unit/slot-engine-no-proactive-age-prompt.test.ts`](file:///c:/Users/Ivan/.gemini/antigravity/scratch/wa-clinic-bot/tests/unit/slot-engine-no-proactive-age-prompt.test.ts): 6/6 tests PASS.
+  - Regresi lengkap Slot Engine (8 test files, 34 tests): 100% PASS.
+  - TypeScript compilation check (`npm run build`): 100% lulus (0 errors).
+
 #### Feature & Refactor — Conversational Consultation Flow, Price Grounding & Form Attachment Hardening (2026-08-27)
 
 - **Latar Belakang & Akar Masalah:**

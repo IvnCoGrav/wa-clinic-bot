@@ -472,6 +472,16 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ---
 
+## 14b. [Customer] Jarak tidak terekam saat human handling (Sawotratap 6283831256927) — FIXED 2026-08-27
+
+- **Status:** fixed (2026-08-27).
+- **Gejala:** Customer Sawotratap kirim `Jl anusanata No.19 Sawotratap Gedangan Sidoarjo` + form reservasi `Kec Sawotratap Kota Sidoarjo` saat `is_human_handling=true` → `customers.lat/lng/distance_km/ongkir` tetap NULL. Balasan admin `jaraknya 4km` hanya teks manual.
+- **Akar masalah:** gate `machine.ts#47` & `decision-matrix P2 SILENT_HUMAN_ACTIVE` langsung `return shouldSendReply:false` sebelum geocoding. `human.ts` hanya handle form lengkap & pin GPS, tidak ada enrichment teks alamat biasa.
+- **Fix:** service baru `human-background-enrichment.service.ts` (silent enrichment via `EntityExtractor` → `geocodingService.geocodeText` → `deliveryService.calculateDelivery` → `customerService.updateCustomerLocation`, fail-safe). `machine.ts` gate kini fire-and-forget `enrichAsync` sebelum return; `human.ts` delegasi ke `enrichSync` + fallback form geocode. Backfill live: Sawotratap `distance_km 5.03km ongkir 5000` via ORS.
+- **Verifikasi:** `tests/unit/human-background-enrichment.test.ts` 5 passed, `npm run build` pass, live `SELECT` Sawotratap `distance_km!=null`.
+
+---
+
 ## 14. [Follow-Up / Live Chat] Pesan Multi-Bubble Follow-Up & Reminder Hanya Mencatat Bubble Terakhir di Live Chat — FIXED 2026-08-26
 
 - **Status:** fixed (2026-08-26).
