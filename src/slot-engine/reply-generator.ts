@@ -59,9 +59,10 @@ export class ReplyGenerator {
 
     const catalogText = grounding.filteredCatalog
       .map((s) => {
+        const priceText = s.promoPrice ? ` (Tarif Promo: Rp ${s.promoPrice.toLocaleString('id-ID')})` : '';
         const dur = s.durationMinutes ? ` (Durasi: ~${s.durationMinutes} menit)` : '';
         const desc = s.description ? `: ${s.description}` : '';
-        return `- ${s.name}${dur}${desc}`;
+        return `- ${s.name}${priceText}${dur}${desc}`;
       })
       .join('\n');
 

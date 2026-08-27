@@ -4,6 +4,34 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & Refactor — Conversational Consultation Flow, Price Grounding & Form Attachment Hardening (2026-08-27)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Pengiriman Formulir Reservasi Prematur di Turn-2 (*Over-eager Form Attachment*)**:
+     - Ketika customer di Turn-2 baru memberikan lokasi dan menanyakan kelayakan (*"Saya lokasinya di alana tambak oso waru bisa pijat bayi 1 bulan gak ya"*), `DynamicCloserService` dan `GroundingComposer` langsung menganggap kondisi siap booking (`isBookingReady = true`) dan menyodorkan formulir reservasi panjang sebelum customer menyetujui harga/ongkir.
+  2. **Hilangnya Harga Paket pada Prompt LLM (`reply-generator.ts`)**:
+     - `catalogText` pada `ReplyGenerator` hanya me-map nama, durasi, dan deskripsi tanpa menyertakan `promoPrice`, sehingga LLM tidak dapat menyebutkan tarif resmi paket rekomendasi.
+  3. **Pemotongan Header Sapaan pada Simulator & Distorsi Kata `Baby` (`language-sanitizer.ts`)**:
+     - Simulator sandbox yang mengawali chat dengan pesan sistem menyebabkan `historyCount = 1`, memicu `sanitizeGreetingRepetitionForFollowUp` memotong `Halo Bunda !` dan menyisakan emoji `✨` melayang.
+     - Regex sanitizer mengubah kata `Baby` pada frasa resmi *"Treatment moms & Baby"* menjadi *"Treatment moms & bayi"*.
+
+- **Solusi & Implementasi:**
+  1. **Preservasi Template Sapaan Resmi & Frasa Brand (`src/utils/language-sanitizer.ts` & `src/slot-engine/slot-engine.ts`)**:
+     - Menambahkan opsi `preserveGreeting: true` saat sanitasi `deterministicTemplateReply` agar template resmi Bidan Yusi tidak dipotong oleh sanitizer.
+     - Memperbarui regex `sanitizeForbiddenEnglishWords` agar melindungi frasa resmi *"moms & baby"*, *"mom & baby"*, dan *"Treatment moms & Baby"*.
+     - Memperbaiki `sanitizeGreetingRepetitionForFollowUp` agar tidak meninggalkan simbol/emoji melayang jika terjadi pemangkasan.
+  2. **Grounding Harga Lengkap di Reply Generator (`src/slot-engine/reply-generator.ts`)**:
+     - Menyertakan tarif promo (`(Tarif Promo: Rp ...)`) ke dalam `catalogText` pada prompt sistem LLM.
+  3. **Penyempurnaan Alur Konsultasi vs Booking Form (`src/slot-engine/grounding-composer.ts` & `src/slot-engine/dynamic-closer.service.ts`)**:
+     - Memperketat `isBookingReady`: Formulir reservasi pre-filled HANYA disuntikkan jika customer menyatakan niat booking eksplisit/implisit (`request_booking` atau menyebutkan hari kunjungan).
+     - Pada tahap konsultasi awal, LLM diinstruksikan mengonfirmasi jangkauan lokasi + menyebutkan tarif ongkir promo + menyebutkan harga paket rekomendasi, lalu menanyakan preferensi hari secara ramah tanpa menyodorkan formulir panjang di awal.
+
+- **Pengujian & Verifikasi:**
+  - `tests/unit/slot-engine-conversational-flow.test.ts`: 6/6 tests PASS.
+  - Seluruh unit & integrasi Slot Engine (8 test files, 55 tests): 100% PASS.
+  - Full automated regression test suite: 213/213 test files PASS (1,904 tests PASS, 0 failures).
+  - TypeScript build check (`npm run build`): 100% lulus (0 errors).
+
 #### Feature & Hardening — Strict Greeting Persona & Lead Onboarding Standardization (2026-08-27)
 
 - **Latar Belakang & Akar Masalah:**

@@ -100,10 +100,15 @@ export class GroundingComposer {
     // 7. PRE-FILLED RESERVATION FORM GENERATOR
     const effectiveTreatment = extraction.treatmentReferenced || slate.selectedTreatmentName;
     const effectiveDate = extraction.preferredDateText || slate.preferredDate;
+    const hasExplicitBookingIntent = Boolean(
+      extraction.intents.includes('request_booking') ||
+      (effectiveDate && (extraction.intents.includes('ask_schedule') || extraction.intents.includes('select_treatment') || extraction.intents.includes('affirmation') || extraction.intents.includes('chitchat'))) ||
+      (effectiveDate && effectiveTreatment)
+    );
     const isBookingReady = Boolean(
       slate.isLocationConfirmed &&
       effectiveTreatment &&
-      (effectiveDate || extraction.intents.includes('request_booking') || extraction.intents.includes('ask_schedule'))
+      hasExplicitBookingIntent
     );
 
     let suggestedPreFilledForm: string | null = null;

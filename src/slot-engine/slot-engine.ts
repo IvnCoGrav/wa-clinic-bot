@@ -225,6 +225,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
     const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply, {
       historyCount: history?.length || 0,
+      preserveGreeting: true,
     });
     return {
       nextState: decision.updatedSlate.projectedState,
