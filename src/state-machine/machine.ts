@@ -44,8 +44,13 @@ export class ConversationStateMachine {
 
     // --- GATE 🛡️: HUMAN HANDLING ACTIVE (CS TAKEOVER GUARD) ---
     // Jika percakapan sedang di-handle admin/CS, batalkan auto-reply bot
+    // tapi tetap jalankan silent background enrichment (geocoding + jarak) agar lat/lng/distance_km tetap terekam.
     if (conversation.is_human_handling) {
       console.log(`[STATE MACHINE ABORT] Conversation ${conversation.id} for customer ${customer.phone} is in HUMAN_HANDLING mode. Skipping bot auto-reply.`);
+      try {
+        const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+        humanBackgroundEnrichmentService.enrichAsync({ customer, conversation, incomingMessage, history: [] } as any, tenantId);
+      } catch {}
       return {
         nextState: conversation.current_state,
         shouldSendReply: false,

@@ -426,10 +426,22 @@ export function extractScheduleFromMessages(
     }
   }
 
-  // Tentukan Kategori & Nama Treatment gabungan
-  if (babyTreatment && momsTreatment) {
-    extractedTreatment = `${babyTreatment} + ${momsTreatment}`;
+  // Tentukan Kategori & Nama Treatment gabungan — support 2 treatment / bundling moms+baby
+  // Normalisasi: pecah treatment yang ditulis "A + B", "A, B", "A & B", "A dan B" menjadi list
+  const splitTreatments = (s: string) => s.split(/\s*(?:\+|,|&|\bdan\b)\s*/i).map(x=>x.trim()).filter(Boolean);
+  const babyTreatList = babyTreatment ? splitTreatments(babyTreatment) : [];
+  const momsTreatList = momsTreatment ? splitTreatments(momsTreatment) : [];
+  const allTreatList = [...babyTreatList, ...momsTreatList];
+  if (babyTreatList.length > 0 && momsTreatList.length > 0) {
+    extractedTreatment = [...babyTreatList, ...momsTreatList].join(' + ');
     extractedCategory = 'BUNDLE';
+    isExtracted = true;
+  } else if (allTreatList.length > 1) {
+    extractedTreatment = allTreatList.join(' + ');
+    extractedCategory = momsTreatList.length > 0 ? 'MOMS' : 'BABY';
+    if (allTreatList.length > 1 && babyTreatList.length > 0 && momsTreatList.length === 0) {
+      // 2 treatment baby/kids (misal Pijat Ceria + Cukur) — tetap BABY tapi treat sebagai multi
+    }
     isExtracted = true;
   } else if (babyTreatment) {
     extractedTreatment = babyTreatment;
@@ -586,7 +598,7 @@ export function extractScheduleFromMessages(
     extractedTime = '12.00-12.30';
   }
 
-  // 5. Pencocokan Treatment dengan Katalog Layanan
+  // 5. Pencocokan Treatment dengan Katalog Layanan — support akumulasi 2+ treatment
   if (!extractedTreatment) {
     if (clinicServices.length > 0) {
       const s0 = clinicServices[0];
@@ -597,15 +609,28 @@ export function extractScheduleFromMessages(
       extractedPrice = 60000;
     }
   } else if (extractedPrice === null) {
-    // Cari kecocokan harga di katalog layanan
-    const matchedService = clinicServices.find(
-      (s) => s.name.toLowerCase() === extractedTreatment.toLowerCase() ||
-             extractedTreatment.toLowerCase().includes(s.name.toLowerCase())
-    );
-    if (matchedService) {
-      extractedPrice = Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000);
+    const names = extractedTreatment.split(/\s*\+\s*/).map(s=>s.trim()).filter(Boolean);
+    if (names.length > 1 && clinicServices.length > 0) {
+      let sum = 0; let found = 0;
+      for (const n of names) {
+        const m = clinicServices.find(s => s.name.toLowerCase() === n.toLowerCase() || n.toLowerCase().includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(n.toLowerCase()));
+        if (m) { sum += Number(m.promoPrice ?? m.price ?? m.originalPrice ?? 0); found++; }
+      }
+      if (found > 0) extractedPrice = sum || 60000;
+      else {
+        const matchedService = clinicServices.find(s => s.name.toLowerCase() === extractedTreatment.toLowerCase() || extractedTreatment.toLowerCase().includes(s.name.toLowerCase()));
+        extractedPrice = matchedService ? Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000) : 60000;
+      }
     } else {
-      extractedPrice = 60000;
+      const matchedService = clinicServices.find(
+        (s) => s.name.toLowerCase() === extractedTreatment.toLowerCase() ||
+               extractedTreatment.toLowerCase().includes(s.name.toLowerCase())
+      );
+      if (matchedService) {
+        extractedPrice = Number(matchedService.promoPrice ?? matchedService.price ?? matchedService.originalPrice ?? 60000);
+      } else {
+        extractedPrice = 60000;
+      }
     }
   }
 

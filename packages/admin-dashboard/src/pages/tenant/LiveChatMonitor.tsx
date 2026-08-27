@@ -223,7 +223,9 @@ export const LiveChatMonitor: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<LiveChatItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('liveChat:selectedId'); } catch { return null; }
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [replyText, setReplyText] = useState('');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -332,6 +334,7 @@ export const LiveChatMonitor: React.FC = () => {
 
   const handleBackToList = () => {
     setMobileView('list');
+    try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
   };
 
   const handleListTouchStart = (e: React.TouchEvent) => {
@@ -554,6 +557,11 @@ export const LiveChatMonitor: React.FC = () => {
   useEffect(() => {
     selectedIdRef.current = selectedId;
     resetChatInput();
+    try {
+      if (selectedId) sessionStorage.setItem('liveChat:selectedId', selectedId);
+      else sessionStorage.removeItem('liveChat:selectedId');
+    } catch {}
+    if (selectedId) loadThread(selectedId);
   }, [selectedId]);
 
   // Load gateway capability & available customer labels on mount
@@ -732,6 +740,25 @@ export const LiveChatMonitor: React.FC = () => {
   const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
 
   useEffect(() => {
+    try {
+      const savedView = sessionStorage.getItem('liveChat:mobileView');
+      const savedId = sessionStorage.getItem('liveChat:selectedId');
+      if (savedId) {
+        setSelectedId(savedId);
+        if (savedView === 'chat' && window.innerWidth < 1024) setMobileView('chat');
+        else if (savedView) setMobileView(savedView as any);
+        else if (window.innerWidth < 1024) setMobileView('chat');
+      } else if (savedView) {
+        setMobileView(savedView as any);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { sessionStorage.setItem('liveChat:mobileView', mobileView); } catch {}
+  }, [mobileView]);
+
+  useEffect(() => {
     const handleResize = () => {
       setIsDesktop(window.innerWidth >= 1024);
     };
@@ -771,7 +798,7 @@ export const LiveChatMonitor: React.FC = () => {
       if (mobileView === 'chat') {
         e.preventDefault();
         setMobileView('list');
-        setSelectedId(null);
+        try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
       }
     };
     window.addEventListener('app-swipe-back', handleAppSwipeBack);
@@ -878,8 +905,10 @@ export const LiveChatMonitor: React.FC = () => {
   const handleSelect = (conversationId: string) => {
     setSelectedId(conversationId);
     setMobileView('chat');
-    resetChatInput();
-    loadThread(conversationId);
+    try {
+      sessionStorage.setItem('liveChat:selectedId', conversationId);
+      sessionStorage.setItem('liveChat:mobileView', 'chat');
+    } catch {}
 
     // Auto mark-as-read jika masih ada unread atau isManualUnread
     const targetChat = chatsRef.current.find((c) => c.conversationId === conversationId);

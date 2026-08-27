@@ -158,6 +158,56 @@ Terimakasih.  ☺️`;
         else delete process.env.HUMANIZER_BUBBLE_SINGLE_THRESHOLD_CHARS;
       }
     });
+
+    it('should split full consultation reply with reservation form into exactly 3 bubbles (Intro, Form, Footer)', () => {
+      const fullReply = `Tentu bisa, Bunda. Untuk keluhan batuk dan pilek, kami sarankan layanan *Pijat Bayi Pulih Ceria* yang dirancang khusus untuk membantu meredakan gejala tersebut. Untuk ketersediaan jadwal besok, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊.
+
+Berikut list untuk reservasi :
+
+Hari dan tanggal : besok  
+Nama Bunda:  
+Alamat & Shareloc : Platuk tauladan 19a, Sidotopo Wetan  
+Kec : Kenjeran  
+Kota : Surabaya  
+No. Hp : 6289999310138  
+
+Pilihan treatment (bayi & Kids)  
+
+Nama Bayi :  
+Usia Bayi/Anak :  
+Treatment : Pijat Bayi Pulih Ceria  
+
+Pilihan treatment (Moms) :  
+
+Usia Kehamilan (Jika hamil):  
+Treatment :  
+
+Mohon bisa diisi Bunda 😊  
+Cancel / Pembatalan Harap minimal H-3 jam  
+
+H-1 sebelum treatment akan kami reminder kembali Bunda 🥰  
+Terimakasih. ☺️`;
+
+      const bubbles = typingService.splitIntoBubbles(fullReply);
+
+      expect(bubbles.length).toBe(3);
+      // Bubble 1: Intro / konsultasi
+      expect(bubbles[0]).toContain('Tentu bisa, Bunda.');
+      expect(bubbles[0]).toContain('Pijat Bayi Pulih Ceria');
+      expect(bubbles[0]).not.toContain('Berikut list untuk reservasi');
+
+      // Bubble 2: Format form reservasi (clean copyable form)
+      expect(bubbles[1]).toContain('Berikut list untuk reservasi :');
+      expect(bubbles[1]).toContain('Hari dan tanggal : besok');
+      expect(bubbles[1]).toContain('Treatment : Pijat Bayi Pulih Ceria');
+      expect(bubbles[1]).not.toContain('Tentu bisa, Bunda.');
+      expect(bubbles[1]).not.toContain('Mohon bisa diisi Bunda');
+
+      // Bubble 3: Footer SOP
+      expect(bubbles[2]).toContain('Mohon bisa diisi Bunda 😊');
+      expect(bubbles[2]).toContain('Cancel / Pembatalan Harap minimal H-3 jam');
+      expect(bubbles[2]).toContain('Terimakasih.');
+    });
   });
 
   describe('4. Redundant stopTyping Elimination & Error Safety Net', () => {

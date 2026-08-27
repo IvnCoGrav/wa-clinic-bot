@@ -45,24 +45,26 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Hanya abaikan jika klik pada input atau form controls
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('[data-event-card]') || target.closest('input')) {
+    if (target.closest('input') || target.closest('select') || target.closest('textarea')) {
       return;
     }
     const container = scrollRef.current;
     if (!container) return;
 
     isDraggingRef.current = true;
+    dragMovedRef.current = false;
     dragStartRef.current = {
       x: e.clientX,
       y: e.clientY,
       scrollLeft: container.scrollLeft,
       scrollTop: container.scrollTop,
     };
-    container.setPointerCapture?.(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -72,9 +74,19 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
+    const distance = Math.hypot(dx, dy);
 
-    container.scrollLeft = dragStartRef.current.scrollLeft - dx;
-    container.scrollTop = dragStartRef.current.scrollTop - dy;
+    // Aktifkan drag setelah threshold 4px agar klik biasa tetap berfungsi
+    if (distance > 4) {
+      if (!dragMovedRef.current) {
+        dragMovedRef.current = true;
+        try {
+          container.setPointerCapture?.(e.pointerId);
+        } catch (_) {}
+      }
+      container.scrollLeft = dragStartRef.current.scrollLeft - dx;
+      container.scrollTop = dragStartRef.current.scrollTop - dy;
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -217,7 +229,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
               return (
                 <button
                   key={idx}
-                  onClick={() => onSelectDate(day)}
+                  onClick={() => {
+                    if (dragMovedRef.current) return;
+                    onSelectDate(day);
+                  }}
                   className={`p-2.5 sm:p-3 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
                     isSelected
                       ? 'bg-[#111b21] text-white shadow-sm'
@@ -270,7 +285,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                   >
                     {/* Empty Slot Hover Quick-Add Button (Always available behind cards) */}
                     <button
-                      onClick={() => onQuickAdd({ date: day, hour })}
+                      onClick={(e) => {
+                        if (dragMovedRef.current) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return;
+                        }
+                        onQuickAdd({ date: day, hour });
+                      }}
                       className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
                       title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
                     >
@@ -312,6 +334,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           data-event-card="true"
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (dragMovedRef.current) return;
                             onSelectReservation(res);
                           }}
                           style={{

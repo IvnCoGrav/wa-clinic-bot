@@ -78,50 +78,7 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
-    // PRIORITY 2B: INITIAL LEAD GREETING / SAPAAN PEMBUKA IKLAN PERTAMA
-    // Mengirim template greeting resmi Kala Spa jika pesan pertama customer adalah sapaan umum/lead iklan
-    // =========================================================================
-    const isInitialConversation =
-      (context?.history?.length ?? 0) === 0 ||
-      !updatedSlate.isLocationConfirmed ||
-      updatedSlate.projectedState === ConversationState.INITIAL;
-
-    const { checkLeadGreetingText } = await import('../state-machine/utils/greeting-checker');
-    const greetingCheck = await checkLeadGreetingText(cleanText, rawIncoming, context?.tenantId);
-
-    const hasSpecificQuestion =
-      extraction.intents.includes('ask_price') ||
-      extraction.intents.includes('consult_symptom') ||
-      extraction.intents.includes('ask_clinic_origin') ||
-      extraction.intents.includes('ask_schedule') ||
-      extraction.intents.includes('select_treatment') ||
-      extraction.childAgeMonths !== null ||
-      extraction.symptoms.length > 0 ||
-      /\b(berapa|brp|harga|tarif|biaya|ongkir|pricelist|usia|umur|bulan|tahun|jadwal|slot|kapan|bisa\s+gak|bisa\s+kah)\b/i.test(rawText);
-
-    const isLeadGreeting =
-      cleanText.length > 0 &&
-      isInitialConversation &&
-      !updatedSlate.isOutOfCoverage &&
-      !hasSpecificQuestion &&
-      !extraction.locationText &&
-      !extraction.treatmentReferenced &&
-      (greetingCheck.isPureGreeting ||
-        /\b(tertarik|home[-\s]?treatment|home[-\s]?care|homecare|layanan\s+home|info\s+lengkap|halo\s+bu\s+bidan|halo\s+bunda|selamat\s+(pagi|siang|sore|malam)|assalamu'?alaikum)\b/i.test(rawText) ||
-        (rawText.length <= 80 && /\b(halo|hi|hei|p|assalamualaikum|pagi|siang|sore|malam)\b/i.test(rawText)));
-
-    if (isLeadGreeting) {
-      return {
-        action: 'RESOLVE_LOCATION_AND_DELIVERY',
-        reason: 'Sapaan pembuka lead pertama -> Kirim template greeting resmi Kala Spa.',
-        updatedSlate,
-        shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.greeting({ isIslamic }),
-      };
-    }
-
-    // =========================================================================
-    // PRIORITY 4: PERTANYAAN KEBIJAKAN OPERASIONAL DETERMINISTIK (0 Token)
+    // PRIORITY 2B: PERTANYAAN KEBIJAKAN OPERASIONAL DETERMINISTIK (0 Token)
     // =========================================================================
     // A. Kebijakan Transport / Ongkir Multi-Anak
     if (/\b(2\s*anak|dua\s*anak|3\s*anak|bunda\s*(dan|\+)\s*(anak|bayi)|ongkir.*(1\s*kali|satu\s*kali|dihitung\s*satu))\b/i.test(rawText) && (rawText.includes('ongkir') || rawText.includes('transport'))) {
@@ -163,32 +120,220 @@ export class DecisionMatrix {
     if (/\b(melayani\s*(daerah|area|wilayah)|jangkauan\s*(kemana|mana)|bisa\s*ke\s*mana\s*aja)\b/i.test(rawText) && !extraction.locationText) {
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
-        reason: 'Customer bertanya area jangkauan umum -> Kirim template coverage area.',
+        reason: 'Customer bertanya area jangkauan umum -> Kirim template area operasional resmi.',
         updatedSlate,
         shouldSendPricelistImage: false,
         deterministicTemplateReply: TEMPLATES.coverageAreaPolicy(),
       };
     }
 
+    // E. Pertanyaan Alamat / Homebase Klinik
+    const isClinicOriginQuery =
+      extraction.intents.includes('ask_clinic_origin') ||
+      /\b((?:alamat|lokasi|posisi)\s*(?:nya)?\s+(?:sby|surabaya|sidoarjo|dimana|di\s*mana|mana)|(?:lokasi|alamat|posisi)\s+klinik(?:nya)?(?:\s+ada)?\s+(?:dimana|di\s*mana|mana)|klinik(?:nya)?\s+(?:dimana|di\s*mana|mana|ada\s+dimana|ada\s+di\s*mana)|dari\s+mana)\b/i.test(rawText);
+
+    const isGenericCityLocationOnly =
+      !extraction.locationText ||
+      ['sby', 'surabaya', 'sidoarjo', 'sda'].includes((extraction.locationText || '').toLowerCase().trim());
+
+    if (isClinicOriginQuery && isGenericCityLocationOnly && extraction.symptoms.length === 0) {
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Customer bertanya lokasi/asal klinik -> Kirim kebijakan homecare & tanyakan alamat rumah Bunda.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.clinicOriginPolicy(),
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 2C: INITIAL LEAD GREETING / SAPAAN PEMBUKA IKLAN PERTAMA
+    // Mengirim template greeting resmi Kala Spa jika pesan pertama customer adalah sapaan umum/lead iklan
+    // =========================================================================
+    const isInitialConversation =
+      (context?.history?.length ?? 0) === 0 ||
+      !updatedSlate.isLocationConfirmed ||
+      updatedSlate.projectedState === ConversationState.INITIAL;
+
+    const { checkLeadGreetingText } = await import('../state-machine/utils/greeting-checker');
+    const greetingCheck = await checkLeadGreetingText(cleanText, rawIncoming, context?.tenantId);
+
+    const hasSpecificClinicalOrPricingQuestion =
+      extraction.intents.includes('ask_price') ||
+      extraction.intents.includes('consult_symptom') ||
+      extraction.intents.includes('ask_schedule') ||
+      extraction.intents.includes('select_treatment') ||
+      Boolean(extraction.treatmentReferenced) ||
+      extraction.childAgeMonths !== null ||
+      extraction.symptoms.length > 0 ||
+      /\b(berapa|brp|harga|tarif|biaya|ongkir|pricelist|usia|umur|\d+\s*(?:bln|bulan|thn|tahun)|jadwal|slot|kapan|jam\s*\d+|besok|lusa)\b/i.test(rawText);
+
+    const isPureLeadOpener =
+      /^(?:halo|hola|hi|hei|p|assalamu'?alaikum|assalamualaikum|(?:selamat|selmat|slmt|met)\s+(?:pagi|siang|sore|malam)|pagi|siang|sore|malam|permisi|bisa|bisa\s+kah|bisa\s+gak|bisa\s+ya|apakah\s+bisa|bisa\s+homecare|mau\s+tanya|info|info\s+lengkap|tertarik|min|bunda|admin)[!.\s?]*$/i.test(cleanText) ||
+      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|info\s+lengkap)\b/i.test(rawText);
+
+    const isLeadGreeting =
+      cleanText.length > 0 &&
+      isInitialConversation &&
+      !updatedSlate.isOutOfCoverage &&
+      !hasSpecificClinicalOrPricingQuestion &&
+      !extraction.locationText &&
+      !extraction.treatmentReferenced &&
+      (greetingCheck.isPureGreeting || isPureLeadOpener);
+
+    if (isLeadGreeting) {
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Sapaan pembuka lead pertama -> Kirim template greeting resmi Kala Spa.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.greeting({ isIslamic }),
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 2D: Tanya Suami / Perlu Waktu Pertimbangan
+    // =========================================================================
+    if (
+      /\b(tanya|diskusi|ngobrol|rembuk|runding)\w*\s+(?:sama|dengan)?\s*(suami|keluarga|ayah|pak\s*su)\b/i.test(rawText) ||
+      /\b(pikir|pikir-pikir|nunggu)\s*(dulu)?\b/i.test(rawText)
+    ) {
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Customer izin diskusi dengan suami/keluarga -> Kirim template respon hangat tanpa mendesak.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: `Baik Bunda, silakan didiskusikan dulu dengan suami yaa 😊 Jika sudah siap atau ada yang ingin ditanyakan lagi seputar treatment, silakan hubungi kami kembali ya Bunda. Kami siap membantu 🤗`,
+      };
+    }
+
     // =========================================================================
     // PRIORITY 5: RESOLUSI LOKASI BARU & KALKULASI ONGKIR DETERMINISTIK
-    // Dipicu jika ada locationText baru DAN (lokasi belum terkonfirmasi ATAU ada pergantian lokasi eksplisit)
+    // Dipicu jika ada locationText/streetDetail baru DAN (lokasi belum terkonfirmasi ATAU ada pergantian lokasi eksplisit)
     // =========================================================================
-    const hasNewLocationText = Boolean(extraction.locationText && extraction.locationText.trim().length > 0);
     const isExplicitLocationChange = /\b(ganti|pindah|salah|ubah|bukan\s+di|yang\s+bener)\b/i.test(rawText);
+
+    // Deteksi apakah customer sedang mengirimkan teks lokasi/alamat pada pesan ini
+    const hasLocationInCurrentMessage =
+      (Boolean(extraction.locationText) && !['sby', 'surabaya', 'sidoarjo', 'sda'].includes((extraction.locationText || '').toLowerCase().trim())) ||
+      Boolean(extraction.streetDetail) ||
+      extraction.intents.includes('provide_location') ||
+      extraction.intents.includes('supplement_address');
+
+    // Apakah customer sedang bertanya hal klinis / treatment / jadwal / harga?
+    const hasClinicalOrOtherInquiry =
+      extraction.symptoms.length > 0 ||
+      Boolean(extraction.treatmentReferenced) ||
+      extraction.intents.includes('consult_symptom') ||
+      extraction.intents.includes('select_treatment') ||
+      extraction.intents.includes('ask_price') ||
+      extraction.intents.includes('ask_schedule') ||
+      extraction.intents.includes('request_booking') ||
+      /\b(pijat|treatment|batuk|pilek|grok|demam|kolik|sembelit|usia|umur|harga|biaya|kapan|bisa|jadwal|slot)\b/i.test(rawText);
+
+    // Double Ongkir Guard: Jika lokasi SUDAH terkonfirmasi DAN bot baru saja mengirimkan ongkir dalam 45s terakhir
+    // HANYA dipicu jika customer mengirim ulang lokasi murni TANPA pertanyaan klinis / treatment / jadwal
+    const historyList = (context as any)?.history || [];
+    const lastAssistant = historyList.slice().reverse().find((m: any) => m.role === 'assistant');
+    const isRecentOngkirSent =
+      lastAssistant &&
+      (lastAssistant.content.includes('ongkir') || lastAssistant.content.includes('jarak')) &&
+      ((lastAssistant as any).createdAt
+        ? Date.now() - new Date((lastAssistant as any).createdAt).getTime() < 45000
+        : true);
+
+    if (
+      updatedSlate.isLocationConfirmed &&
+      hasLocationInCurrentMessage &&
+      !hasClinicalOrOtherInquiry &&
+      isRecentOngkirSent &&
+      !isExplicitLocationChange
+    ) {
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Lokasi sama dikirim ulang dalam waktu singkat tanpa pertanyaan lain -> Cegah spam template ongkir dobel.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: `Baik Bunda, lokasi di ${updatedSlate.kelurahan} sudah kami simpan yaa 😊\n\nRencana mau treatment apa bunda ?🤗`,
+      };
+    }
+
     const isUnconfirmedLocation = !updatedSlate.isLocationConfirmed;
-    const shouldResolveLocation = hasNewLocationText && (isUnconfirmedLocation || isExplicitLocationChange);
+    const shouldResolveLocation = hasLocationInCurrentMessage && (isUnconfirmedLocation || isExplicitLocationChange);
 
     if (shouldResolveLocation) {
       try {
         const { geocodingService } = await import('../integrations/google-maps/geocoding');
         const { deliveryService } = await import('../services/delivery.service');
 
-        const resolved = await geocodingService.geocodeText(extraction.locationText!);
-        if (resolved.isPrecise && resolved.lat && resolved.lng) {
+        // Strategi Pencarian Bertingkat:
+        // 1. Composite query: streetDetail + locationText
+        // 2. Full raw incoming text
+        // 3. locationText saja
+        const compositeQuery = extraction.streetDetail
+          ? `${extraction.streetDetail} ${extraction.locationText || ''}`.trim()
+          : (extraction.locationText || rawText);
+
+        let resolved = await geocodingService.geocodeText(compositeQuery);
+        if (!resolved.isPrecise && rawText) {
+          const rawResolved = await geocodingService.geocodeText(rawText);
+          if (rawResolved.isPrecise) {
+            resolved = rawResolved;
+          }
+        }
+        if (!resolved.isPrecise && extraction.locationText) {
+          const locResolved = await geocodingService.geocodeText(extraction.locationText);
+          if (locResolved.isPrecise || (locResolved.lat && locResolved.lng)) {
+            resolved = locResolved;
+          }
+        }
+
+        // Smart Disambiguation: Jika hasil geocoding mengembalikan daftar ambiguity (misal nama kecamatan),
+        // cek apakah ada nama kelurahan yang spesifik disebut di query/pesan customer
+        if (!resolved.lat && (resolved as any).ambiguityResults && (resolved as any).ambiguityResults.length > 0) {
+          const ambiguityList: any[] = (resolved as any).ambiguityResults;
+          const queryLower = `${compositeQuery} ${rawText}`.toLowerCase();
+          const matchedKelurahan = ambiguityList.find((item: any) =>
+            item.Kelurahan_Desa && queryLower.includes(item.Kelurahan_Desa.toLowerCase())
+          );
+
+          if (matchedKelurahan && matchedKelurahan.Koordinat) {
+            const parts = matchedKelurahan.Koordinat.split(',').map((p: string) => parseFloat(p.trim()));
+            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+              resolved = {
+                isPrecise: true,
+                kelurahan: matchedKelurahan.Kelurahan_Desa,
+                kecamatan: matchedKelurahan.Kecamatan,
+                kota: matchedKelurahan.Kabupaten_Kota || 'Surabaya',
+                lat: parts[0],
+                lng: parts[1],
+                formattedAddress: `${matchedKelurahan.Kelurahan_Desa}, Kec. ${matchedKelurahan.Kecamatan}, ${matchedKelurahan.Kabupaten_Kota}`,
+              };
+            }
+          }
+        }
+
+        // Jika lokasi yang disebutkan HANYA nama kota umum tanpa kelurahan spesifik:
+        const locLower = (extraction.locationText || '').toLowerCase().trim();
+        const isGenericCityOnly =
+          ['sidoarjo', 'surabaya', 'sda', 'sby', 'gresik'].includes(locLower) &&
+          !extraction.streetDetail &&
+          !resolved.kelurahan;
+
+        if (isGenericCityOnly) {
+          return {
+            action: 'RESOLVE_LOCATION_AND_DELIVERY',
+            reason: `Lokasi yang diinput hanya nama kota (${extraction.locationText}) tanpa kelurahan/kecamatan -> Minta detail kelurahan.`,
+            updatedSlate,
+            shouldSendPricelistImage: false,
+            deterministicTemplateReply: `Boleh diinfokan detail kelurahan atau desa di ${extraction.locationText} Bunda agar kami bantu cekkan ongkir presisinya? 😊`,
+          };
+        }
+
+        if (resolved.lat && resolved.lng) {
           const delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
 
-          updatedSlate.kelurahan = resolved.kelurahan || extraction.locationText!;
+          updatedSlate.kelurahan = resolved.kelurahan || resolved.kecamatan || extraction.locationText || 'Surabaya';
           updatedSlate.kecamatan = resolved.kecamatan || null;
           updatedSlate.kota = resolved.kota || null;
           updatedSlate.lat = resolved.lat;
@@ -218,14 +363,19 @@ export class DecisionMatrix {
             updatedSlate.pricelistSent = true;
           }
 
-          // Jika customer HANYA mengirimkan lokasi murni (tanpa keluhan/tanya harga spesifik),
+          // Jika customer HANYA mengirimkan lokasi (maupun disertai pertanyaan ongkir/kena berapa),
           // gunakan TEMPLATES.ongkirInfo deterministik resmi (SOP Kala Spa)
-          const isPureLocationMessage = !extraction.intents.includes('consult_symptom') &&
-            !extraction.intents.includes('ask_price') &&
+          const isPureLocationMessage =
+            !extraction.intents.includes('consult_symptom') &&
             !extraction.intents.includes('ask_clinic_origin') &&
             extraction.symptoms.length === 0;
 
           if (isPureLocationMessage) {
+            const defaultByAge =
+              updatedSlate.childAgeMonths && updatedSlate.childAgeMonths > 24 ? 'Pijat Kids Ceria' : 'Pijat Bayi Ceria';
+            const candidateTreatmentName =
+              updatedSlate.selectedTreatmentName || (updatedSlate.childAgeMonths !== null ? defaultByAge : undefined);
+
             return {
               action: 'RESOLVE_LOCATION_AND_DELIVERY',
               reason: `Lokasi terkonfirmasi (${updatedSlate.kelurahan}, ${updatedSlate.distanceKm} km, ongkir promo Rp ${updatedSlate.ongkirPromoFee?.toLocaleString('id-ID')}) -> Kirim template ongkir resmi.`,
@@ -235,6 +385,7 @@ export class DecisionMatrix {
                 distanceKm: updatedSlate.distanceKm || 0,
                 normalPrice: updatedSlate.ongkirFee || 0,
                 promoPrice: updatedSlate.ongkirPromoFee || 0,
+                candidateTreatmentName,
               }),
             };
           }

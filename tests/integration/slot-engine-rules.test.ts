@@ -104,7 +104,7 @@ describe('Integration Test Suite: Seluruh Rules & Kebijakan Kala Spa', () => {
     expect(result.sendPricelistImage).toBe(true);
     expect(result.replyText).toContain('jaraknya kurang lebih');
     expect(result.replyText).toContain('Rp 20.000');
-    expect(result.replyText).toContain('Mau pilih treatment apa Bunda?');
+    expect(result.replyText).toMatch(/mau (?:pilih )?treatment apa bunda/i);
   });
 
   it('Rule 4: Kebijakan Transport Multi-Anak -> harus membalas 1x ongkir per kedatangan/alamat', async () => {

@@ -124,6 +124,65 @@ export class TypingService {
     const maxCount = parseInt(process.env.HUMANIZER_BUBBLE_MAX_COUNT || '2', 10);
     const maxChars = parseInt(process.env.HUMANIZER_BUBBLE_MAX_CHARS || '250', 10);
 
+    // 0. KHUSUS FORM RESERVASI: Pemisahan Semantik Presisi (3 Bubble)
+    // Bubble 1: Kalimat pengantar / konsultasi / empati ("Tentu bisa Bunda...")
+    // Bubble 2: Format list reservasi (dari "Berikut list untuk reservasi..." sampai akhir field treatment)
+    // Bubble 3: Panduan pengisian & SOP pembatalan ("Mohon bisa diisi Bunda...")
+    const concludingKeywords = [
+      'mohon bisa diisi',
+      'mohon diisi',
+      'mohon untuk mengisi',
+      'harap diisi',
+      'silakan diisi',
+      'silahkan diisi',
+      'mohon diisi ya',
+      'mohon bisa diisi ya',
+    ];
+
+    const isReservationForm =
+      /(berikut\s+(list|format)\s+(untuk\s+)?reservasi|format\s+reservasi|list\s+reservasi|format\s+pendaftaran\s+reservasi)/i.test(trimmed) ||
+      (trimmed.toLowerCase().includes('hari dan tanggal') && trimmed.toLowerCase().includes('alamat & shareloc'));
+
+    if (isReservationForm) {
+      // Normalisasi pemisah sebelum header reservasi dan sebelum footer penutup jika hanya dipisah single \n
+      let normalized = trimmed
+        .replace(/([^\n])\r?\n(berikut\s+(list|format)\s+(untuk\s+)?reservasi|format\s+reservasi|list\s+reservasi)/gi, '$1\n\n$2')
+        .replace(/([^\n])\r?\n(mohon\s+(bisa\s+)?diisi|silakan\s+diisi|silahkan\s+diisi|harap\s+diisi)/gi, '$1\n\n$2');
+
+      const paragraphs = normalized
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      const formHeaderIndex = paragraphs.findIndex((p) =>
+        /^(berikut\s+(list|format)\s+(untuk\s+)?reservasi|format\s+reservasi|list\s+reservasi|format\s+pendaftaran\s+reservasi)/i.test(p) ||
+        (p.toLowerCase().includes('hari dan tanggal') && p.toLowerCase().includes('alamat & shareloc'))
+      );
+
+      const formFooterIndex = paragraphs.findIndex((p, idx) =>
+        idx >= (formHeaderIndex >= 0 ? formHeaderIndex : 0) &&
+        concludingKeywords.some((keyword) => p.toLowerCase().startsWith(keyword))
+      );
+
+      if (formHeaderIndex > 0 && formFooterIndex > formHeaderIndex) {
+        // Ada Intro + Form + Footer -> Pisahkan menjadi 3 BUBBLE
+        const firstBubble = paragraphs.slice(0, formHeaderIndex).join('\n\n');
+        const secondBubble = paragraphs.slice(formHeaderIndex, formFooterIndex).join('\n\n');
+        const thirdBubble = paragraphs.slice(formFooterIndex).join('\n\n');
+        return [firstBubble, secondBubble, thirdBubble];
+      } else if (formHeaderIndex === 0 && formFooterIndex > 0) {
+        // Hanya Form + Footer (Tanpa Intro) -> 2 BUBBLE
+        const firstBubble = paragraphs.slice(0, formFooterIndex).join('\n\n');
+        const secondBubble = paragraphs.slice(formFooterIndex).join('\n\n');
+        return [firstBubble, secondBubble];
+      } else if (formHeaderIndex > 0 && formFooterIndex === -1) {
+        // Hanya Intro + Form (Tanpa Footer) -> 2 BUBBLE
+        const firstBubble = paragraphs.slice(0, formHeaderIndex).join('\n\n');
+        const secondBubble = paragraphs.slice(formHeaderIndex).join('\n\n');
+        return [firstBubble, secondBubble];
+      }
+    }
+
     // 1. JIKA singleThreshold > 0 DAN panjang teks di bawah threshold: Kirim sebagai 1 bubble tunggal!
     if (singleThreshold > 0 && trimmed.length <= singleThreshold) {
       return [trimmed];
@@ -137,18 +196,6 @@ export class TypingService {
         .filter(Boolean);
 
       if (paragraphs.length >= 2) {
-        // Cek apakah ada paragraph yang dimulai dengan kata kunci konklusi form reservasi (prioritas pemisahan semantik)
-        const concludingKeywords = [
-          'mohon bisa diisi',
-          'mohon diisi',
-          'mohon untuk mengisi',
-          'harap diisi',
-          'silakan diisi',
-          'silahkan diisi',
-          'mohon diisi ya',
-          'mohon bisa diisi ya'
-        ];
-
         let targetSplitIndex = -1;
         for (let i = 0; i < paragraphs.length; i++) {
           const lowerP = paragraphs[i].toLowerCase();

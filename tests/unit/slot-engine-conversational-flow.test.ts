@@ -98,9 +98,8 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
       expect(grounding.suggestedPreFilledForm).toBeNull();
 
       const closerInstruction = DynamicCloserService.getCloserInstruction(baseSlate, grounding.suggestedPreFilledForm);
-      expect(closerInstruction).toContain('PANDUAN KONSULTASI & PENUTUP');
-      expect(closerInstruction).toContain('tarif ongkir promonya');
-      expect(closerInstruction).toContain('DILARANG menyertakan formulir reservasi panjang sebelum Bunda meminta jadwal');
+      expect(closerInstruction).toContain('PANDUAN PENAWARAN JADWAL (SCHEDULE)');
+      expect(closerInstruction).toContain('Rencana mau treatment di hari apa Bunda ?');
     });
 
     it('Turn 3 Booking Intent: should attach prefilled form when customer confirms day/schedule', async () => {

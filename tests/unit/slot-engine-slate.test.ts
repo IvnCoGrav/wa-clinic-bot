@@ -125,6 +125,7 @@ describe('Customer Entity Slate & State Projection Model (Part 2)', () => {
       isLocationConfirmed: false,
       childAgeMonths: null,
       selectedTreatmentName: null,
+      symptoms: [],
       preferredDate: null,
     };
 
