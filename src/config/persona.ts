@@ -244,7 +244,7 @@ export const TEMPLATES = {
 
   greeting: (params?: { skipGreeting?: boolean; isIslamic?: boolean }) => {
     if (params?.skipGreeting) {
-      return `Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare). Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
+      return `Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare). Kalau boleh tau rumahnya dimana ya Bunda? 😊`;
     }
     const greetingWord = params?.isIslamic ? 'Waalaikumsalam Bunda ! ✨' : 'Halo Bunda ! ✨';
     return `${greetingWord}
@@ -252,7 +252,7 @@ Terima kasih sudah menghubungi kami.
 
 Perkenalkan, saya ${getBrandIdentity().botDisplayName}, Kami melayani Treatment moms & Baby yang bisa langsung dipanggil ke rumah (Homecare).
 
-Kalau boleh tau rumahnya dimana ya bunda?. 😊`;
+Kalau boleh tau rumahnya dimana ya Bunda? 😊`;
   },
 
   // Sapaan hangat untuk sesi idle panjang (1-2 hari): customer kembali chat dengan
@@ -308,17 +308,15 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>
     `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm.toFixed(1)} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${params.maxCoverageKm ?? 30} km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
 
-  // Catatan: pola asli pakai framing "harga normal -> promo", bukan tiering bersih.
-  // Sesuaikan dengan aturan ongkir final kamu (ingat: logic ongkir masih sementara).
   ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number; freeTierKm?: number; candidateTreatmentName?: string }) => {
     const ctaQuestion = params.candidateTreatmentName && params.candidateTreatmentName.trim()
       ? `Mau pilih treatment apa Bunda untuk hari ini? Atau mau langsung dijadwalkan *${params.candidateTreatmentName.trim()}*-nya? 😊`
-      : `Mau pilih treatment apa Bunda? 😊`;
+      : `Rencana mau treatment apa bunda ?🤗`;
 
     if (params.promoPrice === 0) {
-      return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya bund ☺️ ${ctaQuestion}`;
+      return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya bund ☺️\n\n${ctaQuestion}`;
     }
-    return `Kalau kami cek bund, jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km ya. Dari pricelist untuk jarak ini ongkirnya Rp ${params.normalPrice.toLocaleString("id-ID")}, tapi karena ada promo jadi cukup Rp ${params.promoPrice.toLocaleString("id-ID")} saja Bunda 😊 ${ctaQuestion}`;
+    return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp ${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
   },
 
   scheduleCheckHandoff: () => `kami cek jadwal dulu ya bunda 🙏🏻😊`,
@@ -395,6 +393,9 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
 
   coverageAreaPolicy: () =>
     `Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya ya Bunda 🚗✨ Boleh diinfokan detail kelurahan atau kirim share location Bunda agar kami bantu cekkan jangkauan dan ongkir presisinya ya Bunda 😊`,
+
+  clinicOriginPolicy: () =>
+    `Homebase kami ada di Waru, Sidoarjo ya Bunda. Kami menyediakan layanan Homecare (Bidan kami yang datang ke rumah Bunda) untuk seluruh wilayah Surabaya & Sidoarjo 😊`,
 
   notInterestedReply: () => `Baik Bunda, tidak apa-apa. Terima kasih banyak sudah menghubungi ${getBrandIdentity().businessName}! Jika sewaktu-waktu membutuhkan pijat atau treatment homecare, Bunda bisa menghubungi kami kembali ya Bunda. Have a great day! 🤗✨`,
 

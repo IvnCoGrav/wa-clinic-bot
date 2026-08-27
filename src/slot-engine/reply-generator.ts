@@ -35,9 +35,13 @@ export class ReplyGenerator {
     const historyCount = context?.history?.length || 0;
 
     // Fallback template jika LLM offline
-    const baselineFallback = grounding.suggestedPreFilledForm
-      ? `Baik Bunda ${slate.name || ''}, berikut kami siapkan format reservasi untuk pencatatan jadwalnya ya Bunda:\n\n${grounding.suggestedPreFilledForm}`
-      : `Halo Bunda ${slate.name || ''}! Terima kasih sudah menghubungi Kala Moms and Baby Spa. Ada yang bisa kami bantu untuk si kecil hari ini? 😊`;
+    const { TEMPLATES } = await import('../config/persona');
+    let baselineFallback = TEMPLATES.greeting();
+    if (grounding.suggestedPreFilledForm) {
+      baselineFallback = `Baik Bunda ${slate.name || ''}, berikut kami siapkan format reservasi untuk pencatatan jadwalnya ya Bunda:\n\n${grounding.suggestedPreFilledForm}`;
+    } else if (grounding.relevantFaqs && grounding.relevantFaqs.length > 0) {
+      baselineFallback = `Halo Bunda ! ✨ Untuk informasi seputar ${grounding.relevantFaqs[0].title}:\n\n${grounding.relevantFaqs[0].content}\n\nKalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan jadwal Bidan & ongkirnya? 😊`;
+    }
 
     if (!endpoint.apiKey) {
       return sanitizeFinalReply(baselineFallback, { historyCount });
@@ -72,7 +76,12 @@ export class ReplyGenerator {
       : '';
 
     // 3. Kalimat Penutup Dinamis berbasis Missing Slots & Smart Form
-    const dynamicCloserInstruction = DynamicCloserService.getCloserInstruction(slate, grounding.suggestedPreFilledForm);
+    const dynamicCloserInstruction = DynamicCloserService.getCloserInstruction(
+      slate,
+      grounding.suggestedPreFilledForm,
+      context?.history,
+      context?.customerInput
+    );
 
     // 4. Susun System Prompt via Single Source of Truth PersonaComposer
     const systemPrompt = PersonaComposer.composeSlotGeneratorPrompt({
@@ -111,7 +120,21 @@ export class ReplyGenerator {
 
       const responseData = callResult.data;
       const rawReply = responseData?.choices?.[0]?.message?.content || baselineFallback;
-      const finalReply = sanitizeFinalReply(rawReply, { historyCount });
+      let finalReply = sanitizeFinalReply(rawReply, { historyCount });
+
+      // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
+      // pastikan balasan wajib diawali perkenalan resmi Bidan Yusi jika LLM belum menyertakannya.
+      if (
+        historyCount === 0 &&
+        !finalReply.toLowerCase().includes('bidan yusi') &&
+        !finalReply.toLowerCase().includes('perkenalkan')
+      ) {
+        const { TEMPLATES } = await import('../config/persona');
+        const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+        const isIslamic = hasIslamicGreeting(context?.customerInput || '');
+        const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
+        finalReply = `${greetingHeader}\n\n${finalReply}`;
+      }
 
       try {
         const { auditLlmCall } = await import('../utils/llm-audit-buffer');

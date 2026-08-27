@@ -67,9 +67,9 @@ export function buildApp() {
   });
 
 
-  // Register Rate Limiting (global, admin routes have the tightest budget)
+  // Register Rate Limiting (global protection for public endpoints)
   app.register(rateLimit, {
-    max: 300,
+    max: 1000,
     timeWindow: '1 minute',
     allowList: (request) => {
       const url = request.url || '';
@@ -83,6 +83,10 @@ export function buildApp() {
       }
       // Static assets & SPA
       if (url.startsWith('/admin') || url.startsWith('/assets') || url.startsWith('/landing')) {
+        return true;
+      }
+      // Internal Admin Dashboard API endpoints (termasuk reservasi, customer, dan live chat)
+      if (url.startsWith('/api/admin')) {
         return true;
       }
       return false;

@@ -27,7 +27,7 @@ const STANDARD_LEAD_TOKENS = new Set([
   'saya', 'aku', 'mau', 'ingin', 'reservasi', 'booking', 'pesan',
   'home', 'service', 'sevice', 'homecare', 'care', 'treatment', 'hometreatment',
   'tertarik', 'dengan', 'layanan', 'info', 'lengkap', 'tanya', 'paket', 'spa', 'promo',
-  'bagaimana', 'gimana', 'caranya', 'cara', 'kah', 'ya', 'terima', 'kasih', 'makasih'
+  'bagaimana', 'gimana', 'caranya', 'cara', 'bisa', 'kah', 'ya', 'terima', 'kasih', 'makasih'
 ]);
 
 /**
