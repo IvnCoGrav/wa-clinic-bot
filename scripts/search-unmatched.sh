@@ -1,0 +1,2 @@
+#!/bin/bash
+docker exec wa-clinic-bot-postgres-1 psql -U postgres -d wa_clinic_db -t -A -c "SELECT id, name, phone FROM customers WHERE name ILIKE '%epril%' OR name ILIKE '%anggi%' OR name ILIKE '%fiya%' OR name ILIKE '%ellen%' OR name ILIKE '%leony%' OR name ILIKE '%lely%' OR name ILIKE '%ainun%' OR name ILIKE '%iren%' OR name ILIKE '%goby%';"
