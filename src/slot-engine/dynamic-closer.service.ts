@@ -56,7 +56,9 @@ export class DynamicCloserService {
 ${preFilledForm}
 (Pastikan format di atas tercantum rapi di bagian bawah balasan).`;
         }
-        return `PANDUAN PENUTUP: Tanyakan preferensi jadwal kunjungan di kalimat penutup dengan santun: "Kira-kira Bunda lebih nyaman kami jadwalkan kunjungan Bidan hari apa dan jam berapa yaa? 😊" (DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia, tanyakan saja preferensi waktu Bunda).`;
+        return `PANDUAN KONSULTASI & PENUTUP:
+1. Konfirmasikan bahwa lokasi Bunda terjangkau layanan Homecare Bidan kami, sebutkan tarif ongkir promonya jika ada data ongkir, serta sebutkan nama paket rekomendasi beserta tarif harganya.
+2. Di akhir pesan, tanyakan dengan ramah dan santun: "Kira-kira Bunda ingin kami bantu jadwalkan kunjungan Bidan ke rumah hari apa yaa? 😊" (DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia dan DILARANG menyertakan formulir reservasi panjang sebelum Bunda meminta jadwal).`;
       case 'FORM_ALREADY_SENT':
         return `PANDUAN PENUTUP: Jawab pertanyaan Bunda secara santun (misal konfirmasi ketersediaan hari Jumat/jam atau teknis lainnya). DILARANG KERAS mengulang mengirim format formulir reservasi yang panjang karena formulir sudah dikirim sebelumnya di chat atas. Cukup arahkan dengan santun: "Kira-kira Bunda nyaman di jam berapa yaa? Jika sudah pas, format reservasi yang di atas tadi bisa dibantu lengkapi ya Bunda agar jadwalnya bisa langsung kami amankan 😊"`;
     }
