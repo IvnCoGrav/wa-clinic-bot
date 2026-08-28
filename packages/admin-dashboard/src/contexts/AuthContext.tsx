@@ -23,6 +23,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // sesi server tetap valid — token ini dipakai untuk me-issue ulang cookie via /restore).
 const TOKEN_STORAGE_KEY = 'admin_session_token';
 const LAST_ROLE_KEY = 'last_admin_role';
+const LAST_USER_KEY = 'last_auth_user';
+
+function getInitialUser(): User | null {
+  try {
+    const raw = localStorage.getItem(LAST_USER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 // Backoff adaptif: cepat di percobaan awal (transient), melebar ke radio-wake HP.
 const RETRY_BACKOFF_MS = [1000, 2500, 5000, 8000, 8000];
@@ -40,8 +51,10 @@ function preloadLikelyPage(): void {
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(getInitialUser);
+  const [loading, setLoading] = useState<boolean>(() => {
+    return !getInitialUser() && !localStorage.getItem(TOKEN_STORAGE_KEY);
+  });
 
   async function restoreSession(): Promise<'ok' | 'invalid' | 'network'> {
     const token = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -122,17 +135,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearPendingRetry();
         clearTimeout(hardSafetyTimer);
         if (data.authenticated && data.user) {
-          setUser({
+          const freshUser: User = {
             id: data.user.id,
             email: data.user.email || '',
             name: data.user.name,
             phone: data.user.phone,
             role: data.user.role || 'super_admin',
             tenantId: data.user.tenantId || 'default-tenant',
-          });
+          };
+          setUser(freshUser);
+          try {
+            localStorage.setItem(LAST_USER_KEY, JSON.stringify(freshUser));
+            if (freshUser.role) localStorage.setItem(LAST_ROLE_KEY, freshUser.role);
+          } catch {}
           fetchRolesFromApi().catch(() => {});
         } else {
           setUser(null);
+          try {
+            localStorage.removeItem(LAST_USER_KEY);
+          } catch {}
         }
         setLoading(false);
         emitBootPhase('auth');
@@ -152,6 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           clearPendingRetry();
           clearTimeout(hardSafetyTimer);
           localStorage.removeItem(TOKEN_STORAGE_KEY);
+          localStorage.removeItem(LAST_USER_KEY);
           setUser(null);
           setLoading(false);
           emitBootPhase('auth');
@@ -197,22 +219,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.success && data.user) {
         if (data.token) localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
         await fetchRolesFromApi().catch(() => {});
-        setUser({
+        const authUser: User = {
           id: data.user.id,
           email: data.user.email || '',
           name: data.user.name,
           phone: data.user.phone,
           role: data.user.role,
           tenantId: data.user.tenantId || 'default-tenant',
-        });
+        };
+        setUser(authUser);
         const role = data.role || data.user.role;
-        localStorage.setItem(LAST_ROLE_KEY, role);
+        try {
+          localStorage.setItem(LAST_USER_KEY, JSON.stringify(authUser));
+          localStorage.setItem(LAST_ROLE_KEY, role);
+        } catch {}
         const redirectTo = data.redirectTo || getDefaultRedirect(role);
         return { success: true, role, redirectTo };
       }
       return { success: false, role: 'super_admin', redirectTo: '/admin/overview' };
     } catch (err) {
       setUser(null);
+      try {
+        localStorage.removeItem(LAST_USER_KEY);
+      } catch {}
       throw err;
     } finally {
       setLoading(false);
@@ -222,6 +251,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setLoading(true);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(LAST_USER_KEY);
     try {
       await apiRequest('/api/admin/auth/logout', { method: 'POST' });
     } catch (err) {

@@ -275,16 +275,25 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
 
     try {
       const conversation = await conversationService.getConversationById(id, tenantId);
-      if (!conversation || !conversation.customer) {
+      if (!conversation) {
         return reply.status(404).send({ success: false, error: 'Percakapan tidak ditemukan.' });
       }
 
+      // Ambil customer jika belum ada di objek conversation
+      let customer = conversation.customer;
+      if (!customer && conversation.customer_id) {
+        customer = await customerService.getCustomerById(conversation.customer_id, tenantId);
+      }
+      if (!customer || !customer.phone) {
+        return reply.status(404).send({ success: false, error: 'Customer dari percakapan tidak ditemukan.' });
+      }
+
       // Jangan kirim sinyal typing/seen untuk sandbox test chat
-      if ((conversation.customer as any).is_sandbox_test) {
+      if (customer.is_sandbox_test) {
         return reply.status(200).send({ success: true, sandbox: true });
       }
 
-      const phone = conversation.customer.phone;
+      const phone = customer.phone;
       const { getGateway } = await import('../../integrations/whatsapp');
       const gateway = await getGateway(tenantId);
 

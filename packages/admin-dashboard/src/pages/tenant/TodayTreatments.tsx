@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { apiRequest } from '../../services/api';
+import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import {
@@ -167,8 +167,9 @@ export const TodayTreatments: React.FC = () => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
 
-  const [loading, setLoading] = useState(true);
-  const [tasks, setTasks] = useState<TreatmentTask[]>([]);
+  const cachedTasksRes = getCachedApiResponse<any>('/api/staff/today-tasks?scope=mine') || getCachedApiResponse<any>('/api/staff/today-tasks?scope=all');
+  const [loading, setLoading] = useState(!cachedTasksRes?.data);
+  const [tasks, setTasks] = useState<TreatmentTask[]>(() => Array.isArray(cachedTasksRes?.data) ? cachedTasksRes.data : []);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'OTW' | 'COMPLETED'>('ALL');
@@ -260,7 +261,7 @@ export const TodayTreatments: React.FC = () => {
   };
 
   const fetchTasks = useCallback(async (isPolling = false) => {
-    if (!isPolling) setLoading(true);
+    if (!isPolling && tasks.length === 0) setLoading(true);
     try {
       const apiScope = scopeFilter === 'mine' ? 'mine' : 'all';
       const res = await apiRequest(`/api/staff/today-tasks?scope=${apiScope}`);
@@ -271,11 +272,11 @@ export const TodayTreatments: React.FC = () => {
         }
       }
     } catch (err: any) {
-      if (!isPolling) toast(err.message || 'Gagal memuat tugas treatment.', 'error');
+      if (!isPolling && tasks.length === 0) toast(err.message || 'Gagal memuat tugas treatment.', 'error');
     } finally {
-      if (!isPolling) setLoading(false);
+      setLoading(false);
     }
-  }, [scopeFilter, toast]);
+  }, [scopeFilter, toast, tasks.length]);
 
   const fetchTeamMembers = useCallback(async () => {
     try {

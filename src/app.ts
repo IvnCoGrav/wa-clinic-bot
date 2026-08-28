@@ -10,6 +10,7 @@ import { landingRoutes } from './routes/landing.route';
 import { mediaRoutes } from './routes/media.route';
 import { telegramWebhookRoutes } from './routes/telegram-webhook.route';
 import rateLimit from '@fastify/rate-limit';
+import compress from '@fastify/compress';
 import { initializeConsoleWrapper } from './utils/context';
 import { installLogBuffer } from './utils/log-buffer';
 
@@ -74,6 +75,12 @@ export function buildApp() {
     }
   });
 
+
+  // Register HTTP Response Compression (Gzip & Deflate untuk payload > 1KB)
+  app.register(compress, {
+    threshold: 1024,
+    encodings: ['gzip', 'deflate'],
+  });
 
   // Register Rate Limiting (global protection for public endpoints)
   app.register(rateLimit, {

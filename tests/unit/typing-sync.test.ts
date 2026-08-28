@@ -87,6 +87,36 @@ describe('Live Chat Typing & Delivery Status Tests', () => {
       expect(body.sandbox).toBe(true);
       expect(startTypingSpy).not.toHaveBeenCalled();
     });
+
+    it('resolves customer via customerService when conversation.customer is undefined', async () => {
+      const { customerService } = await import('../../src/services/customer.service');
+      vi.spyOn(conversationService, 'getConversationById').mockResolvedValueOnce({
+        id: 'conv_runtime_no_join',
+        customer_id: 'cust_456',
+        tenant_id: 'default-tenant',
+      } as any);
+
+      vi.spyOn(customerService, 'getCustomerById').mockResolvedValueOnce({
+        id: 'cust_456',
+        phone: '628129999888',
+        is_sandbox_test: false,
+      } as any);
+
+      const sendSeenSpy = vi.spyOn(wahaClient, 'sendSeen').mockResolvedValueOnce(true);
+      const startTypingSpy = vi.spyOn(wahaClient, 'startTyping').mockResolvedValueOnce(true);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/conversations/conv_runtime_no_join/typing',
+        payload: { isTyping: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.success).toBe(true);
+      expect(sendSeenSpy).toHaveBeenCalledWith('628129999888', undefined);
+      expect(startTypingSpy).toHaveBeenCalledWith('628129999888');
+    });
   });
 
   describe('POST /webhook with event message.ack', () => {

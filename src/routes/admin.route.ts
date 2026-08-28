@@ -34,6 +34,16 @@ import { followUpAdminRoutes } from './admin/follow-up.subroute';
 import { googleIntegrationAdminRoutes } from './admin/google-integration.subroute';
 import { backupAdminRoutes } from './admin/backup.subroute';
 
+let cachedIndexHtml: string | null = null;
+let cachedManifest: Buffer | null = null;
+let cachedSwJs: Buffer | null = null;
+
+export function clearAdminStaticCache() {
+  cachedIndexHtml = null;
+  cachedManifest = null;
+  cachedSwJs = null;
+}
+
 export async function adminRoutes(fastify: FastifyInstance) {
   const { AdminSessionService } = await import('../services/admin-session.service');
 
@@ -184,11 +194,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
     // 1. If it is requesting assets, handle it
     if (urlPath.endsWith('/sw.js')) {
       try {
-        const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/sw.js');
-        const content = await fs.readFile(filePath);
+        if (!cachedSwJs || process.env.NODE_ENV !== 'production') {
+          const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/sw.js');
+          cachedSwJs = await fs.readFile(filePath);
+        }
         reply.type('application/javascript');
         reply.header('Service-Worker-Allowed', '/admin/');
-        return reply.send(content);
+        reply.header('Cache-Control', 'public, max-age=3600');
+        return reply.send(cachedSwJs);
       } catch {
         try {
           const filePath = path.join(__dirname, '../../packages/admin-dashboard/public/sw.js');
@@ -212,6 +225,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
         else if (filename.endsWith('.png')) reply.type('image/png');
         else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) reply.type('image/jpeg');
         else if (filename.endsWith('.webp')) reply.type('image/webp');
+        reply.header('Cache-Control', 'public, max-age=86400');
         return reply.send(content);
       } catch {
         try {
@@ -231,10 +245,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     if (urlPath.endsWith('/manifest.json')) {
       try {
-        const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/manifest.json');
-        const content = await fs.readFile(filePath);
+        if (!cachedManifest || process.env.NODE_ENV !== 'production') {
+          const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/manifest.json');
+          cachedManifest = await fs.readFile(filePath);
+        }
         reply.type('application/manifest+json');
-        return reply.send(content);
+        reply.header('Cache-Control', 'public, max-age=86400');
+        return reply.send(cachedManifest);
       } catch {
         try {
           const filePath = path.join(__dirname, '../../packages/admin-dashboard/public/manifest.json');
@@ -263,6 +280,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
           reply.type('image/png');
         } else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
           reply.type('image/jpeg');
+        } else if (filename.endsWith('.woff2')) {
+          reply.type('font/woff2');
+        } else if (filename.endsWith('.woff')) {
+          reply.type('font/woff');
         }
         reply.header('Cache-Control', 'public, max-age=31536000, immutable');
         return reply.send(content);
@@ -285,15 +306,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
     }
 
-    // 3. Otherwise serve index.html for React SPA client-side routing
+    // 3. Otherwise serve index.html for React SPA client-side routing (In-Memory Cached)
     try {
-      const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/index.html');
-      const content = await fs.readFile(filePath, 'utf-8');
+      if (!cachedIndexHtml || process.env.NODE_ENV !== 'production') {
+        const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist/index.html');
+        cachedIndexHtml = await fs.readFile(filePath, 'utf-8');
+      }
       reply.type('text/html');
       reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
       reply.header('Pragma', 'no-cache');
       reply.header('Expires', '0');
-      return reply.send(content);
+      return reply.send(cachedIndexHtml);
     } catch (err) {
       const filename = urlPath.split('/admin/')[1] || 'login.html';
       if (/^[a-z0-9-]+\.html$/.test(filename)) {
