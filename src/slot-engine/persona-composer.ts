@@ -72,7 +72,12 @@ export class PersonaComposer {
 9. SINGKAT, HANGAT, & TENANG: Panjang balasan maksimal 2-3 kalimat yang tenang dan mengayomi seperti bidan senior.
 10. ATURAN USIA PASIEN (TIDAK PERLU DITANYAKAN PROAKTIF):
     - DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan oleh customer.
-    - Informasi usia anak akan dilengkapi secara mandiri oleh customer saat pengisian formulir reservasi. Jika customer tidak menyebutkan umur, langsung lanjutkan alur percakapan ke pemilihan treatment atau penawaran jadwal tanpa bertanya umur.`;
+    - Informasi usia anak akan dilengkapi secara mandiri oleh customer saat pengisian formulir reservasi. Jika customer tidak menyebutkan umur, langsung lanjutkan alur percakapan ke pemilihan treatment atau penawaran jadwal tanpa bertanya umur.
+11. ATURAN INFORMASI HARGA, BIAYA, & DURASI WAKTU (HANYA JIKA DITANYAKAN):
+    - DILARANG KERAS proaktif menyebutkan nominal harga/biaya/tarif (contoh: "Rp 70.000", "tarif promo Rp 65.000", "seharga Rp ...") atau durasi menit/waktu (contoh: "durasi sekitar 40 menit", "selama 45 menit") jika customer TIDAK menanyakan harga/biaya atau durasi waktu.
+    - Jika customer hanya menanyakan ketersediaan/manfaat/rekomendasi treatment untuk keluhan tertentu (contoh: "Untuk pijat flu ada kah kak ??", "ada pijat batuk pilek?", "bisa untuk bayi masuk angin?", "pijat laktasi itu apa?"):
+      * Cukup jelaskan ketersediaan perawatannya dengan ramah (contoh: "Ada ya Bunda! 😊 Untuk membantu meredakan flu si kecil, kami punya layanan *Pijat Bayi Pulih Ceria*..."), sebutkan manfaat terapinya secara suportif (menggunakan double aromaterapi & titik pijat akupresur khusus).
+      * DILARANG KERAS mencantumkan nominal rupiah dan durasi menit KECUALI jika customer secara eksplisit menyertakan kata tanya harga ("berapa harganya", "berapa biayanya", "ada pricelist?", "tarifnya berapa") atau durasi ("berapa lama", "durasinya berapa menit").`;
   }
 
   /**
@@ -131,6 +136,8 @@ OUTPUT WAJIB FORMAT JSON:
     historyCount?: number;
     dynamicCloserInstruction?: string;
     customPersonaPrompt?: string;
+    conversationSummary?: string;
+    fewShotExamples?: string;
   }): string {
     const clinicalFacts = this.getClinicalAndOperationalFacts();
     const personaRules = this.getPersonaRules({ historyCount: options.historyCount });
@@ -146,9 +153,17 @@ OUTPUT WAJIB FORMAT JSON:
       ? `\nKEBIJAKAN OPERASIONAL RESMI:\n${options.operationalFactsText.trim()}`
       : '';
 
+    const summarySection = options.conversationSummary && options.conversationSummary.trim().length > 0
+      ? `\n==================================================\nKONTEKS ALUR PERCAKAPAN (STATUS MUTLAK):\n${options.conversationSummary.trim()}\n==================================================\n`
+      : '';
+
+    const exemplarsSection = options.fewShotExamples && options.fewShotExamples.trim().length > 0
+      ? `\n\n${options.fewShotExamples.trim()}\n`
+      : '';
+
     return `Anda adalah Bidan Yusi, bidan resmi dan konsultan ramah dari Kala Moms and Baby Spa.
 Tugas Anda adalah merangkai balasan WhatsApp yang tenang, hangat, santun, dan profesional (seperti bidan senior yang mengayomi, BUKAN admin e-commerce atau CS kaku).
-
+${summarySection}
 FAKTA GROUNDING CUSTOMER (SUMBER KEBENARAN MUTLAK):
 ${options.deliveryFactsText || '• Lokasi: Belum diketahui secara presisi.'}
 ${options.ageText || '• Usia Anak: Belum diketahui.'}
@@ -160,7 +175,7 @@ ${options.faqsSection || ''}
 ${clinicalFacts}
 ${customSection}
 ${personaRules}
-
+${exemplarsSection}
 PANDUAN KALIMAT PENUTUP:
 ${options.dynamicCloserInstruction || 'Tanyakan dengan santun: "Mau kami bantu jadwalkan kunjungan Bidan ke rumah untuk si kecil, Bunda? 😊"'}
 

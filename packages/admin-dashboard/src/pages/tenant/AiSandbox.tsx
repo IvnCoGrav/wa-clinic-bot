@@ -14,7 +14,8 @@ import {
   Edit3,
   Save,
   X,
-  RefreshCw
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
 
 interface ChatMessage {
@@ -56,6 +57,20 @@ export const AiSandbox: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [activeRequests, setActiveRequests] = useState(0);
   
+  // ⚡ Burst message simulation state
+  const [burstMode, setBurstMode] = useState<boolean>(() => {
+    try {
+      const stored = sessionStorage.getItem('sandbox_burst_mode');
+      if (stored !== null) return stored === 'true';
+    } catch {}
+    return true;
+  });
+  const [pendingBurst, setPendingBurst] = useState<string[]>([]);
+  const pendingBurstRef = useRef<string[]>([]);
+  const burstTimerRef = useRef<any>(null);
+  const burstIntervalRef = useRef<any>(null);
+  const [burstTimeLeft, setBurstTimeLeft] = useState<number>(0);
+
   // Simulated outage toggle
   const [sumoPodOutage, setSumoPodOutage] = useState(false);
 
@@ -117,7 +132,29 @@ export const AiSandbox: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const clearBurstTimers = () => {
+    if (burstTimerRef.current) {
+      clearTimeout(burstTimerRef.current);
+      burstTimerRef.current = null;
+    }
+    if (burstIntervalRef.current) {
+      clearInterval(burstIntervalRef.current);
+      burstIntervalRef.current = null;
+    }
+    setBurstTimeLeft(0);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearBurstTimers();
+    };
+  }, []);
+
   const handleNewCleanSession = () => {
+    clearBurstTimers();
+    pendingBurstRef.current = [];
+    setPendingBurst([]);
+
     const newPhone = '6289999' + Math.floor(100000 + Math.random() * 900000);
     sessionStorage.setItem('sandbox_phone', newPhone);
     setSandboxPhone(newPhone);
@@ -134,6 +171,12 @@ export const AiSandbox: React.FC = () => {
     };
     setInspectorData(emptyInspector);
     sessionStorage.setItem('sandbox_inspector', JSON.stringify(emptyInspector));
+
+    // Reset state percakapan di backend agar bersih dari HUMAN_HANDLING atau state lama
+    apiRequest('/api/admin/sandbox/chat', {
+      method: 'POST',
+      body: JSON.stringify({ text: '/reset', sandboxPhone: newPhone })
+    }).catch(() => {});
   };
 
   const handleStartEdit = (chunk: any) => {
@@ -207,36 +250,38 @@ export const AiSandbox: React.FC = () => {
     }
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
+  const flushBurst = async (overrideList?: string[]) => {
+    clearBurstTimers();
+    const batch = overrideList && overrideList.length > 0 ? overrideList : [...pendingBurstRef.current];
+    pendingBurstRef.current = [];
+    setPendingBurst([]);
 
-    const userText = inputText;
-    setInputText('');
-    
-    // Append user message
-    const newMsg: ChatMessage = { sender: 'user', content: userText, timestamp: new Date() };
-    setMessages(prev => [...prev, newMsg]);
+    if (batch.length === 0) return;
+
     setLoading(true);
     setActiveRequests(prev => prev + 1);
-
     const startTime = Date.now();
 
     try {
       const data = await apiRequest('/api/admin/sandbox/chat', {
         method: 'POST',
-        body: JSON.stringify({ text: userText, simulateOutage: sumoPodOutage, sandboxPhone }),
+        body: JSON.stringify({
+          messages: batch,
+          text: batch.join('\n'),
+          simulateOutage: sumoPodOutage,
+          sandboxPhone,
+        }),
         timeoutMs: 120000,
       });
 
       const endTime = Date.now();
-      
+
       if (data.sentBubbles && Array.isArray(data.sentBubbles) && data.sentBubbles.length > 0) {
         const botBubbles = data.sentBubbles.map((bubbleText: string) => ({
           sender: 'bot' as const,
           content: bubbleText,
           timestamp: new Date(),
-          isError: Boolean(data.llmError)
+          isError: Boolean(data.llmError),
         }));
         setMessages(prev => [...prev, ...botBubbles]);
       } else {
@@ -244,23 +289,23 @@ export const AiSandbox: React.FC = () => {
           sender: 'bot',
           content: data.answer || 'Maaf, saya tidak mengerti maksud Bunda.',
           timestamp: new Date(),
-          isError: Boolean(data.llmError)
+          isError: Boolean(data.llmError),
         }]);
       }
 
       setInspectorData({
-        query: data.query || userText,
+        query: data.query || batch.join('\n'),
         chunks: data.chunks || [],
         systemPrompt: `TUGAS UTAMA: Jawab pertanyaan customer tentang informasi/FAQ moms & baby spa berdasarkan Referensi Dokumen...`,
         latencyMs: endTime - startTime,
-        error: data.llmError || null
+        error: data.llmError || null,
       });
     } catch (err: any) {
       setMessages(prev => [...prev, {
         sender: 'bot',
         content: `Error calling AI Generator: ${err.message}`,
         timestamp: new Date(),
-        isError: true
+        isError: true,
       }]);
     } finally {
       setActiveRequests(prev => {
@@ -271,6 +316,51 @@ export const AiSandbox: React.FC = () => {
         return next;
       });
     }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim()) return;
+
+    const userText = inputText.trim();
+    setInputText('');
+
+    // Append user message bubble to chat UI immediately
+    const newMsg: ChatMessage = { sender: 'user', content: userText, timestamp: new Date() };
+    setMessages(prev => [...prev, newMsg]);
+
+    // Command (seperti /reset, /location) atau jika mode burst OFF -> kirim langsung seketika
+    if (userText.startsWith('/') || !burstMode) {
+      if (pendingBurstRef.current.length > 0) {
+        const all = [...pendingBurstRef.current, userText];
+        await flushBurst(all);
+      } else {
+        await flushBurst([userText]);
+      }
+      return;
+    }
+
+    // ⚡ Mode Burst ON: Tambahkan ke buffer dan mulai timer debounce 2.5s
+    pendingBurstRef.current.push(userText);
+    setPendingBurst([...pendingBurstRef.current]);
+
+    clearBurstTimers();
+
+    const BURST_WINDOW_MS = 2500;
+    const targetEnd = Date.now() + BURST_WINDOW_MS;
+    setBurstTimeLeft(BURST_WINDOW_MS);
+
+    burstIntervalRef.current = setInterval(() => {
+      const remaining = Math.max(0, targetEnd - Date.now());
+      setBurstTimeLeft(remaining);
+      if (remaining <= 0) {
+        if (burstIntervalRef.current) clearInterval(burstIntervalRef.current);
+      }
+    }, 100);
+
+    burstTimerRef.current = setTimeout(() => {
+      flushBurst();
+    }, BURST_WINDOW_MS);
   };
 
   return (
@@ -318,16 +408,42 @@ export const AiSandbox: React.FC = () => {
               <span>Simulated WhatsApp Chat</span>
             </span>
 
-            {sumoPodOutage ? (
-              <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold animate-pulse flex items-center space-x-1">
-                <AlertOctagon size={10} />
-                <span>LLM API OUTAGE</span>
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
-                AI Agent Active
-              </span>
-            )}
+            <div className="flex items-center space-x-2">
+              {/* Burst Mode Toggle Pill */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !burstMode;
+                  setBurstMode(next);
+                  try {
+                    sessionStorage.setItem('sandbox_burst_mode', String(next));
+                  } catch {}
+                  if (!next && pendingBurstRef.current.length > 0) {
+                    flushBurst();
+                  }
+                }}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center space-x-1 border transition active:scale-95 ${
+                  burstMode
+                    ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-2xs'
+                    : 'bg-[#f0f2f5] border-[#d1d7db] text-[#54656f] hover:bg-white'
+                }`}
+                title="Mode Burst WhatsApp: Mengumpulkan pesan beruntun dalam window 2.5 detik sebelum bot membalas satu kali (seperti perilaku customer asli)."
+              >
+                <Zap size={11} className={burstMode ? 'text-amber-600 fill-amber-500' : 'text-[#8696a0]'} />
+                <span>Burst (2.5s): {burstMode ? 'ON' : 'OFF'}</span>
+              </button>
+
+              {sumoPodOutage ? (
+                <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold animate-pulse flex items-center space-x-1">
+                  <AlertOctagon size={10} />
+                  <span>LLM API OUTAGE</span>
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                  AI Agent Active
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Messages list with WhatsApp light wallpaper */}
@@ -365,6 +481,27 @@ export const AiSandbox: React.FC = () => {
 
           {/* Form input — WhatsApp-like style */}
           <form onSubmit={handleSend} className="bg-[#f0f2f5] border border-[#e9edef] rounded-xl p-2.5 space-y-2 shadow-xs">
+            {/* Active Burst Queue Status Banner */}
+            {pendingBurst.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between text-xs animate-fadeIn">
+                <div className="flex items-center space-x-1.5 text-amber-900 font-semibold text-[11px] truncate">
+                  <Zap size={13} className="text-amber-600 fill-amber-500 animate-pulse shrink-0" />
+                  <span className="truncate">
+                    <span className="font-bold">{pendingBurst.length} pesan burst</span> terkumpul • Kirim dlm{' '}
+                    <span className="font-mono font-bold text-amber-700">{(burstTimeLeft / 1000).toFixed(1)}s</span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => flushBurst()}
+                  disabled={loading}
+                  className="px-2.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-[10px] font-bold transition shadow-xs shrink-0 ml-2 cursor-pointer"
+                >
+                  Kirim Sekarang
+                </button>
+              </div>
+            )}
+
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -374,21 +511,25 @@ export const AiSandbox: React.FC = () => {
                   (e.target as HTMLTextAreaElement).form?.requestSubmit();
                 }
               }}
-              placeholder="Ketik pesan simulasi... (Enter untuk kirim)"
+              placeholder={burstMode ? "Ketik pesan simulasi... (Tekan Enter beruntun untuk pesan burst)" : "Ketik pesan simulasi... (Enter untuk kirim)"}
               rows={2}
               className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] resize-none shadow-xs"
             />
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-[#667781]">
-                {inputText.length > 0 ? `${inputText.length} karakter` : 'Tekan Enter atau klik Kirim'}
+              <span className="text-[10px] text-[#667781] truncate">
+                {inputText.length > 0
+                  ? `${inputText.length} karakter`
+                  : burstMode
+                    ? '⚡ Mode Burst aktif (kirim beruntun, bot membalas sekali)'
+                    : 'Tekan Enter atau klik Kirim'}
               </span>
               <button
                 type="submit"
                 disabled={!inputText.trim()}
-                className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
+                className="px-3.5 py-1.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs shrink-0 cursor-pointer"
               >
                 {loading ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                <span>Kirim</span>
+                <span>{pendingBurst.length > 0 ? 'Tambah Burst' : 'Kirim'}</span>
               </button>
             </div>
           </form>

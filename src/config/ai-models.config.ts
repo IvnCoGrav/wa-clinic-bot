@@ -8,7 +8,7 @@
  */
 import { DEFAULT_TENANT_ID } from './tenant';
 
-export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION' | 'AI_VERIFIER';
+export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'CHAT_REPLY_DEEP' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION' | 'AI_VERIFIER';
 
 export interface AiTaskModelConfig {
   task: AiTaskType;
@@ -43,6 +43,17 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
       description: 'Digunakan untuk menghasilkan respon percakapan otomatis kepada customer.',
       maxTokens: 1024,
       temperature: 0.6,
+    },
+  ],
+  [
+    'CHAT_REPLY_DEEP',
+    {
+      task: 'CHAT_REPLY_DEEP',
+      provider: process.env.AI_PROVIDER_CHAT_DEEP || process.env.AI_PROVIDER_CHAT || 'OpenAI',
+      modelName: process.env.AI_MODEL_CHAT_DEEP || process.env.AI_MODEL_CHAT || 'gpt-4o-mini',
+      description: 'Digunakan untuk menghasilkan respon percakapan mendalam pada konsultasi klinis multi-gejala / multi-treatment.',
+      maxTokens: 1024,
+      temperature: 0.5,
     },
   ],
   [
