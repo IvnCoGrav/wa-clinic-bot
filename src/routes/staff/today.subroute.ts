@@ -14,16 +14,37 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
    */
   fastify.get(
     '/api/staff/today-tasks',
-    async (request: FastifyRequest<{ Querystring: { scope?: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{ Querystring: { scope?: string; date?: string } }>,
+      reply: FastifyReply
+    ) => {
       const staffId = (request as any).staffId;
       const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
       const isSupervisor =
         role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs';
       const scope = request.query.scope === 'all' && isSupervisor ? 'all' : 'mine';
+      const dateParam = request.query.date || 'today';
 
-      const tasks = await StaffReservationService.getTodayTasks(staffId, tenantId, scope, isSupervisor);
-      return reply.status(200).send({ success: true, data: tasks, isSupervisor });
+      const dateMeta = StaffReservationService.getWibDateRange(dateParam);
+      const tasks = await StaffReservationService.getTodayTasks(
+        staffId,
+        tenantId,
+        scope,
+        isSupervisor,
+        dateParam
+      );
+      return reply.status(200).send({
+        success: true,
+        data: tasks,
+        isSupervisor,
+        meta: {
+          dateStr: dateMeta.dateStr,
+          formattedDate: dateMeta.formattedDate,
+          isToday: dateMeta.isToday,
+          isTomorrow: dateMeta.isTomorrow,
+        },
+      });
     }
   );
 
