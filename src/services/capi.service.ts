@@ -60,38 +60,401 @@ export function sha256Hash(text: string): string {
  * treatment_detail / raw text reservasi. Best-effort: tak ditemukan → undefined
  * (event dikirim tanpa value). Dipakai event Purchase CAPI.
  */
+/**
+ * Kamus Alias dan Rule Pencocokan Layanan Klinik Kala Spa
+ */
+interface ServiceMatcher {
+  id: string;
+  name: string;
+  price: number;
+  aliases: (string | RegExp)[];
+  isBundle?: boolean;
+  isAddon?: boolean;
+}
+
+const KNOWN_SERVICE_MATCHERS: ServiceMatcher[] = [
+  // 1. Bundles (prioritas tinggi)
+  {
+    id: 'baby-cukur-pijat-terapi',
+    name: 'Cukur + Pijat Terapi',
+    price: 85000,
+    isBundle: true,
+    aliases: [
+      /cukur\s*(?:rambut)?\s*(?:\+|dan|\&)\s*pijat\s*terapi/i,
+      /cukur\s*(?:rambut)?\s*(?:\+|dan|\&)\s*(?:pijat\s*)?(?:pulih|bapil)/i,
+      /pijat\s*(?:terapi|pulih|bapil)\s*(?:\+|dan|\&)\s*cukur/i,
+    ],
+  },
+  {
+    id: 'baby-paket-selapan',
+    name: 'Paket Selapan (Cukur + Pijat Ceria)',
+    price: 80000,
+    isBundle: true,
+    aliases: [
+      /\bselapan\b/i,
+      /paket\s*selapan/i,
+      /cukur\s*(?:rambut)?\s*(?:\+|dan|\&)\s*(?:pijat\s*)?(?:ceria|rileksasi|relaksasi)/i,
+      /cukur\s*(?:rambut)?\s*(?:\+|dan|\&)\s*pijat\s*bayi/i,
+    ],
+  },
+  {
+    id: 'bundle-pra-kelahiran-lengkap',
+    name: 'Paket Pra Kelahiran Lengkap (Perineum + Yoga + Breast)',
+    price: 135000,
+    isBundle: true,
+    aliases: [/pra\s*kelahiran\s*lengkap/i, /perineum.*yoga.*(?:breast|laktasi)/i],
+  },
+  {
+    id: 'moms-laktasi-oksitosin-full',
+    name: 'Breast + Oksitoksin Fullbody Massage',
+    price: 155000,
+    isBundle: true,
+    aliases: [
+      /(?:breast|laktasi|payudara)\s*(?:\+|dan|\&)\s*oksito[ks]+in\s*full/i,
+      /oksito[ks]+in\s*full\s*(?:\+|dan|\&)\s*(?:breast|laktasi|payudara)/i,
+    ],
+  },
+  {
+    id: 'bundle-laktasi-oksitosin',
+    name: 'Paket Laktasi (Breast + Oksitosin)',
+    price: 80000,
+    isBundle: true,
+    aliases: [
+      /(?:breast|laktasi|payudara)\s*(?:\+|dan|\&)\s*oksito[ks]+in/i,
+      /oksito[ks]+in\s*(?:\+|dan|\&)\s*(?:breast|laktasi|payudara)/i,
+    ],
+  },
+  {
+    id: 'bundle-yoga-breast',
+    name: 'Paket Pra Kelahiran (Yoga + Breast)',
+    price: 80000,
+    isBundle: true,
+    aliases: [/yoga\s*(?:\+|dan|\&)\s*(?:breast|laktasi)/i, /(?:breast|laktasi)\s*(?:\+|dan|\&)\s*yoga/i],
+  },
+  {
+    id: 'bundle-perineum-yoga',
+    name: 'Paket Pra Kelahiran (Perineum + Yoga)',
+    price: 80000,
+    isBundle: true,
+    aliases: [/perineum\s*(?:\+|dan|\&)\s*yoga/i, /yoga\s*(?:\+|dan|\&)\s*perineum/i],
+  },
+  {
+    id: 'bundle-perineum-breast',
+    name: 'Paket Pra Kelahiran (Perineum + Breast)',
+    price: 80000,
+    isBundle: true,
+    aliases: [/perineum\s*(?:\+|dan|\&)\s*(?:breast|laktasi)/i, /(?:breast|laktasi)\s*(?:\+|dan|\&)\s*perineum/i],
+  },
+
+  // 2. Layanan Baby Khusus / Terapi (prioritas di atas Pijat Ceria umum)
+  {
+    id: 'baby-massage-pulih-ceria',
+    name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)',
+    price: 70000,
+    aliases: [
+      'pijat bayi pulih ceria',
+      'pulih ceria',
+      'terapi bapil',
+      'terapi kembung',
+      'pijat terapi',
+      'pijat bapil',
+      'pijat batuk pilek',
+      'batuk pilek',
+      'bapil',
+      'pijat flu',
+      'pijat kolik',
+      'pijat kembung',
+      'terapi bayi',
+    ],
+  },
+  {
+    id: 'baby-massage-lahap-juara',
+    name: 'Pijat Lahap Juara (Nafsu Makan)',
+    price: 75000,
+    aliases: ['pijat lahap juara', 'lahap juara', 'nafsu makan', 'pijat lahap', 'pijat nafsu makan', 'pijat makan'],
+  },
+  {
+    id: 'baby-cukur',
+    name: 'Cukur Rambut Bayi',
+    price: 25000,
+    aliases: ['cukur rambut bayi', 'cukur rambut', 'cukur bayi', 'potong rambut bayi', 'cukur'],
+  },
+  {
+    id: 'baby-tindik',
+    name: 'Tindik Telinga Bayi',
+    price: 50000,
+    aliases: ['tindik telinga bayi', 'tindik telinga', 'tindik bayi', 'tindik'],
+  },
+
+  // 3. Layanan Baby Relaksasi Umum
+  {
+    id: 'baby-massage-ceria',
+    name: 'Pijat Bayi Ceria (Rileksasi)',
+    price: 60000,
+    aliases: [
+      'pijat bayi ceria',
+      'bayi ceria',
+      'pijat ceria',
+      'pijat relaksasi',
+      'pijat rileksasi',
+      'rileksasi',
+      'relaksasi',
+      'baby massage',
+      'pijat baby',
+      'pijat bayi',
+    ],
+  },
+
+  // 4. Layanan Kids
+  {
+    id: 'kids-massage-ceria',
+    name: 'Pijat Kids Ceria',
+    price: 70000,
+    aliases: ['pijat kids ceria', 'kids ceria', 'pijat kids', 'pijat anak', 'kids massage', 'anak ceria'],
+  },
+
+  // 5. Layanan Moms Khusus & Fullbody
+  {
+    id: 'moms-prenatal-massage',
+    name: 'Prenatal Massage (Pijat Hamil)',
+    price: 100000,
+    aliases: [
+      'prenatal massage',
+      'pijat hamil',
+      'massage hamil',
+      'pijat ibu hamil',
+      'pijat bumil',
+      'bumil',
+      'ibu hamil',
+      'prenatal',
+    ],
+  },
+  {
+    id: 'moms-oksitosin-fullbody',
+    name: 'Oksitosin Massage Fullbody',
+    price: 105000,
+    aliases: [
+      'oksitosin massage fullbody',
+      'oksitosin fullbody',
+      'oksitosin full',
+      'oksitoksin fullbody',
+      'oksitoksin full',
+      'pijat oksitosin fullbody',
+      'pijat oksitoksin fullbody',
+    ],
+  },
+  {
+    id: 'moms-induksi-fullbody',
+    name: 'Induksi Massage Fullbody',
+    price: 105000,
+    aliases: ['induksi massage fullbody', 'induksi fullbody', 'induksi full', 'pijat induksi fullbody'],
+  },
+  {
+    id: 'moms-oksitosin-partial',
+    name: 'Oksitosin Massage Non-Fullbody',
+    price: 50000,
+    aliases: [
+      'oksitosin massage non-fullbody',
+      'oksitosin non-fullbody',
+      'oksitosin non fullbody',
+      'oksitosin parsial',
+      'oksitosin partial',
+      'pijat oksitosin',
+      'pijat oksitoksin',
+      'oksitosin massage',
+      'oksitosin',
+      'oksitoksin',
+    ],
+  },
+  {
+    id: 'moms-paket-laktasi',
+    name: 'Paket Laktasi (Breast Massage)',
+    price: 50000,
+    aliases: ['paket laktasi', 'breast massage', 'pijat laktasi', 'pijat payudara', 'pijat asi', 'laktasi', 'breast'],
+  },
+  {
+    id: 'moms-perineum-massage',
+    name: 'Perineum Massage',
+    price: 45000,
+    aliases: ['perineum massage', 'pijat perineum', 'perineum'],
+  },
+  {
+    id: 'moms-induksi-massage',
+    name: 'Induksi Massage',
+    price: 50000,
+    aliases: ['induksi massage', 'pijat induksi', 'induksi'],
+  },
+  {
+    id: 'moms-prenatal-yoga',
+    name: 'Prenatal Yoga',
+    price: 50000,
+    aliases: ['prenatal yoga', 'yoga hamil', 'yoga'],
+  },
+
+  // 6. Add-ons
+  {
+    id: 'add-on-nebulizer-obat',
+    name: 'Nebulizer + Obat (Terapi Uap Lengkap)',
+    price: 65000,
+    isAddon: true,
+    aliases: ['nebulizer + obat', 'nebulizer obat', 'uap + obat', 'uap obat', 'terapi uap lengkap'],
+  },
+  {
+    id: 'add-on-nebulizer',
+    name: 'Nebulizer (Terapi Uap Add-on)',
+    price: 35000,
+    isAddon: true,
+    aliases: ['nebulizer', 'terapi uap', 'uap'],
+  },
+  {
+    id: 'add-on-sinar-moksa',
+    name: 'Sinar Moksa (Add-on)',
+    price: 10000,
+    isAddon: true,
+    aliases: ['sinar moksa', 'moksa', 'inframerah', 'sinar infra merah', 'lampu moksa'],
+  },
+];
+
+/**
+ * Mencari harga single service dari matcher atau treatment catalog
+ */
+function matchSingleServicePrice(term: string, catalogServices: any[]): number | undefined {
+  if (!term || !term.trim()) return undefined;
+  const q = term.trim().toLowerCase();
+
+  // 1. Cek Known Service Matchers (alias lengkap & regex)
+  for (const m of KNOWN_SERVICE_MATCHERS) {
+    for (const a of m.aliases) {
+      if (typeof a === 'string') {
+        if (q === a || q.includes(a)) {
+          return m.price;
+        }
+      } else if (a instanceof RegExp) {
+        if (a.test(q)) {
+          return m.price;
+        }
+      }
+    }
+  }
+
+  // 2. Cek Catalog DB / In-memory Services
+  if (catalogServices && catalogServices.length > 0) {
+    const exact = catalogServices.find((s) => {
+      const cleanName = (s.name || '').toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
+      const rawName = (s.name || '').toLowerCase().trim();
+      return (cleanName && (q.includes(cleanName) || cleanName === q)) ||
+             (rawName && (q.includes(rawName) || rawName === q));
+    });
+    if (exact) {
+      return exact.promoPrice ?? exact.originalPrice;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Mencari harga (promoPrice ?? originalPrice) treatment di katalog berdasarkan
+ * treatment_detail / raw text reservasi.
+ * Mendukung pencocokan alias, bundle kombinasi, multi-item compounding, dan kategori fallback.
+ */
 export async function resolveTreatmentValue(treatmentDetail: string | null | undefined): Promise<number | undefined> {
   if (!treatmentDetail || !treatmentDetail.trim()) return undefined;
   try {
-    const { treatmentCatalogService } = await import('./treatment-catalog.service');
-    // Filter out template placeholder phrases (misal: "Mohon bisa diisi Bunda 😊")
-    let cleanDetail = treatmentDetail
-      .replace(/\[[^\]]*\]/g, '')
-      .replace(/\([^)]*\)/g, '')
-      .split('|')
-      .map(p => p.trim())
-      .filter(p => {
-        const lower = p.toLowerCase();
-        return (
-          !lower.includes('mohon bisa diisi') &&
-          !lower.includes('bisa diisi bunda') &&
-          !lower.includes('jika ada') &&
-          !lower.includes('jika hamil') &&
-          !lower.includes('opsional')
-        );
-      })
-      .join(' ');
+    let catalogServices: any[] = [];
+    try {
+      const { treatmentCatalogService } = await import('./treatment-catalog.service');
+      catalogServices = treatmentCatalogService.getAllServices();
+    } catch {}
 
-    const q = (cleanDetail || treatmentDetail).toLowerCase();
-    const services = treatmentCatalogService.getAllServices();
-    const exact = services.find((s) => {
-      const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
-      return cleanName && (q.includes(cleanName) || cleanName.includes(q));
-    });
-    const target = exact || services.find((s) => q.includes(s.name.toLowerCase()));
-    if (target) {
-      return target.promoPrice ?? target.originalPrice;
+    // Bersihkan durasi [xxm], kurung bayi/usia/kehamilan, dan template placeholder
+    const cleanStr = treatmentDetail
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\((?:bayi|anak|kehamilan|usia|umur)[^)]*\)/gi, ' ')
+      .replace(/\((?:mohon|jika|opsional|optional)[^)]*\)/gi, ' ')
+      .trim();
+
+    const cleanLower = cleanStr.toLowerCase();
+
+    // 1. Cek Bundle / Paket Khusus terlebih dahulu pada seluruh string
+    for (const m of KNOWN_SERVICE_MATCHERS.filter(x => x.isBundle)) {
+      for (const a of m.aliases) {
+        if (typeof a === 'string' ? cleanLower.includes(a) : a.test(cleanLower)) {
+          return m.price;
+        }
+      }
     }
+
+    // 2. Pecah multi-treatment (berdasarkan '|', '\n', '+', '&', 'dan', atau koma)
+    const segments = cleanStr
+      .split(/[|\n]/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    let totalCalculated = 0;
+    let matchedAny = false;
+
+    for (const segment of segments) {
+      // Hapus prefix seperti "Baby:", "Moms:", "Kids:", "Treatment:", "Pilihan treatment (Baby & Kids) :"
+      const cleanedSegment = segment
+        .replace(/^(?:Baby|Moms|Kids|Treatment|Pilihan treatment\s*(?:\([^)]*\))?)\s*:\s*/i, '')
+        .trim();
+
+      if (!cleanedSegment) continue;
+
+      // Cek apakah segment ini memiliki sub-item dengan '+' atau 'dan' atau '&'
+      const subItems = cleanedSegment
+        .split(/\s*(?:\+|\bdan\b|\&)\s*/i)
+        .map((x) => x.trim())
+        .filter((x) => x.length >= 2 && !x.startsWith('('));
+
+      // Jika ada subItems (misal: "Pijat Bayi Pulih Ceria + Sinar Moksa")
+      if (subItems.length > 1) {
+        let subSum = 0;
+        let subMatched = false;
+        for (const sub of subItems) {
+          const p = matchSingleServicePrice(sub, catalogServices);
+          if (p !== undefined && p > 0) {
+            subSum += p;
+            subMatched = true;
+          }
+        }
+        if (subMatched && subSum > 0) {
+          totalCalculated += subSum;
+          matchedAny = true;
+          continue;
+        }
+      }
+
+      // Single item match pada segment
+      const price = matchSingleServicePrice(cleanedSegment, catalogServices);
+      if (price !== undefined && price > 0) {
+        totalCalculated += price;
+        matchedAny = true;
+      }
+    }
+
+    if (matchedAny && totalCalculated > 0) {
+      return totalCalculated;
+    }
+
+    // 3. Fallback pencocokan langsung pada seluruh teks
+    const directPrice = matchSingleServicePrice(cleanStr, catalogServices);
+    if (directPrice !== undefined && directPrice > 0) {
+      return directPrice;
+    }
+
+    // 4. Fallback berbasis Kategori / Konteks bila nama treatment generik
+    if (cleanLower.includes('moms') || cleanLower.includes('ibu') || cleanLower.includes('hamil') || cleanLower.includes('nifas') || cleanLower.includes('laktasi')) {
+      return 100000; // Standar Prenatal / Moms Treatment
+    }
+    if (cleanLower.includes('kids') || cleanLower.includes('anak')) {
+      return 70000; // Standar Kids Massage
+    }
+    if (cleanLower.includes('baby') || cleanLower.includes('bayi') || cleanLower.includes('pijat') || cleanLower.includes('homecare')) {
+      return 60000; // Standar Pijat Bayi Ceria (60.000)
+    }
+
     return undefined;
   } catch {
     return undefined;

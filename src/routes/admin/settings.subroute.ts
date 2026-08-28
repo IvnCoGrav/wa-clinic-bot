@@ -284,6 +284,169 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/few-shots
+   */
+  fastify.get('/api/admin/few-shots', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+    const exemplars = await FewShotExemplarBank.getAllExemplars(tenantId);
+    return reply.status(200).send({
+      success: true,
+      data: exemplars,
+    });
+  });
+
+  /**
+   * POST /api/admin/few-shots
+   */
+  fastify.post(
+    '/api/admin/few-shots',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          scenario: string;
+          customerMessage: string;
+          idealResponse: string;
+          tags?: string[];
+          isActive?: boolean;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { scenario, customerMessage, idealResponse, tags, isActive } = request.body || {};
+      if (!scenario || !customerMessage || !idealResponse) {
+        return reply.status(400).send({ error: 'Skenario, Pesan Pasien, dan Respon Ideal wajib diisi' });
+      }
+
+      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const created = await FewShotExemplarBank.createExemplar(
+        {
+          scenario,
+          customerMessage,
+          idealResponse,
+          tags: tags || [],
+          isActive: isActive !== false,
+        },
+        tenantId
+      );
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'FEW_SHOT_CREATE',
+        targetId: created.id,
+        payload: { scenario, tags },
+      });
+
+      return reply.status(201).send({
+        success: true,
+        message: 'Contoh percakapan berhasil ditambahkan!',
+        data: created,
+      });
+    }
+  );
+
+  /**
+   * PUT /api/admin/few-shots/:id
+   */
+  fastify.put(
+    '/api/admin/few-shots/:id',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          scenario?: string;
+          customerMessage?: string;
+          idealResponse?: string;
+          tags?: string[];
+          isActive?: boolean;
+          sortOrder?: number;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { id } = request.params;
+      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const updated = await FewShotExemplarBank.updateExemplar(id, request.body || {}, tenantId);
+
+      if (!updated) {
+        return reply.status(404).send({ error: 'Contoh percakapan tidak ditemukan' });
+      }
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'FEW_SHOT_UPDATE',
+        targetId: id,
+        payload: request.body,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Contoh percakapan berhasil diperbarui!',
+        data: updated,
+      });
+    }
+  );
+
+  /**
+   * DELETE /api/admin/few-shots/:id
+   */
+  fastify.delete(
+    '/api/admin/few-shots/:id',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { id } = request.params;
+      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      await FewShotExemplarBank.deleteExemplar(id, tenantId);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'FEW_SHOT_DELETE',
+        targetId: id,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Contoh percakapan berhasil dihapus!',
+      });
+    }
+  );
+
+  /**
+   * POST /api/admin/few-shots/reset-defaults
+   */
+  fastify.post(
+    '/api/admin/few-shots/reset-defaults',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      const { FewShotExemplarBank } = await import('../../slot-engine/few-shot-exemplars');
+      const defaults = await FewShotExemplarBank.resetToDefaults(tenantId);
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'FEW_SHOT_RESET',
+        targetId: 'ALL',
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Bank contoh percakapan berhasil di-reset ke default SOP klinik!',
+        data: defaults,
+      });
+    }
+  );
+
+  /**
    * GET /api/admin/customer-service
    */
   fastify.get('/api/admin/customer-service', async (request: FastifyRequest, reply: FastifyReply) => {

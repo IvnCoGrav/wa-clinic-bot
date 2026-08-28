@@ -4,7 +4,37 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### Feature & Architecture — Contextual Intelligence Engine: Conversation State Summary, Few-Shot Exemplar Bank, & Adaptive Model Selector (2026-08-28)
+#### Fix & Enhancement — Resolusi Nilai Transaksi (GMV) Event Purchase di Meta CAPI Queue & Batch Sanitasi Database (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Nilai Purchase Kosong / Nol di Meta CAPI Queue**: Pada dashboard *Meta CAPI Queue*, banyak item reservasi/event Purchase tidak menampilkan nilai transaksi (`value` bernilai `0` / `null` / `—`).
+  2. **Pencocokan Treatment Kaku & Alias Terpotong**: Fungsi `resolveTreatmentValue` sebelumnya memotong string kurung `(...)` dari nama katalog treatment. Akibatnya, alias penting seperti `(Pijat Hamil)` pada `Prenatal Massage (Pijat Hamil)` dan `(Terapi Bapil / Kembung)` pada `Pijat Bayi Pulih Ceria` terbuang, menyebabkan pencarian umum seperti *"Pijat Hamil"*, *"Pijat Terapi"*, *"Pijat Bapil"*, *"Breast Massage"*, *"Pijat Oksitosin"*, *"Cukur Bayi"* mengembalikan `undefined`.
+  3. **Multi-Service & Bundle Belum Terhitung**: Format multi-layanan seperti *"Baby: Pijat Bayi Pulih Ceria + Sinar Moksa"* atau *"Baby: Pijat Bayi Ceria | Moms: Prenatal Massage"* belum menjumlahkan harga per komponen secara akurat (compounding), dan paket bundle kombinasi belum terdeteksi otomatis.
+  4. **Ekstraksi Persamaan Pembayaran Belum Terhubung**: Format rincian biaya dari pesan chat seperti `Total = 70.000 + ongkir 15.000 = 85.000` belum diekstrak nilai murni layanannya pada endpoint review CAPI queue.
+
+- **Solusi & Implementasi:**
+  1. **Engine Resolusi Treatment (`src/services/capi.service.ts`)**:
+     - Memperkaya `resolveTreatmentValue` dengan kamus alias cerdas (`KNOWN_SERVICE_MATCHERS`) yang memetakan seluruh sinonim bahasa Indonesia untuk layanan Bayi, Anak, Ibu Hamil, Pasca Melahirkan/Laktasi, dan Add-on.
+     - Menambahkan fitur **Multi-Service Compounding & Tokenizer**: memecah string berdasarkan `+`, `|`, `\n`, `dan`, `&` serta menjumlahkan nominal harga per layanan secara presisi.
+     - Mendukung pendeteksian bundle kombinasi prioritas (seperti *Cukur + Pijat Terapi*, *Paket Selapan*, *Paket Pra Kelahiran*, *Paket Laktasi Oksitosin*).
+     - Menambahkan fallback nilai standar berbasis kategori (*BABY* = Rp 60.000, *MOMS* = Rp 100.000, *KIDS* = Rp 70.000).
+  2. **Pipeline Nilai di Meta CAPI Queue & Moderasi (`src/routes/admin/reservations.subroute.ts`)**:
+     - Meningkatkan logika kalkulasi `value` pada `GET /api/admin/capi-queue` dan `POST /api/admin/reservation/:id/approve-purchase` dengan urutan prioritas: ekstraksi financial equation (`parsePaymentSection`), template `formatValue`, existing `purchase_value`, pola nominal rupiah, dan resolusi katalog komprehensif.
+     - Memperbarui mekanisme self-heal database untuk otomatis menyimpan nilai transaksi yang valid.
+  3. **Deteksi Purchase & Auto-Capture Inbound (`src/services/purchase-detection.service.ts`, `src/routes/webhook.route.ts`)**:
+     - Mengintegrasikan `parsePaymentSection` pada `maybeFirePurchaseEvent` dan ketiga titik auto-capture webhook inbound.
+  4. **Skrip Batch Backfill & Sanitasi Database (`src/scripts/sanitize-purchase-values.ts`)**:
+     - Skrip untuk memindai dan mengisi `purchase_value` pada seluruh data reservasi di DB yang masih bernilai null/0.
+  5. **Script Deploy Server (`scripts/deploy-to-server.js`)**:
+     - Deteksi dinamis lokasi SSH key (`process.env.SSH_KEY_PATH`, `~/.ssh/...`, atau path sistem) serta integrasi langkah sanitasi DB pasca-deploy.
+
+- **Pengujian & Verifikasi:**
+  - `tests/unit/purchase-detection.test.ts`: 17/17 PASS (termasuk 5 test case baru untuk alias, compounding, bundle, dan financial parsing).
+  - `tests/unit/meta-attribution-fix.test.ts`: 4/4 PASS.
+  - `tests/unit/waba-tenant-media-capi.test.ts`: 20/20 PASS.
+  - `npm run build`: Kompilasi TypeScript sukses 100% tanpa error.
+
+#### Feature & Architecture — Contextual Intelligence Engine & Admin Dashboard UI: Conversation State Summary, Few-Shot Exemplar Bank, & Adaptive Model Selector (2026-08-28)
 
 - **Latar Belakang & Masalah yang Dipecahkan:**
   1. **Hilangnya Kesadaran State Percakapan (*Context Amnesia & Repetition*)**: LLM Call ke-2 (`ReplyGenerator`) sebelumnya hanya menerima 4 chat terakhir mentah tanpa pemahaman status tahapan data (apakah ongkir sudah disepakati, apakah treatment sudah direkomendasikan). Akibatnya, LLM cenderung mengulang penjelasan ongkir atau bertanya ulang *"mau treatment apa"*, yang sebelumnya dipangkas paksa secara reaktif oleh puluhan regex sanitizer.
@@ -15,19 +45,26 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   1. **`ConversationStateSummarizer` (`src/slot-engine/conversation-summarizer.ts`)**:
      - Service deterministik (0 Token, <1ms) yang merangkum state percakapan menjadi 4 blok terstruktur: `STATUS DATA YANG SUDAH DILALUI`, `FOKUS SAAT INI (Sedang ditanyakan & Yang wajib dijawab)`, dan `PANDUAN ANTI-PENGULANGAN`.
      - Disuntikkan langsung ke System Prompt dan header riwayat chat pada Call 2, memberikan LLM kesadaran konteks penuh sehingga tidak mengulang informasi yang sudah selesai dibahas.
-  2. **`FewShotExemplarBank` (`src/slot-engine/few-shot-exemplars.ts`)**:
+  2. **`FewShotExemplarBank` & Database Persistence (`src/slot-engine/few-shot-exemplars.ts`, `prisma/schema.prisma`)**:
+     - Model Prisma `FewShotExemplar` untuk menyimpan contoh dialog di database PostgreSQL dengan caching in-memory 0-latency.
      - Bank contoh percakapan ideal yang mencakup 6 skenario inti SOP Bidan Yusi: Anti-afirmasi jadwal, konsultasi keluhan flu/batuk, tarif promo, metode transfer/QRIS, edukasi pijat laktasi/oksitosin, dan follow-up pasca-ongkir.
      - Fungsi `selectRelevantExemplars` secara cerdas memilih 1–2 contoh paling relevan dan menginjeksinya ke `PersonaComposer.composeSlotGeneratorPrompt`.
-  3. **`AdaptiveModelSelector` (`src/slot-engine/adaptive-model-selector.ts`, `src/config/ai-models.config.ts`)**:
+  3. **Backend REST API CRUD (`src/routes/admin/settings.subroute.ts`)**:
+     - Menyediakan 5 endpoint admin terproteksi RBAC: `GET /api/admin/few-shots`, `POST /api/admin/few-shots`, `PUT /api/admin/few-shots/:id`, `DELETE /api/admin/few-shots/:id`, dan `POST /api/admin/few-shots/reset-defaults`.
+  4. **Admin Dashboard UI (`packages/admin-dashboard/src/pages/tenant/AiPersona.tsx`)**:
+     - Antarmuka visual 2-tab modern di menu AI Bot Persona: Tab 1 (System Prompt Editor) dan Tab 2 (Bank Contoh Chat).
+     - Fitur UI: Card dialog visual pesan pasien vs balasan Bidan Yusi, pencarian instan, toggle on/off status aktif, modal tambah/edit contoh dengan live format guidance, tombol reset ke default SOP, dan konfirmasi modal `useUiFeedback`.
+  5. **`AdaptiveModelSelector` (`src/slot-engine/adaptive-model-selector.ts`, `src/config/ai-models.config.ts`)**:
      - Task-adaptive model router (0ms overhead) yang memilih model standar (`CHAT_REPLY`) untuk FAQ/sapaan ringan, dan beralih otomatis ke model pintar (`CHAT_REPLY_DEEP`, konfigurasi `AI_MODEL_CHAT_DEEP`) ketika terdeteksi multi-gejala klinis ($\ge 2$), diskusi bundling Moms & Baby, atau multi-intent konsultasi + tarif/jadwal.
-  4. **Pembaruan Arsitektur & Single Source of Truth**:
+  6. **Pembaruan Arsitektur & Single Source of Truth**:
      - `PersonaComposer.composeSlotGeneratorPrompt` diperbarui untuk menerima dan memformat `conversationSummary` serta `fewShotExamples`.
      - `ReplyGenerator.generate` terhubung penuh dengan ketiga komponen baru dan mencatat detail audit `task_type` & reasoning ke `llm-execution-logger`.
 
 - **Pengujian & Verifikasi:**
-  - 3 Test Suite Baru: `tests/unit/conversation-summarizer.test.ts`, `tests/unit/few-shot-exemplar-selection.test.ts`, dan `tests/unit/adaptive-model-selector.test.ts` (13/13 passing tests).
-  - Regresi penuh Slot Engine (`slot-engine-decision`, `slot-engine-fast-faq`, `slot-engine-transcript-e2e`, dsb.): 48/48 PASS (100% Green).
-  - TypeScript build check (`npm run build` via `tsc`): Sukses 100% (0 error).
+  - 4 Test Suite Baru: `tests/unit/few-shot-api.test.ts` (5 tests), `tests/unit/conversation-summarizer.test.ts` (4 tests), `tests/unit/few-shot-exemplar-selection.test.ts` (5 tests), dan `tests/unit/adaptive-model-selector.test.ts` (4 tests) — Total 18/18 PASS.
+  - Regresi penuh Slot Engine: 48/48 PASS (100% Green).
+  - Frontend Vite build (`packages/admin-dashboard`): Sukses 100% (0 error).
+  - Backend TypeScript build (`npm run build` via `tsc`): Sukses 100% (0 error).
 
 #### Changed & Fixed — Transisi Default ke Arsitektur 2-Call LLM (Slot-Filling Engine) & Perbaikan Inisialisasi Decision Matrix (2026-08-28)
 
