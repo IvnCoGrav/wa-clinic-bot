@@ -358,6 +358,22 @@ model TenantPersona {
   @@map("tenant_persona")
 }
 
+model FewShotExemplar {
+  id               String   @id @default(uuid())
+  tenant_id        String   @default("default-tenant")
+  scenario         String   // Deskripsi skenario
+  customer_message String   // Pesan masuk pasien
+  ideal_response   String   // Balasan ideal Bidan Yusi
+  tags             String[] @default([]) // Tag intent untuk matching
+  is_active        Boolean  @default(true)
+  sort_order       Int      @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@index([tenant_id])
+  @@map("few_shot_exemplars")
+}
+
 model TenantAiConfig {
   id                   String   @id @default(uuid())
   tenant_id            String

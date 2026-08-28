@@ -956,7 +956,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const p = pr.reservation;
                   const recent = await prisma.reservation.findFirst({ where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID, created_at: { gte: new Date(Date.now() - 24*60*60*1000) }, treatment_detail: p.treatmentDetail } });
                   if (!recent) {
-                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending' } });
+                    const { resolveTreatmentValue: _rtvG } = await import('../services/capi.service');
+                    const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvG(p.treatmentDetail)) || undefined;
+                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending', purchase_value: initialVal } });
                     console.log(`[HUMAN GRACE AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name}) — bypass grace silent`);
                     const { reservationLifecycleService: _rlG } = await import('../services/reservation-lifecycle.service');
                     await _rlG.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [], customerName: p.name, kecamatan: p.kec, kota: p.kota, kelurahan: p.address });
@@ -993,7 +995,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const p = pr.reservation;
                   const recent = await prisma.reservation.findFirst({ where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID, created_at: { gte: new Date(Date.now() - 24*60*60*1000) }, treatment_detail: p.treatmentDetail } });
                   if (!recent) {
-                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending' } });
+                    const { resolveTreatmentValue: _rtvL } = await import('../services/capi.service');
+                    const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvL(p.treatmentDetail)) || undefined;
+                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending', purchase_value: initialVal } });
                     console.log(`[HUMAN HOLD-DISABLED AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name})`);
                     const { reservationLifecycleService: _rlL } = await import('../services/reservation-lifecycle.service');
                     await _rlL.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [], customerName: p.name, kecamatan: p.kec, kota: p.kota, kelurahan: p.address });
@@ -1069,7 +1073,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                   const p = pr.reservation;
                   const recent = await prisma.reservation.findFirst({ where: { customer_id: customer.id, tenant_id: DEFAULT_TENANT_ID, created_at: { gte: new Date(Date.now() - 24*60*60*1000) }, treatment_detail: p.treatmentDetail } });
                   if (!recent) {
-                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending' } });
+                    const { resolveTreatmentValue: _rtvE } = await import('../services/capi.service');
+                    const initialVal = p.payment?.treatmentPrice || p.payment?.totalPrice || (await _rtvE(p.treatmentDetail)) || undefined;
+                    const r = await prisma.reservation.create({ data: { tenant_id: DEFAULT_TENANT_ID, customer_id: customer.id, treatment_category: p.treatmentCategory, treatment_detail: p.treatmentDetail, booking_date: p.bookingDate, raw_text: raw, status: 'pending', purchase_value: initialVal } });
                     console.log(`[HUMAN EXPLICIT AUTO-CAPTURE] Created reservation ${r.id} for ${customer.phone} (${p.name})`);
                     const { reservationLifecycleService: _rlE } = await import('../services/reservation-lifecycle.service');
                     await _rlE.onReservationCreated({ customerId: customer.id, reservationId: r.id, tenantId: DEFAULT_TENANT_ID, chatId, babies: p.babies || [], customerName: p.name, kecamatan: p.kec, kota: p.kota, kelurahan: p.address });
