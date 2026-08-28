@@ -106,6 +106,8 @@ export class BackupService {
         personas,
         aiConfigs,
         knowledgeChunks,
+        conversations,
+        messages,
       ] = await Promise.all([
         prisma.customer.findMany().catch(() => []),
         prisma.child.findMany().catch(() => []),
@@ -116,6 +118,8 @@ export class BackupService {
         prisma.tenantPersona.findMany().catch(() => []),
         prisma.tenantAiConfig.findMany().catch(() => []),
         prisma.knowledgeChunk.findMany().catch(() => []),
+        prisma.conversation.findMany().catch(() => []),
+        prisma.message.findMany().catch(() => []),
       ]);
 
       dumpData.tables = {
@@ -128,6 +132,8 @@ export class BackupService {
         personas,
         aiConfigs,
         knowledgeChunks,
+        conversations,
+        messages,
       };
     } catch (err: any) {
       console.warn('[BackupService] Database read partially degraded during programmatic dump:', err?.message);
@@ -240,7 +246,7 @@ export class BackupService {
   }
 
   /**
-   * Restore database dari file dump .sql.gz
+   * Restore database dari file dump .sql.gz / .sql / .json.gz
    */
   public async restoreDatabaseFromDump(
     filePath: string,
@@ -250,73 +256,292 @@ export class BackupService {
       throw new Error(`File backup tidak ditemukan pada lokasi: ${filePath}`);
     }
 
-    if (!isValidGzipHeader(filePath)) {
-      throw new Error('File rusak atau format bukan file gzip (.sql.gz) yang valid.');
-    }
-
-    const compressed = fs.readFileSync(filePath);
     let decompressed: string;
-    try {
-      decompressed = zlib.gunzipSync(compressed).toString('utf-8');
-    } catch (err: any) {
-      throw new Error(`Gagal mengekstrak isi file backup: ${err?.message}`);
+    if (isValidGzipHeader(filePath)) {
+      const compressed = fs.readFileSync(filePath);
+      try {
+        decompressed = zlib.gunzipSync(compressed).toString('utf-8');
+      } catch (err: any) {
+        throw new Error(`Gagal mengekstrak isi file backup gzip: ${err?.message}`);
+      }
+    } else {
+      // Plain text SQL / JSON file
+      decompressed = fs.readFileSync(filePath, 'utf-8');
     }
 
     let tablesRestored = 0;
+    const restoredSummary: string[] = [];
 
     // Cek apakah file berupa JSON dump programatik
     if (decompressed.trim().startsWith('{') && decompressed.includes('"tables"')) {
       try {
         const parsed = JSON.parse(decompressed);
         const tables = parsed.tables || {};
-        const tableNames = Object.keys(tables);
 
-        // Pulihkan Customer
+        // 1. Pulihkan Staff
+        if (Array.isArray(tables.staff) && tables.staff.length > 0) {
+          for (const st of tables.staff) {
+            try {
+              await prisma.staff.upsert({
+                where: { phone: st.phone },
+                update: {
+                  name: st.name,
+                  password_hash: st.password_hash,
+                  role: st.role,
+                  active: st.active ?? true,
+                  tenant_id: st.tenant_id || tenantId,
+                },
+                create: {
+                  ...st,
+                  tenant_id: st.tenant_id || tenantId,
+                },
+              });
+            } catch {}
+          }
+          restoredSummary.push(`${tables.staff.length} staff`);
+          tablesRestored++;
+        }
+
+        // 2. Pulihkan Customer
         if (Array.isArray(tables.customers) && tables.customers.length > 0) {
           for (const c of tables.customers) {
             try {
               await prisma.customer.upsert({
-                where: { id: c.id },
-                update: { name: c.name, phone: c.phone, kelurahan: c.kelurahan, kecamatan: c.kecamatan, kota: c.kota },
-                create: c,
+                where: { phone: c.phone },
+                update: {
+                  name: c.name,
+                  kelurahan: c.kelurahan,
+                  kecamatan: c.kecamatan,
+                  kota: c.kota,
+                  lat: c.lat,
+                  lng: c.lng,
+                  distance_km: c.distance_km,
+                  ongkir: c.ongkir,
+                  tenant_id: c.tenant_id || tenantId,
+                },
+                create: {
+                  ...c,
+                  tenant_id: c.tenant_id || tenantId,
+                },
               });
-            } catch {
-              // ignore offline/mock db
-            }
+            } catch {}
           }
+          restoredSummary.push(`${tables.customers.length} pasien`);
+          tablesRestored++;
         }
 
-        // Pulihkan Layanan Treatment
+        // 3. Pulihkan Anak (Children)
+        if (Array.isArray(tables.children) && tables.children.length > 0) {
+          for (const ch of tables.children) {
+            try {
+              await prisma.child.upsert({
+                where: { id: ch.id },
+                update: {
+                  name: ch.name,
+                  birth_date: ch.birth_date ? new Date(ch.birth_date) : undefined,
+                  age_months_at_registration: ch.age_months_at_registration,
+                  raw_age_text: ch.raw_age_text,
+                },
+                create: {
+                  ...ch,
+                  birth_date: ch.birth_date ? new Date(ch.birth_date) : undefined,
+                },
+              });
+            } catch {}
+          }
+          restoredSummary.push(`${tables.children.length} data anak`);
+          tablesRestored++;
+        }
+
+        // 4. Pulihkan Layanan Treatment (Clinic Services)
         if (Array.isArray(tables.services) && tables.services.length > 0) {
           for (const s of tables.services) {
             try {
               await prisma.clinicService.upsert({
                 where: { id: s.id },
-                update: { name: s.name, original_price: s.original_price, promo_price: s.promo_price, duration_minutes: s.duration_minutes },
-                create: s,
+                update: {
+                  name: s.name,
+                  service_id: s.service_id,
+                  category: s.category,
+                  age_label: s.age_label,
+                  min_age_months: s.min_age_months,
+                  max_age_months: s.max_age_months,
+                  original_price: s.original_price,
+                  promo_price: s.promo_price,
+                  duration_minutes: s.duration_minutes,
+                  is_active: s.is_active ?? true,
+                  description: s.description,
+                  tenant_id: s.tenant_id || tenantId,
+                },
+                create: {
+                  ...s,
+                  tenant_id: s.tenant_id || tenantId,
+                },
               });
-            } catch {
-              // ignore offline/mock db
-            }
+            } catch {}
           }
+          restoredSummary.push(`${tables.services.length} layanan treatment`);
+          tablesRestored++;
         }
 
-        // Pulihkan Tier Ongkir
+        // 5. Pulihkan Tier Ongkir (Delivery Tiers)
         if (Array.isArray(tables.deliveryTiers) && tables.deliveryTiers.length > 0) {
+          try {
+            await prisma.deliveryTier.deleteMany({
+              where: { tenant_id: tenantId },
+            });
+          } catch {}
+
           for (const dt of tables.deliveryTiers) {
             try {
-              await prisma.deliveryTier.upsert({
-                where: { id: dt.id },
-                update: { max_dist: dt.max_dist, fee: dt.fee, promo_discount: dt.promo_discount },
-                create: dt,
+              await prisma.deliveryTier.create({
+                data: {
+                  id: dt.id,
+                  max_dist: dt.max_dist,
+                  fee: dt.fee,
+                  promo_discount: dt.promo_discount,
+                  sort_order: dt.sort_order ?? 1,
+                  tenant_id: dt.tenant_id || tenantId,
+                },
               });
-            } catch {
-              // ignore offline/mock db
-            }
+            } catch {}
           }
+          restoredSummary.push(`${tables.deliveryTiers.length} tier ongkir`);
+          tablesRestored++;
         }
 
-        tablesRestored = tableNames.length;
+        // 6. Pulihkan Reservasi
+        if (Array.isArray(tables.reservations) && tables.reservations.length > 0) {
+          for (const r of tables.reservations) {
+            try {
+              await prisma.reservation.upsert({
+                where: { id: r.id },
+                update: {
+                  status: r.status,
+                  treatment_category: r.treatment_category,
+                  treatment_detail: r.treatment_detail,
+                  booking_date: r.booking_date ? new Date(r.booking_date) : undefined,
+                  purchase_value: r.purchase_value,
+                  payment_method: r.payment_method,
+                  proof_url: r.proof_url,
+                },
+                create: {
+                  ...r,
+                  created_at: r.created_at ? new Date(r.created_at) : new Date(),
+                  booking_date: r.booking_date ? new Date(r.booking_date) : undefined,
+                },
+              });
+            } catch {}
+          }
+          restoredSummary.push(`${tables.reservations.length} reservasi`);
+          tablesRestored++;
+        }
+
+        // 7. Pulihkan Persona & AI Config
+        if (Array.isArray(tables.personas) && tables.personas.length > 0) {
+          for (const p of tables.personas) {
+            try {
+              await prisma.tenantPersona.upsert({
+                where: { id: p.id },
+                update: { ...p },
+                create: { ...p },
+              });
+            } catch {}
+          }
+          tablesRestored++;
+        }
+
+        if (Array.isArray(tables.aiConfigs) && tables.aiConfigs.length > 0) {
+          for (const a of tables.aiConfigs) {
+            try {
+              await prisma.tenantAiConfig.upsert({
+                where: { id: a.id },
+                update: { ...a },
+                create: { ...a },
+              });
+            } catch {}
+          }
+          tablesRestored++;
+        }
+
+        // 8. Pulihkan Knowledge Base
+        if (Array.isArray(tables.knowledgeChunks) && tables.knowledgeChunks.length > 0) {
+          for (const k of tables.knowledgeChunks) {
+            try {
+              await prisma.knowledgeChunk.upsert({
+                where: { id: k.id },
+                update: { ...k },
+                create: { ...k },
+              });
+            } catch {}
+          }
+          restoredSummary.push(`${tables.knowledgeChunks.length} knowledge chunks`);
+          tablesRestored++;
+        }
+
+        // 9. Pulihkan Percakapan (Conversations)
+        if (Array.isArray(tables.conversations) && tables.conversations.length > 0) {
+          for (const conv of tables.conversations) {
+            try {
+              await prisma.conversation.upsert({
+                where: { id: conv.id },
+                update: {
+                  current_state: conv.current_state,
+                  previous_state: conv.previous_state,
+                  is_human_handling: conv.is_human_handling,
+                  human_handling_since: conv.human_handling_since ? new Date(conv.human_handling_since) : undefined,
+                  last_message_at: conv.last_message_at ? new Date(conv.last_message_at) : new Date(),
+                  last_customer_message_at: conv.last_customer_message_at ? new Date(conv.last_customer_message_at) : undefined,
+                  is_pinned: conv.is_pinned ?? false,
+                  is_manual_unread: conv.is_manual_unread ?? false,
+                  escalation_reason: conv.escalation_reason,
+                  review_flagged: conv.review_flagged ?? false,
+                },
+                create: {
+                  ...conv,
+                  created_at: conv.created_at ? new Date(conv.created_at) : new Date(),
+                  last_message_at: conv.last_message_at ? new Date(conv.last_message_at) : new Date(),
+                  last_customer_message_at: conv.last_customer_message_at ? new Date(conv.last_customer_message_at) : undefined,
+                  human_handling_since: conv.human_handling_since ? new Date(conv.human_handling_since) : undefined,
+                  pinned_at: conv.pinned_at ? new Date(conv.pinned_at) : undefined,
+                },
+              });
+            } catch {}
+          }
+          restoredSummary.push(`${tables.conversations.length} percakapan`);
+          tablesRestored++;
+        }
+
+        // 10. Pulihkan Pesan (Messages)
+        if (Array.isArray(tables.messages) && tables.messages.length > 0) {
+          for (const m of tables.messages) {
+            try {
+              await prisma.message.upsert({
+                where: { id: m.id },
+                update: {
+                  content: m.content,
+                  direction: m.direction,
+                  sender_type: m.sender_type,
+                  sender_name: m.sender_name,
+                  payload_raw: m.payload_raw,
+                  delivery_status: m.delivery_status,
+                  is_revoked: m.is_revoked ?? false,
+                  delivered_at: m.delivered_at ? new Date(m.delivered_at) : undefined,
+                  read_at: m.read_at ? new Date(m.read_at) : undefined,
+                },
+                create: {
+                  ...m,
+                  created_at: m.created_at ? new Date(m.created_at) : new Date(),
+                  delivered_at: m.delivered_at ? new Date(m.delivered_at) : undefined,
+                  read_at: m.read_at ? new Date(m.read_at) : undefined,
+                  revoked_at: m.revoked_at ? new Date(m.revoked_at) : undefined,
+                },
+              });
+            } catch {}
+          }
+          restoredSummary.push(`${tables.messages.length} pesan chat`);
+          tablesRestored++;
+        }
       } catch (err: any) {
         console.warn('[BackupService] Partial error during JSON restore:', err?.message);
       }
@@ -325,6 +550,7 @@ export class BackupService {
       try {
         await prisma.$executeRawUnsafe(decompressed);
         tablesRestored = 1;
+        restoredSummary.push('SQL script eksekusi');
       } catch (err: any) {
         console.warn('[BackupService] Raw SQL restore partial error:', err?.message);
       }
@@ -338,16 +564,22 @@ export class BackupService {
           admin_key: 'ADMIN',
           admin_identity: 'ADMIN_MANUAL',
           action: 'RESTORE_DATABASE',
-          payload: JSON.stringify({ fileName: path.basename(filePath), tablesRestored }),
+          payload: JSON.stringify({
+            fileName: path.basename(filePath),
+            tablesRestored,
+            summary: restoredSummary.join(', '),
+          }),
         },
       });
     } catch {
       // Degrade silently
     }
 
+    const detailMsg = restoredSummary.length > 0 ? ` (${restoredSummary.join(', ')})` : '';
+
     return {
       success: true,
-      message: `Database berhasil dipulihkan dari file ${path.basename(filePath)}.`,
+      message: `Database berhasil dipulihkan dari file ${path.basename(filePath)}${detailMsg}.`,
       tablesRestored,
     };
   }

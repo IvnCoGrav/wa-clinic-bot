@@ -16,6 +16,7 @@ import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
 import { AiRouterConfigService } from '../config/ai-router-config';
 import { formatIslamicReply } from './utils/islamic-greeting-helper';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -191,26 +192,29 @@ export class ConversationStateMachine {
           'medical_concern'
         );
 
-        // Dispatch Real-Time Alert HANYA ke Admin (Telegram / Emergency Log).
+        // Dispatch Real-Time Alert HANYA ke Admin (Telegram / Emergency Log) untuk customer riil.
         // TIDAK ada template yang dikirim ke chat customer — customer diamkan total,
         // supaya Bidan/CS yang menggali lebih dalam & menyarankan secara manual.
         // Catatan: keyword medis bisa false-positive (customer hiperbola), jadi alert
         // hanya sebagai notifikasi admin, bukan penilaian darurat final.
-        try {
-          const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
-          const alertService = new AlertService();
-          await alertService.notifyAlert({
-            type: isHigh ? AlertType.MEDICAL_EMERGENCY_HIGH : AlertType.MEDICAL_CONCERN_MEDIUM,
-            severity: isHigh ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
-            message: `[MEDICAL ALERT ${medicalResult.severity}] Customer: ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}. Text: "${incomingText}"`,
-            metadata: {
-              customerPhone: customer.phone,
-              detectedSymptoms: medicalResult.detectedSymptoms,
-              incomingText,
-            },
-          });
-        } catch (alertErr: any) {
-          console.error('[EMERGENCY LOG FALLBACK] Failed to trigger alert for medical emergency:', alertErr.message);
+        const isSandbox = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
+        if (!isSandbox) {
+          try {
+            const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+            const alertService = new AlertService();
+            await alertService.notifyAlert({
+              type: isHigh ? AlertType.MEDICAL_EMERGENCY_HIGH : AlertType.MEDICAL_CONCERN_MEDIUM,
+              severity: isHigh ? AlertSeverity.CRITICAL : AlertSeverity.WARNING,
+              message: `[MEDICAL ALERT ${medicalResult.severity}] Customer: ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}. Text: "${incomingText}"`,
+              metadata: {
+                customerPhone: customer.phone,
+                detectedSymptoms: medicalResult.detectedSymptoms,
+                incomingText,
+              },
+            });
+          } catch (alertErr: any) {
+            console.error('[EMERGENCY LOG FALLBACK] Failed to trigger alert for medical emergency:', alertErr.message);
+          }
         }
 
         return {
@@ -347,17 +351,20 @@ export class ConversationStateMachine {
           tenantId,
           'medical_concern'
         );
-        try {
-          const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
-          const alertService = new AlertService();
-          await alertService.notifyAlert({
-            type: AlertType.MEDICAL_CONCERN_MEDIUM,
-            severity: AlertSeverity.WARNING,
-            message: `[MEDICAL ALERT via NLU] Customer: ${customer.phone}. Text: "${incomingText}"`,
-            metadata: { customerPhone: customer.phone, incomingText },
-          });
-        } catch (alertErr: any) {
-          console.error('[MEDICAL NLU ALERT ERROR] Failed to trigger alert:', alertErr.message);
+        const isSandbox = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
+        if (!isSandbox) {
+          try {
+            const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+            const alertService = new AlertService();
+            await alertService.notifyAlert({
+              type: AlertType.MEDICAL_CONCERN_MEDIUM,
+              severity: AlertSeverity.WARNING,
+              message: `[MEDICAL ALERT via NLU] Customer: ${customer.phone}. Text: "${incomingText}"`,
+              metadata: { customerPhone: customer.phone, incomingText },
+            });
+          } catch (alertErr: any) {
+            console.error('[MEDICAL NLU ALERT ERROR] Failed to trigger alert:', alertErr.message);
+          }
         }
         return {
           nextState: ConversationState.HUMAN_HANDLING,

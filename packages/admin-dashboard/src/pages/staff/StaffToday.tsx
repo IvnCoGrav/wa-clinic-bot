@@ -627,14 +627,16 @@ export const StaffToday: React.FC = () => {
             media: extractMedia(payload),
           };
 
-          // Play notification tone only on new incoming inbound message
-          if (msg.direction === 'INBOUND') {
+          const isSandbox = Boolean(payload.isSandboxTest || payload.is_sandbox_test || payload.isSandbox);
+
+          // Play notification tone only on new incoming inbound message (bukan pesan riwayat / historical & bukan sandbox)
+          if (msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
             playIncomingMessageSound();
           }
 
-          // Native browser notification
-          if ('Notification' in window && Notification.permission === 'granted') {
-            const sender = msg.sender_name || (msg.direction === 'INBOUND' ? 'Customer' : 'Bot');
+          // Native browser notification (hanya untuk pesan live masuk dari customer asli)
+          if ('Notification' in window && Notification.permission === 'granted' && msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
+            const sender = msg.sender_name || 'Pelanggan';
             new Notification(`Pesan Baru dari ${sender}`, {
               body: msg.content || 'Mengirim media/gambar',
               icon: '/pwa-icon.svg',

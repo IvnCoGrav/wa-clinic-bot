@@ -3,6 +3,7 @@ import { ConversationState } from '@prisma/client';
 import { clinicConfig } from '../config/clinic';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from './ai-eligibility.service';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 const memoryConversations = new Map<string, any>();
 
@@ -19,6 +20,7 @@ export function buildConversationUpdatedPayload(conversation: any) {
     isPinned: !!conversation.is_pinned,
     pinnedAt: conversation.pinned_at ?? null,
     isManualUnread: !!conversation.is_manual_unread,
+    isSandboxTest: Boolean(conversation.customer?.is_sandbox_test),
   };
 }
 
@@ -404,11 +406,19 @@ export class ConversationService {
 
     const currentStateBeforeEscalation = conversation.current_state;
 
-    // 1. Tambahkan label "hold" secara fisik ke chat WAHA jika diaktifkan (default disabled di produksi)
+    // Deteksi apakah percakapan berasal dari customer Sandbox/QA Test
+    let isSandbox = Boolean(conversation.customer?.is_sandbox_test);
+    const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
+    const customerName = conversation.customer?.name || 'Pelanggan';
+    if (!isSandbox) {
+      isSandbox = isDummyOrTestContact(cleanPhone, customerName, isSandbox);
+    }
+
+    // 1. Tambahkan label "hold" secara fisik ke chat WAHA jika diaktifkan (default disabled di produksi, lewati untuk sandbox)
     const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true' || (process.env.NODE_ENV === 'test' && process.env.ENABLE_WAHA_HOLD_LABEL !== 'false');
     const isGlobalDisabled = escalationReason === 'global_bot_disabled' || escalationReason === 'Global bot disabled';
 
-    if (enableHoldLabel && !isGlobalDisabled) {
+    if (!isSandbox && enableHoldLabel && !isGlobalDisabled) {
       try {
         const { wahaClient } = await import('../integrations/waha/client');
         await wahaClient.addLabel(`${phone}@c.us`, 'hold').catch((err: any) => console.warn(`[LABEL ERROR] Failed to auto-add hold label:`, err.message));
@@ -416,45 +426,46 @@ export class ConversationService {
         console.warn(`[WAHA CLIENT ERROR] Failed to import wahaClient:`, err.message);
       }
     } else {
-      console.log(`[LABEL SKIP] Skipping WAHA hold label mutation (feature flag disabled / UI-managed).`);
+      console.log(`[LABEL SKIP] Skipping WAHA hold label mutation (feature flag disabled / UI-managed / sandbox).`);
     }
 
-    // 2. Kirim notifikasi alert eskalasi ke Telegram Admin (selalu aktif via alertService)
-    try {
-      const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
-      const customerName = conversation.customer?.name || 'Pelanggan';
-      const cleanPhone = phone.replace(/\D/g, '');
-      const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-      const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: Human Handling (CS Takeover)\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
+    // 2. Kirim notifikasi alert eskalasi ke Telegram Admin (hanya untuk customer riil, nonaktif untuk sandbox)
+    if (!isSandbox) {
+      try {
+        const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+        const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        const alertText = `🚨 *ALERT ESKALASI CS (KLINIK KALA)*\n\n• *Pelanggan*: ${customerName} (+${cleanPhone})\n• *Status Bot*: Human Handling (CS Takeover)\n• *Alasan*: ${reason}\n• *Waktu*: ${timeStr}\n\n👉 *Klik untuk Balas Pelanggan*:\nhttps://wa.me/${cleanPhone}`;
 
-      void alertService.notifyAlert({
-        type: AlertType.CS_ESCALATION,
-        severity: AlertSeverity.WARNING,
-        message: alertText,
-        rawMessage: true,
-        tenantId,
-        metadata: {
-          conversationId: conversation.id,
-          customerPhone: cleanPhone,
-          customerName,
-          reason,
-        },
-      });
-    } catch (err: any) {
-      console.warn(`[TELEGRAM ESCALATION ALERT ERROR] Failed to send escalation alert:`, err.message);
+        void alertService.notifyAlert({
+          type: AlertType.CS_ESCALATION,
+          severity: AlertSeverity.WARNING,
+          message: alertText,
+          rawMessage: true,
+          tenantId,
+          metadata: {
+            conversationId: conversation.id,
+            customerPhone: cleanPhone,
+            customerName,
+            reason,
+          },
+        });
+      } catch (err: any) {
+        console.warn(`[TELEGRAM ESCALATION ALERT ERROR] Failed to send escalation alert:`, err.message);
+      }
     }
 
-    // 3. Kirim Web Push Notification darurat ke seluruh dashboard/HP admin
-    try {
-      const { webPushService } = await import('./web-push.service');
-      const customerName = conversation.customer?.name || 'Pelanggan';
-      void webPushService.sendPushToTenant(tenantId, {
-        title: `🚨 Eskalasi CS: ${customerName}`,
-        body: reason || 'Pelanggan membutuhkan penanganan admin',
-        url: `/admin/#/live-chat?conversationId=${conversation.id}`,
-        tag: `escalation-${conversation.id}`,
-      });
-    } catch {}
+    // 3. Kirim Web Push Notification darurat ke seluruh dashboard/HP admin (hanya untuk customer riil, nonaktif untuk sandbox)
+    if (!isSandbox) {
+      try {
+        const { webPushService } = await import('./web-push.service');
+        void webPushService.sendPushToTenant(tenantId, {
+          title: `🚨 Eskalasi CS: ${customerName}`,
+          body: reason || 'Pelanggan membutuhkan penanganan admin',
+          url: `/admin/#/live-chat?conversationId=${conversation.id}`,
+          tag: `escalation-${conversation.id}`,
+        });
+      } catch {}
+    }
 
     return await this.updateConversationState(
       conversation.id,

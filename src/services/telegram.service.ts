@@ -20,22 +20,33 @@ export class TelegramService {
    * Get or generate a persistent pairing token for a tenant
    */
   async getTenantPairingInfo(tenantId: string): Promise<TelegramLinks> {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
+    let tenant = await prisma.tenant
+      .findUnique({
+        where: { id: tenantId },
+      })
+      .catch(() => null);
 
     let token = tenant?.telegram_pairing_token;
     if (!token) {
       token = `PAIR_${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
       try {
-        await prisma.tenant.update({
+        tenant = await prisma.tenant.upsert({
           where: { id: tenantId },
-          data: { telegram_pairing_token: token },
+          create: {
+            id: tenantId,
+            slug: tenantId,
+            name: `Tenant ${tenantId}`,
+            telegram_pairing_token: token,
+          },
+          update: {
+            telegram_pairing_token: token,
+          },
         });
       } catch (err: any) {
-        // If race condition on unique token, fallback to fetch again
-        const fresh = await prisma.tenant.findUnique({ where: { id: tenantId } });
+        // If race condition on unique token or DB issue, fallback to fetch again
+        const fresh = await prisma.tenant.findUnique({ where: { id: tenantId } }).catch(() => null);
         token = fresh?.telegram_pairing_token || token;
+        tenant = fresh || tenant;
       }
     }
 
@@ -63,10 +74,22 @@ export class TelegramService {
    */
   async regeneratePairingToken(tenantId: string): Promise<TelegramLinks> {
     const newToken = `PAIR_${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-    await prisma.tenant.update({
-      where: { id: tenantId },
-      data: { telegram_pairing_token: newToken },
-    });
+    await prisma.tenant
+      .upsert({
+        where: { id: tenantId },
+        create: {
+          id: tenantId,
+          slug: tenantId,
+          name: `Tenant ${tenantId}`,
+          telegram_pairing_token: newToken,
+        },
+        update: {
+          telegram_pairing_token: newToken,
+        },
+      })
+      .catch((err: any) => {
+        console.warn(`[TelegramService] Failed to upsert regenerated token:`, err.message);
+      });
     return this.getTenantPairingInfo(tenantId);
   }
 

@@ -35,9 +35,23 @@ export const AiSandbox: React.FC = () => {
     return stored;
   });
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { sender: 'bot', content: `Halo Bunda! Saya asisten AI ${BRAND.businessName} (Sesi Baru ${sandboxPhone.substring(7)}). Silakan coba kirim pertanyaan di bawah untuk menguji respon RAG & Persona saya! 🌸`, timestamp: new Date() }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const stored = sessionStorage.getItem('sandbox_messages');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((m: any) => ({
+            ...m,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+          }));
+        }
+      }
+    } catch {}
+    return [
+      { sender: 'bot', content: `Halo Bunda! Saya asisten AI ${BRAND.businessName} (Sesi Baru ${sandboxPhone.substring(7)}). Silakan coba kirim pertanyaan di bawah untuk menguji respon RAG & Persona saya! 🌸`, timestamp: new Date() }
+    ];
+  });
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeRequests, setActiveRequests] = useState(0);
@@ -46,11 +60,17 @@ export const AiSandbox: React.FC = () => {
   const [sumoPodOutage, setSumoPodOutage] = useState(false);
 
   // Inspector state
-  const [inspectorData, setInspectorData] = useState<any>({
-    query: '',
-    chunks: [],
-    systemPrompt: `Kamu adalah asisten chat ramah dari ${BRAND.businessName}...`,
-    latencyMs: 0
+  const [inspectorData, setInspectorData] = useState<any>(() => {
+    try {
+      const stored = sessionStorage.getItem('sandbox_inspector');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return {
+      query: '',
+      chunks: [],
+      systemPrompt: `Kamu adalah asisten chat ramah dari ${BRAND.businessName}...`,
+      latencyMs: 0
+    };
   });
 
   // Edit chunk states
@@ -79,6 +99,20 @@ export const AiSandbox: React.FC = () => {
     loadPersona();
   }, []);
 
+  // Sync messages to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('sandbox_messages', JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
+
+  // Sync inspectorData to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('sandbox_inspector', JSON.stringify(inspectorData));
+    } catch {}
+  }, [inspectorData]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -87,9 +121,19 @@ export const AiSandbox: React.FC = () => {
     const newPhone = '6289999' + Math.floor(100000 + Math.random() * 900000);
     sessionStorage.setItem('sandbox_phone', newPhone);
     setSandboxPhone(newPhone);
-    setMessages([
+    const initialMsgs: ChatMessage[] = [
       { sender: 'bot', content: `Sesi simulator baru dimulai (ID: ${newPhone.substring(7)})! Customer baru, state bersih dari INITIAL 🌸`, timestamp: new Date() }
-    ]);
+    ];
+    setMessages(initialMsgs);
+    sessionStorage.setItem('sandbox_messages', JSON.stringify(initialMsgs));
+    const emptyInspector = {
+      query: '',
+      chunks: [],
+      systemPrompt: personaText || `Kamu adalah asisten chat ramah dari ${BRAND.businessName}...`,
+      latencyMs: 0
+    };
+    setInspectorData(emptyInspector);
+    sessionStorage.setItem('sandbox_inspector', JSON.stringify(emptyInspector));
   };
 
   const handleStartEdit = (chunk: any) => {

@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { Direction, Prisma } from '@prisma/client';
 import { getLiveChatHub } from './live-chat-hub.service';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 // In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local
 const memoryWaMessageIds = new Set<string>();
@@ -344,14 +345,30 @@ export class MessageService {
       memoryMessages.push(fallbackMessage);
       return fallbackMessage;
     } finally {
-      // Jika pesan INBOUND (dari customer) dan bukan sinkronisasi riwayat masa lalu (skipMqlEvaluation), increment bubble count & evaluasi status MQL
+      // Resolusi info customer & deteksi apakah berasal dari percakapan Sandbox/QA Test
+      let isSandboxCustomer = false;
+      let resolvedCustomer: any = null;
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { customerService } = await import('./customer.service');
+        const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
+        if (conv?.customer_id) {
+          resolvedCustomer = await customerService.getCustomerById(conv.customer_id, data.tenantId);
+          if (resolvedCustomer) {
+            isSandboxCustomer = Boolean(
+              resolvedCustomer.is_sandbox_test ||
+              isDummyOrTestContact(resolvedCustomer.phone, resolvedCustomer.name, resolvedCustomer.is_sandbox_test)
+            );
+          }
+        }
+      } catch {}
+
+      // Jika pesan INBOUND (dari customer) dan bukan sinkronisasi riwayat masa lalu (skipMqlEvaluation), increment bubble count & evaluasi status MQL (hanya customer riil)
       if (!data.skipMqlEvaluation && (data.direction === Direction.INBOUND || (data.direction as string) === 'INBOUND')) {
         try {
-          const { conversationService } = await import('./conversation.service');
           const { customerService } = await import('./customer.service');
-          const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
-          if (conv?.customer_id) {
-            customerService.incrementCustomerMessageCount(conv.customer_id, data.tenantId).catch(() => {});
+          if (resolvedCustomer?.id && !isSandboxCustomer) {
+            customerService.incrementCustomerMessageCount(resolvedCustomer.id, data.tenantId).catch(() => {});
           }
         } catch (mqlErr: any) {
           console.warn('[MQL] Failed to increment bubble count:', mqlErr.message);
@@ -368,35 +385,24 @@ export class MessageService {
             direction: data.direction,
             content: data.content,
             senderType: resolveSenderType(data),
-            senderName: data.senderName || null,
+            senderName: data.senderName || resolvedCustomer?.name || null,
             messageId: saved?.id || null,
             createdAt: saved?.created_at || new Date(),
             media: extractMediaFromPayload(data.payloadRaw),
             isHistorical: !!data.isHistorical,
+            isSandboxTest: isSandboxCustomer,
           },
         })
         .catch(() => {});
 
-      // Web Push Background Notification: kirim ke perangkat yang sedang offline/background (hanya pesan live real-time, bukan riwayat)
-      if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical) {
+      // Web Push Background Notification: kirim ke perangkat yang sedang offline/background (hanya pesan live real-time customer asli, bukan riwayat/sandbox)
+      if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical && !isSandboxCustomer) {
         void (async () => {
           try {
             const { webPushService } = await import('./web-push.service');
-            const { customerService } = await import('./customer.service');
-            const { conversationService } = await import('./conversation.service');
 
-            let senderName = data.senderName || 'Pelanggan';
-            let customerId = '';
-            try {
-              const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
-              if (conv?.customer_id) {
-                customerId = conv.customer_id;
-                const customer = await customerService.getCustomerById(conv.customer_id, data.tenantId);
-                if (customer) {
-                  if (customer.name) senderName = customer.name;
-                }
-              }
-            } catch {}
+            const senderName = resolvedCustomer?.name || data.senderName || 'Pelanggan';
+            const customerId = resolvedCustomer?.id || '';
 
             const avatarUrl = customerId
               ? `/media/avatar/${customerId}.jpg`
@@ -916,6 +922,11 @@ export class MessageService {
           tenant_id: tenantId,
           direction: Direction.INBOUND,
           read_at: null,
+          conversation: {
+            customer: {
+              is_sandbox_test: false,
+            },
+          },
         },
       });
 
@@ -923,6 +934,9 @@ export class MessageService {
         where: {
           tenant_id: tenantId,
           is_manual_unread: true,
+          customer: {
+            is_sandbox_test: false,
+          },
           messages: {
             none: {
               direction: Direction.INBOUND,

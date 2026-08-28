@@ -7,6 +7,7 @@ import { GroundingComposer } from './grounding-composer';
 import { ReplyGenerator } from './reply-generator';
 import { conversationService } from '../services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 
 /**
  * Core Orchestrator: Context-Grounded Slot-Filling Engine.
@@ -190,16 +191,19 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       tenantId,
       'medical_concern'
     );
-    try {
-      const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
-      const alertService = new AlertService();
-      await alertService.notifyAlert({
-        type: AlertType.MEDICAL_EMERGENCY_HIGH,
-        severity: AlertSeverity.CRITICAL,
-        message: `[MEDICAL CRITICAL ALERT] Customer: ${customer.phone}. Text: "${incomingText}"`,
-        metadata: { customerPhone: customer.phone, incomingText },
-      });
-    } catch {}
+    const isSandbox = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
+    if (!isSandbox) {
+      try {
+        const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+        const alertService = new AlertService();
+        await alertService.notifyAlert({
+          type: AlertType.MEDICAL_EMERGENCY_HIGH,
+          severity: AlertSeverity.CRITICAL,
+          message: `[MEDICAL CRITICAL ALERT] Customer: ${customer.phone}. Text: "${incomingText}"`,
+          metadata: { customerPhone: customer.phone, incomingText },
+        });
+      } catch {}
+    }
 
     return {
       nextState: ConversationState.HUMAN_HANDLING,
