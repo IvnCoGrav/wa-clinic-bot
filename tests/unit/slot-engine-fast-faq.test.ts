@@ -209,5 +209,11 @@ describe('Hybrid Fast-Track FAQ Engine (Phase 1-4)', () => {
       // Only 1 LLM call occurred!
       expect(callChatCompletionsWithFallback).toHaveBeenCalledTimes(1);
     });
+
+    it('should bypass Fast-Track and use 2-Call Deep Engine when FAST_FAQ_1CALL_ENABLED is false', async () => {
+      delete process.env.FAST_FAQ_1CALL_ENABLED; // default: false (2-call)
+      const { isFastFaq1CallEnabled } = await import('../../src/config/feature-flags');
+      expect(isFastFaq1CallEnabled()).toBe(false);
+    });
   });
 });

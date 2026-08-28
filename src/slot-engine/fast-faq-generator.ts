@@ -32,7 +32,8 @@ export class FastFaqGenerator {
     const { customer, incomingMessage, history } = ctx;
     const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
     const incomingText = incomingMessage?.text?.body || '';
-    const historyCount = history?.length || 0;
+    const botRepliesCount = history?.filter((h) => h.role === 'assistant').length ?? 0;
+    const historyCount = botRepliesCount;
 
     const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
     const endpoint = getLlmEndpointConfig();
@@ -101,7 +102,7 @@ export class FastFaqGenerator {
         return null; // Fallthrough jika balasan kosong
       }
 
-      let finalReply = UnifiedResponseSanitizer.sanitize(rawReply, { historyCount });
+      let finalReply = UnifiedResponseSanitizer.sanitize(rawReply, { historyCount, customerInput: incomingText });
 
       // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
       // pastikan balasan wajib diawali perkenalan resmi Bidan Yusi jika LLM belum menyertakannya.
@@ -112,9 +113,11 @@ export class FastFaqGenerator {
       ) {
         const { TEMPLATES } = await import('../config/persona');
         const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+        const { stripDuplicateTurn0Greeting } = await import('../utils/language-sanitizer');
         const isIslamic = hasIslamicGreeting(incomingText);
         const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
-        finalReply = `${greetingHeader}\n\n${finalReply}`;
+        const cleanBody = stripDuplicateTurn0Greeting(finalReply);
+        finalReply = `${greetingHeader}\n\n${cleanBody}`;
       }
 
       // Audit LLM Call

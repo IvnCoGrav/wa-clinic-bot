@@ -272,7 +272,8 @@ export class ConversationStateMachine {
 
     // 3. Routing ke State Handler yang sesuai
     const { AiModelConfigService } = await import('../config/ai-models.config');
-    if (!AiModelConfigService.isBotActive(tenantId) && !activeConversation.is_human_handling) {
+    const isSandboxTest = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
+    if (!AiModelConfigService.isBotActive(tenantId) && !activeConversation.is_human_handling && !isSandboxTest) {
       console.log(`[GLOBAL BOT DEACTIVATED] Bypassing bot responder and routing customer ${customer.phone} directly to human handling.`);
       await conversationService.escalateToHumanHandling(
         activeConversation,

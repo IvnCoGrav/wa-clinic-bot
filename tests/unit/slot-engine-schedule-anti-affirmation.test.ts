@@ -287,5 +287,248 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
       expect(decision.deterministicTemplateReply).toContain('Layanan homecare kami melayani seluruh area Sidoarjo dan Surabaya');
       expect(decision.deterministicTemplateReply).not.toContain('Bisa banget Bunda');
     });
+
+    it('Customer asks "ke jombang bisa nggak ?" -> DecisionMatrix or Out of Coverage triggers polite apology', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const slate = SlateStore.hydrateSlate({
+        customer: { id: 'c_jombang_1', phone: '6281111120' } as any,
+        conversation: { current_state: 'INITIAL' } as any,
+      });
+
+      const extraction = {
+        intents: [],
+        locationText: 'jombang',
+        streetDetail: null,
+        childAgeMonths: null,
+        symptoms: [],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0.9,
+      };
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'ke jombang bisa nggak ?',
+        history: [],
+      });
+
+      // It should NOT escalate to medical or silent emergency
+      expect(decision.action).not.toBe('ESCALATE_HUMAN_EMERGENCY');
+      expect(decision.action).not.toBe('SILENT_HUMAN_ACTIVE');
+    });
+
+    it('Customer asks "ke tuban bisa ?" on Turn-0 (with pre-logged inbound message in history) -> Out of Coverage has Turn-0 greeting header', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const { geocodingService } = await import('../../src/integrations/google-maps/geocoding');
+      
+      const geocodeSpy = vi.spyOn(geocodingService, 'geocodeText').mockResolvedValueOnce({
+        isPrecise: true,
+        lat: -6.8988,
+        lng: 112.0526,
+        kota: 'Tuban',
+        formattedAddress: 'Tuban, Jawa Timur',
+      });
+
+      const slate = SlateStore.hydrateSlate({
+        customer: { id: 'c_tuban_1', phone: '6281111121' } as any,
+        conversation: { current_state: 'INITIAL' } as any,
+      });
+
+      const extraction = {
+        intents: [],
+        locationText: 'tuban',
+        streetDetail: null,
+        childAgeMonths: null,
+        symptoms: [],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0.9,
+      };
+
+      // Simulasikan database history yang memuat pesan inbound yang baru saja di-log (1 user message, 0 assistant messages)
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'ke tuban bisa ?',
+        history: [{ role: 'user', content: 'ke tuban bisa ?' }],
+      });
+
+      expect(decision.action).toBe('REJECT_OUT_OF_COVERAGE');
+      expect(decision.deterministicTemplateReply).toBeDefined();
+      expect(decision.deterministicTemplateReply).toContain('Halo Bunda ! ✨');
+      expect(decision.deterministicTemplateReply).toContain('Perkenalkan, saya Bidan Yusi');
+      expect(decision.deterministicTemplateReply).toContain('di luar jangkauan');
+
+      geocodeSpy.mockRestore();
+    });
+
+    it('Customer was previously out-of-coverage (Tuban) -> then sends "Jambangan" -> resolves Jambangan and does NOT reject with out-of-coverage', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      // Slate sebelumnya menyimpan isOutOfCoverage: true dari pesan Tuban
+      const slate = SlateStore.hydrateSlate({
+        customer: {
+          id: 'c_tuban_to_jambangan',
+          phone: '6281111122',
+          preferences: { isOutOfCoverage: true, distanceKm: 142.3, location: 'tuban' },
+        } as any,
+        conversation: { current_state: 'AWAITING_LOCATION' } as any,
+      });
+
+      expect(slate.isOutOfCoverage).toBe(true);
+
+      const extraction = {
+        intents: ['provide_location' as const],
+        locationText: 'Jambangan',
+        streetDetail: null,
+        childAgeMonths: null,
+        symptoms: [],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0.9,
+      };
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'Jambangan',
+        history: [
+          { role: 'user', content: 'ke tuban bisa ?' },
+          { role: 'assistant', content: 'Mohon maaf bunda, lokasi Bunda berjarak 142.3 km...' },
+          { role: 'user', content: 'Jambangan' },
+        ],
+      });
+
+      // Seharusnya meminta detail kelurahan untuk Jambangan (bukan menolak out-of-coverage Tuban)
+      expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+      expect(decision.action).not.toBe('REJECT_OUT_OF_COVERAGE');
+      expect(decision.deterministicTemplateReply).toBeDefined();
+      expect(decision.deterministicTemplateReply).toContain('Jambangan');
+      expect(decision.deterministicTemplateReply).not.toContain('142.3 km');
+    });
+
+    it('Customer asks "ke tuban berapa" -> then "ke kenjeran ?" -> asks for kelurahan in Kenjeran, NOT "lokasi di Tuban sudah disimpan"', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const slate = SlateStore.hydrateSlate({
+        customer: {
+          id: 'c_tuban_to_kenjeran',
+          phone: '6281111123',
+          preferences: { isOutOfCoverage: true, distanceKm: 142.3, kelurahan: 'Tuban' },
+        } as any,
+        conversation: { current_state: 'AWAITING_LOCATION' } as any,
+      });
+
+      const extraction = {
+        intents: ['provide_location' as const],
+        locationText: 'kenjeran',
+        streetDetail: null,
+        childAgeMonths: null,
+        symptoms: [],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0.9,
+      };
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'ke kenjeran ?',
+        history: [
+          { role: 'user', content: 'ke tuban berapa' },
+          { role: 'assistant', content: 'Mohon maaf bunda, lokasi Bunda berjarak 142.3 km...' },
+          { role: 'user', content: 'ke kenjeran ?' },
+        ],
+      });
+
+      expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+      expect(decision.deterministicTemplateReply).toBeDefined();
+      expect(decision.deterministicTemplateReply).toContain('Kenjeran');
+      expect(decision.deterministicTemplateReply).not.toContain('lokasi di Tuban sudah kami simpan');
+      expect(decision.deterministicTemplateReply).not.toContain('142.3 km');
+    });
+
+    it('Customer writes typo "ke kencjeran berap aya kak ?" -> fuzzy resolves to Kenjeran and asks for kelurahan', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const slate = SlateStore.hydrateSlate({
+        customer: { id: 'c_typo_kencjeran', phone: '6281111124' } as any,
+        conversation: { current_state: 'INITIAL' } as any,
+      });
+
+      const extraction = {
+        intents: ['provide_location' as const, 'ask_price' as const],
+        locationText: 'kencjeran',
+        streetDetail: null,
+        childAgeMonths: null,
+        symptoms: [],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0.9,
+      };
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'ke kencjeran berap aya kak ?',
+        history: [],
+      });
+
+      expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+      expect(decision.deterministicTemplateReply).toBeDefined();
+      expect(decision.deterministicTemplateReply).toContain('Kenjeran');
+      expect(decision.deterministicTemplateReply).not.toContain('Kencana');
+    });
+
+    it('Customer only asks symptom/treatment availability "Untuk pijat flu ada kah kak ??" -> strips unprompted price and duration', async () => {
+      const { UnifiedResponseSanitizer } = await import('../../src/utils/language-sanitizer');
+      const rawLlmReply =
+        'Ada ya, Bunda! 😊 Untuk pijat flu, kami punya layanan *Pijat Bayi Pulih Ceria (Terapi Bapil)* dengan tarif promo Rp 70.000 durasi sekitar 40 menit. Pijat ini menggunakan double aromaterapi dan titik pijat akupresur khusus yang bantu meredakan flu pada si kecil.';
+
+      const sanitized = UnifiedResponseSanitizer.sanitize(rawLlmReply, {
+        customerInput: 'Untuk pijat flu ada kah kak ??',
+        isFollowUp: true,
+      });
+
+      expect(sanitized).toContain('Pijat Bayi Pulih Ceria');
+      expect(sanitized).not.toContain('Rp 70.000');
+      expect(sanitized).not.toContain('40 menit');
+      expect(sanitized).not.toContain('tarif promo');
+    });
+
+    it('Customer explicitly asks for price & duration "pijat flu berapa harganya dan berapa menit?" -> preserves price and duration', async () => {
+      const { UnifiedResponseSanitizer } = await import('../../src/utils/language-sanitizer');
+      const rawLlmReply =
+        'Untuk *Pijat Bayi Pulih Ceria (Terapi Bapil)*, tarif promo Rp 70.000 dengan durasi sekitar 40 menit ya Bunda 😊';
+
+      const sanitized = UnifiedResponseSanitizer.sanitize(rawLlmReply, {
+        customerInput: 'pijat flu berapa harganya dan berapa menit?',
+        isFollowUp: true,
+      });
+
+      expect(sanitized).toContain('Rp 70.000');
+      expect(sanitized).toContain('40 menit');
+    });
+
+    it('Turn-0 header injection strips duplicate LLM greeting ("Halo Bunda! ✨ Terima kasih sudah menghubungi...")', async () => {
+      const { stripDuplicateTurn0Greeting } = await import('../../src/utils/language-sanitizer');
+      const { TEMPLATES } = await import('../../src/config/persona');
+
+      const rawLlmReply =
+        'Halo Bunda! ✨ Terima kasih sudah menghubungi Kala Moms and Baby Spa. Ada ya, untuk membantu meredakan flu pada si kecil, kami punya layanan *Pijat Bayi Pulih Ceria*...';
+
+      const cleanBody = stripDuplicateTurn0Greeting(rawLlmReply);
+      const greetingHeader = TEMPLATES.firstContactGreetingHeader();
+      const finalReply = `${greetingHeader}\n\n${cleanBody}`;
+
+      // Memastikan hanya ada 1 sapaan "Halo Bunda" dan 1 perkenalan Bidan Yusi
+      const haloMatches = finalReply.match(/Halo\s+Bunda/gi) || [];
+      expect(haloMatches.length).toBe(1);
+      expect(cleanBody.startsWith('Ada ya,')).toBe(true);
+      expect(finalReply).toContain('Perkenalkan, saya Bidan Yusi');
+    });
   });
 });

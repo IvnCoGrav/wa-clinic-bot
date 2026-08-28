@@ -100,20 +100,13 @@ export class DecisionMatrix {
       };
     }
 
-    // =========================================================================
-    // PRIORITY 2C: JANGKAUAN MELEBIHI BATAS WILAYAH (Out of Coverage)
-    // =========================================================================
-    if (updatedSlate.isOutOfCoverage) {
-      return {
-        action: 'REJECT_OUT_OF_COVERAGE',
-        reason: 'Lokasi customer berada di luar wilayah operasional klinik.',
-        updatedSlate,
-        shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.outOfCoverage({
-          distanceKm: updatedSlate.distanceKm || 30,
-        }),
-      };
-    }
+    const isInitialTurn = (context?.history?.filter(h => h.role === 'assistant').length ?? 0) === 0;
+    const formatPolicyReply = (policyText: string) => {
+      if (isInitialTurn) {
+        return `${TEMPLATES.firstContactGreetingHeader({ isIslamic })}\n\n${policyText}`;
+      }
+      return policyText;
+    };
 
     // =========================================================================
     // PRIORITY 3: IZIN BERTANYA / KONSULTASI AWAL
@@ -134,13 +127,6 @@ export class DecisionMatrix {
     // =========================================================================
     // PRIORITY 2B: PERTANYAAN KEBIJAKAN OPERASIONAL DETERMINISTIK (0 Token)
     // =========================================================================
-    const isInitialTurn = (context?.history?.length ?? 0) === 0;
-    const formatPolicyReply = (policyText: string) => {
-      if (isInitialTurn) {
-        return `${TEMPLATES.firstContactGreetingHeader({ isIslamic })}\n\n${policyText}`;
-      }
-      return policyText;
-    };
 
     // A. Kebijakan Transport / Ongkir Multi-Anak
     if (/\b(2\s*anak|dua\s*anak|3\s*anak|bunda\s*(dan|\+)\s*(anak|bayi)|ongkir.*(1\s*kali|satu\s*kali|dihitung\s*satu))\b/i.test(rawText) && (rawText.includes('ongkir') || rawText.includes('transport'))) {
@@ -317,7 +303,19 @@ export class DecisionMatrix {
       /\b(pijat|treatment|batuk|pilek|grok|demam|kolik|sembelit|usia|umur|harga|biaya|kapan|bisa|jadwal|slot)\b/i.test(rawText);
 
     // Double Ongkir Guard: Jika lokasi SUDAH terkonfirmasi DAN bot baru saja mengirimkan ongkir dalam 45s terakhir
-    // HANYA dipicu jika customer mengirim ulang lokasi murni TANPA pertanyaan klinis / treatment / jadwal
+    // HANYA dipicu jika customer mengirim ulang lokasi murni YANG SAMA TANPA pertanyaan klinis / treatment / jadwal
+    const currentLocText = (extraction.locationText || '').toLowerCase().trim();
+    const storedKelurahan = (updatedSlate.kelurahan || '').toLowerCase().trim();
+    const storedKecamatan = (updatedSlate.kecamatan || '').toLowerCase().trim();
+    const isSameLocation =
+      Boolean(currentLocText) &&
+      (currentLocText === storedKelurahan ||
+        currentLocText === storedKecamatan ||
+        (Boolean(storedKelurahan) && currentLocText.includes(storedKelurahan)) ||
+        (Boolean(storedKecamatan) && currentLocText.includes(storedKecamatan)));
+
+    const isDifferentLocation = Boolean(currentLocText) && !isSameLocation;
+
     const historyList = (context as any)?.history || [];
     const lastAssistant = historyList.slice().reverse().find((m: any) => m.role === 'assistant');
     const isRecentOngkirSent =
@@ -329,7 +327,9 @@ export class DecisionMatrix {
 
     if (
       updatedSlate.isLocationConfirmed &&
+      !updatedSlate.isOutOfCoverage &&
       hasLocationInCurrentMessage &&
+      isSameLocation &&
       !hasClinicalOrOtherInquiry &&
       isRecentOngkirSent &&
       !isExplicitLocationChange
@@ -343,8 +343,9 @@ export class DecisionMatrix {
       };
     }
 
-    const isUnconfirmedLocation = !updatedSlate.isLocationConfirmed;
-    const shouldResolveLocation = hasLocationInCurrentMessage && (isUnconfirmedLocation || isExplicitLocationChange);
+    const shouldResolveLocation =
+      hasLocationInCurrentMessage &&
+      (!updatedSlate.isLocationConfirmed || updatedSlate.isOutOfCoverage || isExplicitLocationChange || isDifferentLocation);
 
     if (shouldResolveLocation) {
       try {
@@ -410,7 +411,7 @@ export class DecisionMatrix {
             }
           } else {
             // Tidak ada kelurahan spesifik -> Input adalah nama kecamatan/wilayah luas yang ambigu (misal "Jambangan", "Waru", "Rungkut")
-            const kecName = resolved.matchedSpan || ambiguityList[0]?.Kecamatan || extraction.locationText || 'tersebut';
+            const kecName = ambiguityList[0]?.Kecamatan || resolved.matchedSpan || extraction.locationText || 'tersebut';
             const kotaName = ambiguityList[0]?.Kabupaten_Kota || resolved.kota || null;
             const lowerSpan = (resolved.matchedSpan || kecName).toLowerCase().trim();
             const isCity = ['sidoarjo', 'surabaya', 'sda', 'sby', 'gresik'].includes(lowerSpan) || lowerSpan.includes('kabupaten') || lowerSpan.includes('kota');
@@ -458,21 +459,24 @@ export class DecisionMatrix {
           updatedSlate.distanceKm = Number(delivery.distanceKm.toFixed(2));
           updatedSlate.ongkirFee = delivery.normalPrice;
           updatedSlate.ongkirPromoFee = delivery.promoPrice;
-          updatedSlate.isLocationConfirmed = true;
-          updatedSlate.isOutOfCoverage = delivery.isOutOfCoverage;
-          updatedSlate.projectedState = SlateStore.computeProjectedState(updatedSlate);
-
           if (delivery.isOutOfCoverage) {
+            updatedSlate.isLocationConfirmed = false;
+            updatedSlate.isOutOfCoverage = true;
+            updatedSlate.projectedState = SlateStore.computeProjectedState(updatedSlate);
             return {
               action: 'REJECT_OUT_OF_COVERAGE',
               reason: `Jarak lokasi (${updatedSlate.distanceKm} km) melebihi batas jangkauan layanan (maks 30 km).`,
               updatedSlate,
               shouldSendPricelistImage: false,
-              deterministicTemplateReply: TEMPLATES.outOfCoverage({
+              deterministicTemplateReply: formatPolicyReply(TEMPLATES.outOfCoverage({
                 distanceKm: updatedSlate.distanceKm || 30,
-              }),
+              })),
             };
           }
+
+          updatedSlate.isLocationConfirmed = true;
+          updatedSlate.isOutOfCoverage = false;
+          updatedSlate.projectedState = SlateStore.computeProjectedState(updatedSlate);
 
           // Kirim pricelist image jika belum pernah terkirim
           const shouldSendPricelistImage = !updatedSlate.pricelistSent;
@@ -528,9 +532,9 @@ export class DecisionMatrix {
         reason: 'Lokasi customer berada di luar wilayah operasional klinik.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.outOfCoverage({
+        deterministicTemplateReply: formatPolicyReply(TEMPLATES.outOfCoverage({
           distanceKm: updatedSlate.distanceKm || 30,
-        }),
+        })),
       };
     }
 

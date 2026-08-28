@@ -4,6 +4,48 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & Architecture — Contextual Intelligence Engine: Conversation State Summary, Few-Shot Exemplar Bank, & Adaptive Model Selector (2026-08-28)
+
+- **Latar Belakang & Masalah yang Dipecahkan:**
+  1. **Hilangnya Kesadaran State Percakapan (*Context Amnesia & Repetition*)**: LLM Call ke-2 (`ReplyGenerator`) sebelumnya hanya menerima 4 chat terakhir mentah tanpa pemahaman status tahapan data (apakah ongkir sudah disepakati, apakah treatment sudah direkomendasikan). Akibatnya, LLM cenderung mengulang penjelasan ongkir atau bertanya ulang *"mau treatment apa"*, yang sebelumnya dipangkas paksa secara reaktif oleh puluhan regex sanitizer.
+  2. **Ketiadaan Contoh Percakapan Positif (*Negative Constraint Overload*)**: Prompt persona didominasi oleh 14+ aturan `DILARANG KERAS` tanpa contoh konkret dialog ideal Bidan Yusi, sehingga model mudah melanggar intisari SOP meski menghindari kata terlarang secara literal.
+  3. **Model Homogen untuk Semua Kompleksitas**: Semua jenis percakapan (dari sapaan FAQ ringan hingga konsultasi klinis multi-gejala / bundling Moms & Baby) diproses oleh model yang sama tanpa penyesuaian kecerdasan.
+
+- **Solusi & Implementasi:**
+  1. **`ConversationStateSummarizer` (`src/slot-engine/conversation-summarizer.ts`)**:
+     - Service deterministik (0 Token, <1ms) yang merangkum state percakapan menjadi 4 blok terstruktur: `STATUS DATA YANG SUDAH DILALUI`, `FOKUS SAAT INI (Sedang ditanyakan & Yang wajib dijawab)`, dan `PANDUAN ANTI-PENGULANGAN`.
+     - Disuntikkan langsung ke System Prompt dan header riwayat chat pada Call 2, memberikan LLM kesadaran konteks penuh sehingga tidak mengulang informasi yang sudah selesai dibahas.
+  2. **`FewShotExemplarBank` (`src/slot-engine/few-shot-exemplars.ts`)**:
+     - Bank contoh percakapan ideal yang mencakup 6 skenario inti SOP Bidan Yusi: Anti-afirmasi jadwal, konsultasi keluhan flu/batuk, tarif promo, metode transfer/QRIS, edukasi pijat laktasi/oksitosin, dan follow-up pasca-ongkir.
+     - Fungsi `selectRelevantExemplars` secara cerdas memilih 1–2 contoh paling relevan dan menginjeksinya ke `PersonaComposer.composeSlotGeneratorPrompt`.
+  3. **`AdaptiveModelSelector` (`src/slot-engine/adaptive-model-selector.ts`, `src/config/ai-models.config.ts`)**:
+     - Task-adaptive model router (0ms overhead) yang memilih model standar (`CHAT_REPLY`) untuk FAQ/sapaan ringan, dan beralih otomatis ke model pintar (`CHAT_REPLY_DEEP`, konfigurasi `AI_MODEL_CHAT_DEEP`) ketika terdeteksi multi-gejala klinis ($\ge 2$), diskusi bundling Moms & Baby, atau multi-intent konsultasi + tarif/jadwal.
+  4. **Pembaruan Arsitektur & Single Source of Truth**:
+     - `PersonaComposer.composeSlotGeneratorPrompt` diperbarui untuk menerima dan memformat `conversationSummary` serta `fewShotExamples`.
+     - `ReplyGenerator.generate` terhubung penuh dengan ketiga komponen baru dan mencatat detail audit `task_type` & reasoning ke `llm-execution-logger`.
+
+- **Pengujian & Verifikasi:**
+  - 3 Test Suite Baru: `tests/unit/conversation-summarizer.test.ts`, `tests/unit/few-shot-exemplar-selection.test.ts`, dan `tests/unit/adaptive-model-selector.test.ts` (13/13 passing tests).
+  - Regresi penuh Slot Engine (`slot-engine-decision`, `slot-engine-fast-faq`, `slot-engine-transcript-e2e`, dsb.): 48/48 PASS (100% Green).
+  - TypeScript build check (`npm run build` via `tsc`): Sukses 100% (0 error).
+
+#### Changed & Fixed — Transisi Default ke Arsitektur 2-Call LLM (Slot-Filling Engine) & Perbaikan Inisialisasi Decision Matrix (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Fast-Track 1-Call Memotong Jalur 2-Call**: Secara default, `isFastFaq1CallEnabled` bernilai `true` (`!== 'false'`), sehingga pertanyaan informasi umum (FAQ) langsung diselesaikan dalam 1 call LLM dan melewati alur 2-call deep engine (Entity Extractor + Reply Generator).
+  2. **ReferenceError di `decision-matrix.ts`**: Fungsi pembantu `formatPolicyReply` didefinisikan sebagai `const` di bawah pemanggilannya pada evaluasi prioritas `isOutOfCoverage`, menyebabkan `ReferenceError` saat evaluasi out-of-coverage.
+
+- **Solusi & Implementasi:**
+  1. **Konfigurasi Default 2-Call (`src/config/feature-flags.ts`, `.env.example`)**:
+     - Mengubah default `isFastFaq1CallEnabled` menjadi `false` (`process.env.FAST_FAQ_1CALL_ENABLED === 'true'`). Seluruh pesan kini secara default diproses melalui arsitektur 2-Call Deep Engine (`EntityExtractor` ➔ `GroundingComposer` ➔ `ReplyGenerator`).
+     - Memperbarui dokumentasi `.env.example` dengan flag `SLOT_FILLING_ENGINE_ENABLED` dan `FAST_FAQ_1CALL_ENABLED=false`.
+  2. **Perbaikan Urutan Deklarasi (`src/slot-engine/decision-matrix.ts`)**:
+     - Memindahkan deklarasi `isInitialTurn` dan `formatPolicyReply` ke atas sebelum blok pemeriksaan `isOutOfCoverage`.
+
+- **Pengujian & Verifikasi:**
+  - Unit test `slot-engine-decision.test.ts` dan `slot-engine-fast-faq.test.ts` berhasil lolos (100% PASS).
+  - Typecheck `npm run build` (`tsc`) sukses tanpa error.
+
 #### Fixed — Pembaruan Data & Reservasi Bunda Iren Live Server serta Robustness Parsing Formulir Tanpa Header Kategori (2026-08-28)
 
 - **Latar Belakang & Akar Masalah:**

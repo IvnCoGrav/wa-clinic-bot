@@ -246,8 +246,9 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       decision.updatedSlate.humanHandlingReason || 'escalated'
     );
     const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
+    const botRepliesCount = history?.filter((h) => h.role === 'assistant').length ?? 0;
     const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply || '', {
-      historyCount: history?.length || 0,
+      historyCount: botRepliesCount,
       preserveGreeting: true,
     });
     return {
@@ -263,8 +264,9 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   if (decision.action === 'NOT_INTERESTED_COMPLETED') {
     await SlateStore.persistSlate(decision.updatedSlate);
     const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
+    const botRepliesCount = history?.filter((h) => h.role === 'assistant').length ?? 0;
     const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply || '', {
-      historyCount: history?.length || 0,
+      historyCount: botRepliesCount,
       preserveGreeting: true,
     });
     return {
@@ -289,8 +291,9 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   if (decision.deterministicTemplateReply) {
     await SlateStore.persistSlate(decision.updatedSlate);
     const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
+    const botRepliesCount = history?.filter((h) => h.role === 'assistant').length ?? 0;
     const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply, {
-      historyCount: history?.length || 0,
+      historyCount: botRepliesCount,
       preserveGreeting: true,
     });
     return {

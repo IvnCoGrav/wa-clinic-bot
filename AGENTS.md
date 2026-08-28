@@ -54,3 +54,22 @@ WhatsApp clinic chatbot engine: Node 20 + TypeScript, Fastify, Prisma/PostgreSQL
 - docker-compose pins `devlikeapro/waha:noweb-2026.7.2` (Postgres 16). Never use `:latest` for WAHA; validate WAHA upgrades in staging first. Notes: `deploy_config.txt`, README.
 - `.env` holds live credentials and is gitignored — never commit it or its values.
 - **Server update & Meta gate**: Testing on live server with potential Meta event triggers requires 2-step verification (Pixel is real). Standard safe deploys require 1-step verification. Any deploy/action with risk of touching/disrupting WAHA requires 2-step verification + explicit WARNING. See `.agents/rules/server-update-gate.md` and `.agents/skills/server-access/SKILL.md` for SSH, database queries, container logs, and deployment runbook.
+
+## LLM Intelligence Improvement Roadmap (Agustus 2026)
+
+Audit arsitektur (28/08/2026) mengidentifikasi bahwa **148 regex + 71 negative constraints** digunakan untuk mengekang LLM karena kurangnya konteks yang diberikan. Tiga peningkatan berikut bertujuan **mengurangi ketergantungan pada regex/larangan** tanpa menghapus safety net SOP.
+
+### Prinsip Arsitektur
+- **SOP kritis tetap deterministik** (greeting template, format ongkir, penolakan out-of-coverage, form reservasi) — JANGAN dipindahkan ke LLM.
+- **Perkaya konteks LLM** agar ia tidak perlu dikekang sebanyak sekarang — beri tahu LLM *apa yang sudah dibahas* dan *contoh jawaban ideal*.
+- **Adaptive model** — gunakan model pintar hanya saat dibutuhkan (konsultasi klinis multi-keluhan), model cepat untuk sapaan/FAQ.
+
+### Roadmap (urutan prioritas)
+1. **Conversation State Summary** (`src/slot-engine/conversation-summarizer.ts`) — ringkasan deterministik (0 token) tentang apa yang sudah dibahas, disisipkan ke prompt Call 2. Mengurangi pengulangan info tanpa perlu regex stripper.
+2. **Few-Shot Exemplar Bank** (`src/slot-engine/few-shot-exemplars.ts`) — 5-7 contoh percakapan ideal SOP admin, di-inject ke prompt. Menggantikan sebagian negative constraints dengan contoh positif.
+3. **Adaptive Model Selector** (`src/slot-engine/adaptive-model-selector.ts`) — pemilihan model cepat vs pintar berdasarkan kompleksitas slate. Env var `AI_MODEL_CHAT_DEEP` untuk kasus berat.
+
+### Metrik Keberhasilan
+- Pengurangan regex count di `language-sanitizer.ts` dari 85 → target <50
+- Pengurangan negative constraints di prompt dari 71 → target <40
+- Rasio knowledge:restriction di prompt dari 1:1.4 → target 2:1

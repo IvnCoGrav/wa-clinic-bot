@@ -219,10 +219,22 @@ interface LiveChatItem {
   isAwaitingReply?: boolean;
 }
 
+const DEFAULT_FAVORITE_EMOJIS = [
+  '😊', '🙏', '👶', '❤️', '👍', '✅', '✨', '🌸',
+  '🥰', '🙌', '🩺', '🗓️', '🍼', '💐', '💬', '🎉',
+  '😄', '👌', '💆‍♀️', '💵', '⭐', '☀️', '📞', '💡',
+];
+
 const EMOJI_CATEGORIES = [
   {
+    id: 'favorites',
+    label: 'Favorit & Sering Digunakan',
+    icon: '⭐',
+    emojis: [] as string[],
+  },
+  {
     id: 'smileys',
-    label: 'Wajah',
+    label: 'Wajah & Ekspresi',
     icon: '😊',
     emojis: [
       '😊', '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥹',
@@ -533,7 +545,17 @@ export const LiveChatMonitor: React.FC = () => {
 
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const [emojiCategory, setEmojiCategory] = useState<'smileys' | 'gestures' | 'clinic' | 'symbols'>('smileys');
+  const [favoriteEmojis, setFavoriteEmojis] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('liveChat:favoriteEmojis');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return DEFAULT_FAVORITE_EMOJIS;
+  });
+  const [emojiCategory, setEmojiCategory] = useState<'favorites' | 'smileys' | 'gestures' | 'clinic' | 'symbols'>('favorites');
 
   // Periksa status background sync saat pertama kali buka halaman
   const checkBackgroundSyncStatus = async () => {
@@ -623,6 +645,15 @@ export const LiveChatMonitor: React.FC = () => {
     if (!chatInputRef.current) return;
     chatInputRef.current.focus();
 
+    // Auto-update list emoji favorit / sering digunakan
+    setFavoriteEmojis((prev) => {
+      const next = [emoji, ...prev.filter((e) => e !== emoji)].slice(0, 32);
+      try {
+        localStorage.setItem('liveChat:favoriteEmojis', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
       const range = sel.getRangeAt(0);
@@ -636,9 +667,21 @@ export const LiveChatMonitor: React.FC = () => {
         sel.addRange(range);
       } else {
         chatInputRef.current.innerText += emoji;
+        const newRange = document.createRange();
+        newRange.selectNodeContents(chatInputRef.current);
+        newRange.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
       }
     } else {
       chatInputRef.current.innerText += emoji;
+      if (sel) {
+        const newRange = document.createRange();
+        newRange.selectNodeContents(chatInputRef.current);
+        newRange.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
     }
 
     const updatedText = chatInputRef.current.innerText || '';
@@ -906,8 +949,55 @@ export const LiveChatMonitor: React.FC = () => {
 
   // 📱 Listener untuk Default Android Back button & popstate history navigation
   useEffect(() => {
-    const handlePopState = () => {
-      // Jika di tampilan chat mobile, kembali ke list
+    const handlePopState = (e: PopStateEvent) => {
+      // Prioritas 1: Tutup menu konteks / modal / popup yang sedang aktif terlebih dahulu
+      if (contextMenu) {
+        setContextMenu(null);
+        return;
+      }
+      if (labelPopoverOpen) {
+        setLabelPopoverOpen(false);
+        return;
+      }
+      if (toolsMenuOpen) {
+        setToolsMenuOpen(false);
+        return;
+      }
+      if (emojiPickerOpen) {
+        setEmojiPickerOpen(false);
+        return;
+      }
+      if (customerDetailModalOpen) {
+        setCustomerDetailModalOpen(false);
+        return;
+      }
+      if (customerDetailEditMode) {
+        setCustomerDetailEditMode(false);
+        return;
+      }
+      if (showQuickBookingModal) {
+        setShowQuickBookingModal(false);
+        return;
+      }
+      if (showInvoiceModal) {
+        setShowInvoiceModal(false);
+        return;
+      }
+      if (showSyncInfoModal) {
+        setShowSyncInfoModal(false);
+        return;
+      }
+      if (selectedReservation) {
+        setSelectedReservation(null);
+        return;
+      }
+
+      // Jika state yang baru di-pop masih berada di live-chat-detail (misal setelah drawer sidebar tertutup)
+      if (e.state?.view === 'live-chat-detail' || (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail')) {
+        return;
+      }
+
+      // Prioritas 2: Jika di tampilan chat mobile, kembali ke list
       if (mobileView === 'chat') {
         isChatHistoryPushedRef.current = false;
         setMobileView('list');
@@ -917,7 +1007,19 @@ export const LiveChatMonitor: React.FC = () => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [mobileView]);
+  }, [
+    mobileView,
+    contextMenu,
+    labelPopoverOpen,
+    toolsMenuOpen,
+    emojiPickerOpen,
+    customerDetailModalOpen,
+    customerDetailEditMode,
+    showQuickBookingModal,
+    showInvoiceModal,
+    showSyncInfoModal,
+    selectedReservation,
+  ]);
 
   useEffect(() => {
     // Auto scroll down to latest message when messages change or new chat opened
@@ -3022,7 +3124,7 @@ export const LiveChatMonitor: React.FC = () => {
                       {/* Emoji Popover */}
                       {emojiPickerOpen && (
                         <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-[#e9edef] rounded-2xl shadow-2xl p-2.5 z-40 animate-fadeIn flex flex-col gap-2 select-none">
-                          {/* Header / Category Tabs */}
+                          {/* Header / Category Tabs - Icon Only */}
                           <div className="flex items-center justify-between border-b border-[#e9edef] pb-1.5 px-0.5">
                             <div className="flex items-center space-x-1">
                               {EMOJI_CATEGORIES.map((cat) => (
@@ -3030,22 +3132,22 @@ export const LiveChatMonitor: React.FC = () => {
                                   key={cat.id}
                                   type="button"
                                   onClick={() => setEmojiCategory(cat.id as any)}
-                                  className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1 transition ${
+                                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-base transition active:scale-95 cursor-pointer ${
                                     emojiCategory === cat.id
-                                      ? 'bg-[#e8f5f2] text-[#008069] font-bold shadow-xs'
+                                      ? 'bg-[#e8f5f2] text-[#008069] font-bold shadow-xs scale-105'
                                       : 'text-[#54656f] hover:bg-[#f0f2f5]'
                                   }`}
                                   title={cat.label}
+                                  aria-label={cat.label}
                                 >
-                                  <span className="text-sm">{cat.icon}</span>
-                                  <span className="text-[11px]">{cat.label}</span>
+                                  <span>{cat.icon}</span>
                                 </button>
                               ))}
                             </div>
                             <button
                               type="button"
                               onClick={() => setEmojiPickerOpen(false)}
-                              className="text-[#8696a0] hover:text-[#111b21] p-1 rounded-lg hover:bg-[#f0f2f5] transition"
+                              className="text-[#8696a0] hover:text-[#111b21] p-1.5 rounded-lg hover:bg-[#f0f2f5] transition"
                               title="Tutup"
                             >
                               <X size={14} />
@@ -3054,7 +3156,10 @@ export const LiveChatMonitor: React.FC = () => {
 
                           {/* Emoji Grid */}
                           <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto p-1 custom-scrollbar">
-                            {EMOJI_CATEGORIES.find((cat) => cat.id === emojiCategory)?.emojis.map((emoji, idx) => (
+                            {(emojiCategory === 'favorites'
+                              ? favoriteEmojis
+                              : (EMOJI_CATEGORIES.find((cat) => cat.id === emojiCategory)?.emojis || [])
+                            ).map((emoji, idx) => (
                               <button
                                 key={`${emoji}-${idx}`}
                                 type="button"

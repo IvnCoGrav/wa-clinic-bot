@@ -239,6 +239,8 @@ ATURAN EKSTRAKSI (SANGAT KETAT):
 9. Jika pesan terbaru menanyakan ketersediaan jadwal ("Jumat apakah bisa?"), masukkan intent "ask_schedule" dan waktu ke "preferred_date_text".
 10. Jika customer mengatakan peralihan target audiens (contoh "untuk baby aja kak", "buat adeknya aja", "ambil yg bayi aja"), dan di riwayat chat sebelumnya ada keluhan spesifik bayi (seperti flu, batuk, pilek, grok-grok) atau paket bayi yang dibahas (misal "Pijat Pulih Ceria"), masukkan paket atau keluhan tersebut ke "treatment_referenced" atau "symptoms" agar konteks tetap terjaga.
 11. Jika customer menyebutkan kombinasi lebih dari 1 treatment (contoh: "Pijat bayi ceria + cukur", "Pulih ceria dan sinar", "Laktasi plus oksitosin"), gabungkan nama treatment lengkapnya ke "treatment_referenced" (contoh: "Pijat Bayi Ceria + Cukur Rambut Bayi") dan sertakan intent "select_treatment".
+12. AREA LAYANAN (SURABAYA & SIDOARJO) & NORMALISASI TYPO WILAYAH:
+Klinik berlokasi di Sidoarjo dan melayani area Surabaya & Sidoarjo. Jika terdapat typo penulisan nama wilayah/kecamatan/kelurahan di Surabaya/Sidoarjo (contoh: "kencjeran" -> "Kenjeran", "jambangn" -> "Jambangan", "rungkot" -> "Rungkut", "wru" -> "Waru", "sdoarjo" -> "Sidoarjo", "gdangan" -> "Gedangan", "budurn" -> "Buduran"), normalisasikan ke nama wilayah Surabaya/Sidoarjo yang dimaksud pada "location_text", JANGAN mengubahnya menjadi nama kota/daerah lain di luar Jawa Timur (seperti mengubah "kencjeran" menjadi "Kencana").
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {
