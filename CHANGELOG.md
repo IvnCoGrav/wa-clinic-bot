@@ -4,6 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fixed — Pembaruan Data & Reservasi Bunda Iren Live Server serta Robustness Parsing Formulir Tanpa Header Kategori (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  1. **Data Pelanggan & Reservasi Bunda Iren di Live Server**: Reservasi Bunda Iren (Pijat Bayi Ceria untuk Jay, 15 bulan, 28 Agustus 2026 jam 10.30–11.00) sebelumnya tercatat pada entitas dummy (`phone: 0000000003`). Perlu disinkronkan ke profil WhatsApp pelanggan aktif (`081230083635`) lengkap dengan relasi anak, detail alamat Sarirogo Sidoarjo, ongkir 17km (Rp 20.000), serta pembatalan antrian follow-up `NO_PURCHASE`.
+  2. **Parsing Formulir Tanpa Header Kategori (`src/utils/reservation-text-parser.ts`)**: Ketika teks formulir tidak menyertakan header section eksplisit `Pilihan treatment (Baby & Kids)`, parser berada di section `GENERAL` dan mengabaikan baris `Nama Bayi` serta `Usia Bayi/Anak`. Selain itu, pencocokan `label.includes('uk')` untuk Usia Kehamilan memicu false-positive pada kata umum seperti *"berikut"*.
+
+- **Solusi & Implementasi:**
+  1. **Update Transaksional Live Database**:
+     - Memperbarui data `Customer` (`Bunda Iren Sidoarjo`, `Sarirogo`, `Sidoarjo`, `distance_km = 17`, `ongkir = 20000`, `preferences`).
+     - Memperbarui data `Reservation` (link ke customer aktif, status `confirmed`, nominal `Rp 80.000`, terapis `Bidan Yusi F`, jadwal 28 Agustus 2026 10:30 WIB).
+     - Menambahkan entitas `Child` (`Jay`, 15 bulan, lahir Mei 2025).
+     - Membatalkan antrian `follow_ups` tipe `NO_PURCHASE` dan membersihkan entitas dummy.
+  2. **Penguatan Parser (`src/utils/reservation-text-parser.ts`)**:
+     - Menambahkan penanganan `Nama Bayi` dan `Usia Bayi/Anak` langsung pada section `GENERAL` serta transisi otomatis.
+     - Mengubah pencocokan singkatan `uk` menjadi regex boundary `/\buk\b/i` agar tidak salah mencocokkan kata lain.
+     - Menghapus aturan transisi section `lowerNorm.includes('pijat bayi')` agar nama treatment tidak dianggap header section.
+
+- **Pengujian & Verifikasi:**
+  - Database PostgreSQL live server diverifikasi langsung: record Customer, Reservation, Child, dan FollowUps tersimpan presisi dan sinkron.
+  - Unit test `reservation-text-parser.test.ts`, `hybrid-reservation-parser.test.ts`, dan `reservation-stress.test.ts` (24/24 PASS, 30/30 variasi acak lolos).
+  - Typecheck `npm run build` (`tsc`) sukses tanpa error.
+
 #### Fixed — Perbaikan Drag-to-Scroll 2D View Mingguan Reservasi & Relaksasi Rate Limiting Admin Dashboard (2026-08-27)
 
 - **Latar Belakang & Akar Masalah:**

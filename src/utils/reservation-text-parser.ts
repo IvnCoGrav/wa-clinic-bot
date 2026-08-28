@@ -198,8 +198,7 @@ export function parseReservationText(rawText: string): ParseResult {
       /pilihan\s+treatment\s*\(?\s*(baby|bayi|anak|kids)/i.test(lowerNorm) ||
       /treatment\s*\(?\s*(baby|bayi|anak|kids)/i.test(lowerNorm) ||
       lowerNorm.includes('baby & kids') ||
-      lowerNorm.includes('baby and kids') ||
-      lowerNorm.includes('pijat bayi')
+      lowerNorm.includes('baby and kids')
     ) {
       currentSection = 'BABY';
       pendingField = null;
@@ -282,6 +281,15 @@ export function parseReservationText(rawText: string): ParseResult {
         const k2 = parts[1]?.trim() || '';
         if (k1 && !isPlaceholderText(k1)) kec = k1;
         if (k2 && !isPlaceholderText(k2)) kota = k2;
+      } else if (label.includes('nama bayi') || label.includes('nama anak') || label.includes('nama baby') || label.includes('nama pasien')) {
+        currentSection = 'BABY';
+        setOrPending(value, 'babyName', (v) => { babyName = v; babyNameLines.push(v); });
+      } else if ((label.includes('usia') || label.includes('umur')) && !label.includes('kehamilan') && !label.includes('bunda')) {
+        currentSection = 'BABY';
+        setOrPending(value, 'babyAge', (v) => { babyAge = v; babyAgeLines.push(v); });
+      } else if (label.includes('usia kehamilan') || label.includes('usia hamil') || /\buk\b/i.test(label)) {
+        currentSection = 'MOMS';
+        setOrPending(value, 'momsPregnancyAge', (v) => (momsPregnancyAge = v));
       } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
         setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
       }
@@ -294,7 +302,7 @@ export function parseReservationText(rawText: string): ParseResult {
         setOrPending(value, 'babyTreatment', (v) => (babyTreatment = v));
       }
     } else if (currentSection === 'MOMS') {
-      if (label.includes('usia kehamilan') || label.includes('usia hamil') || label.includes('uk')) {
+      if (label.includes('usia kehamilan') || label.includes('usia hamil') || /\buk\b/i.test(label)) {
         setOrPending(value, 'momsPregnancyAge', (v) => (momsPregnancyAge = v));
       } else if (label.includes('treatment') || label.includes('layanan') || label.includes('paket')) {
         setOrPending(value, 'momsTreatment', (v) => (momsTreatment = v));
