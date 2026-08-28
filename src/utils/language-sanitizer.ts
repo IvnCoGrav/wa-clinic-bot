@@ -176,6 +176,18 @@ export function sanitizeGreetingRepetitionForFollowUp(text: string, isFollowUp: 
 }
 
 /**
+ * Memangkas sapaan pembuka redundan pada body balasan sebelum digabungkan dengan greeting header resmi Turn-0.
+ */
+export function stripDuplicateTurn0Greeting(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/^(?:(?:halo|hai|waalaikumsalam|assalamualaikum|selamat\s+(?:pagi|siang|sore|malam))\s+(?:bunda|kak|min)[!.,✨🌸\s]*)+/i, '')
+    .replace(/^(?:terima\s+kasih\s+(?:sudah|telah|banyak)\s+menghubungi\s+(?:kala\s+moms\s+(?:and|&)\s+baby\s+spa|kami)[!.,✨🌸\s]*)+/i, '')
+    .replace(/^(?:(?:halo|hai|waalaikumsalam|assalamualaikum|selamat\s+(?:pagi|siang|sore|malam))\s+(?:bunda|kak|min)[!.,✨🌸\s]*)+/i, '')
+    .trim();
+}
+
+/**
  * Membersihkan afirmasi sepihak atas ketersediaan jadwal ("Tentu bisa...", "Pasti bisa...", "Bisa ya, Bun...")
  * saat bot merespons pengecekan jadwal/ketersediaan slot, sehingga bot menginfokan secara netral
  * bahwa jadwal akan dicekkan terlebih dahulu tanpa mengonfirmasi "bisa" di depan.
@@ -239,10 +251,41 @@ export function sanitizeScheduleAffirmations(text: string): string {
   return cleaned;
 }
 
+/**
+ * Membersihkan bocoran harga dan durasi waktu jika customer TIDAK menanyakan harga/biaya atau durasi.
+ * Sesuai SOP: Harga & durasi tidak boleh dijelaskan secara proaktif kecuali customer menanyakan langsung.
+ */
+export function sanitizeUnsolicitedPriceAndDuration(text: string, customerInput?: string): string {
+  if (!text || !customerInput) return text;
+
+  const isAskingPriceOrDuration = /\b(berapa|harga|harganya|tarif|tarifnya|biaya|biayanya|ongkir|ongkirnya|ongkos|pricelist|durasi|menit|lama|lamanya|waktu|jam|bayar)\b/i.test(customerInput);
+  if (isAskingPriceOrDuration) {
+    return text;
+  }
+
+  let cleaned = text;
+  // Hapus pola frasa harga & durasi yang menempel di rekomendasi treatment
+  // Contoh: "dengan tarif promo Rp 70.000 durasi sekitar 40 menit"
+  // Contoh: "seharga Rp 70.000 durasi 40 menit"
+  // Contoh: "dengan biaya Rp 70.000"
+  cleaned = cleaned
+    .replace(/(?:,\s*|\s+)(?:dengan\s+)?(?:tarif|harga|biaya)?(?:\s+promo)?\s+Rp\s*[\d\.]+(?:rb|k|ribu)?(?:\s*,\s*|\s+)(?:durasi\s+(?:sekitar\s+)?\d+\s+menit)/gi, '')
+    .replace(/(?:,\s*|\s+)(?:dengan\s+)?(?:tarif|harga|biaya)(?:\s+promo)?\s+Rp\s*[\d\.]+(?:rb|k|ribu)?/gi, '')
+    .replace(/(?:,\s*|\s+)(?:seharga|seharganya)\s+Rp\s*[\d\.]+(?:rb|k|ribu)?/gi, '')
+    .replace(/(?:,\s*|\s+)(?:durasi\s+(?:sekitar\s+)?\d+\s+menit)/gi, '')
+    .replace(/(?:,\s*|\s+)(?:selama\s+(?:sekitar\s+)?\d+\s+menit)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+\./g, '.')
+    .trim();
+
+  return cleaned;
+}
+
 export interface UnifiedSanitizerOptions {
   isFollowUp?: boolean;
   historyCount?: number;
   preserveGreeting?: boolean;
+  customerInput?: string;
 }
 
 /**
@@ -271,6 +314,7 @@ export class UnifiedResponseSanitizer {
     // 4. Repetitive Greetings & Typo & Anti-Affirmation Schedule Guard
     cleaned = sanitizeRepetitiveGreetings(cleaned);
     cleaned = sanitizeScheduleAffirmations(cleaned);
+    cleaned = sanitizeUnsolicitedPriceAndDuration(cleaned, options?.customerInput);
     cleaned = sanitizeEmDash(cleaned);
     cleaned = sanitizeStrayBackslashes(cleaned);
 

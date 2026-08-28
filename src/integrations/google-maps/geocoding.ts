@@ -97,6 +97,13 @@ export class GeocodingService {
           return localMatch;
         }
 
+        // Jika localMatch mengembalikan ambiguitas nama kecamatan/wilayah luas (misal "Kenjeran", "Jambangan", "Waru"),
+        // JANGAN fallback ke Google Maps API untuk menebak koordinat acak!
+        // Pertahankan ambiguitas agar DecisionMatrix meminta detail kelurahan sesuai SOP.
+        if (!localMatch.isPrecise && (localMatch as any).ambiguityResults && (localMatch as any).ambiguityResults.length > 1) {
+          return localMatch;
+        }
+
         // --- TIER 2: GOOGLE MAPS API (FALLBACK UNTUK NAMA JALAN/PERUMAHAN) ---
         if (!this.apiKey || this.apiKey.startsWith('mock')) {
           return localMatch;
@@ -347,7 +354,8 @@ export class GeocodingService {
           }
         } else {
           const similarity = getStringSimilarity(lowerSpan, kecName);
-          if (similarity >= kecamatanThreshold) {
+          const dynamicKecThreshold = kecName.length <= 4 ? 0.85 : 0.75;
+          if (similarity >= dynamicKecThreshold) {
             const cand = { item: entry, score: similarity, level: 'kecamatan' as const, matchedSpan: span };
             if (this.isBetterMatch(cand, bestMatch)) {
               bestMatch = cand;
@@ -484,11 +492,14 @@ export class GeocodingService {
       }
     } catch (_) {}
 
-    // Cek apakah cleanText/lowerNorm mencocoki nama kecamatan luas di database
+    // Cek apakah cleanText/lowerNorm mencocoki nama kecamatan luas di database (termasuk fuzzy typo)
     let matchedKecSubdistricts: any[] | null = null;
     let matchedKecName = '';
     for (const [kecKey, entries] of kecamatanMap.entries()) {
-      if (cleanNorm === kecKey || lowerNorm.includes(kecKey)) {
+      const isDirectMatch = cleanNorm === kecKey || lowerNorm.includes(kecKey);
+      const sim = !isDirectMatch ? getStringSimilarity(cleanNorm, kecKey) : 1.0;
+      const kecThreshold = kecKey.length <= 4 ? 0.85 : 0.75;
+      if (isDirectMatch || sim >= kecThreshold) {
         // Jika cleanNorm persis nama kelurahan dan BUKAN persis nama kecamatan, jangan anggap sebagai kecamatan luas
         if (cleanNorm !== kecKey && (isExactKelurahanName || hasAnyKelurahanInText)) {
           continue;

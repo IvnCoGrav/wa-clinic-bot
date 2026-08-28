@@ -3,10 +3,12 @@ import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import type { IWahaClient } from '../../integrations/waha/client';
 
+const sandboxPhoneLocks = new Map<string, Promise<any>>();
+
 export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/admin/sandbox/chat
-   * Simulate a chat message and inspect RAG retrieval & LLM generation
+   * Simulate a chat message (or burst messages) and inspect RAG retrieval & LLM generation
    */
   fastify.post(
     '/api/admin/sandbox/chat',
@@ -19,18 +21,25 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
       },
     },
     async (
-      request: FastifyRequest<{ Body: { text: string; simulateOutage?: boolean; sandboxPhone?: string } }>,
+      request: FastifyRequest<{ Body: { text?: string; messages?: string[]; simulateOutage?: boolean; sandboxPhone?: string } }>,
       reply: FastifyReply
     ) => {
-      const { text, simulateOutage, sandboxPhone } = request.body || {};
-      if (!text) {
-        return reply.status(400).send({ error: 'Text field is required' });
+      const { text, messages, simulateOutage, sandboxPhone } = request.body || {};
+      const rawTextList = Array.isArray(messages) && messages.length > 0
+        ? messages.filter((m) => typeof m === 'string' && m.trim().length > 0)
+        : typeof text === 'string' && text.trim().length > 0 ? [text] : [];
+
+      if (rawTextList.length === 0) {
+        return reply.status(400).send({ error: 'Text or messages field is required' });
       }
       const targetPhone = sandboxPhone || '628999999999';
+      const combinedRawText = rawTextList.join('\n');
 
-      const { llmOutageStorage } = await import('../../integrations/llm/context');
+      const prevLock = sandboxPhoneLocks.get(targetPhone) || Promise.resolve();
+      const currentTask = prevLock.catch(() => {}).then(async () => {
+        const { llmOutageStorage } = await import('../../integrations/llm/context');
 
-      return llmOutageStorage.run({ simulateOutage: Boolean(simulateOutage) }, async () => {
+        return llmOutageStorage.run({ simulateOutage: Boolean(simulateOutage) }, async () => {
         try {
           const { knowledgeBaseService } = await import('../../services/knowledge.service');
           const { customerService } = await import('../../services/customer.service');
@@ -147,7 +156,7 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
 
           let conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
-          if (text.trim().toLowerCase() === '/reset') {
+          if (combinedRawText.trim().toLowerCase() === '/reset') {
             await customerService.clearPendingLocation(customer.id, DEFAULT_TENANT_ID);
             conversation = await conversationService.updateConversationState(
               conversation.id,
@@ -165,13 +174,14 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               answer:
                 'Sesi percakapan simulator berhasil di-reset ke INITIAL! 🌸 Silakan ketik "halo" atau sapaan lainnya untuk mulai menguji.',
               chunks: [],
-              query: text,
+              query: combinedRawText,
+              burstCount: rawTextList.length,
               timestamp: new Date(),
             };
           }
 
           let incomingMessage: any;
-          const locationMatch = text.match(/^\/location\s+([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)/i);
+          const locationMatch = combinedRawText.match(/^\/location\s+([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)/i);
 
           if (locationMatch) {
             incomingMessage = {
@@ -186,16 +196,22 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
               },
             };
           } else {
-            const strippedText = text.replace(/(?:Promo|ID|Iklan|Diskon)?\s*\[\s*[\w\s]{1,10}?\s*\]/gi, '').trim() || text;
+            const strippedList = rawTextList.map((t) =>
+              t.replace(/(?:Promo|ID|Iklan|Diskon)?\s*\[\s*[\w\s]{1,10}?\s*\]/gi, '').trim() || t
+            );
+            const strippedCombinedText = strippedList.join('\n');
+
             incomingMessage = {
               id: `msg_sandbox_${Date.now()}`,
               from: targetPhone,
               chatId: `${targetPhone}@c.us`,
               timestamp: String(Math.floor(Date.now() / 1000)),
               type: 'text',
-              text: { body: strippedText },
-              _rawBody: text,
-              originalText: text,
+              text: { body: strippedCombinedText },
+              _rawBody: combinedRawText,
+              originalText: combinedRawText,
+              burstMessages: rawTextList,
+              burstCount: rawTextList.length,
             };
           }
 
@@ -222,7 +238,8 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
             answer,
             sentBubbles,
             chunks,
-            query: text,
+            query: combinedRawText,
+            burstCount: rawTextList.length,
             timestamp: new Date(),
             llmError: simulateOutage ? 'Primary LLM provider connection timeout (500 Internal Server Error)' : null,
           };
@@ -230,12 +247,18 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
           return {
             answer: `Error processing sandbox message: ${err.message}`,
             chunks: [],
-            query: text,
+            query: combinedRawText,
+            burstCount: rawTextList.length,
             timestamp: new Date(),
             llmError: err.message,
           };
         }
       });
+      });
+
+      sandboxPhoneLocks.set(targetPhone, currentTask);
+      const result = await currentTask;
+      return reply.send(result);
     }
   );
 

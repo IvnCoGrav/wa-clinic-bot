@@ -1,16 +1,18 @@
 import { CustomerSlate, ExtractedEntities, GroundingPackage } from './types';
 import { callChatCompletionsWithFallback } from '../integrations/llm/model-fallback';
 import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
-import { AiModelConfigService } from '../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { PersonaComposer } from './persona-composer';
 import { DynamicCloserService } from './dynamic-closer.service';
 import { UnifiedResponseSanitizer } from '../utils/language-sanitizer';
+import { ConversationStateSummarizer } from './conversation-summarizer';
+import { FewShotExemplarBank } from './few-shot-exemplars';
+import { AdaptiveModelSelector } from './adaptive-model-selector';
 
 /**
  * Sanitizer Format Deterministik terpusat (alias ke UnifiedResponseSanitizer).
  */
-export function sanitizeFinalReply(text: string, options?: { isFollowUp?: boolean; historyCount?: number }): string {
+export function sanitizeFinalReply(text: string, options?: { isFollowUp?: boolean; historyCount?: number; customerInput?: string }): string {
   return UnifiedResponseSanitizer.sanitize(text, options);
 }
 
@@ -30,9 +32,14 @@ export class ReplyGenerator {
     }
   ): Promise<string> {
     const tenantId = context?.tenantId || DEFAULT_TENANT_ID;
-    const modelConfig = AiModelConfigService.getModelConfig('CHAT_REPLY', tenantId);
+    const modelSelection = AdaptiveModelSelector.selectModel(slate, extraction, {
+      history: context?.history,
+      customerInput: context?.customerInput,
+      tenantId,
+    });
     const endpoint = getLlmEndpointConfig();
-    const historyCount = context?.history?.length || 0;
+    const botRepliesCount = context?.history?.filter((h) => h.role === 'assistant').length ?? 0;
+    const historyCount = botRepliesCount;
 
     // Fallback template jika LLM offline
     const { TEMPLATES } = await import('../config/persona');
@@ -83,7 +90,17 @@ export class ReplyGenerator {
       context?.customerInput
     );
 
-    // 4. Susun System Prompt via Single Source of Truth PersonaComposer
+    // 4. Conversation State Summary (0-Token Context Distillation)
+    const conversationSummary = ConversationStateSummarizer.summarize(slate, extraction, {
+      history: context?.history,
+      customerInput: context?.customerInput,
+    });
+
+    // 5. Few-Shot Exemplars (Positive Dialogue Reference)
+    const relevantExemplars = FewShotExemplarBank.selectRelevantExemplars(extraction, slate, context?.customerInput);
+    const fewShotExamples = FewShotExemplarBank.formatExemplarsForPrompt(relevantExemplars);
+
+    // 6. Susun System Prompt via Single Source of Truth PersonaComposer
     const systemPrompt = PersonaComposer.composeSlotGeneratorPrompt({
       deliveryFactsText: deliveryText,
       ageText,
@@ -92,25 +109,27 @@ export class ReplyGenerator {
       faqsSection,
       historyCount,
       dynamicCloserInstruction,
+      conversationSummary,
+      fewShotExamples,
     });
 
     const historyContext = context?.history && context.history.length > 0
       ? `\nRIWAYAT CHAT SEBELUMNYA:\n${context.history.slice(-4).map((h) => `${h.role}: ${h.content}`).join('\n')}`
       : '';
 
-    const userContent = `${historyContext}\n\nPESAN TERBARU BUNDA:\n"${context?.customerInput || ''}"\n\nBalas dengan ramah sebagai Bidan Yusi:`;
+    const userContent = `${conversationSummary}\n${historyContext}\n\nPESAN TERBARU BUNDA:\n"${context?.customerInput || ''}"\n\nBalas dengan ramah sebagai Bidan Yusi:`;
 
     const startedAt = Date.now();
     try {
       const callResult = await callChatCompletionsWithFallback({
         baseUrl: endpoint.baseUrl,
         apiKey: endpoint.apiKey,
-        model: modelConfig.modelName || 'gpt-4o-mini',
+        model: modelSelection.modelName || 'gpt-4o-mini',
         fallbackModel: endpoint.fallbackModel,
         timeoutMs: endpoint.timeoutMs || 25000,
         payload: {
-          temperature: 0.6,
-          max_tokens: 500,
+          temperature: modelSelection.modelConfig.temperature || 0.6,
+          max_tokens: modelSelection.modelConfig.maxTokens || 500,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userContent },
@@ -120,7 +139,7 @@ export class ReplyGenerator {
 
       const responseData = callResult.data;
       const rawReply = responseData?.choices?.[0]?.message?.content || baselineFallback;
-      let finalReply = sanitizeFinalReply(rawReply, { historyCount });
+      let finalReply = sanitizeFinalReply(rawReply, { historyCount, customerInput: context?.customerInput });
 
       // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
       // pastikan balasan wajib diawali perkenalan resmi Bidan Yusi jika LLM belum menyertakannya.
@@ -131,9 +150,11 @@ export class ReplyGenerator {
       ) {
         const { TEMPLATES } = await import('../config/persona');
         const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+        const { stripDuplicateTurn0Greeting } = await import('../utils/language-sanitizer');
         const isIslamic = hasIslamicGreeting(context?.customerInput || '');
         const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
-        finalReply = `${greetingHeader}\n\n${finalReply}`;
+        const cleanBody = stripDuplicateTurn0Greeting(finalReply);
+        finalReply = `${greetingHeader}\n\n${cleanBody}`;
       }
 
       try {
@@ -141,7 +162,7 @@ export class ReplyGenerator {
         auditLlmCall({
           customer_phone: context?.customerPhone || 'unknown',
           tenant_id: context?.tenantId,
-          task_type: 'SLOT_GENERATOR',
+          task_type: modelSelection.task,
           model_name: callResult.model,
           baseUrl: callResult.baseUrl,
           startedAt,
@@ -156,11 +177,11 @@ export class ReplyGenerator {
           customerPhone: context?.customerPhone || 'unknown',
           customerInput: context?.customerInput || '',
           promptPayload: { systemPrompt, userContent },
-          reasoning: `Single-pass reply generated | Grounding facts: [Loc: ${grounding.deliveryFacts?.kelurahan || '-'}, Age: ${slate.childAgeMonths} bln]`,
+          reasoning: `Single-pass reply generated [Model: ${modelSelection.modelName} (${modelSelection.reason})] | Grounding facts: [Loc: ${grounding.deliveryFacts?.kelurahan || '-'}, Age: ${slate.childAgeMonths} bln]`,
           rawReasoning: rawReply,
           groundTruthUsed: grounding,
           finalReply,
-          modelUsed: callResult.model || modelConfig.modelName,
+          modelUsed: callResult.model || modelSelection.modelName,
           durationMs: Date.now() - startedAt,
           status: 'SUCCESS',
         });
@@ -174,8 +195,8 @@ export class ReplyGenerator {
         auditLlmCall({
           customer_phone: context?.customerPhone || 'unknown',
           tenant_id: context?.tenantId,
-          task_type: 'SLOT_GENERATOR',
-          model_name: modelConfig.modelName || 'MiniMax-M2.7-highspeed',
+          task_type: modelSelection.task,
+          model_name: modelSelection.modelName || 'MiniMax-M2.7-highspeed',
           baseUrl: endpoint.baseUrl,
           startedAt,
           error: { message: err?.message },
