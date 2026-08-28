@@ -297,31 +297,44 @@ export class MessageService {
       }
     }
 
+    const effectiveMsgDate = data.createdAt || new Date();
     const effectiveReadAt = data.readAt !== undefined
       ? data.readAt
       : data.isHistorical
-        ? (data.createdAt || new Date())
+        ? effectiveMsgDate
         : undefined;
 
     let saved: any = null;
     try {
-      saved = await prisma.message.create({
-        data: {
-          tenant_id: data.tenantId,
-          conversation_id: data.conversationId,
-          direction: data.direction,
-          content: data.content,
-          wa_message_id: data.waMessageId || null,
-          payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
-          sender_type: data.senderType ?? (data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND ? 'CUSTOMER' : 'BOT'),
-          sender_name: data.senderName ?? undefined,
-          delivery_status: data.deliveryStatus ?? undefined,
-          meta_error_code: data.metaErrorCode ?? undefined,
-          meta_error_desc: data.metaErrorDesc ?? undefined,
-          created_at: data.createdAt || undefined,
-          read_at: effectiveReadAt ?? undefined,
-        },
-      });
+      const [savedMsg] = await Promise.all([
+        prisma.message.create({
+          data: {
+            tenant_id: data.tenantId,
+            conversation_id: data.conversationId,
+            direction: data.direction,
+            content: data.content,
+            wa_message_id: data.waMessageId || null,
+            payload_raw: data.payloadRaw ? JSON.parse(JSON.stringify(data.payloadRaw)) : undefined,
+            sender_type: data.senderType ?? (data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND ? 'CUSTOMER' : 'BOT'),
+            sender_name: data.senderName ?? undefined,
+            delivery_status: data.deliveryStatus ?? undefined,
+            meta_error_code: data.metaErrorCode ?? undefined,
+            meta_error_desc: data.metaErrorDesc ?? undefined,
+            created_at: data.createdAt || undefined,
+            read_at: effectiveReadAt ?? undefined,
+          },
+        }),
+        prisma.conversation.update({
+          where: { id: data.conversationId },
+          data: {
+            last_message_at: effectiveMsgDate,
+            updated_at: new Date(),
+          },
+        }).catch((convErr: any) => {
+          console.warn('[MESSAGE LOG CONV UPDATE WARN]', convErr.message);
+        }),
+      ]);
+      saved = savedMsg;
       if (saved) return saved;
       throw new Error('Prisma create returned null/undefined (DB offline)');
     } catch (error) {
@@ -339,10 +352,21 @@ export class MessageService {
         delivery_status: data.deliveryStatus ?? null,
         meta_error_code: data.metaErrorCode ?? null,
         meta_error_desc: data.metaErrorDesc ?? null,
-        created_at: data.createdAt || new Date(),
+        created_at: effectiveMsgDate,
         read_at: effectiveReadAt ?? null,
       };
       memoryMessages.push(fallbackMessage);
+
+      // In-memory fallback: sinkronkan last_message_at di memoryConversations
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const conv = await conversationService.getConversationById(data.conversationId, data.tenantId);
+        if (conv) {
+          conv.last_message_at = effectiveMsgDate;
+          conv.updated_at = new Date();
+        }
+      } catch {}
+
       return fallbackMessage;
     } finally {
       // Resolusi info customer & deteksi apakah berasal dari percakapan Sandbox/QA Test

@@ -70,14 +70,58 @@ export function fetchManualCapiHistory<T = any>(): Promise<T> {
   return apiRequest('/api/admin/debug/meta-manual-history');
 }
 
+interface CacheEntry<T = any> {
+  data: T;
+  timestamp: number;
+  ttlMs: number;
+}
+
+const memoryApiCache = new Map<string, CacheEntry>();
+
+export function clearApiCache(prefix?: string) {
+  if (!prefix) {
+    memoryApiCache.clear();
+    return;
+  }
+  for (const key of memoryApiCache.keys()) {
+    if (key.startsWith(prefix) || key.includes(prefix)) {
+      memoryApiCache.delete(key);
+    }
+  }
+}
+
+export function getCachedApiResponse<T = any>(endpoint: string): T | null {
+  const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
+  const entry = memoryApiCache.get(url);
+  if (!entry) return null;
+  return entry.data as T;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit & { timeoutMs?: number } = {}
+  options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean } = {}
 ): Promise<T> {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
-  const timeoutMs = options.timeoutMs ?? 15000; // Default 15s timeout
-  
   const method = (options.method || 'GET').toUpperCase();
+  const isGet = method === 'GET';
+
+  // Invalidate cache on write operations
+  if (!isGet) {
+    clearApiCache();
+  }
+
+  // SWR Cache check for GET requests
+  const shouldCache = options.useCache !== false && isGet;
+  const ttlMs = options.ttlMs ?? 15000; // 15s default cache
+
+  if (shouldCache && !options.forceFresh) {
+    const cached = memoryApiCache.get(url);
+    if (cached && Date.now() - cached.timestamp < cached.ttlMs) {
+      return cached.data as T;
+    }
+  }
+
+  const timeoutMs = options.timeoutMs ?? 15000; // Default 15s timeout
   const needsJsonBody = ['POST', 'PUT', 'PATCH'].includes(method);
   
   const headers: Record<string, string> = {
@@ -124,7 +168,15 @@ export async function apiRequest<T = any>(
       throw error;
     }
 
-    return response.json();
+    const data = await response.json();
+    if (shouldCache) {
+      memoryApiCache.set(url, {
+        data,
+        timestamp: Date.now(),
+        ttlMs,
+      });
+    }
+    return data;
   } catch (err: any) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {

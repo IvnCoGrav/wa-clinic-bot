@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
@@ -48,8 +48,10 @@ import { useAuth } from '../../contexts/AuthContext';
 export const Reservations: React.FC = () => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
-  const [loading, setLoading] = useState(true);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const cachedRes = getCachedApiResponse<any>(`/api/admin/reservations?page=1&pageSize=50`);
+  const initialReservations = Array.isArray(cachedRes) ? cachedRes : (cachedRes?.data || []);
+  const [loading, setLoading] = useState(initialReservations.length === 0);
+  const [reservations, setReservations] = useState<Reservation[]>(() => initialReservations);
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
   const [proofModal, setProofModal] = useState<Reservation | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
@@ -116,7 +118,7 @@ export const Reservations: React.FC = () => {
 
   const loadReservations = async (targetPage = 1, append = false) => {
     try {
-      setLoading(true);
+      if (reservations.length === 0) setLoading(true);
       const res = await apiRequest(`/api/admin/reservations?page=${targetPage}&pageSize=${PAGE_SIZE}`);
       const data = Array.isArray(res) ? res : res?.data || [];
       setReservations((prev) => (append ? [...prev, ...data] : data));
