@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
@@ -103,6 +104,19 @@ export const Reservations: React.FC = () => {
       setEditDate('');
     }
   }, [selectedRes]);
+
+  // Escape key handler for active modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (housePhotoModal) setHousePhotoModal(null);
+        else if (proofModal) setProofModal(null);
+        else if (editLocationModal) setEditLocationModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [housePhotoModal, proofModal, editLocationModal]);
 
   useEffect(() => {
     async function loadStaff() {
@@ -1377,282 +1391,308 @@ export const Reservations: React.FC = () => {
       )}
 
       {/* Payment Proof Viewer Modal */}
-      {proofModal && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-[60] flex items-center justify-center p-3 sm:p-4"
-          onClick={() => setProofModal(null)}
-        >
+      {proofModal &&
+        createPortal(
           <div
-            className="w-full max-w-md bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setProofModal(null)}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
-                <Receipt size={16} className="text-[#008069] flex-shrink-0" />
-                <span>Bukti Pembayaran</span>
-              </h3>
-              <button
-                onClick={() => setProofModal(null)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-xl p-3.5">
-              <div className="flex justify-between">
-                <span className="text-[#667781]">Pasien</span>
-                <span className="font-bold text-[#111b21]">
-                  {proofModal.customer?.name || 'Bunda'} ({proofModal.customer?.phone})
-                </span>
+            <div
+              className="w-full max-w-md bg-white border border-[#e9edef] rounded-3xl p-4 sm:p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
+                <h3 className="text-sm font-bold text-[#111b21] flex items-center space-x-2">
+                  <Receipt size={16} className="text-[#008069] flex-shrink-0" />
+                  <span>Bukti Pembayaran</span>
+                </h3>
+                <button
+                  onClick={() => setProofModal(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[#667781]">Metode</span>
-                <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(proofModal.payment_method)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#667781]">Nilai</span>
-                <span className="font-bold text-[#111b21]">
-                  {proofModal.purchase_value ? `Rp ${proofModal.purchase_value.toLocaleString('id-ID')}` : '-'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[#667781]">Status</span>
-                {getStatusBadge(proofModal.status)}
-              </div>
-            </div>
 
-            <img
-              src={proofModal.proof_url!}
-              alt="Bukti pembayaran"
-              className="w-full rounded-xl border border-[#e9edef] bg-[#f8fafc]"
-            />
-
-            <div className="flex justify-center">
-              <a
-                href={proofModal.proof_url!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition shadow-xs"
-              >
-                Buka Gambar Penuh
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* House Front Photo Lightbox Modal */}
-      {housePhotoModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setHousePhotoModal(null)}
-        >
-          <div
-            className="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-[#e9edef] relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-2 text-[#008069]">
-                <Camera size={18} />
-                <h3 className="font-bold text-sm text-[#111b21]">Foto Tampak Depan Rumah Pasien</h3>
-              </div>
-              <button
-                onClick={() => setHousePhotoModal(null)}
-                className="p-1 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <img
-              src={housePhotoModal}
-              alt="Foto depan rumah pasien"
-              className="w-full max-h-[70vh] object-contain rounded-2xl border border-[#e9edef] bg-[#f8fafc]"
-            />
-
-            <div className="flex justify-center">
-              <a
-                href={housePhotoModal}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition shadow-xs"
-              >
-                Buka Gambar Asli HD
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Edit Panduan Lokasi & Foto Rumah Modal */}
-      {editLocationModal && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
-          onClick={() => setEditLocationModal(null)}
-        >
-          <div
-            className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl border border-[#e9edef] relative max-h-[92vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
-                  <MapPin size={20} />
+              <div className="text-xs space-y-1.5 bg-[#f8fafc] border border-[#e9edef] rounded-2xl p-3.5">
+                <div className="flex justify-between">
+                  <span className="text-[#667781]">Pasien:</span>
+                  <span className="font-bold text-[#111b21]">
+                    {proofModal.customer?.name || 'Bunda'} ({proofModal.customer?.phone})
+                  </span>
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-[#111b21]">Edit Panduan Lokasi & Foto Rumah</h3>
-                  <p className="text-xs text-[#667781] truncate max-w-[220px]">
-                    {editLocationModal.customer?.name || 'Bunda'} ({editLocationModal.customer?.phone})
-                  </p>
+                <div className="flex justify-between">
+                  <span className="text-[#667781]">Metode:</span>
+                  <span className="font-bold text-[#111b21]">{getPaymentMethodLabel(proofModal.payment_method)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#667781]">Nilai:</span>
+                  <span className="font-bold text-[#111b21]">
+                    {proofModal.purchase_value ? `Rp ${proofModal.purchase_value.toLocaleString('id-ID')}` : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-[#e9edef]">
+                  <span className="text-[#667781]">Status:</span>
+                  {getStatusBadge(proofModal.status)}
                 </div>
               </div>
-              <button
-                onClick={() => setEditLocationModal(null)}
-                className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            {/* Info Alamat Pasien */}
-            <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                Alamat Pasien:
-              </span>
-              <p className="text-xs text-[#111b21] font-medium leading-snug">
-                {editLocationModal.customer?.kelurahan
-                  ? `${editLocationModal.customer.kelurahan}, ${editLocationModal.customer.kecamatan}, ${editLocationModal.customer.kota}`
-                  : 'Alamat belum tercatat lengkap'}
-              </p>
-            </div>
+              <div className="rounded-2xl overflow-hidden border border-[#e9edef] bg-[#f8fafc]">
+                <img
+                  src={proofModal.proof_url!}
+                  alt="Bukti pembayaran"
+                  className="w-full max-h-72 object-contain"
+                />
+              </div>
 
-            {/* Bagian 1: Foto Depan Rumah */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-[#111b21]">
-                1. Foto Tampak Depan Rumah:
-              </label>
-
-              <input
-                type="file"
-                ref={adminHouseFileInputRef}
-                accept="image/*"
-                onChange={handlePickAdminHousePhoto}
-                className="hidden"
-              />
-
-              {editHousePhotoB64 && !editRemovePhoto ? (
-                <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
-                  <img
-                    src={editHousePhotoB64}
-                    alt="Tampak Depan Rumah"
-                    className="object-contain max-h-48 w-auto rounded-xl"
-                  />
-                  <div className="absolute top-2 right-2 flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => adminHouseFileInputRef.current?.click()}
-                      className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition shadow-xs"
-                      title="Ganti foto"
-                    >
-                      <Camera size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditRemovePhoto(true);
-                        setEditHousePhotoB64(null);
-                      }}
-                      className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-xs"
-                      title="Hapus foto"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
                 <button
                   type="button"
-                  onClick={() => adminHouseFileInputRef.current?.click()}
-                  className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc]"
+                  onClick={() => setProofModal(null)}
+                  className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
                 >
-                  <Upload size={20} className="mb-1 text-[#008069]" />
-                  <span className="font-semibold text-[#111b21]">Unggah Foto Depan Rumah</span>
-                  <span className="text-[10px] text-[#8696a0]">Pilih gambar dari komputer / galeri (maks 12 MB)</span>
+                  Tutup
                 </button>
-              )}
-            </div>
-
-            {/* Bagian 2: Catatan Patokan */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-[#111b21]">
-                2. Catatan Patokan / Ancer-ancer Rumah:
-              </label>
-              <textarea
-                rows={2}
-                value={editLandmark}
-                onChange={(e) => setEditLandmark(e.target.value)}
-                placeholder="Contoh: Pagar hitam gerbang kayu, seberang masjid, samping toko berkah"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs resize-none"
-              />
-            </div>
-
-            {/* Bagian 3: Koordinat GPS (Opsional) */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-[#111b21]">
-                3. Koordinat GPS (Latitude, Longitude - Opsional):
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={editLat}
-                  onChange={(e) => setEditLat(e.target.value)}
-                  placeholder="Latitude (misal: -7.3488)"
-                  className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
-                />
-                <input
-                  type="text"
-                  value={editLng}
-                  onChange={(e) => setEditLng(e.target.value)}
-                  placeholder="Longitude (misal: 112.7516)"
-                  className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
-                />
+                <a
+                  href={proofModal.proof_url!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Maximize2 size={13} />
+                  <span>Buka Gambar Penuh</span>
+                </a>
               </div>
             </div>
+          </div>,
+          document.body
+        )}
 
-            {/* Modal Actions */}
-            <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
-              <button
-                type="button"
-                onClick={() => setEditLocationModal(null)}
-                disabled={submittingLocation}
-                className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEditLocation}
-                disabled={submittingLocation}
-                className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-              >
-                {submittingLocation ? (
-                  <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} />
-                    <span>Simpan Panduan Rumah</span>
-                  </>
-                )}
-              </button>
+      {/* House Front Photo Lightbox Modal */}
+      {housePhotoModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setHousePhotoModal(null)}
+          >
+            <div
+              className="bg-white rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl border border-[#e9edef] relative animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-[#e9edef] pb-3">
+                <div className="flex items-center space-x-2 text-[#008069]">
+                  <Camera size={18} />
+                  <h3 className="font-bold text-sm text-[#111b21]">Foto Tampak Depan Rumah Pasien</h3>
+                </div>
+                <button
+                  onClick={() => setHousePhotoModal(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="rounded-2xl overflow-hidden border border-[#e9edef] bg-[#f8fafc]">
+                <img
+                  src={housePhotoModal}
+                  alt="Foto depan rumah pasien"
+                  className="w-full max-h-[70vh] object-contain"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+                <button
+                  type="button"
+                  onClick={() => setHousePhotoModal(null)}
+                  className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+                <a
+                  href={housePhotoModal}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Maximize2 size={13} />
+                  <span>Buka Gambar Asli HD</span>
+                </a>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
+
+      {/* Admin Edit Panduan Lokasi & Foto Rumah Modal */}
+      {editLocationModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setEditLocationModal(null)}
+          >
+            <div
+              className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl border border-[#e9edef] relative max-h-[92vh] overflow-y-auto animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-[#e9edef] pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-10 w-10 rounded-2xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center border border-[#c2e7e0] shadow-xs">
+                    <MapPin size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-[#111b21]">Edit Panduan Lokasi & Foto Rumah</h3>
+                    <p className="text-xs text-[#667781] truncate max-w-[220px]">
+                      {editLocationModal.customer?.name || 'Bunda'} ({editLocationModal.customer?.phone})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditLocationModal(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Info Alamat Pasien */}
+              <div className="p-3 rounded-2xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
+                <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                  Alamat Pasien:
+                </span>
+                <p className="text-xs text-[#111b21] font-medium leading-snug">
+                  {editLocationModal.customer?.kelurahan
+                    ? `${editLocationModal.customer.kelurahan}, ${editLocationModal.customer.kecamatan}, ${editLocationModal.customer.kota}`
+                    : 'Alamat belum tercatat lengkap'}
+                </p>
+              </div>
+
+              {/* Bagian 1: Foto Depan Rumah */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-[#111b21]">
+                  1. Foto Tampak Depan Rumah:
+                </label>
+
+                <input
+                  type="file"
+                  ref={adminHouseFileInputRef}
+                  accept="image/*"
+                  onChange={handlePickAdminHousePhoto}
+                  className="hidden"
+                />
+
+                {editHousePhotoB64 && !editRemovePhoto ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                    <img
+                      src={editHousePhotoB64}
+                      alt="Tampak Depan Rumah"
+                      className="object-contain max-h-48 w-auto rounded-xl"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => adminHouseFileInputRef.current?.click()}
+                        className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition shadow-xs cursor-pointer"
+                        title="Ganti foto"
+                      >
+                        <Camera size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditRemovePhoto(true);
+                          setEditHousePhotoB64(null);
+                        }}
+                        className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition shadow-xs cursor-pointer"
+                        title="Hapus foto"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => adminHouseFileInputRef.current?.click()}
+                    className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc] cursor-pointer"
+                  >
+                    <Upload size={20} className="mb-1 text-[#008069]" />
+                    <span className="font-semibold text-[#111b21]">Unggah Foto Depan Rumah</span>
+                    <span className="text-[10px] text-[#8696a0]">Pilih gambar dari komputer / galeri (maks 12 MB)</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Bagian 2: Catatan Patokan */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#111b21]">
+                  2. Catatan Patokan / Ancer-ancer Rumah:
+                </label>
+                <textarea
+                  rows={2}
+                  value={editLandmark}
+                  onChange={(e) => setEditLandmark(e.target.value)}
+                  placeholder="Contoh: Pagar hitam gerbang kayu, seberang masjid, samping toko berkah"
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs resize-none"
+                />
+              </div>
+
+              {/* Bagian 3: Koordinat GPS (Opsional) */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#111b21]">
+                  3. Koordinat GPS (Latitude, Longitude - Opsional):
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={editLat}
+                    onChange={(e) => setEditLat(e.target.value)}
+                    placeholder="Latitude (misal: -7.3488)"
+                    className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                  />
+                  <input
+                    type="text"
+                    value={editLng}
+                    onChange={(e) => setEditLng(e.target.value)}
+                    placeholder="Longitude (misal: 112.7516)"
+                    className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                <button
+                  type="button"
+                  onClick={() => setEditLocationModal(null)}
+                  disabled={submittingLocation}
+                  className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditLocation}
+                  disabled={submittingLocation}
+                  className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {submittingLocation ? (
+                    <>
+                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>Simpan Panduan Rumah</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Comprehensive Create Reservation Modal */}
       <CreateReservationModal
