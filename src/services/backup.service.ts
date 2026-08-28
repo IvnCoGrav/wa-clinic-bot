@@ -454,9 +454,10 @@ export class BackupService {
         if (Array.isArray(tables.aiConfigs) && tables.aiConfigs.length > 0) {
           for (const a of tables.aiConfigs) {
             try {
+              const { id: _id, ...rest } = a;
               await prisma.tenantAiConfig.upsert({
-                where: { id: a.id },
-                update: { ...a },
+                where: { tenant_id_task: { tenant_id: a.tenant_id, task: a.task } },
+                update: { ...rest },
                 create: { ...a },
               });
             } catch {}
