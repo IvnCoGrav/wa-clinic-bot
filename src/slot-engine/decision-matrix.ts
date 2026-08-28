@@ -35,6 +35,60 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
+    // PRIORITY 1B: KOMPLAIN / KELUHAN LAYANAN (Silent Escalation ke CS Manusia)
+    // =========================================================================
+    const isComplaint =
+      extraction.intents.includes('complaint') ||
+      /\b(komplain|kecewa|pelayanan\s*(buruk|kurang|jelek)|terapis\s*(telat|kasar|tidak\s*ramah)|kecewa\s*banget|mau\s*protes)\b/i.test(rawText);
+
+    if (isComplaint) {
+      updatedSlate.isHumanHandling = true;
+      updatedSlate.humanHandlingReason = 'customer_complaint';
+      return {
+        action: 'ESCALATE_HUMAN_COMPLAINT',
+        reason: 'Customer menyampaikan keluhan/komplain pelayanan -> Silent escalation ke CS.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 1C: PERMINTAAN CS / ADMIN MANUSIA (Direct Handover)
+    // =========================================================================
+    const isHumanAgentRequest =
+      /\b(bicara\s+(dengan|sama)?\s*(orang|admin|manusia|cs)|mau\s+(ngomong|bicara|chat)\s+(sama|dengan)?\s*(admin|cs|orang|manusia)|hubungkan\s+ke\s+(admin|cs)|mau\s+cs\s*(asli|manusia)?|ini\s+bot\s+ya|minta\s+nomor\s+admin)\b/i.test(rawText);
+
+    if (isHumanAgentRequest) {
+      updatedSlate.isHumanHandling = true;
+      updatedSlate.humanHandlingReason = 'human_agent_requested';
+      return {
+        action: 'ESCALATE_HUMAN_AGENT_REQUEST',
+        reason: 'Customer meminta berbicara langsung dengan CS/Admin manusia.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.humanAgentRequest(),
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 1D: RESCHEDULE / PEMBATALAN RESERVASI AKTIF (Handover)
+    // =========================================================================
+    const isRescheduleOrCancel =
+      /\b(reschedule|ganti\s+jadwal|ubah\s+jadwal|pindah\s+jadwal|batal\s*(kan)?\s*(jadwal|booking|reservasi)|cancel\s*(jadwal|booking|reservasi)|batalkan\s*(jadwal|booking|reservasi))\b/i.test(rawText);
+
+    if (isRescheduleOrCancel) {
+      updatedSlate.isHumanHandling = true;
+      updatedSlate.humanHandlingReason = 'reschedule_or_cancellation';
+      return {
+        action: 'ESCALATE_RESCHEDULE_CANCEL',
+        reason: 'Customer meminta reschedule atau pembatalan jadwal -> Handover ke CS.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.rescheduleOrCancel(),
+      };
+    }
+
+    // =========================================================================
     // PRIORITY 2: SEDANG DITANGANI CS MANUSIA (CS Takeover Guard)
     // =========================================================================
     if (updatedSlate.isHumanHandling) {
@@ -204,6 +258,22 @@ export class DecisionMatrix {
         updatedSlate,
         shouldSendPricelistImage: false,
         deterministicTemplateReply: `Baik Bunda, silakan didiskusikan dulu dengan suami yaa 😊 Jika sudah siap atau ada yang ingin ditanyakan lagi seputar treatment, silakan hubungi kami kembali ya Bunda. Kami siap membantu 🤗`,
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 2E: NOT INTERESTED / PENOLAKAN HALUS (Tidak Jadi)
+    // =========================================================================
+    const isNotInterested =
+      /\b(tidak\s+jadi|gak\s+jadi|nggak\s+jadi|gajadi|belum\s+berminat|kemahalan\s*(kak|bund|min)?|batal\s+aja|cancel\s+aja|belum\s+butuh)\b/i.test(rawText);
+
+    if (isNotInterested) {
+      return {
+        action: 'NOT_INTERESTED_COMPLETED',
+        reason: 'Customer menyatakan tidak jadi / belum berminat -> Kirim penutup santun.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.notInterestedReply(),
       };
     }
 
@@ -414,6 +484,31 @@ export class DecisionMatrix {
         deterministicTemplateReply: TEMPLATES.outOfCoverage({
           distanceKm: updatedSlate.distanceKm || 30,
         }),
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 6B: TANYA JADWAL / CEK KETERSEDIAAN SLOT SPESIFIK -> HUMAN HANDLING
+    // Sesuai SOP klinik: ketersediaan jadwal terapis lapangan dicek manual oleh CS/Bidan
+    // =========================================================================
+    const isAskingScheduleSlot =
+      extraction.intents.includes('ask_schedule') ||
+      Boolean(extraction.preferredTimeText) ||
+      /\b(ada\s*slot|masih\s*ada\s*slot|slot\s*(hari\s*ini|besok|minggu|sabtu|senin|selasa|rabu|kamis|jumat)|jam\s*\d+(\.\d+)?\s*(pagi|siang|sore|malam)?\s*(bisa|ada|ready|tersedia)?|bisa\s*jam\s*\d+|kapan\s*(ready|tersedia|bisa|kosong)|ketersediaan\s*jadwal|jadwal\s*(kosong|ready|tersedia)|apakah\s*bisa\s*(hari\s*ini|besok|minggu|sabtu))\b/i.test(rawText);
+
+    if (isAskingScheduleSlot && extraction.symptoms.length === 0 && !isConsultationInquiry) {
+      const dayOrTime =
+        extraction.preferredDateText ||
+        extraction.preferredTimeText ||
+        rawText.match(/\b(hari\s*ini|besok|lusa|minggu|sabtu|senin|selasa|rabu|kamis|jumat|jam\s*\d+(\.\d+)?(?:\s*(?:pagi|siang|sore|malam))?)\b/i)?.[0];
+      updatedSlate.isHumanHandling = true;
+      updatedSlate.humanHandlingReason = 'asking_schedule';
+      return {
+        action: 'ESCALATE_HUMAN_SCHEDULE',
+        reason: 'Customer menanyakan ketersediaan jadwal/slot -> Handover ke CS/Bidan manusia untuk cek kalender.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.scheduleCheckHandoff({ dayOrTime }),
       };
     }
 

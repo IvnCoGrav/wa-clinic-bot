@@ -209,6 +209,68 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     };
   }
 
+  // 4b. Handle Komplain Layanan (Silent Escalation)
+  if (decision.action === 'ESCALATE_HUMAN_COMPLAINT') {
+    await SlateStore.persistSlate(decision.updatedSlate);
+    await conversationService.escalateToHumanHandling(
+      conversation,
+      customer.phone,
+      `Komplain layanan terdeteksi via Slot Engine: "${incomingText}"`,
+      tenantId,
+      'customer_complaint'
+    );
+    return {
+      nextState: ConversationState.HUMAN_HANDLING,
+      shouldSendReply: false,
+      isHumanHandling: true,
+      aiReasoning: decision.reason,
+    };
+  }
+
+  // 4c. Handle Eskalasi dengan Pesan Konfirmasi Handoff (Jadwal, CS Request, Reschedule/Cancel)
+  if (
+    decision.action === 'ESCALATE_HUMAN_SCHEDULE' ||
+    decision.action === 'ESCALATE_HUMAN_AGENT_REQUEST' ||
+    decision.action === 'ESCALATE_RESCHEDULE_CANCEL'
+  ) {
+    await SlateStore.persistSlate(decision.updatedSlate);
+    await conversationService.escalateToHumanHandling(
+      conversation,
+      customer.phone,
+      decision.reason,
+      tenantId,
+      decision.updatedSlate.humanHandlingReason || 'escalated'
+    );
+    const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
+    const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply || '', {
+      historyCount: history?.length || 0,
+      preserveGreeting: true,
+    });
+    return {
+      nextState: ConversationState.HUMAN_HANDLING,
+      replyText: sanitizedReply,
+      shouldSendReply: true,
+      isHumanHandling: true,
+      aiReasoning: decision.reason,
+    };
+  }
+
+  // 4d. Handle Not Interested (Selesai Tanpa Mendesak)
+  if (decision.action === 'NOT_INTERESTED_COMPLETED') {
+    await SlateStore.persistSlate(decision.updatedSlate);
+    const { UnifiedResponseSanitizer } = await import('../utils/language-sanitizer');
+    const sanitizedReply = UnifiedResponseSanitizer.sanitize(decision.deterministicTemplateReply || '', {
+      historyCount: history?.length || 0,
+      preserveGreeting: true,
+    });
+    return {
+      nextState: ConversationState.COMPLETED,
+      replyText: sanitizedReply,
+      shouldSendReply: true,
+      aiReasoning: decision.reason,
+    };
+  }
+
   // 5. Handle Kasus 2: Percakapan Sedang Diambil Alih CS
   if (decision.action === 'SILENT_HUMAN_ACTIVE') {
     return {
