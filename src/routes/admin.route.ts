@@ -137,7 +137,6 @@ export async function adminRoutes(fastify: FastifyInstance) {
         '/api/admin/export',
         '/api/admin/google',
         '/api/admin/waba',
-        '/api/admin/roles',
       ];
 
       if (superAdminOnlyPrefixes.some((prefix) => urlPath.startsWith(prefix))) {
@@ -145,6 +144,15 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({
           error: 'Forbidden: Insufficient role privileges for this administrative resource.',
           code: 'FORBIDDEN_STAFF_ROLE',
+        });
+      }
+
+      // Prohibit custom roles modification (creating, updating, deleting custom roles)
+      if (urlPath.startsWith('/api/admin/roles') && request.method !== 'GET') {
+        console.warn(`[RBAC GUARD] Blocked custom roles modification attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
+        return reply.status(403).send({
+          error: 'Forbidden: Only Super Admin can modify custom roles.',
+          code: 'FORBIDDEN_STAFF_MANAGEMENT',
         });
       }
 
