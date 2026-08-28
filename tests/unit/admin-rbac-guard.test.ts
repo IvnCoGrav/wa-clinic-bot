@@ -122,7 +122,7 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
       expect(res.json().code).toBe('FORBIDDEN_STAFF_MANAGEMENT');
     });
 
-    it('allows staff to access permitted operational endpoints (reservations, customers, livechat)', async () => {
+    it('allows staff to access permitted operational endpoints (reservations, customers, livechat, roles listing)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/admin/reservations',
@@ -133,6 +133,33 @@ describe('Admin RBAC Guard & Security Isolation (SEC-01 Fix)', () => {
 
       // Should not be 403 Forbidden
       expect(res.statusCode).not.toBe(403);
+
+      const rolesRes = await app.inject({
+        method: 'GET',
+        url: '/api/admin/roles',
+        headers: {
+          cookie: 'staff_session=valid_staff_token',
+        },
+      });
+      expect(rolesRes.statusCode).toBe(200);
+      expect(rolesRes.json().success).toBe(true);
+    });
+
+    it('strictly blocks staff from creating or modifying custom roles', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/roles',
+        headers: {
+          cookie: 'staff_session=valid_staff_token',
+        },
+        payload: {
+          key: 'UNAUTHORIZED_ROLE',
+          label: 'Unauthorized Role',
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('FORBIDDEN_STAFF_MANAGEMENT');
     });
   });
 });

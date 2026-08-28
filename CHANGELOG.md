@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fixed — RBAC Guard Allow Read-Only Access ke Rute Custom Roles bagi Staf (`admin.route.ts`) (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  - Saat staf non-Super Admin (seperti `ADMIN_CS`, `THERAPIST`, atau role kustom) login dan membuka dashboard admin, aplikasi React memanggil `GET /api/admin/roles` untuk menyinkronkan hak akses menu navigasi.
+  - Namun, rute `/api/admin/roles` sebelumnya dimasukkan secara global ke dalam `superAdminOnlyPrefixes` di `src/routes/admin.route.ts`, sehingga seluruh request (termasuk `GET`) diblokir dengan HTTP 403 dan memicu log warning `[RBAC GUARD] Blocked unauthorized access attempt by staff role '...' on GET /api/admin/roles`.
+
+- **Solusi & Implementasi:**
+  - Mengeluarkan `/api/admin/roles` dari `superAdminOnlyPrefixes`.
+  - Menambahkan guard spesifik berbasis method di `src/routes/admin.route.ts`: staf terautentikasi diizinkan melakukan pembacaan data (`GET /api/admin/roles`), sedangkan operasi modifikasi kustom peran (`POST`, `DELETE`) tetap dibatasi secara ketat khusus untuk `SUPER_ADMIN`.
+  - Menambahkan unit test di `tests/unit/admin-rbac-guard.test.ts` untuk memverifikasi staf non-Super Admin dapat membaca roles (200 OK) dan tetap terblokir saat mencoba membuat/mengubah peran (403 Forbidden).
+
+- **Pengujian & Verifikasi:**
+  - Unit test `tests/unit/admin-rbac-guard.test.ts`: **PASS (8/8 tests passed)**.
+  - TypeScript build & typecheck `npm run build`: **PASS (0 errors)**.
+
 #### Optimized — System-Wide Instant Load & Zero-Wait Architecture di Dashboard & Backend API (2026-08-28)
 
 - **Latar Belakang & Akar Masalah:**
