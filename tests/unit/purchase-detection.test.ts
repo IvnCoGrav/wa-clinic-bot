@@ -167,5 +167,72 @@ describe('purchase-detection.service', () => {
       expect(fired).toBe(false);
       expect(prisma.reservation.update).not.toHaveBeenCalled();
     });
+
+    it('mendukung ekstraksi nominal murni dari financial equation (Total = 70rb + ongkir 15rb = 85rb)', async () => {
+      mockTenantAutoSend(false);
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValue({
+        id: 'r_eq',
+        customer_id: 'c1',
+        tenant_id: 'default-tenant',
+        status: 'pending',
+        treatment_detail: 'Pijat Bayi',
+        treatment_category: 'BABY',
+        purchase_event_sent_at: null,
+        purchase_occurred_at: null,
+        purchase_review_status: 'pending',
+        customer: { id: 'c1', adClick: { trackingCode: 'TC1' } },
+      } as any);
+      vi.mocked(prisma.reservation.update).mockResolvedValue({} as any);
+
+      const fired = await maybeFirePurchaseEvent({
+        customer: baseCustomer,
+        conversation: {},
+        text: 'Payment\nTotal = 70.000 + ongkir 15.000 = 85.000',
+        tenantId: 'default-tenant',
+      });
+
+      expect(fired).toBe(true);
+      expect(prisma.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'r_eq' },
+        data: {
+          purchase_occurred_at: expect.any(Date),
+          purchase_review_status: 'pending',
+          purchase_value: 70000,
+        },
+      });
+    });
+  });
+
+  describe('resolveTreatmentValue — Alias & Multi-Service Compounding', () => {
+    it('mampu mencocokkan alias bahasa Indonesia (Pijat Hamil, Terapi Bapil, Laktasi, dsb)', async () => {
+      expect(await capi.resolveTreatmentValue('Pijat Hamil')).toBe(100000);
+      expect(await capi.resolveTreatmentValue('Moms: Pijat Hamil')).toBe(100000);
+      expect(await capi.resolveTreatmentValue('Pijat Terapi')).toBe(70000);
+      expect(await capi.resolveTreatmentValue('Pijat Bapil')).toBe(70000);
+      expect(await capi.resolveTreatmentValue('Pijat Batuk Pilek')).toBe(70000);
+      expect(await capi.resolveTreatmentValue('Breast Massage')).toBe(50000);
+      expect(await capi.resolveTreatmentValue('Pijat Oksitosin')).toBe(50000);
+      expect(await capi.resolveTreatmentValue('Cukur Bayi')).toBe(25000);
+      expect(await capi.resolveTreatmentValue('Pijat Kids Ceria')).toBe(70000);
+    });
+
+    it('mampu menjumlahkan multi-treatment dengan add-on (compounding)', async () => {
+      expect(await capi.resolveTreatmentValue('Baby: Pijat Bayi Ceria + Sinar Moksa')).toBe(70000);
+      expect(await capi.resolveTreatmentValue('Baby: Pijat Bayi Pulih Ceria + Terapi Uap Nebulizer')).toBe(105000);
+      expect(await capi.resolveTreatmentValue('Baby: Pijat Bayi Ceria | Moms: Prenatal Massage')).toBe(160000);
+    });
+
+    it('mampu mencocokkan paket bundle kombinasi', async () => {
+      expect(await capi.resolveTreatmentValue('Cukur + Pijat Terapi')).toBe(85000);
+      expect(await capi.resolveTreatmentValue('Paket Selapan')).toBe(80000);
+      expect(await capi.resolveTreatmentValue('Moms: Breast + Oksitosin')).toBe(80000);
+      expect(await capi.resolveTreatmentValue('Paket Pra Kelahiran Lengkap')).toBe(135000);
+    });
+
+    it('fallback ke default kategori untuk nama layanan generik', async () => {
+      expect(await capi.resolveTreatmentValue('Baby: Pijat / Treatment Homecare')).toBe(60000);
+      expect(await capi.resolveTreatmentValue('Baby: Pijat Bayi')).toBe(60000);
+      expect(await capi.resolveTreatmentValue('Moms: Treatment Homecare')).toBe(100000);
+    });
   });
 });

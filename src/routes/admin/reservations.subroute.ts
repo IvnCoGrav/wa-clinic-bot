@@ -985,15 +985,29 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const customPayload = body.customPayload;
 
         const formats = await getTenantCapiFormats(DEFAULT_TENANT_ID);
-        const autoResolvedVal =
-          extractValueByFormat(existing.raw_text || '', formats.formatValue) ??
-          existing.purchase_value ??
-          extractRupiahAmount(existing.raw_text || '', formats.formatValue) ??
-          (await resolveTreatmentValue(existing.treatment_detail || existing.raw_text));
+        
+        let autoResolvedVal = existing.purchase_value && existing.purchase_value > 0 ? existing.purchase_value : undefined;
+        if (!autoResolvedVal) {
+          const raw = existing.raw_text || '';
+          if (raw && /payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(raw)) {
+            try {
+              const { parsePaymentSection } = await import('../../utils/conversation-transaction-extractor');
+              const fin = parsePaymentSection(raw);
+              if (fin.treatmentPrice > 0) autoResolvedVal = fin.treatmentPrice;
+              else if (fin.totalPrice > 0) autoResolvedVal = Math.max(0, fin.totalPrice - fin.ongkir + fin.promo);
+            } catch {}
+          }
+          if (!autoResolvedVal) {
+            autoResolvedVal =
+              extractValueByFormat(raw, formats.formatValue) ??
+              extractRupiahAmount(raw, formats.formatValue) ??
+              (await resolveTreatmentValue(existing.treatment_detail || raw));
+          }
+        }
 
         const resolvedVal = (customPayload && typeof customPayload.custom_data?.value === 'number')
           ? customPayload.custom_data.value
-          : autoResolvedVal;
+          : (autoResolvedVal ?? 60000);
 
         const eventName = (customPayload && typeof customPayload.event_name === 'string')
           ? customPayload.event_name
@@ -1232,14 +1246,29 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             sanitizedTreatmentDetail = filtered.length > 0 ? filtered.join(' | ') : 'Treatment Homecare';
           }
 
-          const value =
-            extractValueByFormat(r.raw_text || '', formats.formatValue) ??
-            r.purchase_value ??
-            extractRupiahAmount(r.raw_text || '', formats.formatValue) ??
-            (await resolveTreatmentValue(sanitizedTreatmentDetail || ''));
+          let calculatedValue = r.purchase_value && r.purchase_value > 0 ? r.purchase_value : undefined;
+          if (!calculatedValue) {
+            const raw = r.raw_text || '';
+            if (raw && /payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(raw)) {
+              try {
+                const { parsePaymentSection } = await import('../../utils/conversation-transaction-extractor');
+                const fin = parsePaymentSection(raw);
+                if (fin.treatmentPrice > 0) calculatedValue = fin.treatmentPrice;
+                else if (fin.totalPrice > 0) calculatedValue = Math.max(0, fin.totalPrice - fin.ongkir + fin.promo);
+              } catch {}
+            }
+            if (!calculatedValue) {
+              calculatedValue =
+                extractValueByFormat(raw, formats.formatValue) ??
+                extractRupiahAmount(raw, formats.formatValue) ??
+                (await resolveTreatmentValue(sanitizedTreatmentDetail || raw));
+            }
+          }
 
-          // Self-heal purchase_value in DB if previously stored as total price (including ongkir)
-          if (r.id && value !== undefined && r.purchase_value !== value) {
+          const value = calculatedValue ?? 60000;
+
+          // Self-heal purchase_value in DB if previously null/0 or stored as total price (including ongkir)
+          if (r.id && value > 0 && r.purchase_value !== value) {
             prisma.reservation
               .update({
                 where: { id: r.id },

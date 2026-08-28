@@ -106,9 +106,20 @@ export async function maybeFirePurchaseEvent(params: {
       Date.now() - new Date(reservation.purchase_event_sent_at).getTime() < PURCHASE_DEDUP_WINDOW_MS;
     if (alreadySentRecently) return false;
 
-    // Nilai definitif: nominal murni dari formatValue tenant, lalu amount, fallback katalog.
-    const pureTreatmentVal = extractValueByFormat(text, formats.formatValue);
-    const value = pureTreatmentVal ?? amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
+    // Nilai definitif: nominal murni dari financial section, formatValue tenant, lalu amount, fallback katalog.
+    let value: number | undefined;
+    if (/payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(text)) {
+      try {
+        const { parsePaymentSection } = await import('../utils/conversation-transaction-extractor');
+        const fin = parsePaymentSection(text);
+        if (fin.treatmentPrice > 0) value = fin.treatmentPrice;
+        else if (fin.totalPrice > 0) value = Math.max(0, fin.totalPrice - fin.ongkir + fin.promo);
+      } catch {}
+    }
+    if (!value) {
+      const pureTreatmentVal = extractValueByFormat(text, formats.formatValue);
+      value = pureTreatmentVal ?? amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
+    }
 
     // Kebijakan moderasi: default tahan (false = moderasi manual aktif) sampai
     // admin approve/reject di dashboard. Hanya true → kirim langsung.
