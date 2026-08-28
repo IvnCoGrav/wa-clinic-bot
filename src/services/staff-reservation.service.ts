@@ -95,7 +95,68 @@ function buildShareText(
 
 export class StaffReservationService {
   /**
-   * Mengambil daftar tugas reservasi khusus milik staff ini untuk HARI INI saja,
+   * Menghitung rentang waktu 00:00:00 s/d 23:59:59 dalam zona waktu WIB untuk tanggal tertentu (hari ini, besok, atau spesifik YYYY-MM-DD).
+   */
+  static getWibDateRange(targetDateParam?: string): {
+    startOfDay: Date;
+    endOfDay: Date;
+    dateStr: string;
+    formattedDate: string;
+    isToday: boolean;
+    isTomorrow: boolean;
+  } {
+    const now = new Date();
+    const wibMs = now.getTime() + 7 * 60 * 60 * 1000;
+    const wibNow = new Date(wibMs);
+    let targetYear = wibNow.getUTCFullYear();
+    let targetMonth = wibNow.getUTCMonth();
+    let targetDay = wibNow.getUTCDate();
+
+    let isToday = true;
+    let isTomorrow = false;
+
+    if (targetDateParam === 'tomorrow') {
+      targetDay += 1;
+      isToday = false;
+      isTomorrow = true;
+    } else if (targetDateParam && targetDateParam !== 'today') {
+      const match = targetDateParam.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (match) {
+        targetYear = parseInt(match[1], 10);
+        targetMonth = parseInt(match[2], 10) - 1;
+        targetDay = parseInt(match[3], 10);
+
+        const nowDayStr = `${wibNow.getUTCFullYear()}-${String(wibNow.getUTCMonth() + 1).padStart(2, '0')}-${String(wibNow.getUTCDate()).padStart(2, '0')}`;
+        const tomorrowWib = new Date(wibMs + 24 * 60 * 60 * 1000);
+        const tomorrowDayStr = `${tomorrowWib.getUTCFullYear()}-${String(tomorrowWib.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowWib.getUTCDate()).padStart(2, '0')}`;
+
+        isToday = targetDateParam === nowDayStr;
+        isTomorrow = targetDateParam === tomorrowDayStr;
+      }
+    }
+
+    // 00:00:00.000 WIB dinyatakan dalam UTC adalah jam -7
+    const startOfDay = new Date(Date.UTC(targetYear, targetMonth, targetDay, -7, 0, 0, 0));
+    const endOfDay = new Date(Date.UTC(targetYear, targetMonth, targetDay, 16, 59, 59, 999));
+
+    const displayDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 0, 0, 0));
+    const formattedDate = displayDate.toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+
+    const monthStr = String(targetMonth + 1).padStart(2, '0');
+    const dayStr = String(targetDay).padStart(2, '0');
+    const dateStr = `${targetYear}-${monthStr}-${dayStr}`;
+
+    return { startOfDay, endOfDay, dateStr, formattedDate, isToday, isTomorrow };
+  }
+
+  /**
+   * Mengambil daftar tugas reservasi khusus milik staff ini untuk hari ini/besok/tanggal tertentu,
    * diperkaya dengan alamat, data anak/bayi, navigasi turn-by-turn Maps, rincian harga,
    * dan perhitungan jarak berantai sekuensial (Klinik -> Pasien 1 -> Pasien 2) via Haversine.
    * Catatan keamanan: Nomor HP customer SENGAJA TIDAK di-select dari database (masking layer).
@@ -104,14 +165,12 @@ export class StaffReservationService {
     staffId: string,
     tenantId = DEFAULT_TENANT_ID,
     scope: 'mine' | 'all' = 'mine',
-    isSupervisor = false
+    isSupervisor = false,
+    targetDateParam?: string
   ): Promise<StaffTaskItem[]> {
     if (!staffId) return [];
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const { startOfDay, endOfDay } = this.getWibDateRange(targetDateParam);
 
     try {
       const whereCondition: any = {
