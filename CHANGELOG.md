@@ -4,6 +4,44 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fixed — Navigasi Mobile Sidebar Terkunci / Tidak Berpindah Halaman (`Layout.tsx`) (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  - Saat membuka menu sidebar di browser mobile (HP) dan mengklik salah satu menu tujuan (misal: *Reservations*, *Live Chat*, *Knowledge Base*), halaman tidak berpindah sama sekali dan tetap berada di halaman lama.
+  - Akar masalah: Komponen `<Link>` sebelumnya memanggil `closeMobileMenu()` yang menjalankan `window.history.back()`, berbarengan dengan atribut `replace={true}`. Panggilan `history.back()` secara asinkron membatalkan navigasi React Router dan langsung mengembalikan URL browser ke halaman sebelumnya.
+
+- **Solusi & Implementasi:**
+  - Memisahkan logic penutupan menu:
+    - `dismissMobileMenu()`: Dijalankan hanya saat pengguna secara eksplisit membatalkan/menutup drawer (klik tombol `X`, klik backdrop gelap, atau usap/swipe ke kanan).
+    - `handleNavClick()`: Dijalankan saat mengklik item navigasi menu. Langsung menutup drawer dan membersihkan history state modal tanpa memanggil `history.back()`, serta menghapus `replace={true}` dari `<Link>` agar navigasi berjalan mulus.
+
+- **Pengujian & Verifikasi:**
+  - Build frontend React Vite `packages/admin-dashboard`: **PASS (0 errors, built in 10.04s)**.
+  - Build backend Fastify `npm run build`: **PASS (0 errors)**.
+
+#### Fixed & Redesigned — In-Place Zero-Jump Save & Impeccable Design di Rolling Template Follow-Up (`FollowUpTemplates.tsx`) (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  - Sebelumnya, saat admin mengklik tombol **"Simpan"** pada salah satu varian template follow-up, fungsi `handleSave` memanggil `loadTemplates()` yang menyetel `loading = true`.
+  - Hal ini menyebabkan seluruh komponen daftar form di-unmount seketika dari DOM dan digantikan oleh spinner tunggal, yang mereset tinggi halaman dan memaksa scroll browser meloncat ke paling atas (`scrollY = 0`). Pengguna kehilangan fokus dan posisi editing.
+  - Halaman menumpuk seluruh 10 tipe x 3 varian (30 textarea) secara vertikal tanpa navigasi tab kategori atau pencarian, tombol aksi di bawah standar touch target, dan menggunakan toast kustom terisolasi tanpa konfirmasi modal terpadu.
+
+- **Solusi & Implementasi:**
+  1. **Zero-Jump In-Place Save & Optimistic State**:
+     - Menyimpan template langsung ke server (`PUT /api/admin/follow-up-templates`) dan memperbarui state lokal `templates` secara in-place tanpa memicu `loading = true` (0ms scroll jump / layar tetap stabil di posisi).
+     - Tombol "Simpan" menampilkan feedback transisi halus: indikator loading spinner saat submit, lalu berubah menjadi checkmark hijau `Check` bertuliskan **"Tersimpan ✓"** selama 2.5 detik.
+     - Background revalidation berjalan secara hening (*silent non-blocking fetch*) tanpa meng-unmount DOM.
+  2. **Audit & Desain Impeccable (Kala / WhatsApp Clinic Palette)**:
+     - **Tab Kategori Pintar**: Membagi 10 skenario follow-up ke dalam 4 kategori rapi (*Hari-H & OTW*, *Review H+1*, *Belum Reservasi*, *Treatment Rutin*) plus tab *Semua* dengan badge counter real-time.
+     - **Instant Search Bar**: Pencarian cepat berbasis judul, deskripsi skenario, atau kata kunci isi pesan dengan tombol clear instan `X`.
+     - **Click-to-Insert Placeholder Chips**: Menyediakan chip variabel `{name}`, `{time}`, `{babyName}` di atas setiap textarea yang dapat diklik untuk langsung menyisipkan tag tepat di posisi kursor teks yang aktif.
+     - **Dirty State & Live Character Counter**: Menghitung jumlah karakter secara real-time dan menampilkan badge highlight "Belum disimpan" saat ada perubahan teks dari versi server.
+     - **UI Feedback Terpadu (`useUiFeedback`)**: Mengintegrasikan notifikasi toast standar dan modal dialog interaktif `confirm` sebelum mereset template ke bawaan default sistem (mematuhi mandat anti-native alert).
+
+- **Pengujian & Verifikasi:**
+  - Build frontend Vite `packages/admin-dashboard`: **PASS (0 errors, built in 10.56s)**.
+  - Build backend Fastify `npm run build`: **PASS (0 errors)**.
+
 #### Fixed — RBAC Guard Allow Read-Only Access ke Rute Custom Roles bagi Staf (`admin.route.ts`) (2026-08-28)
 
 - **Latar Belakang & Akar Masalah:**

@@ -62,13 +62,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     } catch (_) {}
   };
 
-  const closeMobileMenu = () => {
+  const dismissMobileMenu = () => {
     setMobileMenuOpen(false);
     if (isMenuHistoryPushedRef.current || (typeof window !== 'undefined' && window.history.state?.modal === 'mobile-menu')) {
       isMenuHistoryPushedRef.current = false;
       if (window.history.state?.modal === 'mobile-menu') {
         window.history.back();
       }
+    }
+  };
+
+  const handleNavClick = () => {
+    setMobileMenuOpen(false);
+    isMenuHistoryPushedRef.current = false;
+    if (typeof window !== 'undefined' && window.history.state?.modal === 'mobile-menu') {
+      window.history.replaceState(null, '');
     }
   };
 
@@ -308,7 +316,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (wasOpenAtTouchStart) {
         if (deltaX > 45 && absX > absY * 2.2) {
           justSwipedRef.current = true;
-          closeMobileMenu();
+          dismissMobileMenu();
           isTracking = false;
         }
       }
@@ -576,13 +584,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         }}
         onTouchEnd={() => {
           if (backdropTouchStartRef.current && !justSwipedRef.current) {
-            closeMobileMenu();
+            dismissMobileMenu();
           }
           backdropTouchStartRef.current = false;
         }}
         onClick={() => {
           if (justSwipedRef.current) return;
-          closeMobileMenu();
+          dismissMobileMenu();
         }}
         className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
           mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
@@ -605,7 +613,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
           </div>
           <button
-            onClick={closeMobileMenu}
+            onClick={dismissMobileMenu}
             aria-label="Tutup menu"
             className="md:hidden text-[#8696a0] hover:text-[#111b21] p-2 rounded-xl hover:bg-[#f0f2f5] transition"
           >
@@ -654,8 +662,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <Link
                       key={item.path}
                       to={item.path}
-                      replace={true}
-                      onClick={closeMobileMenu}
+                      onClick={handleNavClick}
                       className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
                         isActive 
                           ? 'bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold shadow-xs'
