@@ -1,4 +1,3 @@
-import { isReservationFormMessage } from './reservation-text-parser';
 
 export interface ExtractedTransaction {
   customerPhone: string;

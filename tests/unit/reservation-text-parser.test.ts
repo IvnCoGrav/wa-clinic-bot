@@ -328,5 +328,66 @@ Treatment :`;
     expect(res.reservation!.treatmentDetail).toContain('Paket bundling cukur rambut dan pijat ceria');
     expect(res.reservation!.treatmentDetail).toContain('Kian Alvino Yafie');
   });
+
+  it('8. should successfully parse reservation with 2-digit year, time range, and payment block (Bunda Siska case)', () => {
+    const rawText = `Selamat Malam bunda Siska! 😊
+
+Kami ingin mengingatkan untuk besok ada jadwal treatment dengan Kala 🤗
+
+Kami besok kemungkinan akan tiba di jam 09.00-09.30. Mohon ditunggu ya bund 🤗
+
+Oh ya bunda boleh izin kirim sharelock nya bund untuk titik pastinya 🙏😊
+
+Berikut reservasi 🐣
+
+Hari dan tanggal :  sbtu 29 agt 26 jam 09.00-09.30
+Nama Bunda:  siska
+Alamat & Shareloc : grand alana regency d1 no 23
+Kec : gunung anyar
+Kota : sby
+No. Hp :
+
+Pilihan treatment (Baby & Kids) 
+
+Nama Bayi : gifton
+Usia Bayi/Anak : 13bln
+Treatment : ceria
+
+Payment : 
+Treatment = 60.000
+Ongkir 10km = 15.000
+Promo ongkir = - 5.000
+*Total = 70.000*
+
+Terimakasih.  ☺️`;
+
+    const res = parseReservationText(rawText);
+    expect(res.success).toBe(true);
+    expect(res.reservation).toBeDefined();
+    expect(res.reservation!.name).toBe('siska');
+    expect(res.reservation!.kec).toBe('gunung anyar');
+    expect(res.reservation!.kota).toBe('sby');
+    expect(res.reservation!.treatmentCategory).toBe(TreatmentCategory.BABY);
+    expect(res.reservation!.treatmentDetail).toContain('ceria');
+    expect(res.reservation!.babies).toHaveLength(1);
+    expect(res.reservation!.babies[0].name).toBe('gifton');
+    expect(res.reservation!.babies[0].age).toBe('13bln');
+    
+    // Validasi booking date & time
+    expect(res.reservation!.bookingDate).toBeInstanceOf(Date);
+    expect(res.reservation!.bookingDate!.getFullYear()).toBe(2026);
+    expect(res.reservation!.bookingDate!.getMonth()).toBe(7); // Agustus (0-indexed -> 7)
+    expect(res.reservation!.bookingDate!.getDate()).toBe(29);
+    expect(res.reservation!.bookingDate!.getHours()).toBe(9);
+    expect(res.reservation!.bookingDate!.getMinutes()).toBe(0);
+
+    // Validasi payment
+    expect(res.reservation!.payment).toBeDefined();
+    expect(res.reservation!.payment!.treatmentPrice).toBe(60000);
+    expect(res.reservation!.payment!.ongkir).toBe(15000);
+    expect(res.reservation!.payment!.promo).toBe(5000);
+    expect(res.reservation!.payment!.totalPrice).toBe(70000);
+  });
 });
+
 
