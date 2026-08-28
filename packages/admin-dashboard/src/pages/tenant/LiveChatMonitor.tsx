@@ -294,7 +294,8 @@ export const LiveChatMonitor: React.FC = () => {
     try { return sessionStorage.getItem('liveChat:selectedId'); } catch { return null; }
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [replyText, setReplyText] = useState('');
+  const replyTextRef = useRef('');
+  const [hasReplyText, setHasReplyText] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
 
   const handleSelectReply = (msg: ChatMessage) => {
@@ -330,6 +331,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [isEditingSaving, setIsEditingSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
+  const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
@@ -381,10 +383,14 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const handleInputChange = (text: string) => {
-    setReplyText(text);
+    replyTextRef.current = text;
+    const isNotEmpty = text.trim().length > 0;
+    if (hasReplyText !== isNotEmpty) {
+      setHasReplyText(isNotEmpty);
+    }
     if (!selectedIdRef.current) return;
 
-    if (text.trim().length > 0) {
+    if (isNotEmpty) {
       notifyTyping(true);
 
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -689,7 +695,8 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const resetChatInput = () => {
-    setReplyText('');
+    replyTextRef.current = '';
+    setHasReplyText(false);
     setReplyingTo(null);
     setEmojiPickerOpen(false);
     if (chatInputRef.current) {
@@ -1180,7 +1187,10 @@ export const LiveChatMonitor: React.FC = () => {
     loadChats(true);
 
     const unsubscribe = connectLiveChatSse({
-      onStatusChange: (connected) => setSseConnected(connected),
+      onStatusChange: (connected) => {
+        setSseConnected(connected);
+        sseConnectedRef.current = connected;
+      },
       onEvent: (type, payload) => {
         if (type === 'conversation.updated' && payload?.allRead) {
           setChats((prev) =>
@@ -1195,13 +1205,14 @@ export const LiveChatMonitor: React.FC = () => {
 
         if (type === 'message.created') {
           const conversationId = payload.conversationId;
+          const msgTime = payload.createdAt || payload.created_at || new Date().toISOString();
           const msg: ChatMessage = {
             id: payload.messageId || `sse_${Date.now()}`,
             direction: payload.direction,
             content: payload.content || '',
             sender_type: payload.senderType || payload.sender_type || null,
             sender_name: payload.senderName || payload.sender_name || null,
-            created_at: payload.createdAt || payload.created_at || new Date().toISOString(),
+            created_at: msgTime,
             delivery_status: payload.deliveryStatus || 'sent',
             media: extractMedia(payload),
             quoted_message: extractQuotedMessage(payload),
@@ -1259,7 +1270,7 @@ export const LiveChatMonitor: React.FC = () => {
                 ? c
                 : {
                     ...c,
-                    lastMessageAt: payload.createdAt || payload.created_at || c.lastMessageAt,
+                    lastMessageAt: msgTime,
                     lastMessages: [...(c.lastMessages || []), msg].slice(-3),
                     unreadCount: nextUnread,
                     isAwaitingReply: isCurrentOpen && isMsgInbound,
@@ -1338,42 +1349,28 @@ export const LiveChatMonitor: React.FC = () => {
       },
     });
 
-    // 🔄 Smart Background Polling (Fallback and Instant Re-sync every 3.5 seconds)
+    // 🔄 Smart Event-Driven / Fallback Background Sync
+    // Saat SSE aktif, polling konstan 3.5s dimatikan untuk menghemat 95% resource & mencegah UI jitter.
+    // Jika SSE terputus, gunakan fallback interval 15s.
     const pollInterval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        loadChats(false);
-        if (selectedIdRef.current) {
-          const activeId = selectedIdRef.current;
-          apiRequest(`/api/admin/live-chat/conversations/${activeId}/messages`)
-            .then((res) => {
-              if (selectedIdRef.current !== activeId) return;
-              const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-              const mapped = list.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) }));
-              setMessages((prev) => {
-                const hasTemp = prev.some((m) => m.id.startsWith('temp_'));
-                if (hasTemp) return prev;
-                if (
-                  prev.length !== mapped.length ||
-                  mapped.some(
-                    (nm, idx) =>
-                      prev[idx]?.id !== nm.id ||
-                      prev[idx]?.delivery_status !== nm.delivery_status ||
-                      prev[idx]?.is_revoked !== nm.is_revoked
-                  )
-                ) {
-                  return mapped;
-                }
-                return prev;
-              });
-            })
-            .catch(() => {});
+        if (!sseConnectedRef.current) {
+          loadChats(true);
         }
       }
-    }, 3500);
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadChats(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       unsubscribe();
       clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1509,7 +1506,8 @@ export const LiveChatMonitor: React.FC = () => {
         method: 'POST',
       });
       if (res?.data?.draftText) {
-        setReplyText(res.data.draftText);
+        replyTextRef.current = res.data.draftText;
+        setHasReplyText(true);
         if (chatInputRef.current) {
           chatInputRef.current.innerText = res.data.draftText;
         }
@@ -1634,7 +1632,8 @@ export const LiveChatMonitor: React.FC = () => {
   const handleInsertInvoiceToChat = (text: string) => {
     if (chatInputRef.current) {
       chatInputRef.current.innerText = text;
-      setReplyText(text);
+      replyTextRef.current = text;
+      setHasReplyText(true);
       chatInputRef.current.focus();
     }
   };
@@ -1754,7 +1753,7 @@ export const LiveChatMonitor: React.FC = () => {
 
   const handleSendReply = async () => {
     const image = selectedImage;
-    const text = replyText.trim();
+    const text = (chatInputRef.current?.innerText || replyTextRef.current || '').trim();
     if (!selectedId || (!text && !image)) return;
 
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -3198,7 +3197,7 @@ export const LiveChatMonitor: React.FC = () => {
                     />
                     <button
                       onClick={handleSendReply}
-                      disabled={sending || (!replyText.trim() && !selectedImage)}
+                      disabled={sending || (!hasReplyText && !selectedImage)}
                       className="w-9 h-9 sm:w-auto sm:px-4 min-h-[36px] sm:min-h-[38px] p-0 sm:py-2.5 bg-[#008069] hover:bg-[#00a884] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95"
                       title="Kirim Balasan"
                     >

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Pagination } from '../../components/common/Pagination';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -67,8 +67,10 @@ interface ChatMessage {
 
 export const CustomerDatabase: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
-  const [loading, setLoading] = useState(true);
-  const [customers, setCustomers] = useState<CustomerItem[]>([]);
+  const cachedCustRes = getCachedApiResponse<any>('/api/admin/customers?page=1&pageSize=15&sortBy=created_at&sortOrder=desc');
+  const initialCustomers = Array.isArray(cachedCustRes) ? cachedCustRes : (cachedCustRes?.data || []);
+  const [loading, setLoading] = useState(initialCustomers.length === 0);
+  const [customers, setCustomers] = useState<CustomerItem[]>(() => initialCustomers);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -115,7 +117,7 @@ export const CustomerDatabase: React.FC = () => {
   const [sendingEvent, setSendingEvent] = useState(false);
 
   const loadCustomers = async () => {
-    setLoading(true);
+    if (customers.length === 0) setLoading(true);
     try {
       const query = new URLSearchParams({
         page: String(page),

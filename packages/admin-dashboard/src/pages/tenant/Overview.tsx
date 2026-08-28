@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { apiRequest } from '../../services/api';
+import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { 
   MessageSquare, 
   Calendar, 
@@ -25,13 +25,19 @@ import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_DATE, BUILD_TIME } from '../../config/version';
 
 export const Overview: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const [healthData, setHealthData] = useState<any>(null);
-  const [stats, setStats] = useState({
-    incomingChats: 142,
-    reservations: 12,
-    revenue: 3600000,
-    conversionRate: 8.45,
+  const cachedHealth = getCachedApiResponse('/api/admin/health');
+  const cachedResCount = getCachedApiResponse('/api/admin/reservations/count');
+
+  const [loading, setLoading] = useState(!cachedHealth);
+  const [healthData, setHealthData] = useState<any>(() => cachedHealth);
+  const [stats, setStats] = useState(() => {
+    const count = cachedResCount?.count ?? 12;
+    return {
+      incomingChats: 142,
+      reservations: count,
+      revenue: 3600000,
+      conversionRate: count > 0 ? parseFloat(((count / 142) * 100).toFixed(2)) : 8.45,
+    };
   });
 
   const chartData = [

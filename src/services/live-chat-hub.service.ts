@@ -48,7 +48,7 @@ export class LiveChatHubService {
   }
 
   private init(): Promise<void> {
-    if (process.env.NODE_ENV === 'test') {
+    if (process.env.DISABLE_REDIS === 'true') {
       this.redisEnabled = false;
       return Promise.resolve();
     }
