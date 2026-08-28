@@ -62,6 +62,8 @@ export interface ExtractedEntities {
     | 'affirmation'
     | 'negation'
     | 'medical_emergency'
+    | 'complaint'
+    | 'human_agent'
     | 'chitchat'
   >;
   locationText: string | null;
@@ -81,6 +83,11 @@ export interface ExtractedEntities {
  */
 export type EngineActionType =
   | 'ESCALATE_HUMAN_EMERGENCY'
+  | 'ESCALATE_HUMAN_SCHEDULE'
+  | 'ESCALATE_HUMAN_AGENT_REQUEST'
+  | 'ESCALATE_HUMAN_COMPLAINT'
+  | 'ESCALATE_RESCHEDULE_CANCEL'
+  | 'NOT_INTERESTED_COMPLETED'
   | 'SILENT_HUMAN_ACTIVE'
   | 'REJECT_OUT_OF_COVERAGE'
   | 'SEND_RESERVATION_FORM'

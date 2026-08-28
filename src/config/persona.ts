@@ -319,7 +319,18 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp ${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
   },
 
-  scheduleCheckHandoff: () => `kami cek jadwal dulu ya bunda 🙏🏻😊`,
+  scheduleCheckHandoff: (params?: { dayOrTime?: string }) => {
+    if (params?.dayOrTime && params.dayOrTime.trim()) {
+      return `Baik Bunda, untuk ketersediaan jadwal ${params.dayOrTime.trim()} akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 🙏🏻😊`;
+    }
+    return `kami cek jadwal dulu ya bunda 🙏🏻😊`;
+  },
+
+  humanAgentRequest: () =>
+    `Baik Bunda, pesan Bunda sedang kami teruskan ke tim Admin/Bidan kami yaa. Mohon ditunggu sebentar, tim kami akan segera membalas chat Bunda 😊🙏🏻`,
+
+  rescheduleOrCancel: () =>
+    `Baik Bunda, untuk perubahan atau pembatalan jadwal sedang kami teruskan ke tim Admin yaa. Mohon ditunggu sebentar, tim kami akan segera memeriksa kalender dan membantu konfirmasi kembali ya Bunda 😊🙏🏻`,
 
   locationEscalation: () => `Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊`,
 
