@@ -825,8 +825,8 @@ export const TodayTreatments: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredTasks.map((task) => {
+        <div className="flex flex-col gap-4 max-w-4xl mx-auto w-full">
+          {filteredTasks.map((task, index) => {
             const isCompleted = task.status.toLowerCase() === 'completed';
             const isOtw = task.status.toLowerCase() === 'otw';
             const isLunas = task.pricing.paymentStatus === 'LUNAS';
@@ -846,9 +846,18 @@ export const TodayTreatments: React.FC = () => {
                     : 'border-[#e9edef] hover:border-[#008069]'
                 }`}
               >
-                {/* Card Top: Time, Avatar, Status, Assigned Staff */}
+                {/* Card Top: Sequence Number, Time, Avatar, Status, Assigned Staff */}
                 <div className="flex items-start justify-between gap-3 border-b border-[#f0f2f5] pb-3">
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-3.5">
+                    {/* Sequence Badge */}
+                    <div
+                      className="h-9 w-9 rounded-xl bg-[#f0f2f5] group-hover:bg-[#e8f5f2] border border-[#d1d7db] group-hover:border-[#c2e7e0] text-[#111b21] group-hover:text-[#008069] flex flex-col items-center justify-center shrink-0 transition-colors shadow-2xs"
+                      title={`Urutan Kunjungan #${index + 1}`}
+                    >
+                      <span className="text-[9px] font-bold uppercase leading-none opacity-60">No</span>
+                      <span className="text-sm font-black leading-none">{index + 1}</span>
+                    </div>
+
                     <div className="relative shrink-0">
                       {task.customerProfilePictureUrl ? (
                         <img
@@ -864,8 +873,9 @@ export const TodayTreatments: React.FC = () => {
                           {(task.customerName || 'P').charAt(0).toUpperCase()}
                         </div>
                       )}
+                      {/* Waktu Mulai Saja di Foto/Avatar */}
                       <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md bg-[#111b21] text-white text-[9px] font-mono font-bold shadow-xs whitespace-nowrap">
-                        {formatTimeRange(task.bookingDate, parsedTreatments.totalMinutes)}
+                        {formatTime(task.bookingDate)}
                       </span>
                     </div>
 
@@ -879,6 +889,9 @@ export const TodayTreatments: React.FC = () => {
                           title={catCfg.label}
                         >
                           {catCfg.icon}
+                        </span>
+                        <span className="text-xs font-semibold text-[#54656f] hidden sm:inline">
+                          ({formatTimeRange(task.bookingDate, parsedTreatments.totalMinutes)})
                         </span>
                       </div>
 

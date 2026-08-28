@@ -4,6 +4,28 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Impeccable Refinement — Layout 1-Kolom Treatment, Label Waktu Mulai Avatar & Impeccable Audit Kalender & Reservasi (`TodayTreatments.tsx`, `Reservations.tsx`, `ReservationDetailModal.tsx`, `CreateReservationModal.tsx`) (2026-08-28)
+
+- **Latar Belakang & Masukan Pengguna:**
+  1. Label jam di atas foto/avatar pasien sebelumnya menampilkan rentang (`09:00 - 10:00`), diharapkan cukup jam mulai (`09:00`) agar lebih ringkas dan mudah dibaca di avatar thumbnail.
+  2. Tampilan card treatment di website sebelumnya 2 kolom sehingga membingungkan urutan rute kronologis kunjungan terapis dari pagi ke sore.
+  3. Halaman *Reservasi & Kalender* (`Reservations.tsx`) dan modal terkait (`ReservationDetailModal.tsx`, `CreateReservationModal.tsx`) membutuhkan audit Impeccable untuk konsistensi portal, keyboard shortcuts, kontras warna, dan responsivitas.
+
+- **Solusi & Implementasi:**
+  1. **Layout 1-Kolom & Nomor Urut Kronologis di Treatment Hari Ini**:
+     - Mengubah container card dari 2 kolom (`grid-cols-2`) menjadi 1 kolom vertikal (`flex flex-col gap-4 max-w-4xl mx-auto w-full`).
+     - Menambahkan badge nomor urut kunjungan terapis (`No 1`, `No 2`, dst) di sebelah avatar pasien.
+     - Menyederhanakan badge jam di avatar pasien menjadi **hanya waktu mulai** (`09:00`), sementara rentang waktu lengkap tetap tercantum jelas di deskripsi.
+  2. **Audit Impeccable pada Halaman Reservasi & Kalender**:
+     - Membungkus seluruh modal (`CreateReservationModal`, `ReservationDetailModal`, `proofModal`, `housePhotoModal`, `editLocationModal`) dengan `createPortal(..., document.body)` untuk mencegah terpotong layout overflow.
+     - Menambahkan keyboard navigation listener `Escape` untuk menutup modal aktif secara instan.
+     - Memperhalus visual hierarchy, badge status terkonfirmasi/selesai/batal, table sorting arrows, dan segmented tab control dengan WhatsApp Emerald Palette.
+
+- **Pengujian & Verifikasi:**
+  - Build frontend `packages/admin-dashboard`: **PASS (0 errors, built in 11.12s)**.
+  - Build backend `npm run build`: **PASS (0 errors)**.
+  - Vitest Unit Test: **PASS (17/17 tests pass)**.
+
 #### Impeccable Audit & Feature — Tab Treatment Besok & Redesign Impeccable pada Halaman Treatment (`TodayTreatments.tsx`, `today.subroute.ts`, `staff-reservation.service.ts`) (2026-08-28)
 
 - **Latar Belakang & Kebutuhan:**
