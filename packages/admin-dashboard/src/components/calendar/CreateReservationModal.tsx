@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { ToggleSwitch } from '../common/ToggleSwitch';
@@ -746,23 +747,39 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   };
 
+  // Keyboard Escape listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showBookedSlotsModal) {
+          setShowBookedSlotsModal(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, showBookedSlotsModal, onClose]);
+
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain"
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
       onClick={onClose}
       style={{ touchAction: 'pan-y' }}
     >
       <div
-        className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-2xl p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain"
+        className="w-full max-w-2xl bg-white border border-[#e9edef] rounded-3xl p-4 sm:p-6 shadow-2xl relative my-auto max-h-[92vh] flex flex-col mx-auto overflow-x-hidden touch-pan-y overscroll-contain animate-modalScaleUp"
         onClick={(e) => e.stopPropagation()}
         style={{ touchAction: 'pan-y' }}
       >
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
@@ -1704,6 +1721,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
