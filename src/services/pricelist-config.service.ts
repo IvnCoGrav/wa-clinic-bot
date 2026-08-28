@@ -56,9 +56,15 @@ export async function resolvePricelistImageTarget(
 
 /** Menyimpan/menghapus pricelist_image_url per-tenant (null = hapus → fallback). */
 export async function setPricelistImageUrl(tenantId: string, url: string | null): Promise<{ success: boolean; url: string | null }> {
-  const updated = await prisma.tenant.update({
+  const updated = await prisma.tenant.upsert({
     where: { id: tenantId },
-    data: { pricelist_image_url: url },
+    create: {
+      id: tenantId,
+      slug: tenantId,
+      name: `Tenant ${tenantId}`,
+      pricelist_image_url: url,
+    },
+    update: { pricelist_image_url: url },
     select: { pricelist_image_url: true },
   });
   return { success: true, url: updated.pricelist_image_url };

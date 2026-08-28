@@ -126,6 +126,7 @@ ${ongkirGuard}`;
           return `PANDUAN PENUTUP (TANYA LOKASI RUMAH):
 1. Sampaikan bahwa ketersediaan jadwal di hari ${extractedDateMention} akan dicekkan terlebih dahulu oleh tim Bidan.
 2. Tanyakan alamat/daerah di kalimat penutup dengan santun: "${scheduleCheckText}"
+⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung sampaikan bahwa ketersediaan jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG MENANYAKAN "Rencana mau treatment di hari apa" karena Bunda sudah menyebutkan hari ${extractedDateMention}!
 ⚠️ DILARANG menggunakan kata "Ada yang ingin dikonsultasikan?".
 ⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika di pesan sebelumnya Bunda sudah menanyakan paket tersebut!`;
@@ -145,6 +146,7 @@ ${ongkirGuard}`;
           return `PANDUAN PENUTUP (PENAWARAN JADWAL):
 1. Untuk ketersediaan jadwal di hari ${extractedDateMention}, sampaikan dengan santun bahwa jadwal Bidan yang ready akan dicekkan terlebih dahulu.
 2. Tanyakan perkiraan jam yang diinginkan (pagi/siang/sore) atau tanyakan konfirmasi perawatan dengan santun.
+⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung sampaikan bahwa ketersediaan jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG MENANYAKAN "di hari apa" LAGI karena Bunda sudah menyebutkan hari ${extractedDateMention}!
 ⚠️ DILARANG menanyakan dengan nada kaku apakah Bunda sudah memutuskan mengambil paket jika Bunda sudah mendiskusikan paket tersebut!
 ${ongkirGuard}`;
@@ -171,6 +173,7 @@ ${ongkirGuard}`;
 3. Di bagian bawah balasan, sertakan format reservasi berikut agar Bunda bisa langsung mengisi/melengkapi data untuk dicekkan jadwalnya:
 ${preFilledForm}
 (Pastikan format di atas tercantum rapi di bagian bawah balasan).
+⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung sampaikan bahwa ketersediaan jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer! Usia akan dilengkapi saat pengisian form reservasi.
 ⚠️ DILARANG MENANYAKAN LAGI "hari apa" jika Bunda sudah menyebutkan hari/waktu (${dateDisplay})!
 ⚠️ DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia secara sepihak!
@@ -183,6 +186,7 @@ ${ongkirGuard}`;
 1. Jawab terlebih dahulu pertanyaan layanan/keluhan Bunda dengan ramah.
 2. Untuk ketersediaan jadwal di hari ${dateDisplay}, sampaikan bahwa jadwal Bidan akan dicekkan terlebih dahulu: "Untuk ketersediaan jadwal di hari ${dateDisplay}, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊".
 3. Tanyakan preferensi jam yang diinginkan (pagi/siang/sore, contoh: "Kira-kira untuk hari ${dateDisplay} Bunda lebih nyaman di jam berapa yaa (pagi/siang/sore) agar bisa langsung kami bantu amankan slot ${targetTreatment}-nya? 😊").
+⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung jawab bahwa jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG KERAS MENANYAKAN "DI HARI APA" LAGI KARENA BUNDA SUDAH MENYEBUTKAN HARI (${dateDisplay})!
 ⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer!
 ⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika Bunda sudah menanyakan paket tersebut!
@@ -192,6 +196,7 @@ ${ongkirGuard}`;
         return `PANDUAN PENAWARAN JADWAL (SCHEDULE):
 1. Jawab pertanyaan layanan/keluhan Bunda terlebih dahulu dengan ramah.
 2. Tawarkan jadwal reservasi di kalimat penutup secara santun dan natural (contoh: "Rencana mau treatment di hari apa Bunda ? 😊" atau "Mau kami bantu jadwalkan ${targetTreatment}-nya di hari apa Bunda? Nanti kami bantu cekkan ketersediaan jadwal Bidannya 😊").
+⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"!
 ⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer! Usia akan dilengkapi saat pengisian form reservasi.
 ⚠️ DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia secara sepihak!
 ⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika Bunda sudah menanyakan paket tersebut!

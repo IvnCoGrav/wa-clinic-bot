@@ -116,6 +116,6 @@ describe('DecisionMatrix Composite Geocoding & Imprecise Fallback', () => {
 
     expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
     expect(decision.deterministicTemplateReply).toBeDefined();
-    expect(decision.deterministicTemplateReply).toContain('kelurahan atau desa');
+    expect(decision.deterministicTemplateReply).toContain('Di Sidoarjo kelurahan atau kecamatan mana ya Bunda');
   });
 });

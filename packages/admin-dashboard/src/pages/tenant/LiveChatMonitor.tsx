@@ -50,6 +50,7 @@ import {
   Reply,
   CalendarPlus,
   Receipt,
+  Smile,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
@@ -218,6 +219,60 @@ interface LiveChatItem {
   isAwaitingReply?: boolean;
 }
 
+const EMOJI_CATEGORIES = [
+  {
+    id: 'smileys',
+    label: 'Wajah',
+    icon: '😊',
+    emojis: [
+      '😊', '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥹',
+      '🥰', '😍', '🤩', '😘', '😗', '😚', '😋', '😛', '😜', '🤪',
+      '🤗', '🤭', '🫢', '🤫', '🤔', '🫡', '🤐', '🤨', '😐', '😑',
+      '😶', '😏', '😒', '🙄', '😬', '😮‍💨', '🤥', '😌', '😔', '😪',
+      '😴', '😷', '🤒', '🤕', '🤢', '🤧', '🥵', '🥶', '🥴', '😵',
+      '🤯', '🥳', '🥸', '😎', '🤓', '🧐', '😇', '🤠', '🥺', '😭'
+    ],
+  },
+  {
+    id: 'gestures',
+    label: 'Tangan & Hati',
+    icon: '👍',
+    emojis: [
+      '👍', '👍🏻', '👍🏼', '👍🏽', '👎', '👌', '👌🏻', '👌🏼', '✌️', '🤞',
+      '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '✋',
+      '🤚', '🖐️', '👋', '🤝', '🙏', '🤲', '💪', '👏', '🙌', '🫶',
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💔',
+      '❤️‍🔥', '❤️‍🩹', '💖', '💗', '💓', '💞', '💕', '💌', '✨', '⭐',
+      '🌟', '💫', '💥', '🔥', '💯', '🎉', '🎊', '💐', '🌸', '🌹'
+    ],
+  },
+  {
+    id: 'clinic',
+    label: 'Klinik & Bayi',
+    icon: '👶',
+    emojis: [
+      '👶', '👶🏻', '👶🏼', '🧒', '👧', '👦', '👩‍🍼', '👨‍🍼', '🍼', '🤱',
+      '🤰', '💆‍♀️', '💆‍♂️', '🧖‍♀️', '🧖‍♂️', '🛁', '🫧', '🧴', '🩺', '🩹',
+      '💊', '💉', '🏥', '🗓️', '📅', '⏰', '⏱️', '📍', '🗺️', '🏡',
+      '🏠', '🚗', '🛵', '💳', '💵', '🧾', '💰', '🎁', '🎈', '🌿',
+      '🌱', '☀️', '🌤️', '🌙', '⭐', '🌈', '☂️', '☕', '🍵', '🍎'
+    ],
+  },
+  {
+    id: 'symbols',
+    label: 'Simbol',
+    icon: '✅',
+    emojis: [
+      '✅', '✔️', '☑️', '❌', '❎', '❓', '❔', '❗', '❕', '⚠️',
+      '⛔', '🚫', '💡', '🔔', '🔕', '📌', '📍', '📞', '📱', '💬',
+      '💭', '📝', '📋', '📎', '➡️', '⬅️', '⬆️', '⬇️', '▶️', '⏸️',
+      '🔁', '🔂', '🔄', '📢', '📣', '🔍', '🔎', '🔒', '🔓', '🔑',
+      '🏷️', '🏧', '🟢', '🟡', '🔴', '⚪', '⚫', '🟦', '🟧', '🟨',
+      '🟩', '🟣', '🟤', '🔘', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'
+    ],
+  },
+] as const;
+
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
@@ -331,10 +386,21 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const isChatHistoryPushedRef = useRef(false);
 
   const handleBackToList = () => {
-    setMobileView('list');
-    try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
+    if (isChatHistoryPushedRef.current || (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail')) {
+      isChatHistoryPushedRef.current = false;
+      if (window.history.state?.view === 'live-chat-detail') {
+        window.history.back();
+      } else {
+        setMobileView('list');
+        try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
+      }
+    } else {
+      setMobileView('list');
+      try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
+    }
   };
 
   const handleListTouchStart = (e: React.TouchEvent) => {
@@ -465,6 +531,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
 
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const [emojiCategory, setEmojiCategory] = useState<'smileys' | 'gestures' | 'clinic' | 'symbols'>('smileys');
+
   // Periksa status background sync saat pertama kali buka halaman
   const checkBackgroundSyncStatus = async () => {
     try {
@@ -530,7 +600,7 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
-  // Close label popover and tools menu on outside click
+  // Close label popover, tools menu, and emoji picker on outside click
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
       if (labelPopoverRef.current && !labelPopoverRef.current.contains(e.target as Node)) {
@@ -539,6 +609,9 @@ export const LiveChatMonitor: React.FC = () => {
       if (toolsMenuRef.current && !toolsMenuRef.current.contains(e.target as Node)) {
         setToolsMenuOpen(false);
       }
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setEmojiPickerOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleDocumentClick);
     return () => {
@@ -546,9 +619,36 @@ export const LiveChatMonitor: React.FC = () => {
     };
   }, []);
 
+  const insertEmoji = (emoji: string) => {
+    if (!chatInputRef.current) return;
+    chatInputRef.current.focus();
+
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (chatInputRef.current.contains(range.commonAncestorContainer)) {
+        range.deleteContents();
+        const textNode = document.createTextNode(emoji);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        chatInputRef.current.innerText += emoji;
+      }
+    } else {
+      chatInputRef.current.innerText += emoji;
+    }
+
+    const updatedText = chatInputRef.current.innerText || '';
+    handleInputChange(updatedText);
+  };
+
   const resetChatInput = () => {
     setReplyText('');
     setReplyingTo(null);
+    setEmojiPickerOpen(false);
     if (chatInputRef.current) {
       chatInputRef.current.innerText = '';
     }
@@ -797,12 +897,26 @@ export const LiveChatMonitor: React.FC = () => {
     const handleAppSwipeBack = (e: Event) => {
       if (mobileView === 'chat') {
         e.preventDefault();
-        setMobileView('list');
-        try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
+        handleBackToList();
       }
     };
     window.addEventListener('app-swipe-back', handleAppSwipeBack);
     return () => window.removeEventListener('app-swipe-back', handleAppSwipeBack);
+  }, [mobileView]);
+
+  // 📱 Listener untuk Default Android Back button & popstate history navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      // Jika di tampilan chat mobile, kembali ke list
+      if (mobileView === 'chat') {
+        isChatHistoryPushedRef.current = false;
+        setMobileView('list');
+        try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, [mobileView]);
 
   useEffect(() => {
@@ -908,6 +1022,10 @@ export const LiveChatMonitor: React.FC = () => {
     try {
       sessionStorage.setItem('liveChat:selectedId', conversationId);
       sessionStorage.setItem('liveChat:mobileView', 'chat');
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        window.history.pushState({ view: 'live-chat-detail', conversationId }, '');
+        isChatHistoryPushedRef.current = true;
+      }
     } catch {}
 
     // Auto mark-as-read jika masih ada unread atau isManualUnread
@@ -2882,6 +3000,72 @@ export const LiveChatMonitor: React.FC = () => {
                               <p className="text-[10px] text-[#667781] truncate">Kirim foto/pricelist (maks 8MB)</p>
                             </div>
                           </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Emoji Picker Button (Khusus Tampilan Web/Desktop) */}
+                    <div className="relative shrink-0 hidden md:block" ref={emojiPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
+                        disabled={sending}
+                        className={`w-9 h-9 sm:w-10 sm:h-10 min-h-[36px] sm:min-h-[38px] p-0 bg-white border border-[#d1d7db] hover:border-[#008069] disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 ${
+                          emojiPickerOpen ? 'bg-[#e8f5f2] border-[#008069] text-[#008069]' : 'text-[#54656f] hover:text-[#008069]'
+                        }`}
+                        title="Pilih Emoticon (Khusus Web)"
+                        aria-label="Pilih Emoticon"
+                      >
+                        <Smile size={18} className={emojiPickerOpen ? 'text-[#008069]' : 'text-[#54656f]'} />
+                      </button>
+
+                      {/* Emoji Popover */}
+                      {emojiPickerOpen && (
+                        <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-[#e9edef] rounded-2xl shadow-2xl p-2.5 z-40 animate-fadeIn flex flex-col gap-2 select-none">
+                          {/* Header / Category Tabs */}
+                          <div className="flex items-center justify-between border-b border-[#e9edef] pb-1.5 px-0.5">
+                            <div className="flex items-center space-x-1">
+                              {EMOJI_CATEGORIES.map((cat) => (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  onClick={() => setEmojiCategory(cat.id as any)}
+                                  className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1 transition ${
+                                    emojiCategory === cat.id
+                                      ? 'bg-[#e8f5f2] text-[#008069] font-bold shadow-xs'
+                                      : 'text-[#54656f] hover:bg-[#f0f2f5]'
+                                  }`}
+                                  title={cat.label}
+                                >
+                                  <span className="text-sm">{cat.icon}</span>
+                                  <span className="text-[11px]">{cat.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEmojiPickerOpen(false)}
+                              className="text-[#8696a0] hover:text-[#111b21] p-1 rounded-lg hover:bg-[#f0f2f5] transition"
+                              title="Tutup"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          {/* Emoji Grid */}
+                          <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto p-1 custom-scrollbar">
+                            {EMOJI_CATEGORIES.find((cat) => cat.id === emojiCategory)?.emojis.map((emoji, idx) => (
+                              <button
+                                key={`${emoji}-${idx}`}
+                                type="button"
+                                onClick={() => insertEmoji(emoji)}
+                                className="w-8 h-8 flex items-center justify-center text-lg rounded-lg hover:bg-[#f0f2f5] hover:scale-125 transition-transform active:scale-95 cursor-pointer"
+                                title={emoji}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

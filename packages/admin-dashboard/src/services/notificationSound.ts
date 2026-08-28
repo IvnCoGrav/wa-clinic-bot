@@ -180,12 +180,22 @@ export function setSoundEnabled(enabled: boolean): void {
   localStorage.setItem('live_chat_sound_enabled', enabled ? 'true' : 'false');
 }
 
+const MIN_SOUND_INTERVAL_MS = 2500;
+let lastSoundPlayedAt = 0;
+
 /**
  * Mainkan nada chime notifikasi pesan masuk yang jernih & lembut (A5 880Hz -> E6 1318.5Hz) + Getaran Haptik
  * Khusus dipanggil SAAT ADA PESAN BARU MASUK dari pelanggan (bukan untuk klik tombol).
+ * Memiliki throttle debounce (minimal 2.5s) agar tidak meledak/burst saat banyak chat masuk serentak.
  */
-export function playIncomingMessageSound(): void {
+export function playIncomingMessageSound(force = false): void {
   if (!isSoundEnabled()) return;
+
+  const nowMs = Date.now();
+  if (!force && nowMs - lastSoundPlayedAt < MIN_SOUND_INTERVAL_MS) {
+    return;
+  }
+  lastSoundPlayedAt = nowMs;
 
   // 1. Haptic Vibration (Khusus notifikasi pesan masuk di Smartphone Android)
   try {

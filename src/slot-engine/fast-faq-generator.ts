@@ -101,7 +101,21 @@ export class FastFaqGenerator {
         return null; // Fallthrough jika balasan kosong
       }
 
-      const finalReply = UnifiedResponseSanitizer.sanitize(rawReply, { historyCount });
+      let finalReply = UnifiedResponseSanitizer.sanitize(rawReply, { historyCount });
+
+      // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
+      // pastikan balasan wajib diawali perkenalan resmi Bidan Yusi jika LLM belum menyertakannya.
+      if (
+        historyCount === 0 &&
+        !finalReply.toLowerCase().includes('bidan yusi') &&
+        !finalReply.toLowerCase().includes('perkenalkan')
+      ) {
+        const { TEMPLATES } = await import('../config/persona');
+        const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+        const isIslamic = hasIslamicGreeting(incomingText);
+        const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
+        finalReply = `${greetingHeader}\n\n${finalReply}`;
+      }
 
       // Audit LLM Call
       try {

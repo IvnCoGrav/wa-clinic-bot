@@ -68,14 +68,26 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
     });
 
     it('should strip repetitive greeting cleanly without leaving stray emojis on regular follow-up turns', () => {
-      const followUpText = 'Halo Bunda! ✨ Tentu bisa kami jadwalkan untuk hari Sabtu ya.';
+      const followUpText = 'Halo Bunda! ✨ Kami bantu cekkan ketersediaan jadwal Bidan untuk hari Sabtu ya.';
       const cleaned = UnifiedResponseSanitizer.sanitize(followUpText, {
         historyCount: 2,
       });
 
       expect(cleaned).not.toMatch(/^✨/);
       expect(cleaned).not.toMatch(/^Halo Bunda/);
-      expect(cleaned).toContain('Tentu bisa kami jadwalkan untuk hari Sabtu ya.');
+      expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal Bidan untuk hari Sabtu ya.');
+    });
+
+    it('should sanitize over-affirmation "Tentu bisa, kami bantu cekkan..." into neutral schedule check', () => {
+      const affirmationText = 'Tentu bisa, kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bun 😊 Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?';
+      const cleaned = UnifiedResponseSanitizer.sanitize(affirmationText, {
+        historyCount: 1,
+      });
+
+      expect(cleaned).not.toContain('Tentu bisa');
+      expect(cleaned).not.toContain('Bun ');
+      expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bunda 😊');
+      expect(cleaned).toContain('Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?');
     });
   });
 

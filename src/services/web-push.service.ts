@@ -260,8 +260,11 @@ export class WebPushService {
         };
 
         try {
+          const ttlSeconds = parseInt(process.env.WEB_PUSH_TTL_SECONDS || '1800', 10);
+          const ttl = Number.isNaN(ttlSeconds) || ttlSeconds <= 0 ? 1800 : ttlSeconds;
+
           await webpush.sendNotification(pushSubscription, stringifiedPayload, {
-            TTL: 60 * 60 * 24, // 24 jam
+            TTL: ttl,
             urgency: 'high',
           });
           sent++;

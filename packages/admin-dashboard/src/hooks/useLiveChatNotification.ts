@@ -41,7 +41,7 @@ export function useLiveChatNotification(currentRole: string) {
     setSoundEnabled(next);
     unlockAudioContext();
     if (next) {
-      playIncomingMessageSound();
+      playIncomingMessageSound(true);
     }
   }, [soundActive]);
 
@@ -50,7 +50,7 @@ export function useLiveChatNotification(currentRole: string) {
     unlockAudioContext();
     setSoundActive(true);
     setSoundEnabled(true);
-    playIncomingMessageSound();
+    playIncomingMessageSound(true);
   }, []);
 
   // Request browser desktop/mobile push notification permission & register VAPID Web Push
@@ -111,6 +111,9 @@ export function useLiveChatNotification(currentRole: string) {
         }
 
         if (type === 'message.created') {
+          // Abaikan pesan dari sandbox / QA test simulator (tidak perlu ada notifikasi suara, toast, browser push, atau badge)
+          if (payload.isSandboxTest || payload.is_sandbox_test || payload.isSandbox) return;
+
           const msgId = payload.messageId || `${payload.conversationId}_${Date.now()}`;
           const isCustomer =
             payload.direction === 'INBOUND' ||

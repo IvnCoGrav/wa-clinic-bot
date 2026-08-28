@@ -122,7 +122,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
       {/* Channel aktif + toggle */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] gap-3">
         <div className="flex items-center space-x-2.5">
-          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${provider === 'WABA' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
+          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${provider === 'WABA' ? 'bg-sky-50 text-sky-800 border border-sky-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}`}>
             {provider === 'WABA' ? 'Meta Cloud API v25.0' : 'WAHA Self-Hosted'}
           </span>
           <p className="text-xs text-[#667781]">Channel outbound aktif untuk follow-up &amp; reminder. Safety net default WAHA.</p>
@@ -345,7 +345,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 value={wabaPhoneNumberId}
                 onChange={(e) => setWabaPhoneNumberId(e.target.value)}
                 placeholder="100982736451234"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
               />
             </div>
             <div className="space-y-1">
@@ -358,7 +358,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 value={wabaBusinessAccountId}
                 onChange={(e) => setWabaBusinessAccountId(e.target.value)}
                 placeholder="200192837465123"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
               />
             </div>
             <div className="space-y-1">
@@ -371,7 +371,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 value={wabaAccessToken}
                 onChange={(e) => setWabaAccessToken(e.target.value)}
                 placeholder={wabaConfigured ? '•••••••• (kosongkan bila tidak diubah)' : 'EAA... System User Token'}
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
               />
             </div>
             <div className="space-y-1">
@@ -384,7 +384,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 value={wabaWebhookVerifyToken}
                 onChange={(e) => setWabaWebhookVerifyToken(e.target.value)}
                 placeholder="Token rahasia webhook Meta Cloud"
-                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
               />
             </div>
           </div>
@@ -400,14 +400,14 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
           </div>
 
           {/* Pemetaan Template HSM */}
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3 pt-2 border-t border-[#e9edef]">
             <h4 className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
               <FileCheck size={13} className="text-[#008069]" />
               <span>Pemetaan Template HSM Meta</span>
             </h4>
             <div className="space-y-2">
               {wabaTemplates.map((tmpl) => (
-                <div key={`${tmpl.type}_${tmpl.variant}`} className="p-3 rounded-xl bg-white border border-[#e9edef] flex items-center justify-between shadow-xs">
+                <div key={`${tmpl.type}_${tmpl.variant}`} className="p-3.5 rounded-xl bg-white border border-[#e9edef] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs">
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="text-xs font-bold text-[#111b21]">{tmpl.type} (Variant {tmpl.variant})</span>
@@ -420,7 +420,7 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                     type="text"
                     defaultValue={tmpl.templateName}
                     onBlur={(e) => handleSaveWabaTemplate(tmpl.type, tmpl.variant, e.target.value)}
-                    className="bg-white border border-[#d1d7db] rounded-lg px-2.5 py-1 text-xs text-[#111b21] placeholder-[#8696a0] w-64 focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="bg-white border border-[#d1d7db] rounded-xl px-3 py-1.5 text-xs text-[#111b21] placeholder-[#8696a0] w-full sm:w-64 focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                   />
                 </div>
               ))}

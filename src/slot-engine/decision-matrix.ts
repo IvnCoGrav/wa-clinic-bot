@@ -134,6 +134,14 @@ export class DecisionMatrix {
     // =========================================================================
     // PRIORITY 2B: PERTANYAAN KEBIJAKAN OPERASIONAL DETERMINISTIK (0 Token)
     // =========================================================================
+    const isInitialTurn = (context?.history?.length ?? 0) === 0;
+    const formatPolicyReply = (policyText: string) => {
+      if (isInitialTurn) {
+        return `${TEMPLATES.firstContactGreetingHeader({ isIslamic })}\n\n${policyText}`;
+      }
+      return policyText;
+    };
+
     // A. Kebijakan Transport / Ongkir Multi-Anak
     if (/\b(2\s*anak|dua\s*anak|3\s*anak|bunda\s*(dan|\+)\s*(anak|bayi)|ongkir.*(1\s*kali|satu\s*kali|dihitung\s*satu))\b/i.test(rawText) && (rawText.includes('ongkir') || rawText.includes('transport'))) {
       return {
@@ -141,7 +149,7 @@ export class DecisionMatrix {
         reason: 'Customer bertanya kebijakan ongkir multi-anak/treatment -> Kirim template resmi.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.multiChildTransportPolicy(),
+        deterministicTemplateReply: formatPolicyReply(TEMPLATES.multiChildTransportPolicy()),
       };
     }
 
@@ -152,7 +160,7 @@ export class DecisionMatrix {
         reason: 'Customer bertanya metode pembayaran -> Kirim template metode pembayaran resmi.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.paymentMethodPolicy(),
+        deterministicTemplateReply: formatPolicyReply(TEMPLATES.paymentMethodPolicy()),
       };
     }
 
@@ -166,18 +174,25 @@ export class DecisionMatrix {
         reason: 'Customer bertanya kualifikasi bidan/terapis -> Kirim template kualifikasi resmi.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.therapistQualificationPolicy(),
+        deterministicTemplateReply: formatPolicyReply(TEMPLATES.therapistQualificationPolicy()),
       };
     }
 
-    // D. Kebijakan Jangkauan Area Umum
-    if (/\b(melayani\s*(daerah|area|wilayah)|jangkauan\s*(kemana|mana)|bisa\s*ke\s*mana\s*aja)\b/i.test(rawText) && !extraction.locationText) {
+    // D. Kebijakan Jangkauan Area Umum / Tanya Jangkauan Kota ("ke surabaya bisa ?", "bisa ke sidoarjo ?")
+    const isCoverageQuery =
+      /\b(melayani\s*(daerah|area|wilayah)|jangkauan\s*(kemana|mana)|bisa\s*ke\s*mana\s*aja|(?:ke|daerah|area|wilayah)\s+(?:sby|surabaya|sidoarjo|sda|gresik)\s+(?:bisa|melayani)|(?:bisa|melayani)\s+ke\s+(?:sby|surabaya|sidoarjo|sda|gresik)|(?:ke\s+)?(?:sby|surabaya|sidoarjo|sda)\s+(?:bisa|bisa\s+gak|bisa\s+kah|bisa\s+ya))\b/i.test(rawText);
+
+    const isGenericCityCoverageOnly =
+      !extraction.locationText ||
+      ['sby', 'surabaya', 'sidoarjo', 'sda', 'gresik'].includes((extraction.locationText || '').toLowerCase().trim());
+
+    if (isCoverageQuery && isGenericCityCoverageOnly && extraction.symptoms.length === 0 && !extraction.treatmentReferenced) {
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
-        reason: 'Customer bertanya area jangkauan umum -> Kirim template area operasional resmi.',
+        reason: 'Customer bertanya area jangkauan umum / jangkauan kota -> Kirim template area operasional resmi.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.coverageAreaPolicy(),
+        deterministicTemplateReply: formatPolicyReply(TEMPLATES.coverageAreaPolicy()),
       };
     }
 
@@ -196,7 +211,7 @@ export class DecisionMatrix {
         reason: 'Customer bertanya lokasi/asal klinik -> Kirim kebijakan homecare & tanyakan alamat rumah Bunda.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.clinicOriginPolicy(),
+        deterministicTemplateReply: formatPolicyReply(TEMPLATES.clinicOriginPolicy()),
       };
     }
 
@@ -224,7 +239,7 @@ export class DecisionMatrix {
 
     const isPureLeadOpener =
       /^(?:halo|hola|hi|hei|p|assalamu'?alaikum|assalamualaikum|(?:selamat|selmat|slmt|met)\s+(?:pagi|siang|sore|malam)|pagi|siang|sore|malam|permisi|bisa|bisa\s+kah|bisa\s+gak|bisa\s+ya|apakah\s+bisa|bisa\s+homecare|mau\s+tanya|info|info\s+lengkap|tertarik|min|bunda|admin)[!.\s?]*$/i.test(cleanText) ||
-      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|info\s+lengkap)\b/i.test(rawText);
+      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan)\b/i.test(rawText);
 
     const isLeadGreeting =
       cleanText.length > 0 &&
@@ -363,9 +378,22 @@ export class DecisionMatrix {
         if (!resolved.lat && (resolved as any).ambiguityResults && (resolved as any).ambiguityResults.length > 0) {
           const ambiguityList: any[] = (resolved as any).ambiguityResults;
           const queryLower = `${compositeQuery} ${rawText}`.toLowerCase();
-          const matchedKelurahan = ambiguityList.find((item: any) =>
-            item.Kelurahan_Desa && queryLower.includes(item.Kelurahan_Desa.toLowerCase())
-          );
+          
+          const hasExplicitKelurahanPrefix = /\b(?:kelurahan|desa|kel|ds)\b/i.test(queryLower);
+          const hasStreetAddress = Boolean(extraction.streetDetail);
+
+          const matchedKelurahan = ambiguityList.find((item: any) => {
+            if (!item.Kelurahan_Desa) return false;
+            const kelLower = item.Kelurahan_Desa.toLowerCase().trim();
+            const kecLower = (item.Kecamatan || '').toLowerCase().trim();
+
+            if (kelLower !== kecLower) {
+              return queryLower.includes(kelLower);
+            }
+            // Jika nama kelurahan sama persis dengan nama kecamatan (misal "Jambangan", "Waru", "Rungkut")
+            // hanya cocok jika customer secara eksplisit menyebut "kelurahan jambangan" atau menyertakan detail jalan/perumahan
+            return (hasExplicitKelurahanPrefix || hasStreetAddress) && queryLower.includes(kelLower);
+          });
 
           if (matchedKelurahan && matchedKelurahan.Koordinat) {
             const parts = matchedKelurahan.Koordinat.split(',').map((p: string) => parseFloat(p.trim()));
@@ -380,6 +408,25 @@ export class DecisionMatrix {
                 formattedAddress: `${matchedKelurahan.Kelurahan_Desa}, Kec. ${matchedKelurahan.Kecamatan}, ${matchedKelurahan.Kabupaten_Kota}`,
               };
             }
+          } else {
+            // Tidak ada kelurahan spesifik -> Input adalah nama kecamatan/wilayah luas yang ambigu (misal "Jambangan", "Waru", "Rungkut")
+            const kecName = resolved.matchedSpan || ambiguityList[0]?.Kecamatan || extraction.locationText || 'tersebut';
+            const kotaName = ambiguityList[0]?.Kabupaten_Kota || resolved.kota || null;
+            const lowerSpan = (resolved.matchedSpan || kecName).toLowerCase().trim();
+            const isCity = ['sidoarjo', 'surabaya', 'sda', 'sby', 'gresik'].includes(lowerSpan) || lowerSpan.includes('kabupaten') || lowerSpan.includes('kota');
+
+            return {
+              action: 'RESOLVE_LOCATION_AND_DELIVERY',
+              reason: `Lokasi yang diinput merupakan nama kecamatan/wilayah luas (${kecName}) tanpa kelurahan spesifik -> Minta detail kelurahan.`,
+              updatedSlate,
+              shouldSendPricelistImage: false,
+              deterministicTemplateReply: TEMPLATES.askKelurahanAmbiguous({
+                kecamatanName: kecName,
+                cityName: kotaName || kecName,
+                isCity,
+                options: ambiguityList,
+              }),
+            };
           }
         }
 

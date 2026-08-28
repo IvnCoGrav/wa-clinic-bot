@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 export type LlmFlowType =
   | 'CHATBOT_AUTO'
@@ -53,6 +55,66 @@ export interface GroupedCustomerLlmLogs {
 const MAX_LLM_LOGS = 500;
 const llmExecutionBuffer: LlmExecutionRecord[] = [];
 
+const LOGS_DIR = path.resolve(process.cwd(), 'logs');
+
+// Background asynchronous file append queue for LLM JSONL logs (non-blocking)
+let llmWriteQueue: string[] = [];
+let isLlmFlushing = false;
+let llmFlushTimer: NodeJS.Timeout | null = null;
+
+function ensureLogsDir(): void {
+  try {
+    if (!fs.existsSync(LOGS_DIR)) {
+      fs.mkdirSync(LOGS_DIR, { recursive: true });
+    }
+  } catch {}
+}
+
+function getLogDateString(d = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getLlmLogFilePath(d = new Date()): string {
+  return path.join(LOGS_DIR, `llm-${getLogDateString(d)}.jsonl`);
+}
+
+function scheduleLlmFlush(): void {
+  if (llmFlushTimer || llmWriteQueue.length === 0) return;
+  llmFlushTimer = setTimeout(() => {
+    llmFlushTimer = null;
+    void flushLlmWriteQueue();
+  }, 250);
+  if ((llmFlushTimer as any).unref) {
+    (llmFlushTimer as any).unref();
+  }
+}
+
+async function flushLlmWriteQueue(): Promise<void> {
+  if (isLlmFlushing || llmWriteQueue.length === 0) return;
+  if (process.env.NODE_ENV === 'test') {
+    llmWriteQueue = [];
+    return;
+  }
+
+  isLlmFlushing = true;
+  const chunk = llmWriteQueue.splice(0, llmWriteQueue.length);
+  try {
+    ensureLogsDir();
+    const filePath = getLlmLogFilePath();
+    await fs.promises.appendFile(filePath, chunk.join('\n') + '\n', 'utf8');
+  } catch (_) {
+    // Best-effort file writing, never throw or interrupt execution
+  } finally {
+    isLlmFlushing = false;
+    if (llmWriteQueue.length > 0) {
+      scheduleLlmFlush();
+    }
+  }
+}
+
 /**
  * Catat eksekusi proses LLM (baik auto-reply chatbot, NLU, AI Router, AI Verifier, maupun copilot).
  */
@@ -84,7 +146,84 @@ export function recordLlmExecution(
     llmExecutionBuffer.pop();
   }
 
+  // Queue to background JSONL persistent file
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      llmWriteQueue.push(JSON.stringify(entry));
+      if (llmWriteQueue.length >= 10) {
+        if (llmFlushTimer) {
+          clearTimeout(llmFlushTimer);
+          llmFlushTimer = null;
+        }
+        void flushLlmWriteQueue();
+      } else {
+        scheduleLlmFlush();
+      }
+    } catch {}
+  }
+
   return entry;
+}
+
+/**
+ * Rehydrate LLM execution buffer dari file disk saat server baru boot/restart.
+ */
+export async function rehydrateLlmBuffer(): Promise<void> {
+  if (process.env.NODE_ENV === 'test') return;
+
+  try {
+    ensureLogsDir();
+    const todayPath = getLlmLogFilePath();
+    const loadedRecords: LlmExecutionRecord[] = [];
+
+    const readRecordsFromFile = async (filePath: string) => {
+      if (!fs.existsSync(filePath)) return [];
+      const content = await fs.promises.readFile(filePath, 'utf8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      const records: LlmExecutionRecord[] = [];
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line) as LlmExecutionRecord;
+          if (parsed.id && parsed.timestamp) {
+            records.push(parsed);
+          }
+        } catch {}
+      }
+      return records;
+    };
+
+    const todayRecords = await readRecordsFromFile(todayPath);
+    loadedRecords.push(...todayRecords);
+
+    // Jika hari ini baru ada sedikit log LLM (< 50), ambil juga dari file kemarin
+    if (loadedRecords.length < 50) {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const yesterdayPath = getLlmLogFilePath(yesterday);
+      const yesterdayRecords = await readRecordsFromFile(yesterdayPath);
+      loadedRecords.unshift(...yesterdayRecords);
+    }
+
+    if (loadedRecords.length > 0) {
+      // Sort descending (newest first)
+      loadedRecords.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      const recent = loadedRecords.slice(0, MAX_LLM_LOGS);
+
+      // Merge with any entries currently in buffer
+      const existing = [...llmExecutionBuffer];
+      llmExecutionBuffer.length = 0;
+      llmExecutionBuffer.push(...recent);
+      for (const ex of existing) {
+        if (!llmExecutionBuffer.some((b) => b.id === ex.id)) {
+          llmExecutionBuffer.unshift(ex);
+        }
+      }
+      if (llmExecutionBuffer.length > MAX_LLM_LOGS) {
+        llmExecutionBuffer.splice(MAX_LLM_LOGS);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[LLM LOGGER] Gagal rehydrate LLM buffer:', err.message);
+  }
 }
 
 /**

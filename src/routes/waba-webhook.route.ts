@@ -192,6 +192,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
               content: msg.text || (msg.caption ? `[IMAGE: ${msg.caption}]` : '[MEDIA]'),
               waMessageId: msg.messageId,
               payloadRaw: mergeWabaMedia(msg.rawPayload),
+              isHistorical: true,
             });
             processed++;
             continue;
