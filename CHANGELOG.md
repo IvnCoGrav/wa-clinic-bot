@@ -4,6 +4,29 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Impeccable Audit & Feature — Tab Treatment Besok & Redesign Impeccable pada Halaman Treatment (`TodayTreatments.tsx`, `today.subroute.ts`, `staff-reservation.service.ts`) (2026-08-28)
+
+- **Latar Belakang & Kebutuhan:**
+  - Halaman *Treatment Hari Ini* sebelumnya hanya dapat melihat jadwal hari ini dan belum menyediakan tab praktis untuk meninjau persiapan jadwal kunjungan esok hari (*Treatment Besok*).
+  - Diperlukan audit frontend dengan standar **Impeccable Design System** untuk menyempurnakan visual hierarchy, segmented date control, touch targets, kontras tipografi, dan contextual action gates.
+
+- **Solusi & Implementasi:**
+  1. **Segmented Date Control (Hari Ini, Besok, Pilih Tanggal)**:
+     - Menambahkan tab kontrol tanggal fleksibel (*📅 Hari Ini*, *✨ Besok*, dan input date picker untuk tanggal custom).
+     - Menampilkan banner status tanggal dinamis dengan informasi rute & persiapan terapis.
+  2. **Dukungan Backend Multi-Tanggal & Rentang Waktu WIB**:
+     - Memperbarui `StaffReservationService.getWibDateRange` dan `getTodayTasks` di `src/services/staff-reservation.service.ts` untuk memproses parameter `date` (`'today'`, `'tomorrow'`, atau `'YYYY-MM-DD'`) berbasis rentang UTC offset WIB (+7).
+     - Memperbarui route `GET /api/staff/today-tasks` di `src/routes/staff/today.subroute.ts` untuk mengembalikan metadata tanggal (`dateStr`, `formattedDate`, `isToday`, `isTomorrow`).
+  3. **Contextual Action Safety & Impeccable Craft**:
+     - Tombol "Kirim OTW" otomatis dikunci menjadi badge informatif `Jadwal Besok (OTW Hari-H)` saat melihat jadwal besok agar terapis tidak salah kirim notifikasi sebelum hari-H.
+     - Aksi "Catat Lunas", "Maps Navigasi", "Update Lokasi/Foto Rumah", "Chat Pasien", dan "Delegasikan/Ganti Terapis" tetap dapat diakses penuh untuk perencanaan tim.
+     - Standar Impeccable: Touch target $\ge 38\text{px}$, modal transisi smooth dengan `createPortal` dan `backdrop-blur-xs`, shortcut keyboard `Escape`, dan feedback modal tanpa native alert/confirm.
+
+- **Pengujian & Verifikasi:**
+  - Build frontend React Vite `packages/admin-dashboard`: **PASS (0 errors, built in 9.72s)**.
+  - Build backend Fastify `npm run build`: **PASS (0 errors)**.
+  - Vitest Unit Test: **PASS (23/23 tests pass)**.
+
 #### Enhanced & Fixed — Parsing Tanggal 2-Digit, Ekstraksi Jam & Prioritas Total Price di Form Reservasi (`reservation-text-parser.ts`, `webhook.route.ts`) (2026-08-28)
 
 - **Latar Belakang & Akar Masalah:**
