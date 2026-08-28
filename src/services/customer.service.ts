@@ -775,9 +775,16 @@ export class CustomerService {
       const tenant = await prisma.tenant.findFirst({ where: { id: tenantId } });
       const targetId = tenant?.id || tenantId;
 
-      const updated = await prisma.tenant.update({
+      const updated = await prisma.tenant.upsert({
         where: { id: targetId },
-        data: {
+        create: {
+          id: targetId,
+          slug: targetId,
+          name: `Default Clinic`,
+          ...(settings.mqlThresholdBubbles !== undefined && { mql_threshold_bubbles: settings.mqlThresholdBubbles }),
+          ...(settings.mqlAutoLeadEnabled !== undefined && { mql_auto_lead_enabled: settings.mqlAutoLeadEnabled }),
+        },
+        update: {
           ...(settings.mqlThresholdBubbles !== undefined && { mql_threshold_bubbles: settings.mqlThresholdBubbles }),
           ...(settings.mqlAutoLeadEnabled !== undefined && { mql_auto_lead_enabled: settings.mqlAutoLeadEnabled }),
         },

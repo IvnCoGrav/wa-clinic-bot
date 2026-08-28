@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { telegramService } from './telegram.service';
 import { calculateHaversineDistance } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
+import { isDummyOrTestContact } from '../utils/dummy-filter';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -102,6 +103,12 @@ export class StaffNotificationService {
       }
 
       const cust = reservation.customer;
+
+      // Jangan kirim notifikasi penugasan Telegram jika reservasi berasal dari testing / sandbox
+      if (cust?.is_sandbox_test || isDummyOrTestContact(cust?.phone, cust?.name, cust?.is_sandbox_test)) {
+        return { sent: false, reason: 'Sandbox test reservation (notifikasi dinonaktifkan)' };
+      }
+
       const allChildren = reservation.children?.length ? reservation.children : cust?.children || [];
 
       // 1. Format Nama Anak & Usia
@@ -389,6 +396,9 @@ _Semangat melayani Bunda & Buah Hati hari ini! ✨_`;
           booking_date: {
             gte: startOfDay,
             lte: endOfDay,
+          },
+          customer: {
+            is_sandbox_test: false,
           },
         },
         include: {

@@ -191,24 +191,24 @@ export const DailyReportPanel: React.FC = () => {
       ) : (
         <div className="space-y-4 pt-1">
           {/* 1-Click Zero-Setup Pairing Section */}
-          <div className="bg-linear-to-r from-[#f0fdf4] to-[#f8fafc] border border-emerald-200 rounded-2xl p-4 space-y-3 shadow-xs">
+          <div className="bg-emerald-50/40 border border-emerald-200 rounded-2xl p-4 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Sparkles size={15} className="text-emerald-600" />
+                <Sparkles size={15} className="text-[#008069]" />
                 <span className="text-xs font-bold text-[#111b21]">Koneksi 1-Klik Instan (Zero-Setup)</span>
               </div>
               <button
                 type="button"
                 onClick={fetchSettings}
                 title="Perbarui status koneksi"
-                className="text-[11px] text-emerald-700 hover:text-emerald-900 flex items-center space-x-1 font-medium transition"
+                className="text-[11px] text-[#008069] hover:text-[#00a884] flex items-center space-x-1 font-semibold transition"
               >
                 <RefreshCw size={11} />
                 <span>Cek Status</span>
               </button>
             </div>
 
-            <p className="text-[11px] text-[#475569] leading-relaxed">
+            <p className="text-[11px] text-[#54656f] leading-relaxed">
               Pilih tujuan penerimaan laporan. Anda cukup mengklik tombol di bawah dan menekan tombol <b>START / Tambahkan</b> di Telegram:
             </p>
 
@@ -217,64 +217,64 @@ export const DailyReportPanel: React.FC = () => {
                 href={telegramDirectLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-3 bg-white hover:bg-emerald-50 border border-emerald-300 rounded-xl transition shadow-2xs group"
+                className="flex items-center justify-between p-3 bg-white hover:bg-emerald-50/60 border border-emerald-200 rounded-xl transition shadow-2xs group"
               >
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-[#008069] flex items-center justify-center font-bold">
                     <MessageSquare size={16} />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] block group-hover:text-emerald-700">
+                    <span className="text-xs font-bold text-[#111b21] block group-hover:text-[#008069]">
                       Chat Pribadi (DM)
                     </span>
-                    <span className="text-[10px] text-[#64748b]">Laporan langsung ke akun Anda</span>
+                    <span className="text-[10px] text-[#8696a0]">Laporan langsung ke akun Anda</span>
                   </div>
                 </div>
-                <ExternalLink size={13} className="text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
+                <ExternalLink size={13} className="text-[#008069] group-hover:translate-x-0.5 transition-transform" />
               </a>
 
               <a
                 href={telegramGroupLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-3 bg-white hover:bg-emerald-50 border border-emerald-300 rounded-xl transition shadow-2xs group"
+                className="flex items-center justify-between p-3 bg-white hover:bg-emerald-50/60 border border-emerald-200 rounded-xl transition shadow-2xs group"
               >
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
                     <Users size={16} />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] block group-hover:text-emerald-700">
+                    <span className="text-xs font-bold text-[#111b21] block group-hover:text-[#008069]">
                       Grup Telegram / Tim
                     </span>
-                    <span className="text-[10px] text-[#64748b]">Laporan ke grup bersama staff</span>
+                    <span className="text-[10px] text-[#8696a0]">Laporan ke grup bersama staff</span>
                   </div>
                 </div>
-                <ExternalLink size={13} className="text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
+                <ExternalLink size={13} className="text-[#008069] group-hover:translate-x-0.5 transition-transform" />
               </a>
             </div>
 
             {/* Forum / Topics Quick Guide */}
-            <div className="p-3 bg-white/80 rounded-xl border border-emerald-100 text-[11px] text-[#475569] space-y-1.5">
-              <div className="font-bold text-[#1e293b] flex items-center space-x-1">
-                <Layers size={13} className="text-emerald-600" />
+            <div className="p-3 bg-white rounded-xl border border-emerald-200/80 text-[11px] text-[#54656f] space-y-1.5 shadow-2xs">
+              <div className="font-bold text-[#111b21] flex items-center space-x-1">
+                <Layers size={13} className="text-[#008069]" />
                 <span>Panduan Sub-Topik (Forum Topics):</span>
               </div>
-              <p className="text-[10.5px] leading-relaxed">
+              <p className="text-[10.5px] leading-relaxed text-[#54656f]">
                 Jika bot dimasukkan ke grup dengan banyak topik, cukup buka topik yang diinginkan lalu ketik perintah berikut:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1 text-[10px] font-mono">
-                <div className="bg-[#f1f5f9] p-1.5 rounded-lg border border-[#e2e8f0]">
-                  <span className="font-bold text-[#0f172a]">/set_daily_report</span>
-                  <div className="text-[#64748b] text-[9px] font-sans">Topik Laporan Harian</div>
+                <div className="bg-[#f8fafc] p-2 rounded-lg border border-[#e9edef]">
+                  <span className="font-bold text-[#008069]">/set_daily_report</span>
+                  <div className="text-[#8696a0] text-[9px] font-sans">Topik Laporan Harian</div>
                 </div>
-                <div className="bg-[#f1f5f9] p-1.5 rounded-lg border border-[#e2e8f0]">
-                  <span className="font-bold text-[#0f172a]">/set_error_alerts</span>
-                  <div className="text-[#64748b] text-[9px] font-sans">Topik Error Sistem</div>
+                <div className="bg-[#f8fafc] p-2 rounded-lg border border-[#e9edef]">
+                  <span className="font-bold text-[#008069]">/set_error_alerts</span>
+                  <div className="text-[#8696a0] text-[9px] font-sans">Topik Error Sistem</div>
                 </div>
-                <div className="bg-[#f1f5f9] p-1.5 rounded-lg border border-[#e2e8f0]">
-                  <span className="font-bold text-[#0f172a]">/set_medical_alerts</span>
-                  <div className="text-[#64748b] text-[9px] font-sans">Topik Eskalasi Medis</div>
+                <div className="bg-[#f8fafc] p-2 rounded-lg border border-[#e9edef]">
+                  <span className="font-bold text-[#008069]">/set_medical_alerts</span>
+                  <div className="text-[#8696a0] text-[9px] font-sans">Topik Eskalasi Medis</div>
                 </div>
               </div>
             </div>
@@ -306,7 +306,7 @@ export const DailyReportPanel: React.FC = () => {
               max={23}
               value={reportHour}
               onChange={(e) => setReportHour(parseInt(e.target.value, 10) || 0)}
-              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
             />
             <span className="text-[10px] text-[#8696a0] block">
               Default: Jam 07:00 WIB (merangkum data jam 00:00 - 23:59 WIB hari sebelumnya).
@@ -333,7 +333,7 @@ export const DailyReportPanel: React.FC = () => {
                   type="button"
                   onClick={handleRegenerateToken}
                   disabled={regenerating}
-                  className="text-[10px] text-red-600 hover:text-red-700 font-medium"
+                  className="text-[10px] text-rose-600 hover:text-rose-700 font-semibold"
                 >
                   {regenerating ? 'Membuat...' : 'Reset Token Pairing'}
                 </button>
@@ -350,7 +350,7 @@ export const DailyReportPanel: React.FC = () => {
                     value={telegramBotToken}
                     onChange={(e) => setTelegramBotToken(e.target.value)}
                     placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyZ..."
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                   />
                   <span className="text-[10px] text-[#8696a0] block">
                     Kosongkan untuk menggunakan bot resmi default (@{telegramBotUsername}).
@@ -367,7 +367,7 @@ export const DailyReportPanel: React.FC = () => {
                     value={telegramChatId}
                     onChange={(e) => setTelegramChatId(e.target.value)}
                     placeholder="-1001234567890 atau ID Chat Pribadi"
-                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
                   />
                   <span className="text-[10px] text-[#8696a0] block">
                     Diisi otomatis oleh tombol 1-Klik, atau isi manual jika diperlukan.
@@ -377,33 +377,33 @@ export const DailyReportPanel: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#475569]">Topic ID Laporan</label>
+                  <label className="text-[10px] font-bold text-[#54656f]">Topic ID Laporan</label>
                   <input
                     type="text"
                     value={telegramTopicDailyReport}
                     onChange={(e) => setTelegramTopicDailyReport(e.target.value)}
                     placeholder="contoh: 42"
-                    className="w-full bg-white border border-[#d1d7db] rounded-lg px-2.5 py-1.5 text-xs"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#475569]">Topic ID Error Server</label>
+                  <label className="text-[10px] font-bold text-[#54656f]">Topic ID Error Server</label>
                   <input
                     type="text"
                     value={telegramTopicSystemErrors}
                     onChange={(e) => setTelegramTopicSystemErrors(e.target.value)}
                     placeholder="contoh: 50"
-                    className="w-full bg-white border border-[#d1d7db] rounded-lg px-2.5 py-1.5 text-xs"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#475569]">Topic ID Eskalasi Medis</label>
+                  <label className="text-[10px] font-bold text-[#54656f]">Topic ID Eskalasi Medis</label>
                   <input
                     type="text"
                     value={telegramTopicMedicalAlerts}
                     onChange={(e) => setTelegramTopicMedicalAlerts(e.target.value)}
                     placeholder="contoh: 65"
-                    className="w-full bg-white border border-[#d1d7db] rounded-lg px-2.5 py-1.5 text-xs"
+                    className="w-full bg-white border border-[#d1d7db] rounded-xl px-2.5 py-1.5 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069]"
                   />
                 </div>
               </div>

@@ -48,6 +48,11 @@ export class LiveChatHubService {
   }
 
   private init(): Promise<void> {
+    if (process.env.NODE_ENV === 'test') {
+      this.redisEnabled = false;
+      return Promise.resolve();
+    }
+
     const host = process.env.REDIS_HOST || 'localhost';
     const port = parseInt(process.env.REDIS_PORT || '6379', 10);
 

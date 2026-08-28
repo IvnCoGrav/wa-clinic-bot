@@ -101,9 +101,15 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const updated = await prisma.tenant.update({
+        const updated = await prisma.tenant.upsert({
           where: { id: DEFAULT_TENANT_ID },
-          data: { media_retention_days: Math.floor(mediaRetentionDays) },
+          create: {
+            id: DEFAULT_TENANT_ID,
+            slug: DEFAULT_TENANT_ID,
+            name: `Default Clinic`,
+            media_retention_days: Math.floor(mediaRetentionDays),
+          },
+          update: { media_retention_days: Math.floor(mediaRetentionDays) },
         });
 
         await auditService.logAdminAction({
@@ -1091,9 +1097,15 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const updated = await prisma.tenant.update({
+        const updated = await prisma.tenant.upsert({
           where: { id: DEFAULT_TENANT_ID },
-          data: { auto_send_purchase_capi: autoSendPurchaseCapi },
+          create: {
+            id: DEFAULT_TENANT_ID,
+            slug: DEFAULT_TENANT_ID,
+            name: `Default Clinic`,
+            auto_send_purchase_capi: autoSendPurchaseCapi,
+          },
+          update: { auto_send_purchase_capi: autoSendPurchaseCapi },
         });
 
         await auditService.logAdminAction({
@@ -1238,9 +1250,15 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
         if (telegramTopicSystemErrors !== undefined) updateData.telegram_topic_system_errors = telegramTopicSystemErrors.trim() || null;
         if (telegramTopicMedicalAlerts !== undefined) updateData.telegram_topic_medical_alerts = telegramTopicMedicalAlerts.trim() || null;
 
-        const updated = await prisma.tenant.update({
+        const updated = await prisma.tenant.upsert({
           where: { id: DEFAULT_TENANT_ID },
-          data: updateData,
+          create: {
+            id: DEFAULT_TENANT_ID,
+            slug: DEFAULT_TENANT_ID,
+            name: `Default Clinic`,
+            ...updateData,
+          },
+          update: updateData,
         });
 
         await auditService.logAdminAction({

@@ -151,10 +151,10 @@ describe('Centralized Architecture & PersonaComposer Test Suite', () => {
       };
 
       const missing = DynamicCloserService.determineMissingSlot(slate);
-      expect(missing).toBe('AGE');
+      expect(missing).toBe('TREATMENT');
 
       const closerInstruction = DynamicCloserService.getCloserInstruction(slate);
-      expect(closerInstruction).toContain('Tanyakan usia si kecil di kalimat penutup');
+      expect(closerInstruction).toContain('PANDUAN KONSULTASI & PENUTUP (TANYA PILIHAN TREATMENT)');
     });
   });
 

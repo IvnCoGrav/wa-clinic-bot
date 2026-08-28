@@ -682,6 +682,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 waMessageId,
                 payloadRaw: mergeMediaIntoPayload(payload),
                 skipMqlEvaluation: true,
+                isHistorical: true,
               });
               return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
             } else {
@@ -696,6 +697,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 waMessageId,
                 payloadRaw: mergeMediaIntoPayload(payload),
                 skipMqlEvaluation: true,
+                isHistorical: true,
               });
               return reply.status(200).send({ status: 'IGNORED_STALE_MESSAGE' });
             }

@@ -151,7 +151,7 @@ describe('Slot Engine Lead Greeting & False-Positive Hardening (Unit Tests)', ()
       expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
       expect(decision.deterministicTemplateReply).toBe(TEMPLATES.greeting({ isIslamic: false }));
       expect(decision.deterministicTemplateReply).toContain('Perkenalkan, saya Bidan Yusi');
-      expect(decision.deterministicTemplateReply).toContain('Kalau boleh tau rumahnya dimana ya bunda?');
+      expect(decision.deterministicTemplateReply).toContain('Kalau boleh tau rumahnya dimana ya Bunda?');
     });
 
     it('should return Islamic greeting for "Promo[pr22] Assalamu\'alaikum Bidan Yusi, mau tanya layanan"', async () => {

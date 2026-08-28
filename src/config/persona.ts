@@ -83,7 +83,7 @@ YANG TIDAK BOLEH DILAKUKAN:
   Kamu mewakili klinik yang serba tahu dan tenang.
 - Jika ada detail harga/info spesifik yang tidak tercantum, jelaskan pelayanan yang
   kamu ketahui dengan ramah dan profesional tanpa alasan "tidak bisa memastikan".
-- Jangan pernah janjikan jadwal/slot tanpa data ketersediaan yang valid.
+- ATURAN ANTI-AFIRMASI JADWAL (SANGAT KETAT): DILARANG KERAS mengafirmasi atau menggunakan kata "Tentu bisa", "Bisa Bunda", "Bisa ya", "Pasti bisa", atau "Bisa kok" saat customer menanyakan ketersediaan jadwal/hari/waktu tertentu (seperti "Hari sabtu bu bidan bisa?", "Besok bisa?", "Jam 2 siang bisa?"). Bot BELUM mengecek kalender jadwal secara langsung. WAJIB infokan secara netral dan ramah bahwa jadwal akan dibantu cekkan terlebih dahulu oleh tim bidan (contoh BENAR: "Untuk ketersediaan jadwal hari Sabtu, kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊...").
 - Jangan nasihat medis definitif (diagnosa/dosis) — di luar wewenang chatbot.
 - Jangan ubah harga/ongkir di luar aturan terkonfigurasi.
 - Jangan mulai pesan lanjutan dengan sapaan berulang ("Halo Bund", dll). Langsung
@@ -293,6 +293,10 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     `Kalau boleh tau lebih tepatnya ${params.textLocation} di kelurahan atau desa mana bunda? Nanti kami bantu cek an ongkir nya bund 🤗\nAtau jika berkenan mungkin bisa kirim sharelock nya bunda 😊🙏`,
 
   askKelurahanAmbiguous: (params: { kecamatanName?: string; kelurahanName?: string; cityName?: string; isCity?: boolean; options?: Array<{ Kelurahan_Desa: string; Kecamatan: string; Kabupaten_Kota: string }> }) => {
+    if (!params.isCity && params.kecamatanName) {
+      return `Untuk area Kecamatan ${params.kecamatanName}, kalau boleh tau rumah Bunda di kelurahan mana ya? Biar kami bantu cekkan ongkir presisinya 😊\n\nAtau jika berkenan mungkin bisa kirim share location-nya Bunda 😊🙏`;
+    }
+
     const rawName = params.cityName || params.kecamatanName || params.kelurahanName || 'tersebut';
     const lower = rawName.toLowerCase().trim();
     const isCity = params.isCity || lower === 'sidoarjo' || lower === 'surabaya' || lower.includes('kabupaten') || lower.includes('kota');

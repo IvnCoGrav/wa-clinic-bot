@@ -75,13 +75,12 @@ export function sanitizeHallucinatedTerms(text: string): string {
     // Perbaiki kesalahan penerjemahan nama brand "Kala Moms and bayi Spa"
     .replace(/\bKala\s+Moms?\s+(?:and|&)\s+bayi\s+Spa\b/gi, 'Kala Moms and Baby Spa')
     .replace(/\bKala\s+Mom's\s+(?:and|&)\s+bayi\s+Spa\b/gi, 'Kala Moms and Baby Spa')
-    // Perbaiki preposisi dan konjungsi kaku "maupun/dan/untuk bund" -> "Bunda"
-    .replace(/\b(maupun|dan|serta|untuk|ke|dari|pada|bagi|buat|oleh)\s+bund\b/gi, '$1 Bunda')
-    .replace(/\b(maupun|dan|serta|untuk|ke|dari|pada|bagi|buat|oleh)\s+Bund\b/g, '$1 Bunda')
+    // Perbaiki preposisi dan konjungsi kaku "maupun/dan/untuk bund/bun" -> "Bunda"
+    .replace(/\b(maupun|dan|serta|untuk|ke|dari|pada|bagi|buat|oleh)\s+(?:bund|bun)\b/gi, '$1 Bunda')
     .replace(/\b(untuk|buat|pada|bagi|terkait)\s+bunny\b/gi, '$1 si kecil')
     .replace(/\bsi\s+bunny\b/gi, 'si kecil')
-    .replace(/\b(ya|kan|nih|deh),?\s+bund\b/gi, '$1, Bunda')
-    .replace(/,\s*bund\b/gi, ', Bunda')
+    .replace(/\b(ya|kan|nih|deh),?\s+(?:bund|bun)\b/gi, '$1, Bunda')
+    .replace(/,\s*(?:bund|bun)\b/gi, ', Bunda')
     .replace(/\bsyukur\s+sekali\b/gi, 'Wah senang sekali')
     .replace(/\bpuji\s+syukur\b/gi, 'Wah senang sekali');
 }
@@ -143,14 +142,17 @@ export function sanitizeStrayBackslashes(text: string): string {
 export function sanitizePronounsAndSlang(text: string): string {
   if (!text) return text;
   return text
-    // Perbaiki singkatan slang "Bund" / "bund" menjadi "Bunda" (case-insensitive)
-    .replace(/\bbund\b/gi, 'Bunda')
+    // Perbaiki singkatan slang "Bund" / "bund" / "Bun" / "bun" menjadi "Bunda" (case-insensitive)
+    .replace(/\b(?:bund|bun)\b/gi, 'Bunda')
     // Perbaiki kata ganti orang pertama tunggal menjadi jamak tim "kami"
-    .replace(/\b(biar|agar|akan|mau|nanti|bisa)\s+saya\b/gi, '$1 kami')
+    .replace(/\b(biar|agar|akan|mau|nanti|bisa|boleh|jika|apakah|supaya)\s+saya\b/gi, '$1 kami')
     .replace(/\b(?:bantuan|arahan)\s+saya\b/gi, '$1 kami')
-    .replace(/\bsaya\s+(bantu|sarankan|siapkan|cekkan|arahkan|jadwalkan|dampingi|lihat|rekomendasikan)\b/gi, 'kami $1')
+    .replace(/\bsaya\s+(tahu|ketahui|bantu|sarankan|siapkan|cekkan|arahkan|jadwalkan|dampingi|lihat|rekomendasikan|minta)\b/gi, 'kami $1')
     .replace(/\bsaya\s+pribadi\b/gi, 'kami')
-    .replace(/\baku\s+(cek|bantu|jadwalkan|sarankan|siapkan)\b/gi, 'kami $1')
+    .replace(/\baku\s+(cek|bantu|jadwalkan|sarankan|siapkan|tahu)\b/gi, 'kami $1')
+    // Perbaiki spasi partikel imbuhan -kan yang terpisah
+    .replace(/\binfo\s+kan\b/gi, 'infokan')
+    .replace(/\bcek\s+kan\b/gi, 'cekkan')
     // Normalisasi QRIS e-wallet spesifik ke QRIS Universal
     .replace(/\bQRIS\s+(?:ShopeePay|GoPay|OVO|Dana|BCA)\b/gi, 'QRIS')
     .replace(/\bShopeePay\b/gi, 'QRIS')
@@ -171,6 +173,70 @@ export function sanitizeGreetingRepetitionForFollowUp(text: string, isFollowUp: 
     .replace(/^Halo\s+Bunda\s*[!✨🥰🌸\.,\s]*/i, '')
     .replace(/^Selamat\s+(?:pagi|siang|sore|malam)\s*[!✨🥰🌸\.,\s]*(?:Bunda\s*[!✨🥰🌸\.,\s]*)?/i, '')
     .trim();
+}
+
+/**
+ * Membersihkan afirmasi sepihak atas ketersediaan jadwal ("Tentu bisa...", "Pasti bisa...", "Bisa ya, Bun...")
+ * saat bot merespons pengecekan jadwal/ketersediaan slot, sehingga bot menginfokan secara netral
+ * bahwa jadwal akan dicekkan terlebih dahulu tanpa mengonfirmasi "bisa" di depan.
+ */
+export function sanitizeScheduleAffirmations(text: string): string {
+  if (!text) return text;
+  let cleaned = text;
+
+  // 1. "Tentu bisa, kami bantu cekkan..." / "Tentu bisa Bunda, kami bantu cekkan..."
+  //    -> "Kami bantu cekkan..."
+  cleaned = cleaned.replace(
+    /^(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?(?:akan\s+)?kami\s+bantu\s+cekkan\b/i,
+    'Kami bantu cekkan'
+  );
+  cleaned = cleaned.replace(
+    /\b(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?(?:akan\s+)?kami\s+bantu\s+cekkan\b/gi,
+    'kami bantu cekkan'
+  );
+
+  // 2. "Tentu bisa, untuk jadwal..." / "Tentu bisa Bunda, untuk ketersediaan..."
+  //    -> "Untuk jadwal..." / "Untuk ketersediaan..."
+  cleaned = cleaned.replace(
+    /^(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?(?:untuk\s+)/i,
+    'Untuk '
+  );
+  cleaned = cleaned.replace(
+    /\b(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?(?:untuk\s+)/gi,
+    'untuk '
+  );
+
+  // 3. "Tentu bisa kami cekkan..." / "Tentu bisa kami jadwalkan..."
+  cleaned = cleaned.replace(
+    /^(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?kami\s+(?:bantu\s+)?(?:jadwalkan|cekkan|aturkan)\b/i,
+    'Kami bantu jadwalkan'
+  );
+  cleaned = cleaned.replace(
+    /\b(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?kami\s+(?:bantu\s+)?(?:jadwalkan|cekkan|aturkan)\b/gi,
+    'kami bantu jadwalkan'
+  );
+
+  // 3b. "Bisa banget Bunda, kami melayani..." / "Tentu bisa Bunda, kami melayani..." -> "Kami melayani..."
+  cleaned = cleaned.replace(
+    /^(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?(?:kami\s+melayani|layanan\s+kami\s+melayani)\b/i,
+    'Kami melayani'
+  );
+  cleaned = cleaned.replace(
+    /\b(?:Tentu\s+bisa|Pasti\s+bisa|Bisa\s+kok|Bisa\s+banget)[,\s]+(?:(?:bunda|bun)[,\s]+)?(?:kami\s+melayani|layanan\s+kami\s+melayani)\b/gi,
+    'kami melayani'
+  );
+
+  // 4. "..., bisa ya, Bun / Bunda 😊 Untuk jam..." -> "..., ya Bunda 😊 Untuk jam..."
+  cleaned = cleaned.replace(
+    /,\s*(?:bisa\s+ya|bisa\s+kok)[,\s]+(?:bun|bunda)\b(?=\s*[😊☺️🥰🌸✨]*\s*(?:untuk|mau\s+jam|preferensi|pagi|siang|sore|apakah))/gi,
+    ', Bunda'
+  );
+  cleaned = cleaned.replace(
+    /\b(?:bisa\s+ya|bisa\s+kok)[,\s]+(?:bun|bunda)[,\s]*(?:😊|☺️)?\s*(?:untuk\s+jam|untuk\s+preferensi|untuk\s+ketersediaan|kami\s+bantu\s+cek)/gi,
+    'kami bantu cek'
+  );
+
+  return cleaned;
 }
 
 export interface UnifiedSanitizerOptions {
@@ -202,8 +268,9 @@ export class UnifiedResponseSanitizer {
     // 3. Pronouns ("saya" -> "kami") & Slang ("Bund" -> "Bunda")
     cleaned = sanitizePronounsAndSlang(cleaned);
 
-    // 4. Repetitive Greetings & Typo
+    // 4. Repetitive Greetings & Typo & Anti-Affirmation Schedule Guard
     cleaned = sanitizeRepetitiveGreetings(cleaned);
+    cleaned = sanitizeScheduleAffirmations(cleaned);
     cleaned = sanitizeEmDash(cleaned);
     cleaned = sanitizeStrayBackslashes(cleaned);
 

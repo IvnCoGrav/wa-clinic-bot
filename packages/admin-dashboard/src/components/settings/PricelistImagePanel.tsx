@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ImageIcon, Upload, Save, Trash2, Eye } from 'lucide-react';
+import { ImageIcon, Upload, Save, Trash2, Eye, X } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 
@@ -102,12 +102,12 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
           className="w-full px-4 py-2.5 bg-[#f8fafc] hover:bg-[#e8f5f2]/60 border border-[#e9edef] rounded-xl text-xs font-semibold text-[#111b21] transition flex items-center justify-center space-x-1.5 shadow-xs"
         >
           <Eye size={14} className="text-[#008069]" />
-          <span>Lihat Gambar Pricelist</span>
+          <span>Lihat Gambar Pricelist HD</span>
         </button>
       )}
 
       <div
-        className="border-2 border-dashed border-[#d1d7db] rounded-xl p-6 text-center cursor-pointer hover:border-[#008069] hover:bg-[#e8f5f2]/20 transition"
+        className="border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-xl p-6 text-center cursor-pointer hover:bg-[#e8f5f2]/20 transition bg-[#fafafa]"
         onClick={() => fileInputRef.current?.click()}
       >
         <input
@@ -131,7 +131,7 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
           className="px-3.5 py-2 bg-white hover:bg-rose-50 border border-[#d1d7db] hover:border-rose-200 text-[#54656f] hover:text-rose-700 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
         >
           <Trash2 size={12} />
-          <span>Reset ke Default</span>
+          <span>Reset Default</span>
         </button>
         <button
           onClick={handleSave}
@@ -139,30 +139,42 @@ export const PricelistImagePanel: React.FC<Props> = ({ initialImageUrl, onSaved 
           className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 disabled:opacity-50 shadow-xs"
         >
           <Save size={12} />
-          <span>{saving ? 'Menyimpan...' : 'Simpan Gambar Pricelist'}</span>
+          <span>{saving ? 'Menyimpan...' : 'Simpan Gambar'}</span>
         </button>
       </div>
 
       {viewOpen && initialImageUrl && (
         <div
-          className="fixed inset-0 z-[90] bg-black/60 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4"
           onClick={() => setViewOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl p-4 max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl"
+            className="bg-white rounded-2xl sm:rounded-3xl border border-[#e9edef] shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-fadeIn"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-bold text-[#111b21]">Gambar Pricelist (HD)</h4>
+            <div className="p-4 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc]">
+              <div>
+                <h4 className="text-sm font-bold text-[#111b21]">Gambar Pricelist (HD)</h4>
+                <p className="text-[11px] text-[#667781]">Tampilan resolusi penuh yang diterima pelanggan di WhatsApp</p>
+              </div>
               <button
                 onClick={() => setViewOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#f0f2f5] text-[#54656f] hover:bg-[#e2e5e9] transition"
+                className="text-[#54656f] hover:text-[#111b21] p-1.5 rounded-lg hover:bg-[#f0f2f5] transition"
+                title="Tutup Modal"
               >
-                Tutup
+                <X size={18} />
               </button>
             </div>
-            <div className="overflow-auto flex items-center justify-center bg-[#f8fafc] rounded-xl p-2 border border-[#e9edef]">
-              <img src={initialImageUrl} alt="Gambar pricelist" className="max-h-[70vh] object-contain rounded-lg" />
+            <div className="overflow-auto flex-1 p-4 flex items-center justify-center bg-[#f0f2f5]">
+              <img src={initialImageUrl} alt="Gambar pricelist" className="max-h-[65vh] object-contain rounded-xl shadow-xs border border-[#e9edef]" />
+            </div>
+            <div className="p-3 border-t border-[#e9edef] flex justify-end bg-white">
+              <button
+                onClick={() => setViewOpen(false)}
+                className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-semibold transition shadow-xs"
+              >
+                Tutup Preview
+              </button>
             </div>
           </div>
         </div>

@@ -79,7 +79,7 @@ export class PhrasingService {
           : isNeedTimeIntent
           ? `ATURAN KHUSUS JEDA / TUNGGU KABAR (SANGAT KETAT): Customer meminta waktu untuk berdiskusi/menanyakan ke keluarga/berpikir. Berikan respon hangat, santun, sabar, dan penuh pengertian (contoh: "Baik Bunda, kami tunggu kabarnya yaa bund 🤗"). DILARANG KERAS mendesak, menodong, atau menanyakan ulang pertanyaan lokasi/jadwal/harga. Cukup sampaikan bahwa kita siap menunggu dan siap membantu kapan pun Bunda sudah siap.\n\n`
           : isScheduleHandoffIntent
-          ? `ATURAN KHUSUS CEK JADWAL / HANDOFF (SANGAT KETAT): Ini pesan ${req.intent}. Sampaikan secara singkat dan ramah bahwa kita sedang mengecek jadwal (contoh: "Baik Bunda, kami bantu cekkan ketersediaan jadwalnya dulu yaa 🙏🏻😊"). DILARANG KERAS menanyakan ulang tanggal atau informasi yang sudah disebutkan customer. DILARANG membuat kalimat panjang atau bertele-tele. Pertahankan pesan tetap singkat dan ringkas.\n\n`
+          ? `ATURAN KHUSUS CEK JADWAL / HANDOFF (SANGAT KETAT): Ini pesan ${req.intent}. Sampaikan secara singkat dan ramah bahwa kita sedang mengecek jadwal (contoh: "Baik Bunda, kami bantu cekkan ketersediaan jadwalnya dulu yaa 🙏🏻😊"). DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa Bunda", "Bisa ya", atau "Pasti bisa". DILARANG KERAS menanyakan ulang tanggal atau informasi yang sudah disebutkan customer. DILARANG membuat kalimat panjang atau bertele-tele. Pertahankan pesan tetap singkat dan ringkas.\n\n`
           : '';
 
         const systemPrompt = `${BOT_PERSONA_PROMPT}

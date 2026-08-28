@@ -22,6 +22,14 @@ dotenv.config();
 installLogBuffer();
 initializeConsoleWrapper();
 
+// Rehydrate persistent logs asynchronously on startup (non-blocking)
+import('./utils/log-buffer').then(({ rehydrateLogBuffer }) => {
+  rehydrateLogBuffer().catch(() => {});
+});
+import('./utils/llm-execution-logger').then(({ rehydrateLlmBuffer }) => {
+  rehydrateLlmBuffer().catch(() => {});
+});
+
 export function buildApp() {
   if (!process.env.ADMIN_API_KEY) {
     throw new Error('Critical Configuration Missing: ADMIN_API_KEY environment variable must be defined for secure admin API endpoints.');
@@ -47,7 +55,7 @@ export function buildApp() {
 
   const app = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),
+      level: process.env.FASTIFY_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : (process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info')),
     },
   });
 

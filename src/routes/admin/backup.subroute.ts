@@ -6,6 +6,7 @@ import { backupService } from '../../services/backup.service';
 import { auditService } from '../../services/audit.service';
 import {
   sanitizeBackupFileName,
+  ensureBackupDirectory,
   BACKUP_STORAGE_DIR,
 } from '../../utils/backup-file';
 
@@ -143,6 +144,64 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
           success: true,
           message: `File ${fileName} berhasil diunggah ke Google Drive.`,
           data: { driveFile },
+        });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err?.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/backup/upload-file
+   * Mengunggah file backup .sql.gz / .sql dari komputer lokal ke server
+   */
+  fastify.post(
+    '/api/admin/backup/upload-file',
+    {
+      bodyLimit: 50 * 1024 * 1024, // 50MB body limit untuk file dump database
+    },
+    async (
+      request: FastifyRequest<{
+        Body: { fileName: string; fileBase64: string; tenantId?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const tenantId = request.body?.tenantId || DEFAULT_TENANT_ID;
+        const rawFileName = request.body?.fileName || '';
+        const base64Data = request.body?.fileBase64 || '';
+
+        if (!rawFileName || !base64Data) {
+          return reply.status(400).send({
+            success: false,
+            error: 'Nama file dan konten data backup wajib diisi.',
+          });
+        }
+
+        const fileName = sanitizeBackupFileName(rawFileName);
+        ensureBackupDirectory();
+        const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
+
+        const cleanB64 = base64Data.replace(/^data:.*?;base64,/, '');
+        const fileBuffer = Buffer.from(cleanB64, 'base64');
+
+        fs.writeFileSync(filePath, fileBuffer);
+
+        await auditService.logAdminAction({
+          apiKey: (request.headers['x-api-key'] as string) || 'admin_session',
+          adminIdentity: 'ADMIN',
+          action: 'CREATE_DATABASE_BACKUP',
+          payload: { fileName, sizeBytes: fileBuffer.length, uploadedViaFile: true },
+          tenantId,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: `File backup ${fileName} berhasil diunggah ke server.`,
+          data: {
+            fileName,
+            sizeBytes: fileBuffer.length,
+          },
         });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err?.message });

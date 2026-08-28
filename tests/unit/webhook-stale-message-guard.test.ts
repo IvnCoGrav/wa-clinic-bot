@@ -78,12 +78,13 @@ describe('Webhook Stale Message Timestamp Guard', () => {
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ status: 'IGNORED_STALE_MESSAGE' });
-    // Pastikan pesan tetap dicatat ke database (audit trail / live chat)
+    // Pastikan pesan tetap dicatat ke database (audit trail / live chat) dengan flag isHistorical: true
     expect(logSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         waMessageId,
         direction: 'INBOUND',
         content: 'Halo pesan lama 1 jam lalu saat reconnect',
+        isHistorical: true,
       })
     );
   });

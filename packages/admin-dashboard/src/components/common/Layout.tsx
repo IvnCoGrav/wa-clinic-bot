@@ -52,6 +52,26 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isMenuHistoryPushedRef = useRef(false);
+
+  const openMobileMenu = () => {
+    setMobileMenuOpen(true);
+    try {
+      window.history.pushState({ modal: 'mobile-menu' }, '');
+      isMenuHistoryPushedRef.current = true;
+    } catch (_) {}
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+    if (isMenuHistoryPushedRef.current || (typeof window !== 'undefined' && window.history.state?.modal === 'mobile-menu')) {
+      isMenuHistoryPushedRef.current = false;
+      if (window.history.state?.modal === 'mobile-menu') {
+        window.history.back();
+      }
+    }
+  };
+
   const currentRole = user?.role || 'super_admin';
   const [customRoles, setCustomRoles] = useState(() => getCustomRoles());
 
@@ -191,11 +211,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     },
   ];
 
+  // Tutup menu dan bersihkan ref history saat navigasi halaman
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    isMenuHistoryPushedRef.current = false;
+  }, [location.pathname]);
+
   // Handle browser / hardware back button so it dismisses sidebar menu instead of navigating back
   useEffect(() => {
     if (!mobileMenuOpen) return;
 
     const handlePopState = () => {
+      isMenuHistoryPushedRef.current = false;
       setMobileMenuOpen(false);
     };
 
@@ -271,7 +298,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - 24) {
         if (deltaX < -45 && absX > absY * 2.2) {
           justSwipedRef.current = true;
-          setMobileMenuOpen(true);
+          openMobileMenu();
           isTracking = false;
         }
         return;
@@ -281,7 +308,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (wasOpenAtTouchStart) {
         if (deltaX > 45 && absX > absY * 2.2) {
           justSwipedRef.current = true;
-          setMobileMenuOpen(false);
+          closeMobileMenu();
           isTracking = false;
         }
       }
@@ -549,13 +576,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         }}
         onTouchEnd={() => {
           if (backdropTouchStartRef.current && !justSwipedRef.current) {
-            setMobileMenuOpen(false);
+            closeMobileMenu();
           }
           backdropTouchStartRef.current = false;
         }}
         onClick={() => {
           if (justSwipedRef.current) return;
-          setMobileMenuOpen(false);
+          closeMobileMenu();
         }}
         className={`fixed inset-0 bg-black/40 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300 ${
           mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
@@ -578,7 +605,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
           </div>
           <button
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={closeMobileMenu}
             aria-label="Tutup menu"
             className="md:hidden text-[#8696a0] hover:text-[#111b21] p-2 rounded-xl hover:bg-[#f0f2f5] transition"
           >
@@ -628,7 +655,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       key={item.path}
                       to={item.path}
                       replace={true}
-                      onClick={() => setMobileMenuOpen(false)}
+                      onClick={closeMobileMenu}
                       className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
                         isActive 
                           ? 'bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold shadow-xs'
@@ -772,7 +799,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
             {/* Mobile Hamburger Menu Button (Moved to Right Side) */}
             <button 
-              onClick={() => setMobileMenuOpen(true)} 
+              onClick={openMobileMenu} 
               aria-label="Buka Menu"
               title="Buka Menu Navigasi"
               className="md:hidden p-2 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-1"
