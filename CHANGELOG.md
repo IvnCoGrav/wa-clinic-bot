@@ -4,6 +4,26 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhanced & Fixed — Parsing Tanggal 2-Digit, Ekstraksi Jam & Prioritas Total Price di Form Reservasi (`reservation-text-parser.ts`, `webhook.route.ts`) (2026-08-28)
+
+- **Latar Belakang & Akar Masalah:**
+  - Saat pesan konfirmasi reservasi dikirim admin dari WhatsApp HP (contoh format: `Hari dan tanggal : sbtu 29 agt 26 jam 09.00-09.30`), parser tanggal `tryParseIndonesianDate` hanya menerima format tahun 4 digit (`\d{4}`), sehingga gagal mem-parse tahun 2 digit (`26`) dan waktu jam.
+  - Akibatnya, `booking_date` tersimpan `NULL` di database dan jadwal tidak muncul di slot kalender admin.
+  - Pada auto-capture outbound admin, nilai `purchase_value` sebelumnya memprioritaskan `treatmentPrice` dibanding `totalPrice` (sehingga total biaya dengan ongkir tidak otomatis tersimpan).
+
+- **Solusi & Implementasi:**
+  - Memperbarui `tryParseIndonesianDate` di `src/utils/reservation-text-parser.ts`:
+    - Mendukung tahun 2 digit (`26` → `2026`) dan 4 digit (`2026`).
+    - Ekstraksi waktu jam & menit secara otomatis (contoh: `jam 09.00-09.30`, `09:00`, `pukul 10.30`).
+    - Mendukung singkatan hari (`sbtu`, `sabtu`, `rabu`, dll) dan variasi singkatan bulan (`agt`, `agu`, `ags`, `sept`, dll).
+  - Mengupdate `src/routes/webhook.route.ts` agar `purchase_value` memprioritaskan `totalPrice` saat rincian pembayaran tersedia.
+  - Menghapus dependensi circular di `conversation-transaction-extractor.ts` dan mengimpor `parsePaymentSection` secara langsung.
+
+- **Pengujian & Verifikasi:**
+  - Unit test `tests/unit/reservation-text-parser.test.ts` (17/17 PASS, mencakup case Bunda Siska).
+  - Suite parser test (`hybrid-reservation-parser.test.ts`, `reservation-stress.test.ts`, `capi-payload-sanitizer.test.ts`): 12/12 PASS.
+  - Build backend `npm run build`: **PASS (0 errors)**.
+
 #### Fixed — Navigasi Mobile Sidebar Terkunci / Tidak Berpindah Halaman (`Layout.tsx`) (2026-08-28)
 
 - **Latar Belakang & Akar Masalah:**

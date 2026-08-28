@@ -1,4 +1,5 @@
 import { TreatmentCategory } from '@prisma/client';
+import { parsePaymentSection } from './conversation-transaction-extractor';
 
 export interface BabyDetail {
   name: string;
@@ -400,7 +401,6 @@ export function parseReservationText(rawText: string): ParseResult {
   // Ekstrak rincian pembayaran jika ada di dalam teks
   let payment: { treatmentPrice: number; ongkir: number; promo: number; totalPrice: number } | undefined;
   if (/payment|pembayaran|total\s*[:=]/i.test(rawText)) {
-    const { parsePaymentSection } = require('./conversation-transaction-extractor');
     payment = parsePaymentSection(rawText);
   }
 
@@ -525,52 +525,86 @@ function splitMultiValue(value: string): string[] {
 }
 
 /**
- * Helper untuk mem-parse tanggal bahasa Indonesia
+ * Helper untuk mem-parse tanggal bahasa Indonesia secara toleran dan akurat.
+ * Mendukung format:
+ * - Teks: "sbtu 29 agt 26 jam 09.00-09.30", "Selasa, 21 Juli 2026", "29 agt 2026", "29 agt 26"
+ * - Numerik: "29-08-2026", "29/08/26", "2026-08-29"
+ * - Jam: "jam 09.00-09.30", "pukul 10.30", "pk 14.00", "09.00"
  */
-function tryParseIndonesianDate(dateStr: string): Date | null {
-  const cleanStr = dateStr.toLowerCase().trim();
+export function tryParseIndonesianDate(dateStr: string): Date | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const cleanStr = dateStr.toLowerCase().replace(/[*_~`]/g, '').trim();
   if (!cleanStr) return null;
 
-  // Regex untuk format YYYY-MM-DD
+  // 1. Ekstrak Jam & Menit jika ada
+  let hours = 0;
+  let minutes = 0;
+  let hasExplicitTime = false;
+
+  const timeMatch = cleanStr.match(/(?:jam|pukul|pk|@)?\s*(\d{1,2})[.:](\d{2})(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?/i) ||
+                    cleanStr.match(/(?:jam|pukul|pk)\s*(\d{1,2})(?:\s*[-–]\s*\d{1,2})?(?!\d)/i);
+  if (timeMatch) {
+    const h = parseInt(timeMatch[1], 10);
+    const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      hours = h;
+      minutes = m;
+      hasExplicitTime = true;
+    }
+  }
+
+  // 2. Format ISO YYYY-MM-DD
   const isoMatch = cleanStr.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (isoMatch) {
-    const date = new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const date = new Date(year, month, day, hasExplicitTime ? hours : 0, hasExplicitTime ? minutes : 0);
     if (!isNaN(date.getTime())) return date;
   }
 
-  // Regex untuk format DD-MM-YYYY
-  const indMatch = cleanStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-  if (indMatch) {
-    const date = new Date(parseInt(indMatch[3], 10), parseInt(indMatch[2], 10) - 1, parseInt(indMatch[1], 10));
+  // 3. Format DD-MM-YYYY atau DD-MM-YY (atau pemisah '/')
+  const indNumMatch = cleanStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+  if (indNumMatch) {
+    let year = parseInt(indNumMatch[3], 10);
+    if (year < 100) year += 2000;
+    const month = parseInt(indNumMatch[2], 10) - 1;
+    const day = parseInt(indNumMatch[1], 10);
+    const date = new Date(year, month, day, hasExplicitTime ? hours : 0, hasExplicitTime ? minutes : 0);
     if (!isNaN(date.getTime())) return date;
   }
 
   // Map nama bulan Indonesia ke angka index 0-11
   const indMonths: { [key: string]: number } = {
-    jan: 0, januari: 0,
-    feb: 1, februari: 1,
-    mar: 2, maret: 2,
+    jan: 0, januari: 0, january: 0,
+    feb: 1, februari: 1, february: 1,
+    mar: 2, maret: 2, march: 2,
     apr: 3, april: 3,
-    mei: 4,
-    jun: 5, juni: 5,
-    jul: 6, juli: 6,
-    agt: 7, agustus: 7,
-    sep: 8, september: 8,
-    okt: 9, oktober: 9,
+    mei: 4, may: 4,
+    jun: 5, juni: 5, june: 5,
+    jul: 6, juli: 6, july: 6,
+    agt: 7, agu: 7, ags: 7, agustus: 7, august: 7,
+    sep: 8, sept: 8, september: 8,
+    okt: 9, oktober: 9, october: 9,
     nov: 10, november: 10,
-    des: 11, desember: 11,
+    des: 11, desember: 11, december: 11,
   };
 
-  // Regex untuk mendeteksi tanggal berformat "21 Juli 2026" atau "Selasa, 21 Juli 2026"
-  const textMatch = cleanStr.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/i);
+  // 4. Format Teks: "sbtu 29 agt 26 jam 09.00-09.30", "Selasa, 21 Juli 2026", "29 agt 2026", "29 agt 26"
+  const textMatch = cleanStr.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{2,4}))?/i);
   if (textMatch) {
     const day = parseInt(textMatch[1], 10);
-    const monthName = textMatch[2];
-    const year = parseInt(textMatch[3], 10);
+    const monthName = textMatch[2].toLowerCase();
+    const rawYear = textMatch[3];
     const month = indMonths[monthName];
-    if (month !== undefined) {
-      const date = new Date(year, month, day);
-      if (!isNaN(date.getTime())) return date;
+
+    if (month !== undefined && day >= 1 && day <= 31) {
+      if (rawYear) {
+        let year = parseInt(rawYear, 10);
+        if (year < 100) year += 2000;
+        const date = new Date(year, month, day, hasExplicitTime ? hours : 0, hasExplicitTime ? minutes : 0);
+        if (!isNaN(date.getTime())) return date;
+      }
     }
   }
 

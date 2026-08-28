@@ -421,7 +421,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                           booking_date: parsed.bookingDate,
                           raw_text: adminReplyText,
                           status: 'pending',
-                          purchase_value: parsed.payment?.treatmentPrice || parsed.payment?.totalPrice || undefined,
+                          purchase_value: parsed.payment?.totalPrice || parsed.payment?.treatmentPrice || undefined,
                         },
                       });
 
