@@ -19,7 +19,7 @@
     "backfill:labels": "tsx scripts/backfill-customer-labels.ts"
   },
   "dependencies": {
-    "@fastify/compress": "^9.2.0",
+    "@fastify/compress": "^7.0.3",
     "@fastify/rate-limit": "^8.1.1",
     "@googlemaps/google-maps-services-js": "^3.4.0",
     "@prisma/client": "^5.19.1",
