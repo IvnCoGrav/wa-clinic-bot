@@ -1642,12 +1642,40 @@ export class WahaClient implements IWahaClient {
     const sessionName = this.session;
     let lastErr: any = null;
 
-    // 1. Coba endpoint POST /api/sendReaction (WAHA standar)
+    // 1. WAHA standard: PUT /api/reaction — body hanya { session, messageId, reaction }
+    //    (chatId tidak diperlukan; WAHA resolve chat dari messageId saja)
+    for (const mId of msgIds) {
+      try {
+        const response = await this.runSerialized(() =>
+          this.withRetry('sendReaction', () =>
+            axios.put(
+              `${this.baseUrl}/api/reaction`,
+              {
+                session: sessionName,
+                messageId: mId,
+                reaction: emoji || '',
+              },
+              {
+                headers: this.headers,
+                timeout: this.timeoutMs,
+              }
+            )
+          )
+        );
+        if (response.status >= 200 && response.status < 300) {
+          return true;
+        }
+      } catch (err: any) {
+        lastErr = err;
+      }
+    }
+
+    // 2. Fallback: POST /api/sendReaction (beberapa versi WAHA)
     for (const cId of chatIds) {
       for (const mId of msgIds) {
         try {
           const response = await this.runSerialized(() =>
-            this.withRetry('sendReaction', () =>
+            this.withRetry('sendReactionPost', () =>
               axios.post(
                 `${this.baseUrl}/api/sendReaction`,
                 {
@@ -1672,37 +1700,7 @@ export class WahaClient implements IWahaClient {
       }
     }
 
-    // 2. Fallback ke POST /api/reactions
-    for (const cId of chatIds) {
-      for (const mId of msgIds) {
-        try {
-          const response = await this.runSerialized(() =>
-            this.withRetry('sendReactionFallback', () =>
-              axios.post(
-                `${this.baseUrl}/api/reactions`,
-                {
-                  session: sessionName,
-                  chatId: cId,
-                  messageId: mId,
-                  reaction: emoji || '',
-                },
-                {
-                  headers: this.headers,
-                  timeout: this.timeoutMs,
-                }
-              )
-            )
-          );
-          if (response.status >= 200 && response.status < 300) {
-            return true;
-          }
-        } catch (postErr: any) {
-          lastErr = postErr;
-        }
-      }
-    }
-
-    // 3. Fallback ke POST /api/{session}/chats/{chatId}/messages/{messageId}/reaction
+    // 3. Fallback: POST /api/{session}/chats/{chatId}/messages/{messageId}/reaction
     for (const cId of chatIds) {
       for (const mId of msgIds) {
         try {
