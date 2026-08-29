@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
@@ -95,6 +95,23 @@ export const AiSandbox: React.FC = () => {
   const [editLoading, setEditLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback((smooth = false) => {
+    const doScroll = () => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
+      }
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 30);
+    setTimeout(doScroll, 100);
+    setTimeout(doScroll, 250);
+  }, []);
 
   const [editingPersona, setEditingPersona] = useState(false);
   const [personaText, setPersonaText] = useState('');
@@ -129,8 +146,10 @@ export const AiSandbox: React.FC = () => {
   }, [inspectorData]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (messages.length > 0) {
+      scrollToBottom(false);
+    }
+  }, [messages, scrollToBottom]);
 
   const clearBurstTimers = () => {
     if (burstTimerRef.current) {
@@ -447,7 +466,11 @@ export const AiSandbox: React.FC = () => {
           </div>
 
           {/* Messages list with WhatsApp light wallpaper */}
-          <div className="flex-1 overflow-y-auto space-y-3 p-3 mb-3 bg-[#efeae2] rounded-xl border border-[#e9edef] shadow-inner" style={{ backgroundImage: 'radial-gradient(#d1d7db 0.75px, transparent 0.75px)', backgroundSize: '16px 16px' }}>
+          <div
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto space-y-3 p-3 mb-3 bg-[#efeae2] rounded-xl border border-[#e9edef] shadow-inner"
+            style={{ backgroundImage: 'radial-gradient(#d1d7db 0.75px, transparent 0.75px)', backgroundSize: '16px 16px' }}
+          >
             {messages.map((msg, idx) => (
               <div 
                 key={idx} 

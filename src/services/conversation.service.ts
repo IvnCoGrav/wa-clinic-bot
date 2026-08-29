@@ -461,7 +461,7 @@ export class ConversationService {
         void webPushService.sendPushToTenant(tenantId, {
           title: `🚨 Eskalasi CS: ${customerName}`,
           body: reason || 'Pelanggan membutuhkan penanganan admin',
-          url: `/admin/#/live-chat?conversationId=${conversation.id}`,
+          url: `/admin/live-chat?conversationId=${conversation.id}`,
           tag: `escalation-${conversation.id}`,
         });
       } catch {}

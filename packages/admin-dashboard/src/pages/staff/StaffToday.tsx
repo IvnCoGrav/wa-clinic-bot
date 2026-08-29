@@ -637,10 +637,20 @@ export const StaffToday: React.FC = () => {
           // Native browser notification (hanya untuk pesan live masuk dari customer asli)
           if ('Notification' in window && Notification.permission === 'granted' && msg.direction === 'INBOUND' && !payload.isHistorical && !isSandbox) {
             const sender = msg.sender_name || 'Pelanggan';
-            new Notification(`Pesan Baru dari ${sender}`, {
+            const notif = new Notification(`Pesan Baru dari ${sender}`, {
               body: msg.content || 'Mengirim media/gambar',
-              icon: '/pwa-icon.svg',
+              icon: '/admin/pwa-192x192.png',
+              tag: `staff_chat_${convId}`,
             });
+            notif.onclick = () => {
+              window.focus();
+              const allTasks = [...tasks, ...upcomingTasks, ...completedTasks];
+              const match = allTasks.find((t) => t.conversationId === convId);
+              if (match) {
+                handleOpenChat(match);
+              }
+              try { notif.close(); } catch (_) {}
+            };
           }
 
           // Append/reconcile message if matches currently open conversation (Maksimal 10 bubble)

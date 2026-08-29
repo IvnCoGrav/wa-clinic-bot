@@ -232,6 +232,30 @@ export const TodayTreatments: React.FC = () => {
   const [sendingChat, setSendingChat] = useState(false);
   const [selectedChatImage, setSelectedChatImage] = useState<{ file: File; preview: string } | null>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollChatToBottom = useCallback((smooth = false) => {
+    const doScroll = () => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
+      }
+      if (chatMessagesEndRef.current) {
+        chatMessagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 30);
+    setTimeout(doScroll, 100);
+    setTimeout(doScroll, 250);
+  }, []);
+
+  useEffect(() => {
+    if (chatModalTask && chatMessages.length > 0 && !loadingChat) {
+      scrollChatToBottom(false);
+    }
+  }, [chatModalTask, chatMessages, loadingChat, scrollChatToBottom]);
 
   // Escape key handler for active modals
   useEffect(() => {
@@ -1884,29 +1908,32 @@ export const TodayTreatments: React.FC = () => {
               </div>
 
               {/* Message History */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efeae2]/30 overscroll-contain">
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efeae2]/30 overscroll-contain">
                 {loadingChat ? (
                   <div className="text-center py-10 text-xs text-[#54656f]">Memuat riwayat chat...</div>
                 ) : chatMessages.length === 0 ? (
                   <div className="text-center py-10 text-xs text-[#8696a0]">Belum ada pesan tercatat.</div>
                 ) : (
-                  chatMessages.map((m: any) => {
-                    const isOut = m.direction === 'OUTBOUND';
-                    return (
-                      <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
-                        <div
-                          className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs shadow-xs ${
-                            isOut ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs' : 'bg-white text-[#111b21] rounded-tl-xs'
-                          }`}
-                        >
-                          <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                          <span className="block text-[9px] text-[#8696a0] text-right mt-1 font-mono">
-                            {formatTime(m.created_at)}
-                          </span>
+                  <>
+                    {chatMessages.map((m: any) => {
+                      const isOut = m.direction === 'OUTBOUND';
+                      return (
+                        <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-xs shadow-xs ${
+                              isOut ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-xs' : 'bg-white text-[#111b21] rounded-tl-xs'
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                            <span className="block text-[9px] text-[#8696a0] text-right mt-1 font-mono">
+                              {formatTime(m.created_at)}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                    <div ref={chatMessagesEndRef} className="h-0 w-0 pointer-events-none" />
+                  </>
                 )}
               </div>
 

@@ -95,9 +95,28 @@ export async function maybeFirePurchaseEvent(params: {
     });
     if (!reservation) return false;
 
-    // Sudah ditahan menunggu review admin → jangan re-queue (anti double-count).
-    // (purchase_occurred_at membedakan "ditahan" dari default 'pending' row lama.)
+    // Sudah ditahan menunggu review admin → perbarui nilainya jika ada revisi nominal baru, tapi jangan re-queue
     if (reservation.purchase_review_status === 'pending' && reservation.purchase_occurred_at) {
+      let value: number | undefined;
+      if (/payment|pembayaran|total\s*[:=]|treatment\s*[:=]/i.test(text)) {
+        try {
+          const { parsePaymentSection } = await import('../utils/conversation-transaction-extractor');
+          const fin = parsePaymentSection(text);
+          if (fin.treatmentPrice > 0) value = fin.treatmentPrice;
+          else if (fin.totalPrice > 0) value = Math.max(0, fin.totalPrice - fin.ongkir + fin.promo);
+        } catch {}
+      }
+      if (!value) {
+        const pureTreatmentVal = extractValueByFormat(text, formats.formatValue);
+        value = pureTreatmentVal ?? amount;
+      }
+      if (value && value !== reservation.purchase_value) {
+        await prisma.reservation.update({
+          where: { id: reservation.id },
+          data: { purchase_value: value },
+        });
+        console.log(`[CAPI HELD] Updated purchase value for pending review ${reservation.id} to ${value}`);
+      }
       return false;
     }
 

@@ -1,5 +1,5 @@
 // Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support & Offline Caching
-const CACHE_NAME = 'kala-admin-v5';
+const CACHE_NAME = 'kala-admin-v6';
 const PRECACHE_ASSETS = [
   '/admin/',
   '/admin/manifest.json',
@@ -79,7 +79,7 @@ self.addEventListener('push', (event) => {
     renotify: true,
     vibrate: [200, 100, 200],
     data: {
-      url: resolveUrl(data.url) || resolveUrl('/admin/#/live-chat'),
+      url: resolveUrl(data.url) || resolveUrl('/admin/live-chat'),
       ...data.data,
     },
     actions: [
@@ -98,7 +98,14 @@ self.addEventListener('push', (event) => {
  */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || (self.location.origin + '/admin/#/live-chat');
+  const origin = self.location.origin;
+  const resolveUrl = (url) => {
+    if (!url) return origin + '/admin/live-chat';
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return origin + (url.startsWith('/') ? '' : '/') + url;
+  };
+
+  const targetUrl = resolveUrl(event.notification.data?.url || '/admin/live-chat');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

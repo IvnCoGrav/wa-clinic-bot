@@ -24,6 +24,19 @@ export interface MatchAdClickResult {
   adClick?: any;
 }
 
+// In-memory cache untuk mencegah race condition / burst call Contact dari multiple incoming bubbles
+const contactBurstLock = new Map<string, number>();
+const contactCooldown24h = new Map<string, number>();
+
+function pruneCooldownMap(map: Map<string, number>, maxAgeMs: number) {
+  const now = Date.now();
+  for (const [key, timestamp] of map.entries()) {
+    if (now - timestamp > maxAgeMs) {
+      map.delete(key);
+    }
+  }
+}
+
 /**
  * Shared service for matching AdClick attribution across WAHA & WABA webhooks.
  * Encapsulates regex matching, CTWA referral handling, memory & DB atomic updates,
@@ -39,6 +52,7 @@ export async function matchAdClickAndFireContact(
   const ctwaClid = referral?.ctwaClid;
 
   let matched = false;
+  let isNewlyLinked = false;
   let matchedAdClick: any = null;
 
   // 1. Priority 1: Native Click-to-WhatsApp (ctwa_clid) from Meta Referral payload (WABA)
@@ -55,6 +69,7 @@ export async function matchAdClickAndFireContact(
         },
       });
       matched = true;
+      isNewlyLinked = true;
       matchedAdClick = result;
       console.log(`[ATTRIBUTION SUCCESS - CTWA] Linked ctwa_clid ${ctwaClid} to customer ${customer.phone}`);
     } catch (err: any) {
@@ -71,6 +86,7 @@ export async function matchAdClickAndFireContact(
         if (!memClick.matchedAt) {
           memClick.matchedAt = new Date();
           memClick.customerId = customer.id;
+          isNewlyLinked = true;
           console.log(`[ATTRIBUTION SUCCESS - MEMORY] Linked trackingCode ${trackingCode} to customer ${customer.phone}`);
         }
         matched = true;
@@ -93,6 +109,7 @@ export async function matchAdClickAndFireContact(
 
       if (updateResult.count === 1) {
         matched = true;
+        isNewlyLinked = true;
         console.log(`[ATTRIBUTION SUCCESS - WEB CTA] Linked trackingCode ${trackingCode} to customer ${customer.phone}`);
         matchedAdClick = await prisma.adClick.findFirst({
           where: { trackingCode, customerId: customer.id },
@@ -104,6 +121,7 @@ export async function matchAdClickAndFireContact(
         });
         if (alreadyLinked) {
           matched = true;
+          isNewlyLinked = false; // ⚠️ Sudah pernah ter-link, BUKAN touchpoint baru
           matchedAdClick = alreadyLinked;
         } else {
           // Direct WAHA CTWA lead (tanpa lewat website /cta) -> Otomatis buat record AdClick baru
@@ -120,6 +138,7 @@ export async function matchAdClickAndFireContact(
               },
             });
             matched = true;
+            isNewlyLinked = true;
             matchedAdClick = directAdClick;
             console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA] Created direct AdClick for campaign tag ${trackingCode} on customer ${customer.phone}`);
           } catch (createErr: any) {
@@ -132,29 +151,51 @@ export async function matchAdClickAndFireContact(
     }
   }
 
-  // 3. Fire Meta CAPI 'Contact' event jika ada touchpoint iklan baru (matched) ATAU jika customer adalah kontak baru (organic)
-  if (matched || isNewCustomerRecord) {
-    try {
-      capiService.sendCapiEvent({
-        eventName: 'Contact',
-        customer,
-        adClick: matchedAdClick || undefined,
-        tenantId,
-        customData: {
-          trackingCode: trackingCode || undefined,
-          ctwaClid: ctwaClid || undefined,
-          source: matched ? 'WHATSAPP_INBOUND_CTA' : 'WHATSAPP_INBOUND_ORGANIC',
-        },
-      }).catch((err) => console.error('[CAPI CONTACT ERROR]', err.message));
-    } catch (capiErr: any) {
-      console.error('[CAPI CONTACT ERROR]', capiErr.message);
+  // 3. Fire Meta CAPI 'Contact' event DENGAN GUARD MULTI-LAPIS (Idempotensi + 10s Debounce + 24h Cooldown)
+  const phoneKey = (customer?.phone || '').replace(/\D/g, '');
+  const isNewTouchpoint = isNewlyLinked || isNewCustomerRecord;
+
+  if (isNewTouchpoint && phoneKey) {
+    const now = Date.now();
+    pruneCooldownMap(contactBurstLock, 10_000);
+    pruneCooldownMap(contactCooldown24h, 24 * 60 * 60 * 1000);
+
+    const lastBurst = contactBurstLock.get(phoneKey);
+    const last24h = contactCooldown24h.get(phoneKey);
+
+    const isBursting = lastBurst && now - lastBurst < 10_000;
+    const isIn24hCooldown = last24h && now - last24h < 24 * 60 * 60 * 1000;
+
+    if (isBursting) {
+      console.log(`[CAPI GUARD] Skipped Contact event for ${phoneKey}: concurrent burst lock active (< 10s).`);
+    } else if (isIn24hCooldown && !isNewlyLinked) {
+      console.log(`[CAPI GUARD] Skipped Contact event for ${phoneKey}: 24h cooldown active.`);
+    } else {
+      contactBurstLock.set(phoneKey, now);
+      contactCooldown24h.set(phoneKey, now);
+
+      try {
+        capiService.sendCapiEvent({
+          eventName: 'Contact',
+          customer,
+          adClick: matchedAdClick || undefined,
+          tenantId,
+          customData: {
+            trackingCode: trackingCode || undefined,
+            ctwaClid: ctwaClid || undefined,
+            source: matched ? 'WHATSAPP_INBOUND_CTA' : 'WHATSAPP_INBOUND_ORGANIC',
+          },
+        }).catch((err) => console.error('[CAPI CONTACT ERROR]', err.message));
+      } catch (capiErr: any) {
+        console.error('[CAPI CONTACT ERROR]', capiErr.message);
+      }
     }
   }
 
   // Calculate stripped text (removes Promo[code] / [IG-BABYSPA] prefix/suffix for AI processing)
   let strippedText = bodyText;
   if (promoMatch && bodyText) {
-    const stripped = bodyText.replace(/(?:Promo\s*)?\[\s*[\w\s-]{2,32}?\s*\]\s*/gi, '').trim();
+    const stripped = bodyText.replace(/(?:Promo\s*)?\[\s*([\w\s-]{2,32}?)\s*\]\s*/gi, '').trim();
     strippedText = stripped || 'Halo';
   }
 

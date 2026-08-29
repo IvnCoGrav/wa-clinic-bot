@@ -47,11 +47,11 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       const { code, state, error } = request.query;
 
       if (error) {
-        return reply.redirect(`/admin/#/settings?google_error=${encodeURIComponent(error)}`);
+        return reply.redirect(`/admin/settings?google_error=${encodeURIComponent(error)}`);
       }
 
       if (!code) {
-        return reply.redirect('/admin/#/settings?google_error=missing_auth_code');
+        return reply.redirect('/admin/settings?google_error=missing_auth_code');
       }
 
       try {
@@ -68,11 +68,11 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
-        return reply.redirect('/admin/#/settings?google_connected=true');
+        return reply.redirect('/admin/settings?google_connected=true');
       } catch (err: any) {
         console.error('[GoogleOAuth Callback Error]:', err?.message);
         return reply.redirect(
-          `/admin/#/settings?google_error=${encodeURIComponent(err?.message || 'callback_failed')}`
+          `/admin/settings?google_error=${encodeURIComponent(err?.message || 'callback_failed')}`
         );
       }
     }
