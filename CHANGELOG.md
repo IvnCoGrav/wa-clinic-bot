@@ -4,6 +4,38 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Direct Navigation to Live Chat Conversation on Notification Click (`sw.js`, `App.tsx`, `useLiveChatNotification.ts`, `LiveChatMonitor.tsx`, `StaffToday.tsx`, `message.service.ts`, `conversation.service.ts`, `web-push.service.ts`, `livechat.subroute.ts`) (2026-08-29)
+
+- **Latar Belakang & Masukan Pengguna:**
+  - Saat menerima notifikasi (Web Push maupun In-App Floating Toast), mengeklik notifikasi menyebabkan dashboard terbuka ke **Homepage (`/admin/overview`)** alih-alih langsung ke riwayat percakapan chat pelanggan yang bersangkutan.
+
+- **Akar Masalah (Root Cause):**
+  1. **Hash-Based URL vs `BrowserRouter`**: Backend push service (`web-push.service.ts`, `message.service.ts`, `conversation.service.ts`, `push.subroute.ts`) dan Service Worker (`sw.js`) membuat payload URL dengan format hash: `/admin/#/live-chat?conversationId=...`. Karena dashboard menggunakan HTML5 `BrowserRouter`, React Router hanya membaca path `/admin` dan mengabaikan `#...`. Path `/admin` mencocokkan `<Route path="/admin" element={<IndexRedirect />} />` yang otomatis me-redirect peran pengguna (Admin/CS/Owner) ke `/admin/overview` (Homepage).
+  2. **Toast Hook Tanpa ID Percakapan**: Fungsi `openChatFromToast` dan fallback `showBrowserNotification` di `useLiveChatNotification.ts` hanya memanggil `navigate('/admin/live-chat')` tanpa mengoper dan menyimpan `conversationId` yang diklik.
+  3. **`LiveChatMonitor.tsx` Tidak Mengikat `searchParams`**: Komponen Live Chat Monitor hanya membaca ID dari `sessionStorage` pada initial load, mengabaikan parameter URL `?conversationId=...` / `?id=...`, dan tidak otomatis beralih ke mobile chat view saat dibuka dari notifikasi.
+
+- **Solusi & Implementasi:**
+  1. **Normalisasi URL Web Push & Backend**:
+     - Mengubah seluruh target URL Web Push dari `/admin/#/live-chat` menjadi URL HTML5 bersih `/admin/live-chat?conversationId=${conversationId}` di `message.service.ts`, `conversation.service.ts`, `web-push.service.ts`, dan `push.subroute.ts`.
+     - Menormalkan redirect Google OAuth di `google-integration.subroute.ts` ke `/admin/settings`.
+  2. **Service Worker PWA Update (`sw.js`)**:
+     - Mengupdate target URL default ke `/admin/live-chat` dan menaikkan cache ke `kala-admin-v6`.
+     - Memperbaiki event listener `notificationclick` agar memfokuskan dan menavigasikan tab browser ke URL tujuan lengkap dengan query parameter `conversationId`.
+  3. **Resiliensi Hash Routing di `IndexRedirect` (`App.tsx`)**:
+     - Menambahkan deteksi otomatis `window.location.hash` pada `IndexRedirect` sehingga URL ber-hash dari notifikasi lama/cache (seperti `#/live-chat?conversationId=...`) tetap diarahkan secara tepat ke `/admin/live-chat?conversationId=...`.
+  4. **Deep-Linking & Dynamic Conversation Selection di `LiveChatMonitor.tsx`**:
+     - Mengintegrasikan `useSearchParams` untuk mendeteksi `conversationId` atau `id` dari URL.
+     - Saat notifikasi diklik, halaman otomatis menetapkan `selectedId`, beralih ke tampilan thread chat (`mobileView = 'chat'`), dan memuat riwayat pesan (`loadThread`).
+     - Menyediakan endpoint backend baru `GET /api/admin/live-chat/conversations/:id` dan method `getConversationDetail` di `live-chat.service.ts` agar data ringkasan percakapan/customer otomatis termuat meskipun chat belum ada di 50 percakapan teratas.
+  5. **In-App Toast & Native Notification Click Handlers (`useLiveChatNotification.ts`, `StaffToday.tsx`)**:
+     - Menyematkan `conversationId` dan update `sessionStorage` saat `openChatFromToast` dan `showBrowserNotification` dipicu.
+     - Menambahkan handler `onclick` pada notifikasi desktop di `StaffToday.tsx` untuk langsung membuka modal/thread tugas terapis yang relevan.
+
+- **Pengujian & Verifikasi:**
+  - Unit tests `tests/unit/web-push.service.test.ts`: **PASS (4/4 tests passed)**.
+  - Frontend admin dashboard (`npm run build`): **PASS (0 errors, build in 10s)**.
+  - Root backend TypeScript (`npm run build`): **PASS (0 errors)**.
+
 #### Enhanced — In-Page Chat History Modal, Full Follow-Up Text/Variant Editor & Smart Date Range Filters (`FollowUpQueue.tsx`, `follow-up.service.ts`, `follow-up.subroute.ts`) (2026-08-29)
 
 - **Latar Belakang & Masukan Pengguna:**

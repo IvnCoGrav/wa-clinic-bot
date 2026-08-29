@@ -173,6 +173,36 @@ export class LiveChatService {
   }
 
   /**
+   * Mengambil detail satu percakapan berformat LiveChatConversationItem.
+   */
+  public async getConversationDetail(conversationId: string, tenantId: string): Promise<LiveChatConversationItem | null> {
+    const conv = await conversationService.getConversationById(conversationId, tenantId);
+    if (!conv) return null;
+
+    const cust = await customerService.getCustomerById(conv.customer_id, tenantId);
+    const lastMessages = await messageService.getRecentMessages(conversationId, 3, tenantId);
+    const unreadMap = await messageService.getUnreadCountsBatch([conversationId], tenantId);
+
+    const { resolveTreatmentValue } = await import('./capi.service');
+    let ltv = 0;
+    const resList = cust?.reservations || [];
+    for (const r of resList) {
+      const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
+      ltv += val || 0;
+    }
+
+    return this.serialize(
+      {
+        ...conv,
+        customer: cust,
+        messages: lastMessages,
+      },
+      { purchaseCount: resList.length, ltv },
+      unreadMap.get(conversationId) || 0
+    );
+  }
+
+  /**
    * Thread pesan sebuah percakapan (kronologis).
    */
   public async getConversationMessages(conversationId: string, tenantId: string, limit = 50): Promise<any[]> {

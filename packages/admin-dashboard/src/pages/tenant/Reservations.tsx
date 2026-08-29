@@ -66,6 +66,30 @@ export const Reservations: React.FC = () => {
   const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<{ id: string; name?: string; phone?: string } | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyMessages, setHistoryMessages] = useState<any[]>([]);
+  const historyContainerRef = useRef<HTMLDivElement>(null);
+  const historyMessagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollHistoryToBottom = useCallback((smooth = false) => {
+    const doScroll = () => {
+      if (historyContainerRef.current) {
+        historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight + 99999;
+      }
+      if (historyMessagesEndRef.current) {
+        historyMessagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 30);
+    setTimeout(doScroll, 100);
+    setTimeout(doScroll, 250);
+  }, []);
+
+  useEffect(() => {
+    if (activeHistoryCustomer && historyMessages.length > 0 && !loadingHistory) {
+      scrollHistoryToBottom(false);
+    }
+  }, [activeHistoryCustomer, historyMessages, loadingHistory, scrollHistoryToBottom]);
 
   // Edit Location & House Photo Modal (Admin CS)
   const [editLocationModal, setEditLocationModal] = useState<Reservation | null>(null);
@@ -1779,6 +1803,7 @@ export const Reservations: React.FC = () => {
 
               {/* Modal Body: Message Stream with WhatsApp Wallpaper */}
               <div
+                ref={historyContainerRef}
                 className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
                 style={{
                   backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
@@ -1794,40 +1819,43 @@ export const Reservations: React.FC = () => {
                     Belum ada pesan tercatat untuk customer ini.
                   </div>
                 ) : (
-                  historyMessages.map((msg) => {
-                    const isInbound = msg.direction === 'INBOUND';
-                    const typeUpper = (msg.sender_type || '').toUpperCase();
-                    const sender = isInbound
-                      ? 'Customer'
-                      : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
-                      ? msg.sender_name || 'Admin'
-                      : 'Bot';
+                  <>
+                    {historyMessages.map((msg) => {
+                      const isInbound = msg.direction === 'INBOUND';
+                      const typeUpper = (msg.sender_type || '').toUpperCase();
+                      const sender = isInbound
+                        ? 'Customer'
+                        : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
+                        ? msg.sender_name || 'Admin'
+                        : 'Bot';
 
-                    return (
-                      <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
-                        <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5">
-                          <span className="font-bold text-[#111b21]">{sender}</span>
-                          <span>•</span>
-                          <Clock size={9} />
-                          <span>
-                            {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                      return (
+                        <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
+                          <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5">
+                            <span className="font-bold text-[#111b21]">{sender}</span>
+                            <span>•</span>
+                            <Clock size={9} />
+                            <span>
+                              {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <div
+                            className={`max-w-[80%] p-3 rounded-xl text-xs leading-relaxed shadow-xs ${
+                              isInbound
+                                ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                                : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                            }`}
+                          >
+                            {msg.content}
+                          </div>
                         </div>
-                        <div
-                          className={`max-w-[80%] p-3 rounded-xl text-xs leading-relaxed shadow-xs ${
-                            isInbound
-                              ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                              : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                          }`}
-                        >
-                          {msg.content}
-                        </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                    <div ref={historyMessagesEndRef} className="h-0 w-0 pointer-events-none" />
+                  </>
                 )}
               </div>
 
