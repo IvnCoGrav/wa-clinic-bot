@@ -64,6 +64,7 @@ export interface ExtractedEntities {
     | 'medical_emergency'
     | 'complaint'
     | 'human_agent'
+    | 'ask_unlisted_service'
     | 'chitchat'
   >;
   locationText: string | null;
@@ -86,6 +87,7 @@ export type EngineActionType =
   | 'ESCALATE_HUMAN_SCHEDULE'
   | 'ESCALATE_HUMAN_AGENT_REQUEST'
   | 'ESCALATE_HUMAN_COMPLAINT'
+  | 'ESCALATE_HUMAN_UNLISTED_SERVICE'
   | 'ESCALATE_RESCHEDULE_CANCEL'
   | 'NOT_INTERESTED_COMPLETED'
   | 'SILENT_HUMAN_ACTIVE'

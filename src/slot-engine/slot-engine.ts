@@ -231,6 +231,24 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     };
   }
 
+  // 4b2. Handle Pertanyaan Layanan di Luar Pricelist / Katalog (Silent Escalation)
+  if (decision.action === 'ESCALATE_HUMAN_UNLISTED_SERVICE') {
+    await SlateStore.persistSlate(decision.updatedSlate);
+    await conversationService.escalateToHumanHandling(
+      conversation,
+      customer.phone,
+      `Pertanyaan layanan di luar pricelist/katalog: "${incomingText}"`,
+      tenantId,
+      'unlisted_service'
+    );
+    return {
+      nextState: ConversationState.HUMAN_HANDLING,
+      shouldSendReply: false,
+      isHumanHandling: true,
+      aiReasoning: decision.reason,
+    };
+  }
+
   // 4c. Handle Eskalasi dengan Pesan Konfirmasi Handoff (Jadwal, CS Request, Reschedule/Cancel)
   if (
     decision.action === 'ESCALATE_HUMAN_SCHEDULE' ||

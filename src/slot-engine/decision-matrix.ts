@@ -89,6 +89,27 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
+    // PRIORITY 1E: PERTANYAAN LAYANAN DI LUAR PRICELIST / KATALOG RESMI (Silent Escalation)
+    // Sesuai SOP: jika customer menanyakan layanan di luar pricelist/katalog resmi
+    // (misal: mandikan bayi, paket newborn harian, baby sitting, tindik, imunisasi, dll),
+    // bot DIAM (silent) dan langsung mengalihkan penanganan ke CS/Bidan manusia.
+    // =========================================================================
+    const isUnlistedServiceQuery =
+      extraction.intents.includes('ask_unlisted_service') ||
+      /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|imunisasi|vaksin|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText);
+
+    if (isUnlistedServiceQuery) {
+      updatedSlate.isHumanHandling = true;
+      updatedSlate.humanHandlingReason = 'unlisted_service';
+      return {
+        action: 'ESCALATE_HUMAN_UNLISTED_SERVICE',
+        reason: 'Customer menanyakan layanan di luar pricelist/katalog resmi -> Silent escalation ke CS.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+      };
+    }
+
+    // =========================================================================
     // PRIORITY 2: SEDANG DITANGANI CS MANUSIA (CS Takeover Guard)
     // =========================================================================
     if (updatedSlate.isHumanHandling) {

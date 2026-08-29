@@ -46,6 +46,8 @@ const DYNAMIC_CONSTRAINTS_PATTERNS = [
   /\b(ongkir ke|ongkos ke|transport ke|kalau di perumahan|kena ongkos brp|kena ongkir brp)\b/i,
   // Sinyal darurat medis fatal
   /\b(kejang|membiru|biru|tidak sadar|pingsan|darah banyak|perdarahan hebat|sesak parah)\b/i,
+  // Layanan di luar katalog resmi yang membutuhkan eskalasi diam / penanganan manual CS
+  /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|imunisasi|vaksin|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i,
 ];
 
 export class FastFaqDetector {

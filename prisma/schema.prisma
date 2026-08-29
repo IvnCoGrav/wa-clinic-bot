@@ -269,6 +269,7 @@ model Reservation {
   children                 Child[]
   assigned_staff_id        String?
   assigned_staff           Staff?            @relation(fields: [assigned_staff_id], references: [id], onDelete: SetNull)
+  follow_ups               FollowUp[]
 
   @@index([tenant_id])
   @@index([tenant_id, created_at])
@@ -281,6 +282,9 @@ model Reservation {
 enum FollowUpType {
   NO_PURCHASE
   NEXT_TREATMENT
+  REMINDER_H1
+  REVIEW_H1_BABY
+  REVIEW_H1_MOMS
 }
 
 enum FollowUpStatus {
@@ -426,19 +430,22 @@ model FollowUpTemplate {
 }
 
 model FollowUp {
-  id           String         @id @default(uuid())
-  tenant_id    String         @default("default-tenant")
-  customer_id  String
-  customer     Customer       @relation(fields: [customer_id], references: [id], onDelete: Cascade)
-  type         FollowUpType
-  stage        Int // 1 | 2 | 3
-  scheduled_at DateTime
-  sent_at      DateTime?
-  status       FollowUpStatus @default(QUEUED)
-  created_at   DateTime       @default(now())
-  updated_at   DateTime       @updatedAt
+  id             String         @id @default(uuid())
+  tenant_id      String         @default("default-tenant")
+  customer_id    String
+  customer       Customer       @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  reservation_id String?
+  reservation    Reservation?   @relation(fields: [reservation_id], references: [id], onDelete: SetNull)
+  type           FollowUpType
+  stage          Int // 1 | 2 | 3
+  scheduled_at   DateTime
+  sent_at        DateTime?
+  status         FollowUpStatus @default(QUEUED)
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
 
   @@index([tenant_id])
+  @@index([reservation_id])
   @@index([status, scheduled_at])
   @@map("follow_ups")
 }

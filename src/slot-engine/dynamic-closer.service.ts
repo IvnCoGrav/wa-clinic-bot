@@ -194,12 +194,12 @@ ${ongkirGuard}`;
         }
 
         return `PANDUAN PENAWARAN JADWAL (SCHEDULE):
-1. Jawab pertanyaan layanan/keluhan Bunda terlebih dahulu dengan ramah.
-2. Tawarkan jadwal reservasi di kalimat penutup secara santun dan natural (contoh: "Rencana mau treatment di hari apa Bunda ? 😊" atau "Mau kami bantu jadwalkan ${targetTreatment}-nya di hari apa Bunda? Nanti kami bantu cekkan ketersediaan jadwal Bidannya 😊").
+1. Jika customer sudah memilih/menentukan treatment (misal *Pijat Bayi Ceria*, *Pijat Bayi Pulih Ceria*, dll), DILARANG KERAS menjelaskan ulang manfaat, rincian, atau minyak/aromaterapi dari treatment tersebut! Cukup sambut pilihan Bunda secara hangat.
+2. Tawarkan rencana hari reservasi secara santun dan natural (contoh: "Baik Bunda, untuk ${targetTreatment} rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊" atau "Baik Bunda, rencana mau treatment di hari apa ya Bunda? 🙏😊").
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"!
 ⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer! Usia akan dilengkapi saat pengisian form reservasi.
 ⚠️ DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia secara sepihak!
-⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika Bunda sudah menanyakan paket tersebut!
+⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika Bunda sudah memilih/menentukan paket tersebut!
 ${ongkirGuard}`;
       }
 

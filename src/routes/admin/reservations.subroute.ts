@@ -293,6 +293,21 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           });
         }
 
+        if (reservationStatus === 'confirmed' && parsedDate) {
+          try {
+            const { followUpService } = await import('../../services/follow-up.service');
+            await followUpService.createReservationFollowUps({
+              reservationId: reservation.id,
+              customerId,
+              bookingDate: parsedDate,
+              treatmentCategory: dbCategory,
+              tenantId: DEFAULT_TENANT_ID,
+            });
+          } catch (fuErr: any) {
+            console.warn('[Admin API] Failed to create follow-ups for manual reservation:', fuErr.message);
+          }
+        }
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -405,6 +420,21 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             google_calendar_event_id: calendarEventId,
           },
         });
+
+        if (existing.booking_date) {
+          try {
+            const { followUpService } = await import('../../services/follow-up.service');
+            await followUpService.createReservationFollowUps({
+              reservationId: id,
+              customerId: existing.customer_id,
+              bookingDate: existing.booking_date,
+              treatmentCategory: existing.treatment_category,
+              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+            });
+          } catch (fuErr: any) {
+            console.warn('[Admin API] Failed to schedule follow-ups on confirmation:', fuErr.message);
+          }
+        }
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -581,6 +611,23 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           data: { status },
         });
 
+        try {
+          const { followUpService } = await import('../../services/follow-up.service');
+          if (status === 'confirmed' && existing.booking_date) {
+            await followUpService.createReservationFollowUps({
+              reservationId: id,
+              customerId: existing.customer_id,
+              bookingDate: existing.booking_date,
+              treatmentCategory: existing.treatment_category,
+              tenantId: existing.tenant_id || DEFAULT_TENANT_ID,
+            });
+          } else if (status === 'cancelled') {
+            await followUpService.onReservationCancelled(id, existing.tenant_id || DEFAULT_TENANT_ID);
+          }
+        } catch (fuErr: any) {
+          console.warn('[Admin API] Failed to sync follow-ups on status update:', fuErr.message);
+        }
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -637,6 +684,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           where: { id },
           data: { booking_date: parsedDate },
         });
+
+        try {
+          const { followUpService } = await import('../../services/follow-up.service');
+          await followUpService.onReservationRescheduled(id, parsedDate, existing.tenant_id || DEFAULT_TENANT_ID);
+        } catch (fuErr: any) {
+          console.warn('[Admin API] Failed to reschedule follow-ups on date update:', fuErr.message);
+        }
 
         if (reservation.google_calendar_event_id) {
           try {

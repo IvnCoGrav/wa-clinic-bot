@@ -159,6 +159,23 @@ export class EntityExtractor {
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');
       }
+    } else if (
+      /\b(?:massage|pijat)\s+(?:biasa|aja|saja|reguler|standar|rutin)\b/i.test(lower) ||
+      /^(?:massage|pijat)\s+(?:biasa|aja|saja|reguler|standar|rutin)$/i.test(lower.trim())
+    ) {
+      result.treatmentReferenced = 'Pijat Bayi Ceria';
+      result.intents = result.intents || [];
+      if (!result.intents.includes('select_treatment')) {
+        result.intents.push('select_treatment');
+      }
+    }
+
+    // 7. Deteksi Permintaan Layanan di Luar Katalog Resmi (Unlisted Service)
+    if (/\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|imunisasi|vaksin|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(lower)) {
+      result.intents = result.intents || [];
+      if (!result.intents.includes('ask_unlisted_service')) {
+        result.intents.push('ask_unlisted_service');
+      }
     }
 
     return result;
@@ -225,6 +242,7 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "affirmation": Persetujuan/jawaban positif singkat (boleh, iya, siap, mau).
 - "negation": Penolakan/jawaban negatif (tidak, bukan, jangan).
 - "medical_emergency": Kondisi kritis fatal (kejang, biru, tidak sadar, perdarahan hebat).
+- "ask_unlisted_service": Menanyakan layanan/tindakan di luar katalog resmi klinik (seperti memandikan bayi harian, penitipan anak/baby sitting, tindik telinga, imunisasi, sunat, perawatan newborn mandiri).
 - "chitchat": Sapaan atau basa-basi umum.
 
 ATURAN EKSTRAKSI (SANGAT KETAT):
@@ -241,6 +259,10 @@ ATURAN EKSTRAKSI (SANGAT KETAT):
 11. Jika customer menyebutkan kombinasi lebih dari 1 treatment (contoh: "Pijat bayi ceria + cukur", "Pulih ceria dan sinar", "Laktasi plus oksitosin"), gabungkan nama treatment lengkapnya ke "treatment_referenced" (contoh: "Pijat Bayi Ceria + Cukur Rambut Bayi") dan sertakan intent "select_treatment".
 12. AREA LAYANAN (SURABAYA & SIDOARJO) & NORMALISASI TYPO WILAYAH:
 Klinik berlokasi di Sidoarjo dan melayani area Surabaya & Sidoarjo. Jika terdapat typo penulisan nama wilayah/kecamatan/kelurahan di Surabaya/Sidoarjo (contoh: "kencjeran" -> "Kenjeran", "jambangn" -> "Jambangan", "rungkot" -> "Rungkut", "wru" -> "Waru", "sdoarjo" -> "Sidoarjo", "gdangan" -> "Gedangan", "budurn" -> "Buduran"), normalisasikan ke nama wilayah Surabaya/Sidoarjo yang dimaksud pada "location_text", JANGAN mengubahnya menjadi nama kota/daerah lain di luar Jawa Timur (seperti mengubah "kencjeran" menjadi "Kencana").
+13. ALIAS TREATMENT STANDAR / BIASA:
+Jika customer menyebutkan "massage biasa", "pijat biasa", "massage aja", "pijat aja", "pijat reguler", "massage reguler", "pijat rutin", atau "pijat standar", ini adalah nama sebutan santai untuk perawatan kebugaran umum si kecil. Masukkan ke "treatment_referenced": "Pijat Bayi Ceria" (atau "Pijat Kids Ceria" jika usia anak > 2 tahun) dan sertakan intent "select_treatment".
+14. LAYANAN DI LUAR KATALOG RESMI (UNLISTED SERVICE):
+Jika customer menanyakan layanan/tindakan yang bukan merupakan layanan pijat/spa/terapi resmi klinik (contoh: "Ada PL homecare mandikan bayi?", "bisa baby sitting?", "tindik telinga bisa?"), sertakan intent "ask_unlisted_service" dan JANGAN memasukkannya ke "treatment_referenced" resmi.
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {
