@@ -71,7 +71,7 @@ export class FastFaqGenerator {
         apiKey: endpoint.apiKey,
         model: modelConfig.modelName || 'gpt-4o-mini',
         fallbackModel: endpoint.fallbackModel,
-        timeoutMs: endpoint.timeoutMs || 25000,
+        timeoutMs: endpoint.timeoutMs || 30000,
         payload: {
           temperature: 0.5,
           max_tokens: 500,

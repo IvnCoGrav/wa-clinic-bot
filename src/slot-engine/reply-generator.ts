@@ -117,7 +117,7 @@ export class ReplyGenerator {
         apiKey: endpoint.apiKey,
         model: modelSelection.modelName || 'gpt-4o-mini',
         fallbackModel: endpoint.fallbackModel,
-        timeoutMs: endpoint.timeoutMs || 25000,
+        timeoutMs: endpoint.timeoutMs || 30000,
         payload: {
           temperature: modelSelection.modelConfig.temperature || 0.6,
           max_tokens: modelSelection.modelConfig.maxTokens || 500,

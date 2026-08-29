@@ -273,8 +273,8 @@ export function sanitizeUnsolicitedPriceAndDuration(text: string, customerInput?
     .replace(/(?:,\s*|\s+)(?:dengan\s+)?(?:tarif|harga|biaya)(?:\s+promo)?\s+Rp\s*[\d\.]+(?:rb|k|ribu)?/gi, '')
     .replace(/(?:,\s*|\s+)(?:seharga|seharganya)\s+Rp\s*[\d\.]+(?:rb|k|ribu)?/gi, '')
     .replace(/(?:,\s*|\s+)(?:durasi\s+(?:sekitar\s+)?\d+\s+menit)/gi, '')
-    .replace(/(?:,\s*|\s+)(?:selama\s+(?:sekitar\s+)?\d+\s+menit)/gi, '')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[^\S\r\n]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .replace(/\s+\./g, '.')
     .trim();
 
