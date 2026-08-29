@@ -4,6 +4,32 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhanced — In-Page Chat History Modal, Full Follow-Up Text/Variant Editor & Smart Date Range Filters (`FollowUpQueue.tsx`, `follow-up.service.ts`, `follow-up.subroute.ts`) (2026-08-29)
+
+- **Latar Belakang & Masukan Pengguna:**
+  1. **Tombol Live Chat Buka Tab Baru & Chat List**: Tombol live chat di antrian sebelumnya membuka tab baru ke halaman utama Live Chat tanpa konteks percakapan spesifik customer tersebut.
+  2. **Kebutuhan Edit Varian & Teks Kustom**: Admin membutuhkan fleksibilitas untuk tidak hanya mengubah tanggal/jam, tetapi juga memilih varian rolling template (Tahap 1/2/3) dan mengedit teks pesan secara spesifik untuk pelanggan tersebut sebelum dikirim.
+  3. **Bug Urutan Jadwal Terdekat (Semua Status)**: Saat mengurutkan "Jadwal Terdekat" (ASC), data lama di masa lalu (seperti tanggal 13 Agustus) muncul di awal antrian, padahal admin membutuhkan tampilan jadwal dari hari ini ke depan (upcoming).
+
+- **Solusi & Implementasi:**
+  1. **Modal Riwayat Chat In-Page (`FollowUpQueue.tsx`)**:
+     - Mengganti tautan eksternal dengan **Modal Riwayat Chat WhatsApp** interaktif langsung di dalam halaman.
+     - Menampilkan riwayat percakapan kronologis (bubble chat Customer vs Bot/Admin dengan timestamp & status).
+     - Menyediakan kolom input balasan langsung (*Quick Reply*) sehingga admin dapat menyapa pelanggan via WhatsApp tanpa meninggalkan halaman antrian.
+  2. **Editor Follow-Up Fleksibel (Jadwal, Varian & Teks Kustom)**:
+     - Menambahkan kolom `custom_text String?` pada model `FollowUp` (`prisma/schema.prisma`).
+     - Menyediakan modal edit interaktif dengan pemilih varian (Varian #1, #2, #3), tombol reset ke template default, tag helper variabel (`{name}`, `{babyName}`, `{time}`), serta textarea untuk kustomisasi pesan.
+     - Backend endpoint `PATCH /api/admin/follow-ups/:id` dan worker `executeFollowUp` memprioritaskan pengiriman pesan menggunakan `custom_text` jika ada.
+  3. **Smart Date Filter & Perbaikan Sorting Jadwal Terdekat**:
+     - Menambahkan filter tanggal pada backend `listFollowUps` dan dropdown filter di dashboard:
+       - `📅 Hari Ini & Ke Depan (Upcoming)` (Default): menyaring jadwal `scheduled_at >= hari ini (WIB)`, sehingga sorting *Jadwal Terdekat* menampilkan hari ini ke depan tanpa tertutup data lampau.
+       - Pilihan filter lain: `📅 Semua Tanggal`, `📅 Hari Ini Saja`, `📅 Minggu Ini`, `📅 Bulan Ini`, `⚠️ Lewat Jadwal (Overdue)`.
+
+- **Pengujian & Verifikasi:**
+  - Vitest Unit & Integration Tests (`tests/unit/follow-up-engine.test.ts`, `tests/integration/follow-up-admin.test.ts`): **43/43 tests PASS (100%)**.
+  - Backend typecheck (`npm run build`): **PASS (0 errors)**.
+  - Frontend admin dashboard (`npm run build`): **PASS (0 errors)**.
+
 #### Impeccable Refinement — Layout 1-Kolom Treatment, Label Waktu Mulai Avatar & Impeccable Audit Kalender & Reservasi (`TodayTreatments.tsx`, `Reservations.tsx`, `ReservationDetailModal.tsx`, `CreateReservationModal.tsx`) (2026-08-28)
 
 - **Latar Belakang & Masukan Pengguna:**

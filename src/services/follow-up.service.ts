@@ -113,6 +113,7 @@ export class FollowUpService {
       status?: string;
       type?: string;
       search?: string;
+      dateFilter?: string;
       page?: number;
       pageSize?: number;
       sortBy?: string;
@@ -692,9 +693,17 @@ export class FollowUpService {
   }
 
   /**
-   * Reschedule follow-up (ubah tanggal/jam jadwal kirim).
+   * Update follow-up (ubah tanggal, varian/stage, atau custom_text).
    */
-  public async rescheduleFollowUp(id: string, newDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
+  public async updateFollowUp(
+    id: string,
+    data: {
+      scheduledAt?: Date;
+      stage?: number;
+      customText?: string | null;
+    },
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<any> {
     const existing = await prisma.followUp.findFirst({
       where: { id, tenant_id: tenantId },
     });
@@ -703,15 +712,29 @@ export class FollowUpService {
       throw new Error(`Follow-up #${id} tidak ditemukan.`);
     }
 
+    const updateData: any = {};
+    if (data.scheduledAt) updateData.scheduled_at = data.scheduledAt;
+    if (typeof data.stage === 'number' && data.stage >= 1 && data.stage <= 3) {
+      updateData.stage = data.stage;
+    }
+    if (data.customText !== undefined) {
+      updateData.custom_text = data.customText ? data.customText.trim() : null;
+    }
+
     return prisma.followUp.update({
       where: { id },
-      data: {
-        scheduled_at: newDate,
-      },
+      data: updateData,
       include: {
         customer: true,
       },
     });
+  }
+
+  /**
+   * Reschedule follow-up (ubah tanggal/jam jadwal kirim).
+   */
+  public async rescheduleFollowUp(id: string, newDate: Date, tenantId: string = DEFAULT_TENANT_ID): Promise<any> {
+    return this.updateFollowUp(id, { scheduledAt: newDate }, tenantId);
   }
 
   /**
