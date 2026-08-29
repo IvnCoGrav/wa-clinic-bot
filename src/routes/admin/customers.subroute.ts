@@ -6,8 +6,17 @@ import { auditService } from '../../services/audit.service';
 import { conversationService } from '../../services/conversation.service';
 import { ConversationState } from '@prisma/client';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
+import { responseCacheService } from '../../services/response-cache.service';
 
 export async function customerAdminRoutes(fastify: FastifyInstance) {
+  // Invalidate cache saat ada create/update/delete customer
+  fastify.addHook('onResponse', async (request) => {
+    const method = request.method;
+    if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && request.url.includes('/customers')) {
+      responseCacheService.invalidatePrefix('customers:');
+    }
+  });
+
   /**
    * GET /api/admin/customers
    * Mengambil daftar customer database lengkap dengan Tracking Code, LTV, MQL Status, dan pagination
@@ -39,7 +48,10 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           sortBy,
           sortOrder,
         });
-        return reply.status(200).send({ success: true, ...result });
+        return reply
+          .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+          .status(200)
+          .send({ success: true, ...result });
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }

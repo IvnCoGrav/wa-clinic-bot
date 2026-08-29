@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { Customer } from '@prisma/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { responseCacheService } from './response-cache.service';
 
 // In-Memory store fallback jika DB offline
 const memoryCustomers = new Map<string, any>();
@@ -1043,45 +1044,50 @@ export class CustomerService {
           },
           orderBy: isLtvSort ? { created_at: 'desc' } : orderBy,
           skip: isLtvSort ? 0 : (page - 1) * pageSize,
-          take: isLtvSort ? undefined : pageSize,
+          take: isLtvSort ? Math.min(500, pageSize * 5) : pageSize,
         }),
         prisma.customer.count({ where }),
       ]);
 
-      let stats = {
-        totalCustomers: total,
-        totalPurchasers: 0,
-        totalMql: 0,
-        totalProspects: total,
-        totalRevenue: 0,
-      };
+      const cacheKeyStats = `customers:stats:${tenantId}`;
+      let stats = responseCacheService.get<any>(cacheKeyStats);
 
-      try {
-        const [totalCustomersCount, totalPurchasersCount, totalMqlCount, totalRevAgg] = await Promise.all([
-          prisma.customer.count({ where: { tenant_id: tenantId, is_sandbox_test: false } }),
-          prisma.customer.count({
-            where: { tenant_id: tenantId, is_sandbox_test: false, reservations: { some: { status: { notIn: ['cancelled', 'rejected'] } } } },
-          }),
-          prisma.customer.count({
-            where: { tenant_id: tenantId, is_sandbox_test: false, is_mql: true },
-          }),
-          prisma.reservation.aggregate({
-            where: { tenant_id: tenantId, status: { notIn: ['cancelled', 'rejected'] }, customer: { is_sandbox_test: false } },
-            _sum: { purchase_value: true },
-          }),
-        ]);
-        stats = {
-          totalCustomers: totalCustomersCount,
-          totalPurchasers: totalPurchasersCount,
-          totalMql: totalMqlCount,
-          totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
-          totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
-        };
-      } catch {
-        // Safe fallback if extra stats aggregation cannot be fetched
+      if (!stats) {
+        try {
+          const [totalCustomersCount, totalPurchasersCount, totalMqlCount, totalRevAgg] = await Promise.all([
+            prisma.customer.count({ where: { tenant_id: tenantId, is_sandbox_test: false } }),
+            prisma.customer.count({
+              where: { tenant_id: tenantId, is_sandbox_test: false, reservations: { some: { status: { notIn: ['cancelled', 'rejected'] } } } },
+            }),
+            prisma.customer.count({
+              where: { tenant_id: tenantId, is_sandbox_test: false, is_mql: true },
+            }),
+            prisma.reservation.aggregate({
+              where: { tenant_id: tenantId, status: { notIn: ['cancelled', 'rejected'] }, customer: { is_sandbox_test: false } },
+              _sum: { purchase_value: true },
+            }),
+          ]);
+          stats = {
+            totalCustomers: totalCustomersCount,
+            totalPurchasers: totalPurchasersCount,
+            totalMql: totalMqlCount,
+            totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
+            totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
+          };
+          responseCacheService.set(cacheKeyStats, stats, 15);
+        } catch {
+          stats = {
+            totalCustomers: total,
+            totalPurchasers: 0,
+            totalMql: 0,
+            totalProspects: total,
+            totalRevenue: 0,
+          };
+        }
       }
 
       const { resolveTreatmentValue } = await import('./capi.service');
+      const treatmentMemoMap = new Map<string, number>();
 
       let customers = await Promise.all(
         rawCustomers.map(async (c) => {
@@ -1090,7 +1096,16 @@ export class CustomerService {
             for (const r of c.reservations) {
               let val = r.purchase_value;
               if (val === null || val === undefined || val === 0) {
-                val = (await resolveTreatmentValue(r.treatment_detail || r.raw_text)) ?? 0;
+                const text = r.treatment_detail || r.raw_text;
+                if (text) {
+                  if (!treatmentMemoMap.has(text)) {
+                    const resolved = (await resolveTreatmentValue(text)) ?? 0;
+                    treatmentMemoMap.set(text, resolved);
+                  }
+                  val = treatmentMemoMap.get(text) ?? 0;
+                } else {
+                  val = 0;
+                }
               }
               ltv += val;
             }

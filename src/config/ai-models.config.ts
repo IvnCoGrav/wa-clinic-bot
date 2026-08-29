@@ -49,8 +49,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY_DEEP',
     {
       task: 'CHAT_REPLY_DEEP',
-      provider: process.env.AI_PROVIDER_CHAT_DEEP || process.env.AI_PROVIDER_CHAT || 'OpenAI',
-      modelName: process.env.AI_MODEL_CHAT_DEEP || process.env.AI_MODEL_CHAT || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_CHAT_DEEP || 'Mimo',
+      modelName: process.env.AI_MODEL_CHAT_DEEP || 'mimo-v2.5',
       description: 'Digunakan untuk menghasilkan respon percakapan mendalam pada konsultasi klinis multi-gejala / multi-treatment.',
       maxTokens: 1024,
       temperature: 0.5,
@@ -93,8 +93,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'INTENT_CLASSIFICATION',
     {
       task: 'INTENT_CLASSIFICATION',
-      provider: process.env.AI_PROVIDER_NLU || 'OpenAI',
-      modelName: process.env.AI_MODEL_NLU || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_NLU || 'MiniMax',
+      modelName: process.env.AI_MODEL_NLU || 'MiniMax-M2.7-highspeed',
       description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
       maxTokens: 1024,
       temperature: 0.1,

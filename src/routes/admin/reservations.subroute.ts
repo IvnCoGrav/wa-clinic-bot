@@ -8,19 +8,44 @@ import { capiService, resolveTreatmentValue, extractValueByFormat, getTenantCapi
 import { extractRupiahAmount } from '../../services/purchase-detection.service';
 import { parseReservationText, extractBabyDetails } from '../../utils/reservation-text-parser';
 import { memoryReservations } from './stores';
+import { responseCacheService } from '../../services/response-cache.service';
 
 export async function reservationAdminRoutes(fastify: FastifyInstance) {
+  // Invalidate cache saat ada create/update/delete reservasi
+  fastify.addHook('onResponse', async (request) => {
+    const method = request.method;
+    if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && request.url.includes('/reservations')) {
+      responseCacheService.invalidatePrefix('reservations:');
+    }
+  });
+
   /**
    * GET /api/admin/reservations/count
    */
   fastify.get('/api/admin/reservations/count', async (request: FastifyRequest, reply: FastifyReply) => {
+    const cacheKey = `reservations:count:${DEFAULT_TENANT_ID}`;
+    const cached = responseCacheService.get<number>(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      return reply
+        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+        .status(200)
+        .send({ success: true, count: cached });
+    }
+
     try {
       const count = await prisma.reservation.count({
         where: { tenant_id: DEFAULT_TENANT_ID },
       });
-      return reply.status(200).send({ success: true, count });
+      responseCacheService.set(cacheKey, count, 15);
+      return reply
+        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+        .status(200)
+        .send({ success: true, count });
     } catch (err: any) {
-      return reply.status(200).send({ success: true, count: memoryReservations.size });
+      return reply
+        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+        .status(200)
+        .send({ success: true, count: memoryReservations.size });
     }
   });
 
@@ -142,8 +167,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       try {
         const tenantBaseWhere = { tenant_id: DEFAULT_TENANT_ID };
-        const [rows, total, totalCount, upcomingCount, overdueCount, pendingCount, confirmedCount, completedCount, cancelledCount] =
-          await Promise.all([
+        const cacheKeyStats = `reservations:stats:${DEFAULT_TENANT_ID}`;
+        let stats = responseCacheService.get<any>(cacheKeyStats);
+
+        let rows: any[];
+        let total: number;
+
+        if (stats) {
+          [rows, total] = await Promise.all([
             prisma.reservation.findMany({
               where,
               include: {
@@ -165,36 +196,65 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               take: pageSize,
             }),
             prisma.reservation.count({ where }),
-            prisma.reservation.count({ where: tenantBaseWhere }),
-            prisma.reservation.count({
-              where: {
-                ...tenantBaseWhere,
-                OR: [{ booking_date: null }, { booking_date: { gte: overdueThreshold } }],
-                status: { notIn: ['cancelled', 'rejected'] },
-              },
-            }),
-            prisma.reservation.count({
-              where: {
-                ...tenantBaseWhere,
-                booking_date: { lt: overdueThreshold },
-                status: { notIn: ['completed', 'cancelled', 'rejected'] },
-              },
-            }),
-            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'pending' } }),
-            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'confirmed' } }),
-            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'completed' } }),
-            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'cancelled' } }),
           ]);
+        } else {
+          const [fetchedRows, fetchedTotal, totalCount, upcomingCount, overdueCount, pendingCount, confirmedCount, completedCount, cancelledCount] =
+            await Promise.all([
+              prisma.reservation.findMany({
+                where,
+                include: {
+                  customer: {
+                    include: {
+                      children: true,
+                      reservations: {
+                        where: { status: { notIn: ['cancelled', 'rejected'] } },
+                        select: { id: true, purchase_value: true },
+                      },
+                    },
+                  },
+                  assigned_staff: {
+                    select: { id: true, name: true, phone: true },
+                  },
+                },
+                orderBy,
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+              }),
+              prisma.reservation.count({ where }),
+              prisma.reservation.count({ where: tenantBaseWhere }),
+              prisma.reservation.count({
+                where: {
+                  ...tenantBaseWhere,
+                  OR: [{ booking_date: null }, { booking_date: { gte: overdueThreshold } }],
+                  status: { notIn: ['cancelled', 'rejected'] },
+                },
+              }),
+              prisma.reservation.count({
+                where: {
+                  ...tenantBaseWhere,
+                  booking_date: { lt: overdueThreshold },
+                  status: { notIn: ['completed', 'cancelled', 'rejected'] },
+                },
+              }),
+              prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'pending' } }),
+              prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'confirmed' } }),
+              prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'completed' } }),
+              prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'cancelled' } }),
+            ]);
 
-        const stats = {
-          total: totalCount,
-          upcoming: upcomingCount,
-          overdue: overdueCount,
-          pending: pendingCount,
-          confirmed: confirmedCount,
-          completed: completedCount,
-          cancelled: cancelledCount,
-        };
+          rows = fetchedRows;
+          total = fetchedTotal;
+          stats = {
+            total: totalCount,
+            upcoming: upcomingCount,
+            overdue: overdueCount,
+            pending: pendingCount,
+            confirmed: confirmedCount,
+            completed: completedCount,
+            cancelled: cancelledCount,
+          };
+          responseCacheService.set(cacheKeyStats, stats, 15);
+        }
 
         const { computeCurrentAge } = await import('../../utils/age-calculator');
         const data = rows.map((r) => ({
@@ -222,15 +282,18 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               }
             : undefined,
         }));
-        return reply.status(200).send({
-          success: true,
-          data,
-          total,
-          page,
-          pageSize,
-          totalPages: Math.max(1, Math.ceil(total / pageSize)),
-          stats,
-        });
+        return reply
+          .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+          .status(200)
+          .send({
+            success: true,
+            data,
+            total,
+            page,
+            pageSize,
+            totalPages: Math.max(1, Math.ceil(total / pageSize)),
+            stats,
+          });
       } catch (err: any) {
         try {
           console.warn('[Admin API] Reservations query failed, retrying without children relation:', err.message);

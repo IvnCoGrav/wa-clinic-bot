@@ -76,10 +76,10 @@ export function buildApp() {
   });
 
 
-  // Register HTTP Response Compression (Gzip & Deflate untuk payload > 1KB)
+  // Register HTTP Response Compression (Brotli, Gzip & Deflate untuk payload > 1KB)
   app.register(compress, {
     threshold: 1024,
-    encodings: ['gzip', 'deflate'],
+    encodings: ['br', 'gzip', 'deflate'],
   });
 
   // Register Rate Limiting (global protection for public endpoints)

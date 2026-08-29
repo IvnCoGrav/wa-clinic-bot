@@ -7,6 +7,7 @@ import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { conversationService, buildConversationUpdatedPayload } from '../../services/conversation.service';
 import { customerService } from '../../services/customer.service';
 import { messageService } from '../../services/message.service';
+import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
 
 export async function livechatAdminRoutes(fastify: FastifyInstance) {
@@ -63,8 +64,28 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         const mode: 'all' | 'real' | 'sandbox' =
           modeRaw === 'real' || modeRaw === 'sandbox' ? modeRaw : 'all';
         const search = request.query.search?.trim();
+
+        // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik)
+        const cacheKey = !search ? `livechat:list:${DEFAULT_TENANT_ID}:${mode}:${limit}:${offset}` : null;
+        if (cacheKey) {
+          const cached = responseCacheService.get(cacheKey);
+          if (cached) {
+            return reply
+              .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+              .status(200)
+              .send(cached);
+          }
+        }
+
         const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode, search);
-        return reply.status(200).send({ success: true, count: items.length, hasMore, mode, data: items });
+        const payload = { success: true, count: items.length, hasMore, mode, data: items };
+        if (cacheKey) {
+          responseCacheService.set(cacheKey, payload, 5); // 5s TTL
+        }
+        return reply
+          .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+          .status(200)
+          .send(payload);
       } catch (err: any) {
         return reply.status(500).send({ success: false, error: err.message });
       }
@@ -78,8 +99,21 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/live-chat/unread-count', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
     try {
+      const cacheKey = `livechat:unread:${tenantId}`;
+      const cached = responseCacheService.get<number>(cacheKey);
+      if (cached !== null && cached !== undefined) {
+        return reply
+          .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+          .status(200)
+          .send({ success: true, count: cached });
+      }
+
       const count = await messageService.getTotalUnreadCount(tenantId);
-      return reply.status(200).send({ success: true, count });
+      responseCacheService.set(cacheKey, count, 5);
+      return reply
+        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+        .status(200)
+        .send({ success: true, count });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message || 'Gagal menghitung unread count' });
     }
