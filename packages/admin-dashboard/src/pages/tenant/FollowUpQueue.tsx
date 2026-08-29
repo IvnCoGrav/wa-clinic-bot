@@ -41,12 +41,18 @@ interface Customer {
 
 interface FollowUpItem {
   id: string;
-  type: string; // NO_PURCHASE | NEXT_TREATMENT
+  type: string; // NO_PURCHASE | NEXT_TREATMENT | REMINDER_H1 | REVIEW_H1_BABY | REVIEW_H1_MOMS
   stage: number;
   scheduled_at: string;
   sent_at: string | null;
   status: string; // PENDING | QUEUED | SENT | CANCELLED | FAILED | SKIPPED
   customer: Customer | null;
+  reservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category: string;
+    treatment_detail: string | null;
+  } | null;
 }
 
 export const FollowUpQueue: React.FC = () => {
@@ -257,6 +263,24 @@ export const FollowUpQueue: React.FC = () => {
         color: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
       };
     }
+    if (type === 'REMINDER_H1') {
+      return {
+        label: `Reminder Treatment (H-1 Malam)`,
+        color: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+      };
+    }
+    if (type === 'REVIEW_H1_BABY') {
+      return {
+        label: `Review H+1 Treatment (Bayi)`,
+        color: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
+      };
+    }
+    if (type === 'REVIEW_H1_MOMS') {
+      return {
+        label: `Review H+1 Treatment (Moms)`,
+        color: 'bg-teal-500/10 text-teal-600 border-teal-500/20',
+      };
+    }
     return { label: `${type} Stage ${stage}`, color: 'bg-slate-500/10 text-slate-600 border-slate-500/20' };
   };
 
@@ -409,6 +433,9 @@ export const FollowUpQueue: React.FC = () => {
             className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="">Semua Tipe</option>
+            <option value="REMINDER_H1">Reminder Treatment (H-1 Malam)</option>
+            <option value="REVIEW_H1_BABY">Review H+1 Treatment Bayi</option>
+            <option value="REVIEW_H1_MOMS">Review H+1 Treatment Moms</option>
             <option value="NO_PURCHASE">Belum Purchase (+3, +7, +14 Hari)</option>
             <option value="NEXT_TREATMENT">Treatment Lanjutan (+1, +2, +3 Bulan)</option>
           </select>
@@ -592,6 +619,11 @@ export const FollowUpQueue: React.FC = () => {
                             </span>
                           )}
                         </div>
+                        {fu.reservation?.treatment_detail && (
+                          <div className="text-[10px] text-slate-500 truncate max-w-[220px] ml-4 mt-0.5" title={fu.reservation.treatment_detail}>
+                            📋 {fu.reservation.treatment_detail}
+                          </div>
+                        )}
                       </td>
 
                       {/* Template Rolling */}

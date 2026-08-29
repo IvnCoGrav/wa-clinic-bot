@@ -188,8 +188,114 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
 
   it('6. getAllTemplates returns merged list (DB custom + default fallback)', async () => {
     const templates = await followUpService.getAllTemplates(DEFAULT_TENANT_ID);
-    expect(templates.length).toBeGreaterThanOrEqual(27); // 9 types x 3 variants
+    expect(templates.length).toBeGreaterThanOrEqual(27);
     expect(templates.every((t) => t.text.length > 0)).toBe(true);
+  });
+
+  it('7. createReservationFollowUps schedules REMINDER_H1 and REVIEW_H1_BABY / REVIEW_H1_MOMS', async () => {
+    const createSpy = vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
+    const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null);
+
+    const bookingDate = new Date();
+    bookingDate.setDate(bookingDate.getDate() + 3); // 3 days from now at 10:00
+    bookingDate.setHours(10, 0, 0, 0);
+
+    // Baby category -> REVIEW_H1_BABY
+    await followUpService.createReservationFollowUps({
+      reservationId: 'res-baby-1',
+      customerId: 'cust-baby-1',
+      bookingDate,
+      treatmentCategory: 'BABY',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reservation_id: 'res-baby-1',
+          customer_id: 'cust-baby-1',
+          type: 'REMINDER_H1',
+          status: 'QUEUED',
+        }),
+      })
+    );
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reservation_id: 'res-baby-1',
+          customer_id: 'cust-baby-1',
+          type: 'REVIEW_H1_BABY',
+          status: 'QUEUED',
+        }),
+      })
+    );
+
+    // Moms category -> REVIEW_H1_MOMS
+    await followUpService.createReservationFollowUps({
+      reservationId: 'res-moms-1',
+      customerId: 'cust-moms-1',
+      bookingDate,
+      treatmentCategory: 'MOMS',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reservation_id: 'res-moms-1',
+          customer_id: 'cust-moms-1',
+          type: 'REVIEW_H1_MOMS',
+          status: 'QUEUED',
+        }),
+      })
+    );
+  });
+
+  it('8. onReservationCancelled cancels follow-ups for reservation', async () => {
+    const updateManySpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValueOnce({ count: 2 } as any);
+    await followUpService.onReservationCancelled('res-baby-1', DEFAULT_TENANT_ID);
+
+    expect(updateManySpy).toHaveBeenCalledWith({
+      where: {
+        reservation_id: 'res-baby-1',
+        tenant_id: DEFAULT_TENANT_ID,
+        status: { in: ['PENDING', 'QUEUED'] },
+      },
+      data: { status: 'CANCELLED' },
+    });
+  });
+
+  it('9. onReservationRescheduled updates scheduled_at for REMINDER_H1 and REVIEW_H1', async () => {
+    const updateManySpy = vi.spyOn(prisma.followUp, 'updateMany').mockResolvedValue({ count: 1 } as any);
+    const newDate = new Date();
+    newDate.setDate(newDate.getDate() + 5);
+
+    await followUpService.onReservationRescheduled('res-baby-1', newDate, DEFAULT_TENANT_ID);
+
+    expect(updateManySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          reservation_id: 'res-baby-1',
+          type: 'REMINDER_H1',
+          tenant_id: DEFAULT_TENANT_ID,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: expect.objectContaining({ scheduled_at: expect.any(Date) }),
+      })
+    );
+
+    expect(updateManySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          reservation_id: 'res-baby-1',
+          type: { in: ['REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] },
+          tenant_id: DEFAULT_TENANT_ID,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: expect.objectContaining({ scheduled_at: expect.any(Date) }),
+      })
+    );
   });
 });
 

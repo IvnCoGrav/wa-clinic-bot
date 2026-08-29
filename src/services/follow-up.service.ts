@@ -206,6 +206,14 @@ export class FollowUpService {
                 },
               },
             },
+            reservation: {
+              select: {
+                id: true,
+                booking_date: true,
+                treatment_category: true,
+                treatment_detail: true,
+              },
+            },
           },
           orderBy,
           skip,
@@ -335,6 +343,201 @@ export class FollowUpService {
       }
     } catch (err) {
       console.error('[FollowUp Service] Error handling reservation creation event:', err);
+    }
+  }
+
+  /**
+   * Dipanggil saat reservasi dikonfirmasi (CONFIRMED).
+   * Membuat 1 row REMINDER_H1 (H-1 pukul 19:00 WIB) dan
+   * 1 row REVIEW_H1_BABY / REVIEW_H1_MOMS (H+1 pukul 08:00 WIB) di antrian follow_ups.
+   */
+  public async createReservationFollowUps(params: {
+    reservationId: string;
+    customerId: string;
+    bookingDate: Date;
+    treatmentCategory?: string | null;
+    tenantId?: string;
+  }): Promise<void> {
+    const {
+      reservationId,
+      customerId,
+      bookingDate,
+      treatmentCategory,
+      tenantId = DEFAULT_TENANT_ID,
+    } = params;
+
+    try {
+      // 1. Verifikasi customer bukan akun sandbox/dummy test (offline-safe)
+      try {
+        const customer = await prisma.customer?.findUnique?.({ where: { id: customerId } });
+        if (customer && (customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name))) {
+          return;
+        }
+      } catch (_) {}
+
+      const bDate = new Date(bookingDate);
+      if (isNaN(bDate.getTime())) return;
+
+      const now = new Date();
+
+      // 2. Hitung waktu Reminder H-1 Malam (19:00 WIB)
+      const reminderDate = new Date(bDate);
+      reminderDate.setDate(reminderDate.getDate() - 1);
+      reminderDate.setHours(19, 0, 0, 0);
+
+      let effectiveReminderDate: Date | null = reminderDate;
+      if (reminderDate <= now) {
+        // Jika booking dibuat mendadak (misal hari H pagi atau H-1 malam > 19:00),
+        // jadwalkan segera jika booking_date masih di depan
+        if (bDate.getTime() > now.getTime() + 15 * 60 * 1000) {
+          effectiveReminderDate = new Date(now.getTime() + 2 * 60 * 1000);
+        } else {
+          effectiveReminderDate = null;
+        }
+      }
+
+      // 3. Hitung waktu Review H+1 Pagi (08:00 WIB)
+      const reviewDate = new Date(bDate);
+      reviewDate.setDate(reviewDate.getDate() + 1);
+      reviewDate.setHours(8, 0, 0, 0);
+
+      const isBaby = treatmentCategory === 'BABY' || treatmentCategory === 'BOTH';
+      const reviewType = isBaby ? 'REVIEW_H1_BABY' : 'REVIEW_H1_MOMS';
+
+      // 4. Jadwalkan Reminder H-1 Malam jika masih berlaku
+      if (effectiveReminderDate) {
+        let existingReminder = null;
+        try {
+          existingReminder = await prisma.followUp?.findFirst?.({
+            where: {
+              reservation_id: reservationId,
+              type: 'REMINDER_H1',
+              tenant_id: tenantId,
+              status: { in: ['PENDING', 'QUEUED'] },
+            },
+          });
+        } catch (_) {}
+
+        if (!existingReminder) {
+          try {
+            await prisma.followUp?.create?.({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                reservation_id: reservationId,
+                type: 'REMINDER_H1',
+                stage: 1,
+                scheduled_at: effectiveReminderDate,
+                status: 'QUEUED',
+              },
+            });
+            console.log(`[FollowUp Service] Queued REMINDER_H1 for reservation: ${reservationId} at ${effectiveReminderDate.toISOString()}`);
+          } catch (err: any) {
+            console.warn('[FollowUp Service] Failed to create REMINDER_H1:', err.message);
+          }
+        }
+      }
+
+      // 5. Jadwalkan Review H+1 Pasca Treatment
+      let existingReview = null;
+      try {
+        existingReview = await prisma.followUp?.findFirst?.({
+          where: {
+            reservation_id: reservationId,
+            type: reviewType as any,
+            tenant_id: tenantId,
+            status: { in: ['PENDING', 'QUEUED'] },
+          },
+        });
+      } catch (_) {}
+
+      if (!existingReview) {
+        try {
+          await prisma.followUp?.create?.({
+            data: {
+              tenant_id: tenantId,
+              customer_id: customerId,
+              reservation_id: reservationId,
+              type: reviewType as any,
+              stage: 1,
+              scheduled_at: reviewDate,
+              status: 'QUEUED',
+            },
+          });
+          console.log(`[FollowUp Service] Queued ${reviewType} for reservation: ${reservationId} at ${reviewDate.toISOString()}`);
+        } catch (err: any) {
+          console.warn(`[FollowUp Service] Failed to create ${reviewType}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error('[FollowUp Service] Failed to create reservation follow-ups:', err.message);
+    }
+  }
+
+  /**
+   * Membatalkan semua follow-up terkait reservasi tertentu saat reservasi dibatalkan/ditolak.
+   */
+  public async onReservationCancelled(reservationId: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    try {
+      await prisma.followUp?.updateMany?.({
+        where: {
+          reservation_id: reservationId,
+          tenant_id: tenantId,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: { status: 'CANCELLED' },
+      });
+      console.log(`[FollowUp Service] Cancelled follow-ups for reservation ${reservationId}`);
+    } catch (err: any) {
+      console.error('[FollowUp Service] Error cancelling follow-ups for reservation:', err.message);
+    }
+  }
+
+  /**
+   * Menyesuaikan jadwal reminder H-1 dan review H+1 saat reservasi di-reschedule.
+   */
+  public async onReservationRescheduled(
+    reservationId: string,
+    newBookingDate: Date,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<void> {
+    try {
+      const bDate = new Date(newBookingDate);
+      if (isNaN(bDate.getTime())) return;
+
+      const reminderDate = new Date(bDate);
+      reminderDate.setDate(reminderDate.getDate() - 1);
+      reminderDate.setHours(19, 0, 0, 0);
+
+      const reviewDate = new Date(bDate);
+      reviewDate.setDate(reviewDate.getDate() + 1);
+      reviewDate.setHours(8, 0, 0, 0);
+
+      // Update REMINDER_H1
+      await prisma.followUp?.updateMany?.({
+        where: {
+          reservation_id: reservationId,
+          type: 'REMINDER_H1',
+          tenant_id: tenantId,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: { scheduled_at: reminderDate },
+      });
+
+      // Update Review H+1
+      await prisma.followUp?.updateMany?.({
+        where: {
+          reservation_id: reservationId,
+          type: { in: ['REVIEW_H1_BABY', 'REVIEW_H1_MOMS'] },
+          tenant_id: tenantId,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: { scheduled_at: reviewDate },
+      });
+
+      console.log(`[FollowUp Service] Rescheduled follow-ups for reservation ${reservationId} to new date ${newBookingDate.toISOString()}`);
+    } catch (err: any) {
+      console.error('[FollowUp Service] Error rescheduling follow-ups for reservation:', err.message);
     }
   }
 
@@ -607,6 +810,14 @@ export class FollowUpService {
           },
         },
         include: {
+          reservation: {
+            select: {
+              id: true,
+              booking_date: true,
+              treatment_category: true,
+              treatment_detail: true,
+            },
+          },
           customer: {
             include: {
               children: true,
@@ -758,11 +969,25 @@ export class FollowUpService {
         templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}` as any;
       } else if (fu.type === 'NEXT_TREATMENT') {
         templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
+      } else if (fu.type === 'REMINDER_H1') {
+        templateType = 'REMINDER_H1';
+      } else if (fu.type === 'REVIEW_H1_BABY') {
+        templateType = 'REVIEW_H1_BABY';
+      } else if (fu.type === 'REVIEW_H1_MOMS') {
+        templateType = 'REVIEW_H1_MOMS';
       }
 
       const cleanName = sanitizeCustomerNameForGreeting(fu.customer?.name);
       const greetingName = formatGreetingBunda(cleanName);
       const babyName = formatBabyNamesForGreeting(fu.customer?.children, null, { prefixDek: true });
+
+      let timeStr = 'sesuai kesepakatan';
+      if (fu.reservation?.booking_date) {
+        const d = new Date(fu.reservation.booking_date);
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        timeStr = `${hours}:${minutes} WIB`;
+      }
 
       // Provider-aware send: WABA → HSM template + consent gatekeeper; WAHA → rolling text (existing)
       const gateway = await resolveGatewayForTenant(tenantId);
@@ -782,7 +1007,7 @@ export class FollowUpService {
           messageText = custom.text
             .replace(/Bunda\s*\{name\}/gi, greetingName)
             .replace(/\{name\}/g, cleanName || 'Bunda')
-            .replace(/\{time\}/g, '')
+            .replace(/\{time\}/g, timeStr)
             .replace(/\{babyName\}/g, babyName)
             .replace(/Bunda\s+Bunda/gi, 'Bunda')
             .replace(/dek\s+dek\s+/gi, 'dek ')
@@ -793,6 +1018,7 @@ export class FollowUpService {
           const { text } = getRollingFollowUpMessage(templateType, {
             name: cleanName,
             babyName,
+            time: timeStr,
             index: fu.stage - 1,
           });
           messageText = text;
@@ -802,6 +1028,7 @@ export class FollowUpService {
         const { text } = getRollingFollowUpMessage(templateType, {
           name: cleanName,
           babyName,
+          time: timeStr,
           index: fu.stage - 1,
         });
         messageText = text;
@@ -852,6 +1079,14 @@ export class FollowUpService {
         });
       } catch (dbErr: any) {
         console.warn(`[FollowUp Worker] FollowUp status update warning:`, dbErr.message);
+      }
+
+      // Jika follow-up adalah REVIEW H+1, daftarkan follow-up NEXT_TREATMENT (+1, +2, +3 bulan)
+      if (fu.type === 'REVIEW_H1_BABY' || fu.type === 'REVIEW_H1_MOMS') {
+        try {
+          const bookingDate = fu.reservation?.booking_date || new Date();
+          await this.createNextTreatmentFollowUps(fu.customer_id, bookingDate, tenantId);
+        } catch (_) {}
       }
 
       return true;

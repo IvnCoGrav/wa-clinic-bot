@@ -579,93 +579,66 @@ export class ConversationStateMachine {
       if (result.sendPricelistImage) {
         let sendOk = false;
         try {
-          const { prisma } = await import('../db/client');
-          const dbCustomer = await prisma.customer.findUnique({
-            where: { id: customer.id },
-          });
-          const alreadySent = dbCustomer ? dbCustomer.pricelist_sent : false;
+          const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
+          const gateway = await resolveGatewayForTenant(tenantId);
+          const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
+          const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
 
-          if (!alreadySent || result.forcePricelistResend) {
-            const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
-            const gateway = await resolveGatewayForTenant(tenantId);
-            const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
-            const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
-
-            if (!pricelistTarget) {
-              console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}.`);
-            } else if (customer.is_sandbox_test) {
-              console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
-              sendOk = true;
-            } else {
-              const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
-              sendOk = sendResult.success;
-            }
-
-            if (sendOk) {
-              if (dbCustomer && !dbCustomer.pricelist_sent) {
-                await prisma.customer.update({
-                  where: { id: customer.id },
-                  data: { pricelist_sent: true },
-                }).catch(() => {});
-                customer.pricelist_sent = true;
-              }
-
-              // Log pesan gambar pricelist ke tabel messages & siarkan ke Live Chat
-              try {
-                const { messageService } = await import('../services/message.service');
-                const path = await import('path');
-                const rawUrl = await (await import('../services/pricelist-config.service')).getPricelistImageUrl(tenantId);
-                let mediaUrl = rawUrl;
-                if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://') && !rawUrl.startsWith('/media/')) {
-                  const filename = path.basename(rawUrl);
-                  mediaUrl = `/media/asset/${filename}`;
-                }
-                await messageService.logMessage({
-                  tenantId,
-                  conversationId: conversation.id,
-                  direction: 'OUTBOUND',
-                  content: caption || `[IMAGE: Pricelist ${getBrandIdentity().businessName}]`,
-                  senderType: 'BOT',
-                  senderName: `Bot (${getBrandIdentity().businessName})`,
-                  payloadRaw: {
-                    type: 'image',
-                    caption: caption || `Pricelist ${getBrandIdentity().businessName}`,
-                    media: {
-                      url: mediaUrl,
-                      hdUrl: mediaUrl,
-                      caption,
-                      mimetype: 'image/jpeg',
-                    },
-                  },
-                });
-              } catch (logErr: any) {
-                console.warn('[PRICELIST LOG ERROR] Failed to log pricelist message to DB:', logErr.message);
-              }
-            }
-
-            // Beri jeda singkat agar gambar sampai terlebih dahulu di WhatsApp sebelum bubble teks masuk
-            await new Promise((resolve) => setTimeout(resolve, 800));
+          if (!pricelistTarget) {
+            console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}.`);
+          } else if (customer.is_sandbox_test) {
+            console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
+            sendOk = true;
           } else {
-            console.log(`[PRICELIST SKIPPED] Pricelist image was already sent to customer ${customer.phone}. Skipping duplicate send.`);
+            const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
+            sendOk = sendResult.success;
           }
-        } catch (dbErr: any) {
-          console.error('[PRICELIST ERROR] Failed to query/update pricelist_sent:', dbErr.message);
-          // Best-effort tetap kirim walaupun DB offline (misal environment test / mock DB)
-          if (!sendOk) {
+
+          if (sendOk) {
+            const { prisma } = await import('../db/client');
+            await prisma.customer.update({
+              where: { id: customer.id },
+              data: { pricelist_sent: true },
+            }).catch(() => {});
+            customer.pricelist_sent = true;
+
+            // Log pesan gambar pricelist ke tabel messages & siarkan ke Live Chat
             try {
-              const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
-              const gateway = await resolveGatewayForTenant(tenantId);
-              const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
-              const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
-              if (pricelistTarget) {
-                if (customer.is_sandbox_test) {
-                  console.log(`[SANDBOX OUTBOUND] sendImageMessage -> phone: ${customer.phone} | target: "${pricelistTarget}" | caption: "${caption}"`);
-                } else {
-                  await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
-                }
+              const { messageService } = await import('../services/message.service');
+              const path = await import('path');
+              const rawUrl = await (await import('../services/pricelist-config.service')).getPricelistImageUrl(tenantId);
+              let mediaUrl = rawUrl;
+              if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://') && !rawUrl.startsWith('/media/')) {
+                const filename = path.basename(rawUrl);
+                mediaUrl = `/media/asset/${filename}`;
               }
-            } catch {}
+              await messageService.logMessage({
+                tenantId,
+                conversationId: conversation.id,
+                direction: 'OUTBOUND',
+                content: caption || `[IMAGE: Pricelist ${getBrandIdentity().businessName}]`,
+                senderType: 'BOT',
+                senderName: `Bot (${getBrandIdentity().businessName})`,
+                payloadRaw: {
+                  type: 'image',
+                  caption: caption || `Pricelist ${getBrandIdentity().businessName}`,
+                  media: {
+                    url: mediaUrl,
+                    hdUrl: mediaUrl,
+                    caption,
+                    mimetype: 'image/jpeg',
+                  },
+                },
+              });
+            } catch (logErr: any) {
+              console.warn('[PRICELIST LOG ERROR] Failed to log pricelist message to DB:', logErr.message);
+            }
           }
+
+          // Beri jeda singkat agar gambar sampai terlebih dahulu di WhatsApp sebelum bubble teks masuk
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        } catch (dbErr: any) {
+          console.error('[PRICELIST ERROR] Failed to send pricelist image:', dbErr.message);
         }
       }
 
