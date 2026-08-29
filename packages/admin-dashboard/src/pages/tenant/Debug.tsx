@@ -1542,8 +1542,8 @@ function LlmLogsSection() {
                                         </div>
                                       )}
 
-                                      {/* FLOW TYPE: SLOT_EXTRACTOR & SLOT_GENERATOR */}
-                                      {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR') && (
+                                      {/* FLOW TYPE: SLOT_EXTRACTOR, SLOT_GENERATOR & SLOT_FAST_FAQ */}
+                                      {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                             <div className="bg-violet-50/70 border border-violet-200 rounded-xl p-3 space-y-1">
@@ -1554,11 +1554,57 @@ function LlmLogsSection() {
                                             </div>
                                             <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
                                               <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                                                🎯 Output Keputusan Slot
+                                                🎯 Output Keputusan Slot / Balasan
                                               </span>
                                               <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
                                             </div>
                                           </div>
+
+                                          {/* Reasoning Ringkas */}
+                                          {call.reasoning && (
+                                            <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block">
+                                                🧠 AI Reasoning & Context Analysis
+                                              </span>
+                                              <p className="text-purple-950 font-medium text-xs whitespace-pre-wrap">{call.reasoning}</p>
+                                            </div>
+                                          )}
+
+                                          {/* Ground Truth / Fakta DB */}
+                                          {call.groundTruthUsed && Object.keys(call.groundTruthUsed).length > 0 && (
+                                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                                                📊 Ground Truth / Fakta DB Terinjeksi
+                                              </span>
+                                              <pre className="text-slate-800 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-36">
+                                                {typeof call.groundTruthUsed === 'string'
+                                                  ? call.groundTruthUsed
+                                                  : JSON.stringify(call.groundTruthUsed, null, 2)}
+                                              </pre>
+                                            </div>
+                                          )}
+
+                                          {/* Raw LLM JSON / Output */}
+                                          {call.rawReasoning && (
+                                            <div className="bg-slate-900 text-slate-100 rounded-xl p-3 space-y-1.5 shadow-inner">
+                                              <div className="flex items-center justify-between border-b border-slate-700 pb-1.5">
+                                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">
+                                                  🔍 Raw LLM Output (JSON / Text)
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => copyText(`${call.id}_raw`, call.rawReasoning || '')}
+                                                  className="text-[10px] font-semibold text-slate-300 hover:text-white flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 transition-colors"
+                                                >
+                                                  {copiedId === `${call.id}_raw` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                                                  <span>Salin</span>
+                                                </button>
+                                              </div>
+                                              <pre className="text-slate-200 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-56">
+                                                {call.rawReasoning}
+                                              </pre>
+                                            </div>
+                                          )}
                                         </div>
                                       )}
 
@@ -1570,7 +1616,8 @@ function LlmLogsSection() {
                                         call.flowType !== 'AI_VERIFIER' &&
                                         call.flowType !== 'PHRASING' &&
                                         call.flowType !== 'SLOT_EXTRACTOR' &&
-                                        call.flowType !== 'SLOT_GENERATOR' && (
+                                        call.flowType !== 'SLOT_GENERATOR' &&
+                                        call.flowType !== 'SLOT_FAST_FAQ' && (
                                           <div className="space-y-2.5 text-xs">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                                               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
