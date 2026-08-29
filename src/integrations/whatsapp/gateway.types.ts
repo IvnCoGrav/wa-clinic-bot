@@ -22,6 +22,7 @@ export interface WhatsAppGateway {
   readonly providerType: WhatsAppProvider;
   readonly supportsRevoke: boolean;
   readonly supportsEdit: boolean;
+  readonly supportsReaction: boolean;
 
   sendTextMessage(to: string, text: string, options?: { replyToMessageId?: string }): Promise<SendResult>;
 
@@ -33,6 +34,8 @@ export interface WhatsAppGateway {
   ): Promise<SendResult>;
 
   sendImageMessage(to: string, imageUrl: string, caption?: string, options?: { replyToMessageId?: string }): Promise<SendResult>;
+
+  sendReactionMessage?(to: string, messageId: string, emoji: string): Promise<SendResult>;
 
   sendTypingIndicator(to: string, incomingMessageId?: string, durationMs?: number): Promise<void>;
 
@@ -49,7 +52,7 @@ export interface NormalizedInboundMessage {
   messageId: string;
   fromNumber: string;
   timestamp: number;
-  type: 'text' | 'location' | 'image' | 'unknown';
+  type: 'text' | 'location' | 'image' | 'reaction' | 'unknown';
   text?: string;
   location?: { latitude: number; longitude: number; name?: string; address?: string };
   mediaUrl?: string;

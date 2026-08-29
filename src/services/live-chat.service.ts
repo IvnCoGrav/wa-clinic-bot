@@ -464,17 +464,111 @@ export class LiveChatService {
   }
 
   /**
-   * Mengambil kapabilitas gateway WhatsApp tenant aktif (misal: kemampuan tarik pesan / revoke).
+   * Mengambil kapabilitas gateway WhatsApp tenant aktif (misal: kemampuan tarik pesan / revoke, edit, reaction).
    */
   public async getGatewayCapability(tenantId: string): Promise<{
     provider: string;
     supportsRevoke: boolean;
+    supportsEdit: boolean;
+    supportsReaction: boolean;
   }> {
     const gateway = await resolveGatewayForTenant(tenantId);
     return {
       provider: gateway.providerType,
       supportsRevoke: !!gateway.supportsRevoke,
+      supportsEdit: !!gateway.supportsEdit,
+      supportsReaction: (gateway as any).supportsReaction ?? true,
     };
+  }
+
+  /**
+   * Mengirim reaksi emotikon ke pesan WhatsApp (Outbound Reaction dari admin/petugas).
+   */
+  public async sendReaction(params: {
+    conversationId: string;
+    messageId: string;
+    emoji: string;
+    tenantId: string;
+    adminName?: string;
+  }): Promise<{ success: boolean; reactions?: any[]; error?: string }> {
+    const { conversationId, messageId, emoji, tenantId, adminName = 'Admin' } = params;
+
+    const conversation = await conversationService.getConversationById(conversationId, tenantId);
+    if (!conversation) {
+      return { success: false, error: 'Percakapan tidak ditemukan.' };
+    }
+
+    const customer = await customerService.getCustomerById(conversation.customer_id, tenantId);
+    if (!customer?.phone) {
+      return { success: false, error: 'Data nomor WhatsApp customer tidak ditemukan.' };
+    }
+
+    // Cari pesan di DB / memory
+    let msg: any = null;
+    try {
+      msg = await prisma.message.findFirst({
+        where: {
+          OR: [
+            { id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+            { wa_message_id: messageId, conversation_id: conversationId, tenant_id: tenantId },
+          ],
+        },
+      });
+    } catch {
+      msg = null;
+    }
+    if (!msg) {
+      const memoryMsgs = messageService.getMemoryMessages();
+      msg = memoryMsgs.find(
+        (m) => (m.id === messageId || m.wa_message_id === messageId) && m.conversation_id === conversationId
+      );
+    }
+
+    if (!msg) {
+      return { success: false, error: 'Pesan tidak ditemukan.' };
+    }
+
+    // Panggil gateway sendReactionMessage jika bukan sandbox test chat
+    const targetWaId = msg.wa_message_id || msg.id;
+    if (!customer.is_sandbox_test && targetWaId) {
+      const gateway = await resolveGatewayForTenant(tenantId);
+      if (typeof gateway.sendReactionMessage === 'function') {
+        try {
+          const reactionRes = await gateway.sendReactionMessage(customer.phone, targetWaId, emoji);
+          if (!reactionRes.success) {
+            console.warn(`[REACTION WARNING] Failed to send reaction to WhatsApp:`, reactionRes.error?.message);
+          }
+        } catch (gwErr: any) {
+          console.warn(`[REACTION ERROR] Gateway sendReaction error:`, gwErr.message);
+        }
+      }
+    }
+
+    // Simpan reaksi di DB/memory dan broadcast via LiveChatHub
+    const updateRes = await messageService.addOrUpdateReaction(msg.id, tenantId, {
+      emoji,
+      fromMe: true,
+      senderName: adminName,
+    });
+
+    // Audit log
+    const { auditService } = await import('./audit.service');
+    await auditService.logAdminAction({
+      apiKey: 'LIVE_CHAT',
+      adminIdentity: adminName,
+      action: 'SEND_REACTION',
+      targetId: msg.id,
+      payload: {
+        conversationId,
+        messageId: msg.id,
+        waMessageId: msg.wa_message_id,
+        emoji,
+        customerPhone: customer.phone,
+      },
+      tenantId,
+    });
+
+    return { success: true, reactions: updateRes.reactions };
   }
 
   /**

@@ -578,11 +578,18 @@ export class ConversationStateMachine {
       // kemudian disusul bubble teks informasi ongkir & pertanyaan pilihan treatment.
       if (result.sendPricelistImage) {
         let sendOk = false;
+        let sentMessageId: string | undefined = undefined;
         try {
           const { resolvePricelistImageTarget } = await import('../services/pricelist-config.service');
           const gateway = await resolveGatewayForTenant(tenantId);
           const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
           const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
+
+          // Register in-flight bot outbound untuk mencegah echo webhook WAHA menduplikat gambar di Live Chat
+          const { messageService } = await import('../services/message.service');
+          messageService.registerInFlightBotOutbound(customer.phone, caption, tenantId, 60000);
+          messageService.registerInFlightBotOutbound(customer.phone, `[IMAGE: ${caption}]`, tenantId, 60000);
+          messageService.registerInFlightBotOutbound(customer.phone, '[IMAGE]', tenantId, 60000);
 
           if (!pricelistTarget) {
             console.error(`[PRICELIST ERROR] Tidak bisa resolve gambar pricelist untuk tenant ${tenantId} & provider ${gateway.providerType}.`);
@@ -592,6 +599,7 @@ export class ConversationStateMachine {
           } else {
             const sendResult = await gateway.sendImageMessage(customer.phone, pricelistTarget, caption);
             sendOk = sendResult.success;
+            sentMessageId = sendResult.messageId;
           }
 
           if (sendOk) {
@@ -604,7 +612,6 @@ export class ConversationStateMachine {
 
             // Log pesan gambar pricelist ke tabel messages & siarkan ke Live Chat
             try {
-              const { messageService } = await import('../services/message.service');
               const path = await import('path');
               const rawUrl = await (await import('../services/pricelist-config.service')).getPricelistImageUrl(tenantId);
               let mediaUrl = rawUrl;
@@ -617,6 +624,7 @@ export class ConversationStateMachine {
                 conversationId: conversation.id,
                 direction: 'OUTBOUND',
                 content: caption || `[IMAGE: Pricelist ${getBrandIdentity().businessName}]`,
+                waMessageId: sentMessageId,
                 senderType: 'BOT',
                 senderName: `Bot (${getBrandIdentity().businessName})`,
                 payloadRaw: {

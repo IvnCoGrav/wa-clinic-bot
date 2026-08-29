@@ -876,10 +876,36 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
-  const loadThread = async (conversationId: string) => {    try {
+  const loadThread = async (conversationId: string) => {
+    try {
       const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages`);
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
-      setMessages(list.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) })));
+      
+      // Client-side deduplication filter (mencegah double render bubble pesan/gambar identik)
+      const isImageOrPricelist = (c?: string, m?: any) => 
+        !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)/i.test((c || '').trim()) || (c || '').startsWith('Pricelist') || !!m;
+
+      const deduped: ChatMessage[] = [];
+      for (const m of list) {
+        const hasDuplicate = deduped.some((existing) => {
+          if (existing.id === m.id) return true;
+          if (
+            existing.direction === m.direction &&
+            Math.abs(new Date(existing.created_at).getTime() - new Date(m.created_at).getTime()) < 20000
+          ) {
+            if (existing.content && m.content && existing.content === m.content) return true;
+            if (isImageOrPricelist(existing.content, existing.media) && isImageOrPricelist(m.content, m.media)) {
+              return true;
+            }
+          }
+          return false;
+        });
+        if (!hasDuplicate) {
+          deduped.push(m);
+        }
+      }
+
+      setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) })));
     } catch (err: any) {
       console.error('Failed to load conversation thread:', err);
       setMessages([]);
@@ -1221,7 +1247,8 @@ export const LiveChatMonitor: React.FC = () => {
           // Append ke thread yang sedang dibuka / replace optimistic message
           if (selectedIdRef.current === conversationId) {
             setMessages((prev) => {
-              const isImagePlaceholder = (c?: string) => !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)\]/i.test(c.trim());
+              const isImageOrPricelist = (c?: string, m?: any) =>
+                !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)/i.test((c || '').trim()) || (c || '').startsWith('Pricelist') || !!m;
               
               // Cek apakah ada optimistic message (temp_) yang cocok
               const tempIndex = prev.findIndex(
@@ -1229,8 +1256,7 @@ export const LiveChatMonitor: React.FC = () => {
                   m.id.startsWith('temp_') &&
                   m.direction === msg.direction &&
                   (m.content === msg.content ||
-                    (isImagePlaceholder(m.content) && isImagePlaceholder(msg.content)) ||
-                    (!!m.media && !!msg.media))
+                    (isImageOrPricelist(m.content, m.media) && isImageOrPricelist(msg.content, msg.media)))
               );
               if (tempIndex !== -1) {
                 const next = [...prev];
@@ -1247,8 +1273,7 @@ export const LiveChatMonitor: React.FC = () => {
                   m.id === msg.id ||
                   (m.direction === msg.direction &&
                     (m.content === msg.content ||
-                      (isImagePlaceholder(m.content) && isImagePlaceholder(msg.content)) ||
-                      (!!m.media && !!msg.media)) &&
+                      (isImageOrPricelist(m.content, m.media) && isImageOrPricelist(msg.content, msg.media))) &&
                     Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 20000)
               );
               if (isDuplicate) return prev;
@@ -1315,6 +1340,28 @@ export const LiveChatMonitor: React.FC = () => {
               prev.map((m) =>
                 m.id === messageId ? { ...m, content, is_revoked: isRevoked } : m
               )
+            );
+          }
+        } else if ((type === 'message:reaction' || type === 'message.reaction') && (payload?.messageId || payload?.waMessageId)) {
+          const { messageId, waMessageId, conversationId, reactions } = payload;
+          if (!conversationId || selectedIdRef.current === conversationId) {
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (
+                  (messageId && m.id === messageId) ||
+                  (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId))
+                ) {
+                  return {
+                    ...m,
+                    reactions,
+                    payload_raw: {
+                      ...(typeof m.payload_raw === 'object' && m.payload_raw ? m.payload_raw : {}),
+                      reactions,
+                    },
+                  };
+                }
+                return m;
+              })
             );
           }
         } else if (type === 'message.status_updated' && (payload?.messageId || payload?.waMessageId)) {
@@ -1451,6 +1498,87 @@ export const LiveChatMonitor: React.FC = () => {
       toast(`Gagal mengedit pesan: ${err.message || 'Terjadi kesalahan'}`, 'error');
     } finally {
       setIsEditingSaving(false);
+    }
+  };
+
+  const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null);
+  const [customEmojiMsgId, setCustomEmojiMsgId] = useState<string | null>(null);
+
+  const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+  const EXTRA_REACTIONS = ['🔥', '👏', '🎉', '💯', '✨', '🤝', '🌸', '💐', '👶', '🍼', '🤱', '💪'];
+
+  const handleToggleReaction = async (msg: ChatMessage, emoji: string) => {
+    if (!selectedChat?.conversationId || !msg) return;
+    setActiveReactionMsgId(null);
+    setCustomEmojiMsgId(null);
+
+    const targetMsgId = msg.id || msg.wa_message_id;
+    const currentReactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
+      (msg as any).reactions || (msg as any).payload_raw?.reactions || [];
+    const myReaction = currentReactions.find((r) => r.fromMe);
+    const newEmoji = myReaction && myReaction.emoji === emoji ? '' : emoji;
+
+    // Optimistic UI update
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === msg.id || (msg.wa_message_id && m.wa_message_id === msg.wa_message_id)) {
+          let updatedReactions = (
+            (m as any).reactions || (m as any).payload_raw?.reactions || []
+          ).filter((r: any) => !r.fromMe);
+
+          if (newEmoji) {
+            updatedReactions.push({
+              emoji: newEmoji,
+              fromMe: true,
+              senderName: (user as any)?.name || 'Admin',
+              createdAt: new Date().toISOString(),
+            });
+          }
+          return {
+            ...m,
+            reactions: updatedReactions,
+            payload_raw: {
+              ...(typeof (m as any).payload_raw === 'object' && (m as any).payload_raw ? (m as any).payload_raw : {}),
+              reactions: updatedReactions,
+            },
+          };
+        }
+        return m;
+      })
+    );
+
+    try {
+      const res = await apiRequest(
+        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${targetMsgId}/reaction`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ emoji: newEmoji }),
+        }
+      );
+
+      if (res?.success) {
+        if (res.reactions) {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id === msg.id || (msg.wa_message_id && m.wa_message_id === msg.wa_message_id)) {
+                return {
+                  ...m,
+                  reactions: res.reactions,
+                  payload_raw: {
+                    ...(typeof (m as any).payload_raw === 'object' && (m as any).payload_raw ? (m as any).payload_raw : {}),
+                    reactions: res.reactions,
+                  },
+                };
+              }
+              return m;
+            })
+          );
+        }
+      } else {
+        toast(`Gagal mengirim reaksi: ${res?.error || 'Terjadi kesalahan'}`, 'error');
+      }
+    } catch (err: any) {
+      toast(`Gagal mengirim reaksi: ${err.message || 'Terjadi kesalahan'}`, 'error');
     }
   };
 
@@ -2745,6 +2873,21 @@ export const LiveChatMonitor: React.FC = () => {
                         }
                       }
 
+                      // Reaksi Pesan (WhatsApp Message Reactions)
+                      const reactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string }> =
+                        (msg as any).reactions || (msg as any).payload_raw?.reactions || [];
+                      const myReaction = reactions.find((r) => r.fromMe);
+
+                      const groupedReactionsMap = new Map<string, { emoji: string; count: number; senders: string[] }>();
+                      for (const r of reactions) {
+                        if (!r.emoji) continue;
+                        const entry = groupedReactionsMap.get(r.emoji) || { emoji: r.emoji, count: 0, senders: [] };
+                        entry.count += 1;
+                        entry.senders.push(r.fromMe ? 'Anda' : (r.senderName || 'Customer'));
+                        groupedReactionsMap.set(r.emoji, entry);
+                      }
+                      const groupedReactions = Array.from(groupedReactionsMap.values());
+
                       return (
                         <React.Fragment key={msg.id}>
                           {showDateSeparator && (
@@ -2756,10 +2899,70 @@ export const LiveChatMonitor: React.FC = () => {
                           )}
                           <div
                             id={`msg-${msg.id}`}
-                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300`}
+                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300 relative`}
                           >
+                            {/* Floating WhatsApp-Style Quick Emoji Reaction Toolbar */}
+                            {activeReactionMsgId === msg.id && (
+                              <div
+                                className={`absolute -top-10 ${isCustomer ? 'left-0' : 'right-0'} z-30 bg-white border border-[#d1d7db] rounded-full shadow-lg px-2 py-1 flex items-center gap-1 animate-fadeIn select-none`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {QUICK_REACTIONS.map((em) => {
+                                  const isSelected = myReaction?.emoji === em;
+                                  return (
+                                    <button
+                                      key={em}
+                                      type="button"
+                                      onClick={() => handleToggleReaction(msg, em)}
+                                      className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
+                                        isSelected ? 'bg-[#d9fdd3] ring-2 ring-[#008069]' : 'hover:bg-[#f0f2f5]'
+                                      }`}
+                                      title={`Reaksi ${em}${isSelected ? ' (klik untuk batal)' : ''}`}
+                                    >
+                                      {em}
+                                    </button>
+                                  );
+                                })}
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomEmojiMsgId(customEmojiMsgId === msg.id ? null : msg.id)}
+                                  className={`w-7 h-7 flex items-center justify-center text-xs rounded-full hover:bg-[#f0f2f5] transition ${
+                                    customEmojiMsgId === msg.id ? 'bg-[#e8f5f2] text-[#008069]' : 'text-[#54656f]'
+                                  }`}
+                                  title="Pilih emoji lainnya"
+                                >
+                                  ➕
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Extra Emoji Grid Popup */}
+                            {activeReactionMsgId === msg.id && customEmojiMsgId === msg.id && (
+                              <div
+                                className={`absolute -top-28 ${isCustomer ? 'left-0' : 'right-0'} z-40 bg-white border border-[#d1d7db] rounded-2xl shadow-xl p-2 grid grid-cols-6 gap-1 animate-fadeIn select-none`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {EXTRA_REACTIONS.map((em) => {
+                                  const isSelected = myReaction?.emoji === em;
+                                  return (
+                                    <button
+                                      key={em}
+                                      type="button"
+                                      onClick={() => handleToggleReaction(msg, em)}
+                                      className={`w-7 h-7 flex items-center justify-center text-base rounded-full hover:scale-125 transition active:scale-95 ${
+                                        isSelected ? 'bg-[#d9fdd3] ring-2 ring-[#008069]' : 'hover:bg-[#f0f2f5]'
+                                      }`}
+                                      title={`Reaksi ${em}`}
+                                    >
+                                      {em}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
                             <div
-                              className={`${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs transition-all select-text cursor-text ${
+                              className={`relative ${hasMediaOnly ? 'max-w-[240px] sm:max-w-[280px] p-1 sm:p-1.5' : 'max-w-[88%] sm:max-w-[75%] md:max-w-[70%] px-2.5 sm:px-3 py-1.5'} rounded-lg text-xs leading-relaxed shadow-2xs transition-all select-text cursor-text ${
                                 isRevoked
                                   ? 'bg-[#f0f2f5] text-[#667781] border border-[#d1d7db]'
                                   : isCustomer
@@ -2772,7 +2975,7 @@ export const LiveChatMonitor: React.FC = () => {
                               {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
                                 <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
                                   isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
-                                }`}>
+                                }}`}>
                                   {!isCustomer && !isAdmin && <Bot size={10} />}
                                   <span>{senderLabel(msg)}</span>
                                 </span>
@@ -2898,6 +3101,24 @@ export const LiveChatMonitor: React.FC = () => {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
+                                      setCustomEmojiMsgId(null);
+                                    }}
+                                    className={`ml-0.5 p-0.5 rounded transition active:scale-90 ${
+                                      activeReactionMsgId === msg.id || myReaction
+                                        ? 'text-[#008069] bg-[#e8f5f2]'
+                                        : 'text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2]'
+                                    }`}
+                                    title={myReaction ? `Reaksi Anda: ${myReaction.emoji} (klik untuk ubah/batal)` : 'Beri reaksi emotikon'}
+                                  >
+                                    <Smile size={11} />
+                                  </button>
+                                )}
+                                {!isRevoked && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       handleSelectReply(msg);
                                     }}
                                     className="ml-0.5 p-0.5 rounded text-[#8696a0] hover:text-[#008069] hover:bg-[#e8f5f2] transition active:scale-90"
@@ -2932,7 +3153,27 @@ export const LiveChatMonitor: React.FC = () => {
                                   </button>
                                 )}
                               </div>
-                            </div>
+
+                              {/* Reaction Badges (WhatsApp Style Pill attached to bottom corner of bubble) */}
+                              {groupedReactions.length > 0 && !isRevoked && (
+                                <div
+                                  className={`absolute -bottom-2.5 ${isCustomer ? 'left-2' : 'right-2'} z-10 flex items-center bg-white border border-[#d1d7db] rounded-full px-1.5 py-0.5 shadow-xs text-[11px] gap-1 select-none hover:shadow-md cursor-pointer transition`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveReactionMsgId(activeReactionMsgId === msg.id ? null : msg.id);
+                                    setCustomEmojiMsgId(null);
+                                  }}
+                                  title={reactions.map((r) => `${r.emoji} ${r.fromMe ? 'Anda' : (r.senderName || 'Customer')}`).join('\n')}
+                                >
+                                  {groupedReactions.map((g) => (
+                                    <span key={g.emoji} className="flex items-center gap-0.5">
+                                      <span>{g.emoji}</span>
+                                      {g.count > 1 && <span className="text-[10px] text-[#667781] font-bold">{g.count}</span>}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                             </div>
                           </div>
                         </React.Fragment>
                       );
