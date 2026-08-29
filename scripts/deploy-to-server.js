@@ -43,6 +43,9 @@ docker compose build app
 echo "--> Recreate App Container Safely (WAHA untouched)..."
 docker compose up -d --no-deps app
 
+echo "--> Run Database Migrations..."
+docker compose exec -T app npx prisma migrate deploy
+
 echo "--> Run Purchase Values Backfill & DB Sanitization..."
 docker compose exec -T app npx tsx src/scripts/sanitize-purchase-values.ts || true
 
