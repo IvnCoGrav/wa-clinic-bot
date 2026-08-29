@@ -4,6 +4,7 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { BRAND } from '../../config/brand';
 import { WhatsAppProviderPanel } from '../../components/settings/WhatsAppProviderPanel';
+import { AiModelSettingsPanel } from '../../components/settings/AiModelSettingsPanel';
 import { AiRouterPanel } from '../../components/settings/AiRouterPanel';
 import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
 import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
@@ -850,6 +851,9 @@ export const Settings: React.FC = () => {
             wabaTemplates={wabaTemplates}
             handleSaveWabaTemplate={handleSaveWabaTemplate}
           />
+
+          {/* Konfigurasi Model AI Per-Tugas (Slot Extractor, Balasan Chat, QC) */}
+          <AiModelSettingsPanel />
 
           {/* AI Router Engine & AI Rollout Scope */}
           <AiRouterPanel
