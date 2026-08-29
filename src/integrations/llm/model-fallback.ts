@@ -142,8 +142,8 @@ export async function callChatCompletionsWithFallback(
     // 0) Transient retry: 429/5xx/timeout bisa pulih tanpa ganti model.
     //    Retry terbatas (maks 2) dengan backoff eksponensial singkat, JANGAN
     //    menutup circuit breaker (error tetap diteruskan bila tak kunjung pulih).
-    const retryConfig = call.transientRetry ?? { maxRetries: 2, baseDelayMs: 400 };
-    const maxRetries = retryConfig.maxRetries ?? 2;
+    const retryConfig = call.transientRetry ?? { maxRetries: 0, baseDelayMs: 400 };
+    const maxRetries = retryConfig.maxRetries ?? 0;
     const baseDelayMs = retryConfig.baseDelayMs ?? 400;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       if (!isTransientError(lastErr)) break;
