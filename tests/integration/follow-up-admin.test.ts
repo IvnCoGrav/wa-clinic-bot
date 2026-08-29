@@ -179,4 +179,53 @@ describe('Follow-Up Admin Subroute Integration Tests', () => {
       expect.objectContaining({ maxPerDay: 10 })
     );
   });
+
+  it('8. PATCH /api/admin/follow-ups/:id updates scheduledAt, stage, and customText', async () => {
+    const updateSpy = vi.spyOn(followUpService, 'updateFollowUp').mockResolvedValueOnce({
+      id: 'fu-1',
+      scheduled_at: new Date('2026-12-01T02:00:00.000Z'),
+      stage: 2,
+      custom_text: 'Halo Bunda {name}! Teks kustom.',
+    } as any);
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/follow-ups/fu-1',
+      payload: {
+        scheduledAt: '2026-12-01T02:00:00.000Z',
+        stage: 2,
+        customText: 'Halo Bunda {name}! Teks kustom.',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(updateSpy).toHaveBeenCalledWith(
+      'fu-1',
+      expect.objectContaining({
+        stage: 2,
+        customText: 'Halo Bunda {name}! Teks kustom.',
+      }),
+      expect.any(String)
+    );
+  });
+
+  it('9. GET /api/admin/follow-ups supports dateFilter query parameter', async () => {
+    const listSpy = vi.spyOn(followUpService, 'listFollowUps').mockResolvedValueOnce({
+      data: [],
+      pagination: { total: 0, page: 1, pageSize: 20, totalPages: 0 },
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/follow-ups?dateFilter=upcoming',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ dateFilter: 'upcoming' })
+    );
+  });
 });

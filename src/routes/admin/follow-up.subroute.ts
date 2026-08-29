@@ -16,6 +16,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
           status?: string;
           type?: string;
           search?: string;
+          dateFilter?: string;
           page?: string;
           pageSize?: string;
           sortBy?: string;
@@ -25,11 +26,12 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const { status, type, search, page, pageSize, sortBy, sortOrder } = request.query || {};
+        const { status, type, search, dateFilter, page, pageSize, sortBy, sortOrder } = request.query || {};
         const result = await followUpService.listFollowUps(DEFAULT_TENANT_ID, {
           status,
           type,
           search,
+          dateFilter,
           page: page ? parseInt(page, 10) : 1,
           pageSize: pageSize ? parseInt(pageSize, 10) : 20,
           sortBy,
@@ -197,6 +199,53 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
           message: `Berhasil membatalkan ${cancelledCount} antrian follow-up (${targetStatus}).`,
           count: cancelledCount,
         });
+      } catch (err: any) {
+        return reply.status(500).send({ error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/follow-ups/:id
+   * Mengubah detail follow-up (jadwal kirim, varian stage, atau teks pesan kustom).
+   */
+  fastify.patch(
+    '/api/admin/follow-ups/:id',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          scheduledAt?: string;
+          stage?: number;
+          customText?: string | null;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const { scheduledAt, stage, customText } = request.body || {};
+
+      try {
+        const updated = await followUpService.updateFollowUp(
+          id,
+          {
+            scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+            stage: stage ? Number(stage) : undefined,
+            customText: customText !== undefined ? customText : undefined,
+          },
+          DEFAULT_TENANT_ID
+        );
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed || 'SYSTEM',
+          adminIdentity: (request as any).adminIdentity || 'Admin',
+          action: 'UPDATE_FOLLOWUP',
+          targetId: id,
+          payload: { scheduledAt, stage, customText },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: updated });
       } catch (err: any) {
         return reply.status(500).send({ error: err.message });
       }
