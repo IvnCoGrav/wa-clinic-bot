@@ -41,17 +41,8 @@ export class ReplyGenerator {
     const botRepliesCount = context?.history?.filter((h) => h.role === 'assistant').length ?? 0;
     const historyCount = botRepliesCount;
 
-    // Fallback template jika LLM offline
-    const { TEMPLATES } = await import('../config/persona');
-    let baselineFallback = TEMPLATES.greeting();
-    if (grounding.suggestedPreFilledForm) {
-      baselineFallback = `Baik Bunda ${slate.name || ''}, berikut kami siapkan format reservasi untuk pencatatan jadwalnya ya Bunda:\n\n${grounding.suggestedPreFilledForm}`;
-    } else if (grounding.relevantFaqs && grounding.relevantFaqs.length > 0) {
-      baselineFallback = `Halo Bunda ! ✨ Untuk informasi seputar ${grounding.relevantFaqs[0].title}:\n\n${grounding.relevantFaqs[0].content}\n\nKalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan jadwal Bidan & ongkirnya? 😊`;
-    }
-
     if (!endpoint.apiKey) {
-      return sanitizeFinalReply(baselineFallback, { historyCount });
+      throw new Error('LLM API Key is missing. Escalating to human handling.');
     }
 
     // 1. Format Fakta Ongkir
@@ -138,7 +129,10 @@ export class ReplyGenerator {
       });
 
       const responseData = callResult.data;
-      const rawReply = responseData?.choices?.[0]?.message?.content || baselineFallback;
+      const rawReply = responseData?.choices?.[0]?.message?.content || '';
+      if (!rawReply || rawReply.trim().length === 0) {
+        throw new Error('Empty response content from LLM choices');
+      }
       let finalReply = sanitizeFinalReply(rawReply, { historyCount, customerInput: context?.customerInput });
 
       // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
@@ -189,20 +183,21 @@ export class ReplyGenerator {
 
       return finalReply;
     } catch (err: any) {
-      console.warn('[REPLY GENERATOR ERROR] LLM generation failed, using fallback:', err.message);
+      console.error('[REPLY GENERATOR ERROR] All LLM models in fallback chain failed:', err.message);
       try {
         const { auditLlmCall } = await import('../utils/llm-audit-buffer');
         auditLlmCall({
           customer_phone: context?.customerPhone || 'unknown',
           tenant_id: context?.tenantId,
           task_type: modelSelection.task,
-          model_name: modelSelection.modelName || 'MiniMax-M2.7-highspeed',
+          model_name: modelSelection.modelName || 'gpt-4o-mini',
           baseUrl: endpoint.baseUrl,
           startedAt,
           error: { message: err?.message },
         });
       } catch {}
-      return sanitizeFinalReply(baselineFallback);
+      // Jangan mengarang teks fallback. Lempar error agar slot-engine melakukan Silent Human Escalation!
+      throw err;
     }
   }
 }

@@ -66,7 +66,29 @@ const IndexRedirect: React.FC = () => {
   return <Navigate to={targetPath} replace />;
 };
 
+// Prefetch chunk bundle halaman inti saat CPU/jaringan browser sedang idle untuk navigasi instan
+const preloadCoreRouteBundles = () => {
+  if (typeof window === 'undefined') return;
+  const load = () => {
+    import('./pages/tenant/LiveChatMonitor').catch(() => {});
+    import('./pages/tenant/Reservations').catch(() => {});
+    import('./pages/tenant/CustomerDatabase').catch(() => {});
+    import('./pages/tenant/TodayTreatments').catch(() => {});
+    import('./pages/tenant/Settings').catch(() => {});
+    import('./pages/staff/StaffToday').catch(() => {});
+  };
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(load, { timeout: 3000 });
+  } else {
+    setTimeout(load, 1500);
+  }
+};
+
 export const App: React.FC = () => {
+  useEffect(() => {
+    preloadCoreRouteBundles();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

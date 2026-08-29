@@ -23,6 +23,8 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   // 1. Hydrate Customer Slate dari database snapshot
   const initialSlate = SlateStore.hydrateSlate(ctx);
 
+  try {
+
   // 1a. GERBANG UTAMA 📋: FORMULIR RESERVASI MASUK
   // Jika customer mengirimkan formulir reservasi yang sudah diisi, parse datanya, simpan ke database,
   // update nama kontak, trigger CAPI InitiateCheckout, dan alihkan ke HUMAN_HANDLING secara deterministik.
@@ -357,4 +359,42 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     pricelistCaption: decision.pricelistCaption,
     aiReasoning: decision.reason,
   };
+  } catch (error: any) {
+    console.error(`[SLOT ENGINE OUTAGE ESCALATION] LLM Outage or unhandled error for customer ${customer.phone}:`, error.message);
+
+    initialSlate.isHumanHandling = true;
+    initialSlate.humanHandlingReason = 'llm_outage_fallback';
+    initialSlate.projectedState = ConversationState.HUMAN_HANDLING;
+    await SlateStore.persistSlate(initialSlate);
+
+    await conversationService.escalateToHumanHandling(
+      conversation,
+      customer.phone,
+      `Eskalasi darurat: Seluruh model LLM offline / gagal merespons (${error.message}). Percakapan dialihkan ke CS.`,
+      tenantId,
+      'llm_outage_fallback'
+    );
+
+    const isSandbox = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
+    if (!isSandbox) {
+      try {
+        const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
+        const alertService = new AlertService();
+        await alertService.notifyAlert({
+          type: AlertType.LLM_API_FAILURE,
+          severity: AlertSeverity.WARNING,
+          message: `[LLM OUTAGE ALERT] Seluruh model LLM offline. Customer ${customer.phone} dialihkan ke CS.`,
+          metadata: { customerPhone: customer.phone, incomingText, error: error.message },
+        });
+      } catch {}
+    }
+
+    // Bot DIAM (shouldSendReply: false) - Jangan pernah mengirim pesan mengarang / regex rusak ke customer!
+    return {
+      nextState: ConversationState.HUMAN_HANDLING,
+      shouldSendReply: false,
+      isHumanHandling: true,
+      aiReasoning: `LLM Outage -> Silent Escalation to Human CS: ${error.message}`,
+    };
+  }
 }
