@@ -138,6 +138,32 @@ export class EntityExtractor {
       }
     }
 
+    // 5. Deteksi Gejala Klinis Umum (Deterministic Baseline Safety Net)
+    const symptomKeywords = [
+      { key: 'pilek', re: /\b(pilek|flu|ingus|meler|hidung tersumbat)\b/i },
+      { key: 'batuk', re: /\b(batuk|batuk-batuk)\b/i },
+      { key: 'grok-grok', re: /\b(grok[\s-]*grok|nafas bunyi|bunyi grok)\b/i },
+      { key: 'demam', re: /\b(demam|panas|meriang|sumeng)\b/i },
+      { key: 'kembung', re: /\b(kembung|masuk angin|begah)\b/i },
+      { key: 'kolik', re: /\b(kolik|colic)\b/i },
+      { key: 'sembelit', re: /\b(sembelit|susah bab|konstipasi)\b/i },
+      { key: 'diare', re: /\b(diare|mencret|bab cair)\b/i },
+      { key: 'gtm', re: /\b(gtm|susah makan|tidak mau makan|gamau makan)\b/i },
+      { key: 'susah tidur', re: /\b(susah tidur|rewel|nangis terus|gelisah)\b/i },
+    ];
+    for (const item of symptomKeywords) {
+      if (item.re.test(lower)) {
+        if (!result.symptoms) result.symptoms = [];
+        if (!result.symptoms.includes(item.key)) {
+          result.symptoms.push(item.key);
+        }
+        result.intents = result.intents || [];
+        if (!result.intents.includes('consult_symptom')) {
+          result.intents.push('consult_symptom');
+        }
+      }
+    }
+
     // 5. Deteksi Pertanyaan Asal Klinik
     if (/\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower)) {
       result.intents = result.intents || [];
