@@ -52,7 +52,7 @@ interface FollowUpItem {
 export const FollowUpQueue: React.FC = () => {
   const [followUps, setFollowUps] = useState<FollowUpItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('QUEUED');
+  const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<string>('scheduled_at');
