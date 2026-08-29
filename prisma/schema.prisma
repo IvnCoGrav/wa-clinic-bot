@@ -438,6 +438,7 @@ model FollowUp {
   reservation    Reservation?   @relation(fields: [reservation_id], references: [id], onDelete: SetNull)
   type           FollowUpType
   stage          Int // 1 | 2 | 3
+  custom_text    String?
   scheduled_at   DateTime
   sent_at        DateTime?
   status         FollowUpStatus @default(QUEUED)
