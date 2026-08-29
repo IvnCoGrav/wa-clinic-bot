@@ -258,7 +258,21 @@ export class FollowUpService {
         }
       } catch (_) {}
 
-      // 2. Cek apakah sudah ada antrian NO_PURCHASE aktif (idempoten)
+      // 2. Cek apakah customer sudah memiliki reservasi (pending, confirmed, atau completed)
+      try {
+        const hasReservation = await prisma.reservation?.findFirst?.({
+          where: {
+            customer_id: customerId,
+            status: { in: ['pending', 'confirmed', 'completed'] },
+          },
+        });
+        if (hasReservation) {
+          console.log(`[FollowUp Service] Customer ${customerId} already has reservation (${hasReservation.id}, status: ${hasReservation.status}). Skipping NO_PURCHASE creation.`);
+          return;
+        }
+      } catch (_) {}
+
+      // 3. Cek apakah sudah ada antrian NO_PURCHASE aktif (idempoten)
       let existing = null;
       try {
         existing = await prisma.followUp?.findFirst?.({
@@ -966,6 +980,25 @@ export class FollowUpService {
         templateType = milestoneType;
         fu._milestone = true;
       } else if (fu.type === 'NO_PURCHASE') {
+        // Auto-cancel jika customer ternyata sudah memiliki reservasi (pending/confirmed/completed)
+        try {
+          const res = await prisma.reservation.findFirst({
+            where: {
+              customer_id: fu.customer_id,
+              tenant_id: tenantId,
+              status: { in: ['pending', 'confirmed', 'completed'] },
+            },
+          });
+          if (res) {
+            console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is NO_PURCHASE but customer already has reservation (${res.id}, status: ${res.status}). Auto-cancelling.`);
+            await prisma.followUp.update({
+              where: { id: fu.id },
+              data: { status: 'CANCELLED' },
+            });
+            return false;
+          }
+        } catch (_) {}
+
         templateType = `NO_PURCHASE_${Math.min(3, Math.max(1, fu.stage))}` as any;
       } else if (fu.type === 'NEXT_TREATMENT') {
         templateType = `NEXT_TREATMENT_${Math.min(3, Math.max(1, fu.stage))}` as any;
