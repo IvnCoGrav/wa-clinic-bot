@@ -144,6 +144,35 @@ export class FollowUpService {
       where.type = options.type;
     }
 
+    if (options.dateFilter && options.dateFilter !== 'all') {
+      const now = new Date();
+      const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+      const year = nowWib.getUTCFullYear();
+      const month = nowWib.getUTCMonth();
+      const date = nowWib.getUTCDate();
+
+      // Start of today in WIB (00:00:00 WIB)
+      const startOfTodayUtc = new Date(Date.UTC(year, month, date, 0, 0, 0) - 7 * 60 * 60 * 1000);
+      // End of today in WIB (23:59:59.999 WIB)
+      const endOfTodayUtc = new Date(Date.UTC(year, month, date, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
+
+      if (options.dateFilter === 'upcoming') {
+        where.scheduled_at = { gte: startOfTodayUtc };
+      } else if (options.dateFilter === 'today') {
+        where.scheduled_at = { gte: startOfTodayUtc, lte: endOfTodayUtc };
+      } else if (options.dateFilter === 'this_week') {
+        const dayOfWeek = nowWib.getUTCDay(); // 0 is Sunday
+        const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+        const endOfWeekUtc = new Date(Date.UTC(year, month, date + daysToSunday, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
+        where.scheduled_at = { gte: startOfTodayUtc, lte: endOfWeekUtc };
+      } else if (options.dateFilter === 'this_month') {
+        const endOfMonthUtc = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
+        where.scheduled_at = { gte: startOfTodayUtc, lte: endOfMonthUtc };
+      } else if (options.dateFilter === 'overdue') {
+        where.scheduled_at = { lt: startOfTodayUtc };
+      }
+    }
+
     if (options.search) {
       const q = options.search.trim();
       where.customer = {
