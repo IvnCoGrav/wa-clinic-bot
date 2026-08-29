@@ -127,4 +127,9 @@ export class MockWAHAClient implements IWahaClient {
   public async getProfilePicture(_phone: string, _session?: string): Promise<string | null> {
     return null;
   }
+
+  public async sendReaction(chatId: string, messageId: string, emoji: string): Promise<boolean> {
+    process.stdout.write(`\x1b[90m[${emoji || '❌'} Reaksi pada pesan ${messageId}]\x1b[0m\n`);
+    return true;
+  }
 }

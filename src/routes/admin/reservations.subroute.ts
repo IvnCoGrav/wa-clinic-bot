@@ -29,36 +29,172 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.get(
     '/api/admin/reservations',
-    async (request: FastifyRequest<{ Querystring: { page?: string; pageSize?: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{
+        Querystring: {
+          page?: string;
+          pageSize?: string;
+          status?: string;
+          staffId?: string;
+          category?: string;
+          search?: string;
+          startDate?: string;
+          endDate?: string;
+          sortBy?: string;
+          sortOrder?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
       const page = Math.max(1, parseInt(request.query?.page || '1', 10) || 1);
-      const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '100', 10) || 100));
+      const pageSize = Math.min(500, Math.max(1, parseInt(request.query?.pageSize || '20', 10) || 20));
+      const statusParam = request.query?.status?.trim();
+      const staffIdParam = request.query?.staffId?.trim();
+      const categoryParam = request.query?.category?.trim();
+      const searchParam = request.query?.search?.trim();
+      const startDateParam = request.query?.startDate?.trim();
+      const endDateParam = request.query?.endDate?.trim();
+      const sortByParam = request.query?.sortBy?.trim() || 'created_at';
+      const sortOrderParam = (request.query?.sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+
+      const now = new Date();
+      const overdueThreshold = new Date(Date.now() - 3 * 3600 * 1000);
+
+      const where: any = { tenant_id: DEFAULT_TENANT_ID };
+
+      // Status filter
+      if (statusParam && statusParam !== 'all') {
+        if (statusParam === 'upcoming') {
+          where.AND = [
+            ...(where.AND || []),
+            {
+              OR: [
+                { booking_date: null },
+                { booking_date: { gte: overdueThreshold } },
+              ],
+            },
+            { status: { notIn: ['cancelled', 'rejected'] } },
+          ];
+        } else if (statusParam === 'overdue') {
+          where.AND = [
+            ...(where.AND || []),
+            { booking_date: { lt: overdueThreshold } },
+            { status: { notIn: ['completed', 'cancelled', 'rejected'] } },
+          ];
+        } else {
+          where.status = statusParam;
+        }
+      }
+
+      // Staff filter
+      if (staffIdParam && staffIdParam !== 'all') {
+        if (staffIdParam === 'unassigned') {
+          where.assigned_staff_id = null;
+        } else {
+          where.assigned_staff_id = staffIdParam;
+        }
+      }
+
+      // Category filter
+      if (categoryParam && categoryParam !== 'all') {
+        where.treatment_category = categoryParam;
+      }
+
+      // Search query (customer name, phone, treatment detail, address, raw text)
+      if (searchParam) {
+        where.AND = [
+          ...(where.AND || []),
+          {
+            OR: [
+              { treatment_detail: { contains: searchParam, mode: 'insensitive' } },
+              { address: { contains: searchParam, mode: 'insensitive' } },
+              { raw_text: { contains: searchParam, mode: 'insensitive' } },
+              { customer: { name: { contains: searchParam, mode: 'insensitive' } } },
+              { customer: { phone: { contains: searchParam } } },
+            ],
+          },
+        ];
+      }
+
+      // Date range filter (Calendar view)
+      if (startDateParam && endDateParam) {
+        const start = new Date(startDateParam);
+        const end = new Date(endDateParam);
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          where.booking_date = {
+            gte: start,
+            lte: end,
+          };
+        }
+      }
+
+      // Sort Order
+      let orderBy: any = { created_at: sortOrderParam };
+      if (sortByParam === 'booking_date') {
+        orderBy = { booking_date: sortOrderParam };
+      } else if (sortByParam === 'status') {
+        orderBy = { status: sortOrderParam };
+      } else if (sortByParam === 'category' || sortByParam === 'treatment_category') {
+        orderBy = { treatment_category: sortOrderParam };
+      } else if (sortByParam === 'customer') {
+        orderBy = { customer: { name: sortOrderParam } };
+      }
+
       try {
-        const where = { tenant_id: DEFAULT_TENANT_ID };
-        const [rows, total] = await Promise.all([
-          prisma.reservation.findMany({
-            where,
-            include: {
-              customer: {
-                include: {
-                  children: true,
-                  reservations: {
-                    where: { status: { notIn: ['cancelled', 'rejected'] } },
-                    select: { id: true, purchase_value: true },
+        const tenantBaseWhere = { tenant_id: DEFAULT_TENANT_ID };
+        const [rows, total, totalCount, upcomingCount, overdueCount, pendingCount, confirmedCount, completedCount, cancelledCount] =
+          await Promise.all([
+            prisma.reservation.findMany({
+              where,
+              include: {
+                customer: {
+                  include: {
+                    children: true,
+                    reservations: {
+                      where: { status: { notIn: ['cancelled', 'rejected'] } },
+                      select: { id: true, purchase_value: true },
+                    },
                   },
                 },
+                assigned_staff: {
+                  select: { id: true, name: true, phone: true },
+                },
               },
-              assigned_staff: {
-                select: { id: true, name: true, phone: true },
+              orderBy,
+              skip: (page - 1) * pageSize,
+              take: pageSize,
+            }),
+            prisma.reservation.count({ where }),
+            prisma.reservation.count({ where: tenantBaseWhere }),
+            prisma.reservation.count({
+              where: {
+                ...tenantBaseWhere,
+                OR: [{ booking_date: null }, { booking_date: { gte: overdueThreshold } }],
+                status: { notIn: ['cancelled', 'rejected'] },
               },
-            },
-            orderBy: {
-              created_at: 'desc',
-            },
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-          }),
-          prisma.reservation.count({ where }),
-        ]);
+            }),
+            prisma.reservation.count({
+              where: {
+                ...tenantBaseWhere,
+                booking_date: { lt: overdueThreshold },
+                status: { notIn: ['completed', 'cancelled', 'rejected'] },
+              },
+            }),
+            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'pending' } }),
+            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'confirmed' } }),
+            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'completed' } }),
+            prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'cancelled' } }),
+          ]);
+
+        const stats = {
+          total: totalCount,
+          upcoming: upcomingCount,
+          overdue: overdueCount,
+          pending: pendingCount,
+          confirmed: confirmedCount,
+          completed: completedCount,
+          cancelled: cancelledCount,
+        };
 
         const { computeCurrentAge } = await import('../../utils/age-calculator');
         const data = rows.map((r) => ({
@@ -93,15 +229,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           page,
           pageSize,
           totalPages: Math.max(1, Math.ceil(total / pageSize)),
+          stats,
         });
       } catch (err: any) {
         try {
           console.warn('[Admin API] Reservations query failed, retrying without children relation:', err.message);
           const rows = await prisma.reservation.findMany({
-            where: { tenant_id: DEFAULT_TENANT_ID },
+            where,
             include: { customer: true },
-            orderBy: { created_at: 'desc' },
+            orderBy,
+            skip: (page - 1) * pageSize,
+            take: pageSize,
           });
+          const total = await prisma.reservation.count({ where });
           const data = rows.map((r) => ({
             ...r,
             baby_details: extractBabyDetails(r.raw_text),
@@ -109,16 +249,85 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }));
           return reply
             .status(200)
-            .send({ success: true, data, total: data.length, page: 1, pageSize: data.length, totalPages: 1 });
+            .send({
+              success: true,
+              data,
+              total,
+              page,
+              pageSize,
+              totalPages: Math.max(1, Math.ceil(total / pageSize)),
+              stats: { total, upcoming: total, overdue: 0, pending: 0, confirmed: 0, completed: 0, cancelled: 0 },
+            });
         } catch (err2: any) {
           console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err2.message);
-          const data = Array.from(memoryReservations.values()).map((r) => ({
+          let data = Array.from(memoryReservations.values()).map((r) => ({
             ...r,
             baby_details: extractBabyDetails(r.raw_text),
           }));
+
+          // Memory filtering
+          if (statusParam && statusParam !== 'all') {
+            if (statusParam === 'upcoming') {
+              data = data.filter((r) => (!r.booking_date || new Date(r.booking_date).getTime() >= overdueThreshold.getTime()) && r.status !== 'cancelled');
+            } else if (statusParam === 'overdue') {
+              data = data.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < overdueThreshold.getTime() && r.status !== 'completed' && r.status !== 'cancelled');
+            } else {
+              data = data.filter((r) => r.status === statusParam);
+            }
+          }
+          if (staffIdParam && staffIdParam !== 'all') {
+            if (staffIdParam === 'unassigned') {
+              data = data.filter((r) => !r.assigned_staff_id);
+            } else {
+              data = data.filter((r) => r.assigned_staff_id === staffIdParam);
+            }
+          }
+          if (categoryParam && categoryParam !== 'all') {
+            data = data.filter((r) => r.treatment_category === categoryParam);
+          }
+          if (searchParam) {
+            const q = searchParam.toLowerCase();
+            data = data.filter((r) =>
+              (r.treatment_detail || '').toLowerCase().includes(q) ||
+              (r.address || '').toLowerCase().includes(q) ||
+              (r.raw_text || '').toLowerCase().includes(q) ||
+              (r.customer?.name || '').toLowerCase().includes(q) ||
+              (r.customer?.phone || '').includes(q)
+            );
+          }
+          if (startDateParam && endDateParam) {
+            const start = new Date(startDateParam).getTime();
+            const end = new Date(endDateParam).getTime();
+            data = data.filter((r) => {
+              if (!r.booking_date) return false;
+              const t = new Date(r.booking_date).getTime();
+              return t >= start && t <= end;
+            });
+          }
+
+          const total = data.length;
+          const paginated = data.slice((page - 1) * pageSize, page * pageSize);
+          const allMemory = Array.from(memoryReservations.values());
+
           return reply
             .status(200)
-            .send({ success: true, data, total: data.length, page: 1, pageSize: data.length, totalPages: 1 });
+            .send({
+              success: true,
+              data: paginated,
+              total,
+              page,
+              pageSize,
+              totalPages: Math.max(1, Math.ceil(total / pageSize)),
+              stats: {
+                total: allMemory.length,
+                upcoming: allMemory.filter((r) => !r.booking_date || new Date(r.booking_date).getTime() >= overdueThreshold.getTime()).length,
+                overdue: allMemory.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < overdueThreshold.getTime() && r.status !== 'completed' && r.status !== 'cancelled').length,
+                pending: allMemory.filter((r) => r.status === 'pending').length,
+                confirmed: allMemory.filter((r) => r.status === 'confirmed').length,
+                completed: allMemory.filter((r) => r.status === 'completed').length,
+                cancelled: allMemory.filter((r) => r.status === 'cancelled').length,
+              },
+            });
         }
       }
     }
@@ -864,11 +1073,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * DELETE /api/admin/reservation/:id
+   * Mendukung soft-cancel (default) atau hard delete permanen (?hard=true)
    */
   fastify.delete(
     '/api/admin/reservation/:id',
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Querystring: { hard?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
       const { id } = request.params;
+      const isHardDelete = request.query?.hard === 'true';
       try {
         const existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: DEFAULT_TENANT_ID },
@@ -884,6 +1101,29 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           } catch (err) {
             console.error('[Admin API] Google Calendar Event deletion failed:', err);
           }
+        }
+
+        if (isHardDelete) {
+          // Unlink child relation jika ada
+          await prisma.child.updateMany({
+            where: { reservation_id: id },
+            data: { reservation_id: null },
+          }).catch(() => {});
+
+          await prisma.reservation.delete({
+            where: { id },
+          });
+
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'DELETE_RESERVATION_PERMANENT',
+            targetId: id,
+            payload: { hard: true },
+            ipAddress: request.ip,
+          });
+
+          return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen.' });
         }
 
         const reservation = await prisma.reservation.update({
@@ -936,6 +1176,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       } catch (error) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          if (isHardDelete) {
+            memoryReservations.delete(id);
+            return reply.status(200).send({ success: true, message: 'Reservasi berhasil dihapus permanen (memory).' });
+          }
           mock.status = 'cancelled';
           mock.updated_at = new Date();
           memoryReservations.set(id, mock);

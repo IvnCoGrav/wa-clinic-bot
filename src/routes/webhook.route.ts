@@ -178,6 +178,47 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         return reply.status(200).send({ status: 'REVOKE_PROCESSED' });
       }
 
+      // --- EVENT MESSAGE REACTION (WAHA Message Reaction Inbound/Outbound) ---
+      const isReactionEvent =
+        event.event === 'message.reaction' ||
+        event.event === 'message.reaction.added' ||
+        event.event === 'message.reaction.deleted' ||
+        (event.event === 'message' && (
+          (event.payload as any)?.type === 'reaction' ||
+          (event.payload as any)?.subType === 'reaction' ||
+          (event.payload as any)?.reaction !== undefined
+        ));
+
+      if (isReactionEvent) {
+        const reactPayload: any = event.payload || {};
+        const reactionObj = typeof reactPayload.reaction === 'object' ? reactPayload.reaction : null;
+        const emoji = typeof reactPayload.reaction === 'string'
+          ? reactPayload.reaction
+          : reactionObj?.text || reactionObj?.emoji || reactPayload.text || '';
+        const targetMsgId =
+          reactPayload.messageId ||
+          reactPayload.targetMessageId ||
+          reactionObj?.messageId ||
+          reactionObj?.id ||
+          reactPayload.id?._serialized ||
+          reactPayload.id ||
+          reactPayload.key?.id;
+
+        const fromMe = !!reactPayload.fromMe || !!reactionObj?.fromMe;
+        const senderName = reactPayload._data?.notifyName || reactPayload.notifyName || (fromMe ? 'Admin' : undefined);
+
+        if (targetMsgId) {
+          console.log(`[MESSAGE REACTION WEBHOOK] targetMsgId=${targetMsgId}, emoji="${emoji}", fromMe=${fromMe}`);
+          await messageService.addOrUpdateReaction(String(targetMsgId), DEFAULT_TENANT_ID, {
+            emoji: emoji || '',
+            fromMe,
+            senderName,
+            actorId: reactPayload.from ? normalizeWahaJid(reactPayload.from) : undefined,
+          });
+        }
+        return reply.status(200).send({ status: 'REACTION_PROCESSED' });
+      }
+
       // Filter hanya event "message" atau "message.any"
       if (event.event !== 'message' && event.event !== 'message.any') {
         return reply.status(200).send({ status: 'IGNORED_EVENT_TYPE' });
@@ -240,7 +281,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const isBotAutoReply = 
               adminReplyText.includes('Bunda, untuk kondisi darurat seperti ini') ||
               adminReplyText.includes('Bunda, untuk pertimbangan kondisi kesehatan') ||
-              adminReplyText.startsWith('Pricelist ') ||
+              adminReplyText.startsWith('Pricelist') ||
+              adminReplyText.startsWith('[IMAGE: Pricelist') ||
+              imageCaption.startsWith('Pricelist') ||
               adminReplyText.startsWith('[AUTOMATED]') ||
               isDeviceAutoGreeting;
 
@@ -311,6 +354,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 `${phone}@c.us`,
                 outboundContent,
                 DEFAULT_TENANT_ID
+              ) || messageService.isInFlightBotOutbound(
+                `${phone}@c.us`,
+                adminReplyText,
+                DEFAULT_TENANT_ID
+              ) || messageService.isInFlightBotOutbound(
+                `${phone}@c.us`,
+                imageCaption,
+                DEFAULT_TENANT_ID
               );
 
               if (isDuplicateOutbound || isRecentDuplicate || isInFlightBot) {
@@ -319,6 +370,32 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
                 console.log(`[OUTBOUND DUPLICATE SKIP] Outbound message ${payload.id} already recorded (Bot echo / in-flight / duplicate). Skipping manual reply escalation.`);
                 return reply.status(200).send({ status: 'OUTBOUND_DUPLICATE_SKIPPED' });
+              }
+
+              // SAFETY NET: Jika ini adalah bot auto reply / pricelist echo, periksa apakah ada bot outbound dalam 30 detik terakhir
+              if (isBotAutoReply) {
+                try {
+                  const recentBotMsg = await prisma.message.findFirst({
+                    where: {
+                      conversation_id: conversation.id,
+                      tenant_id: DEFAULT_TENANT_ID,
+                      direction: 'OUTBOUND',
+                      sender_type: 'BOT',
+                      created_at: { gte: new Date(Date.now() - 30000) },
+                    },
+                    orderBy: { created_at: 'desc' },
+                  });
+                  if (recentBotMsg) {
+                    if (!recentBotMsg.wa_message_id && payload.id) {
+                      await prisma.message.update({
+                        where: { id: recentBotMsg.id },
+                        data: { wa_message_id: payload.id },
+                      }).catch(() => {});
+                    }
+                    console.log(`[OUTBOUND AUTO-REPLY DEDUP] Skipped duplicate bot echo ${payload.id} matching recent bot outbound message in conversation ${conversation.id}.`);
+                    return reply.status(200).send({ status: 'OUTBOUND_DUPLICATE_SKIPPED' });
+                  }
+                } catch (_) {}
               }
 
               // JIKA BUKAN DUPLIKAT: Pesan ini berasal dari WhatsApp HP asli / bot echo

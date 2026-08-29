@@ -972,6 +972,11 @@ export class CustomerService {
       aiOverride: string | null;
       isAdminLabeled: boolean;
       isHoldLabeled: boolean;
+      kecamatan: string | null;
+      kota: string | null;
+      kelurahan: string | null;
+      distanceKm: number | null;
+      ongkir: number | null;
     }>;
     total: number;
     page: number;
@@ -1007,6 +1012,9 @@ export class CustomerService {
         where.OR = [
           { name: { contains: search, mode: 'insensitive' } },
           { phone: { contains: search } },
+          { kecamatan: { contains: search, mode: 'insensitive' } },
+          { kota: { contains: search, mode: 'insensitive' } },
+          { kelurahan: { contains: search, mode: 'insensitive' } },
           { adClick: { trackingCode: { contains: search, mode: 'insensitive' } } },
         ];
       }
@@ -1014,6 +1022,8 @@ export class CustomerService {
       let orderBy: any = { created_at: sortOrder };
       if (sortBy === 'name') orderBy = { name: sortOrder };
       else if (sortBy === 'phone') orderBy = { phone: sortOrder };
+      else if (sortBy === 'kecamatan') orderBy = { kecamatan: sortOrder };
+      else if (sortBy === 'kota') orderBy = { kota: sortOrder };
       else if (sortBy === 'mqlBubbleCount') orderBy = { mql_bubble_count: sortOrder };
       else if (sortBy === 'created_at') orderBy = { created_at: sortOrder };
       else if (sortBy === 'reservations' || sortBy === 'reservationCount') {
@@ -1105,6 +1115,11 @@ export class CustomerService {
             aiOverride: c.ai_override || null,
             isAdminLabeled: !!c.is_admin_labeled,
             isHoldLabeled: !!c.is_hold_labeled,
+            kecamatan: c.kecamatan || c.pending_kecamatan || null,
+            kota: c.kota || c.pending_kota || null,
+            kelurahan: c.kelurahan || c.pending_kelurahan || null,
+            distanceKm: c.distance_km ?? null,
+            ongkir: c.ongkir ?? null,
           };
         })
       );
@@ -1155,6 +1170,11 @@ export class CustomerService {
           aiOverride: c.ai_override || null,
           isAdminLabeled: !!c.is_admin_labeled,
           isHoldLabeled: !!c.is_hold_labeled,
+          kecamatan: c.kecamatan || c.pending_kecamatan || null,
+          kota: c.kota || c.pending_kota || null,
+          kelurahan: c.kelurahan || c.pending_kelurahan || null,
+          distanceKm: c.distance_km ?? null,
+          ongkir: c.ongkir ?? null,
         })),
         total: list.length,
         page,

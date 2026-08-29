@@ -53,6 +53,9 @@ export function normalizeWabaPayload(
           mediaId = msg.image.id;
           caption = msg.image.caption;
           mimeType = msg.image.mime_type;
+        } else if (msg.type === 'reaction' && msg.reaction) {
+          type = 'reaction';
+          text = msg.reaction.emoji;
         }
 
         results.push({

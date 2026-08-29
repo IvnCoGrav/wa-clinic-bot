@@ -123,6 +123,24 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       // Tenant resolution per phone_number_id dari payload (multi-tenant WABA)
       const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(msg.phoneNumberId);
 
+      // --- EVENT REACTION DARI CUSTOMER (WABA Message Reaction) ---
+      if (msg.type === 'reaction') {
+        const rawReaction = (msg.rawPayload as any)?.reaction;
+        const targetMessageId = rawReaction?.message_id;
+        const emoji = rawReaction?.emoji || msg.text || '';
+        if (targetMessageId) {
+          console.log(`[WABA REACTION WEBHOOK] targetMsgId=${targetMessageId}, emoji="${emoji}", from=${msg.fromNumber}`);
+          await messageService.addOrUpdateReaction(targetMessageId, tenantId, {
+            emoji,
+            fromMe: false,
+            senderName: msg.contactName,
+            actorId: msg.fromNumber,
+          });
+        }
+        processed++;
+        continue;
+      }
+
       const isDuplicate = await messageService.isDuplicateMessage(msg.messageId, tenantId);
       if (isDuplicate) {
         console.log(`[WABA IDEMPOTENCY SKIP] ${msg.messageId} already processed [${correlationId}]`);

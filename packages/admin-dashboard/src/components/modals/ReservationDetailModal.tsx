@@ -25,6 +25,7 @@ import {
   Receipt,
   Loader,
   Copy,
+  MessageSquare,
 } from 'lucide-react';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
@@ -51,6 +52,9 @@ interface ReservationDetailModalProps {
   onSetDate?: (id: string, date: string) => Promise<void>;
   onAssignStaff?: (id: string, staffId: string | null) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  onCancel?: (id: string) => Promise<void>;
+  onDeletePermanent?: (id: string) => Promise<void>;
+  onOpenChatHistory?: (customerId: string, customerName?: string, customerPhone?: string) => void;
   onProofUpload?: (file: File) => Promise<void>;
   onProofRemove?: () => Promise<void>;
   onOpenEditLocation?: (res: Reservation) => void;
@@ -123,6 +127,9 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   onSetDate,
   onAssignStaff,
   onDelete,
+  onCancel,
+  onDeletePermanent,
+  onOpenChatHistory,
   onProofUpload,
   onProofRemove,
   onOpenEditLocation,
@@ -161,6 +168,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
       return;
     }
     onProofUpload?.(file);
+    if (proofFileInputRef.current) proofFileInputRef.current.value = '';
   };
 
   const handleProofRemoveClick = async () => {
@@ -176,15 +184,25 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     onUpdate();
   };
 
-  const handleSaveEditDate = async () => {
-    if (!editDate) return;
-    await onSetDate?.(reservation.id, editDate);
-    toast('Jadwal kunjungan berhasil diperbarui!', 'success');
-    setEditDate('');
-    onUpdate();
+  const handleSetDateClick = async () => {
+    if (!editDate || !onSetDate) return;
+    try {
+      const parsed = new Date(editDate);
+      if (isNaN(parsed.getTime())) {
+        toast('Format tanggal tidak valid', 'error');
+        return;
+      }
+      await onSetDate(reservation.id, parsed.toISOString());
+      toast('Jadwal reservasi berhasil diperbarui.', 'success');
+      onUpdate();
+    } catch (err: any) {
+      toast(`Gagal memperbarui jadwal: ${err.message}`, 'error');
+    }
   };
+  const handleSaveEditDate = handleSetDateClick;
 
-  const handleAssignStaffClick = async (staffId: string | null) => {
+  const handleStaffChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const staffId = e.target.value || null;
     setAssigningStaff(true);
     try {
       await onAssignStaff?.(reservation.id, staffId);
@@ -196,6 +214,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
       setAssigningStaff(false);
     }
   };
+  const handleAssignStaffClick = (staffId: string | null) =>
+    handleStaffChange({ target: { value: staffId || '' } } as any);
 
   const handleConfirmClick = async () => {
     if (!onConfirm) return;
@@ -224,19 +244,50 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     onUpdate();
   };
 
-  const handleDeleteClick = async () => {
-    if (!onDelete) return;
+  const handleCancelClick = async () => {
+    if (onCancel) {
+      await onCancel(reservation.id);
+      return;
+    }
     const ok = await confirm({
-      title: 'Hapus Reservasi?',
-      message: 'Apakah Anda yakin ingin membatalkan dan menghapus jadwal reservasi ini?',
-      confirmText: 'Ya, Hapus',
+      title: 'Batalkan Reservasi?',
+      message: 'Apakah Anda yakin ingin membatalkan jadwal reservasi ini? Status reservasi akan diubah menjadi Cancelled.',
+      confirmText: 'Ya, Batalkan',
       danger: true,
     });
     if (!ok) return;
-    await onDelete(reservation.id);
+    if (onStatusChange) {
+      await onStatusChange(reservation.id, 'cancelled');
+    } else if (onDelete) {
+      await onDelete(reservation.id);
+    }
     toast('Reservasi berhasil dibatalkan.', 'success');
     onClose();
     onUpdate();
+  };
+
+  const handleDeletePermanentClick = async () => {
+    if (onDeletePermanent) {
+      await onDeletePermanent(reservation.id);
+      return;
+    }
+    const ok = await confirm({
+      title: 'Hapus Reservasi Permanen?',
+      message: 'Apakah Anda yakin ingin menghapus data reservasi ini secara permanen dari database? Tindakan ini tidak dapat dibatalkan.',
+      confirmText: 'Ya, Hapus Permanen',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/api/admin/reservation/${reservation.id}?hard=true`, {
+        method: 'DELETE',
+      });
+      toast('Reservasi berhasil dihapus permanen.', 'success');
+      onClose();
+      onUpdate();
+    } catch (err: any) {
+      toast(`Gagal menghapus reservasi: ${err.message}`, 'error');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -610,19 +661,52 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         </div>
 
         {/* Actions button footer */}
-        <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 justify-between items-center">
-          <button
-            onClick={handleDeleteClick}
-            className="w-full sm:w-auto justify-center px-4 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition text-xs font-semibold flex items-center space-x-1.5"
-          >
-            <X size={14} />
-            <span>Batalkan Reservasi</span>
-          </button>
+        <div className="pt-3.5 border-t border-[#e9edef] flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-2 justify-between items-stretch sm:items-center">
+          {/* Left Action Group: Batalkan & Hapus */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {reservation.status !== 'cancelled' && (
+              <button
+                onClick={handleCancelClick}
+                className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                title="Batalkan reservasi (Status berubah menjadi Cancelled)"
+              >
+                <X size={14} />
+                <span>Batalkan</span>
+              </button>
+            )}
 
+            <button
+              onClick={handleDeletePermanentClick}
+              className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              title="Hapus data reservasi secara permanen dari database"
+            >
+              <Trash2 size={14} />
+              <span>Hapus Reservasi</span>
+            </button>
+          </div>
+
+          {/* Right Action Group: Riwayat Chat, Invoice WA, Action Status */}
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            {reservation.customer?.id && onOpenChatHistory && (
+              <button
+                onClick={() =>
+                  onOpenChatHistory(
+                    reservation.customer?.id!,
+                    reservation.customer?.name || undefined,
+                    reservation.customer?.phone || undefined
+                  )
+                }
+                className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 transition text-xs font-semibold flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                title="Lihat riwayat chat WhatsApp customer ini"
+              >
+                <MessageSquare size={14} className="text-sky-600" />
+                <span>Riwayat Chat</span>
+              </button>
+            )}
+
             <button
               onClick={handleCopyInvoice}
-              className={`w-full sm:w-auto justify-center px-4 py-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition ${
+              className={`flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
                 copiedInvoice
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                   : 'bg-white border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] shadow-xs'
@@ -630,7 +714,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               title="Salin rincian format reservasi & payment untuk WhatsApp"
             >
               <Receipt size={14} className={copiedInvoice ? 'text-emerald-600' : 'text-[#008069]'} />
-              <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Format Invoice WA'}</span>
+              <span>{copiedInvoice ? 'Invoice Tersalin!' : 'Salin Invoice WA'}</span>
             </button>
 
             {reservation.status === 'pending' && (() => {
@@ -645,14 +729,14 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       ? `Purchase event sudah terkirim ${purchaseSentAt.toLocaleString('id-ID')}. Nonaktif 7 hari untuk mencegah double-count.`
                       : undefined
                   }
-                  className={`w-full sm:w-auto justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition ${
+                  className={`flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
                     purchaseWindowOpen
                       ? 'bg-[#e9edef] text-[#8696a0] cursor-not-allowed'
                       : 'bg-[#008069] text-white hover:bg-[#00a884] shadow-xs'
                   }`}
                 >
                   <Check size={14} />
-                  <span>{purchaseWindowOpen ? 'Purchase Sudah Dikirim' : 'Tandai Lunas'}</span>
+                  <span>{purchaseWindowOpen ? 'Purchase Dikirim' : 'Tandai Lunas'}</span>
                 </button>
               );
             })()}
@@ -660,10 +744,10 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
             {reservation.status === 'confirmed' && (
               <button
                 onClick={handleCompleteClick}
-                className="w-full sm:w-auto justify-center px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs"
+                className="flex-1 sm:flex-initial justify-center px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
               >
                 <CheckCircle size={14} />
-                <span>Tandai Selesai Treatment</span>
+                <span>Tandai Selesai</span>
               </button>
             )}
 
@@ -671,11 +755,11 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               <div className="flex items-center space-x-2">
                 <span className="px-3 py-1.5 rounded-xl bg-sky-100 border border-sky-200 text-sky-800 text-xs font-bold flex items-center space-x-1">
                   <CheckCheck size={14} className="text-sky-600" />
-                  <span>Treatment Telah Selesai</span>
+                  <span>Treatment Selesai</span>
                 </span>
                 <button
                   onClick={() => handleStatusChangeClick('confirmed')}
-                  className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition"
+                  className="px-2.5 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition cursor-pointer"
                   title="Kembalikan ke status Terkonfirmasi / Lunas"
                 >
                   Ubah Status

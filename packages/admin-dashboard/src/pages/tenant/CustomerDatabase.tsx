@@ -36,6 +36,7 @@ import {
   FileText,
   Navigation,
   PenLine,
+  ChevronRight,
 } from 'lucide-react';
 
 interface CustomerItem {
@@ -46,14 +47,19 @@ interface CustomerItem {
   isMql: boolean;
   mqlBubbleCount: number;
   mqlTriggeredAt: string | null;
-  trackingCode: string;
-  adClick: any;
+  trackingCode?: string;
+  adClick?: any;
   ltv: number;
   reservationCount: number;
   createdAt: string;
   updatedAt: string;
-  isAdminLabeled: boolean;
-  isHoldLabeled: boolean;
+  isAdminLabeled?: boolean;
+  isHoldLabeled?: boolean;
+  kecamatan?: string | null;
+  kota?: string | null;
+  kelurahan?: string | null;
+  distanceKm?: number | null;
+  ongkir?: number | null;
 }
 
 interface ChatMessage {
@@ -338,7 +344,7 @@ export const CustomerDatabase: React.FC = () => {
             <span>Database Customer</span>
           </h1>
           <p className="text-xs text-[#667781] mt-0.5">
-            Kelola data customer, lihat Tracking Code, nilai LTV, riwayat reservasi/anak, riwayat chat, dan kirim event Meta CAPI.
+            Kelola data customer, wilayah (kecamatan & kota), nilai LTV, riwayat reservasi/anak, riwayat chat, dan kirim event Meta CAPI.
           </p>
         </div>
 
@@ -396,8 +402,8 @@ export const CustomerDatabase: React.FC = () => {
 
       {/* Sub-Filter Segmentasi & Search Bar */}
       <div className="space-y-2.5">
-        {/* Segment Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] border border-[#e9edef] rounded-xl w-fit">
+        {/* Desktop Segment Filter Tabs (>= md) */}
+        <div className="hidden md:flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] border border-[#e9edef] rounded-xl w-fit">
           <button
             onClick={() => {
               setSegment('all');
@@ -456,13 +462,62 @@ export const CustomerDatabase: React.FC = () => {
           </button>
         </div>
 
+        {/* Mobile Dropdowns (< md): Segment (Left) + Sorting (Right) */}
+        <div className="grid grid-cols-2 gap-2 md:hidden">
+          {/* Left Dropdown: Segment Filter */}
+          <div className="relative">
+            <select
+              value={segment}
+              onChange={(e) => {
+                setSegment(e.target.value as any);
+                setPage(1);
+              }}
+              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs cursor-pointer appearance-none pr-7 truncate"
+            >
+              <option value="all">👥 Semua ({stats.totalCustomers || totalCount})</option>
+              <option value="purchased">🎯 Pembeli ({stats.totalPurchasers})</option>
+              <option value="mql">⚡ MQL Aktif ({stats.totalMql})</option>
+              <option value="prospect">💬 Prospek ({stats.totalProspects})</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#8696a0]">
+              <ArrowUpDown size={12} />
+            </div>
+          </div>
+
+          {/* Right Dropdown: Sorting */}
+          <div className="relative">
+            <select
+              value={`${sortBy}:${sortOrder}`}
+              onChange={(e) => {
+                const [f, o] = e.target.value.split(':');
+                setSortBy(f);
+                setSortOrder(o as 'asc' | 'desc');
+                setPage(1);
+              }}
+              className="w-full bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs cursor-pointer appearance-none pr-7 truncate"
+            >
+              <option value="created_at:desc">Terdaftar: Terbaru</option>
+              <option value="created_at:asc">Terdaftar: Terlama</option>
+              <option value="name:asc">Nama (A - Z)</option>
+              <option value="name:desc">Nama (Z - A)</option>
+              <option value="kecamatan:asc">Wilayah (A - Z)</option>
+              <option value="ltv:desc">LTV Tertinggi</option>
+              <option value="ltv:asc">LTV Terendah</option>
+              <option value="mqlBubbleCount:desc">MQL Bubble Terbanyak</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#8696a0]">
+              <ArrowUpDown size={12} />
+            </div>
+          </div>
+        </div>
+
         {/* Search Bar */}
         <form onSubmit={handleSearchSubmit} className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-2.5 text-[#8696a0]" size={15} />
             <input
               type="text"
-              placeholder="Cari berdasarkan No HP, Nama, atau Tracking Code (TC-XXXXX)..."
+              placeholder="Cari berdasarkan No HP, Nama, Kecamatan, atau Kota..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs"
@@ -493,104 +548,75 @@ export const CustomerDatabase: React.FC = () => {
             {/* Mobile Card List (< md) */}
             <div className="md:hidden divide-y divide-[#e9edef]">
               {customers.map((customer) => (
-                <div key={customer.id} className="p-4 space-y-3 bg-white">
-                  {/* Top row: Name/Phone & LTV */}
+                <div
+                  key={customer.id}
+                  onClick={() => handleOpenDetail(customer)}
+                  className="p-4 space-y-2.5 bg-white hover:bg-[#f8fafc] active:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  {/* Top row: Name/Phone/Location & LTV */}
                   <div className="flex justify-between items-start gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-bold text-sm text-[#111b21]">
+                        <span className="font-bold text-sm text-[#111b21] truncate">
                           {customer.name || 'Bunda Customer'}
                         </span>
+                        {customer.isMql && (
+                          <span
+                            title={`MQL (${customer.mqlBubbleCount ?? 0} Bubble)`}
+                            className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0"
+                          >
+                            <Zap size={8} className="mr-0.5" />
+                            MQL
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-1.5 text-xs text-[#54656f] mt-0.5">
-                        <Phone size={13} className="text-[#8696a0]" />
+                        <Phone size={12} className="text-[#8696a0] shrink-0" />
                         <span className="font-mono">{customer.phone}</span>
                       </div>
-                    </div>
-
-                    <div className="text-right flex-shrink-0">
-                      {customer.ltv > 0 ? (
-                        <>
-                          <div className="font-bold text-emerald-700 text-sm">
-                            {formatCurrency(customer.ltv)}
-                          </div>
-                          <span className="text-[10px] text-emerald-600 font-medium">
-                            {customer.reservationCount}x transaksi
+                      {(customer.kecamatan || customer.kota) && (
+                        <div className="flex items-center space-x-1.5 text-xs text-[#54656f] mt-1">
+                          <MapPin size={12} className="text-[#008069] shrink-0" />
+                          <span className="truncate">
+                            {[customer.kecamatan, customer.kota].filter(Boolean).join(', ')}
                           </span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="font-semibold text-slate-500 text-xs bg-slate-100 px-1.5 py-0.5 rounded">
-                            Rp 0
-                          </div>
-                          <span className="text-[10px] text-[#8696a0]">
-                            Prospek
-                          </span>
-                        </>
+                        </div>
                       )}
                     </div>
-                  </div>
 
-                  {/* Badges & Meta */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <div className="flex items-center space-x-1">
-                      <span className="font-mono text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] px-2 py-0.5 rounded text-[11px] font-bold">
-                        {customer.trackingCode}
-                      </span>
-                      <button
-                        onClick={() => handleCopyCode(customer.trackingCode)}
-                        className="text-[#8696a0] hover:text-[#111b21] transition p-1.5 rounded hover:bg-[#f0f2f5]"
-                        title="Salin Tracking Code"
-                        aria-label="Salin Tracking Code"
-                      >
-                        {copiedCode === customer.trackingCode ? <Check size={13} className="text-[#008069]" /> : <Copy size={13} />}
-                      </button>
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <div className="text-right">
+                        {customer.ltv > 0 ? (
+                          <>
+                            <div className="font-bold text-emerald-700 text-sm">
+                              {formatCurrency(customer.ltv)}
+                            </div>
+                            <span className="text-[10px] text-emerald-600 font-medium">
+                              {customer.reservationCount}x transaksi
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold text-slate-500 text-xs bg-slate-100 px-1.5 py-0.5 rounded">
+                              Rp 0
+                            </div>
+                            <span className="text-[10px] text-[#8696a0]">
+                              Prospek
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <ChevronRight size={16} className="text-[#8696a0]" />
                     </div>
-
-                    {customer.isMql ? (
-                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
-                        <Zap size={10} className="fill-emerald-700 text-emerald-700" />
-                        <span>MQL ({customer.mqlBubbleCount} Bubble)</span>
-                      </span>
-                    ) : (
-                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f0f2f5] text-[#54656f] border border-[#e9edef]">
-                        Regular ({customer.mqlBubbleCount} Bubble)
-                      </span>
-                    )}
-
-                    {customer.adClick?.utmCampaign && (
-                      <p className="text-[11px] text-[#667781] truncate">
-                        Campaign: <span className="text-[#111b21] font-medium">{customer.adClick.utmCampaign}</span>
-                      </p>
-                    )}
                   </div>
 
-                  {/* Action buttons (Mobile) */}
-                  <div className="grid grid-cols-3 gap-1.5 pt-1">
-                    <button
-                      onClick={() => handleOpenDetail(customer)}
-                      className="py-2 px-2 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold transition flex items-center justify-center space-x-1 shadow-xs"
-                    >
-                      <Eye size={13} />
-                      <span>Detail</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleOpenHistory(customer)}
-                      className="py-2 px-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center justify-center space-x-1 shadow-xs"
-                    >
-                      <MessageSquare size={13} />
-                      <span>History</span>
-                    </button>
-
-                    <button
-                      onClick={() => setActiveEventCustomer(customer)}
-                      className="py-2 px-2 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center justify-center space-x-1 shadow-xs"
-                    >
-                      <Send size={13} />
-                      <span>Event</span>
-                    </button>
-                  </div>
+                  {/* Ad Campaign (if any) */}
+                  {customer.adClick?.utmCampaign && (
+                    <div className="flex items-center space-x-1 text-[11px] text-[#667781] truncate">
+                      <span className="text-[#8696a0]">Campaign:</span>
+                      <span className="text-[#111b21] font-medium truncate">{customer.adClick.utmCampaign}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -600,9 +626,6 @@ export const CustomerDatabase: React.FC = () => {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px] tracking-wider select-none">
-                    <th className="py-3 px-4">
-                      <span>Tracking Code (ID)</span>
-                    </th>
                     <th
                       className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
                       onClick={() => handleSort('name')}
@@ -614,11 +637,11 @@ export const CustomerDatabase: React.FC = () => {
                     </th>
                     <th
                       className="py-3 px-4 cursor-pointer hover:text-[#111b21] group transition"
-                      onClick={() => handleSort('mqlBubbleCount')}
+                      onClick={() => handleSort('kecamatan')}
                     >
                       <div className="flex items-center space-x-1.5">
-                        <span>Status MQL</span>
-                        {renderSortIcon('mqlBubbleCount')}
+                        <span>Wilayah (Kecamatan & Kota)</span>
+                        {renderSortIcon('kecamatan')}
                       </div>
                     </th>
                     <th
@@ -645,49 +668,56 @@ export const CustomerDatabase: React.FC = () => {
                 <tbody className="divide-y divide-[#e9edef]">
                   {customers.map((customer) => (
                     <tr key={customer.id} className="hover:bg-[#f8fafc] transition">
-                      {/* Tracking Code */}
+                      {/* Customer Phone & Name with MQL icon */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="font-mono text-[#008069] bg-[#e8f5f2] border border-[#c2e7e0] px-2 py-0.5 rounded text-[11px] font-bold">
-                            {customer.trackingCode}
-                          </span>
-                          <button
-                            onClick={() => handleCopyCode(customer.trackingCode)}
-                            className="text-[#8696a0] hover:text-[#111b21] transition p-1 rounded hover:bg-[#f0f2f5]"
-                            title="Salin Tracking Code"
-                          >
-                            {copiedCode === customer.trackingCode ? <Check size={12} className="text-[#008069]" /> : <Copy size={12} />}
-                          </button>
-                        </div>
-                        {customer.adClick?.utmCampaign && (
-                          <p className="text-[10px] text-[#667781] mt-1 truncate max-w-[150px]">
-                            Campaign: {customer.adClick.utmCampaign}
-                          </p>
-                        )}
-                      </td>
-
-                      {/* Customer Phone & Name */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center space-x-2">
-                          <Phone size={14} className="text-[#8696a0] flex-shrink-0" />
-                          <div>
-                            <span className="font-bold text-[#111b21] block">{customer.phone}</span>
-                            <span className="text-[11px] text-[#667781]">{customer.name || 'Bunda Customer'}</span>
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-8 h-8 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-xs shrink-0">
+                            {(customer.name || customer.phone || 'B').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-bold text-[#111b21] truncate">
+                                {customer.name || 'Bunda Customer'}
+                              </span>
+                              {customer.isMql && (
+                                <span
+                                  title={`MQL (${customer.mqlBubbleCount ?? 0} Bubble)`}
+                                  className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0"
+                                >
+                                  <Zap size={8} className="mr-0.5" />
+                                  MQL
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-1 text-[11px] text-[#667781] font-mono mt-0.5">
+                              <Phone size={11} className="text-[#8696a0] shrink-0" />
+                              <span>{customer.phone}</span>
+                            </div>
+                            {customer.adClick?.utmCampaign && (
+                              <p className="text-[10px] text-[#8696a0] truncate max-w-[170px] mt-0.5">
+                                Ad: {customer.adClick.utmCampaign}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>
 
-                      {/* Status MQL */}
+                      {/* Wilayah (Kecamatan & Kota) */}
                       <td className="py-3.5 px-4">
-                        {customer.isMql ? (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold uppercase">
-                            <Zap size={10} className="fill-emerald-700 text-emerald-700" />
-                            <span>MQL ({customer.mqlBubbleCount} Bubble)</span>
-                          </span>
+                        {customer.kecamatan || customer.kota ? (
+                          <div className="flex items-start space-x-1.5">
+                            <MapPin size={13} className="text-[#008069] shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                              <span className="font-bold text-[#111b21] block truncate text-xs">
+                                {customer.kecamatan || '-'}
+                              </span>
+                              <span className="text-[11px] text-[#667781] block truncate">
+                                {customer.kota || '-'}
+                              </span>
+                            </div>
+                          </div>
                         ) : (
-                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#f0f2f5] text-[#54656f] border border-[#e9edef]">
-                            Regular ({customer.mqlBubbleCount} Bubble)
-                          </span>
+                          <span className="text-[#8696a0] text-xs italic">-</span>
                         )}
                       </td>
 
@@ -722,30 +752,27 @@ export const CustomerDatabase: React.FC = () => {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end space-x-1.5">
-                          {/* Detail Button */}
                           <button
                             onClick={() => handleOpenDetail(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                            className="px-2.5 py-1.5 rounded-xl bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
                             title="Lihat Detail Lengkap Pasien"
                           >
                             <Eye size={12} />
                             <span>Detail</span>
                           </button>
 
-                          {/* Chat History Button */}
                           <button
                             onClick={() => handleOpenHistory(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                            className="px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
                             title="Buka Riwayat Chat"
                           >
                             <MessageSquare size={12} />
                             <span>History</span>
                           </button>
 
-                          {/* Send Event Button */}
                           <button
                             onClick={() => setActiveEventCustomer(customer)}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                            className="px-2.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold transition flex items-center space-x-1 shadow-xs cursor-pointer"
                             title="Kirim Event Meta CAPI"
                           >
                             <Send size={12} />
@@ -996,10 +1023,15 @@ export const CustomerDatabase: React.FC = () => {
                       <Phone size={12} className="text-[#8696a0]" />
                       <span>{detailData?.phone || activeDetailCustomer.phone}</span>
                     </span>
-                    <span>•</span>
-                    <span className="font-mono text-[#008069] font-bold">
-                      {activeDetailCustomer.trackingCode}
-                    </span>
+                    {(detailData?.kecamatan || activeDetailCustomer.kecamatan || detailData?.kota || activeDetailCustomer.kota) && (
+                      <>
+                        <span>•</span>
+                        <span className="flex items-center space-x-1 text-[#008069] font-medium">
+                          <MapPin size={12} className="text-[#008069]" />
+                          <span>{[detailData?.kecamatan || activeDetailCustomer.kecamatan, detailData?.kota || activeDetailCustomer.kota].filter(Boolean).join(', ')}</span>
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

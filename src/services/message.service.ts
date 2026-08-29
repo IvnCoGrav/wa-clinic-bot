@@ -189,6 +189,7 @@ export class MessageService {
     const cutoff = new Date(Date.now() - windowSeconds * 1000);
     const normalizedContent = (content || '').trim();
     const isImagePlaceholder = isImage || !normalizedContent || /^\[(IMAGE|MEDIA|GAMBAR)/i.test(normalizedContent);
+    const strippedCaption = normalizedContent.replace(/^\[(IMAGE|MEDIA|GAMBAR)(?::\s*([^\]]+))?\]/i, '$2').trim();
     const shortId = extractShortMessageId(waMessageId);
 
     // 1. Cek memoryMessages fallback
@@ -199,7 +200,13 @@ export class MessageService {
         m.direction === 'OUTBOUND' &&
         new Date(m.created_at) >= cutoff &&
         (
-          (isImagePlaceholder && (!m.content || /^\[(IMAGE|MEDIA|GAMBAR)/i.test((m.content || '').trim()) || !!(m.payload_raw as any)?.media)) ||
+          (isImagePlaceholder && (
+            !m.content ||
+            /^\[(IMAGE|MEDIA|GAMBAR)/i.test((m.content || '').trim()) ||
+            !!(m.payload_raw as any)?.media ||
+            (m.content || '').toLowerCase().startsWith('pricelist') ||
+            (strippedCaption && (m.content || '').trim().toLowerCase() === strippedCaption.toLowerCase())
+          )) ||
           (!isImagePlaceholder && (
             (m.content || '').trim().toLowerCase() === normalizedContent.toLowerCase() ||
             (normalizedContent.length >= 20 && (m.content || '').toLowerCase().includes(normalizedContent.toLowerCase()))
@@ -233,6 +240,15 @@ export class MessageService {
           { content: { startsWith: '[GAMBAR' } },
           { content: '[IMAGE]' },
           { content: '[MEDIA]' },
+          { content: { startsWith: 'Pricelist', mode: 'insensitive' } },
+          ...(strippedCaption ? [
+            { content: { equals: strippedCaption, mode: 'insensitive' } },
+            { content: { contains: strippedCaption, mode: 'insensitive' } },
+          ] : []),
+          ...(normalizedContent ? [
+            { content: { equals: normalizedContent, mode: 'insensitive' } },
+            { content: { contains: normalizedContent, mode: 'insensitive' } },
+          ] : []),
         ];
       } else if (normalizedContent.length >= 20) {
         whereClause.OR = [
@@ -804,6 +820,117 @@ export class MessageService {
     }
 
     return true;
+  }
+
+  /**
+   * Menambahkan, mengubah, atau menghapus reaksi emotikon pada pesan WhatsApp.
+   * Format payload_raw.reactions: Array<{ emoji: string; fromMe: boolean; senderName?: string; actorId?: string; createdAt: string }>
+   */
+  public async addOrUpdateReaction(
+    messageId: string,
+    tenantId: string,
+    reaction: {
+      emoji: string;
+      fromMe: boolean;
+      senderName?: string;
+      actorId?: string;
+    }
+  ): Promise<{ success: boolean; messageId?: string; conversationId?: string; reactions?: any[] }> {
+    let conversationId = '';
+    let targetMessageId = messageId;
+    let reactions: any[] = [];
+
+    const actorKey = reaction.fromMe ? 'ME' : (reaction.actorId || reaction.senderName || 'CUSTOMER');
+
+    try {
+      let msg = await prisma.message.findFirst({
+        where: {
+          OR: [
+            { id: messageId, tenant_id: tenantId },
+            { wa_message_id: messageId, tenant_id: tenantId },
+          ],
+        },
+      });
+
+      if (msg) {
+        conversationId = msg.conversation_id;
+        targetMessageId = msg.id;
+        const currentPayload = (typeof msg.payload_raw === 'object' && msg.payload_raw ? msg.payload_raw : {}) as any;
+        const existingReactions = Array.isArray(currentPayload.reactions) ? [...currentPayload.reactions] : [];
+
+        if (!reaction.emoji) {
+          // Hapus reaksi dari actor ini
+          reactions = existingReactions.filter((r: any) => (r.fromMe ? 'ME' : (r.actorId || r.senderName || 'CUSTOMER')) !== actorKey);
+        } else {
+          // Hapus reaksi lama dari actor ini, lalu tambahkan yang baru
+          reactions = existingReactions.filter((r: any) => (r.fromMe ? 'ME' : (r.actorId || r.senderName || 'CUSTOMER')) !== actorKey);
+          reactions.push({
+            emoji: reaction.emoji,
+            fromMe: reaction.fromMe,
+            senderName: reaction.senderName,
+            actorId: reaction.actorId,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        await prisma.message.update({
+          where: { id: msg.id },
+          data: {
+            payload_raw: {
+              ...currentPayload,
+              reactions,
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.warn('DB addOrUpdateReaction error (using memory fallback):', (error as Error).message);
+    }
+
+    // Memory store fallback sync
+    const inMem = memoryMessages.find(
+      (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
+    );
+    if (inMem) {
+      conversationId = inMem.conversation_id;
+      targetMessageId = inMem.id;
+      const currentPayload = inMem.payload_raw || {};
+      const existingReactions = Array.isArray(currentPayload.reactions) ? [...currentPayload.reactions] : [];
+
+      if (!reaction.emoji) {
+        reactions = existingReactions.filter((r: any) => (r.fromMe ? 'ME' : (r.actorId || r.senderName || 'CUSTOMER')) !== actorKey);
+      } else {
+        reactions = existingReactions.filter((r: any) => (r.fromMe ? 'ME' : (r.actorId || r.senderName || 'CUSTOMER')) !== actorKey);
+        reactions.push({
+          emoji: reaction.emoji,
+          fromMe: reaction.fromMe,
+          senderName: reaction.senderName,
+          actorId: reaction.actorId,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      inMem.payload_raw = { ...currentPayload, reactions };
+    }
+
+    // Broadcast update via LiveChatHub
+    try {
+      const hub = getLiveChatHub();
+      if (hub && conversationId) {
+        await hub.publish({
+          type: 'message:reaction' as any,
+          tenantId,
+          payload: {
+            conversationId,
+            messageId: targetMessageId,
+            reactions,
+          },
+        });
+      }
+    } catch (hubErr: any) {
+      console.warn('[HUB] Failed to publish message:reaction event:', hubErr.message);
+    }
+
+    return { success: true, messageId: targetMessageId, conversationId, reactions };
   }
 
   /**

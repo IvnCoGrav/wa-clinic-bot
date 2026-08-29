@@ -409,6 +409,44 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/live-chat/conversations/:id/messages/:messageId/reaction & POST /api/admin/conversations/:id/messages/:messageId/reaction
+   * Memberikan, mengganti, atau menghapus reaksi emotikon pada pesan WhatsApp.
+   */
+  const reactionHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string; messageId: string };
+      Body: { emoji?: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id, messageId } = request.params;
+    const { emoji = '' } = request.body || {};
+    const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+    const adminName = (request as any).adminIdentity || 'Admin';
+
+    const result = await liveChatService.sendReaction({
+      conversationId: id,
+      messageId,
+      emoji: typeof emoji === 'string' ? emoji.trim() : '',
+      tenantId,
+      adminName,
+    });
+
+    if (!result.success) {
+      return reply.status(400).send({ success: false, error: result.error });
+    }
+
+    return reply.status(200).send({
+      success: true,
+      message: emoji ? 'Reaksi emotikon berhasil dikirim.' : 'Reaksi emotikon berhasil dihapus.',
+      reactions: result.reactions,
+    });
+  };
+
+  fastify.post('/api/admin/live-chat/conversations/:id/messages/:messageId/reaction', reactionHandler);
+  fastify.post('/api/admin/conversations/:id/messages/:messageId/reaction', reactionHandler);
+
+  /**
    * GET /api/admin/live-chat/events
    * Server-Sent Events: stream real-time Live Chat (message.created & conversation.updated).
    */
