@@ -131,10 +131,20 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
 
   describe('5. Old AdClick Cleanup & TrackingCode Soft Release (>100 days old)', () => {
     it('should soft-release trackingCode via prisma.adClick.updateMany (preserving attribution history)', async () => {
+      const deleteManySpy = vi.mocked(prisma.adClick.deleteMany).mockResolvedValue({ count: 2 });
       const updateManySpy = vi.mocked(prisma.adClick.updateMany).mockResolvedValue({ count: 5 });
       const { cronService } = await import('../../src/services/cron.service');
 
       await cronService.cleanupOldAdClicks();
+
+      expect(deleteManySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            matchedAt: null,
+            customerId: null,
+          }),
+        })
+      );
 
       expect(updateManySpy).toHaveBeenCalledTimes(2);
       expect(updateManySpy).toHaveBeenNthCalledWith(

@@ -365,19 +365,21 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
         return result;
       }
     } catch (err: any) {
-      console.warn('[ENTITY EXTRACTOR ERROR] LLM extraction failed, using deterministic baseline:', err.message);
+      console.error('[ENTITY EXTRACTOR ERROR] All LLM models in fallback chain failed:', err.message);
       try {
         const { auditLlmCall } = await import('../utils/llm-audit-buffer');
         auditLlmCall({
           customer_phone: context?.customerPhone || 'unknown',
           tenant_id: context?.tenantId,
           task_type: 'SLOT_EXTRACTOR',
-          model_name: modelConfig.modelName || 'gpt-4o-mini',
+          model_name: modelConfig.modelName || 'MiniMax-M2.7-highspeed',
           baseUrl: endpoint.baseUrl,
           startedAt,
           error: { message: err?.message },
         });
       } catch {}
+      // Jangan tebak-tebak dengan regex rapuh saat LLM outage. Lempar error untuk Silent Human Escalation!
+      throw err;
     }
 
     return baseline;

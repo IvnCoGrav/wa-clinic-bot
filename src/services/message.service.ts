@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { Direction, Prisma } from '@prisma/client';
 import { getLiveChatHub } from './live-chat-hub.service';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { responseCacheService } from './response-cache.service';
 
 // In-Memory store fallback untuk idempotency check jika DB belum terkoneksi saat dev local
 const memoryWaMessageIds = new Set<string>();
@@ -434,6 +435,9 @@ export class MessageService {
           },
         })
         .catch(() => {});
+
+      // Invalidate live chat cached lists & unread badge for instant update
+      responseCacheService.invalidatePrefix('livechat:');
 
       // Web Push Background Notification: kirim ke perangkat yang sedang offline/background (hanya pesan live real-time customer asli, bukan riwayat/sandbox)
       if ((data.direction === 'INBOUND' || (data.direction as any) === Direction.INBOUND) && !data.isHistorical && !isSandboxCustomer) {
@@ -975,6 +979,7 @@ export class MessageService {
       const { conversationService } = await import('./conversation.service');
       await conversationService.setManualUnread(conversationId, tenantId, false);
     } catch {}
+    responseCacheService.invalidatePrefix('livechat:');
   }
 
   /**
@@ -1024,6 +1029,7 @@ export class MessageService {
       const { conversationService } = await import('./conversation.service');
       await conversationService.setManualUnread(conversationId, tenantId, true);
     } catch {}
+    responseCacheService.invalidatePrefix('livechat:');
   }
 
   /**
@@ -1160,6 +1166,7 @@ export class MessageService {
       }
     } catch {}
 
+    responseCacheService.invalidatePrefix('livechat:');
     return updatedCount;
   }
 

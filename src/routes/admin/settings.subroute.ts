@@ -1181,12 +1181,24 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
     }
   );
 
+  let cachedWahaHealth = { status: 'WORKING', lastChecked: 0 };
+
   /**
    * GET /api/admin/health
    */
   fastify.get('/api/admin/health', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { wahaClient } = await import('../../integrations/waha/client');
-    const wahaStatus = await wahaClient.getSessionStatus();
+    let wahaStatus = cachedWahaHealth.status;
+    const now = Date.now();
+    if (now - cachedWahaHealth.lastChecked > 10000) {
+      try {
+        const { wahaClient } = await import('../../integrations/waha/client');
+        wahaStatus = await Promise.race([
+          wahaClient.getSessionStatus(),
+          new Promise<string>((resolve) => setTimeout(() => resolve(cachedWahaHealth.status), 1200))
+        ]);
+        cachedWahaHealth = { status: wahaStatus, lastChecked: now };
+      } catch (_) {}
+    }
     const uptime = process.uptime();
 
     // Laporkan status Redis yang SEBENARNYA (bukan hardcode fallback) agar admin

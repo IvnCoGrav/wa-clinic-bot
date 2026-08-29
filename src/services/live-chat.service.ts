@@ -99,13 +99,20 @@ export class LiveChatService {
     }
 
     const { resolveTreatmentValue } = await import('./capi.service');
+    const treatmentPriceCache = new Map<string, number>();
     const customerStats = new Map<string, { purchaseCount: number; ltv: number }>();
     for (const [id, cust] of customers.entries()) {
       let ltv = 0;
       const resList = cust.reservations || [];
       for (const r of resList) {
-        const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
-        ltv += val || 0;
+        const text = r.treatment_detail || r.raw_text;
+        if (text) {
+          if (!treatmentPriceCache.has(text)) {
+            const val = (await resolveTreatmentValue(text)) || 0;
+            treatmentPriceCache.set(text, val);
+          }
+          ltv += treatmentPriceCache.get(text) || 0;
+        }
       }
       customerStats.set(id, { purchaseCount: resList.length, ltv });
     }

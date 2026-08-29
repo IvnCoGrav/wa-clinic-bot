@@ -205,54 +205,66 @@ export class CronService {
    */
   public async cleanupOldAdClicks(force = false): Promise<void> {
     try {
-      const today = new Date();
-      // Hanya jalankan pada tanggal 1 setiap bulan (kecuali dipaksa/dalam test environment)
-      if (today.getDate() !== 1 && !force && process.env.NODE_ENV !== 'test') {
-        return;
+      // 1. HARD DELETE: Hapus klik iklan yang tidak sampai ke WhatsApp (hanya ATC / click catcher) > 7 hari (1 minggu)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const deletedAbandoned = await prisma.adClick.deleteMany({
+        where: {
+          createdAt: { lt: sevenDaysAgo },
+          matchedAt: null,
+          customerId: null,
+        },
+      });
+
+      if (deletedAbandoned.count > 0) {
+        console.log(`[Cron Service] Deleted ${deletedAbandoned.count} abandoned ad clicks (>7 days old with no WhatsApp chat).`);
       }
 
-      const hundredDaysAgo = new Date();
-      hundredDaysAgo.setDate(hundredDaysAgo.getDate() - 100);
+      // 2. SOFT RELEASE: Dijalankan tiap tanggal 1 untuk mendaur ulang trackingCode > 100 hari (data atribusi tetap tersimpan)
+      const today = new Date();
+      if (today.getDate() === 1 || force || process.env.NODE_ENV === 'test') {
+        const hundredDaysAgo = new Date();
+        hundredDaysAgo.setDate(hundredDaysAgo.getDate() - 100);
 
-      // 1. Release trackingCode for unmatched clicks older than 100 days
-      const releaseUnmatched = await prisma.adClick.updateMany({
-        where: {
-          createdAt: { lt: hundredDaysAgo },
-          matchedAt: null,
-          trackingCode: { not: null },
-        },
-        data: {
-          trackingCode: null,
-        },
-      });
+        const releaseUnmatched = await prisma.adClick.updateMany({
+          where: {
+            createdAt: { lt: hundredDaysAgo },
+            matchedAt: null,
+            trackingCode: { not: null },
+          },
+          data: {
+            trackingCode: null,
+          },
+        });
 
-      // 2. Release trackingCode for matched clicks older than 100 days where customer status is 'lost' or has no confirmed reservation
-      const releaseMatchedLostOrNoSales = await prisma.adClick.updateMany({
-        where: {
-          createdAt: { lt: hundredDaysAgo },
-          matchedAt: { not: null },
-          trackingCode: { not: null },
-          customer: {
-            OR: [
-              { status: 'lost' },
-              {
-                reservations: {
-                  none: {
-                    status: 'confirmed',
+        const releaseMatchedLostOrNoSales = await prisma.adClick.updateMany({
+          where: {
+            createdAt: { lt: hundredDaysAgo },
+            matchedAt: { not: null },
+            trackingCode: { not: null },
+            customer: {
+              OR: [
+                { status: 'lost' },
+                {
+                  reservations: {
+                    none: {
+                      status: 'confirmed',
+                    },
                   },
                 },
-              },
-            ],
+              ],
+            },
           },
-        },
-        data: {
-          trackingCode: null,
-        },
-      });
+          data: {
+            trackingCode: null,
+          },
+        });
 
-      const totalReleased = releaseUnmatched.count + releaseMatchedLostOrNoSales.count;
-      if (totalReleased > 0) {
-        console.log(`[Cron Service] Released ${totalReleased} old tracking codes (>100 days old with no sales/lost status) while preserving ROI attribution history.`);
+        const totalReleased = releaseUnmatched.count + releaseMatchedLostOrNoSales.count;
+        if (totalReleased > 0) {
+          console.log(`[Cron Service] Released ${totalReleased} old tracking codes (>100 days old with no sales/lost status) while preserving ROI attribution history.`);
+        }
       }
     } catch (err) {
       console.error('[Cron Service] Failed to cleanup/release old tracking codes:', err);

@@ -81,6 +81,12 @@ const memoryApiCache = new Map<string, CacheEntry>();
 export function clearApiCache(prefix?: string) {
   if (!prefix) {
     memoryApiCache.clear();
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('apiCache:')) sessionStorage.removeItem(key);
+      }
+    } catch {}
     return;
   }
   for (const key of memoryApiCache.keys()) {
@@ -88,18 +94,36 @@ export function clearApiCache(prefix?: string) {
       memoryApiCache.delete(key);
     }
   }
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith('apiCache:') && (key.includes(prefix) || key.startsWith(`apiCache:${prefix}`))) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  } catch {}
 }
 
 export function getCachedApiResponse<T = any>(endpoint: string): T | null {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
   const entry = memoryApiCache.get(url);
-  if (!entry) return null;
-  return entry.data as T;
+  if (entry) return entry.data as T;
+  try {
+    const raw = sessionStorage.getItem(`apiCache:${url}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.data) {
+        memoryApiCache.set(url, parsed);
+        return parsed.data as T;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean } = {}
+  options: RequestInit & { timeoutMs?: number; useCache?: boolean; ttlMs?: number; forceFresh?: boolean; retryCount?: number } = {}
 ): Promise<T> {
   const url = endpoint.startsWith('/') ? endpoint : `/api/admin/${endpoint}`;
   const method = (options.method || 'GET').toUpperCase();
@@ -110,13 +134,22 @@ export async function apiRequest<T = any>(
     clearApiCache();
   }
 
-  // SWR Cache check for GET requests
+  // SWR Cache check for GET requests: Instant 0ms response
   const shouldCache = options.useCache !== false && isGet;
-  const ttlMs = options.ttlMs ?? 15000; // 15s default cache
+  const ttlMs = options.ttlMs ?? 15000; // 15s default freshness
 
   if (shouldCache && !options.forceFresh) {
-    const cached = memoryApiCache.get(url);
-    if (cached && Date.now() - cached.timestamp < cached.ttlMs) {
+    let cached = memoryApiCache.get(url);
+    if (!cached) {
+      try {
+        const raw = sessionStorage.getItem(`apiCache:${url}`);
+        if (raw) {
+          cached = JSON.parse(raw);
+          if (cached) memoryApiCache.set(url, cached);
+        }
+      } catch {}
+    }
+    if (cached && Date.now() - cached.timestamp < (cached.ttlMs || ttlMs)) {
       return cached.data as T;
     }
   }
@@ -170,15 +203,35 @@ export async function apiRequest<T = any>(
 
     const data = await response.json();
     if (shouldCache) {
-      memoryApiCache.set(url, {
+      const cacheObj = {
         data,
         timestamp: Date.now(),
         ttlMs,
-      });
+      };
+      memoryApiCache.set(url, cacheObj);
+      try {
+        sessionStorage.setItem(`apiCache:${url}`, JSON.stringify(cacheObj));
+      } catch {}
     }
     return data;
   } catch (err: any) {
     clearTimeout(timeoutId);
+
+    // Stale-While-Revalidate Fallback: Jika koneksi sempat drop / sleep, gunakan data cache yang ada
+    if (isGet) {
+      const fallbackCache = getCachedApiResponse<T>(url);
+      if (fallbackCache) {
+        console.warn(`[API] Serving stale cached response for ${url} due to network timeout.`);
+        return fallbackCache;
+      }
+    }
+
+    // Auto-retry 1x on network transient abort
+    const retries = options.retryCount ?? 0;
+    if (retries < 1 && isGet && (err.name === 'AbortError' || err.message?.includes('Failed to fetch'))) {
+      return apiRequest<T>(endpoint, { ...options, retryCount: retries + 1, timeoutMs: 20000 });
+    }
+
     if (err.name === 'AbortError') {
       throw new Error(`Koneksi server/database lambat (Timeout ${Math.round(timeoutMs / 1000)}s). Silakan coba lagi.`);
     }

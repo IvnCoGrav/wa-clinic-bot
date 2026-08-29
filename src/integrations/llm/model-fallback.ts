@@ -1,23 +1,34 @@
 import axios from 'axios';
 
+export const DEFAULT_FALLBACK_CHAIN = [
+  'MiniMax-M2.7-highspeed',
+  'mimo-v2.5',
+  'qwen3.7-flash-2026-07-15',
+  'deepseek-v4-flash',
+];
+
+export class LlmOutageError extends Error {
+  public readonly isLlmOutage = true;
+  constructor(message: string = 'All LLM models in fallback chain failed to respond.') {
+    super(message);
+    this.name = 'LlmOutageError';
+  }
+}
+
 export function getFallbackModel(): string {
-  return process.env.AI_MODEL_FALLBACK || 'qwen3.7-flash-2026-07-15';
+  return process.env.AI_MODEL_FALLBACK || 'deepseek-chat';
 }
 
 /**
  * Rantai fallback DALAM provider yang sama (mis. SumoPod), dipisah koma.
- * Contoh: AI_MODEL_FALLBACK_CHAIN="deepseek-v4-flash,qwen3.7-flash-2026-07-15"
- * berarti: primary gagal → coba deepseek-v4-flash → coba qwen — SEMUANYA via
- * baseUrl + apiKey yang sama dengan primary. Penyelamat terakhir di provider
- * EKSTERNAL diatur terpisah via LLM_FALLBACK_BASE_URL/LLM_FALLBACK_API_KEY
- * (model-nya = AI_MODEL_FALLBACK / fallbackModel). Kosongkan env ini untuk
- * kembali ke perilaku lama: fallback tunggal langsung ke eksternal.
+ * Default urutan: MiniMax-M2.7-highspeed -> mimo-v2.5 -> qwen3.7-flash-2026-07-15 -> deepseek-v4-flash
  */
 export function getFallbackChain(): string[] {
-  return (process.env.AI_MODEL_FALLBACK_CHAIN || '')
+  const envChain = (process.env.AI_MODEL_FALLBACK_CHAIN || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  return envChain.length > 0 ? envChain : DEFAULT_FALLBACK_CHAIN;
 }
 
 export interface ChatCompletionsWithFallbackCall {
@@ -189,6 +200,10 @@ export async function callChatCompletionsWithFallback(
       }
     }
 
-    throw lastErr;
+    const outageErr = new LlmOutageError(
+      `Seluruh model LLM fallback (${[call.model, ...chain, call.fallbackModel].filter(Boolean).join(' -> ')}) gagal merespons: ${lastErr?.message || String(lastErr)}`
+    );
+    (outageErr as any).cause = lastErr;
+    throw outageErr;
   }
 }
