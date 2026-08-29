@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
@@ -288,10 +289,17 @@ const EMOJI_CATEGORIES = [
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<LiveChatItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
-    try { return sessionStorage.getItem('liveChat:selectedId'); } catch { return null; }
+    try {
+      const urlParam = new URLSearchParams(window.location.search).get('conversationId') || new URLSearchParams(window.location.search).get('id');
+      if (urlParam) return urlParam;
+      return sessionStorage.getItem('liveChat:selectedId');
+    } catch {
+      return null;
+    }
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const replyTextRef = useRef('');
@@ -538,6 +546,7 @@ export const LiveChatMonitor: React.FC = () => {
   const selectedIdRef = useRef<string | null>(null);
   const chatListContainerRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
 
@@ -711,7 +720,24 @@ export const LiveChatMonitor: React.FC = () => {
       if (selectedId) sessionStorage.setItem('liveChat:selectedId', selectedId);
       else sessionStorage.removeItem('liveChat:selectedId');
     } catch {}
-    if (selectedId) loadThread(selectedId);
+    if (selectedId) {
+      loadThread(selectedId);
+      // Jika conversation belum ada di chats list (misal dibuka langsung dari URL / Push notif), ambil detailnya
+      if (!chatsRef.current.some((c) => c.conversationId === selectedId)) {
+        apiRequest(`/api/admin/live-chat/conversations/${selectedId}`)
+          .then((res) => {
+            if (res?.success && res.data) {
+              setChats((prev) => {
+                if (prev.some((c) => c.conversationId === selectedId)) return prev;
+                const updated = [res.data, ...prev];
+                chatsRef.current = updated;
+                return updated;
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    }
   }, [selectedId]);
 
   // Load gateway capability & available customer labels on mount
@@ -917,18 +943,22 @@ export const LiveChatMonitor: React.FC = () => {
 
   useEffect(() => {
     try {
+      const urlConvId = searchParams.get('conversationId') || searchParams.get('id');
       const savedView = sessionStorage.getItem('liveChat:mobileView');
       const savedId = sessionStorage.getItem('liveChat:selectedId');
-      if (savedId) {
-        setSelectedId(savedId);
-        if (savedView === 'chat' && window.innerWidth < 1024) setMobileView('chat');
-        else if (savedView) setMobileView(savedView as any);
-        else if (window.innerWidth < 1024) setMobileView('chat');
+      const effectiveId = urlConvId || savedId;
+      if (effectiveId) {
+        setSelectedId(effectiveId);
+        if (urlConvId || savedView === 'chat' || window.innerWidth < 1024) {
+          setMobileView('chat');
+        } else if (savedView) {
+          setMobileView(savedView as any);
+        }
       } else if (savedView) {
         setMobileView(savedView as any);
       }
     } catch {}
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     try { sessionStorage.setItem('liveChat:mobileView', mobileView); } catch {}
@@ -942,14 +972,24 @@ export const LiveChatMonitor: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const scrollToBottom = (smooth = false) => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: smooth ? 'smooth' : 'auto',
-      });
+  const scrollToBottom = useCallback((smooth = false, forceMulti = true) => {
+    const doScroll = () => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
+      }
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    if (forceMulti) {
+      setTimeout(doScroll, 30);
+      setTimeout(doScroll, 100);
+      setTimeout(doScroll, 250);
+      setTimeout(doScroll, 500);
     }
-  };
+  }, []);
 
   // 📱 Visual Viewport API: Saat keyboard iOS muncul/berubah ukuran, auto-scroll chat agar tidak tertutup
   useEffect(() => {
@@ -1056,8 +1096,10 @@ export const LiveChatMonitor: React.FC = () => {
 
   useEffect(() => {
     // Auto scroll down to latest message when messages change or new chat opened
-    scrollToBottom(false);
-  }, [messages, selectedId]);
+    if (messages.length > 0) {
+      scrollToBottom(false, true);
+    }
+  }, [messages, selectedId, scrollToBottom]);
 
   const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
     return [...list].sort((a, b) => {
@@ -3179,6 +3221,7 @@ export const LiveChatMonitor: React.FC = () => {
                       );
                     })
                   )}
+                  <div ref={messagesEndRef} className="h-0 w-0 pointer-events-none" />
                 </div>
 
                 {/* Reply Composer */}

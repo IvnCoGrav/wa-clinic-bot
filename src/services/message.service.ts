@@ -461,7 +461,7 @@ export class MessageService {
               icon: avatarUrl,
               badge: '/admin/favicon.ico',
               image: imageUrl,
-              url: `/admin/#/live-chat?conversationId=${data.conversationId}`,
+              url: `/admin/live-chat?conversationId=${data.conversationId}`,
               tag: `chat-${data.conversationId}`,
             });
           } catch {}

@@ -241,7 +241,7 @@ export class WebPushService {
     const stringifiedPayload = JSON.stringify({
       title: payload.title,
       body: payload.body,
-      url: payload.url || '/admin/#/live-chat',
+      url: payload.url || '/admin/live-chat',
       tag: payload.tag || 'chat-notification',
       icon: payload.icon || '/admin/favicon.ico',
       badge: payload.badge || '/admin/favicon.ico',
@@ -317,7 +317,7 @@ export class WebPushService {
       body: 'Halo kak, apakah besok ada jadwal kosong untuk perawatan spa bayi?',
       icon: 'https://ui-avatars.com/api/?name=Bunda+Sarah&background=008069&color=fff&size=192&bold=true',
       badge: '/admin/favicon.ico',
-      url: '/admin/#/live-chat',
+      url: '/admin/live-chat',
       tag: 'test-push',
     });
 

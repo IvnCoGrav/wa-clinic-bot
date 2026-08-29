@@ -40,7 +40,7 @@ const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m =>
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
 const TelegramIntegration = lazy(() => import('./pages/tenant/TelegramIntegration').then(m => ({ default: m.TelegramIntegration })));
 
-/** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. */
+/** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. Mendukung resolusi URL legacy berbasis hash. */
 const IndexRedirect: React.FC = () => {
   const { user, loading } = useAuth();
   useEffect(() => {
@@ -53,6 +53,15 @@ const IndexRedirect: React.FC = () => {
       </div>
     );
   }
+
+  // Resiliensi URL legacy: jika pengguna datang dari notifikasi lama/bookmark ber-hash (e.g. /admin/#/live-chat?conversationId=...)
+  if (typeof window !== 'undefined' && window.location.hash && window.location.hash.startsWith('#/')) {
+    const rawHash = window.location.hash.slice(2);
+    if (rawHash) {
+      return <Navigate to={`/admin/${rawHash}`} replace />;
+    }
+  }
+
   const targetPath = getDefaultRedirect(user?.role || '');
   return <Navigate to={targetPath} replace />;
 };

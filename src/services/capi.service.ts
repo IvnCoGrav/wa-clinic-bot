@@ -706,6 +706,9 @@ export function fireCapiEvent(params: {
 
 
 export class CapiService {
+  private contactCooldown = new Map<string, number>();
+  private checkoutCooldown = new Map<string, number>();
+
   /**
    * Mengirimkan server-side event ke Meta Conversions API (CAPI).
    */
@@ -737,6 +740,27 @@ export class CapiService {
       return { success: false, message: 'Skipped: Sandbox or dummy test contact' };
     }
 
+    // 1b. Centralized Event Cooldown Guard (Anti-Burst & Idempotency)
+    const phoneKey = (customer?.phone || '').replace(/\D/g, '');
+    if (phoneKey) {
+      const now = Date.now();
+      if (eventName === 'Contact') {
+        const lastSent = this.contactCooldown.get(phoneKey);
+        if (lastSent && now - lastSent < 24 * 60 * 60 * 1000) {
+          console.log(`[CAPI GUARD] Skipped Contact event for ${phoneKey}: Centralized 24h cooldown active.`);
+          return { success: false, message: 'Skipped: Contact event 24h cooldown active' };
+        }
+        this.contactCooldown.set(phoneKey, now);
+      } else if (eventName === 'InitiateCheckout') {
+        const lastSent = this.checkoutCooldown.get(phoneKey);
+        if (lastSent && now - lastSent < 60 * 60 * 1000) {
+          console.log(`[CAPI GUARD] Skipped InitiateCheckout event for ${phoneKey}: Centralized 1h cooldown active.`);
+          return { success: false, message: 'Skipped: InitiateCheckout event 1h cooldown active' };
+        }
+        this.checkoutCooldown.set(phoneKey, now);
+      }
+    }
+
     let effectiveAdClick = adClick || (customer as any)?.adClick;
     let fullCustomer = customer;
     if (customer?.id || customer?.phone) {
@@ -748,10 +772,15 @@ export class CapiService {
         if (dbCust) {
           fullCustomer = { ...dbCust, ...customer };
         }
-        if (!effectiveAdClick && fullCustomer?.id) {
+        if (!effectiveAdClick && (fullCustomer?.id || fullCustomer?.phone)) {
           effectiveAdClick = await prisma.adClick.findFirst({
-            where: { customerId: fullCustomer.id },
-            orderBy: { matchedAt: 'desc' },
+            where: {
+              OR: [
+                ...(fullCustomer?.id ? [{ customerId: fullCustomer.id }] : []),
+                ...(fullCustomer?.phone ? [{ phone: fullCustomer.phone }] : []),
+              ],
+            },
+            orderBy: [{ matchedAt: 'desc' }, { createdAt: 'desc' }],
           });
         }
       } catch {}
@@ -908,7 +937,11 @@ export class CapiService {
         effectiveAdClick?.ipAddress || null // remoteAddress
       );
 
-      const fbc = builder.getFbc() || effectiveAdClick?.fbc;
+      let fbc = builder.getFbc() || effectiveAdClick?.fbc;
+      if (!fbc && effectiveAdClick?.fbclid) {
+        const ts = effectiveAdClick.createdAt ? new Date(effectiveAdClick.createdAt).getTime() : Date.now();
+        fbc = effectiveAdClick.fbclid.startsWith('fb.1.') ? effectiveAdClick.fbclid : `fb.1.${ts}.${effectiveAdClick.fbclid}`;
+      }
       const fbp = builder.getFbp() || effectiveAdClick?.fbp;
       const clientIp = builder.getClientIpAddress() || effectiveAdClick?.ipAddress;
 

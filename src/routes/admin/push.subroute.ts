@@ -115,7 +115,7 @@ export async function pushSubroutes(fastify: FastifyInstance) {
         const result = await webPushService.sendPushToTenant(DEFAULT_TENANT_ID, {
           title: '🔔 Uji Coba Web Push',
           body: 'Notifikasi berhasil terkirim dari server Kala Clinic!',
-          url: '/admin/#/live-chat',
+          url: '/admin/live-chat',
           tag: 'test-push',
         });
         return reply.status(200).send({ success: true, ...result });

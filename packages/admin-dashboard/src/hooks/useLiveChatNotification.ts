@@ -145,7 +145,13 @@ export function useLiveChatNotification(currentRole: string) {
               body: content,
               conversationId,
               onClick: () => {
-                navigate('/admin/live-chat');
+                try {
+                  if (conversationId) {
+                    sessionStorage.setItem('liveChat:selectedId', conversationId);
+                    sessionStorage.setItem('liveChat:mobileView', 'chat');
+                  }
+                } catch {}
+                navigate(conversationId ? `/admin/live-chat?conversationId=${encodeURIComponent(conversationId)}` : '/admin/live-chat');
               },
             });
           }
@@ -188,7 +194,13 @@ export function useLiveChatNotification(currentRole: string) {
   const openChatFromToast = useCallback(
     (conversationId: string) => {
       dismissToast();
-      navigate('/admin/live-chat');
+      try {
+        if (conversationId) {
+          sessionStorage.setItem('liveChat:selectedId', conversationId);
+          sessionStorage.setItem('liveChat:mobileView', 'chat');
+        }
+      } catch {}
+      navigate(conversationId ? `/admin/live-chat?conversationId=${encodeURIComponent(conversationId)}` : '/admin/live-chat');
     },
     [dismissToast, navigate]
   );

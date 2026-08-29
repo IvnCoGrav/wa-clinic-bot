@@ -175,6 +175,27 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/admin/live-chat/conversations/:id
+   * Detail satu percakapan untuk live chat monitor.
+   */
+  fastify.get(
+    '/api/admin/live-chat/conversations/:id',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      const { id } = request.params;
+      const tenantId = (request as any).tenantId || DEFAULT_TENANT_ID;
+      try {
+        const item = await liveChatService.getConversationDetail(id, tenantId);
+        if (!item) {
+          return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan' });
+        }
+        return reply.status(200).send({ success: true, data: item });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
    * GET /api/admin/live-chat/conversations/:id/messages
    * Thread pesan sebuah percakapan (kronologis).
    */

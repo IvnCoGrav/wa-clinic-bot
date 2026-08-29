@@ -115,6 +115,32 @@ export const FollowUpQueue: React.FC = () => {
     sending: false,
   });
 
+  const chatContainerRef = React.useRef<HTMLDivElement>(null);
+  const chatMessagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll chat modal to bottom
+  const scrollChatToBottom = useCallback((smooth = false) => {
+    const doScroll = () => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
+      }
+      if (chatMessagesEndRef.current) {
+        chatMessagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 30);
+    setTimeout(doScroll, 100);
+    setTimeout(doScroll, 250);
+  }, []);
+
+  useEffect(() => {
+    if (chatModal.open && chatModal.messages.length > 0 && !chatModal.loading) {
+      scrollChatToBottom(false);
+    }
+  }, [chatModal.open, chatModal.messages, chatModal.loading, scrollChatToBottom]);
+
   // Edit Modal (Date, Variant/Stage, and Custom Text)
   const [editModal, setEditModal] = useState<{
     open: boolean;
@@ -1160,6 +1186,7 @@ export const FollowUpQueue: React.FC = () => {
 
               {/* Modal Body: Message Stream with WhatsApp Pattern Background */}
               <div
+                ref={chatContainerRef}
                 className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
                 style={{
                   backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
@@ -1177,40 +1204,43 @@ export const FollowUpQueue: React.FC = () => {
                     <p className="text-[#8696a0] mt-0.5">Ketik pesan di bawah untuk memulai percakapan.</p>
                   </div>
                 ) : (
-                  chatModal.messages.map((msg) => {
-                    const isInbound = msg.direction === 'INBOUND';
-                    const typeUpper = (msg.sender_type || '').toUpperCase();
-                    const sender = isInbound
-                      ? 'Customer'
-                      : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
-                      ? msg.sender_name || 'Admin'
-                      : 'Bot';
+                  <>
+                    {chatModal.messages.map((msg) => {
+                      const isInbound = msg.direction === 'INBOUND';
+                      const typeUpper = (msg.sender_type || '').toUpperCase();
+                      const sender = isInbound
+                        ? 'Customer'
+                        : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
+                        ? msg.sender_name || 'Admin'
+                        : 'Bot';
 
-                    return (
-                      <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
-                        <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5 px-1">
-                          <span className="font-bold text-[#111b21]">{sender}</span>
-                          <span>•</span>
-                          <Clock size={9} />
-                          <span>
-                            {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                      return (
+                        <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
+                          <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5 px-1">
+                            <span className="font-bold text-[#111b21]">{sender}</span>
+                            <span>•</span>
+                            <Clock size={9} />
+                            <span>
+                              {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <div
+                            className={`max-w-[85%] sm:max-w-[75%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs ${
+                              isInbound
+                                ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                                : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                          </div>
                         </div>
-                        <div
-                          className={`max-w-[85%] sm:max-w-[75%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs ${
-                            isInbound
-                              ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                              : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
-                          }`}
-                        >
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                    <div ref={chatMessagesEndRef} className="h-0 w-0 pointer-events-none" />
+                  </>
                 )}
               </div>
 
