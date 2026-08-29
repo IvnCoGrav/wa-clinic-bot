@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { Pagination } from '../../components/common/Pagination';
 import {
@@ -28,6 +29,9 @@ import {
   Loader2,
   FileText,
   Tag,
+  Phone,
+  MapPin,
+  ChevronRight,
 } from 'lucide-react';
 
 interface Customer {
@@ -84,13 +88,15 @@ export const FollowUpQueue: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Available Templates Cache for previews & resets
+  const [availableTemplates, setAvailableTemplates] = useState<TemplateItem[]>([]);
+
+  // Confirmation Modal
   const [confirmAction, setConfirmAction] = useState<{
     type: 'cancel' | 'send' | 'bulk-cancel' | 'queue' | 'bulk-queue' | 'reschedule-overdue';
     id?: string;
   } | null>(null);
-
-  // Available Templates Cache for previews & resets
-  const [availableTemplates, setAvailableTemplates] = useState<TemplateItem[]>([]);
 
   // Chat History Modal
   const [chatModal, setChatModal] = useState<{
@@ -125,6 +131,19 @@ export const FollowUpQueue: React.FC = () => {
 
   const PAGE_SIZE = 20;
 
+  // Global ESC key listener to close modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (chatModal.open) setChatModal((prev) => ({ ...prev, open: false }));
+        if (editModal.open) setEditModal({ open: false, newDate: '', stage: 1, customText: '' });
+        if (confirmAction) setConfirmAction(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [chatModal.open, editModal.open, confirmAction]);
+
   // Pre-load templates
   useEffect(() => {
     apiRequest('follow-up-templates')
@@ -136,7 +155,7 @@ export const FollowUpQueue: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  const loadFollowUps = async () => {
+  const loadFollowUps = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -160,11 +179,11 @@ export const FollowUpQueue: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, typeFilter, dateFilter, search, sortBy, sortOrder, page]);
 
   useEffect(() => {
     loadFollowUps();
-  }, [statusFilter, typeFilter, dateFilter, page, sortBy, sortOrder]);
+  }, [loadFollowUps]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -457,49 +476,49 @@ export const FollowUpQueue: React.FC = () => {
     switch (status) {
       case 'PENDING':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
             <Clock size={11} />
             <span>PENDING</span>
           </span>
         );
       case 'QUEUED':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
             <CalendarCheck size={11} />
             <span>QUEUED</span>
           </span>
         );
       case 'SENT':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <CheckCircle size={11} />
             <span>SENT</span>
           </span>
         );
       case 'CANCELLED':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
             <XCircle size={11} />
             <span>CANCELLED</span>
           </span>
         );
       case 'SKIPPED':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
             <AlertCircle size={11} />
             <span>SKIPPED</span>
           </span>
         );
       case 'FAILED':
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
             <AlertCircle size={11} />
             <span>FAILED</span>
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-50 text-slate-600 border border-slate-200">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-50 text-slate-600 border border-slate-200">
             <span>{status}</span>
           </span>
         );
@@ -508,7 +527,7 @@ export const FollowUpQueue: React.FC = () => {
 
   const renderSortIndicator = (field: string) => {
     if (sortBy !== field) {
-      return <ArrowUpDown size={12} className="text-[#8696a0] opacity-40 group-hover:opacity-100" />;
+      return <ArrowUpDown size={12} className="text-[#8696a0] opacity-40 group-hover:opacity-100 transition" />;
     }
     return sortOrder === 'asc' ? (
       <ArrowUp size={12} className="text-[#008069] font-bold" />
@@ -522,7 +541,7 @@ export const FollowUpQueue: React.FC = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e9edef]">
         <div className="flex items-center space-x-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-[#008069] text-white flex items-center justify-center shadow-sm shrink-0">
+          <div className="h-12 w-12 rounded-2xl bg-[#008069] text-white flex items-center justify-center shadow-xs shrink-0">
             <CalendarCheck size={24} />
           </div>
           <div>
@@ -540,11 +559,11 @@ export const FollowUpQueue: React.FC = () => {
         </div>
 
         {/* Global Bulk Actions */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
           <button
             onClick={() => setConfirmAction({ type: 'bulk-queue' })}
             disabled={actionLoading !== null}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
             title="Jadwalkan seluruh follow-up pending ke antrian QUEUED"
           >
             <CalendarCheck size={14} />
@@ -554,7 +573,7 @@ export const FollowUpQueue: React.FC = () => {
           <button
             onClick={() => setConfirmAction({ type: 'reschedule-overdue' })}
             disabled={actionLoading !== null}
-            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
             title="Majukan follow-up overdue mulai hari ini/besok (maks 10 blast/hari)"
           >
             <FastForward size={14} />
@@ -564,7 +583,7 @@ export const FollowUpQueue: React.FC = () => {
           <button
             onClick={() => setConfirmAction({ type: 'bulk-cancel' })}
             disabled={actionLoading !== null}
-            className="px-3.5 py-2 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
+            className="px-3.5 py-2 bg-white hover:bg-rose-50 active:scale-95 border border-rose-200 text-rose-600 rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
             title="Batalkan seluruh antrian pending"
           >
             <Trash2 size={14} />
@@ -572,9 +591,9 @@ export const FollowUpQueue: React.FC = () => {
           </button>
 
           <button
-            onClick={loadFollowUps}
+            onClick={() => loadFollowUps()}
             disabled={loading}
-            className="p-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl transition shadow-xs flex items-center space-x-1"
+            className="p-2 bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#111b21] rounded-xl transition shadow-xs flex items-center space-x-1"
             title="Refresh Data"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
@@ -591,15 +610,18 @@ export const FollowUpQueue: React.FC = () => {
           <p className="text-[#54656f] mt-0.5">
             Pesan berstatus <strong>QUEUED</strong> akan terkirim otomatis tepat pada tanggal & jam yang sudah disetup (maksimal 10 blast per hari pada jam kerja).
             Dilengkapi <strong>Smart Context Guard</strong>: jika customer baru saja aktif chat (&lt;3 hari terakhir), jadwal otomatis dimundurkan agar tidak menimpa obrolan baru.
-            Admin juga dapat mengklik tombol <strong>Chat</strong> untuk membuka modal riwayat obrolan langsung di sini tanpa pindah halaman.
+            Klik tombol <strong>Chat</strong> untuk membuka modal riwayat obrolan langsung di sini tanpa pindah halaman.
           </p>
         </div>
       </div>
 
-      {/* Filters & Search Bar */}
+      {/* Filters & Search Bar (Cleaned up - No sorting dropdown) */}
       <div className="bg-white border border-[#e9edef] rounded-2xl p-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          <Filter size={15} className="text-[#008069] flex-shrink-0" />
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+          <div className="flex items-center space-x-1.5 text-xs font-bold text-[#54656f] pr-1">
+            <Filter size={15} className="text-[#008069] flex-shrink-0" />
+            <span>Filter:</span>
+          </div>
 
           {/* Date Filter Dropdown */}
           <select
@@ -608,7 +630,7 @@ export const FollowUpQueue: React.FC = () => {
               setDateFilter(e.target.value);
               setPage(1);
             }}
-            className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-medium"
+            className="p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] rounded-xl text-xs text-[#111b21] font-semibold focus:outline-none focus:border-[#008069] shadow-xs transition"
           >
             <option value="upcoming">📅 Hari Ini & Ke Depan (Upcoming)</option>
             <option value="all">📅 Semua Tanggal</option>
@@ -625,7 +647,7 @@ export const FollowUpQueue: React.FC = () => {
               setStatusFilter(e.target.value);
               setPage(1);
             }}
-            className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs transition"
           >
             <option value="">Semua Status</option>
             <option value="QUEUED">QUEUED (Terjadwal di Antrian)</option>
@@ -643,7 +665,7 @@ export const FollowUpQueue: React.FC = () => {
               setTypeFilter(e.target.value);
               setPage(1);
             }}
-            className="p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs transition"
           >
             <option value="">Semua Tipe</option>
             <option value="REMINDER_H1">Reminder Treatment (H-1 Malam)</option>
@@ -652,28 +674,6 @@ export const FollowUpQueue: React.FC = () => {
             <option value="NO_PURCHASE">Belum Purchase (+3, +7, +14 Hari)</option>
             <option value="NEXT_TREATMENT">Treatment Lanjutan (+1, +2, +3 Bulan)</option>
           </select>
-
-          {/* Quick Sort Dropdown */}
-          <div className="flex items-center space-x-1 border border-[#d1d7db] rounded-xl px-2 py-1 bg-white shadow-xs">
-            <ArrowUpDown size={13} className="text-[#8696a0]" />
-            <select
-              value={`${sortBy}:${sortOrder}`}
-              onChange={(e) => {
-                const [sb, so] = e.target.value.split(':');
-                setSortBy(sb);
-                setSortOrder(so as 'asc' | 'desc');
-                setPage(1);
-              }}
-              className="p-1 bg-transparent text-xs text-[#111b21] focus:outline-none border-0"
-            >
-              <option value="scheduled_at:asc">Urutkan: Jadwal Terdekat (ASC)</option>
-              <option value="scheduled_at:desc">Urutkan: Jadwal Terjauh (DESC)</option>
-              <option value="created_at:desc">Urutkan: Terbaru Dibuat</option>
-              <option value="customer_name:asc">Urutkan: Nama Customer (A-Z)</option>
-              <option value="type:asc">Urutkan: Tipe Follow-Up</option>
-              <option value="status:asc">Urutkan: Status</option>
-            </select>
-          </div>
         </div>
 
         {/* Search Bar */}
@@ -684,7 +684,7 @@ export const FollowUpQueue: React.FC = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cari nama / nomor WhatsApp..."
-            className="w-full pl-8 pr-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="w-full pl-8 pr-3 py-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
           />
         </form>
       </div>
@@ -738,20 +738,20 @@ export const FollowUpQueue: React.FC = () => {
             <tbody className="divide-y divide-[#e9edef]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#667781] text-xs">
+                  <td colSpan={6} className="py-16 text-center text-[#667781] text-xs">
                     <div className="flex justify-center items-center space-x-2">
-                      <RefreshCw size={14} className="animate-spin text-[#008069]" />
+                      <RefreshCw size={16} className="animate-spin text-[#008069]" />
                       <span>Memuat data antrian follow-up...</span>
                     </div>
                   </td>
                 </tr>
               ) : followUps.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#667781] text-xs">
-                    <CalendarCheck size={28} className="mx-auto text-[#8696a0] mb-2 opacity-50" />
-                    <p className="font-semibold text-[#111b21]">Tidak ada antrian follow-up yang sesuai filter.</p>
-                    <p className="text-[#8696a0] mt-0.5">
-                      Coba ganti filter status, filter tanggal, atau bersihkan kata kunci pencarian.
+                  <td colSpan={6} className="py-16 text-center text-[#667781] text-xs">
+                    <CalendarCheck size={36} className="mx-auto text-[#8696a0] mb-2.5 opacity-40" />
+                    <p className="font-bold text-[#111b21] text-sm">Tidak ada antrian follow-up yang sesuai filter.</p>
+                    <p className="text-[#8696a0] mt-1 max-w-sm mx-auto">
+                      Saat ini tidak ada jadwal follow-up aktif. Coba ubah pilihan tanggal atau status di atas.
                     </p>
                   </td>
                 </tr>
@@ -760,17 +760,19 @@ export const FollowUpQueue: React.FC = () => {
                   const dt = formatDateTime(fu.scheduled_at);
                   const typeMeta = getTypeLabel(fu.type, fu.stage);
                   const c = fu.customer;
-                  const isOverdue = new Date(fu.scheduled_at).getTime() < Date.now() && (fu.status === 'PENDING' || fu.status === 'QUEUED');
+                  const isOverdue =
+                    new Date(fu.scheduled_at).getTime() < Date.now() &&
+                    (fu.status === 'PENDING' || fu.status === 'QUEUED');
 
                   return (
-                    <tr key={fu.id} className="hover:bg-[#f8fafc] transition">
+                    <tr key={fu.id} className="hover:bg-[#f8fafc] transition group">
                       {/* Jadwal Kirim */}
                       <td className="px-4 py-3.5 text-xs">
-                        <div className="font-semibold text-[#111b21] flex items-center space-x-1">
-                          <Calendar size={12} className="text-[#8696a0]" />
+                        <div className="font-bold text-[#111b21] flex items-center space-x-1.5">
+                          <Calendar size={13} className="text-[#008069]" />
                           <span>{dt.date}</span>
                         </div>
-                        <div className="text-[11px] text-[#667781] flex items-center space-x-1 mt-0.5">
+                        <div className="text-[11px] text-[#667781] flex items-center space-x-1 mt-0.5 font-medium">
                           <Clock size={10} className="text-[#8696a0]" />
                           <span>{dt.time}</span>
                           {isOverdue && (
@@ -784,7 +786,7 @@ export const FollowUpQueue: React.FC = () => {
                       {/* Tipe & Tahap */}
                       <td className="px-4 py-3.5 text-xs">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border ${typeMeta.color}`}
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${typeMeta.color}`}
                         >
                           {typeMeta.label}
                         </span>
@@ -792,8 +794,8 @@ export const FollowUpQueue: React.FC = () => {
 
                       {/* Customer & Konteks Chat */}
                       <td className="px-4 py-3.5 text-xs">
-                        <div className="flex items-center space-x-1.5 font-semibold text-[#111b21]">
-                          <User size={12} className="text-[#8696a0]" />
+                        <div className="flex items-center space-x-1.5 font-bold text-[#111b21]">
+                          <User size={13} className="text-[#8696a0]" />
                           <span className="truncate max-w-[170px]">{c?.name || 'Tanpa Nama'}</span>
                           {c?.conversations?.[0]?.is_human_handling && (
                             <span
@@ -808,9 +810,9 @@ export const FollowUpQueue: React.FC = () => {
                           <span>{c?.phone}</span>
                           {c?.conversations?.[0]?.last_message_at && (
                             <span
-                              className={`flex items-center space-x-0.5 px-1 py-0.2 rounded text-[9px] ${
+                              className={`flex items-center space-x-0.5 px-1.5 py-0.5 rounded text-[9px] ${
                                 Date.now() - new Date(c.conversations[0].last_message_at).getTime() < 72 * 60 * 60 * 1000
-                                  ? 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200'
+                                  ? 'bg-emerald-50 text-emerald-700 font-bold border border-emerald-200'
                                   : 'text-[#8696a0]'
                               }`}
                               title={`Chat terakhir: ${new Date(c.conversations[0].last_message_at).toLocaleString('id-ID')}`}
@@ -832,11 +834,11 @@ export const FollowUpQueue: React.FC = () => {
 
                       {/* Template / Pesan */}
                       <td className="px-4 py-3.5 text-xs text-[#54656f]">
-                        <div className="flex items-center space-x-1">
-                          <Sparkles size={11} className="text-amber-500 flex-shrink-0" />
-                          <span className="font-semibold">Varian #{((fu.stage - 1) % 3) + 1}</span>
+                        <div className="flex items-center space-x-1.5">
+                          <Sparkles size={12} className="text-amber-500 flex-shrink-0" />
+                          <span className="font-semibold text-[#111b21]">Varian #{((fu.stage - 1) % 3) + 1}</span>
                           {fu.custom_text && (
-                            <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 ml-1">
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 ml-1">
                               Custom Text
                             </span>
                           )}
@@ -848,77 +850,49 @@ export const FollowUpQueue: React.FC = () => {
 
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end space-x-1">
+                        <div className="flex items-center justify-end space-x-1.5">
                           {fu.status === 'PENDING' && (
-                            <>
-                              <button
-                                onClick={() => setConfirmAction({ type: 'queue', id: fu.id })}
-                                disabled={actionLoading === fu.id}
-                                className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center space-x-1 transition shadow-xs"
-                                title="Jadwalkan / Masukkan ke Antrian"
-                              >
-                                <CalendarCheck size={12} />
-                                <span>Jadwalkan</span>
-                              </button>
-                              <button
-                                onClick={() => fu.customer && handleOpenChatHistory(fu.customer)}
-                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#008069] text-xs font-semibold transition shadow-xs flex items-center"
-                                title="Buka Riwayat Chat Modal"
-                              >
-                                <MessageSquare size={12} />
-                              </button>
-                              <button
-                                onClick={() => handleOpenEdit(fu)}
-                                disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition shadow-xs"
-                                title="Edit Jadwal & Pesan"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button
-                                onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
-                                disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold transition shadow-xs"
-                                title="Batalkan"
-                              >
-                                <XCircle size={12} />
-                              </button>
-                            </>
-                          )}
-                          {fu.status === 'QUEUED' && (
-                            <>
-                              <button
-                                onClick={() => fu.customer && handleOpenChatHistory(fu.customer)}
-                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#008069] text-xs font-semibold transition shadow-xs flex items-center"
-                                title="Buka Riwayat Chat Modal"
-                              >
-                                <MessageSquare size={12} />
-                              </button>
-                              <button
-                                onClick={() => handleOpenEdit(fu)}
-                                disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition shadow-xs"
-                                title="Edit Jadwal & Pesan"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button
-                                onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
-                                disabled={actionLoading === fu.id}
-                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-semibold transition shadow-xs"
-                                title="Batalkan"
-                              >
-                                <XCircle size={12} />
-                              </button>
-                            </>
-                          )}
-                          {fu.status !== 'PENDING' && fu.status !== 'QUEUED' && (
                             <button
-                              onClick={() => fu.customer && handleOpenChatHistory(fu.customer)}
-                              className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] hover:text-[#008069] text-xs font-semibold transition shadow-xs flex items-center"
-                              title="Buka Riwayat Chat Modal"
+                              onClick={() => setConfirmAction({ type: 'queue', id: fu.id })}
+                              disabled={actionLoading === fu.id}
+                              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 text-blue-700 text-xs font-bold flex items-center space-x-1 transition shadow-xs"
+                              title="Jadwalkan / Masukkan ke Antrian"
                             >
-                              <MessageSquare size={12} />
+                              <CalendarCheck size={12} />
+                              <span>Jadwalkan</span>
+                            </button>
+                          )}
+
+                          {/* Chat History Modal Button */}
+                          <button
+                            onClick={() => fu.customer && handleOpenChatHistory(fu.customer)}
+                            className="p-2 rounded-xl bg-white hover:bg-[#e8f5f2] active:scale-95 border border-[#d1d7db] text-[#54656f] hover:text-[#008069] text-xs font-semibold transition shadow-xs flex items-center"
+                            title="Buka Riwayat Chat Modal"
+                          >
+                            <MessageSquare size={13} />
+                          </button>
+
+                          {/* Edit Modal Button */}
+                          {(fu.status === 'PENDING' || fu.status === 'QUEUED') && (
+                            <button
+                              onClick={() => handleOpenEdit(fu)}
+                              disabled={actionLoading === fu.id}
+                              className="p-2 rounded-xl bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] hover:text-[#111b21] text-xs font-semibold transition shadow-xs"
+                              title="Edit Jadwal, Varian & Teks Pesan"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                          )}
+
+                          {/* Cancel Button */}
+                          {(fu.status === 'PENDING' || fu.status === 'QUEUED') && (
+                            <button
+                              onClick={() => setConfirmAction({ type: 'cancel', id: fu.id })}
+                              disabled={actionLoading === fu.id}
+                              className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 border border-rose-200 text-rose-600 text-xs font-semibold transition shadow-xs"
+                              title="Batalkan Follow-Up"
+                            >
+                              <XCircle size={13} />
                             </button>
                           )}
                         </div>
@@ -941,381 +915,443 @@ export const FollowUpQueue: React.FC = () => {
         label={`Menampilkan ${totalItems > 0 ? (page - 1) * 20 + 1 : 0} - ${Math.min(page * 20, totalItems)} dari ${totalItems} antrian`}
       />
 
-      {/* Modal 1: Edit Follow-Up Modal (Date, Variant & Text Editor) */}
-      {editModal.open && editModal.item && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
-          onClick={() => setEditModal({ open: false, newDate: '', stage: 1, customText: '' })}
-        >
+      {/* ========================================================================= */}
+      {/* PORTAL MODAL 1: Edit Follow-Up Modal (Date, Variant & Text Editor)       */}
+      {/* ========================================================================= */}
+      {editModal.open &&
+        editModal.item &&
+        createPortal(
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
+            onClick={() => setEditModal({ open: false, newDate: '', stage: 1, customText: '' })}
           >
-            <div className="flex justify-between items-center pb-3 border-b border-[#e9edef]">
-              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
-                <Edit2 className="text-[#008069]" size={18} />
-                <span>Edit Follow-Up: Jadwal, Varian & Teks Pesan</span>
-              </h3>
-              <button
-                onClick={() => setEditModal({ open: false, newDate: '', stage: 1, customText: '' })}
-                className="p-1 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Customer & Info Banner */}
-            <div className="text-xs text-[#54656f] space-y-1 bg-[#f8fafc] p-3 rounded-xl border border-[#e9edef]">
-              <p>
-                <strong className="text-[#111b21]">Customer:</strong> {editModal.item.customer?.name || 'Tanpa Nama'} (
-                {editModal.item.customer?.phone})
-              </p>
-              <p>
-                <strong className="text-[#111b21]">Tipe Follow-Up:</strong> {getTypeLabel(editModal.item.type, editModal.stage).label}
-              </p>
-            </div>
-
-            {/* Field 1: Jadwal Kirim */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1">
-                <Calendar size={13} className="text-[#008069]" />
-                <span>Jadwal Kirim</span>
-              </label>
-              <input
-                type="datetime-local"
-                value={editModal.newDate}
-                onChange={(e) => setEditModal({ ...editModal, newDate: e.target.value })}
-                className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
-              />
-            </div>
-
-            {/* Field 2: Pilihan Varian (Stage 1 / 2 / 3) */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1">
-                  <Sparkles size={13} className="text-amber-500" />
-                  <span>Pilih Varian Rolling / Tahap</span>
-                </label>
-                <span className="text-[10px] text-[#8696a0]">Klik varian untuk memuat template defaultnya</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[1, 2, 3].map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => handleVariantSelect(v)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
-                      editModal.stage === v
-                        ? 'bg-[#e8f5f2] border-[#008069] text-[#008069] shadow-xs'
-                        : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
-                    }`}
-                  >
-                    <span>Varian #{v}</span>
-                    {editModal.stage === v && <CheckCircle size={12} className="text-[#008069]" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Field 3: Teks Pesan Follow-Up */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1">
-                  <FileText size={13} className="text-[#008069]" />
-                  <span>Teks Pesan Follow-Up</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (editModal.item) {
-                      const defaultText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage);
-                      setEditModal((prev) => ({ ...prev, customText: defaultText }));
-                    }
-                  }}
-                  className="text-[11px] text-[#008069] hover:underline flex items-center space-x-1 font-semibold"
-                >
-                  <RotateCcw size={10} />
-                  <span>Reset ke Template Default</span>
-                </button>
-              </div>
-
-              <textarea
-                rows={5}
-                value={editModal.customText}
-                onChange={(e) => setEditModal({ ...editModal, customText: e.target.value })}
-                placeholder="Tulis pesan follow-up kustom untuk pelanggan ini..."
-                className="w-full p-3 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs leading-relaxed font-sans"
-              />
-
-              {/* Tag Helpers */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                <span className="text-[10px] text-[#8696a0] flex items-center gap-1">
-                  <Tag size={10} /> Variabel:
-                </span>
-                {['{name}', '{babyName}', '{time}'].map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => setEditModal((prev) => ({ ...prev, customText: `${prev.customText} ${tag}` }))}
-                    className="px-2 py-0.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[10px] font-mono text-[#54656f] border border-[#d1d7db] transition"
-                  >
-                    + {tag}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-[#8696a0] leading-tight">
-                * Variabel <code>{'{name}'}</code> akan otomatis disanitasi menjadi sapaan bersih (misal: "Bunda Rina").
-              </p>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
-              <button
-                type="button"
-                onClick={() => setEditModal({ open: false, newDate: '', stage: 1, customText: '' })}
-                className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleEditSave}
-                disabled={actionLoading === editModal.item.id}
-                className="px-5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5"
-              >
-                {actionLoading === editModal.item.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />}
-                <span>Simpan Perubahan</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal 2: Chat History Modal */}
-      {chatModal.open && chatModal.customer && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
-          onClick={() => setChatModal((prev) => ({ ...prev, open: false }))}
-        >
-          <div
-            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
-              <div>
-                <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-2">
-                  <MessageSquare size={16} className="text-[#008069]" />
-                  <span>Riwayat Chat: {chatModal.customer.name || 'Customer'}</span>
-                </h3>
-                <p className="text-[11px] text-[#667781] mt-0.5">
-                  {chatModal.customer.phone} • {chatModal.customer.kelurahan || chatModal.customer.kecamatan || chatModal.customer.kota || 'Surabaya/Sidoarjo'}
-                </p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <a
-                  href="/admin/live-chat"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] text-xs font-medium transition flex items-center space-x-1"
-                  title="Buka Halaman Live Chat di Tab Baru"
-                >
-                  <ExternalLink size={12} />
-                  <span>Live Chat Tab</span>
-                </a>
-                <button
-                  onClick={() => setChatModal((prev) => ({ ...prev, open: false }))}
-                  className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Body: Message Stream with WhatsApp Pattern Background */}
             <div
-              className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[320px]"
-              style={{
-                backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
-                backgroundSize: '16px 16px',
-              }}
+              className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-xl shadow-2xl flex flex-col my-auto max-h-[88vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
             >
-              {chatModal.loading ? (
-                <div className="flex justify-center items-center py-16">
-                  <Loader2 className="animate-spin text-[#008069]" size={32} />
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc] shrink-0">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#e8f5f2] text-[#008069] flex items-center justify-center">
+                    <Edit2 size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-[#111b21] tracking-tight">Edit Follow-Up</h3>
+                    <p className="text-[11px] text-[#54656f]">Atur jadwal pengiriman, varian pesan, atau sesuaikan teks khusus.</p>
+                  </div>
                 </div>
-              ) : chatModal.messages.length === 0 ? (
-                <div className="text-center py-16 text-[#667781] text-xs">
-                  Belum ada riwayat pesan tercatat untuk customer ini.
-                </div>
-              ) : (
-                chatModal.messages.map((msg) => {
-                  const isInbound = msg.direction === 'INBOUND';
-                  const typeUpper = (msg.sender_type || '').toUpperCase();
-                  const sender = isInbound
-                    ? 'Customer'
-                    : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
-                    ? msg.sender_name || 'Admin'
-                    : 'Bot';
+                <button
+                  onClick={() => setEditModal({ open: false, newDate: '', stage: 1, customText: '' })}
+                  className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+                  title="Tutup (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-                  return (
-                    <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
-                      <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5">
-                        <span className="font-bold text-[#111b21]">{sender}</span>
-                        <span>•</span>
-                        <Clock size={9} />
-                        <span>
-                          {new Date(msg.created_at).toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                      <div
-                        className={`max-w-[80%] p-3 rounded-xl text-xs leading-relaxed shadow-xs ${
-                          isInbound
-                            ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
-                            : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+              {/* Modal Body */}
+              <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
+                {/* Customer Banner */}
+                <div className="bg-[#f8fafc] p-3 rounded-xl border border-[#e9edef] flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[#667781] block text-[10px]">Pelanggan</span>
+                    <strong className="text-[#111b21] font-bold text-sm">
+                      {editModal.item.customer?.name || 'Tanpa Nama'}
+                    </strong>
+                    <span className="text-[#667781] block font-mono text-[11px]">{editModal.item.customer?.phone}</span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                    {getTypeLabel(editModal.item.type, editModal.stage).label}
+                  </span>
+                </div>
+
+                {/* Field 1: Jadwal Kirim */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                    <Calendar size={14} className="text-[#008069]" />
+                    <span>Jadwal Kirim</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editModal.newDate}
+                    onChange={(e) => setEditModal({ ...editModal, newDate: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] focus:outline-none shadow-xs transition font-medium"
+                  />
+                </div>
+
+                {/* Field 2: Pilihan Varian (Stage 1 / 2 / 3) */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                      <Sparkles size={14} className="text-amber-500" />
+                      <span>Pilih Varian Rolling / Tahap</span>
+                    </label>
+                    <span className="text-[10px] text-[#8696a0]">Klik varian untuk memuat template default</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 3].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => handleVariantSelect(v)}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center space-x-1.5 active:scale-95 ${
+                          editModal.stage === v
+                            ? 'bg-[#e8f5f2] border-[#008069] text-[#008069] shadow-xs'
+                            : 'bg-white border-[#d1d7db] text-[#54656f] hover:bg-[#f8fafc]'
                         }`}
                       >
-                        {msg.content}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                        <span>Varian #{v}</span>
+                        {editModal.stage === v && <CheckCircle size={12} className="text-[#008069]" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Field 3: Teks Pesan Follow-Up */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                      <FileText size={14} className="text-[#008069]" />
+                      <span>Teks Pesan Follow-Up</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editModal.item) {
+                          const defaultText = getTemplateTextForTypeAndVariant(editModal.item.type, editModal.stage);
+                          setEditModal((prev) => ({ ...prev, customText: defaultText }));
+                        }
+                      }}
+                      className="text-[11px] text-[#008069] hover:underline flex items-center space-x-1 font-semibold"
+                    >
+                      <RotateCcw size={11} />
+                      <span>Reset ke Template Default</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={5}
+                    value={editModal.customText}
+                    onChange={(e) => setEditModal({ ...editModal, customText: e.target.value })}
+                    placeholder="Tulis pesan follow-up kustom untuk pelanggan ini..."
+                    className="w-full p-3 bg-white border border-[#d1d7db] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] focus:outline-none shadow-xs leading-relaxed transition font-sans"
+                  />
+
+                  {/* Tag Helpers */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[10px] text-[#8696a0] flex items-center gap-1">
+                      <Tag size={10} /> Sisipkan Variabel:
+                    </span>
+                    {['{name}', '{babyName}', '{time}'].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() =>
+                          setEditModal((prev) => ({
+                            ...prev,
+                            customText: `${prev.customText} ${tag}`,
+                          }))
+                        }
+                        className="px-2 py-0.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] text-[10px] font-mono text-[#54656f] border border-[#d1d7db] transition active:scale-95"
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-[#8696a0] leading-tight">
+                    * Variabel <code>{'{name}'}</code> akan otomatis disanitasi menjadi sapaan bersih (misal: "Bunda Rina").
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditModal({ open: false, newDate: '', stage: 1, customText: '' })}
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEditSave}
+                  disabled={actionLoading === editModal.item.id}
+                  className="px-5 py-2 bg-[#008069] hover:bg-[#00a884] active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5"
+                >
+                  {actionLoading === editModal.item.id ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <CheckCircle size={13} />
+                  )}
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
             </div>
+          </div>,
+          document.body
+        )}
 
-            {/* Modal Footer: Quick Reply Bar */}
-            <form onSubmit={handleSendChatReply} className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex items-center space-x-2">
-              <input
-                type="text"
-                value={chatModal.replyText}
-                onChange={(e) => setChatModal({ ...chatModal, replyText: e.target.value })}
-                placeholder="Ketik balasan WhatsApp langsung ke nomor ini..."
-                className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
-              />
-              <button
-                type="submit"
-                disabled={chatModal.sending || !chatModal.replyText.trim()}
-                className="px-4 py-2 bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 shrink-0"
-              >
-                {chatModal.sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                <span>Kirim</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Confirm Modal untuk Queue / Bulk-Queue / Cancel / Bulk-Cancel / Send */}
-      {confirmAction && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
-          onClick={() => setConfirmAction(null)}
-        >
+      {/* ========================================================================= */}
+      {/* PORTAL MODAL 2: Chat History Modal (In-Page Viewport Centered)            */}
+      {/* ========================================================================= */}
+      {chatModal.open &&
+        chatModal.customer &&
+        createPortal(
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
+            onClick={() => setChatModal((prev) => ({ ...prev, open: false }))}
           >
-            <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
-              {confirmAction.type === 'reschedule-overdue' ? (
-                <>
-                  <FastForward className="text-amber-600" size={18} />
-                  <span>Majukan & Rapikan Jadwal Overdue?</span>
-                </>
-              ) : confirmAction.type === 'bulk-cancel' ? (
-                <>
-                  <Trash2 className="text-rose-600" size={18} />
-                  <span>Batalkan Semua Antrian Pending?</span>
-                </>
-              ) : confirmAction.type === 'bulk-queue' ? (
-                <>
-                  <CalendarCheck className="text-blue-600" size={18} />
-                  <span>Jadwalkan Semua Antrian Pending?</span>
-                </>
-              ) : confirmAction.type === 'cancel' ? (
-                <>
-                  <XCircle className="text-rose-600" size={18} />
-                  <span>Batalkan Follow-Up?</span>
-                </>
-              ) : confirmAction.type === 'queue' ? (
-                <>
-                  <CalendarCheck className="text-blue-600" size={18} />
-                  <span>Jadwalkan Follow-Up?</span>
-                </>
-              ) : (
-                <>
-                  <Send className="text-[#008069]" size={18} />
-                  <span>Setujui & Kirim Sekarang?</span>
-                </>
-              )}
-            </h3>
-            <p className="text-xs text-[#54656f]">
-              {confirmAction.type === 'reschedule-overdue'
-                ? 'Seluruh follow-up berstatus PENDING yang jadwalnya sebelum hari ini akan dimajukan mulai dari hari ini/besok, dan dibagi merata maksimal 10 blast per hari pada jam kerja (09:00 - 16:00 WIB).'
-                : confirmAction.type === 'bulk-cancel'
-                ? 'Seluruh follow-up berstatus PENDING akan dibatalkan sekaligus dan tidak akan dikirim.'
-                : confirmAction.type === 'bulk-queue'
-                ? 'Seluruh follow-up berstatus PENDING akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam jadwal masing-masing.'
-                : confirmAction.type === 'cancel'
-                ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim ke customer.'
-                : confirmAction.type === 'queue'
-                ? 'Follow-up ini akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam yang sudah disetup.'
-                : 'Pesan follow-up akan langsung dikirim sekarang ke nomor WhatsApp customer.'}
-            </p>
-            <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
-              <button
-                onClick={() => setConfirmAction(null)}
-                className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => {
-                  const { type, id } = confirmAction;
-                  setConfirmAction(null);
-                  if (type === 'reschedule-overdue') handleRescheduleOverdue();
-                  else if (type === 'bulk-cancel') handleBulkCancel();
-                  else if (type === 'bulk-queue') handleBulkQueue();
-                  else if (type === 'cancel' && id) handleCancel(id);
-                  else if (type === 'queue' && id) handleQueue(id);
-                  else if (type === 'send' && id) handleSendNow(id);
+            <div
+              className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col my-auto max-h-[85vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc] shrink-0">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-[#008069] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                    {chatModal.customer.name ? chatModal.customer.name.slice(0, 2).toUpperCase() : 'CU'}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-1.5">
+                      <span>{chatModal.customer.name || 'Customer'}</span>
+                      {chatModal.customer.conversations?.[0]?.is_human_handling && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                          Human Handling
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-[11px] text-[#667781] flex items-center space-x-2 mt-0.5">
+                      <span className="font-mono">{chatModal.customer.phone}</span>
+                      <span>•</span>
+                      <span className="flex items-center space-x-0.5">
+                        <MapPin size={10} className="text-[#8696a0]" />
+                        <span>
+                          {chatModal.customer.kelurahan ||
+                            chatModal.customer.kecamatan ||
+                            chatModal.customer.kota ||
+                            'Surabaya/Sidoarjo'}
+                        </span>
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <a
+                    href="/admin/live-chat"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition flex items-center space-x-1"
+                    title="Buka Halaman Live Chat di Tab Baru"
+                  >
+                    <ExternalLink size={12} />
+                    <span className="hidden sm:inline">Live Chat Tab</span>
+                  </a>
+                  <button
+                    onClick={() => setChatModal((prev) => ({ ...prev, open: false }))}
+                    className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition"
+                    title="Tutup (Esc)"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body: Message Stream with WhatsApp Pattern Background */}
+              <div
+                className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
+                style={{
+                  backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
+                  backgroundSize: '16px 16px',
                 }}
-                disabled={actionLoading !== null}
-                className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs ${
-                  confirmAction.type === 'reschedule-overdue'
-                    ? 'bg-amber-600 hover:bg-amber-700'
-                    : confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel'
-                    ? 'bg-rose-600 hover:bg-rose-700'
-                    : confirmAction.type === 'bulk-queue' || confirmAction.type === 'queue'
-                    ? 'bg-blue-600 hover:bg-blue-700'
-                    : 'bg-[#008069] hover:bg-[#00a884]'
-                }`}
               >
-                {actionLoading !== null
-                  ? 'Memproses...'
-                  : confirmAction.type === 'reschedule-overdue'
-                  ? 'Ya, Majukan & Rapikan'
-                  : confirmAction.type === 'bulk-cancel'
-                  ? 'Ya, Batalkan Semua'
-                  : confirmAction.type === 'bulk-queue'
-                  ? 'Ya, Jadwalkan Semua'
-                  : confirmAction.type === 'cancel'
-                  ? 'Ya, Batalkan'
-                  : confirmAction.type === 'queue'
-                  ? 'Ya, Jadwalkan'
-                  : 'Ya, Kirim'}
-              </button>
+                {chatModal.loading ? (
+                  <div className="flex justify-center items-center py-20">
+                    <Loader2 className="animate-spin text-[#008069]" size={32} />
+                  </div>
+                ) : chatModal.messages.length === 0 ? (
+                  <div className="text-center py-20 text-[#667781] text-xs">
+                    <MessageSquare size={32} className="mx-auto text-[#8696a0] mb-2 opacity-40" />
+                    <p className="font-semibold text-[#111b21]">Belum ada riwayat pesan tercatat.</p>
+                    <p className="text-[#8696a0] mt-0.5">Ketik pesan di bawah untuk memulai percakapan.</p>
+                  </div>
+                ) : (
+                  chatModal.messages.map((msg) => {
+                    const isInbound = msg.direction === 'INBOUND';
+                    const typeUpper = (msg.sender_type || '').toUpperCase();
+                    const sender = isInbound
+                      ? 'Customer'
+                      : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
+                      ? msg.sender_name || 'Admin'
+                      : 'Bot';
+
+                    return (
+                      <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
+                        <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5 px-1">
+                          <span className="font-bold text-[#111b21]">{sender}</span>
+                          <span>•</span>
+                          <Clock size={9} />
+                          <span>
+                            {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <div
+                          className={`max-w-[85%] sm:max-w-[75%] p-3 rounded-2xl text-xs leading-relaxed shadow-xs ${
+                            isInbound
+                              ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                              : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer: Quick Reply Bar */}
+              <form
+                onSubmit={handleSendChatReply}
+                className="p-3 border-t border-[#e9edef] bg-[#f8fafc] flex items-center space-x-2 shrink-0"
+              >
+                <input
+                  type="text"
+                  value={chatModal.replyText}
+                  onChange={(e) => setChatModal({ ...chatModal, replyText: e.target.value })}
+                  placeholder="Ketik balasan WhatsApp langsung ke nomor ini..."
+                  className="flex-1 px-3.5 py-2.5 bg-white border border-[#d1d7db] hover:border-[#008069] focus:border-[#008069] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none shadow-xs transition"
+                />
+                <button
+                  type="submit"
+                  disabled={chatModal.sending || !chatModal.replyText.trim()}
+                  className="px-4 py-2.5 bg-[#008069] hover:bg-[#00a884] active:scale-95 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1.5 shrink-0"
+                >
+                  {chatModal.sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>Kirim</span>
+                </button>
+              </form>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
+
+      {/* ========================================================================= */}
+      {/* PORTAL MODAL 3: Confirm Action Modal                                     */}
+      {/* ========================================================================= */}
+      {confirmAction &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-xs animate-fadeIn"
+            onClick={() => setConfirmAction(null)}
+          >
+            <div
+              className="bg-white border border-[#e9edef] rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl my-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+                {confirmAction.type === 'reschedule-overdue' ? (
+                  <>
+                    <FastForward className="text-amber-600" size={18} />
+                    <span>Majukan & Rapikan Jadwal Overdue?</span>
+                  </>
+                ) : confirmAction.type === 'bulk-cancel' ? (
+                  <>
+                    <Trash2 className="text-rose-600" size={18} />
+                    <span>Batalkan Semua Antrian Pending?</span>
+                  </>
+                ) : confirmAction.type === 'bulk-queue' ? (
+                  <>
+                    <CalendarCheck className="text-blue-600" size={18} />
+                    <span>Jadwalkan Semua Antrian Pending?</span>
+                  </>
+                ) : confirmAction.type === 'cancel' ? (
+                  <>
+                    <XCircle className="text-rose-600" size={18} />
+                    <span>Batalkan Follow-Up?</span>
+                  </>
+                ) : confirmAction.type === 'queue' ? (
+                  <>
+                    <CalendarCheck className="text-blue-600" size={18} />
+                    <span>Jadwalkan Follow-Up?</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="text-[#008069]" size={18} />
+                    <span>Setujui & Kirim Sekarang?</span>
+                  </>
+                )}
+              </h3>
+              <p className="text-xs text-[#54656f] leading-relaxed">
+                {confirmAction.type === 'reschedule-overdue'
+                  ? 'Seluruh follow-up berstatus PENDING yang jadwalnya sebelum hari ini akan dimajukan mulai dari hari ini/besok, dan dibagi merata maksimal 10 blast per hari pada jam kerja (09:00 - 16:00 WIB).'
+                  : confirmAction.type === 'bulk-cancel'
+                  ? 'Seluruh follow-up berstatus PENDING akan dibatalkan sekaligus dan tidak akan dikirim.'
+                  : confirmAction.type === 'bulk-queue'
+                  ? 'Seluruh follow-up berstatus PENDING akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam jadwal masing-masing.'
+                  : confirmAction.type === 'cancel'
+                  ? 'Follow-up ini akan dibatalkan dan tidak akan dikirim ke customer.'
+                  : confirmAction.type === 'queue'
+                  ? 'Follow-up ini akan dimasukkan ke antrian (QUEUED) dan dikirim otomatis sesuai tanggal & jam yang sudah disetup.'
+                  : 'Pesan follow-up akan langsung dikirim sekarang ke nomor WhatsApp customer.'}
+              </p>
+              <div className="flex justify-end space-x-2 pt-2 border-t border-[#e9edef]">
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] active:scale-95 border border-[#d1d7db] text-[#54656f] rounded-xl text-xs font-semibold transition"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={() => {
+                    const { type, id } = confirmAction;
+                    setConfirmAction(null);
+                    if (type === 'reschedule-overdue') handleRescheduleOverdue();
+                    else if (type === 'bulk-cancel') handleBulkCancel();
+                    else if (type === 'bulk-queue') handleBulkQueue();
+                    else if (type === 'cancel' && id) handleCancel(id);
+                    else if (type === 'queue' && id) handleQueue(id);
+                    else if (type === 'send' && id) handleSendNow(id);
+                  }}
+                  disabled={actionLoading !== null}
+                  className={`px-4 py-2 text-white rounded-xl text-xs font-bold transition shadow-xs active:scale-95 ${
+                    confirmAction.type === 'reschedule-overdue'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : confirmAction.type === 'cancel' || confirmAction.type === 'bulk-cancel'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : confirmAction.type === 'bulk-queue' || confirmAction.type === 'queue'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-[#008069] hover:bg-[#00a884]'
+                  }`}
+                >
+                  {actionLoading !== null
+                    ? 'Memproses...'
+                    : confirmAction.type === 'reschedule-overdue'
+                    ? 'Ya, Majukan & Rapikan'
+                    : confirmAction.type === 'bulk-cancel'
+                    ? 'Ya, Batalkan Semua'
+                    : confirmAction.type === 'bulk-queue'
+                    ? 'Ya, Jadwalkan Semua'
+                    : confirmAction.type === 'cancel'
+                    ? 'Ya, Batalkan'
+                    : confirmAction.type === 'queue'
+                    ? 'Ya, Jadwalkan'
+                    : 'Ya, Kirim'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Toast Notification */}
       {toastMsg && (
         <div
-          className={`fixed bottom-6 right-6 z-[70] px-4 py-3 rounded-xl border text-xs font-bold shadow-xl flex items-center space-x-2 ${
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl border text-xs font-bold shadow-xl flex items-center space-x-2 animate-fadeIn ${
             toastMsg.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : 'bg-rose-50 border-rose-200 text-rose-800'
