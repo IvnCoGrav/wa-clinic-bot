@@ -26,6 +26,7 @@ export interface WabaTemplateMeta {
 
 const DEFAULT_TEMPLATE_NAMES: Record<string, WabaTemplateMeta> = {
   REMINDER_H0: { templateName: 'reminder_treatment', category: 'UTILITY' },
+  REMINDER_H1: { templateName: 'reminder_treatment_h1', category: 'UTILITY' },
   REVIEW_H1_BABY: { templateName: 'review_h1_baby', category: 'UTILITY' },
   REVIEW_H1_MOMS: { templateName: 'review_h1_moms', category: 'UTILITY' },
   NO_PURCHASE_1: { templateName: 'followup_no_purchase_1', category: 'MARKETING' },

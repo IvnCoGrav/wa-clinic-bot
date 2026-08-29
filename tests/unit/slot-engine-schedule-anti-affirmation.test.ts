@@ -531,4 +531,89 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
       expect(finalReply).toContain('Perkenalkan, saya Bidan Yusi');
     });
   });
+
+  describe('7. Standard Massage Alias (Massage Biasa) & Direct Schedule Question', () => {
+    it('EntityExtractor: "Massage biasa" -> normalized to "Pijat Bayi Ceria" + intent "select_treatment"', async () => {
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const res = await EntityExtractor.extract('Massage biasa');
+      expect(res.treatmentReferenced).toBe('Pijat Bayi Ceria');
+      expect(res.intents).toContain('select_treatment');
+    });
+
+    it('EntityExtractor: "pijat biasa aja" -> normalized to "Pijat Bayi Ceria"', async () => {
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const res = await EntityExtractor.extract('pijat biasa aja');
+      expect(res.treatmentReferenced).toBe('Pijat Bayi Ceria');
+      expect(res.intents).toContain('select_treatment');
+    });
+
+    it('DynamicCloserService: When treatment is selected, missing slot is SCHEDULE and forbids explaining treatment details', () => {
+      const slate: any = {
+        isLocationConfirmed: true,
+        kelurahan: 'Sepanjang',
+        selectedTreatmentName: 'Pijat Bayi Ceria',
+      };
+      const missing = DynamicCloserService.determineMissingSlot(slate);
+      expect(missing).toBe('SCHEDULE');
+
+      const instruction = DynamicCloserService.getCloserInstruction(slate, null, [], 'Massage biasa');
+      expect(instruction).toContain('DILARANG KERAS menjelaskan ulang manfaat');
+      expect(instruction).toContain('rencana mau kami bantu jadwalkan di hari apa');
+    });
+
+    it('PersonaComposer: Rule 12 forbids explaining treatment details when customer has selected a treatment', () => {
+      const rules = PersonaComposer.getPersonaRules();
+      expect(rules).toContain('ATURAN SAAT CUSTOMER SUDAH MEMILIH / MENENTUKAN TREATMENT');
+      expect(rules).toContain('DILARANG KERAS menjelaskan ulang rincian, deskripsi, manfaat');
+    });
+
+    it('PersonaComposer: Rule 13 forbids hallucinating unlisted services and triggers human handover', () => {
+      const rules = PersonaComposer.getPersonaRules();
+      expect(rules).toContain('ATURAN LAYANAN DI LUAR KATALOG RESMI (ANTI-HALUSINASI & HANDOVER CS)');
+      expect(rules).toContain('DILARANG KERAS mengarang atau mengiyakan');
+      expect(rules).toContain('is_unlisted_service');
+    });
+
+    it('EntityExtractor: "Ada PL homecare mandikan bayi?" extracts intent "ask_unlisted_service"', async () => {
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const res = await EntityExtractor.extract('Ada PL homecare mandikan bayi?');
+      expect(res.intents).toContain('ask_unlisted_service');
+    });
+
+    it('DecisionMatrix: "Ada PL homecare mandikan bayi?" returns action "ESCALATE_HUMAN_UNLISTED_SERVICE" with isHumanHandling = true', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const { SlateStore } = await import('../../src/slot-engine/slate-store');
+      const slate = SlateStore.hydrateSlate({
+        customer: { id: 'c_test_unlisted', phone: '6282349966953' } as any,
+        conversation: { current_state: 'INITIAL' } as any,
+      });
+      const extraction = await EntityExtractor.extract('Ada PL homecare mandikan bayi?');
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'Ada PL homecare mandikan bayi?',
+      });
+
+      expect(decision.action).toBe('ESCALATE_HUMAN_UNLISTED_SERVICE');
+      expect(decision.updatedSlate.isHumanHandling).toBe(true);
+      expect(decision.shouldSendPricelistImage).toBe(false);
+    });
+
+    it('SlotEngine: "Ada PL homecare mandikan bayi?" executes silent human escalation (shouldSendReply = false)', async () => {
+      const { processSlotEngine } = await import('../../src/slot-engine/slot-engine');
+      const { ConversationState } = await import('@prisma/client');
+
+      const result = await processSlotEngine({
+        customer: { id: 'c_test_unlisted', phone: '6282349966953' } as any,
+        conversation: { id: 'conv_unlisted_1', current_state: ConversationState.INITIAL } as any,
+        incomingMessage: { text: { body: 'Ada PL homecare mandikan bayi?' } } as any,
+        tenantId: 'default-tenant',
+      });
+
+      expect(result.shouldSendReply).toBe(false);
+      expect(result.isHumanHandling).toBe(true);
+      expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
+    });
+  });
 });
+

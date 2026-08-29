@@ -93,8 +93,8 @@ export class FastFaqGenerator {
         return null; // Fallthrough ke 2-call jika JSON malformed
       }
 
-      if (parsed.needs_deeper_processing === true) {
-        return null; // Fallthrough ke 2-call jika LLM minta pemrosesan lebih dalam
+      if (parsed.needs_deeper_processing === true || parsed.is_unlisted_service === true || parsed.needs_human_escalation === true) {
+        return null; // Fallthrough ke 2-call / DecisionMatrix jika LLM minta pemrosesan lebih dalam atau layanan di luar katalog
       }
 
       const rawReply = parsed.reply_text || '';

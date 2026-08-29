@@ -15,8 +15,7 @@ export class CronService {
   public async runMorningJobs(): Promise<void> {
     try {
       console.log('[Cron Service] Starting Morning Jobs...');
-      await this.sendMorningReminders();
-      await this.sendYesterdayReviewsAndScheduleNextFollowups();
+      await followUpService.processDueFollowUps(DEFAULT_TENANT_ID);
       await followUpService.checkAndSetLostCustomers(DEFAULT_TENANT_ID);
       await this.cleanupOldAdClicks();
       await this.purgeOldLegacyStaging();

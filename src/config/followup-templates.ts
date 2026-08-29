@@ -20,6 +20,7 @@ export interface FollowUpTemplateParams {
 
 export type FollowUpTemplateType =
   | 'REMINDER_H0'
+  | 'REMINDER_H1'
   | 'REVIEW_H1_BABY'
   | 'REVIEW_H1_MOMS'
   | 'NO_PURCHASE_1'
@@ -46,6 +47,16 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Halo Bunda ${name}, selamat pagi! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} hari ini pukul ${time || 'sesuai kesepakatan'} ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
     ({ name, time }) =>
       `Pagi Bunda ${name}! 🥰 Nanti jam ${time || 'sesuai kesepakatan'} tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu nanti ya bund! ✨`,
+  ],
+
+  // 1b. Reminder H-1 Malam (19:00 WIB)
+  REMINDER_H1: [
+    ({ name, time }) =>
+      `Selamat malam Bunda ${name}! ✨ Mengingatkan kembali untuk jadwal treatment homecare ${getBrandIdentity().businessName} besok jam ${time || 'sesuai kesepakatan'} ya bund. Tim bidan kami akan datang sesuai jadwal. Sampai jumpa besok Bunda! 🥰`,
+    ({ name, time }) =>
+      `Halo Bunda ${name}, selamat malam! 🌸 Mengingatkan kembali jadwal treatment ${getBrandIdentity().businessName} besok pukul ${time || 'sesuai kesepakatan'} ya. Mohon disiapkan tempat yang nyaman ya bund. Terimakasih! ✨`,
+    ({ name, time }) =>
+      `Malam Bunda ${name}! 🥰 Besok jam ${time || 'sesuai kesepakatan'} tim bidan ${getBrandIdentity().businessName} akan menuju ke rumah Bunda untuk treatment. Sampai ketemu besok ya bund! ✨`,
   ],
 
   // 2. Review H+1 Baby (07:00 WIB)

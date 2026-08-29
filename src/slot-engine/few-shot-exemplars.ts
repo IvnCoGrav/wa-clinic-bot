@@ -71,11 +71,11 @@ export const DEFAULT_FEW_SHOT_EXEMPLARS: FewShotExemplar[] = [
   },
   {
     id: 'post_delivery_treatment_continuation',
-    scenario: 'Lanjutan percakapan setelah ongkir sudah disepakati (Anti-Pengulangan Ongkir)',
-    tags: ['follow_up', 'after_ongkir'],
-    customerMessage: 'Oke deh, mau ambil paket pijat yang biasa aja',
+    scenario: 'Customer memilih/menentukan treatment (Anti-Penjelasan Ulang & Langsung Tanya Hari)',
+    tags: ['follow_up', 'after_ongkir', 'select_treatment', 'massage biasa', 'pijat biasa'],
+    customerMessage: 'Massage biasa',
     idealResponse:
-      'Baik Bunda, untuk perawatan rutin si kecil kami siapkan paket *Pijat Bayi Ceria* yaa 😊 Rencana mau kami bantu jadwalkan di hari apa Bunda?',
+      'Baik Bunda, untuk *Pijat Bayi Ceria* rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊',
     isActive: true,
     sortOrder: 6,
   },
