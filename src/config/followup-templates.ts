@@ -229,8 +229,8 @@ export function getRollingFollowUpMessage(
     .replace(/Bunda\s+,/gi, 'Bunda,')
     .replace(/dek\s+dek\s+/gi, 'dek ')
     .replace(/dek\s+si kecil/gi, 'si kecil')
-    .replace(/\(si kecil\)/gi, '')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[^\S\r\n]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   return {

@@ -11,6 +11,7 @@ export interface HumanReplyParams {
   replyText: string;      // teks balasan yang akan di-bubble-split
   tenantId?: string;
   shouldAbort?: () => Promise<boolean> | boolean; // guard pembatalan real-time jika CS takeover
+  singleBubble?: boolean; // Jika true: kirim sebagai 1 bubble utuh tanpa dipecah (misal follow-up/broadcast)
 }
 
 export interface HumanReplyResult {
@@ -343,7 +344,7 @@ export class TypingService {
 
     let bubblesSent = 0;
     let typingStopped = true; // Status awal typing mati/stop
-    const bubbles = this.splitIntoBubbles(replyText);
+    const bubbles = params.singleBubble ? [replyText] : this.splitIntoBubbles(replyText);
 
     // Daftarkan semua bubble ke in-flight registry sebelum mulai pengiriman
     // agar echo webhook dari WAHA tidak memicu false positive human takeover
