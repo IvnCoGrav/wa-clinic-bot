@@ -90,17 +90,21 @@ export class GeocodingService {
   public async geocodeText(locationText: string): Promise<ResolvedLocation> {
     return measure('GEOCODING_TOTAL', async () => {
       try {
-        // --- TIER 1: LOCAL GAZETTEER MATCHER (PRIMARY) ---
+        // --- TIER 1: LOCAL GAZETTEER & LANDMARK MATCHER (PRIMARY) ---
+        const landmarkMatch = findPopularLandmark(locationText);
         const localMatch = await this.mockGeocodeText(locationText);
-        if (localMatch.isPrecise && localMatch.lat != null && localMatch.lng != null) {
+        const hasSpecificStreetOrEstate = /\b(jalan|jl|jln|gang|gg|perum|perumahan|komplek|kompleks|blok|residence|residences|regency|cluster|villa|apartemen|apartment|mansion|estate|graha|griya|taman\s+\w+)\b/i.test(locationText);
+
+        // Jika cocok sebagai landmark spesifik atau kelurahan presisi tanpa nama perumahan/jalan spesifik lain, gunakan localMatch
+        if (localMatch.isPrecise && localMatch.lat != null && localMatch.lng != null && (landmarkMatch || !hasSpecificStreetOrEstate || !this.apiKey || this.apiKey.startsWith('mock'))) {
           console.log(`[GEOCODING LOCAL HIT] Resolved "${locationText}" via local gazetteer -> ${localMatch.kelurahan || '-'}, ${localMatch.kecamatan || '-'}, ${localMatch.kota || '-'}`);
           return localMatch;
         }
 
-        // Jika localMatch mengembalikan ambiguitas nama kecamatan/wilayah luas (misal "Kenjeran", "Jambangan", "Waru"),
+        // Jika localMatch mengembalikan ambiguitas nama kecamatan/wilayah luas (misal "Kenjeran", "Jambangan", "Waru") tanpa nama perumahan spesifik,
         // JANGAN fallback ke Google Maps API untuk menebak koordinat acak!
         // Pertahankan ambiguitas agar DecisionMatrix meminta detail kelurahan sesuai SOP.
-        if (!localMatch.isPrecise && (localMatch as any).ambiguityResults && (localMatch as any).ambiguityResults.length > 1) {
+        if (!localMatch.isPrecise && (localMatch as any).ambiguityResults && (localMatch as any).ambiguityResults.length > 1 && !hasSpecificStreetOrEstate) {
           return localMatch;
         }
 

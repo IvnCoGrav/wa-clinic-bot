@@ -72,6 +72,7 @@ export interface IWahaClient {
   downloadMedia(messageId: string, chatId: string): Promise<Buffer | null>;
   deleteMessage(chatId: string, messageId: string, everyone?: boolean): Promise<boolean>;
   editMessage(chatId: string, messageId: string, newText: string): Promise<boolean>;
+  sendReaction(chatId: string, messageId: string, emoji: string): Promise<boolean>;
 }
 
 /**
@@ -1625,6 +1626,109 @@ export class WahaClient implements IWahaClient {
       throw new Error('Pesan tidak ditemukan di server WhatsApp atau sudah melewati batas waktu pengeditan (15 menit).');
     }
     throw lastErr || new Error('Gagal mengedit pesan di WhatsApp.');
+  }
+
+  /**
+   * Mengirim reaksi emotikon ke pesan WhatsApp tertentu.
+   * Format reaksi emoji (mis. "👍", "❤️", "😂") atau "" (string kosong) untuk menghapus reaksi.
+   */
+  public async sendReaction(chatId: string, messageId: string, emoji: string): Promise<boolean> {
+    if (this.shouldMock) {
+      console.log(`[WAHA MOCK] sendReaction: chat=${chatId}, msgId=${messageId}, emoji="${emoji}"`);
+      return true;
+    }
+
+    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId);
+    const sessionName = this.session;
+    let lastErr: any = null;
+
+    // 1. Coba endpoint POST /api/sendReaction (WAHA standar)
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('sendReaction', () =>
+              axios.post(
+                `${this.baseUrl}/api/sendReaction`,
+                {
+                  session: sessionName,
+                  chatId: cId,
+                  messageId: mId,
+                  reaction: emoji || '',
+                },
+                {
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
+          }
+        } catch (err: any) {
+          lastErr = err;
+        }
+      }
+    }
+
+    // 2. Fallback ke POST /api/reactions
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('sendReactionFallback', () =>
+              axios.post(
+                `${this.baseUrl}/api/reactions`,
+                {
+                  session: sessionName,
+                  chatId: cId,
+                  messageId: mId,
+                  reaction: emoji || '',
+                },
+                {
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
+          }
+        } catch (postErr: any) {
+          lastErr = postErr;
+        }
+      }
+    }
+
+    // 3. Fallback ke POST /api/{session}/chats/{chatId}/messages/{messageId}/reaction
+    for (const cId of chatIds) {
+      for (const mId of msgIds) {
+        try {
+          const response = await this.runSerialized(() =>
+            this.withRetry('sendReactionChatFallback', () =>
+              axios.post(
+                `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}/reaction`,
+                { reaction: emoji || '' },
+                {
+                  headers: this.headers,
+                  timeout: this.timeoutMs,
+                }
+              )
+            )
+          );
+          if (response.status >= 200 && response.status < 300) {
+            return true;
+          }
+        } catch (postErr: any) {
+          lastErr = postErr;
+        }
+      }
+    }
+
+    console.error(`[WAHA API ERROR] sendReaction failed for chat=${chatId}, msg=${messageId}:`, lastErr?.response?.data || lastErr?.message);
+    throw lastErr || new Error('Gagal mengirim reaksi emotikon ke WhatsApp.');
   }
 }
 

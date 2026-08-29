@@ -138,6 +138,9 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
                 'base64'
               );
             }
+            public async sendReaction(chatId: string, messageId: string, emoji: string): Promise<boolean> {
+              return true;
+            }
           }
 
           const sandboxClient = new SandboxWAHAClient();

@@ -20,6 +20,7 @@ export class WabaGatewayDriver implements WhatsAppGateway {
   readonly providerType = 'WABA' as const;
   readonly supportsRevoke = false;
   readonly supportsEdit = false;
+  readonly supportsReaction = true;
   private phoneNumberId: string;
   private accessToken: string;
   private baseUrl: string;
@@ -43,6 +44,33 @@ export class WabaGatewayDriver implements WhatsAppGateway {
       success: false,
       error: 'Meta Cloud API (WABA) belum mendukung pengeditan pesan yang sudah terkirim via API.',
     };
+  }
+
+  async sendReactionMessage(to: string, messageId: string, emoji: string): Promise<SendResult> {
+    try {
+      const payload: any = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'reaction',
+        reaction: {
+          message_id: messageId,
+          emoji: emoji || '',
+        },
+      };
+
+      const response = await axios.post(
+        this.messagesUrl,
+        payload,
+        { headers: this.headers, timeout: 10000 }
+      );
+      const msgId = response.data?.messages?.[0]?.id;
+      return { success: true, messageId: msgId, provider: 'WABA', rawResponse: response.data };
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code?.toString() || 'WABA_SEND_REACTION';
+      const message = err?.response?.data?.error?.message || err?.message || 'sendReaction failed';
+      return { success: false, provider: 'WABA', error: { code, message } };
+    }
   }
 
   async getProfilePicture(): Promise<string | null> {

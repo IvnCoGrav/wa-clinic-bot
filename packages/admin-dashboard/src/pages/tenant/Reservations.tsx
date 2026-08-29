@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { Pagination } from '../../components/common/Pagination';
 import { 
   Search, 
   Calendar as CalendarIcon, 
@@ -37,6 +38,8 @@ import {
   ArrowUp,
   ArrowDown,
   Loader,
+  MessageSquare,
+  Clock,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
@@ -49,7 +52,7 @@ import { useAuth } from '../../contexts/AuthContext';
 export const Reservations: React.FC = () => {
   const { user } = useAuth();
   const { toast, confirm } = useUiFeedback();
-  const cachedRes = getCachedApiResponse<any>(`/api/admin/reservations?page=1&pageSize=50`);
+  const cachedRes = getCachedApiResponse<any>(`/api/admin/reservations?page=1&pageSize=20`);
   const initialReservations = Array.isArray(cachedRes) ? cachedRes : (cachedRes?.data || []);
   const [loading, setLoading] = useState(initialReservations.length === 0);
   const [reservations, setReservations] = useState<Reservation[]>(() => initialReservations);
@@ -58,6 +61,11 @@ export const Reservations: React.FC = () => {
   const [proofUploading, setProofUploading] = useState(false);
   const [housePhotoModal, setHousePhotoModal] = useState<string | null>(null);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Chat History Modal State
+  const [activeHistoryCustomer, setActiveHistoryCustomer] = useState<{ id: string; name?: string; phone?: string } | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyMessages, setHistoryMessages] = useState<any[]>([]);
 
   // Edit Location & House Photo Modal (Admin CS)
   const [editLocationModal, setEditLocationModal] = useState<Reservation | null>(null);
@@ -79,10 +87,32 @@ export const Reservations: React.FC = () => {
     status: 'upcoming',
   });
 
+  const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
   const [googleCalendarMockActive, setGoogleCalendarMockActive] = useState(true);
   const [editDate, setEditDate] = useState('');
   const [staffList, setStaffList] = useState<StaffOption[]>([]);
   const [assigningStaff, setAssigningStaff] = useState(false);
+
+  // Global stats state
+  const [stats, setStats] = useState<{
+    total: number;
+    upcoming: number;
+    overdue: number;
+    pending: number;
+    confirmed: number;
+    completed: number;
+    cancelled: number;
+  }>({
+    total: 0,
+    upcoming: 0,
+    overdue: 0,
+    pending: 0,
+    confirmed: 0,
+    completed: 0,
+    cancelled: 0,
+  });
 
   // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -92,7 +122,7 @@ export const Reservations: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalReservations, setTotalReservations] = useState(0);
-  const PAGE_SIZE = 100;
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     if (selectedRes?.booking_date) {
@@ -130,34 +160,117 @@ export const Reservations: React.FC = () => {
     loadStaff();
   }, []);
 
-  const loadReservations = async (targetPage = 1, append = false) => {
-    try {
-      if (reservations.length === 0) setLoading(true);
-      const res = await apiRequest(`/api/admin/reservations?page=${targetPage}&pageSize=${PAGE_SIZE}`);
-      const data = Array.isArray(res) ? res : res?.data || [];
-      setReservations((prev) => (append ? [...prev, ...data] : data));
-      if (!Array.isArray(res)) {
-        setTotalPages(res?.totalPages || 1);
-        setTotalReservations(res?.total ?? data.length);
-      } else {
-        setTotalPages(1);
-        setTotalReservations(data.length);
-      }
-      setPage(targetPage);
-    } catch (err) {
-      console.error('Failed to load reservations:', err);
-    } finally {
-      setLoading(false);
+  const getCalendarDateRange = (mode: CalendarViewMode, date: Date) => {
+    if (mode === 'day') {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start.toISOString(), endDate: end.toISOString() };
+    } else if (mode === 'week') {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const start = new Date(d.setDate(diff));
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start.toISOString(), endDate: end.toISOString() };
+    } else if (mode === 'month') {
+      const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
+      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { startDate: start.toISOString(), endDate: end.toISOString() };
     }
+    return null;
   };
 
+  const loadReservations = useCallback(
+    async (targetPage = 1) => {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams();
+
+        if (viewMode === 'table') {
+          params.set('page', String(targetPage));
+          params.set('pageSize', String(PAGE_SIZE));
+          if (filterState.status && filterState.status !== 'all') {
+            params.set('status', filterState.status);
+          }
+          if (filterState.staffId && filterState.staffId !== 'all') {
+            params.set('staffId', filterState.staffId);
+          }
+          if (filterState.category && filterState.category !== 'all') {
+            params.set('category', filterState.category);
+          }
+          if (filterState.searchQuery.trim()) {
+            params.set('search', filterState.searchQuery.trim());
+          }
+          params.set('sortBy', sortField);
+          params.set('sortOrder', sortOrder);
+        } else {
+          // Calendar Mode: pull full window for visible date range
+          params.set('page', '1');
+          params.set('pageSize', '500');
+          if (filterState.staffId && filterState.staffId !== 'all') {
+            params.set('staffId', filterState.staffId);
+          }
+          if (filterState.category && filterState.category !== 'all') {
+            params.set('category', filterState.category);
+          }
+          if (filterState.searchQuery.trim()) {
+            params.set('search', filterState.searchQuery.trim());
+          }
+          const range = getCalendarDateRange(viewMode, selectedDate);
+          if (range) {
+            params.set('startDate', range.startDate);
+            params.set('endDate', range.endDate);
+          }
+        }
+
+        const res = await apiRequest(`/api/admin/reservations?${params.toString()}`);
+        const data = Array.isArray(res) ? res : res?.data || [];
+        setReservations(data);
+        if (!Array.isArray(res)) {
+          setTotalPages(res?.totalPages || 1);
+          setTotalReservations(res?.total ?? data.length);
+          if (res?.stats) {
+            setStats(res.stats);
+          }
+        } else {
+          setTotalPages(1);
+          setTotalReservations(data.length);
+        }
+        setPage(targetPage);
+      } catch (err) {
+        console.error('Failed to load reservations:', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [viewMode, selectedDate, filterState.status, filterState.staffId, filterState.category, filterState.searchQuery, sortField, sortOrder]
+  );
+
+  // Trigger data load when filters or views change
   useEffect(() => {
     loadReservations(1);
-  }, []);
+  }, [
+    viewMode,
+    selectedDate,
+    filterState.status,
+    filterState.staffId,
+    filterState.category,
+    sortField,
+    sortOrder,
+  ]);
 
-  const loadMore = () => {
-    if (page < totalPages) loadReservations(page + 1, true);
-  };
+  // Debounced search query trigger
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      loadReservations(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [filterState.searchQuery]);
 
   const extractDurationMinutes = (detail?: string | null): number => {
     if (!detail) return 60;
@@ -246,6 +359,14 @@ export const Reservations: React.FC = () => {
 
   const handleModalDelete = async (id: string) => {
     await handleDelete(id);
+  };
+
+  const handleModalCancel = async (id: string) => {
+    await handleCancel(id);
+  };
+
+  const handleModalDeletePermanent = async (id: string) => {
+    await handleDeletePermanent(id);
   };
 
   const handleModalProofUpload = async (file: File) => {
@@ -344,26 +465,72 @@ export const Reservations: React.FC = () => {
     }
   };
 
-  // Delete Reservation
-  const handleDelete = async (id: string) => {
+  // Cancel Reservation (Soft Cancel -> Status: Cancelled)
+  const handleCancel = async (id: string) => {
     const isConfirmed = await confirm({
-      title: 'Hapus Reservasi?',
-      message: 'Apakah Anda yakin ingin membatalkan dan menghapus jadwal reservasi ini?',
-      confirmText: 'Ya, Hapus',
+      title: 'Batalkan Reservasi?',
+      message: 'Apakah Anda yakin ingin membatalkan jadwal reservasi ini? Status reservasi akan diubah menjadi Cancelled.',
+      confirmText: 'Ya, Batalkan',
       danger: true,
     });
     if (!isConfirmed) return;
     try {
       setLoading(true);
-      await apiRequest(`/api/admin/reservation/${id}`, {
-        method: 'DELETE',
+      await apiRequest(`/api/admin/reservation/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'cancelled' }),
       });
       toast('Reservasi berhasil dibatalkan.', 'success');
       setSelectedRes(null);
       loadReservations();
     } catch (err: any) {
-      toast(`Error deleting: ${err.message}`, 'error');
+      toast(`Gagal membatalkan: ${err.message}`, 'error');
       setLoading(false);
+    }
+  };
+
+  // Delete Reservation Permanently (Hard Delete)
+  const handleDeletePermanent = async (id: string) => {
+    const isConfirmed = await confirm({
+      title: 'Hapus Reservasi Permanen?',
+      message: 'Apakah Anda yakin ingin menghapus data reservasi ini secara permanen dari database? Tindakan ini tidak dapat dibatalkan.',
+      confirmText: 'Ya, Hapus Permanen',
+      danger: true,
+    });
+    if (!isConfirmed) return;
+    try {
+      setLoading(true);
+      await apiRequest(`/api/admin/reservation/${id}?hard=true`, {
+        method: 'DELETE',
+      });
+      toast('Reservasi berhasil dihapus permanen.', 'success');
+      setSelectedRes(null);
+      loadReservations();
+    } catch (err: any) {
+      toast(`Gagal menghapus reservasi: ${err.message}`, 'error');
+      setLoading(false);
+    }
+  };
+
+  // Delete Reservation (Legacy wrapper)
+  const handleDelete = async (id: string) => {
+    await handleCancel(id);
+  };
+
+  // Open Chat History
+  const handleOpenChatHistory = async (customerId: string, customerName?: string, customerPhone?: string) => {
+    setActiveHistoryCustomer({ id: customerId, name: customerName, phone: customerPhone });
+    setLoadingHistory(true);
+    setHistoryMessages([]);
+    try {
+      const res = await apiRequest(`/api/admin/customers/${customerId}/messages`);
+      if (res && res.success) {
+        setHistoryMessages(res.data || []);
+      }
+    } catch (err: any) {
+      toast(`Gagal memuat riwayat chat: ${err.message}`, 'error');
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -414,10 +581,6 @@ export const Reservations: React.FC = () => {
     return extractBabiesFromRawText(res.raw_text, res.treatment_detail).map((b) => ({ name: b.name, age: b.age }));
   };
 
-  // Table sorting state (Default: sort by jadwal kunjungan ascending / nearest upcoming first)
-  const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('booking_date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
   const handleSort = (field: 'booking_date' | 'customer' | 'category' | 'status' | 'created_at') => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -427,100 +590,8 @@ export const Reservations: React.FC = () => {
     }
   };
 
-  // Filtered & Sorted reservations based on global sidebar, search filter, and sorting
-  const filteredReservations = useMemo(() => {
-    const now = Date.now();
-    const isOverdue = (r: Reservation) => {
-      if (!r.booking_date) return false;
-      const time = new Date(r.booking_date).getTime();
-      return time < now - 3 * 3600 * 1000 && r.status !== 'completed' && r.status !== 'cancelled';
-    };
-    const isUpcomingOrToday = (r: Reservation) => {
-      if (!r.booking_date) return true;
-      const time = new Date(r.booking_date).getTime();
-      return time >= now - 3 * 3600 * 1000;
-    };
-
-    const list = reservations.filter((res) => {
-      // Status & verification filter
-      if (filterState.status === 'upcoming') {
-        if (!isUpcomingOrToday(res)) return false;
-      } else if (filterState.status === 'overdue') {
-        if (!isOverdue(res)) return false;
-      } else if (filterState.status !== 'all' && res.status !== filterState.status) {
-        return false;
-      }
-      // Category filter
-      if (filterState.category !== 'all' && res.treatment_category !== filterState.category) {
-        return false;
-      }
-      // Staff filter
-      if (filterState.staffId !== 'all') {
-        if (filterState.staffId === 'unassigned') {
-          if (res.assigned_staff_id || res.assigned_staff?.id) return false;
-        } else {
-          const match =
-            res.assigned_staff_id === filterState.staffId ||
-            res.assigned_staff?.id === filterState.staffId;
-          if (!match) return false;
-        }
-      }
-      // Search query
-      if (filterState.searchQuery.trim()) {
-        const q = filterState.searchQuery.toLowerCase();
-        const cPhone = (res.customer?.phone || '').toLowerCase();
-        const cName = (res.customer?.name || '').toLowerCase();
-        const detail = (res.treatment_detail || '').toLowerCase();
-        if (!cPhone.includes(q) && !cName.includes(q) && !detail.includes(q)) {
-          return false;
-        }
-      }
-      return true;
-    });
-
-    return list.sort((a, b) => {
-      let comparison = 0;
-      if (sortField === 'booking_date') {
-        const now = Date.now();
-        const getScore = (dateStr?: string | null) => {
-          if (!dateStr) return Number.MAX_SAFE_INTEGER;
-          const targetTime = new Date(dateStr).getTime();
-          if (isNaN(targetTime)) return Number.MAX_SAFE_INTEGER;
-          const diffMs = targetTime - now;
-          // Jadwal hari ini & mendatang (toleransi 3 jam lalu hari ini):
-          // Diberi prioritas utama (terdekat dari hari dan jam sekarang)
-          if (diffMs >= -3 * 3600 * 1000) {
-            return diffMs;
-          }
-          // Jadwal masa lalu yang sudah selesai: ditaruh setelah jadwal aktif
-          return 10_000_000_000_000 + Math.abs(diffMs);
-        };
-
-        const scoreA = getScore(a.booking_date);
-        const scoreB = getScore(b.booking_date);
-        comparison = scoreA - scoreB;
-      } else if (sortField === 'customer') {
-        const nameA = a.customer?.name || 'Bunda';
-        const nameB = b.customer?.name || 'Bunda';
-        comparison = nameA.localeCompare(nameB);
-      } else if (sortField === 'category') {
-        const catA = a.treatment_category || '';
-        const catB = b.treatment_category || '';
-        comparison = catA.localeCompare(catB);
-      } else if (sortField === 'status') {
-        const statusOrder: Record<string, number> = { confirmed: 1, pending: 2, completed: 3, cancelled: 4 };
-        const orderA = statusOrder[a.status] || 99;
-        const orderB = statusOrder[b.status] || 99;
-        comparison = orderA - orderB;
-      } else if (sortField === 'created_at') {
-        const tA = new Date(a.created_at || 0).getTime();
-        const tB = new Date(b.created_at || 0).getTime();
-        comparison = tA - tB;
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-  }, [reservations, filterState, sortField, sortOrder]);
+  // Direct server-filtered reservations (lightweight & zero memory overhead)
+  const filteredReservations = reservations;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -934,13 +1005,13 @@ export const Reservations: React.FC = () => {
               }
               className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs truncate"
             >
-              <option value="all">Semua Status ({reservations.length})</option>
-              <option value="upcoming">📅 Aktif &amp; Mendatang ({reservations.filter((r) => !r.booking_date || new Date(r.booking_date).getTime() >= Date.now() - 3 * 3600 * 1000).length})</option>
-              <option value="overdue">⚠️ Perlu Verifikasi ({reservations.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < Date.now() - 3 * 3600 * 1000 && r.status !== 'completed' && r.status !== 'cancelled').length})</option>
-              <option value="pending">Pending ({reservations.filter((r) => r.status === 'pending').length})</option>
-              <option value="confirmed">Confirmed / Lunas ({reservations.filter((r) => r.status === 'confirmed').length})</option>
-              <option value="completed">Completed / Selesai ({reservations.filter((r) => r.status === 'completed').length})</option>
-              <option value="cancelled">Cancelled / Batal ({reservations.filter((r) => r.status === 'cancelled').length})</option>
+              <option value="all">Semua Status ({stats.total})</option>
+              <option value="upcoming">📅 Aktif &amp; Mendatang ({stats.upcoming})</option>
+              <option value="overdue">⚠️ Perlu Verifikasi ({stats.overdue})</option>
+              <option value="pending">Pending ({stats.pending})</option>
+              <option value="confirmed">Confirmed / Lunas ({stats.confirmed})</option>
+              <option value="completed">Completed / Selesai ({stats.completed})</option>
+              <option value="cancelled">Cancelled / Batal ({stats.cancelled})</option>
             </select>
 
             <select
@@ -962,13 +1033,13 @@ export const Reservations: React.FC = () => {
           <div className="hidden sm:flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl">
               {[
-                { key: 'all', label: 'Semua', count: reservations.length },
-                { key: 'upcoming', label: '📅 Aktif & Mendatang', count: reservations.filter((r) => !r.booking_date || new Date(r.booking_date).getTime() >= Date.now() - 3 * 3600 * 1000).length },
-                { key: 'overdue', label: '⚠️ Perlu Verifikasi', count: reservations.filter((r) => r.booking_date && new Date(r.booking_date).getTime() < Date.now() - 3 * 3600 * 1000 && r.status !== 'completed' && r.status !== 'cancelled').length, isAlert: true },
-                { key: 'pending', label: 'Pending', count: reservations.filter((r) => r.status === 'pending').length },
-                { key: 'confirmed', label: 'Confirmed (Lunas)', count: reservations.filter((r) => r.status === 'confirmed').length },
-                { key: 'completed', label: 'Completed (Selesai)', count: reservations.filter((r) => r.status === 'completed').length },
-                { key: 'cancelled', label: 'Cancelled (Batal)', count: reservations.filter((r) => r.status === 'cancelled').length },
+                { key: 'all', label: 'Semua', count: stats.total },
+                { key: 'upcoming', label: '📅 Aktif & Mendatang', count: stats.upcoming },
+                { key: 'overdue', label: '⚠️ Perlu Verifikasi', count: stats.overdue, isAlert: true },
+                { key: 'pending', label: 'Pending', count: stats.pending },
+                { key: 'confirmed', label: 'Confirmed (Lunas)', count: stats.confirmed },
+                { key: 'completed', label: 'Completed (Selesai)', count: stats.completed },
+                { key: 'cancelled', label: 'Cancelled (Batal)', count: stats.cancelled },
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -1082,7 +1153,9 @@ export const Reservations: React.FC = () => {
                 {/* Mobile Count Bar */}
                 <div className="flex items-center justify-between gap-2 px-1">
                   <span className="text-[#667781] font-bold text-xs">
-                    {filteredReservations.length} Data Reservasi
+                    {totalReservations > 0
+                      ? `Menampilkan ${reservations.length} dari ${totalReservations} Reservasi`
+                      : '0 Data Reservasi'}
                   </span>
                 </div>
 
@@ -1137,30 +1210,22 @@ export const Reservations: React.FC = () => {
                           <span>Terapis: {res.assigned_staff.name}</span>
                         </div>
                       )}
-
-                      <div className="pt-2 flex justify-end space-x-2">
-                        {res.status === 'completed' && res.proof_url && (
+                      
+                      {res.status === 'completed' && res.proof_url && (
+                        <div className="pt-1 flex justify-end">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setProofModal(res);
                             }}
-                            className="p-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                            className="px-2.5 py-1 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] rounded-xl transition text-[11px] font-semibold flex items-center space-x-1 cursor-pointer"
                             title={`Lihat Bukti Bayar (${getPaymentMethodLabel(res.payment_method)})`}
                           >
-                            <Eye size={15} />
+                            <Eye size={13} />
+                            <span>Bukti Bayar</span>
                           </button>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedRes(res);
-                          }}
-                          className="px-3 py-1.5 bg-[#f0f2f5] hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] rounded-xl transition-all font-semibold text-xs cursor-pointer"
-                        >
-                          Manage
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -1203,15 +1268,15 @@ export const Reservations: React.FC = () => {
                         <th className="py-3.5 px-5">Detail Layanan</th>
                         <th 
                           onClick={() => handleSort('booking_date')} 
-                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors bg-[#e8f5f2]/40"
+                          className="py-3.5 px-5 cursor-pointer hover:bg-[#f0f2f5] transition-colors"
                           title="Klik untuk mengurutkan jadwal kunjungan"
                         >
-                          <div className="flex items-center gap-1.5 text-[#008069]">
+                          <div className="flex items-center gap-1.5">
                             <span>Jadwal Kunjungan</span>
                             {sortField === 'booking_date' ? (
-                              sortOrder === 'asc' ? <ArrowUp size={14} className="text-[#008069] font-bold" /> : <ArrowDown size={14} className="text-[#008069] font-bold" />
+                              sortOrder === 'asc' ? <ArrowUp size={13} className="text-[#008069]" /> : <ArrowDown size={13} className="text-[#008069]" />
                             ) : (
-                              <ArrowUpDown size={12} className="opacity-60" />
+                              <ArrowUpDown size={12} className="opacity-40" />
                             )}
                           </div>
                         </th>
@@ -1231,7 +1296,7 @@ export const Reservations: React.FC = () => {
                           </div>
                         </th>
                         <th className="py-3.5 px-5">Bukti Bayar</th>
-                        <th className="py-3.5 px-5">Aksi</th>
+                        <th className="py-3.5 px-5 text-right">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e9edef] text-xs text-[#111b21]">
@@ -1317,7 +1382,7 @@ export const Reservations: React.FC = () => {
                                 <span className="text-[#8696a0] text-xs">-</span>
                               )}
                             </td>
-                            <td className="py-3.5 px-5">
+                            <td className="py-3.5 px-5 text-right">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1337,32 +1402,17 @@ export const Reservations: React.FC = () => {
               </div>
 
               {/* Pagination Footer */}
-              {totalPages > 1 && (
-                <div className="p-4 border-t border-[#e9edef] flex items-center justify-between text-xs text-[#667781] bg-white rounded-xl shadow-xs">
-                  <span>
-                    Menampilkan {reservations.length} dari total <span className="text-[#111b21] font-bold">{totalReservations}</span> reservasi
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => {
-                        setReservations([]);
-                        loadReservations(1);
-                      }}
-                      disabled={page === 1 || loading}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] disabled:opacity-40 transition font-semibold"
-                    >
-                      Awal
-                    </button>
-                    <button
-                      onClick={loadMore}
-                      disabled={page >= totalPages || loading}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-[#d1d7db] text-[#111b21] hover:bg-[#f0f2f5] disabled:opacity-40 transition font-semibold"
-                    >
-                      {loading ? 'Memuat...' : `Muat Halaman ${page + 1} / ${totalPages}`}
-                    </button>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={(newPage) => {
+                  setPage(newPage);
+                  loadReservations(newPage);
+                }}
+                loading={loading}
+                totalItems={totalReservations}
+                loadedItems={reservations.length}
+              />
             </div>
           )}
         </div>
@@ -1382,6 +1432,9 @@ export const Reservations: React.FC = () => {
           onSetDate={handleModalSetDate}
           onAssignStaff={handleModalAssignStaff}
           onDelete={handleModalDelete}
+          onCancel={handleModalCancel}
+          onDeletePermanent={handleModalDeletePermanent}
+          onOpenChatHistory={handleOpenChatHistory}
           onProofUpload={handleModalProofUpload}
           onProofRemove={handleModalProofRemove}
           onOpenEditLocation={handleModalOpenEditLocation}
@@ -1687,6 +1740,104 @@ export const Reservations: React.FC = () => {
                       <span>Simpan Panduan Rumah</span>
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Chat History Stream Modal */}
+      {activeHistoryCustomer &&
+        createPortal(
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
+            onClick={() => setActiveHistoryCustomer(null)}
+          >
+            <div
+              className="w-full max-w-lg bg-white border border-[#e9edef] rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-modalScaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-4 border-b border-[#e9edef] flex items-center justify-between bg-[#f8fafc]">
+                <div>
+                  <h3 className="font-bold text-sm text-[#111b21] flex items-center space-x-2">
+                    <MessageSquare size={16} className="text-[#008069]" />
+                    <span>Riwayat Chat WhatsApp</span>
+                  </h3>
+                  <p className="text-xs text-[#667781] mt-0.5 font-mono">
+                    {activeHistoryCustomer.name || 'Pasien'} {activeHistoryCustomer.phone ? `• ${activeHistoryCustomer.phone}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveHistoryCustomer(null)}
+                  className="p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body: Message Stream with WhatsApp Wallpaper */}
+              <div
+                className="p-4 overflow-y-auto flex-1 space-y-3 bg-[#efeae2] min-h-[300px]"
+                style={{
+                  backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
+                  backgroundSize: '16px 16px',
+                }}
+              >
+                {loadingHistory ? (
+                  <div className="flex justify-center items-center py-12">
+                    <Loader className="animate-spin text-[#008069]" size={32} />
+                  </div>
+                ) : historyMessages.length === 0 ? (
+                  <div className="text-center py-12 text-[#667781] text-xs">
+                    Belum ada pesan tercatat untuk customer ini.
+                  </div>
+                ) : (
+                  historyMessages.map((msg) => {
+                    const isInbound = msg.direction === 'INBOUND';
+                    const typeUpper = (msg.sender_type || '').toUpperCase();
+                    const sender = isInbound
+                      ? 'Customer'
+                      : typeUpper === 'ADMIN' || typeUpper === 'HUMAN' || typeUpper === 'STAFF'
+                      ? msg.sender_name || 'Admin'
+                      : 'Bot';
+
+                    return (
+                      <div key={msg.id} className={`flex flex-col ${isInbound ? 'items-start' : 'items-end'}`}>
+                        <div className="flex items-center space-x-1 text-[10px] text-[#667781] mb-0.5">
+                          <span className="font-bold text-[#111b21]">{sender}</span>
+                          <span>•</span>
+                          <Clock size={9} />
+                          <span>
+                            {new Date(msg.created_at).toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <div
+                          className={`max-w-[80%] p-3 rounded-xl text-xs leading-relaxed shadow-xs ${
+                            isInbound
+                              ? 'bg-white text-[#111b21] rounded-tl-none border border-black/5'
+                              : 'bg-[#d9fdd3] text-[#111b21] rounded-tr-none border border-[#00a884]/20'
+                          }`}
+                        >
+                          {msg.content}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3.5 border-t border-[#e9edef] bg-[#f8fafc] flex justify-end">
+                <button
+                  onClick={() => setActiveHistoryCustomer(null)}
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer"
+                >
+                  Tutup
                 </button>
               </div>
             </div>

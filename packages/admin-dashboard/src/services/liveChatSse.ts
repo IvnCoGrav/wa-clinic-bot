@@ -86,6 +86,8 @@ function openShared() {
 
     sharedEs.addEventListener('message.created', (e) => handleEvent('message.created', e));
     sharedEs.addEventListener('message.updated', (e) => handleEvent('message.updated', e));
+    sharedEs.addEventListener('message:reaction', (e) => handleEvent('message:reaction', e));
+    sharedEs.addEventListener('message.reaction', (e) => handleEvent('message.reaction', e));
     sharedEs.addEventListener('message.status_updated', (e) => handleEvent('message.status_updated', e));
     sharedEs.addEventListener('conversation.updated', (e) => handleEvent('conversation.updated', e));
     sharedEs.addEventListener('ping', () => resetWatchdog());

@@ -467,6 +467,54 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lng: 112.701805,
   },
   {
+    name: 'Perumahan Pondok Jati',
+    patterns: [
+      /\bpondok\s*jati\b/i,
+      /\bperum(ahan)?\s*pondok\s*jati\b/i,
+    ],
+    kelurahan: 'Jati',
+    kecamatan: 'Sidoarjo (Kota)',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.439574,
+    lng: 112.701114,
+  },
+  {
+    name: 'Taman Pinang Indah',
+    patterns: [
+      /\btaman\s*pinang(\s*indah)?\b/i,
+      /\btpi\s*sidoarjo\b/i,
+    ],
+    kelurahan: 'Banjarbendo',
+    kecamatan: 'Sidoarjo',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.447545,
+    lng: 112.697425,
+  },
+  {
+    name: 'Tiara Regency / Graha Anggrek Mas',
+    patterns: [
+      /\btiara\s*regency\b/i,
+      /\bgraha\s*anggrek\s*mas\b/i,
+    ],
+    kelurahan: 'Pagarwojo',
+    kecamatan: 'Buduran',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.436780,
+    lng: 112.705640,
+  },
+  {
+    name: 'Deltasari Indah & Deltasari Baru',
+    patterns: [
+      /\bdeltasari(\s*indah|\s*baru)?\b/i,
+      /\bdelta\s*sari\b/i,
+    ],
+    kelurahan: 'Kureksari',
+    kecamatan: 'Waru',
+    kota: 'Kabupaten Sidoarjo',
+    lat: -7.359218,
+    lng: 112.738914,
+  },
+  {
     name: 'Puri Surya Jaya',
     patterns: [
       /\bpuri\s*surya\s*jaya\b/i,

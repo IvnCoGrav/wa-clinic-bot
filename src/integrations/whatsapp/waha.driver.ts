@@ -10,6 +10,7 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   readonly providerType = 'WAHA' as const;
   readonly supportsRevoke = true;
   readonly supportsEdit = true;
+  readonly supportsReaction = true;
   private client: IWahaClient;
   private tenantId: string;
 
@@ -68,6 +69,20 @@ export class WahaGatewayDriver implements WhatsAppGateway {
       return { success: ok };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Gagal mengedit pesan' };
+    }
+  }
+
+  async sendReactionMessage(to: string, messageId: string, emoji: string): Promise<SendResult> {
+    const targetChatId = this.toChatId(to);
+    try {
+      const ok = await this.client.sendReaction(targetChatId, messageId, emoji);
+      return { success: ok, provider: 'WAHA' };
+    } catch (err: any) {
+      return {
+        success: false,
+        provider: 'WAHA',
+        error: { code: 'WAHA_SEND_REACTION', message: err?.message || 'sendReaction failed' },
+      };
     }
   }
 
