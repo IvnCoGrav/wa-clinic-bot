@@ -253,6 +253,7 @@ export class BroadcastQueueService {
         chatId: customer.phone,
         replyText,
         tenantId: targetTenantId,
+        singleBubble: true,
       });
 
       if (!res.success) {

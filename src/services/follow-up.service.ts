@@ -1082,24 +1082,49 @@ export class FollowUpService {
 
       let messageText: string;
 
-      // Cek apakah ada template custom di DB untuk type+variant ini
-      try {
-        const custom = await prisma.followUpTemplate.findFirst({
-          where: { tenant_id: tenantId, type: templateType, variant: fu.stage, is_active: true },
-        });
-        if (custom) {
-          // Replacing placeholders in custom template with smart context
-          messageText = custom.text
-            .replace(/Bunda\s*\{name\}/gi, greetingName)
-            .replace(/\{name\}/g, cleanName || 'Bunda')
-            .replace(/\{time\}/g, timeStr)
-            .replace(/\{babyName\}/g, babyName)
-            .replace(/Bunda\s+Bunda/gi, 'Bunda')
-            .replace(/dek\s+dek\s+/gi, 'dek ')
-            .replace(/dek\s+si kecil/gi, 'si kecil')
-            .replace(/\s{2,}/g, ' ')
-            .trim();
-        } else {
+      // 1. Prioritaskan teks kustom spesifik yang diedit admin untuk customer ini
+      if (fu.custom_text && fu.custom_text.trim()) {
+        messageText = fu.custom_text
+          .replace(/Bunda\s*\{name\}/gi, greetingName)
+          .replace(/\{name\}/g, cleanName || 'Bunda')
+          .replace(/\{time\}/g, timeStr)
+          .replace(/\{babyName\}/g, babyName)
+          .replace(/Bunda\s+Bunda/gi, 'Bunda')
+          .replace(/dek\s+dek\s+/gi, 'dek ')
+          .replace(/dek\s+si kecil/gi, 'si kecil')
+          .replace(/[^\S\r\n]{2,}/g, ' ') // Hanya rapikan spasi horizontal, enter/newline tetap aman
+          .replace(/\n{3,}/g, '\n\n')     // Maksimal 2 newline berurutan (paragraf)
+          .trim();
+      } else {
+        // 2. Cek apakah ada template custom di DB untuk type+variant ini
+        try {
+          const custom = await prisma.followUpTemplate.findFirst({
+            where: { tenant_id: tenantId, type: templateType, variant: fu.stage, is_active: true },
+          });
+          if (custom) {
+            // Replacing placeholders in custom template with smart context
+            messageText = custom.text
+              .replace(/Bunda\s*\{name\}/gi, greetingName)
+              .replace(/\{name\}/g, cleanName || 'Bunda')
+              .replace(/\{time\}/g, timeStr)
+              .replace(/\{babyName\}/g, babyName)
+              .replace(/Bunda\s+Bunda/gi, 'Bunda')
+              .replace(/dek\s+dek\s+/gi, 'dek ')
+              .replace(/dek\s+si kecil/gi, 'si kecil')
+              .replace(/[^\S\r\n]{2,}/g, ' ') // Hanya rapikan spasi horizontal, enter/newline tetap aman
+              .replace(/\n{3,}/g, '\n\n')
+              .trim();
+          } else {
+            const { text } = getRollingFollowUpMessage(templateType, {
+              name: cleanName,
+              babyName,
+              time: timeStr,
+              index: fu.stage - 1,
+            });
+            messageText = text;
+          }
+        } catch (err) {
+          // DB fallback -> gunakan default
           const { text } = getRollingFollowUpMessage(templateType, {
             name: cleanName,
             babyName,
@@ -1108,15 +1133,6 @@ export class FollowUpService {
           });
           messageText = text;
         }
-      } catch (err) {
-        // DB fallback -> gunakan default
-        const { text } = getRollingFollowUpMessage(templateType, {
-          name: cleanName,
-          babyName,
-          time: timeStr,
-          index: fu.stage - 1,
-        });
-        messageText = text;
       }
 
       console.log(`[FollowUp Worker] Sending ${fu.type} Stage ${fu.stage} to ${fu.customer.phone} (${greetingName}, Baby: ${babyName})`);
@@ -1151,6 +1167,7 @@ export class FollowUpService {
         chatId: fu.customer.phone,
         replyText: messageText,
         tenantId,
+        singleBubble: true, // Follow-up selalu dikirim dalam 1 bubble utuh (tidak dipecah multi-bubble)
       });
 
       // Mark as SENT

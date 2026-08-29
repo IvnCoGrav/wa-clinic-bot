@@ -37,7 +37,7 @@ export function getLlmEndpointConfig(overrides?: {
     baseUrl: (overrides?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
     model: overrides?.model || modelConfig?.modelName || process.env.OPENAI_MODEL || '',
     fallbackModel: getFallbackModel(),
-    timeoutMs: overrides?.timeoutMs ?? parsePositiveInt(process.env.LLM_TIMEOUT_CHAT_MS, 120000),
+    timeoutMs: overrides?.timeoutMs ?? parsePositiveInt(process.env.LLM_TIMEOUT_CHAT_MS, 30000),
   };
 }
 

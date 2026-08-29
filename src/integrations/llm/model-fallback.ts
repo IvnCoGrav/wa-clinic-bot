@@ -53,8 +53,14 @@ export interface ChatCompletionsWithFallbackCall {
 
 function isTransientError(err: any): boolean {
   const code = err?.code || '';
-  const msg = String(err?.message || '');
+  const msg = String(err?.message || '') + ' ' + JSON.stringify(err?.response?.data || '');
   const status = err?.response?.status || err?.status || 0;
+
+  // Jika kuota/kredit akun habis, jangan buang waktu retry model yang sama, langsung fallback ke model berikutnya!
+  if (/no credits|insufficient_quota|quota|billing|RateLimitError.*OpenAIException/i.test(msg)) {
+    return false;
+  }
+
   return (
     code === 'ECONNABORTED' ||
     /timeout/i.test(msg) ||
