@@ -10,12 +10,39 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
  * Tidak ada template darurat yang dikirim ke customer.
  */
 
-vi.mock('../../src/integrations/llm/intent', () => ({
-  llmIntentService: { detectIntent: async () => ({ intent: 'other' }) },
-}));
-vi.mock('../../src/integrations/llm/generator', () => ({
-  llmResponseGenerator: { generateFaqResponse: async () => 'Mock FAQ response' },
-}));
+vi.mock('../../src/integrations/llm/llm-gateway', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/integrations/llm/llm-gateway')>();
+  return {
+    ...original,
+    getLlmEndpointConfig: vi.fn().mockReturnValue({
+      baseUrl: 'https://mock.api.openai.com/v1',
+      apiKey: 'mock-api-key',
+      timeoutMs: 30000,
+      fallbackModel: null,
+    }),
+  };
+});
+
+vi.mock('../../src/integrations/llm/model-fallback', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/integrations/llm/model-fallback')>();
+  return {
+    ...original,
+    callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
+      data: {
+        choices: [{
+          message: {
+            content: 'Baik Bunda, terima kasih. Kami bantu cek ya.',
+          },
+        }],
+      },
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      latencyMs: 100,
+      isPrimaryModel: true,
+      modelUsed: 'gpt-4o-mini',
+      retryCount: 0,
+    }),
+  };
+});
 
 describe('Medical Escalation — Alert Admin Only, Customer Silent', () => {
   let sentToCustomer: string[] = [];

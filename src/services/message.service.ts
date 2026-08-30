@@ -341,15 +341,19 @@ export class MessageService {
             read_at: effectiveReadAt ?? undefined,
           },
         }),
-        prisma.conversation.update({
-          where: { id: data.conversationId },
-          data: {
-            last_message_at: effectiveMsgDate,
-            updated_at: new Date(),
-          },
-        }).catch((convErr: any) => {
-          console.warn('[MESSAGE LOG CONV UPDATE WARN]', convErr.message);
-        }),
+        prisma.conversation?.update
+          ? prisma.conversation
+              .update({
+                where: { id: data.conversationId },
+                data: {
+                  last_message_at: effectiveMsgDate,
+                  updated_at: new Date(),
+                },
+              })
+              ?.catch?.((convErr: any) => {
+                console.warn('[MESSAGE LOG CONV UPDATE WARN]', convErr.message);
+              })
+          : Promise.resolve(),
       ]);
       saved = savedMsg;
       if (saved) return saved;

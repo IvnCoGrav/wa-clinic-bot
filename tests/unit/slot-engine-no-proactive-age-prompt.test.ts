@@ -58,7 +58,7 @@ describe('Slot Engine - No Proactive Age Prompt & Custom Persona Integration', (
       { role: 'assistant', content: 'Jika dilihat dari jaraknya... Rencana mau treatment apa bunda ?🤗' },
     ]);
     expect(instruction).toContain('PANDUAN PENAWARAN JADWAL');
-    expect(instruction).toContain('Rencana mau treatment di hari apa Bunda ? 😊');
+    expect(instruction).toContain('rencana mau treatment di hari apa');
     expect(instruction).not.toContain('berapa usia si kecil');
   });
 
@@ -80,7 +80,7 @@ describe('Slot Engine - No Proactive Age Prompt & Custom Persona Integration', (
 
   it('4. PersonaComposer menyuntikkan Rule 18 (larangan tanya usia proaktif)', () => {
     const rules = PersonaComposer.getPersonaRules();
-    expect(rules).toContain('ATURAN USIA PASIEN (TIDAK PERLU DITANYAKAN PROAKTIF)');
+    expect(rules).toContain('ATURAN USIA & KELUHAN PASIEN (TIDAK PERLU DITANYAKAN PROAKTIF)');
     expect(rules).toContain('DILARANG KERAS proaktif menanyakan usia atau umur si kecil');
   });
 

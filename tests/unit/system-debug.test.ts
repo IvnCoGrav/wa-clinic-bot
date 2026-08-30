@@ -29,7 +29,7 @@ describe('System Debug Service', () => {
 
     const routerFlag = info.featureFlags.find((f) => f.key === 'AI_ROUTER_ENABLED');
     expect(routerFlag?.value).toBe('unset');
-    expect(info.aiRouter.enabled).toBe(true); // default ON per tenant
+    expect(info.aiRouter.enabled).toBe(false); // default OFF when AI_ROUTER_ENABLED is unset
     expect(info.aiRouter.shadowMode).toBe(false); // default shadow OFF (mode aktif penuh)
 
     // DB di-mock offline di test → status bukan CONNECTED, tapi service tetap return (tidak throw)

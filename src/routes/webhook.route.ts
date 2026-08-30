@@ -448,6 +448,16 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
               }
 
+              // 5. Admin Outbound Distance & Ongkir Capture Hook (0 LLM Cost)
+              if (adminReplyText.trim() && !isBotAutoReply) {
+                try {
+                  const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+                  humanBackgroundEnrichmentService.enrichFromAdminOutboundAsync(adminReplyText, customer.id, DEFAULT_TENANT_ID);
+                } catch (err: any) {
+                  console.warn('[ADMIN OUTBOUND ENRICH ERROR]', err?.message || err);
+                }
+              }
+
               // 5. Log outbound reply ke tabel Messages & broadcast SSE ke Live Chat Panel
               let msgDate: Date | undefined = undefined;
               if (payload.timestamp) {
@@ -1175,6 +1185,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
             }
           } catch (e: any) { console.warn('[HUMAN EXPLICIT AUTO-CAPTURE ERROR]', e.message); }
+
+          // Passive Background Location & Distance Enrichment (GPS Pin, Google Maps Link, Alamat Teks, Form Reservasi)
+          try {
+            const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+            humanBackgroundEnrichmentService.enrichAsync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+          } catch (enrichErr: any) {
+            console.warn('[HUMAN ENRICH HOOK ERROR]', enrichErr?.message || enrichErr);
+          }
 
           // Log pesan ke DB Audit Trail
           await messageService.logMessage({

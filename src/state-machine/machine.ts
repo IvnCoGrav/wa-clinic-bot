@@ -235,7 +235,7 @@ export class ConversationStateMachine {
 
     // 3. Cek Global Bot Deactivation
     const { AiModelConfigService } = await import('../config/ai-models.config');
-    const isSandboxTest = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
+    const isSandboxTest = Boolean(customer.is_sandbox_test);
     if (!AiModelConfigService.isBotActive(tenantId) && !activeConversation.is_human_handling && !isSandboxTest) {
       console.log(`[GLOBAL BOT DEACTIVATED] Bypassing bot responder and routing customer ${customer.phone} directly to human handling.`);
       await conversationService.escalateToHumanHandling(
@@ -277,10 +277,12 @@ export class ConversationStateMachine {
     }
 
     // 5. Update timestamp pesan terakhir pada percakapan
-    await prisma.conversation.update({
-      where: { id: activeConversation.id },
-      data: { last_message_at: new Date() },
-    }).catch(() => {});
+    try {
+      await prisma.conversation?.update?.({
+        where: { id: activeConversation.id },
+        data: { last_message_at: new Date() },
+      });
+    } catch {}
 
     // --- 6. PENGIRIMAN BALASAN (JIKA DIPERLUKAN) ---
     if (result.shouldSendReply && result.replyText) {
@@ -312,10 +314,12 @@ export class ConversationStateMachine {
           }
 
           if (sendOk) {
-            await prisma.customer.update({
-              where: { id: customer.id },
-              data: { pricelist_sent: true },
-            }).catch(() => {});
+            try {
+              await prisma.customer?.update?.({
+                where: { id: customer.id },
+                data: { pricelist_sent: true },
+              });
+            } catch {}
             customer.pricelist_sent = true;
 
             try {

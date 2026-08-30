@@ -270,30 +270,44 @@ describe('Multi-Turn Conversation Replay Test Suite (Part 6)', () => {
         last_discussed_treatment: 'Pijat Anak Ceria',
       };
 
-      vi.spyOn(modelFallback, 'callChatCompletionsWithFallback').mockResolvedValueOnce({
-        model: 'MiniMax-M2.7-highspeed',
-        data: {
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  intents: ['select_treatment', 'request_booking', 'affirmation'],
-                  location_text: null,
-                  street_detail: null,
-                  child_age_months: null,
-                  symptoms: [],
-                  treatment_referenced: 'Pijat Anak Ceria',
-                  preferred_date_text: 'Sabtu pagi jam 9',
-                  preferred_time_text: '09.00',
-                  customer_name: null,
-                  is_medical_emergency: false,
-                  confidence_score: 0.95,
-                }),
+      vi.spyOn(modelFallback, 'callChatCompletionsWithFallback')
+        .mockResolvedValueOnce({
+          model: 'MiniMax-M2.7-highspeed',
+          data: {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    intents: ['select_treatment', 'request_booking', 'affirmation'],
+                    location_text: null,
+                    street_detail: null,
+                    child_age_months: null,
+                    symptoms: [],
+                    treatment_referenced: 'Pijat Anak Ceria',
+                    preferred_date_text: 'Sabtu pagi jam 9',
+                    preferred_time_text: '09.00',
+                    customer_name: null,
+                    is_medical_emergency: false,
+                    confidence_score: 0.95,
+                  }),
+                },
               },
-            },
-          ],
-        },
-      } as any);
+            ],
+          },
+        } as any)
+        .mockResolvedValueOnce({
+          model: 'MiniMax-M2.7-highspeed',
+          data: {
+            choices: [
+              {
+                message: {
+                  content:
+                    'Baik Bunda Fitra, berikut list untuk reservasi ya bund:\n\nNama Bunda: Bunda Fitra\nUsia Anak: 36 bulan\nTreatment: Pijat Anak Ceria\nLokasi: Kureksari, Waru, Sidoarjo\nJadwal: Sabtu pagi jam 09.00\n\nSilakan kirim data lengkapnya ya bund! 😊',
+                },
+              },
+            ],
+          },
+        } as any);
 
       const result = await processSlotEngine({
         customer,

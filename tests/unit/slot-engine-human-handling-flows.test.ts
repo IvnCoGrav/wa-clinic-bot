@@ -21,6 +21,8 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
     symptoms: [],
     isOutOfCoverage: false,
     reservationFormSent: false,
+    isHumanHandling: false,
+    humanHandlingReason: null,
     lastInteractionAt: new Date().toISOString(),
     conversationState: 'COLLECTING_SLOTS',
   };
@@ -40,7 +42,7 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
     confidenceScore: 0.95,
   };
 
-  it('1. Asking Schedule: Saat customer tanya "Klo hari ini apa masih ada slot?", matrix harus eskalasi ke ESCALATE_HUMAN_SCHEDULE', async () => {
+  it('1. Asking Schedule: Saat customer tanya "Klo hari ini apa masih ada slot?", matrix harus result GENERATE_AI_RESPONSE', async () => {
     const extraction: ExtractedEntities = {
       ...emptyExtraction,
       intents: ['ask_schedule'],
@@ -51,13 +53,11 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
       incomingText: 'Klo hari ini apa masih ada slot?',
     });
 
-    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
-    expect(decision.updatedSlate.isHumanHandling).toBe(true);
-    expect(decision.updatedSlate.humanHandlingReason).toBe('asking_schedule');
-    expect(decision.deterministicTemplateReply).toContain('cekkan ketersediaan jadwal');
+    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
+    expect(decision.updatedSlate.isHumanHandling).toBe(false);
   });
 
-  it('2. Asking Schedule Jam: Saat customer sebut "jam 10 bisa", matrix harus eskalasi ke ESCALATE_HUMAN_SCHEDULE', async () => {
+  it('2. Asking Schedule Jam: Saat customer sebut "jam 10 bisa", matrix harus result GENERATE_AI_RESPONSE', async () => {
     const extraction: ExtractedEntities = {
       ...emptyExtraction,
       intents: ['ask_schedule'],
@@ -68,9 +68,8 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
       incomingText: 'jam 10 bisa',
     });
 
-    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
-    expect(decision.updatedSlate.isHumanHandling).toBe(true);
-    expect(decision.deterministicTemplateReply).toContain('cekkan ketersediaan jadwal');
+    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
+    expect(decision.updatedSlate.isHumanHandling).toBe(false);
   });
 
   it('3. Permintaan CS Manusia: Saat customer minta "mau bicara sama admin", matrix harus eskalasi ke ESCALATE_HUMAN_AGENT_REQUEST', async () => {

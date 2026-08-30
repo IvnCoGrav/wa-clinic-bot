@@ -61,7 +61,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   }
 
   it('label.chat.added (hold) → kolom is_hold_labeled=true; pesan masuk dibaca dari DB tanpa getChatLabels', async () => {
-    const phone = `6283331${Date.now()}`;
+    const phone = `6283331${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Hold Event', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     await conversationService.updateConversationState(
@@ -100,7 +100,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   });
 
   it('label.chat.deleted (hold) → kolom is_hold_labeled=false; pesan berikutnya auto-release tanpa getChatLabels', async () => {
-    const phone = `6283332${Date.now()}`;
+    const phone = `6283332${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Release Event', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     await conversationService.updateConversationState(
@@ -141,7 +141,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   });
 
   it('label.chat.added (admin) → pesan masuk IGNORED_ADMIN lewat kolom DB tanpa getChatLabels', async () => {
-    const phone = `6283333${Date.now()}`;
+    const phone = `6283333${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Admin Record', DEFAULT_TENANT_ID);
 
     const resEvent = await app.inject({
@@ -164,7 +164,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   });
 
   it('fallback tetap jalan: chat tanpa record customer → getChatLabels (mock WAHA) dipakai untuk deteksi Admin', async () => {
-    const phone = `6283334${Date.now()}`;
+    const phone = `6283334${Date.now().toString().slice(-7)}`;
     wahaClient.mockLabels.set(`${phone}@c.us`, ['Admin']);
 
     const getLabelsSpy = vi.spyOn(wahaClient, 'getChatLabelsOrNull');
@@ -183,7 +183,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
 
 
   it('event dengan label null (baru selesai scan QR) atau label non-admin/hold → dilewati dengan aman', async () => {
-    const phone = `6283335${Date.now()}`;
+    const phone = `6283335${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Ignore Event', DEFAULT_TENANT_ID);
 
     // 1. label null → tidak merubah kolom
@@ -209,7 +209,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   });
 
   it('escalateToHumanHandling → addLabel hold sukses → kolom is_hold_labeled ikut ter-set true', async () => {
-    const phone = `6283336${Date.now()}`;
+    const phone = `6283336${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Escalate Sync', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -229,7 +229,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   });
 
   it('[TC 18] Idempotent Webhook Delivery → menerima event label sama berulang kali tetap stabil', async () => {
-    const phone = `6283337${Date.now()}`;
+    const phone = `6283337${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Idempotent Test', DEFAULT_TENANT_ID);
 
     const payload = labelEvent('label.chat.added', `${phone}@c.us`, 'hold');
@@ -242,7 +242,7 @@ describe('WAHA Label Events & DB-column Fast Path', () => {
   });
 
   it('[TC 19] Case-insensitive Webhook Label Name → "HoLd" atau "ADMIN" terdeteksi dengan tepat', async () => {
-    const phone = `6283338${Date.now()}`;
+    const phone = `6283338${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Case Insensitive Test', DEFAULT_TENANT_ID);
 
     const res = await app.inject({
