@@ -275,6 +275,95 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/staff/reservations/:id/otw
+   * Mengirim notifikasi WhatsApp otomatis bahwa terapis sedang meluncur ke lokasi pasien (OTW).
+   */
+  fastify.post(
+    '/api/staff/reservations/:id/otw',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body?: { text?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const staffId = (request as any).staffId;
+      const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
+      const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const { id } = request.params;
+      const customText = request.body?.text;
+
+      const reservation = await prisma.reservation.findUnique({
+        where: { id },
+        include: {
+          customer: {
+            include: {
+              conversations: {
+                where: { tenant_id: tenantId },
+                orderBy: { updated_at: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          assigned_staff: true,
+        },
+      });
+
+      if (!reservation) {
+        return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+      }
+
+      const conversation = (reservation as any).customer?.conversations?.[0];
+      if (!conversation) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Belum ada percakapan WhatsApp yang terhubung dengan customer ini.',
+        });
+      }
+
+      const patientName = (reservation as any).customer?.name || 'Bunda';
+      const therapistName = (reservation as any).assigned_staff?.name || staffName;
+
+      let finalText = customText;
+      if (!finalText || !finalText.trim()) {
+        finalText = await StaffReservationService.getOtwMessageText(tenantId, {
+          patientName,
+          therapistName,
+        });
+      }
+
+      const replyResult = await liveChatService.sendAdminReply({
+        conversationId: conversation.id,
+        text: finalText,
+        tenantId,
+        adminName: therapistName,
+        forceEscalate: true,
+      });
+
+      if (!replyResult.success) {
+        return reply.status(400).send({ success: false, error: replyResult.error });
+      }
+
+      // Audit trail
+      await auditService.logAdminAction({
+        apiKey: 'STAFF_SESSION',
+        adminIdentity: staffName,
+        action: 'STAFF_SEND_OTW',
+        targetId: id,
+        payload: { conversationId: conversation.id, textPreview: finalText.slice(0, 60) },
+        ipAddress: request.ip,
+        tenantId,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: `Pesan OTW berhasil dikirim ke WhatsApp ${patientName}!`,
+        data: replyResult,
+      });
+    }
+  );
+
+  /**
    * POST /api/staff/reservations/:id/payment
    * Mencatat penyelesaian pembayaran transaksi homecare oleh terapis di lapangan.
    */
@@ -295,7 +384,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
       const { id } = request.params;
       const { paymentMethod, amount, proofImageB64, notes } = request.body || {};
 
@@ -312,6 +404,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         amount,
         proofImageB64,
         notes,
+        isSupervisor,
       });
 
       if (!result.success) {
@@ -344,7 +437,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Staff Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
       const { reservationId, lat, lng, housePhotoB64, landmark } = request.body || {};
 
       if (!reservationId) {
@@ -360,6 +456,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         lng,
         housePhotoB64,
         landmark,
+        isSupervisor,
       });
 
       if (!result.success) {
@@ -395,10 +492,13 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
       const { id, messageId } = request.params;
 
-      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId);
+      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId, isSupervisor);
       if (!owned) {
         return reply.status(403).send({ error: 'Anda tidak memiliki akses ke percakapan ini.' });
       }
@@ -434,7 +534,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
     ) => {
       const staffId = (request as any).staffId;
       const staffName = (request as any).staffSession?.staff?.name || 'Bidan Terapis';
+      const role = ((request as any).staffSession?.staff?.role || '').toLowerCase();
       const tenantId = (request as any).staffSession?.staff?.tenant_id || DEFAULT_TENANT_ID;
+      const isSupervisor =
+        role === 'spv_cs' || role === 'super_admin' || role === 'tenant_admin' || role === 'admin_cs' || role === 'admin';
       const { id, messageId } = request.params;
       const { text } = request.body || {};
 
@@ -442,7 +545,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ success: false, error: 'Teks pesan baru tidak boleh kosong.' });
       }
 
-      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId);
+      const owned = await StaffReservationService.assertConversationOwnedByStaffToday(id, staffId, tenantId, isSupervisor);
       if (!owned) {
         return reply.status(403).send({ error: 'Anda tidak memiliki akses ke percakapan ini.' });
       }

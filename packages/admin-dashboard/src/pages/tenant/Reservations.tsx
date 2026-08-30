@@ -37,12 +37,22 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Loader,
-  MessageSquare,
   Clock,
+  Crosshair,
+  Sparkles,
+  Link2,
+  ExternalLink,
+  ChevronUp,
+  ChevronDown,
+  CheckCircle2,
+  MessageSquare,
+  Loader,
 } from 'lucide-react';
 import { CalendarViewMode, CalendarFilterState, QuickSlotTarget, StaffOption } from '../../components/calendar/types';
 import { WeekScheduleGrid } from '../../components/calendar/WeekScheduleGrid';
+import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
+import { compressImageFile } from '../../utils/imageCompressor';
+import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { DayScheduleGrid } from '../../components/calendar/DayScheduleGrid';
 import { MonthScheduleGrid } from '../../components/calendar/MonthScheduleGrid';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
@@ -735,31 +745,114 @@ export const Reservations: React.FC = () => {
     }
   };
 
+  // Smart location assistant states in Reservations
+  const [editMapsUrlInput, setEditMapsUrlInput] = useState('');
+  const [editGettingGps, setEditGettingGps] = useState(false);
+  const [editGeocoding, setEditGeocoding] = useState(false);
+  const [editGpsAccuracy, setEditGpsAccuracy] = useState<number | null>(null);
+  const [editShowManualCoords, setEditShowManualCoords] = useState(false);
+  const [editRawHousePhotoB64, setEditRawHousePhotoB64] = useState<string | null>(null);
+
   const handleOpenEditLocation = (res: Reservation) => {
     setEditLocationModal(res);
     const prefs = res.customer?.preferences as any;
     setEditHousePhotoB64(prefs?.house_photo_url || null);
+    setEditRawHousePhotoB64(null);
     setEditLandmark(prefs?.landmark || '');
     setEditLat(res.customer?.lat != null ? String(res.customer.lat) : '');
     setEditLng(res.customer?.lng != null ? String(res.customer.lng) : '');
     setEditRemovePhoto(false);
+    setEditMapsUrlInput('');
+    setEditGpsAccuracy(null);
+    setEditShowManualCoords(false);
   };
 
-  const handlePickAdminHousePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePickAdminHousePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 12 * 1024 * 1024) {
-      toast('Ukuran file maksimal 12 MB', 'error');
+    try {
+      // Kompresi cepat di sisi client (maks 1280px, ~150-250KB)
+      const compressed = await compressImageFile(file, { maxWidth: 1280, maxHeight: 1280, quality: 0.8 });
+      setEditRawHousePhotoB64(compressed.dataUrl);
+      
+      // Beri watermark GPS / Kelurahan jika tersedia
+      const cust = editLocationModal?.customer;
+      const adminName = user?.name || user?.email || 'Admin Klinik';
+      const watermarked = await stampGpsWatermark(compressed.dataUrl, {
+        lat: editLat ? parseFloat(editLat) : cust?.lat,
+        lng: editLng ? parseFloat(editLng) : cust?.lng,
+        kelurahan: cust?.kelurahan,
+        kecamatan: cust?.kecamatan,
+        landmark: editLandmark,
+        customerName: cust?.name || undefined,
+        takerName: adminName,
+        staffName: adminName,
+      });
+
+      setEditHousePhotoB64(watermarked);
+      setEditRemovePhoto(false);
+      toast('Foto rumah berhasil dimuat & dikompres instan! 📸', 'success');
+    } catch {
+      toast('Gagal memproses foto rumah.', 'error');
+    }
+  };
+
+  // Smart Maps URL Parser
+  const handlePasteEditMapsUrl = (val: string) => {
+    setEditMapsUrlInput(val);
+    if (!val || val.trim().length < 5) return;
+
+    const parsed = extractLatLngFromMapsUrl(val);
+    if (parsed) {
+      setEditLat(parsed.lat.toFixed(6));
+      setEditLng(parsed.lng.toFixed(6));
+      setEditGpsAccuracy(null);
+      toast('✓ Titik koordinat berhasil diekstrak dari link Google Maps! 📍', 'success');
+    }
+  };
+
+  // Kunci GPS Perangkat Sekarang
+  const handleLockEditGps = async () => {
+    setEditGettingGps(true);
+    try {
+      const loc = await getCurrentDeviceLocation(10000);
+      setEditLat(loc.lat.toFixed(6));
+      setEditLng(loc.lng.toFixed(6));
+      setEditGpsAccuracy(loc.accuracy);
+      toast(`✓ Titik GPS berhasil dikunci (Akurasi: ±${loc.accuracy}m)! 📍`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal mengunci GPS.', 'error');
+    } finally {
+      setEditGettingGps(false);
+    }
+  };
+
+  // Cari Koordinat dari Alamat via Geocoding
+  const handleGeocodeEditAddress = async () => {
+    const cust = editLocationModal?.customer;
+    const addressQuery = [cust?.kelurahan, cust?.kecamatan, cust?.kota].filter(Boolean).join(', ');
+    if (!addressQuery || addressQuery.trim().length < 3) {
+      toast('Alamat kelurahan/kecamatan belum lengkap untuk pencarian otomatis.', 'info');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEditHousePhotoB64(reader.result as string);
-      setEditRemovePhoto(false);
-    };
-    reader.readAsDataURL(file);
+    setEditGeocoding(true);
+    try {
+      const res = await geocodeAddressWithNominatim(addressQuery);
+      if (res) {
+        setEditLat(res.lat.toFixed(6));
+        setEditLng(res.lng.toFixed(6));
+        setEditGpsAccuracy(null);
+        toast(`✓ Titik koordinat ditemukan untuk ${cust?.kelurahan || cust?.kecamatan}! 📍`, 'success');
+      } else {
+        toast('Titik tidak ditemukan untuk alamat ini. Coba tempel link Google Maps.', 'info');
+      }
+    } catch {
+      toast('Gagal mencari titik alamat.', 'error');
+    } finally {
+      setEditGeocoding(false);
+    }
   };
 
   const handleSaveEditLocation = async () => {
@@ -776,7 +869,7 @@ export const Reservations: React.FC = () => {
       const res = await apiRequest(`/api/admin/customers/${editLocationModal.customer_id}/location`, {
         method: 'PUT',
         body: JSON.stringify({
-          housePhotoB64: editHousePhotoB64 && editHousePhotoB64.startsWith('data:image/') ? editHousePhotoB64 : undefined,
+          housePhotoB64: editRawHousePhotoB64 || (editHousePhotoB64 && editHousePhotoB64.startsWith('data:image/') ? editHousePhotoB64 : undefined),
           landmark: editLandmark,
           lat: parsedLat,
           lng: parsedLng,
@@ -1714,26 +1807,124 @@ export const Reservations: React.FC = () => {
                 />
               </div>
 
-              {/* Bagian 3: Koordinat GPS (Opsional) */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#111b21]">
-                  3. Koordinat GPS (Latitude, Longitude - Opsional):
-                </label>
+              {/* Bagian 3: Smart Koordinat GPS Rumah Pasien */}
+              <div className="space-y-3 bg-[#f8fafc] -mx-4 p-4 rounded-2xl border border-[#e9edef]">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#111b21] flex items-center space-x-1.5">
+                    <Sparkles size={13} className="text-[#008069]" />
+                    <span>3. Titik Lokasi GPS Rumah Pasien:</span>
+                  </label>
+                  {editLat && editLng && (
+                    <a
+                      href={getGoogleMapsDirectionUrl(parseFloat(editLat), parseFloat(editLng))}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-[#008069] hover:underline inline-flex items-center gap-1"
+                    >
+                      <span>Lihat Maps</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  )}
+                </div>
+
+                {/* Assistant 1: Tempel Link Maps */}
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-semibold text-[#54656f] flex items-center gap-1">
+                    <Link2 size={11} className="text-[#008069]" />
+                    <span>Tempel Link Shareloc / Google Maps Pasien:</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editMapsUrlInput}
+                    onChange={(e) => handlePasteEditMapsUrl(e.target.value)}
+                    placeholder="Paste link Google Maps / shareloc di sini..."
+                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+                  />
+                </div>
+
+                {/* Assistant 2: Tombol Cepat GPS & Geocode */}
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={editLat}
-                    onChange={(e) => setEditLat(e.target.value)}
-                    placeholder="Latitude (misal: -7.3488)"
-                    className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
-                  />
-                  <input
-                    type="text"
-                    value={editLng}
-                    onChange={(e) => setEditLng(e.target.value)}
-                    placeholder="Longitude (misal: 112.7516)"
-                    className="w-full px-3 py-2 bg-white border border-[#e9edef] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
-                  />
+                  <button
+                    type="button"
+                    onClick={handleLockEditGps}
+                    disabled={editGettingGps}
+                    className="py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+                  >
+                    <Crosshair size={13} className={editGettingGps ? 'animate-spin' : ''} />
+                    <span>{editGettingGps ? 'Mengunci...' : '📍 Kunci GPS Saya'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGeocodeEditAddress}
+                    disabled={editGeocoding}
+                    className="py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+                  >
+                    <Search size={13} className={editGeocoding ? 'animate-spin' : ''} />
+                    <span>{editGeocoding ? 'Mencari...' : '🔍 Cari dari Alamat'}</span>
+                  </button>
+                </div>
+
+                {/* Coordinate Status Badge */}
+                {editLat && editLng ? (
+                  <div className="p-2.5 bg-[#d9fdd3]/70 border border-[#00a884]/40 rounded-xl flex items-center justify-between text-xs text-[#008069]">
+                    <div className="flex items-center space-x-1.5 font-mono font-bold">
+                      <CheckCircle2 size={14} className="text-[#008069] shrink-0" />
+                      <span>Titik: {parseFloat(editLat).toFixed(6)}, {parseFloat(editLng).toFixed(6)}</span>
+                      {editGpsAccuracy && <span className="text-[10px] text-[#54656f]">(±{editGpsAccuracy}m)</span>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditLat('');
+                        setEditLng('');
+                      }}
+                      className="text-[10px] text-rose-600 hover:underline font-semibold"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[#8696a0] italic">
+                    Belum ada titik koordinat. Gunakan tombol di atas atau tempel link Maps.
+                  </p>
+                )}
+
+                {/* Collapsible Manual Coordinates */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setEditShowManualCoords(!editShowManualCoords)}
+                    className="text-[11px] text-[#54656f] hover:text-[#111b21] font-semibold flex items-center gap-1 transition"
+                  >
+                    <span>{editShowManualCoords ? 'Sembunyikan Input Manual' : 'Input Koordinat Manual (Angka)'}</span>
+                    {editShowManualCoords ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+
+                  {editShowManualCoords && (
+                    <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#e9edef]">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] text-[#667781]">Latitude</label>
+                        <input
+                          type="text"
+                          value={editLat}
+                          onChange={(e) => setEditLat(e.target.value)}
+                          placeholder="-7.3488"
+                          className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[10px] text-[#667781]">Longitude</label>
+                        <input
+                          type="text"
+                          value={editLng}
+                          onChange={(e) => setEditLng(e.target.value)}
+                          placeholder="112.7516"
+                          className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
