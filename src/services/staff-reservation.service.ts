@@ -765,6 +765,7 @@ export class StaffReservationService {
     amount?: number;
     proofImageB64?: string;
     notes?: string;
+    isSupervisor?: boolean;
   }): Promise<{ success: boolean; data?: any; error?: string }> {
     const {
       reservationId,
@@ -775,6 +776,7 @@ export class StaffReservationService {
       amount,
       proofImageB64,
       notes,
+      isSupervisor = false,
     } = params;
 
     if (!reservationId || !staffId) {
@@ -800,7 +802,11 @@ export class StaffReservationService {
         return { success: false, error: 'Reservasi tidak ditemukan.' };
       }
 
-      if (reservation.tenant_id !== tenantId || reservation.assigned_staff_id !== staffId) {
+      if (reservation.tenant_id !== tenantId) {
+        return { success: false, error: 'Reservasi tidak ditemukan untuk klinik ini.' };
+      }
+
+      if (!isSupervisor && reservation.assigned_staff_id && reservation.assigned_staff_id !== staffId) {
         return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
       }
 
@@ -1028,6 +1034,7 @@ export class StaffReservationService {
     lng?: number | null;
     housePhotoB64?: string | null;
     landmark?: string | null;
+    isSupervisor?: boolean;
   }): Promise<{ success: boolean; data?: any; error?: string }> {
     const {
       reservationId,
@@ -1038,6 +1045,7 @@ export class StaffReservationService {
       lng,
       housePhotoB64,
       landmark,
+      isSupervisor = false,
     } = params;
 
     if (!reservationId || !staffId) {
@@ -1056,7 +1064,11 @@ export class StaffReservationService {
         return { success: false, error: 'Reservasi tidak ditemukan.' };
       }
 
-      if (reservation.tenant_id !== tenantId || reservation.assigned_staff_id !== staffId) {
+      if (reservation.tenant_id !== tenantId) {
+        return { success: false, error: 'Reservasi tidak ditemukan untuk klinik ini.' };
+      }
+
+      if (!isSupervisor && reservation.assigned_staff_id && reservation.assigned_staff_id !== staffId) {
         return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
       }
 
@@ -1128,7 +1140,7 @@ export class StaffReservationService {
 
       let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
-      // Kompres, beri watermark GPS (lengkap dengan Kelurahan & Kecamatan), dan simpan foto jika ada
+      // Kompres, beri watermark GPS (lengkap dengan nama pengambil foto, Kelurahan & Kecamatan), dan simpan foto jika ada
       if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
         const { mediaService } = await import('./media.service');
         const matches = housePhotoB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -1137,9 +1149,12 @@ export class StaffReservationService {
         const watermarked = await mediaService.overlayGpsBadge(resized, {
           lat: targetLat,
           lng: targetLng,
+          customerName: customer.name || undefined,
           kelurahan: customer.kelurahan,
           kecamatan: customer.kecamatan,
           landmark: finalLandmark,
+          staffName: staffName || undefined,
+          takerName: staffName || undefined,
         });
         const saved = await mediaService.saveOutboundMedia({
           tenantId,

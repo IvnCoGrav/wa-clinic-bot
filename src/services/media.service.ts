@@ -246,13 +246,26 @@ export class MediaService {
     info: {
       lat?: number | null;
       lng?: number | null;
+      customerName?: string | null;
+      address?: string | null;
       kelurahan?: string | null;
       kecamatan?: string | null;
       landmark?: string | null;
+      takerName?: string | null;
+      staffName?: string | null;
+      brandName?: string | null;
       timestamp?: string;
     }
   ): Promise<Buffer> {
-    if (info.lat == null || info.lng == null) return buffer;
+    const hasCoords = info.lat != null && info.lng != null;
+    const cleanCust = (info.customerName || '').replace(/[<>&'"]/g, '').trim();
+    const cleanKel = (info.kelurahan || '').replace(/[<>&'"]/g, '').trim();
+    const cleanKec = (info.kecamatan || '').replace(/[<>&'"]/g, '').trim();
+    const cleanLandmark = (info.landmark || '').replace(/[<>&'"]/g, '').trim();
+    const cleanTaker = (info.takerName || info.staffName || '').replace(/[<>&'"]/g, '').trim();
+    const cleanBrand = (info.brandName || 'Kala Moms & Baby').replace(/[<>&'"]/g, '').trim();
+
+    if (!hasCoords && !cleanKel && !cleanKec && !cleanLandmark && !cleanCust) return buffer;
 
     try {
       const sharp = (await import('sharp')).default;
@@ -272,12 +285,6 @@ export class MediaService {
           timeZone: 'Asia/Jakarta',
         }) + ' WIB';
 
-      const latStr = Number(info.lat).toFixed(6);
-      const lngStr = Number(info.lng).toFixed(6);
-      const cleanLandmark = (info.landmark || '').replace(/[<>&'"]/g, '');
-      const cleanKel = (info.kelurahan || '').replace(/[<>&'"]/g, '');
-      const cleanKec = (info.kecamatan || '').replace(/[<>&'"]/g, '');
-
       let areaText = '';
       if (cleanKel && cleanKec) {
         areaText = ` · Kel. ${cleanKel}, Kec. ${cleanKec}`;
@@ -285,22 +292,42 @@ export class MediaService {
         areaText = ` · ${cleanKel || cleanKec}`;
       }
 
-      const latLngText = `GPS: ${latStr}, ${lngStr}${areaText}`;
-      const subText = cleanLandmark ? `Patokan: ${cleanLandmark.slice(0, 45)} · ${timeStr}` : timeStr;
+      const custPrefix = cleanCust ? `Bunda ${cleanCust} · ` : '';
 
-      const bannerHeight = 56;
+      let latLngText = `Panduan Lokasi ${cleanCust ? 'Bunda ' + cleanCust : 'Pasien'}`;
+      if (hasCoords) {
+        const latStr = Number(info.lat).toFixed(6);
+        const lngStr = Number(info.lng).toFixed(6);
+        latLngText = `GPS: ${latStr}, ${lngStr} · ${custPrefix}${cleanKel || cleanKec ? 'Kel. ' + cleanKel + ', Kec. ' + cleanKec : ''}`.replace(/ · $/, '');
+      } else if (areaText) {
+        latLngText = `${custPrefix}Area:${areaText}`;
+      }
+
+      const subParts: string[] = [];
+      if (cleanTaker) subParts.push(`Foto: ${cleanTaker}`);
+      if (cleanLandmark) {
+        const truncated = cleanLandmark.length > 40 ? cleanLandmark.slice(0, 37) + '...' : cleanLandmark;
+        subParts.push(`Patokan: ${truncated}`);
+      }
+      subParts.push(timeStr);
+      const subText = subParts.join(' · ');
+
+      const bannerHeight = 58;
       const bannerY = height - bannerHeight;
 
       const svgOverlay = Buffer.from(`
         <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
           <style>
             .title { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #ffffff; }
-            .sub { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; fill: #e2e8f0; }
+            .sub { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; fill: #cbd5e1; }
+            .brand { font-family: 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif; font-size: 11px; font-weight: bold; fill: #2dd4bf; }
           </style>
-          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="#0f172a" fill-opacity="0.85"/>
-          <circle cx="20" cy="${bannerY + 18}" r="5" fill="#22c55e" />
-          <text x="32" y="${bannerY + 23}" class="title">${latLngText}</text>
-          <text x="32" y="${bannerY + 43}" class="sub">${subText}</text>
+          <rect x="0" y="${bannerY}" width="${width}" height="${bannerHeight}" fill="#0f172a" fill-opacity="0.88"/>
+          <rect x="0" y="${bannerY}" width="${width}" height="3" fill="#00a884"/>
+          <circle cx="18" cy="${bannerY + 20}" r="5" fill="#22c55e" />
+          <text x="30" y="${bannerY + 24}" class="title">${latLngText}</text>
+          <text x="${width - 15}" y="${bannerY + 24}" text-anchor="end" class="brand">🌸 ${cleanBrand}</text>
+          <text x="30" y="${bannerY + 45}" class="sub">${subText}</text>
         </svg>
       `);
 

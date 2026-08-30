@@ -1,7 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
-import { X, Save, Loader, MapPin, User, Mail, Phone, Home } from 'lucide-react';
+import { 
+  X, 
+  Save, 
+  Loader, 
+  MapPin, 
+  User, 
+  Mail, 
+  Phone, 
+  Home, 
+  Crosshair, 
+  Navigation, 
+  Search, 
+  Link2, 
+  ExternalLink, 
+  CheckCircle2, 
+  ChevronDown, 
+  ChevronUp, 
+  Sparkles 
+} from 'lucide-react';
+import { extractLatLngFromMapsUrl, getCurrentDeviceLocation, geocodeAddressWithNominatim, getGoogleMapsDirectionUrl } from '../../utils/geoUtils';
 
 interface CustomerEditFormProps {
   customer: {
@@ -41,6 +60,13 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
     lng: customer.lng !== null ? String(customer.lng) : '',
   });
 
+  // Smart Coordinate Assistant states
+  const [mapsUrlInput, setMapsUrlInput] = useState('');
+  const [gettingGps, setGettingGps] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [showManualCoords, setShowManualCoords] = useState(false);
+
   useEffect(() => {
     setFormData({
       name: customer.name || '',
@@ -56,6 +82,71 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Smart Maps URL Parser
+  const handlePasteMapsUrl = (val: string) => {
+    setMapsUrlInput(val);
+    if (!val || val.trim().length < 5) return;
+
+    const parsed = extractLatLngFromMapsUrl(val);
+    if (parsed) {
+      setFormData((prev) => ({
+        ...prev,
+        lat: parsed.lat.toFixed(6),
+        lng: parsed.lng.toFixed(6),
+      }));
+      setGpsAccuracy(null);
+      toast('✓ Koordinat berhasil diekstrak dari link Google Maps! 📍', 'success');
+    }
+  };
+
+  // Kunci GPS Perangkat Sekarang
+  const handleLockGps = async () => {
+    setGettingGps(true);
+    try {
+      const loc = await getCurrentDeviceLocation(10000);
+      setFormData((prev) => ({
+        ...prev,
+        lat: loc.lat.toFixed(6),
+        lng: loc.lng.toFixed(6),
+      }));
+      setGpsAccuracy(loc.accuracy);
+      toast(`✓ Titik GPS berhasil dikunci (Akurasi: ±${loc.accuracy}m)! 📍`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal mengunci GPS.', 'error');
+    } finally {
+      setGettingGps(false);
+    }
+  };
+
+  // Cari Koordinat dari Alamat via Geocoding
+  const handleGeocodeFromAddress = async () => {
+    const addressQuery = [formData.kelurahan, formData.kecamatan, formData.kota].filter(Boolean).join(', ');
+    if (!addressQuery || addressQuery.trim().length < 3) {
+      toast('Isi nama Kelurahan atau Kecamatan terlebih dahulu untuk mencari titik.', 'info');
+      return;
+    }
+
+    setGeocoding(true);
+    try {
+      const res = await geocodeAddressWithNominatim(addressQuery);
+      if (res) {
+        setFormData((prev) => ({
+          ...prev,
+          lat: res.lat.toFixed(6),
+          lng: res.lng.toFixed(6),
+        }));
+        setGpsAccuracy(null);
+        toast(`✓ Titik koordinat ditemukan untuk ${formData.kelurahan || formData.kecamatan}! 📍`, 'success');
+      } else {
+        toast('Titik tidak ditemukan untuk alamat ini. Coba tempel link Google Maps.', 'info');
+      }
+    } catch {
+      toast('Gagal mencari titik alamat.', 'error');
+    } finally {
+      setGeocoding(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,7 +201,7 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fadeIn" onClick={handleCancel}>
       <div
-        className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95"
+        className="bg-white rounded-2xl sm:rounded-3xl border border-[#e9edef] overflow-hidden w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -226,39 +317,122 @@ export const CustomerEditForm: React.FC<CustomerEditFormProps> = ({
           />
         </div>
 
-        {/* Koordinat GPS */}
-        <div className="pt-2 border-t border-[#e9edef] space-y-3">
-          <label className="block text-[11px] font-bold text-[#111b21] flex items-center space-x-1">
-            <MapPin size={12} className="text-[#8696a0]" />
-            <span>Koordinat GPS (Opsional)</span>
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="block text-[10px] text-[#667781]">Latitude</label>
-              <input
-                type="text"
-                value={formData.lat}
-                onChange={(e) => handleChange('lat', e.target.value)}
-                placeholder="-7.3488"
-                className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs transition"
-                disabled={saving || loading}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-[10px] text-[#667781]">Longitude</label>
-              <input
-                type="text"
-                value={formData.lng}
-                onChange={(e) => handleChange('lng', e.target.value)}
-                placeholder="112.7516"
-                className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] focus:ring-1 focus:ring-[#008069] shadow-xs transition"
-                disabled={saving || loading}
-              />
-            </div>
+        {/* Smart Koordinat GPS Section (Anti-Hapal Koordinat) */}
+        <div className="pt-3 border-t border-[#e9edef] space-y-3 bg-[#f8fafc] -mx-4 p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <label className="block text-[11px] font-bold text-[#111b21] flex items-center space-x-1.5">
+              <Sparkles size={13} className="text-[#008069]" />
+              <span>Titik Lokasi GPS Rumah Pasien</span>
+            </label>
+            {formData.lat && formData.lng && (
+              <a
+                href={getGoogleMapsDirectionUrl(parseFloat(formData.lat), parseFloat(formData.lng))}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-bold text-[#008069] hover:underline inline-flex items-center gap-1"
+              >
+                <span>Lihat di Maps</span>
+                <ExternalLink size={11} />
+              </a>
+            )}
           </div>
-          <p className="text-[10px] text-[#8696a0] italic">
-            Isi jika ingin override titik koordinat manual. Kosongkan untuk pakai data existing.
-          </p>
+
+          {/* Assistant 1: Tempel Link Google Maps */}
+          <div className="space-y-1">
+            <label className="block text-[10px] font-semibold text-[#54656f] flex items-center gap-1">
+              <Link2 size={11} className="text-[#008069]" />
+              <span>Tempel Link Shareloc / Google Maps Pasien:</span>
+            </label>
+            <input
+              type="text"
+              value={mapsUrlInput}
+              onChange={(e) => handlePasteMapsUrl(e.target.value)}
+              placeholder="Paste link Google Maps / shareloc di sini..."
+              className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-2xs"
+            />
+          </div>
+
+          {/* Assistant 2: Tombol Cepat GPS & Geocode */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleLockGps}
+              disabled={gettingGps}
+              className="py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+            >
+              <Crosshair size={13} className={gettingGps ? 'animate-spin' : ''} />
+              <span>{gettingGps ? 'Mengunci GPS...' : '📍 Kunci GPS Saya'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleGeocodeFromAddress}
+              disabled={geocoding}
+              className="py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+            >
+              <Search size={13} className={geocoding ? 'animate-spin' : ''} />
+              <span>{geocoding ? 'Mencari...' : '🔍 Cari dari Alamat'}</span>
+            </button>
+          </div>
+
+          {/* Coordinate Status Badge */}
+          {formData.lat && formData.lng ? (
+            <div className="p-2.5 bg-[#d9fdd3]/70 border border-[#00a884]/40 rounded-xl flex items-center justify-between text-xs text-[#008069]">
+              <div className="flex items-center space-x-1.5 font-mono font-bold">
+                <CheckCircle2 size={14} className="text-[#008069] shrink-0" />
+                <span>Titik: {parseFloat(formData.lat).toFixed(6)}, {parseFloat(formData.lng).toFixed(6)}</span>
+                {gpsAccuracy && <span className="text-[10px] text-[#54656f]">(±{gpsAccuracy}m)</span>}
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, lat: '', lng: '' }))}
+                className="text-[10px] text-rose-600 hover:underline font-semibold"
+              >
+                Hapus
+              </button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-[#8696a0] italic">
+              Belum ada titik koordinat. Gunakan tombol di atas atau tempel link Maps.
+            </p>
+          )}
+
+          {/* Collapsible Manual Input (Jika Dibutuhkan) */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowManualCoords(!showManualCoords)}
+              className="text-[11px] text-[#54656f] hover:text-[#111b21] font-semibold flex items-center gap-1 transition"
+            >
+              <span>{showManualCoords ? 'Sembunyikan Input Manual' : 'Input Koordinat Manual (Angka)'}</span>
+              {showManualCoords ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+
+            {showManualCoords && (
+              <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#e9edef]">
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-[#667781]">Latitude</label>
+                  <input
+                    type="text"
+                    value={formData.lat}
+                    onChange={(e) => handleChange('lat', e.target.value)}
+                    placeholder="-7.3488"
+                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-[#667781]">Longitude</label>
+                  <input
+                    type="text"
+                    value={formData.lng}
+                    onChange={(e) => handleChange('lng', e.target.value)}
+                    placeholder="112.7516"
+                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs transition"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Phone (read-only) */}

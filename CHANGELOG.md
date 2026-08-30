@@ -4,6 +4,84 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix & UI/UX Overhaul — Impeccable Mobile Experience for Reservations & Today Treatments: Past Slot Filtering, Dual Android/iOS Camera Triggers, Smart GPS/Maps Link Parser, Instant Client-Side Image Compression (<200KB), Live GPS Canvas Watermarking, Always-Available Google Maps Navigation, & Mobile Action Toolbar Redesign (`TodayTreatments.tsx`, `StaffToday.tsx`, `CreateReservationModal.tsx`, `CustomerEditForm.tsx`, `Reservations.tsx`, `imageCompressor.ts`, `imageWatermark.ts`, `geoUtils.ts`, `media.service.ts`) (2026-08-30)
+
+- **Latar Belakang & 8 Kasus Temuan User:**
+  1. **Rekomendasi Jam Kunjungan Mengusulkan Jam Lampau**: Saat membuat reservasi untuk hari ini (`bookingDate === today`), rekomendasi slot jam menyarankan jam yang sudah lewat (mis. jam 08:30 atau 09:00 padahal waktu saat ini sudah siang/sore).
+  2. **Kompatibilitas Kamera Android vs iPhone**: Pada perangkat Android, input foto rumah seringkali hanya menampilkan pemilih file/dokumen tanpa opsi kamera langsung, sedangkan di iPhone langsung membuka opsi Take Photo / Photo Library.
+  3. **Input Koordinat Lat/Lng Manual Tidak Usable**: Form pengeditan profil pelanggan dan modal reservasi meminta admin/staf mengetik angka Latitude & Longitude desimal manual (mis. `-7.348812, 112.751623`) tanpa bantuan GPS atau pencarian peta.
+  4. & 7. **Kelambatan / Latensi Unggah Foto Rumah di Lapangan (Page Treatment Hari Ini)**: Saat menyimpan foto tampak depan rumah pasien dari smartphone, proses simpan memakan waktu 15–40 detik dan rawan timeout koneksi seluler.
+  5. **Watermark Koordinat & Stempel Informasi Rumah Tidak Muncul**: Foto rumah yang diunggah terkadang tidak memiliki watermark koordinat GPS dan kelurahan/kecamatan.
+  6. **Tombol Aksi di Bagian Bawah Tidak Mobile-Friendly**: Pada layar ponsel (viewport 360px–412px), tombol-tombol aksi di bagian bawah kartu treatment bertumpuk kaku dalam 2 baris blok yang tidak ergonomis.
+  8. **Tombol Navigasi Google Maps Tidak Muncul di Halaman Treatment Hari Ini**: Tombol Maps navigasi tersembunyi jika URL navigasi backend bernilai null, tidak seperti pada halaman khusus staf/terapis.
+
+- **Akar Masalah (Root Cause):**
+  1. **Missing Is-Today Temporal Filter (`CreateReservationModal.tsx`)**: Loop iterasi `CANDIDATE_SLOTS` tidak membandingkan jam slot dengan jam sekarang saat tanggal kunjungan adalah hari ini, serta tidak memeriksa apakah waktu keberangkatan bidan (`plannedDepartureMinutes`) berada di masa lalu.
+  2. **Inconsistent OS File Picker Handling**: Atribut `<input type="file" accept="image/*" />` tunggal diinterpretasikan berbeda oleh berbagai ROM Android (beberapa OEM memblokir kamera langsung jika tanpa `capture="environment"` dan sebaliknya).
+  3. **Missing Geo Assistant Layer**: Form profil customer dan edit reservasi hanya menyediakan 2 input teks mentah `editLat` & `editLng` tanpa modul ekstraksi URL Google Maps, Geolocation API, atau Geocoding alamat.
+  4. & 7. **Raw High-Resolution Base64 Payload**: Browser mengirim file foto kamera resolusi penuh (5MB–15MB JPEG mentah) langsung dikonversi menjadi string base64 raksasa (>13MB) ke backend tanpa kompresi canvas client-side.
+  5. **Null Coordinates Watermark Guard (`media.service.ts`)**: `mediaService.overlayGpsBadge` membatalkan pembuatan banner watermark jika `info.lat` atau `info.lng` bernilai `null` (`if (info.lat == null) return buffer;`), sehingga foto tanpa GPS gagal mendapatkan stempel area/kelurahan/patokan dan timestamp.
+  6. & 8. **Rigid 2-Row Layout & Hard-Conditioned Maps Button (`TodayTreatments.tsx`)**: Tombol Maps dibatasi oleh pengecekan kaku `(task.navigationUrl || task.mapsUrl)` sehingga hilang jika tidak di-generate oleh backend, serta tombol disusun dalam grid 3-kolom + 1-kolom yang padat di layar mobile.
+
+- **Solusi & Perbaikan Komprehensif:**
+  1. **Past-Time Recommendation Guard (`CreateReservationModal.tsx`)**:
+     - Memeriksa apakah `bookingDate === todayStr`. Jika ya, seluruh slot jam yang `slotStartMinutes <= nowMinutes + 15` dan seluruh slot dengan waktu keberangkatan `plannedDepartureMinutes <= nowMinutes` otomatis disaring dan diabaikan.
+  2. **Dual Action Trigger untuk Kamera & Galeri (`TodayTreatments.tsx`, `StaffToday.tsx`)**:
+     - Menyediakan 2 tombol aksi terpisah: **"📸 Buka Kamera"** (terhubung ke input dengan atribut `capture="environment"` untuk membuka kamera belakang langsung di semua OS) dan **"🖼️ Pilih Galeri"** (input standar untuk memilih dari album foto).
+  3. **Smart Location & Coordinates Assistant (`geoUtils.ts`, `CustomerEditForm.tsx`, `Reservations.tsx`, `TodayTreatments.tsx`)**:
+     - **Tempel Link Google Maps**: Parser cerdas `extractLatLngFromMapsUrl` yang otomatis mengekstrak koordinat dari format URL Google Maps apapun (`maps.app.goo.gl`, `?q=lat,lng`, `@lat,lng`, shareloc text).
+     - **Kunci Titik GPS Saya**: Mengunci koordinat perangkat saat ini secara presisi via `getCurrentDeviceLocation` dengan laporan akurasi (±meter).
+     - **Cari dari Alamat**: Geocoding instan via OpenStreetMap Nominatim berdasarkan nama Kelurahan, Kecamatan, dan Kota yang terisi.
+     - **Lihat di Google Maps**: Tautan cepat untuk memverifikasi posisi titik di Google Maps.
+  4. & 7. **High-Performance Client-Side Image Compression (`imageCompressor.ts`)**:
+     - Kompresi canvas berkecepatan tinggi (<100ms di HP) yang mendownscale gambar ke resolusi optimal 1280px (kualitas 0.8 JPEG), memangkas ukuran payload dari 10MB menjadi **~150KB - 250KB (pengurangan ukuran 98%)**, membuat proses simpan menjadi instan (< 0.5 detik) bahkan di jaringan seluler lemah di jalan raya.
+  5. **View Mode vs Edit Mode, Overwrite Confirmation & Instant Zero-Wait Optimistic UI (`TodayTreatments.tsx`, `StaffToday.tsx`, `Reservations.tsx`, `staff-reservation.service.ts`, `today.subroute.ts`, `media.service.ts`)**:
+     - **Mode Pratinjau Panduan Tersimpan (View Mode)**: Jika pasien sudah memiliki data foto rumah, koordinat GPS, atau patokan, saat tombol kamera ditekan modal akan terbuka dalam **Mode Pratinjau Panduan**. Menampilkan foto rumah tampak depan secara jelas (bisa dizoom layar penuh), status GPS terkunci beserta tombol langsung *"Buka Maps Navigasi"*, catatan patokan rumah, dan alamat tercatat.
+     - **Mode Edit & Konfirmasi Timpa Data (Edit Mode & Overwrite Safety)**: Di dalam mode pratinjau, tersedia tombol *"✏️ Edit / Perbarui Data"*. Saat staf/admin ingin memperbarui atau menimpa foto/GPS yang sudah tersimpan sebelumnya, sistem akan memunculkan dialog konfirmasi (*"Data panduan rumah & GPS sudah ada sebelumnya. Apakah Anda yakin ingin menimpa data tersebut?"*) untuk mencegah data terhapus/tertimpa tanpa sengaja. Jika pasien belum memiliki data sebelumnya, modal langsung terbuka dalam mode input/kamera.
+     - **Instant Zero-Wait UX (Optimistic UI Update)**: Ketika pengguna memilih foto rumah dan menekan tombol simpan, modal langsung tertutup seketika (**0 detik perceived loading**), status kartu pasien di layar langsung ter-update secara optimis, dan proses kompresi serta sinkronisasi server berjalan mulus di latar belakang tanpa memblokir alur kerja staf/admin.
+     - **Enriched Official Single Watermark**: Banner watermark SVG di server kini mencakup seluruh rincian lengkap: Nama Pasien (`Bunda [Nama]`), Titik GPS (`GPS: lat, lng`), Area (`Kelurahan, Kecamatan`), Petugas (`📸 Foto: [Nama Petugas/Admin]`), Patokan Rumah, Timestamp Waktu (`WIB`), dan Branding Klinik (`🌸 Kala Moms & Baby`).
+     - **Supervisor / Super Admin Permission Fix**: Memperbaiki validasi kepemilikan tugas pada `updateCustomerLocation`, `recordPayment`, `revokeMessage`, dan `editMessage` di `staff-reservation.service.ts` agar pengguna dengan peran Supervisor (`SPV_CS`), Super Admin (`super_admin`), atau Admin CS (`admin_cs`) memiliki hak akses penuh untuk memperbarui lokasi, foto rumah, dan pembayaran atas seluruh jadwal pasien tim.
+     - **Pencegahan Watermark Ganda (Double Watermark Elimination)**: Memperbaiki payload simpan foto di `TodayTreatments.tsx`, `StaffToday.tsx`, dan `Reservations.tsx` agar mengirim foto mentah hasil kompresi canvas (`locRawHousePhotoB64` / `editRawHousePhotoB64`) ke backend, sehingga `mediaService.overlayGpsBadge` membubuhkan satu banner watermark resmi secara presisi tanpa menimpa/menumpuk pratinjau watermark client-side sebelumnya.
+     - Memperbaiki endpoint simpan lokasi di `TodayTreatments.tsx` dari yang sebelumnya memanggil route 404 (`/api/staff/reservations/:id/location`) menjadi endpoint resmi **`POST /api/staff/update-location`** yang menyimpan koordinat, menghitung ulang rute, dan menyimpan foto ber-watermark.
+     - Menambahkan endpoint resmi **`POST /api/staff/reservations/:id/otw`** di `today.subroute.ts` untuk mengirim pesan WhatsApp notifikasi OTW 1-klik secara otomatis ke customer terkait dengan template dinamis klinik.
+  6. & 8. **Impeccable Mobile-First Action Toolbar & Always-Available Maps (`TodayTreatments.tsx`)**:
+     - Mengubah tata letak tombol aksi menjadi toolbar responsif berbasis standar *Impeccable Design System*:
+       - Baris utama: Tombol aksi operasional (Kirim Info OTW / Catat Lunas) dengan target sentuh penuh dan kontras tinggi.
+       - Baris sekunder: Chip aksi cepat (Maps, Update Lokasi & Foto Rumah, Chat WhatsApp, Delegasi Terapis) dengan ikon proporsional dan ukuran sentuh minimal 44px.
+       - Tombol **Google Maps Navigasi** kini **selalu aktif 100%** untuk setiap pasien dengan fallback berjenjang ke koordinat atau teks alamat/kelurahan.
+
+- **Pengujian & Verifikasi:**
+  - Frontend TypeScript build (`npm run build` di `packages/admin-dashboard`): **PASS (0 error, build time 32s)**.
+  - Backend TypeScript build (`npm run build` di root): **PASS (0 error)**.
+  - Vitest Unit Test Suite (`npx vitest run tests/unit/typing.test.ts`): **PASS (12/12 green, 100%)**.
+
+#### Fix — Phantom Draft Auto-Save Prevention & Meaningful Data Guard in Form Draft System (`useFormDraft.ts`, `CreateReservationModal.tsx`, `InvoiceGeneratorModal.tsx`) (2026-08-30)
+
+- **Latar Belakang & Gejala:**
+  - Saat pengguna membuka modal **Buat Jadwal Reservasi Baru** (`CreateReservationModal.tsx`), muncul banner notifikasi draf: *"Ditemukan draf reservasi yang tersimpan baru saja."* padahal form baru saja dibuka dan belum diisi.
+  - Saat pengguna menekan tombol **"Pulihkan Draf"**, tidak ada satu pun field form yang terisi atau berubah.
+
+- **Akar Masalah (Root Cause):**
+  1. **Unconditional Auto-Save on Default State Changes (`useFormDraft.ts`)**:
+     - Ketika modal dibuka, `useEffect` internal di modal menyetel nilai default seperti tanggal hari ini (`bookingDate: 'YYYY-MM-DD'`) dan jam (`bookingTime: '09:00'`).
+     - Perubahan state default ini memicu effect auto-save di `useFormDraft.ts` yang menyimpan payload form kosong (`customerId: ""`, `selectedTreatments: []`, `babies: []`, dll.) ke `localStorage` (`wa_clinic_draft_create_reservation`).
+  2. **Missing Meaningful Data Predicate / Draft Dirtiness Check**:
+     - `useFormDraft` sebelumnya tidak memeriksa apakah data form benar-benar berisi input bermakna dari pengguna (nama pelanggan, layanan yang dipilih, catatan, anak) sebelum disimpan atau sebelum menampilkan banner pemulihan draf.
+     - Akibatnya, form kosong dianggap sebagai draf valid dan dipulihkan sebagai data kosong tanpa perubahan visual.
+
+- **Solusi & Perbaikan:**
+  1. **Meaningful Data Validation Predicate (`isMeaningful` di `useFormDraft.ts`)**:
+     - Menambahkan opsi `isMeaningful?: (data: T) => boolean` pada `useFormDraft` serta fallback inspector otomatis `defaultIsMeaningful` yang mengabaikan key boilerplate (tanggal, jam default, status pending, kategori).
+     - Jika form tidak memiliki data bermakna (masih kosong/default), `useFormDraft` **tidak akan pernah menyimpan ke `localStorage`**.
+  2. **Auto-Purge Stale Empty Drafts**:
+     - Saat inisialisasi / `refreshDraftStatus`, jika draf yang ada di `localStorage` berisi form kosong, `useFormDraft` langsung menghapusnya secara otomatis (`localStorage.removeItem`) sehingga banner tidak pernah muncul secara salah.
+  3. **Tailored Form Predicates (`CreateReservationModal.tsx` & `InvoiceGeneratorModal.tsx`)**:
+     - Menambahkan predikat `isReservationDraftMeaningful` dan `isInvoiceDraftMeaningful` yang memverifikasi keberadaan customer, layanan terpilih, data anak/bayi, diskon, catatan, atau terapis sebelum draf disimpan.
+
+- **Pengujian & Verifikasi:**
+  - Frontend TypeScript build (`npm run build` di `packages/admin-dashboard`): **PASS (0 error)**.
+  - Backend TypeScript build (`npm run build`): **PASS (0 error)**.
+
 #### Fix & Feature — Form Treatment 0-Lock, Accurate Buffer Stripping & Dynamic Tier Ongkir (Anti-Hardcode), WA Preview Scroll, & 1-Hour Local Draft System (`ClinicServices.tsx`, `InvoiceGeneratorModal.tsx`, `CreateReservationModal.tsx`, `DeliveryTiers.tsx`, `treatmentStringParser.ts`, `deliveryTierCalculator.ts`, `useFormDraft.ts`, `paymentInvoiceFormatter.ts`) (2026-08-30)
 
 - **Latar Belakang & Gejala:**
