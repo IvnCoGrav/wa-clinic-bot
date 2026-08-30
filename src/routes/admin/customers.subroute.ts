@@ -648,12 +648,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = housePhotoB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
+          const adminName = (request as any).adminSession?.adminIdentity || 'Admin Klinik';
           const watermarked = await mediaService.overlayGpsBadge(resized, {
             lat: targetLat,
             lng: targetLng,
             kelurahan: customer.kelurahan,
             kecamatan: customer.kecamatan,
             landmark: finalLandmark,
+            takerName: adminName,
+            staffName: adminName,
           });
           const saved = await mediaService.saveOutboundMedia({
             tenantId: DEFAULT_TENANT_ID,

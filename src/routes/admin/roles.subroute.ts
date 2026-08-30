@@ -12,7 +12,12 @@ export interface CustomRolePayload {
 }
 
 // In-memory fallback store jika database offline
-const memoryCustomRoles: Map<string, any> = new Map();
+const defaultFallbackRoles = [
+  { key: 'therapist', label: 'Terapis', description: 'Akses tugas harian lapangan dan chat pasien.', isSystem: true, allowedPaths: ['/staff/today'], defaultRedirect: '/staff/today' },
+  { key: 'admin_cs', label: 'Admin CS', description: 'Akses reservasi, live chat, dan manajemen pelanggan.', isSystem: true, allowedPaths: ['/tenant/reservations', '/tenant/live-chat', '/tenant/customers', '/tenant/today-treatments'], defaultRedirect: '/tenant/reservations' },
+  { key: 'spv_cs', label: 'Supervisor CS', description: 'Akses penuh operasional dan laporan.', isSystem: true, allowedPaths: ['*'], defaultRedirect: '/tenant/overview' },
+];
+const memoryCustomRoles: Map<string, any> = new Map(defaultFallbackRoles.map((r) => [r.key, r]));
 
 export async function rolesAdminRoutes(fastify: FastifyInstance) {
   /**

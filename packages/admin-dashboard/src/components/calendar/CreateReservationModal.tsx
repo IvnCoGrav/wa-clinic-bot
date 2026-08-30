@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
@@ -242,11 +242,30 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     if (restored.selectedTreatments !== undefined) setSelectedTreatments(restored.selectedTreatments);
   };
 
+  const isReservationDraftMeaningful = useCallback((data: typeof currentFormPayload) => {
+    if (!data) return false;
+    const hasCustomer = Boolean(
+      (data.customerId && data.customerId.trim().length > 0) ||
+      (data.customerSearch && data.customerSearch.trim().length > 0) ||
+      data.selectedCustomerInfo
+    );
+    const hasTreatments = Array.isArray(data.selectedTreatments) && data.selectedTreatments.length > 0;
+    const hasBabies = Array.isArray(data.babies) && data.babies.some((b: any) => b?.name?.trim() || b?.ageText?.trim());
+    const hasNotes = Boolean(data.notes && data.notes.trim().length > 0);
+    const hasDiscount = typeof data.discount === 'number' && data.discount > 0;
+    const hasAssignedStaff = Boolean(data.assignedStaffId && data.assignedStaffId.trim().length > 0);
+
+    return hasCustomer || hasTreatments || hasBabies || hasNotes || hasDiscount || hasAssignedStaff;
+  }, []);
+
   const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
     'create_reservation',
     currentFormPayload,
     handleRestoreDraft,
-    { enabled: isOpen }
+    {
+      enabled: isOpen,
+      isMeaningful: isReservationDraftMeaningful,
+    }
   );
 
   // Load clinic services catalog
@@ -613,6 +632,15 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       '14:30', '15:00', '15:30', '16:00', '16:30',
     ];
 
+    // Cek apakah tanggal reservasi adalah HARI INI (Case 1: Hindari rekomendasi jam lampau)
+    const now = new Date();
+    const todayYyyy = now.getFullYear();
+    const todayMm = String(now.getMonth() + 1).padStart(2, '0');
+    const todayDd = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${todayYyyy}-${todayMm}-${todayDd}`;
+    const isToday = bookingDate === todayStr;
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
     const results: SlotRecommendation[] = [];
 
     for (const staff of targetStaffList) {
@@ -625,6 +653,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         const [slotH, slotM] = slotTime.split(':').map(Number);
         const slotStartMinutes = slotH * 60 + slotM;
         const slotEndMinutes = slotStartMinutes + totalScheduledDurationMinutes;
+
+        // Case 1 Guard: Jika hari ini, jangan rekomendasikan jam yang sudah lewat / kurang dari 15 menit dari sekarang
+        if (isToday && slotStartMinutes <= nowMinutes + 15) {
+          continue;
+        }
 
         // Check if overlaps with any existing booking
         let hasConflict = false;
@@ -690,6 +723,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           if (plannedDepartureMinutes < 480) {
             continue;
           }
+        }
+
+        // Jika reservasi hari ini, waktu keberangkatan bidan tidak boleh sudah lewat dari jam sekarang
+        if (isToday && plannedDepartureMinutes <= nowMinutes) {
+          continue;
         }
 
         // If midwife has next booking, verify she can travel to next booking on time

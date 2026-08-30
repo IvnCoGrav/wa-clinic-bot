@@ -392,12 +392,28 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     if (restored.discountPct !== undefined) setDiscountPct(restored.discountPct);
   }, []);
 
+  const isInvoiceDraftMeaningful = useCallback((data: typeof currentFormPayload) => {
+    if (!data) return false;
+    const hasBunda = Boolean(data.bundaName && data.bundaName.trim().length > 0);
+    const hasPhone = Boolean(data.phone && data.phone.trim().length > 0);
+    const hasAddress = Boolean(data.address && data.address.trim().length > 0);
+    const hasChild = Boolean(data.childName && data.childName.trim().length > 0);
+    const hasTreatment = Boolean(data.treatmentName && data.treatmentName.trim().length > 0);
+    const hasTreatmentsList = Array.isArray(data.selectedTreatments) && data.selectedTreatments.length > 0;
+    const hasBabies = Array.isArray(data.babies) && data.babies.some((b: any) => b?.name?.trim() || b?.ageText?.trim());
+
+    return hasBunda || hasPhone || hasAddress || hasChild || hasTreatment || hasTreatmentsList || hasBabies;
+  }, []);
+
   const draftKey = `invoice_${phone || initialData?.phone || 'active'}`;
   const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
     draftKey,
     currentFormPayload,
     handleRestoreDraft,
-    { enabled: isOpen }
+    {
+      enabled: isOpen,
+      isMeaningful: isInvoiceDraftMeaningful,
+    }
   );
 
   if (!isOpen) return null;

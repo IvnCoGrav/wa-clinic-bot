@@ -38,11 +38,16 @@ import {
   PenLine,
   LayoutDashboard,
   ArrowRightLeft,
+  ExternalLink,
+  Pencil,
+  ArrowLeft,
 } from 'lucide-react';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
+import { compressImageFile } from '../../utils/imageCompressor';
+import { stampGpsWatermark } from '../../utils/imageWatermark';
 
 interface StaffTaskChild {
   name: string;
@@ -219,14 +224,19 @@ export const StaffToday: React.FC = () => {
 
   // Update Location & House Photo Modal State
   const [updateLocationModalTask, setUpdateLocationModalTask] = useState<StaffTask | null>(null);
+  const [locModalMode, setLocModalMode] = useState<'view' | 'edit'>('view');
+  const [hasSavedLocData, setHasSavedLocData] = useState(false);
   const [locCoords, setLocCoords] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [locHousePhotoB64, setLocHousePhotoB64] = useState<string | null>(null);
+  const [locRawHousePhotoB64, setLocRawHousePhotoB64] = useState<string | null>(null);
   const [locLandmark, setLocLandmark] = useState<string>('');
   const [locGettingGps, setLocGettingGps] = useState(false);
   const [gpsAttemptInfo, setGpsAttemptInfo] = useState<string | null>(null);
   const [submittingLoc, setSubmittingLoc] = useState(false);
   const [zoomImageUrl, setZoomImageUrl] = useState<string | null>(null);
-  const locHouseFileInputRef = useRef<HTMLInputElement>(null);
+  const locHouseCameraInputRef = useRef<HTMLInputElement>(null);
+  const locHouseGalleryInputRef = useRef<HTMLInputElement>(null);
+  const [locProcessingPhoto, setLocProcessingPhoto] = useState(false);
 
   // Gateway capability (WAHA supportsRevoke=true, supportsEdit=true vs WABA supportsRevoke=false)
   const [gatewayCapability, setGatewayCapability] = useState<{ provider: string; supportsRevoke: boolean; supportsEdit?: boolean } | null>(null);
@@ -1098,7 +1108,16 @@ export const StaffToday: React.FC = () => {
       setLocCoords(null);
     }
     setLocHousePhotoB64(task.address.housePhotoUrl || null);
+    setLocRawHousePhotoB64(null);
     setLocLandmark(task.address.landmark || '');
+
+    const hasData = Boolean(
+      task.address.housePhotoUrl ||
+      (task.address.lat != null && task.address.lng != null) ||
+      task.address.landmark
+    );
+    setHasSavedLocData(hasData);
+    setLocModalMode(hasData ? 'view' : 'edit');
   };
 
   // Auto-retry polling GPS hingga 5 kali percobaan atau hingga akurasi ≤ 10m
@@ -1164,6 +1183,11 @@ export const StaffToday: React.FC = () => {
 
     if (bestPos) {
       setLocCoords(bestPos);
+      // Perbarui watermark foto secara reaktif jika foto sudah diambil
+      if (locRawHousePhotoB64) {
+        await applyStaffWatermarkToRaw(locRawHousePhotoB64, bestPos, locLandmark);
+      }
+
       if (bestPos.accuracy <= 10) {
         toast(`🟢 GPS presisi tinggi terkunci (±${bestPos.accuracy}m)`, 'success');
       } else {
@@ -1179,115 +1203,163 @@ export const StaffToday: React.FC = () => {
     }
   };
 
+  // Helper untuk membubuhkan watermark GPS & info lokasi ke raw photo di staff page
+  const applyStaffWatermarkToRaw = async (
+    rawB64: string,
+    coords: { lat: number; lng: number; accuracy?: number } | null,
+    landmark: string,
+    taskObj?: StaffTask | null
+  ) => {
+    const currentTask = taskObj || updateLocationModalTask;
+    const targetLat = coords?.lat ?? currentTask?.address.lat ?? null;
+    const targetLng = coords?.lng ?? currentTask?.address.lng ?? null;
+    const targetAcc = coords?.accuracy ?? null;
+
+    const takerName = staff?.name || 'Bidan Terapis';
+    const watermarked = await stampGpsWatermark(rawB64, {
+      lat: targetLat,
+      lng: targetLng,
+      accuracy: targetAcc,
+      kelurahan: currentTask?.address.kelurahan,
+      kecamatan: currentTask?.address.kecamatan,
+      landmark: landmark || currentTask?.address.landmark || null,
+      customerName: currentTask?.customerName || undefined,
+      takerName,
+      staffName: takerName,
+    });
+    setLocHousePhotoB64(watermarked);
+    return watermarked;
+  };
+
   // Get GPS directly from mobile device
   const handleGetCurrentGps = () => {
     acquireBestGps(false);
   };
 
-  // Pick / Capture House Photo from camera
-  const handlePickHousePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Pick / Capture House Photo from camera / gallery with instant client-side compression
+  const handleProcessStaffHousePhoto = async (file: File) => {
+    setLocProcessingPhoto(true);
+    try {
+      // 1. Fast Canvas downscaling (<30ms, 1000px, ~70-100KB)
+      const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.75 });
+      setLocRawHousePhotoB64(compressed.dataUrl);
+      setLocHousePhotoB64(compressed.dataUrl);
+      toast('Foto rumah berhasil dimuat! 📸', 'success');
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const b64 = reader.result as string;
-      setLocHousePhotoB64(b64);
-    };
-    reader.readAsDataURL(file);
-
-    // Auto-fetch GPS if not yet fetched so therapist captures photo & GPS in 1 step
-    if (!locCoords && 'geolocation' in navigator && !locGettingGps) {
-      acquireBestGps(true);
+      // 2. Auto-fetch GPS di background jika belum terkunci
+      if (!locCoords && 'geolocation' in navigator && !locGettingGps) {
+        acquireBestGps(true);
+      }
+    } catch {
+      toast('Gagal memproses foto rumah.', 'error');
+    } finally {
+      setLocProcessingPhoto(false);
     }
   };
 
-  // Submit Location & House Photo Update
+  // Submit Location & House Photo Update (Optimistic UI - 0 Detik Loading)
   const handleSaveLocation = async () => {
     if (!updateLocationModalTask) return;
 
-    // Konfirmasi titik lokasi GPS sebelum menyimpan
-    if (locCoords) {
-      const isLowAccuracy = locCoords.accuracy && locCoords.accuracy > 10;
-      const confirmMsg = isLowAccuracy
-        ? `⚠️ Perhatian: Akurasi GPS saat ini ±${locCoords.accuracy}m (target maksimal 10m).\n\nUntuk hasil paling presisi, disarankan berdiri di luar pagar/gerbang rumah pasien.\n\nApakah Anda ingin tetap menyimpan koordinat ini?`
-        : `Apakah Anda yakin saat ini sedang berada di depan/lokasi rumah pasien (${updateLocationModalTask.customerName || 'Bunda'})? Titik koordinat GPS ini akan disimpan sebagai panduan tetap untuk kunjungan berikutnya.`;
-
+    // Konfirmasi sebelum menimpa data lokasi/foto yang sudah ada sebelumnya
+    if (hasSavedLocData) {
       const ok = await confirm({
-        title: isLowAccuracy ? 'Konfirmasi Akurasi GPS' : 'Konfirmasi Titik Lokasi Rumah Pasien',
-        message: confirmMsg,
-        confirmText: isLowAccuracy ? 'Ya, Tetap Simpan' : 'Ya, Saya di Lokasi Pasien',
-        cancelText: 'Batal / Kunci GPS Lagi',
-        danger: !!isLowAccuracy,
+        title: 'Konfirmasi Timpa Data Lokasi',
+        message: `Data panduan rumah dan titik GPS untuk ${updateLocationModalTask.customerName || 'Bunda'} sudah tersimpan sebelumnya.\n\nApakah Anda yakin ingin menimpa dengan data foto & koordinat yang baru?`,
+        confirmText: 'Ya, Timpa Data',
+        cancelText: 'Batal',
+        danger: false,
       });
       if (!ok) return;
     }
 
-    setSubmittingLoc(true);
+    // Konfirmasi titik lokasi GPS jika akurasi rendah (> 15m)
+    if (locCoords && locCoords.accuracy && locCoords.accuracy > 15) {
+      const ok = await confirm({
+        title: 'Konfirmasi Akurasi GPS',
+        message: `⚠️ Akurasi GPS saat ini ±${locCoords.accuracy}m.\n\nApakah Anda ingin tetap menyimpan koordinat ini?`,
+        confirmText: 'Ya, Tetap Simpan',
+        cancelText: 'Kunci GPS Ulang',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+
+    const targetResId = updateLocationModalTask.reservationId;
+    const photoPayload = locRawHousePhotoB64 || (locHousePhotoB64 && locHousePhotoB64.startsWith('data:image/') ? locHousePhotoB64 : undefined);
+    const newLandmark = locLandmark || updateLocationModalTask.address.landmark;
+    const newLat = locCoords?.lat ?? updateLocationModalTask.address.lat;
+    const newLng = locCoords?.lng ?? updateLocationModalTask.address.lng;
+    const newMapsUrl = newLat && newLng ? `https://maps.google.com/?q=${newLat},${newLng}` : null;
+    const newNavUrl =
+      newLat && newLng
+        ? `https://www.google.com/maps/dir/?api=1&destination=${newLat},${newLng}&travelmode=two-wheeler`
+        : null;
+
+    const updateTaskObj = (t: StaffTask): StaffTask => {
+      if (t.reservationId !== targetResId) return t;
+      return {
+        ...t,
+        mapsUrl: newMapsUrl,
+        navigationUrl: newNavUrl,
+        address: {
+          ...t.address,
+          lat: newLat,
+          lng: newLng,
+          housePhotoUrl: photoPayload || t.address.housePhotoUrl,
+          landmark: newLandmark,
+        },
+      };
+    };
+
+    // 1. UPDATE STATE SECARA INSTAN (0s Perceived Loading)
+    setTasks((prev) => prev.map(updateTaskObj));
+    setUpcomingTasks((prev) => prev.map(updateTaskObj));
+    setCompletedTasks((prev) => prev.map(updateTaskObj));
+    if (selectedTask?.reservationId === targetResId) {
+      setSelectedTask((prev) => (prev ? updateTaskObj(prev) : null));
+    }
+    if (detailModalTask?.reservationId === targetResId) {
+      setDetailModalTask((prev) => (prev ? updateTaskObj(prev) : null));
+    }
+
+    // Langsung tutup modal & tampilkan feedback sukses instan
+    setUpdateLocationModalTask(null);
+    setLocRawHousePhotoB64(null);
+    toast('✅ Lokasi & panduan berhasil diperbarui! ⚡', 'success');
+
+    // 2. SINKRONISASI SERVER DI BACKGROUND
     try {
       const res = await apiRequest('/api/staff/update-location', {
         method: 'POST',
         body: JSON.stringify({
-          reservationId: updateLocationModalTask.reservationId,
+          reservationId: targetResId,
           lat: locCoords?.lat,
           lng: locCoords?.lng,
-          housePhotoB64: locHousePhotoB64 && locHousePhotoB64.startsWith('data:image/') ? locHousePhotoB64 : undefined,
+          housePhotoB64: photoPayload,
           landmark: locLandmark,
         }),
       });
 
-      if (res.success && res.data) {
-        toast('✅ Titik lokasi & panduan rumah berhasil diperbarui!', 'success');
-        const targetResId = updateLocationModalTask.reservationId;
-        const newHouseUrl = res.data.housePhotoUrl || updateLocationModalTask.address.housePhotoUrl;
-        const newLandmark = res.data.landmark !== undefined ? res.data.landmark : locLandmark;
-        const newLat = res.data.lat ?? locCoords?.lat;
-        const newLng = res.data.lng ?? locCoords?.lng;
-        const newDistKm = res.data.distanceKm ?? updateLocationModalTask.address.distanceKm;
-        const newEstMin = res.data.estimatedMinutes ?? updateLocationModalTask.address.estimatedMinutes;
-        const newMapsUrl = newLat && newLng ? `https://maps.google.com/?q=${newLat},${newLng}` : null;
-        const newNavUrl =
-          newLat && newLng
-            ? `https://www.google.com/maps/dir/?api=1&destination=${newLat},${newLng}&travelmode=two-wheeler`
-            : null;
-
-        const updateTaskObj = (t: StaffTask) => {
+      if (res && res.success && res.data?.housePhotoUrl) {
+        const updateServerUrl = (t: StaffTask): StaffTask => {
           if (t.reservationId !== targetResId) return t;
           return {
             ...t,
-            mapsUrl: newMapsUrl,
-            navigationUrl: newNavUrl,
             address: {
               ...t.address,
-              lat: newLat,
-              lng: newLng,
-              distanceKm: newDistKm,
-              estimatedMinutes: newEstMin,
-              housePhotoUrl: newHouseUrl,
-              landmark: newLandmark,
+              housePhotoUrl: res.data.housePhotoUrl,
+              distanceKm: res.data.distanceKm ?? t.address.distanceKm,
+              estimatedMinutes: res.data.estimatedMinutes ?? t.address.estimatedMinutes,
             },
           };
         };
-
-        setTasks((prev) => prev.map(updateTaskObj));
-        setUpcomingTasks((prev) => prev.map(updateTaskObj));
-        setCompletedTasks((prev) => prev.map(updateTaskObj));
-
-        if (selectedTask?.reservationId === targetResId) {
-          setSelectedTask((prev) => (prev ? updateTaskObj(prev) : null));
-        }
-        if (detailModalTask?.reservationId === targetResId) {
-          setDetailModalTask((prev) => (prev ? updateTaskObj(prev) : null));
-        }
-
-        setUpdateLocationModalTask(null);
-      } else {
-        toast(`Gagal: ${res.error || 'Terjadi kesalahan saat memperbarui lokasi'}`, 'error');
+        setTasks((prev) => prev.map(updateServerUrl));
+        setUpcomingTasks((prev) => prev.map(updateServerUrl));
+        setCompletedTasks((prev) => prev.map(updateServerUrl));
       }
     } catch (err: any) {
-      toast(`Gagal: ${err.message || 'Terjadi kesalahan jaringan'}`, 'error');
-    } finally {
-      setSubmittingLoc(false);
+      console.warn('[STAFF] Background sync location error:', err?.message || err);
     }
   };
 
@@ -3473,7 +3545,9 @@ export const StaffToday: React.FC = () => {
                   <MapPin size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-[#111b21]">Update Lokasi & Foto Rumah</h3>
+                  <h3 className="font-bold text-base text-[#111b21]">
+                    {locModalMode === 'view' ? 'Panduan Lokasi Tersimpan' : 'Update Lokasi & Foto Rumah'}
+                  </h3>
                   <p className="text-xs text-[#667781] truncate max-w-[220px]">
                     {updateLocationModalTask.customerName || 'Customer'}
                   </p>
@@ -3488,195 +3562,341 @@ export const StaffToday: React.FC = () => {
               </button>
             </div>
 
-            {/* Info Alamat Pasien */}
-            <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
-              <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
-                Alamat Tercatat:
-              </span>
-              <p className="text-xs text-[#111b21] font-medium leading-snug">
-                {updateLocationModalTask.address.fullText}
-              </p>
-            </div>
-
-            {/* Bagian 1: Koordinat GPS Otomatis */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-[#111b21]">
-                1. Titik Koordinat GPS Rumah Pasien:
-              </label>
-
-              <button
-                type="button"
-                onClick={handleGetCurrentGps}
-                disabled={locGettingGps}
-                className="w-full py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
-              >
-                {locGettingGps ? (
-                  <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>{gpsAttemptInfo || 'Mendeteksi Satelit GPS (Target ≤ 10m)...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Crosshair size={14} />
-                    <span>📍 Gunakan Titik GPS HP Saya Sekarang</span>
-                  </>
-                )}
-              </button>
-
-              {locCoords ? (
-                <div
-                  className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition ${
-                    (locCoords.accuracy ?? 999) <= 10
-                      ? 'bg-[#d9fdd3]/70 border-[#00a884]/30 text-[#008069]'
-                      : 'bg-amber-50 border-amber-200 text-amber-800'
-                  }`}
-                >
-                  <div>
-                    <div className="font-bold flex items-center gap-1">
-                      {(locCoords.accuracy ?? 999) <= 10 ? (
-                        <>
-                          <CheckCircle2 size={13} className="text-[#008069]" />
-                          <span>GPS Sangat Akurat (≤10m)</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle size={13} className="text-amber-600" />
-                          <span>Akurasi Cukup (±{locCoords.accuracy}m)</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="font-mono text-[11px] text-[#54656f] mt-0.5">
-                      {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}
-                      {locCoords.accuracy ? ` (Akurasi: ±${locCoords.accuracy}m)` : ''}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
+            {locModalMode === 'view' ? (
+              <div className="space-y-4">
+                {/* Foto Rumah Tersimpan */}
+                {updateLocationModalTask.address.housePhotoUrl ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-56 group">
+                    <img
+                      src={updateLocationModalTask.address.housePhotoUrl}
+                      alt="Foto Rumah"
+                      className="object-contain max-h-56 w-auto rounded-xl"
+                    />
                     <button
                       type="button"
-                      onClick={handleGetCurrentGps}
-                      disabled={locGettingGps}
-                      className="p-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#54656f] text-[11px] font-semibold flex items-center gap-1 shadow-xs"
-                      title="Kunci Ulang GPS"
+                      onClick={() => setZoomImageUrl(updateLocationModalTask.address.housePhotoUrl!)}
+                      className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-xl bg-black/70 text-white text-xs font-semibold hover:bg-black/90 transition shadow-md flex items-center gap-1.5 cursor-pointer backdrop-blur-xs"
                     >
-                      <RefreshCw size={11} className={locGettingGps ? 'animate-spin' : ''} />
-                      <span>Ulang</span>
+                      <Maximize2 size={13} />
+                      <span>Lihat Penuh</span>
                     </button>
-                    <a
-                      href={`https://maps.google.com/?q=${locCoords.lat},${locCoords.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg bg-white text-[#008069] border border-[#00a884]/30 hover:bg-[#e8f5f2] text-xs font-semibold flex items-center gap-1 shadow-xs"
-                      title="Cek di Google Maps"
-                    >
-                      <Navigation size={12} />
-                      <span>Cek</span>
-                    </a>
                   </div>
+                ) : (
+                  <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center text-xs text-[#8696a0] space-y-1">
+                    <ImageIcon size={24} className="mx-auto text-slate-400" />
+                    <p>Belum ada foto tampak depan rumah</p>
+                  </div>
+                )}
+
+                {/* Info Titik GPS */}
+                {updateLocationModalTask.address.lat != null && updateLocationModalTask.address.lng != null ? (
+                  <div className="p-3.5 bg-[#d9fdd3]/70 border border-[#00a884]/40 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-xs font-bold text-[#008069]">
+                        <CheckCircle2 size={15} className="text-[#008069]" />
+                        <span>Titik GPS Terkunci</span>
+                      </div>
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${updateLocationModalTask.address.lat},${updateLocationModalTask.address.lng}&travelmode=two-wheeler`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1 rounded-lg bg-[#008069] text-white text-[11px] font-bold hover:bg-[#00a884] transition inline-flex items-center gap-1 shadow-2xs"
+                      >
+                        <span>Buka Maps</span>
+                        <ExternalLink size={11} />
+                      </a>
+                    </div>
+                    <p className="text-xs font-mono text-[#111b21] bg-white/80 px-2.5 py-1.5 rounded-xl border border-[#00a884]/20">
+                      📍 {updateLocationModalTask.address.lat.toFixed(6)}, {updateLocationModalTask.address.lng.toFixed(6)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2">
+                    <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+                    <span>Belum ada titik GPS presisi untuk pasien ini.</span>
+                  </div>
+                )}
+
+                {/* Info Patokan */}
+                {updateLocationModalTask.address.landmark && (
+                  <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl space-y-1">
+                    <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
+                      🏷️ Patokan / Ciri Rumah:
+                    </span>
+                    <p className="text-xs font-medium text-[#111b21]">
+                      {updateLocationModalTask.address.landmark}
+                    </p>
+                  </div>
+                )}
+
+                {/* Info Alamat Pasien */}
+                <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
+                  <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                    Alamat Tercatat:
+                  </span>
+                  <p className="text-xs text-[#111b21] font-medium leading-snug">
+                    {updateLocationModalTask.address.fullText}
+                  </p>
                 </div>
-              ) : (
-                <p className="text-[11px] text-[#8696a0] italic">
-                  * Berdirilah di luar pagar/depan rumah pasien lalu tekan tombol GPS di atas (target akurasi ≤ 10m).
-                </p>
-              )}
-            </div>
 
-            {/* Bagian 2: Foto Tampak Depan Rumah */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-[#111b21]">
-                2. Foto Tampak Depan Rumah (Kamera):
-              </label>
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                  <button
+                    type="button"
+                    onClick={() => setUpdateLocationModalTask(null)}
+                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLocModalMode('edit')}
+                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs active:scale-95"
+                  >
+                    <Pencil size={13} />
+                    <span>Edit / Perbarui Panduan</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {hasSavedLocData && (
+                  <button
+                    type="button"
+                    onClick={() => setLocModalMode('view')}
+                    className="text-xs font-bold text-[#008069] hover:underline flex items-center gap-1 cursor-pointer mb-1"
+                  >
+                    <ArrowLeft size={13} />
+                    <span>Kembali ke Panduan Tersimpan</span>
+                  </button>
+                )}
 
-              <input
-                type="file"
-                ref={locHouseFileInputRef}
-                accept="image/*"
-                capture="environment"
-                onChange={handlePickHousePhoto}
-                className="hidden"
-              />
+                {/* Info Alamat Pasien */}
+                <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] text-xs text-[#54656f] space-y-1">
+                  <span className="text-[10px] font-bold text-[#667781] uppercase tracking-wider block">
+                    Alamat Tercatat:
+                  </span>
+                  <p className="text-xs text-[#111b21] font-medium leading-snug">
+                    {updateLocationModalTask.address.fullText}
+                  </p>
+                </div>
 
-              {locHousePhotoB64 ? (
-                <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
-                  <img
-                    src={locHousePhotoB64}
-                    alt="Tampak Depan Rumah"
-                    className="object-contain max-h-48 w-auto rounded-xl"
+                {/* Bagian 1: Koordinat GPS Otomatis */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-[#111b21]">
+                    1. Titik Koordinat GPS Rumah Pasien:
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleGetCurrentGps}
+                    disabled={locGettingGps}
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center justify-center space-x-2 shadow-xs active:scale-95 disabled:opacity-50"
+                  >
+                    {locGettingGps ? (
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        <span>{gpsAttemptInfo || 'Mendeteksi Satelit GPS (Target ≤ 10m)...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Crosshair size={14} />
+                        <span>📍 Gunakan Titik GPS HP Saya Sekarang</span>
+                      </>
+                    )}
+                  </button>
+
+                  {locCoords ? (
+                    <div
+                      className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition ${
+                        (locCoords.accuracy ?? 999) <= 10
+                          ? 'bg-[#d9fdd3]/70 border-[#00a884]/30 text-[#008069]'
+                          : 'bg-amber-50 border-amber-200 text-amber-800'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-bold flex items-center gap-1">
+                          {(locCoords.accuracy ?? 999) <= 10 ? (
+                            <>
+                              <CheckCircle2 size={13} className="text-[#008069]" />
+                              <span>GPS Sangat Akurat (≤10m)</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle size={13} className="text-amber-600" />
+                              <span>Akurasi Cukup (±{locCoords.accuracy}m)</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="font-mono text-[11px] text-[#54656f] mt-0.5">
+                          {locCoords.lat.toFixed(6)}, {locCoords.lng.toFixed(6)}
+                          {locCoords.accuracy ? ` (Akurasi: ±${locCoords.accuracy}m)` : ''}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleGetCurrentGps}
+                          disabled={locGettingGps}
+                          className="p-1.5 rounded-lg bg-white border border-[#e9edef] hover:bg-[#f0f2f5] text-[#54656f] text-[11px] font-semibold flex items-center gap-1 shadow-xs"
+                          title="Kunci Ulang GPS"
+                        >
+                          <RefreshCw size={11} className={locGettingGps ? 'animate-spin' : ''} />
+                          <span>Ulang</span>
+                        </button>
+                        <a
+                          href={`https://maps.google.com/?q=${locCoords.lat},${locCoords.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg bg-white text-[#008069] border border-[#00a884]/30 hover:bg-[#e8f5f2] text-xs font-semibold flex items-center gap-1 shadow-xs"
+                          title="Cek di Google Maps"
+                        >
+                          <Navigation size={12} />
+                          <span>Cek</span>
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-[#8696a0] italic">
+                      * Berdirilah di luar pagar/depan rumah pasien lalu tekan tombol GPS di atas (target akurasi ≤ 10m).
+                    </p>
+                  )}
+                </div>
+
+                {/* Bagian 2: Foto Tampak Depan Rumah */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-[#111b21]">
+                      2. Foto Tampak Depan Rumah:
+                    </label>
+                    {locProcessingPhoto && (
+                      <span className="text-[10px] text-[#008069] font-medium animate-pulse">
+                        Mengompres foto...
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dual Hidden Inputs: Kamera Langsung & Galeri */}
+                  <input
+                    type="file"
+                    ref={locHouseCameraInputRef}
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleProcessStaffHousePhoto(f);
+                    }}
+                    className="hidden"
                   />
-                  <div className="absolute top-2 right-2 flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => locHouseFileInputRef.current?.click()}
-                      className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition"
-                      title="Foto ulang"
-                    >
-                      <Camera size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLocHousePhotoB64(null)}
-                      className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition"
-                      title="Hapus foto"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
+                  <input
+                    type="file"
+                    ref={locHouseGalleryInputRef}
+                    accept="image/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleProcessStaffHousePhoto(f);
+                    }}
+                    className="hidden"
+                  />
+
+                  {locHousePhotoB64 ? (
+                    <div className="relative rounded-2xl overflow-hidden border border-[#e9edef] bg-black/5 flex items-center justify-center max-h-48">
+                      <img
+                        src={locHousePhotoB64}
+                        alt="Tampak Depan Rumah"
+                        className="object-contain max-h-48 w-auto rounded-xl"
+                      />
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => locHouseCameraInputRef.current?.click()}
+                          className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition"
+                          title="Foto ulang kamera"
+                        >
+                          <Camera size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLocHousePhotoB64(null)}
+                          className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 transition"
+                          title="Hapus foto"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => locHouseCameraInputRef.current?.click()}
+                        disabled={locProcessingPhoto}
+                        className="py-3 px-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border-2 border-dashed border-emerald-300 text-[#008069] text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                      >
+                        <Camera size={18} className="text-[#008069]" />
+                        <span>📸 Buka Kamera</span>
+                        <span className="text-[10px] text-[#54656f] font-normal">Foto depan rumah</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => locHouseGalleryInputRef.current?.click()}
+                        disabled={locProcessingPhoto}
+                        className="py-3 px-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border-2 border-dashed border-slate-300 text-slate-700 text-xs font-bold transition flex flex-col items-center justify-center gap-1 cursor-pointer shadow-xs active:scale-[0.98]"
+                      >
+                        <ImageIcon size={18} className="text-[#54656f]" />
+                        <span>🖼️ Pilih Galeri</span>
+                        <span className="text-[10px] text-[#8696a0] font-normal">Dari album foto</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => locHouseFileInputRef.current?.click()}
-                  className="w-full py-4 border-2 border-dashed border-[#d1d7db] hover:border-[#008069] rounded-2xl flex flex-col items-center justify-center text-xs text-[#667781] hover:text-[#008069] transition bg-[#f8fafc]"
-                >
-                  <Camera size={22} className="mb-1 text-[#008069]" />
-                  <span className="font-semibold text-[#111b21]">Buka Kamera & Foto Rumah Pasien</span>
-                  <span className="text-[10px] text-[#8696a0]">Foto pagar, nomor rumah, atau tampak depan</span>
-                </button>
-              )}
-            </div>
 
-            {/* Bagian 3: Patokan Landmark */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-[#111b21]">
-                3. Catatan Patokan / Ancer-ancer Rumah:
-              </label>
-              <input
-                type="text"
-                value={locLandmark}
-                onChange={(e) => setLocLandmark(e.target.value)}
-                placeholder="Contoh: Pagar hitam, samping toko berkah, seberang masjid"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs"
-              />
-            </div>
+                {/* Bagian 3: Patokan Landmark */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-[#111b21]">
+                    3. Catatan Patokan / Ancer-ancer Rumah:
+                  </label>
+                  <input
+                    type="text"
+                    value={locLandmark}
+                    onChange={(e) => setLocLandmark(e.target.value)}
+                    placeholder="Contoh: Pagar hitam, samping toko berkah, seberang masjid"
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#e9edef] rounded-xl text-xs sm:text-sm text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] transition shadow-xs"
+                  />
+                </div>
 
-            {/* Tombol Simpan */}
-            <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
-              <button
-                type="button"
-                onClick={() => setUpdateLocationModalTask(null)}
-                disabled={submittingLoc}
-                className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveLocation}
-                disabled={submittingLoc}
-                className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
-              >
-                {submittingLoc ? (
-                  <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 size={14} />
-                    <span>Simpan Pembaruan Lokasi</span>
-                  </>
-                )}
-              </button>
-            </div>
+                {/* Tombol Simpan */}
+                <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+                  <button
+                    type="button"
+                    onClick={() => (hasSavedLocData ? setLocModalMode('view') : setUpdateLocationModalTask(null))}
+                    disabled={submittingLoc}
+                    className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveLocation}
+                    disabled={submittingLoc}
+                    className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                  >
+                    {submittingLoc ? (
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        <span>Menyimpan...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={14} />
+                        <span>Simpan Pembaruan Lokasi</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

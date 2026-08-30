@@ -7,11 +7,17 @@ export interface DraftStoragePayload<T> {
   formData: T;
 }
 
-export interface UseFormDraftOptions {
+export interface UseFormDraftOptions<T = any> {
   ttlMs?: number; // Default: 1 jam (3.600.000 ms)
   autoSave?: boolean; // Default: true
   autoSaveDebounceMs?: number; // Default: 1500 ms
   enabled?: boolean; // Default: true
+  /**
+   * Predikat validasi untuk menentukan apakah form memiliki data bermakna
+   * yang pantas disimpan / dipulihkan sebagai draf.
+   * Mencegah form kosong / default ter-autosave menjadi draf hantu.
+   */
+  isMeaningful?: (data: T) => boolean;
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -24,11 +30,61 @@ function formatTimeAgo(timestamp: number): string {
   return `${hours} jam yang lalu`;
 }
 
+/**
+ * Fallback inspector untuk memeriksa apakah objek data form memiliki isian bermakna.
+ * Mengabaikan key boilerplate/default (seperti tanggal, jam default, status pending, kategori default).
+ */
+function defaultIsMeaningful(data: any): boolean {
+  if (!data || typeof data !== 'object') return false;
+
+  const IGNORED_KEYS = new Set([
+    'date',
+    'time',
+    'bookingDate',
+    'bookingTime',
+    'dateDisplay',
+    'timeDisplay',
+    'status',
+    'treatmentCategory',
+    'category',
+    'customServiceDuration',
+    'customCategory',
+    'customIsAddon',
+    'showCustomServiceInput',
+  ]);
+
+  for (const [key, val] of Object.entries(data)) {
+    if (IGNORED_KEYS.has(key)) continue;
+
+    if (typeof val === 'string' && val.trim().length > 0) return true;
+    if (typeof val === 'number' && val > 0 && key !== 'ongkir' && key !== 'promoOngkir') return true;
+    if (Array.isArray(val) && val.length > 0) {
+      const hasItem = val.some((item) => {
+        if (!item) return false;
+        if (typeof item === 'string') return item.trim().length > 0;
+        if (typeof item === 'object') {
+          return Object.entries(item).some(([k, v]) => {
+            if (IGNORED_KEYS.has(k)) return false;
+            return (typeof v === 'string' && v.trim().length > 0) || (typeof v === 'number' && v > 0);
+          });
+        }
+        return false;
+      });
+      if (hasItem) return true;
+    }
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      if (Object.values(val).some((v) => v !== null && v !== undefined && v !== '')) return true;
+    }
+  }
+
+  return false;
+}
+
 export function useFormDraft<T>(
   draftKey: string,
   currentFormData: T,
   onRestore: (restoredData: T) => void,
-  options: UseFormDraftOptions = {}
+  options: UseFormDraftOptions<T> = {}
 ) {
   const { toast } = useUiFeedback();
   const {
@@ -36,6 +92,7 @@ export function useFormDraft<T>(
     autoSave = true,
     autoSaveDebounceMs = 1500,
     enabled = true,
+    isMeaningful = defaultIsMeaningful,
   } = options;
 
   const storageKey = `wa_clinic_draft_${draftKey}`;
@@ -52,11 +109,11 @@ export function useFormDraft<T>(
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed: DraftStoragePayload<T> = JSON.parse(raw);
-        if (parsed && parsed.expiresAt && Date.now() < parsed.expiresAt) {
+        if (parsed && parsed.expiresAt && Date.now() < parsed.expiresAt && parsed.formData && isMeaningful(parsed.formData)) {
           setHasDraft(true);
           setDraftTimeAgo(formatTimeAgo(parsed.timestamp));
         } else {
-          // Hapus jika sudah kedaluwarsa (> 1 jam)
+          // Hapus jika sudah kedaluwarsa atau jika data di dalamnya kosong / tidak bermakna
           localStorage.removeItem(storageKey);
           setHasDraft(false);
         }
@@ -66,7 +123,7 @@ export function useFormDraft<T>(
     } catch (err) {
       console.warn('[useFormDraft] Failed to check draft:', err);
     }
-  }, [storageKey]);
+  }, [storageKey, isMeaningful]);
 
   useEffect(() => {
     if (enabled) {
@@ -83,6 +140,19 @@ export function useFormDraft<T>(
   const saveDraftToStorage = useCallback(
     (data: T, showToast = false) => {
       if (isDiscardedRef.current) return;
+      if (!isMeaningful(data)) {
+        if (showToast) {
+          toast('Form masih kosong, belum ada data yang bisa disimpan sebagai draf.', 'info');
+        } else {
+          // Bersihkan draft jika user mengosongkan kembali form
+          try {
+            localStorage.removeItem(storageKey);
+            setHasDraft(false);
+          } catch {}
+        }
+        return;
+      }
+
       try {
         const payload: DraftStoragePayload<T> = {
           timestamp: Date.now(),
@@ -102,7 +172,7 @@ export function useFormDraft<T>(
         }
       }
     },
-    [storageKey, ttlMs, toast]
+    [storageKey, ttlMs, isMeaningful, toast]
   );
 
   // Auto-save dengan debounce saat form data berubah
@@ -146,18 +216,22 @@ export function useFormDraft<T>(
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed: DraftStoragePayload<T> = JSON.parse(raw);
-        if (parsed && parsed.formData) {
+        if (parsed && parsed.formData && isMeaningful(parsed.formData)) {
           isRestoring.current = true;
           onRestore(parsed.formData);
           setHasDraft(false);
           toast('Draf reservasi berhasil dipulihkan! ✨', 'success');
+        } else {
+          localStorage.removeItem(storageKey);
+          setHasDraft(false);
+          toast('Tidak ada data draf yang tersimpan.', 'info');
         }
       }
     } catch (err) {
       console.warn('[useFormDraft] Failed to restore draft:', err);
       toast('Gagal memulihkan draf.', 'error');
     }
-  }, [storageKey, onRestore, toast]);
+  }, [storageKey, onRestore, isMeaningful, toast]);
 
   // Hapus / Buang Draf
   const discardDraft = useCallback(
