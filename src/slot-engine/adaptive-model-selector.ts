@@ -60,7 +60,7 @@ export class AdaptiveModelSelector {
       return {
         task: 'CHAT_REPLY_DEEP',
         modelConfig: deepConfig,
-        modelName: deepConfig.modelName || 'gpt-4o-mini',
+        modelName: deepConfig.modelName || process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed',
         reason,
         isDeepModel: true,
       };
@@ -71,7 +71,7 @@ export class AdaptiveModelSelector {
     return {
       task: 'CHAT_REPLY',
       modelConfig: standardConfig,
-      modelName: standardConfig.modelName || 'gpt-4o-mini',
+      modelName: standardConfig.modelName || process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed',
       reason: 'Pertanyaan umum / SOP standar / FAQ ringan',
       isDeepModel: false,
     };

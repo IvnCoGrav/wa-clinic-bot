@@ -123,16 +123,51 @@ export class GroundingComposer {
       customerPreferencesText = `Catatan Medis Khusus: ${slate.medicalConcerns.join(', ')}`;
     }
 
-    // 6. SLOT YANG MASIH KURANG (HANYA tanyakan 1 hal berikutnya)
-    const missingSlots = SlateStore.getMissingCriticalSlots(slate);
-    const missingSlotsToPrompt = missingSlots[0] || null;
-
-    // 7. PRE-FILLED RESERVATION FORM GENERATOR
     const effectiveTreatment =
       extraction.treatmentReferenced ||
       slate.selectedTreatmentName ||
       (allSymptoms.length > 0 ? 'Pijat Bayi Pulih Ceria' : null);
     const effectiveDate = extraction.preferredDateText || slate.preferredDate;
+
+    // 5b. STATUS DATA TERKONFIRMASI (ANTI-AMNESIA GROUND TRUTH LOCK)
+    const confirmedDataItems: string[] = [];
+    if (effectiveTreatment) {
+      confirmedDataItems.push(`• Treatment Terpilih: *${effectiveTreatment}*`);
+    }
+    if (effectiveDate) {
+      confirmedDataItems.push(`• Jadwal/Hari Kunjungan: *${effectiveDate}*`);
+    }
+    if (slate.isLocationConfirmed && slate.kelurahan) {
+      const distInfo = slate.distanceKm ? ` (~${slate.distanceKm} km, ongkir: ${slate.ongkirPromoFee === 0 ? 'GRATIS' : `Rp ${(slate.ongkirPromoFee || 0).toLocaleString('id-ID')}`})` : '';
+      confirmedDataItems.push(`• Lokasi Rumah: *${slate.kelurahan}*${distInfo}`);
+    }
+    if (slate.childAgeMonths !== null) {
+      confirmedDataItems.push(`• Usia Anak: *${slate.childAgeMonths} bulan*`);
+    }
+
+    const lockedHeader = confirmedDataItems.length > 0
+      ? `⚠️ DATA TERKONFIRMASI (SUMBER KEBENARAN MUTLAK - DILARANG DITANYAKAN ULANG):\n${confirmedDataItems.join('\n')}`
+      : '';
+
+    if (effectiveDate || extraction.intents.includes('ask_schedule')) {
+      const targetDate = effectiveDate || 'jadwal yang ditanyakan';
+      const targetTreatmentName = effectiveTreatment || 'Pijat Bayi Ceria';
+      const locationNote = slate.isLocationConfirmed && slate.kelurahan
+        ? `Lokasi Bunda sudah terkonfirmasi di ${slate.kelurahan}. Informasikan jarak dan estimasi ongkir promo ke ${slate.kelurahan}, lalu konfirmasi jadwal ${targetDate} untuk *${targetTreatmentName}* dan bantu proses reservasinya. DILARANG KERAS menanyakan lagi "di hari apa" atau menanyakan alamat rumah!`
+        : `Sampaikan dengan ramah bahwa ketersediaan jadwal Bidan sedang kami bantu cekkan, dan tanyakan daerah/kelurahan rumah Bunda agar bisa sekalian kami cek jarak dan ongkirnya.`;
+      const scheduleNote = `Preferensi Jadwal Customer: Bunda menanyakan ketersediaan jadwal untuk ${targetDate} (Treatment: *${targetTreatmentName}*). ${locationNote}`;
+      customerPreferencesText = customerPreferencesText ? `${customerPreferencesText}\n${scheduleNote}` : scheduleNote;
+    }
+
+    if (lockedHeader) {
+      customerPreferencesText = customerPreferencesText ? `${lockedHeader}\n\n${customerPreferencesText}` : lockedHeader;
+    }
+
+    // 6. SLOT YANG MASIH KURANG (HANYA tanyakan 1 hal berikutnya)
+    const missingSlots = SlateStore.getMissingCriticalSlots(slate);
+    const missingSlotsToPrompt = missingSlots[0] || null;
+
+    // 7. PRE-FILLED RESERVATION FORM GENERATOR
     const intentsList = extraction.intents || [];
     const hasExplicitBookingIntent = Boolean(
       intentsList.includes('request_booking') ||

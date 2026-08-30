@@ -4,6 +4,115 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix & Feature — Form Treatment 0-Lock, Accurate Buffer Stripping & Dynamic Tier Ongkir (Anti-Hardcode), WA Preview Scroll, & 1-Hour Local Draft System (`ClinicServices.tsx`, `InvoiceGeneratorModal.tsx`, `CreateReservationModal.tsx`, `DeliveryTiers.tsx`, `treatmentStringParser.ts`, `deliveryTierCalculator.ts`, `useFormDraft.ts`, `paymentInvoiceFormatter.ts`) (2026-08-30)
+
+- **Latar Belakang & Gejala:**
+  1. Pada form pembuatan/pengeditan treatment (`ClinicServices.tsx`) serta input angka lainnya di dashboard, angka "0" tidak bisa dihapus dengan tombol Backspace karena langsung terkunci dan kembali ke 0.
+  2. Saat menyimpan reservasi dan membuka modal invoice WhatsApp (`InvoiceGeneratorModal.tsx`), rincian layanan terpecah menjadi 3 baris di mana teks buffer waktu `Buffer 20m = 75m]` terhitung sebagai layanan ke-3, dan harga total Rp 90.000 terbagi rata menjadi 3x Rp 30.000. Selain itu ongkir terhitung Rp 44.730 karena rumus hardcode statis `(jarak - 3) * 3000`.
+  3. Pada modal invoice WhatsApp, teks preview WhatsApp yang panjang mendorong kartu total pembayaran ke bawah sehingga menutupi tombol footer (*Batal*, *Salin Format*, *Masukkan ke Chat WA*).
+  4. Belum tersedianya mekanisme penyimpanan draf lokal saat pengisian jadwal reservasi atau invoice WhatsApp terputus atau tidak sengaja ditutup.
+
+- **Akar Masalah (Root Cause):**
+  1. **Controlled Number Input Backspace Trap**: State React bertipe `number` dengan `onChange={(e) => setState(Number(e.target.value))}` mengevaluasi string kosong `""` menjadi `0`, sehingga angka `0` langsung muncul kembali saat dihapus.
+  2. **Naive String Splitting on Plus Sign (`/\s*\+\s*/`)**: Suffix durasi buffer `[Total 55m + Buffer 20m = 75m]` memiliki tanda `+` di dalamnya. Saat di-split mentah, teks buffer terpecah menjadi item layanan tersendiri.
+  3. **Hardcoded Linear Ongkir Formula**: `InvoiceGeneratorModal.tsx:L148` dan `CreateReservationModal.tsx:L302` memiliki rumus `(dist - 3) * 3000` alih-alih menarik data tabel `delivery_tiers` dari PostgreSQL.
+  4. **Uncontained Overflow on Preview Column**: Kolom Live Preview WA tidak memiliki kontainer scroll mandiri (`overflow-y-auto max-h`) dan footer tombol aksi tidak dikunci (`sticky bottom-0`).
+
+- **Solusi & Perbaikan:**
+  1. **Safe Empty-String Number Input Standard (`number | ''`)**:
+     - Mengubah state dan handler input angka di `ClinicServices.tsx`, `DeliveryTiers.tsx`, `CreateReservationModal.tsx`, dan `InvoiceGeneratorModal.tsx` agar mendukung string kosong saat pengetikan dan melakukan sanitasi `Number()` saat simpan/kalkulasi.
+  2. **Treatment String Buffer Stripper & Catalog Lookup (`treatmentStringParser.ts`)**:
+     - Membuat fungsi `stripBufferMetadata` untuk membersihkan tag `[Total ... + Buffer ...]` dan `parseTreatmentItemsFromRaw` untuk memetakan nama layanan murni ke harga & durasi asli di katalog `clinic_services`.
+  3. **Dynamic Database-Tiered Delivery Calculator & Promo Ongkir Breakdown (`deliveryTierCalculator.ts`, `InvoiceGeneratorModal.tsx`)**:
+     - Mengganti seluruh rumus `* 3000` dengan `calculateOngkirFromTiers` yang terhubung langsung ke API `/api/admin/delivery-tiers`.
+     - Menambahkan baris rincian **Potongan Promo Ongkir** (`Promo ongkir = - 5.000`) pada invoice WhatsApp sehingga rincian `Ongkir normal (25.000)` dan `Promo (-5.000)` tercantum transparan sesuai standar operasional klinik.
+  4. **Responsive Preview Scroll & Pinned Footer Layout (`InvoiceGeneratorModal.tsx`)**:
+     - Membatasi bubble chat WhatsApp ke kontainer scrollable mandiri (`max-h-[50vh] overflow-y-auto`) dan mengunci kartu total serta tombol aksi footer di bagian bawah (`sticky bottom-0 z-10`).
+  5. **1-Hour Local Draft System & Lifecycle Hardening (`useFormDraft.ts`)**:
+     - Membuat custom hook `useFormDraft` berbasis `localStorage` dengan TTL 1 jam, auto-save (debounce 1.5s), tombol manual **"Simpan Draf"**, banner notifikasi pemulihan draf (*Restore Prompt*), dan auto-cleanup saat submit sukses.
+     - Menambahkan opsi `enabled: isOpen` agar pemeriksaan draf di-refresh otomatis setiap kali modal dibuka dan menghindari penimpaan draf saat modal dalam keadaan tertutup.
+  6. **Sanitasi Format Pesan Reservasi (`paymentInvoiceFormatter.ts`)**:
+     - Mengintegrasikan `stripBufferMetadata` pada formatting pesan chat WhatsApp.
+
+- **Pengujian & Verifikasi:**
+  - Unit tests `tests/unit/treatment-string-and-tier-calc.test.ts`: **PASS (7/7 tests passed)**.
+  - Frontend Admin Dashboard build (`npm run build` in `packages/admin-dashboard`): **PASS (0 errors, 42 chunks compiled successfully)**.
+  - Backend TypeScript build (`npm run build`): **PASS (0 errors)**.
+
+#### Fix — AI Sandbox & LLM Generator Instant Response: SumoPod Model Auto-Sanitizer & Fast Fallback Timeout Capping (`ai-models.config.ts`, `llm-gateway.ts`, `model-fallback.ts`, `adaptive-model-selector.ts`) (2026-08-29)
+
+- **Latar Belakang & Gejala:**
+  - Pengguna menjalankan pengujian di AI Sandbox Simulator (Admin Dashboard) dengan pesan "adek pilek treatment apaa ya kak".
+  - Di log server, simulator menggantung (*hang*) selama 120 detik lalu menampilkan pesan `Error calling AI Generator: Koneksi server/database lambat (Timeout 120s). Silakan coba lagi.`
+
+- **Akar Masalah (Root Cause):**
+  1. **Model Proprietary Mismatch pada SumoPod (`OPENAI_MODEL=gpt-4o-mini` vs `OPENAI_BASE_URL=https://ai.sumopod.com/v1`)**:
+     - Endpoint OpenAI-compatible SumoPod melayani model cepat seperti `MiniMax-M2.7-highspeed`, `mimo-v2.5`, `qwen3.7-flash-2026-07-15`, dan `deepseek-v4-flash`.
+     - Konfigurasi `defaultTaskModelRegistry` di `ai-models.config.ts` sebelumnya me-resolve default `CHAT_REPLY` ke `gpt-4o-mini`. Saat `gpt-4o-mini` diminta ke endpoint SumoPod, SumoPod menahan koneksi HTTP terbuka hingga batas timeout sebelum merespons error, membuang waktu 120 detik per panggilan sebelum berpindah ke fallback.
+  2. **Uncapped Per-Attempt Timeout in Fallback Chain (`model-fallback.ts`)**:
+     - `callChatCompletionsWithFallback` mengoper nilai `call.timeoutMs` (120.000ms / 2 menit) secara mentah ke setiap percobaan model. Akibatnya, saat model pertama menggantung, sistem menunggu 120 detik penuh sebelum mencoba fallback model kedua, yang menyebabkan request browser keburu di-abort oleh batas timeout client.
+
+- **Solusi & Perbaikan:**
+  1. **SumoPod Model Auto-Sanitizer (`sanitizeModelForProvider` di `ai-models.config.ts` & `llm-gateway.ts`)**:
+     - Menambahkan fungsi `sanitizeModelForProvider` yang otomatis mendeteksi apakah endpoint yang aktif adalah SumoPod. Jika endpoint SumoPod terdeteksi dan konfigurasi model berisi nama model OpenAI lama (`gpt-4o-mini`, `gpt-4o`, `gpt-3.5-turbo`), sistem secara otomatis mengalihkannya ke model ultra-cepat yang didukung penuh (`MiniMax-M2.7-highspeed` / `mimo-v2.5`).
+  2. **Fast Per-Attempt Timeout Capping in Fallback Chain (`model-fallback.ts`)**:
+     - Membatasi durasi tunggu per model percobaan maksimal **15.000ms (15 detik)** (`attemptTimeout = Math.min(call.timeoutMs || 15000, 15000)`). Jika model utama tidak merespons dalam 15 detik, sistem langsung berpindah ke model cadangan berikutnya dalam hitungan milidetik.
+  3. **Adaptive Model Selector Fallbacks (`adaptive-model-selector.ts`)**:
+     - Mengubah fallback statis `'gpt-4o-mini'` menjadi `process.env.OPENAI_MODEL || 'MiniMax-M2.7-highspeed'`.
+
+- **Pengujian & Verifikasi:**
+  - Eksekusi AI Sandbox Simulator end-to-end (`test-sandbox-repro.ts`): **SUCCESS (Balasan selesai dan terkirim rapi)**.
+  - Backend TypeScript build (`npm run build`): **PASS (0 errors)**.
+  - Frontend Admin Dashboard build (`npm run build` in `packages/admin-dashboard`): **PASS (0 errors)**.
+
+#### Fix — AI Sandbox Simulator 120s Timeout Resolution via Non-Blocking Terminal Guard & Adjusted Typing Speed Factor (`machine.ts`, `typing.service.ts`, `evaluations.subroute.ts`) (2026-08-29)
+
+- **Latar Belakang & Gejala:**
+  - Pengguna menjalankan pengujian di AI Sandbox Simulator (Admin Dashboard) dengan pesan "adek pilek triatmnet apa ya kak".
+  - Di log server, LLM sudah selesai men-generate pesan dalam beberapa detik, tetapi antarmuka simulator di browser tetap menggantung (*hang*) selama 120 detik lalu menampilkan error: `Error calling AI Generator: Koneksi server/database lambat (Timeout 120s). Silakan coba lagi.`
+
+- **Akar Masalah (Root Cause):**
+  1. **Terminal Approval Safety Net Blocking (`machine.ts:L517`)**:
+     - State machine memanggil `this.promptTerminal()` jika `TERMINAL_APPROVAL_ENABLED=true` tanpa mengecek apakah panggilan berasal dari Sandbox Simulator (`isSandboxTest`). Fungsi `promptTerminal` menunggu input keyboard pada `process.stdin` di terminal console. Karena admin berinteraksi lewat web browser dan tidak menekan Enter di terminal console, request HTTP menggantung tanpa batas hingga terkena batas waktu timeout 120 detik.
+  2. **Unadjusted Sleep Delays in Typing Simulation (`typing.service.ts:L372, L407, L443`)**:
+     - Pada `TypingService`, delay kalkulasi `adjustedMs` sudah dihitung dengan `speedFactor`, namun pemanggilan `this.sleep()` di dalam loop masih mengoper `typingDelayMs` dan `interBubbleDelayMs` tanpa pembagian `speedFactor`. Akibatnya, mode sandbox/evaluasi yang menyetel `speedFactor = 100000` tetap menunggu delay pengetikan manusia utuh.
+  3. **Sandbox Phone Promise Lock Chaining (`evaluations.subroute.ts:L38, L262`)**:
+     - Antrian promise per nomor telepon simulator (`sandboxPhoneLocks`) tidak membersihkan task yang sudah selesai di blok `finally`, sehingga jika ada request sebelumnya yang menggantung/timeout, request berikutnya akan terblokir menunggu promise sebelumnya.
+
+- **Solusi & Perbaikan:**
+  1. **Non-Blocking Terminal Approval Guard (`machine.ts`)**:
+     - Menambahkan guard `!isSandboxTest && process.stdin && process.stdin.isTTY` sebelum memanggil `promptTerminal`. Sandbox simulator dan environment non-interaktif tidak akan pernah memblokir `process.stdin`.
+  2. **Accurate Speed Factor Sleep in TypingService (`typing.service.ts`)**:
+     - Memperbaiki `this.sleep()` agar menggunakan `adjustedReading`, `adjustedMs`, dan `adjustedInter`, sehingga simulasi di Sandbox berjalan instan (< 10 ms).
+  3. **Safe Lock Cleanup in Sandbox Route (`evaluations.subroute.ts`)**:
+     - Menambahkan blok `finally` untuk menghapus `sandboxPhoneLocks` setelah request selesai diproses.
+
+- **Pengujian & Verifikasi:**
+  - Unit tests `tests/unit/typing.test.ts`: **PASS (12/12 tests passed)**.
+  - Backend TypeScript build (`npm run build`): **PASS (0 errors)**.
+
+#### Fix — Preservation of Enters/Newlines (Multi-Paragraph) & Custom Text Priority in Follow-Up Queue (`follow-up.service.ts`, `followup-templates.ts`, `language-sanitizer.ts`, `FollowUpQueue.tsx`, `follow-up-engine.test.ts`) (2026-08-29)
+
+- **Latar Belakang & Pertanyaan Pengguna:**
+  - Pengguna menanyakan apakah tombol Enter / baris baru (`\n`) pada pesan follow-up di antrian (Queue) terbaca dengan benar, dan meminta memastikan teks tidak menjadi satu paragraf panjang menyambung tanpa pemisah baris.
+
+- **Akar Masalah (Root Cause):**
+  1. **Regex Whitespace Over-Collapsing (`\s{2,}`)**:
+     - Di `src/services/follow-up.service.ts` dan `src/config/followup-templates.ts`, proses normalisasi teks menggunakan `.replace(/\s{2,}/g, ' ')`. Karakter kelas `\s` mencakup newline (`\n` dan `\r\n`), sehingga dua enter berturut-turut (`\n\n`) otomatis diubah menjadi satu spasi biasa (`' '`), merusak struktur paragraf WhatsApp.
+  2. **Custom Text Execution Priority**:
+     - `executeFollowUp` belum memprioritaskan kolom `fu.custom_text` yang secara spesifik diedit oleh admin via modal edit, melainkan selalu me-resolve ulang dari template database atau default hardcoded.
+
+- **Solusi & Perbaikan:**
+  1. **Newline-Safe Horizontal Whitespace Normalization**:
+     - Mengganti seluruh pembersihan regex multi-spasi dari `/\s{2,}/g` menjadi `/[^\S\r\n]{2,}/g` (hanya merapikan spasi/tab horizontal tanpa menyentuh enter/newline) dan menambahkan `/\n{3,}/g -> '\n\n'` (membatasi maksimal 2 enter berurutan).
+  2. **Prioritas Eksekusi `custom_text`**:
+     - `executeFollowUp` kini memprioritaskan `fu.custom_text` bila ada, sambil tetap melakukan sanitasi variabel pintar (`{name}`, `{babyName}`, `{time}`).
+  3. **Single Bubble Outbound Guarantee (`typing.service.ts`, `follow-up.service.ts`, `broadcast-queue.service.ts`)**:
+     - Menambahkan opsi parameter `singleBubble: true` pada `HumanReplyParams`.
+     - Saat memproses pengiriman pesan follow-up (maupun broadcast), sistem mem-bypass pemecah chat (*chat splitting*) sehingga pesan multi-paragraf tetap dikirim secara utuh dalam **1 bubble chat tunggal** di WhatsApp pelanggan.
+  4. **Unit Testing (`tests/unit/follow-up-engine.test.ts`, `tests/unit/typing.test.ts`)**:
+     - Menambahkan automated unit test (Test 10 di `follow-up-engine.test.ts` & test di `typing.test.ts`) yang memverifikasi pesan follow-up multi-baris/paragraf terkirim dengan struktur baris baru utuh dan selalu dalam 1 bubble tunggal (`bubblesSent === 1`).
+
 #### Performance — Ultra-Fast Sub-Second Mobile Road Load Time via 4-Stage Optimization Suite (`response-cache.service.ts`, `app.ts`, `App.tsx`, `livechat.subroute.ts`, `reservations.subroute.ts`, `customers.subroute.ts`, `customer.service.ts`, `message.service.ts`, `api.ts`) (2026-08-29)
 
 - **Latar Belakang & Kebutuhan Pengguna:**

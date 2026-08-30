@@ -112,7 +112,7 @@ export class FastFaqGenerator {
         !finalReply.toLowerCase().includes('perkenalkan')
       ) {
         const { TEMPLATES } = await import('../config/persona');
-        const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+        const { hasIslamicGreeting } = await import('../utils/islamic-greeting');
         const { stripDuplicateTurn0Greeting } = await import('../utils/language-sanitizer');
         const isIslamic = hasIslamicGreeting(incomingText);
         const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
@@ -138,13 +138,22 @@ export class FastFaqGenerator {
       // Execution Log (Debug Page)
       try {
         const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+        const reasoningContent =
+          responseData?.choices?.[0]?.message?.reasoning_content ||
+          responseData?.choices?.[0]?.message?.reasoning ||
+          null;
+
+        const displayReasoning = reasoningContent
+          ? `[AI CoT Reasoning (${callResult.model})]:\n${reasoningContent}\n\n[Summary]: Fast-Track 1-Call FAQ handled | Intents: [${(parsed.intents || []).join(', ')}] | KB Chunks: ${relevantFaqs.length}`
+          : `Fast-Track 1-Call FAQ handled | Intents: [${(parsed.intents || []).join(', ')}] | KB Chunks: ${relevantFaqs.length}`;
+
         recordLlmExecution({
           flowType: 'SLOT_FAST_FAQ',
           customerPhone: customer.phone || 'unknown',
           customerInput: incomingText,
           promptPayload: { systemPrompt, userContent },
-          reasoning: `Fast-Track 1-Call FAQ handled | Intents: [${(parsed.intents || []).join(', ')}] | KB Chunks: ${relevantFaqs.length}`,
-          rawReasoning: rawContent,
+          reasoning: displayReasoning,
+          rawReasoning: reasoningContent || rawContent,
           groundTruthUsed: { relevantFaqs, intents: parsed.intents },
           finalReply,
           modelUsed: callResult.model || modelConfig.modelName,

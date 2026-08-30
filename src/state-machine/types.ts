@@ -1,15 +1,13 @@
 import { ConversationState, Customer, Conversation } from '@prisma/client';
 import { WhatsAppIncomingMessage } from '../integrations/whatsapp/types';
-import { NluClassificationResult } from '../services/nlu-classifier.service';
-import { AIRouterDecision } from '../integrations/llm/ai-router';
 
 export interface StateHandlerContext {
   tenantId?: string;
   customer: Customer;
   conversation: Conversation;
   incomingMessage: WhatsAppIncomingMessage;
-  nluResult?: NluClassificationResult;
-  routerDecision?: AIRouterDecision;
+  nluResult?: any;
+  routerDecision?: any;
   /** Riwayat percakapan terbaru (role user/assistant) — dipakai handler untuk resolusi anaphora (mis. "berapa itu?"). */
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   /** Teks lokasi spesifik yang diekstrak oleh handler sebelumnya untuk geocoding. */

@@ -1,62 +1,53 @@
-const { prisma } = require('./dist/db/client');
+const { execSync } = require('child_process');
 
-async function diagnose() {
-  console.log('='.repeat(80));
-  console.log('🔍 LIVE SERVER AI & CONVERSATION DIAGNOSTIC');
-  console.log('='.repeat(80));
-
-  const tenants = await prisma.tenant.findMany();
-  console.log('\n--- 🏢 TENANTS CONFIG ---');
-  for (const t of tenants) {
-    console.log(`Tenant ID: ${t.id} (${t.name})`);
-    console.log(`- is_active: ${t.is_active}`);
-    console.log(`- ai_customer_scope: ${t.ai_customer_scope}`);
-    console.log(`- telegram_chat_id: ${t.telegram_chat_id || 'NOT SET'}`);
-  }
-
-  const aiConfigs = await prisma.tenantAiConfig.findMany();
-  console.log('\n--- 🤖 AI MODEL CONFIGS ---');
-  for (const c of aiConfigs) {
-    console.log(`Task: ${c.task.padEnd(25)} | Provider: ${c.provider.padEnd(10)} | Model: ${c.model_name.padEnd(25)}`);
-  }
-
-  console.log('\n--- 💬 RECENT 20 CONVERSATIONS & HUMAN HANDLING REASONS ---');
-  const recentConvs = await prisma.conversation.findMany({
-    orderBy: { updated_at: 'desc' },
-    take: 20,
-    include: {
-      customer: true,
-      messages: {
-        orderBy: { created_at: 'desc' },
-        take: 3,
-      },
-    },
-  });
-
-  for (const c of recentConvs) {
-    const phone = c.customer?.phone || 'UNKNOWN';
-    const name = c.customer?.name || '-';
-    const updated = c.updated_at.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-    console.log(`\n📱 Phone: ${phone} (${name}) | State: ${c.current_state}`);
-    console.log(`   is_human_handling: ${c.is_human_handling} | Reason: ${c.escalation_reason || 'N/A'}`);
-    console.log(`   Human Handling Since: ${c.human_handling_since ? c.human_handling_since.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : 'N/A'}`);
-    console.log(`   Last Discussed Treatment: ${c.last_discussed_treatment || 'None'}`);
-    console.log(`   Updated: ${updated}`);
-    if (c.messages && c.messages.length > 0) {
-      console.log('   Recent Messages:');
-      for (const m of c.messages.reverse()) {
-        const dir = m.direction === 'inbound' ? '📥 Cust' : '📤 Bot';
-        const txt = (m.content || '').replace(/\n/g, ' ').substring(0, 80);
-        console.log(`     ${dir}: "${txt}" (${m.created_at.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })})`);
-      }
-    }
-  }
-
-  console.log('\n' + '='.repeat(80));
-  process.exit(0);
+function runRemoteBash(bashScript) {
+  const b64 = Buffer.from(bashScript).toString('base64');
+  const sshCmd = `ssh -i C:/Users/Ivan/.ssh/id_ed25519_klinik -p 1403 -o StrictHostKeyChecking=no ubuntu@43.157.197.148 "echo ${b64} | base64 -d | bash"`;
+  return execSync(sshCmd, { encoding: 'utf8' });
 }
 
-diagnose().catch(err => {
-  console.error('Diagnostic error:', err);
-  process.exit(1);
-});
+const checkScript = `
+cd /opt/wa-clinic-bot
+echo "=== ENV IN FILE ==="
+grep -E 'OPENAI_BASE_URL|LLM_API_KEY|OPENAI_MODEL|AI_MODEL|LLM_FALLBACK' .env | sed 's/KEY=.*/KEY=REDACTED/'
+
+echo "=== TEST API CALL FROM INSIDE APP CONTAINER ==="
+docker compose exec -T app node -e "
+const dotenv = require('dotenv');
+dotenv.config();
+const { callChatCompletionsWithFallback } = require('./dist/integrations/llm/model-fallback');
+const { getLlmEndpointConfig } = require('./dist/integrations/llm/llm-gateway');
+
+async function testCall() {
+  const ep = getLlmEndpointConfig();
+  console.log('Endpoint config:', {
+    baseUrl: ep.baseUrl,
+    model: ep.model,
+    hasApiKey: !!ep.apiKey,
+    keyPrefix: ep.apiKey ? ep.apiKey.slice(0, 7) + '...' : 'none',
+  });
+
+  try {
+    const res = await callChatCompletionsWithFallback({
+      baseUrl: ep.baseUrl,
+      apiKey: ep.apiKey,
+      model: ep.model,
+      fallbackModel: ep.fallbackModel,
+      payload: {
+        messages: [{ role: 'user', content: 'Halo, ini tes singkat' }],
+        max_tokens: 20
+      }
+    });
+    console.log('Test call SUCCESS! Model used:', res.model, 'Reply:', res.data.choices[0].message.content);
+  } catch (err) {
+    console.error('Test call FAILED:', err.message);
+    if (err.response) {
+      console.error('Status:', err.response.status, 'Data:', err.response.data);
+    }
+  }
+}
+testCall();
+"
+`;
+
+console.log(runRemoteBash(checkScript));

@@ -195,28 +195,13 @@ export class CommandService {
       console.warn('[COMMAND /mulai] Reset state/lokasi gagal:', err.message);
     }
 
-    // Reuse greeting handler utk reply persona asli (tenant-aware). Fresh snapshot tanpa lokasi.
+    // Return template greeting resmi Kala Spa
     try {
-      const { handleGreetingState } = await import('../state-machine/handlers/greeting');
-      const freshCustomer = { ...customer, kelurahan: null, kecamatan: null, lat: null, lng: null };
-      const freshConversation = {
-        ...conversation,
-        current_state: ConversationState.INITIAL,
-        previous_state: null,
-        is_human_handling: false,
-        last_message_at: new Date(),
-        created_at: conversation.created_at || new Date(),
-      };
-      const result = await handleGreetingState({
-        ...ctx,
-        tenantId,
-        customer: freshCustomer,
-        conversation: freshConversation,
-      });
+      const { TEMPLATES } = await import('../config/persona');
       return {
-        replyText: result.replyText || START_OVER_FALLBACK,
+        replyText: TEMPLATES.greeting(),
         conversationId: conversation.id,
-        nextState: result.nextState || ConversationState.AWAITING_LOCATION,
+        nextState: ConversationState.INITIAL,
       };
     } catch (err: any) {
       console.warn('[COMMAND /mulai] Gagal generate greeting, fallback teks statis:', err.message);

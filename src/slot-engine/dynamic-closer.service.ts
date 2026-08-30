@@ -107,12 +107,21 @@ ${ongkirGuard}`;
 2. Di kalimat penutup, tanyakan: "Perawatan ini untuk Bunda sendiri atau mau dibarengkan dengan si kecil, Bunda? 😊"
 ${ongkirGuard}`;
       }
+
+      const isAskingVaccine = /\b(vaksin|imunisasi|imun|bcg|polio|dpt|campak|pcv)\b/i.test(lowerRaw);
+      if (isAskingVaccine) {
+        return `PANDUAN PENUTUP (EDUKASI PASCA VAKSIN / IMUNISASI):
+1. Jelaskan dengan ramah & menenangkan bahwa setelah vaksin (BCG, Polio, dll.), si kecil sebaiknya diistirahatkan 2–3 hari terlebih dahulu sebelum dipijat (untuk menghindari area bekas suntikan dan mengantisipasi demam/KIPI).
+2. Di kalimat penutup, tanyakan: "Sebaiknya si kecil diistirahatkan 2–3 hari dulu ya Bunda agar kondisinya benar-benar fit 😊 Mau kami bantu jadwalkan kunjungannya setelah 2-3 hari ke depan, Bunda?"
+⚠️ DILARANG mengalihkan ke CS jika customer hanya bertanya apakah boleh pijat setelah vaksin! Jawab dengan ramah dan mengayomi sebagai Bidan Yusi.
+${ongkirGuard}`;
+      }
     }
 
     // Helper deteksi penyebutan hari/jadwal dinamis
     const extractDateMention = (text?: string | null): string | null => {
       if (!text) return null;
-      const match = text.match(/\b(hari\s+(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)(?:\s*(?:atau|\/|dan)\s*(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu))?|(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)(?:\s*(?:atau|\/|dan)\s*(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu))?|besok(?:\s+pagi|\s+siang|\s+sore|\s+malam)?|lusa|weekend|akhir\s+pekan)\b/i);
+      const match = text.match(/\b(hari\s*ini|hari\s+(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu|ini)(?:\s*(?:atau|\/|dan)\s*(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu|ini))?|(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)|besok(?:\s+pagi|\s+siang|\s+sore|\s+malam)?|lusa|weekend|akhir\s+pekan)\b/i);
       return match ? match[0].trim() : null;
     };
 
@@ -143,9 +152,10 @@ ${ongkirGuard}`;
 
       case 'TREATMENT': {
         if (extractedDateMention) {
-          return `PANDUAN PENUTUP (PENAWARAN JADWAL):
+          return `PANDUAN PENUTUP (PENAWARAN TREATMENT):
 1. Untuk ketersediaan jadwal di hari ${extractedDateMention}, sampaikan dengan santun bahwa jadwal Bidan yang ready akan dicekkan terlebih dahulu.
-2. Tanyakan perkiraan jam yang diinginkan (pagi/siang/sore) atau tanyakan konfirmasi perawatan dengan santun.
+2. Tanyakan konfirmasi perawatan dengan santun (contoh: "Untuk hari ${extractedDateMention}, rencana mau kami bantu jadwalkan perawatan apa untuk si kecil, Bunda? 😊").
+⚠️ DILARANG MENANYAKAN JAM KUNJUNGAN (pagi/siang/sore) karena koordinasi jam akan dilakukan oleh Admin CS.
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung sampaikan bahwa ketersediaan jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG MENANYAKAN "di hari apa" LAGI karena Bunda sudah menyebutkan hari ${extractedDateMention}!
 ⚠️ DILARANG menanyakan dengan nada kaku apakah Bunda sudah memutuskan mengambil paket jika Bunda sudah mendiskusikan paket tersebut!
@@ -176,6 +186,7 @@ ${preFilledForm}
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung sampaikan bahwa ketersediaan jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer! Usia akan dilengkapi saat pengisian form reservasi.
 ⚠️ DILARANG MENANYAKAN LAGI "hari apa" jika Bunda sudah menyebutkan hari/waktu (${dateDisplay})!
+⚠️ DILARANG MENANYAKAN JAM (pagi/siang/sore), karena jam akan dikoordinasikan langsung oleh Admin CS.
 ⚠️ DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia secara sepihak!
 ⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil treatment jika Bunda sudah memilih treatment tersebut!
 ${ongkirGuard}`;
@@ -185,10 +196,11 @@ ${ongkirGuard}`;
           return `PANDUAN PENAWARAN JADWAL (SCHEDULE):
 1. Jawab terlebih dahulu pertanyaan layanan/keluhan Bunda dengan ramah.
 2. Untuk ketersediaan jadwal di hari ${dateDisplay}, sampaikan bahwa jadwal Bidan akan dicekkan terlebih dahulu: "Untuk ketersediaan jadwal di hari ${dateDisplay}, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊".
-3. Tanyakan preferensi jam yang diinginkan (pagi/siang/sore, contoh: "Kira-kira untuk hari ${dateDisplay} Bunda lebih nyaman di jam berapa yaa (pagi/siang/sore) agar bisa langsung kami bantu amankan slot ${targetTreatment}-nya? 😊").
+3. Ajak Bunda melengkapi data reservasi atau konfirmasi ketersediaan jadwal (contoh: "Mau kami bantu siapkan jadwal kunjungannya, Bunda? 😊").
+⚠️ DILARANG MENANYAKAN JAM (pagi/siang/sore) karena koordinasi jam ditangani oleh Admin CS.
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung jawab bahwa jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG KERAS MENANYAKAN "DI HARI APA" LAGI KARENA BUNDA SUDAH MENYEBUTKAN HARI (${dateDisplay})!
-⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer!
+⚠️ DILARANG KERAS proaktif menanyakan usia atau keluhan si kecil jika tidak diinfokan customer!
 ⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika Bunda sudah menanyakan paket tersebut!
 ${ongkirGuard}`;
         }
