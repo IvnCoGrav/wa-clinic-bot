@@ -117,6 +117,52 @@ export class EntityExtractor {
       }
     }
 
+    // 1c. Deteksi nama wilayah / kelurahan Surabaya & Sidoarjo langsung (misal: "Berbek Bund", "di Berbek", "Jambangan", "Rungkut", "gak jadi di brebek aja")
+    const normalizedLower = lower
+      .replace(/\bbrebek\b/gi, 'berbek')
+      .replace(/\bjambangn\b/gi, 'jambangan')
+      .replace(/\brungkot\b/gi, 'rungkut')
+      .replace(/\bwru\b/gi, 'waru')
+      .replace(/\bsdoarjo\b/gi, 'sidoarjo');
+
+    const cleanedLocationCandidate = normalizedLower
+      .replace(/^(?:gak\s+jadi\s+)?(?:di|daerah|ke|posisi|area)\s+/i, '')
+      .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan)$/i, '')
+      .trim();
+
+    const KNOWN_SURABAYA_SIDOARJO_AREAS = [
+      'berbek', 'rungkut', 'jambangan', 'ketintang', 'tropodo', 'sedati', 'sukodono', 'candi',
+      'taman', 'gayungan', 'wonokromo', 'gubeng', 'wiyung', 'kenjeran', 'sawahan', 'karangpilang',
+      'sukolilo', 'mulyorejo', 'benowo', 'pakal', 'lakarsantri', 'sambikerep', 'dukuh pakis',
+      'tegalsari', 'genteng', 'bubutan', 'simokerto', 'semampir', 'pabean cantikan', 'krembangan',
+      'bulak', 'tambaksari', 'waru', 'gedangan', 'buduran', 'krian', 'driyorejo', 'pepelegi',
+      'deltasari', 'pondok tjandra', 'medokan', 'gunung anyar', 'panjang jiwo', 'tenggilis',
+      'kutisari', 'kendangsari', 'siwalankerto', 'jemursari', 'margorejo', 'menanggal', 'kebonsari',
+      'pagesangan', 'karah', 'keputih', 'gebang', 'klampis', 'manyar', 'kertajaya', 'dharmahusada',
+      'baratajaya', 'ngagel', 'bratang', 'kalirungkut', 'rungkut kidul', 'rungkut tengah', 'rungkut menanggal',
+      'penjaringan sari', 'wonorejo', 'rungkut asri', 'puri surya jaya', 'taman pinang', 'kahuripan'
+    ];
+
+    if (!result.locationText) {
+      for (const area of KNOWN_SURABAYA_SIDOARJO_AREAS) {
+        if (
+          cleanedLocationCandidate === area ||
+          cleanedLocationCandidate.startsWith(area + ' ') ||
+          cleanedLocationCandidate.endsWith(' ' + area) ||
+          normalizedLower.includes(`di ${area}`) ||
+          normalizedLower.includes(`ke ${area}`) ||
+          normalizedLower.includes(`daerah ${area}`)
+        ) {
+          result.locationText = area.charAt(0).toUpperCase() + area.slice(1);
+          result.intents = result.intents || [];
+          if (!result.intents.includes('provide_location')) {
+            result.intents.push('provide_location');
+          }
+          break;
+        }
+      }
+    }
+
     // 2. Usia Deterministik via Age Calculator
     const ageMonths = parseAgeTextToMonths(text);
     if (ageMonths !== null) {
@@ -197,7 +243,14 @@ export class EntityExtractor {
     }
 
     // 7. Deteksi Permintaan Layanan di Luar Katalog Resmi (Unlisted Service)
-    if (/\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|imunisasi|vaksin|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(lower)) {
+    const isPostVaccineConsultation =
+      /\b(habis|setelah|pasca|baru|selesai)\s+(?:vaksin|imunisasi|imun)\b/i.test(lower) ||
+      /\b(?:vaksin|imunisasi|imun)\b.*?\b(berpengaruh|boleh\s*(?:kah|ga|gak|nggak|ta)|aman\s*(?:kah|ga|gak)|bisa\s+pijat|pijatnya)\b/i.test(lower);
+
+    if (
+      !isPostVaccineConsultation &&
+      /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(lower)
+    ) {
       result.intents = result.intents || [];
       if (!result.intents.includes('ask_unlisted_service')) {
         result.intents.push('ask_unlisted_service');
@@ -239,10 +292,6 @@ export class EntityExtractor {
     };
     const baseline = this.sanitizeExtractedEntities(baselineRaw);
 
-    if (!text || text.trim().length === 0) {
-      return baseline;
-    }
-
     const modelConfig = AiModelConfigService.getModelConfig('INTENT_CLASSIFICATION', tenantId);
     const endpoint = getLlmEndpointConfig();
     const startedAt = Date.now();
@@ -262,8 +311,8 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "consult_symptom": Mengeluhkan kondisi anak (grok-grok, batuk, pilek, kembung, kolik, susah makan/GTM, susah tidur/rewel, pegal/capek).
 - "ask_price": Menanyakan harga, tarif, promo, atau minta pricelist.
 - "ask_clinic_origin": Menanyakan klinik/bidan berasal dari daerah/lokasi mana.
-- "ask_schedule": Menanyakan ketersediaan hari/jam/slot (misal "Jumat apakah bisa?", "bisa besok jam 3?", "ada slot kosong hari minggu?").
-- "select_treatment": Memilih treatment tertentu (misal "Pijat Pulih", "Sinar Moksa", atau rujukan anaphora seperti "yang tadi", "paket kedua").
+- "ask_schedule": Menanyakan ketersediaan hari/jam/slot (misal "hari ini tersedia kah?", "bisa hari ini?", "ada jadwal hari ini?", "Jumat apakah bisa?", "bisa besok jam 3?", "ada slot kosong hari ini?").
+- "select_treatment": Memilih treatment tertentu (misal "Pijat Bayi Ceria", "Pijat Pulih", "Sinar Moksa", atau rujukan anaphora seperti "yang tadi", "paket kedua").
 - "request_booking": Mengajukan reservasi/minta dijadwalkan hari/jam tertentu.
 - "affirmation": Persetujuan/jawaban positif singkat (boleh, iya, siap, mau).
 - "negation": Penolakan/jawaban negatif (tidak, bukan, jangan).
@@ -273,22 +322,39 @@ DAFTAR INTENTS YANG DIDUKUNG:
 
 ATURAN EKSTRAKSI (SANGAT KETAT):
 1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah pada PESAN CUSTOMER TERBARU. Jika customer memberikan alamat lengkap (contoh "Platuk tauladan 19a , sidotopo wetan , kenjeran"), masukkan nama kelurahan/desa/kecamatan ("Sidotopo Wetan, Kenjeran") ke "location_text", dan detail nomor/jalan/gang ("Platuk tauladan 19a") ke "street_detail". DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain. DILARANG mengekstrak kata generik "rumah", "ke rumah", "klinik" sebagai location_text.
-2. DILARANG KERAS mengekstrak istilah umum model bisnis ("home-treatment", "homecare", "home care", "layanan home", "perawatan", "treatment", "pijat", "spa", "promo") sebagai "treatment_referenced". Field "treatment_referenced" HANYA boleh diisi jika customer menyebut nama perawatan spesifik katalog (contoh: "Pijat Bayi Ceria", "Pijat Pulih", "Pijat Laktasi", "Sinar Moksa", "Pijat Gemoy").
+2. DILARANG KERAS mengekstrak istilah umum model bisnis ("home-treatment", "homecare", "home care", "layanan home", "perawatan", "treatment", "spa", "promo") sebagai "treatment_referenced". Field "treatment_referenced" HANYA boleh diisi jika customer menyebut nama perawatan spesifik katalog (contoh: "Pijat Bayi Ceria", "Pijat Pulih", "Pijat Laktasi", "Sinar Moksa", "Pijat Gemoy").
 3. Jangan mengekstrak kata sapaan/basa-basi ("sehat selalu", "mau info", "konsultasi") sebagai "symptoms".
 4. Jangan mengekstrak kata ganti diri ("Saya", "Aku", "Bunda") sebagai "customer_name".
 5. Jika customer menyebut nama perumahan/gang (misal: "Darmo permai selatan gang 17") setelah kelurahan diketahui, masukkan ke "street_detail".
 6. Konversikan usia ke total bulan pada "child_age_months" (contoh: "1 bulan" -> 1, "2 bulan" -> 2, "1 tahun" -> 12, "3 tahun" -> 36).
 7. Tangkap semua keluhan fisik/anak ke dalam array "symptoms".
 8. Pecahkan rujukan anaphora ("yang tadi", "yang kedua") ke "treatment_referenced" jika ada riwayat percakapan.
-9. Jika pesan terbaru menanyakan ketersediaan jadwal ("Jumat apakah bisa?"), masukkan intent "ask_schedule" dan waktu ke "preferred_date_text".
+9. Jika pesan terbaru menanyakan ketersediaan jadwal/waktu (contoh: "hari ini tersedia kah?", "bisa hari ini?", "ada jadwal hari ini?", "Jumat apakah bisa?", "bisa besok jam 3?", "ada slot kosong hari ini?"), masukkan intent "ask_schedule" dan ekstrak waktu/hari tersebut (contoh: "hari ini", "Jumat", "besok") ke "preferred_date_text".
 10. Jika customer mengatakan peralihan target audiens (contoh "untuk baby aja kak", "buat adeknya aja", "ambil yg bayi aja"), dan di riwayat chat sebelumnya ada keluhan spesifik bayi (seperti flu, batuk, pilek, grok-grok) atau paket bayi yang dibahas (misal "Pijat Pulih Ceria"), masukkan paket atau keluhan tersebut ke "treatment_referenced" atau "symptoms" agar konteks tetap terjaga.
 11. Jika customer menyebutkan kombinasi lebih dari 1 treatment (contoh: "Pijat bayi ceria + cukur", "Pulih ceria dan sinar", "Laktasi plus oksitosin"), gabungkan nama treatment lengkapnya ke "treatment_referenced" (contoh: "Pijat Bayi Ceria + Cukur Rambut Bayi") dan sertakan intent "select_treatment".
 12. AREA LAYANAN (SURABAYA & SIDOARJO) & NORMALISASI TYPO WILAYAH:
 Klinik berlokasi di Sidoarjo dan melayani area Surabaya & Sidoarjo. Jika terdapat typo penulisan nama wilayah/kecamatan/kelurahan di Surabaya/Sidoarjo (contoh: "kencjeran" -> "Kenjeran", "jambangn" -> "Jambangan", "rungkot" -> "Rungkut", "wru" -> "Waru", "sdoarjo" -> "Sidoarjo", "gdangan" -> "Gedangan", "budurn" -> "Buduran"), normalisasikan ke nama wilayah Surabaya/Sidoarjo yang dimaksud pada "location_text", JANGAN mengubahnya menjadi nama kota/daerah lain di luar Jawa Timur (seperti mengubah "kencjeran" menjadi "Kencana").
 13. ALIAS TREATMENT STANDAR / BIASA:
-Jika customer menyebutkan "massage biasa", "pijat biasa", "massage aja", "pijat aja", "pijat reguler", "massage reguler", "pijat rutin", atau "pijat standar", ini adalah nama sebutan santai untuk perawatan kebugaran umum si kecil. Masukkan ke "treatment_referenced": "Pijat Bayi Ceria" (atau "Pijat Kids Ceria" jika usia anak > 2 tahun) dan sertakan intent "select_treatment".
-14. LAYANAN DI LUAR KATALOG RESMI (UNLISTED SERVICE):
-Jika customer menanyakan layanan/tindakan yang bukan merupakan layanan pijat/spa/terapi resmi klinik (contoh: "Ada PL homecare mandikan bayi?", "bisa baby sitting?", "tindik telinga bisa?"), sertakan intent "ask_unlisted_service" dan JANGAN memasukkannya ke "treatment_referenced" resmi.
+Jika customer menyebutkan "pijat bayi", "massage bayi", "pijat baby", "pijat newborn", "massage biasa", "pijat biasa", "massage aja", "pijat aja", "pijat reguler", "massage reguler", "pijat rutin", atau "pijat standar", ini adalah nama sebutan untuk perawatan kebugaran umum si kecil. Masukkan ke "treatment_referenced": "Pijat Bayi Ceria" (atau "Pijat Kids Ceria" jika usia anak > 2 tahun) dan sertakan intent "select_treatment".
+14. LAYANAN DI LUAR KATALOG RESMI (UNLISTED SERVICE) VS KONSULTASI PASCA VAKSIN:
+Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan layanan pijat/spa/terapi resmi klinik (contoh: "Ada PL homecare mandikan bayi?", "bisa baby sitting?", "bisa suntik vaksin/imunisasi?"), sertakan intent "ask_unlisted_service".
+NAMUN jika customer bertanya apakah bayi yang baru divaksin/imunisasi boleh dipijat (contoh: "anak saya habis vaksin boleh pijat?", "anak saya baru imunisasi bcg polio boleh dipijat hari ini?"), ini adalah KONSULTASI KLINIS biasa (intent: "consult_symptom" atau "chitchat"), DILARANG menandainya sebagai "ask_unlisted_service"!
+15. PENYEBUTAN LOKASI SINGKAT / JAWABAN WILAYAH:
+Jika pesan customer menyebutkan nama daerah/kelurahan/kecamatan/kawasan di Surabaya atau Sidoarjo (contoh: "Berbek", "Berbek Bund", "di berbek", "rungkut", "jambangan", "ketintang", "tropodo", "sedati", "sukodono", "candi", "taman", "sidoarjo kota", "gayungan", "wonokromo", "gubeng", "wiyung", "pakal", "kenjeran"), ini adalah NAMA LOKASI/WILAYAH! WAJIB ekstrak sebagai "location_text" dan sertakan intent "provide_location". DILARANG menganggapnya sebagai chitchat biasa!
+
+CONTOH FEW-SHOT EKSTRAKSI (GUNAKAN SEBAGAI ACUAN POLA KONSISTEN):
+- Input: "Berbek Bund"
+  Output: {"intents":["provide_location"],"location_text":"Berbek","street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+- Input: "gak jadi bund di brebek aja"
+  Output: {"intents":["provide_location"],"location_text":"Berbek","street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+- Input: "Pagi Bu bidan. Untuk home care pijat bayi hari ini tersedia kah?"
+  Output: {"intents":["ask_schedule","select_treatment"],"location_text":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":"Pijat Bayi Ceria","preferred_date_text":"hari ini","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+- Input: "kalo misal sudah boleh pijat, hari ini kan kebetulan anak saya habis vaksin bcg dan polio apakah berpengaruh kalo semisal saya ambil hari ini pijatnya?"
+  Output: {"intents":["consult_symptom","ask_schedule"],"location_text":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":"hari ini","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+- Input: "Usia adek 26hari Bu bidan, lg batuk pilek jd susah tidur karena hidung buntu sm nafasnya grok\". Jd baiknya ambil treatment yg mna Bu bidan?"
+  Output: {"intents":["provide_age","consult_symptom","select_treatment"],"location_text":null,"street_detail":null,"child_age_months":0.86,"symptoms":["batuk","pilek","susah tidur","hidung buntu","grok-grok"],"treatment_referenced":"Pijat Bayi Pulih Ceria","preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.98}
+- Input: "banjar mukti residence, buduran, sidoarjo"
+  Output: {"intents":["provide_location","supplement_address"],"location_text":"Buduran","street_detail":"banjar mukti residence","child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {
@@ -373,13 +439,22 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 
         try {
           const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+          const reasoningContent =
+            responseData?.choices?.[0]?.message?.reasoning_content ||
+            responseData?.choices?.[0]?.message?.reasoning ||
+            null;
+
+          const displayReasoning = reasoningContent
+            ? `[MiniMax CoT Reasoning]:\n${reasoningContent}\n\n[Summary]: Extracted intents: [${result.intents.join(', ')}] | Age: ${result.childAgeMonths} bln | Loc: ${result.locationText || '-'} | Symptoms: [${result.symptoms.join(', ')}]`
+            : `Extracted intents: [${result.intents.join(', ')}] | Age: ${result.childAgeMonths} bln | Loc: ${result.locationText || '-'} | Symptoms: [${result.symptoms.join(', ')}]`;
+
           recordLlmExecution({
             flowType: 'SLOT_EXTRACTOR',
             customerPhone: context?.customerPhone || 'unknown',
             customerInput: text,
             promptPayload: { systemPrompt, userContent },
-            reasoning: `Extracted intents: [${result.intents.join(', ')}] | Age: ${result.childAgeMonths} bln | Loc: ${result.locationText || '-'} | Symptoms: [${result.symptoms.join(', ')}]`,
-            rawReasoning: rawContent,
+            reasoning: displayReasoning,
+            rawReasoning: reasoningContent || rawContent,
             groundTruthUsed: { deterministic, finalResult: result },
             finalReply: JSON.stringify(result),
             modelUsed: callResult.model || modelConfig.modelName,

@@ -260,8 +260,14 @@ export async function evaluationsAdminRoutes(fastify: FastifyInstance) {
       });
 
       sandboxPhoneLocks.set(targetPhone, currentTask);
-      const result = await currentTask;
-      return reply.send(result);
+      try {
+        const result = await currentTask;
+        return reply.send(result);
+      } finally {
+        if (sandboxPhoneLocks.get(targetPhone) === currentTask) {
+          sandboxPhoneLocks.delete(targetPhone);
+        }
+      }
     }
   );
 

@@ -297,5 +297,54 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
       })
     );
   });
+
+  it('10. executeFollowUp prioritizes custom_text and preserves newlines (enter / multi-paragraph)', async () => {
+    const multiLineCustomText = 'Halo Bunda {name}!\n\nBagaimana kabar hari ini?\nSemoga Bunda dan {babyName} sehat selalu ya.\n\nApakah ada yang bisa kami bantu? 😊';
+
+    const fuMock: any = {
+      id: 'fu-custom-enter-1',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-1',
+      type: 'NO_PURCHASE',
+      stage: 1,
+      custom_text: multiLineCustomText,
+      scheduled_at: new Date(),
+      status: 'QUEUED',
+      customer: {
+        id: 'cust-1',
+        name: 'Rina Kartika',
+        phone: '6281234567890',
+        children: [{ id: 'child-1', name: 'Alvaro' }],
+      },
+    };
+
+    const { typingService } = await import('../../src/services/typing.service');
+    const simulateSpy = vi.spyOn(typingService, 'simulateHumanReply').mockResolvedValue({
+      status: 'sent',
+      chatId: '6281234567890',
+      messageCount: 1,
+      totalTypingMs: 100,
+    } as any);
+
+    vi.spyOn(prisma.followUp, 'update').mockResolvedValue({ id: 'fu-custom-enter-1', status: 'SENT' } as any);
+
+    const success = await followUpService.executeFollowUp(fuMock, DEFAULT_TENANT_ID);
+    expect(success).toBe(true);
+
+    expect(simulateSpy).toHaveBeenCalledTimes(1);
+    const sentMessage = simulateSpy.mock.calls[0][0].replyText;
+
+    // Check that placeholders are sanitized
+    expect(sentMessage).toContain('Bunda Rina');
+    expect(sentMessage).toContain('dek Alvaro');
+
+    // Check that newlines / enters are 100% PRESERVED and not collapsed into a single inline paragraph
+    expect(sentMessage).toContain('\n\n');
+    const lines = sentMessage.split('\n');
+    expect(lines.length).toBeGreaterThanOrEqual(4);
+    expect(lines[0]).toBe('Halo Bunda Rina Kartika!');
+    expect(lines[2]).toBe('Bagaimana kabar hari ini?');
+  });
 });
+
 

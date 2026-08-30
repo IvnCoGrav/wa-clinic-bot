@@ -164,15 +164,11 @@ if (require.main === module) {
       const { getDeliveryTiersFromDb } = await import('./services/delivery.service');
       const { loadPersonaFromDb } = await import('./config/persona');
       const { AiModelConfigService } = await import('./config/ai-models.config');
-      const { AiRouterConfigService } = await import('./config/ai-router-config');
-      const { IdleGreetingConfigService } = await import('./config/idle-greeting.config');
       const { AiEligibilityConfigService } = await import('./config/ai-eligibility-config');
       await loadServicesFromDb(DEFAULT_TENANT_ID);
       await getDeliveryTiersFromDb(DEFAULT_TENANT_ID);
       await loadPersonaFromDb(DEFAULT_TENANT_ID);
       await AiModelConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      await AiRouterConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
-      await IdleGreetingConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
       const aiScopeLoaded = await AiEligibilityConfigService.loadConfigsFromDb(DEFAULT_TENANT_ID);
       if (!aiScopeLoaded) {
         console.warn(

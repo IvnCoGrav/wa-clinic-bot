@@ -1,11 +1,6 @@
 import { ConversationState, Direction } from '@prisma/client';
 import { prisma } from '../db/client';
 import { StateHandlerContext, StateHandlerResult } from './types';
-import { handleGreetingState } from './handlers/greeting';
-import { handleLocationState } from './handlers/location';
-import { handleInterestState } from './handlers/interest';
-import { handleHumanHandlingState } from './handlers/human';
-import { handleLocationConfirmationState } from './handlers/location-confirmation';
 import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { customerService } from '../services/customer.service';
@@ -14,9 +9,8 @@ import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
 import { LLM_HISTORY_LIMIT } from '../config/llm-context';
-import { AiRouterConfigService } from '../config/ai-router-config';
-import { formatIslamicReply } from './utils/islamic-greeting-helper';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { processSlotEngine } from '../slot-engine/slot-engine';
 
 export class ConversationStateMachine {
   private typingSvc: TypingService;
@@ -27,7 +21,7 @@ export class ConversationStateMachine {
 
   /**
    * Core State Machine Engine:
-   * Memproses pesan masuk, mengarahkan ke handler state yang sesuai, 
+   * Memproses pesan masuk via Context-Grounded Slot Engine,
    * dan mengirim balasan otomatis MENGGUNAKAN SIMULASI MENGETIK (typingService).
    */
   public async processMessage(ctx: StateHandlerContext): Promise<StateHandlerResult> {
@@ -44,8 +38,6 @@ export class ConversationStateMachine {
     }
 
     // --- GATE 🛡️: HUMAN HANDLING ACTIVE (CS TAKEOVER GUARD) ---
-    // Jika percakapan sedang di-handle admin/CS, batalkan auto-reply bot
-    // tapi tetap jalankan silent background enrichment (geocoding + jarak) agar lat/lng/distance_km tetap terekam.
     if (conversation.is_human_handling) {
       console.log(`[STATE MACHINE ABORT] Conversation ${conversation.id} for customer ${customer.phone} is in HUMAN_HANDLING mode. Skipping bot auto-reply.`);
       try {
@@ -59,9 +51,6 @@ export class ConversationStateMachine {
     }
 
     // --- GATE ✨: CUSTOMER SLASH COMMANDS (/reset, /state, /mulai) ---
-    // Dieksekusi SEBELUM inbound logging, medical detection, NLU & AI router supaya pesan
-    // perintah tidak salah-rute ke state handler / eskalasi medis. Command selalu
-    // per-customer (hanya data nomor yang sedang berbicara ini yang direset/ditampilkan).
     const { commandService } = await import('../services/command.service');
     const cmdResult = await commandService.tryHandle(ctx, tenantId);
     if (cmdResult) {
@@ -86,9 +75,7 @@ export class ConversationStateMachine {
       };
     }
 
-    // --- GATE 🚫: OPT-OUT MARKETING (Scope: WABA only, semua state / global handler) ---
-    // Hanya aktif untuk tenant berprovider WABA (incomingMessage._provider = 'WABA').
-    // Customer WAHA tidak punya marketing_opt_in, tidak terpengaruh.
+    // --- GATE 🚫: OPT-OUT MARKETING (WABA only) ---
     const rawInboundText = incomingMessage.text?.body || '';
     if ((incomingMessage as any)._provider === 'WABA') {
       const { wabaOptOutService } = await import('../services/waba-optout.service');
@@ -99,7 +86,6 @@ export class ConversationStateMachine {
           const result = await wabaOptOutService.handleOptOut(customer.id, tenantId);
           console.log(`[WABA OPT-OUT] Customer ${customer.phone} opted out. Cancelled ${result.cancelledFollowUps} scheduled follow-ups.`);
 
-          // Ack reply via gateway WABA (masih dalam 24h window percakapan aktif → teks bebas)
           const gateway = await resolveGatewayForTenant(tenantId);
           const ackText = wabaOptOutService.getAckMessage();
           const sendResult = await gateway.sendTextMessage(customer.phone, ackText);
@@ -122,9 +108,6 @@ export class ConversationStateMachine {
     }
 
     // 1. Audit Log Pesan Inbound (Masuk)
-    // Skip jika pesan sudah di-log oleh BurstCoalesceService (_preLogged) — pesan asli
-    // tercatat realtime saat diterima, job hasil merge tidak perlu mencatat ulang.
-    // Prioritas: media image dulu baru location — mencegah image dari WA Web yang kebawa location {0,0} tampil dobel Share Location
     const hasValidLocation = !!(incomingMessage.location && Number((incomingMessage.location as any).latitude) !== 0 && Number((incomingMessage.location as any).longitude) !== 0);
     const hasMedia = !!(incomingMessage.media || (incomingMessage as any).type === 'image');
     const loc = incomingMessage.location as any;
@@ -157,8 +140,6 @@ export class ConversationStateMachine {
       const { knowledgeBaseService } = await import('../services/knowledge.service');
       const approvedFaqMatch = await knowledgeBaseService.findMatchingFaq(incomingText, tenantId);
 
-      // Strict Rule: Pasien legacy ATAU pasien yang sudah pernah confirmed reservasi
-      // TIDAK BOLEH dijawab oleh bot (bahkan jika ada FAQ). Wajib STRICT SILENT AUTO-HOLD!
       const isLegacy = !!(customer as any).is_legacy_source;
       let hasPriorConfirmed = false;
       try {
@@ -166,20 +147,16 @@ export class ConversationStateMachine {
           where: { customer_id: customer.id, status: 'confirmed', tenant_id: tenantId },
         });
         hasPriorConfirmed = confirmedCount > 0;
-      } catch (err: any) {
-        // Fallback: anggap customer lama jika status offline tidak pasti
-      }
+      } catch (err: any) {}
 
       const allowFaqExemption = !isLegacy && !hasPriorConfirmed;
 
-      // Exemption: Hanya untuk customer baru (belum pernah treatment & non-legacy) jika ada FAQ resmi
       if (allowFaqExemption && approvedFaqMatch && (approvedFaqMatch as any).category === 'medical' && (approvedFaqMatch as any).status === 'APPROVED') {
         console.log(`[MEDICAL FAQ EXEMPTION] Approved medical FAQ found for new customer "${incomingText}". Proceeding with official FAQ response.`);
       } else {
         const isHigh = medicalResult.severity === 'HIGH';
-        console.log(`[STRICT MEDICAL ESCALATION] Severity ${medicalResult.severity} detected for customer ${customer.phone} (isLegacy=${isLegacy}, hasPriorConfirmed=${hasPriorConfirmed}). Symptoms: ${medicalResult.detectedSymptoms.join(', ')}`);
+        console.log(`[STRICT MEDICAL ESCALATION] Severity ${medicalResult.severity} detected for customer ${customer.phone}. Symptoms: ${medicalResult.detectedSymptoms.join(', ')}`);
 
-        // Set conversation to HUMAN_HANDLING with escalation_reason = 'medical_concern'
         conversation.is_human_handling = true;
         conversation.human_handling_since = new Date();
         conversation.escalation_reason = 'medical_concern';
@@ -192,11 +169,6 @@ export class ConversationStateMachine {
           'medical_concern'
         );
 
-        // Dispatch Real-Time Alert HANYA ke Admin (Telegram / Emergency Log) untuk customer riil.
-        // TIDAK ada template yang dikirim ke chat customer — customer diamkan total,
-        // supaya Bidan/CS yang menggali lebih dalam & menyarankan secara manual.
-        // Catatan: keyword medis bisa false-positive (customer hiperbola), jadi alert
-        // hanya sebagai notifikasi admin, bukan penilaian darurat final.
         const isSandbox = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
         if (!isSandbox) {
           try {
@@ -225,14 +197,13 @@ export class ConversationStateMachine {
       }
     }
 
-
     // 2. Cek Auto-Release Timeout terlebih dahulu jika sedang Human Handling
     const autoRelease = conversationService.checkAndApplyAutoRelease(conversation, tenantId);
     let activeConversation = autoRelease.updatedConversation;
 
-    // --- PENGECEKAN IDLE TIMEOUT (env: IDLE_TIMEOUT_MS default 24 jam) ATAU TIMEOUT KONFIRMASI LOKASI (env: LOCATION_CONFIRMATION_TIMEOUT_MS default 5 menit) ---
+    // --- IDLE TIMEOUT ---
     const IDLE_TIMEOUT_MS = parseInt(process.env.IDLE_TIMEOUT_MS || '86400000', 10);
-    const CONFIRMATION_TIMEOUT_MS = parseInt(process.env.LOCATION_CONFIRMATION_TIMEOUT_MS || '300000', 10); // 5 menit
+    const CONFIRMATION_TIMEOUT_MS = parseInt(process.env.LOCATION_CONFIRMATION_TIMEOUT_MS || '300000', 10);
 
     const lastMsgTime = activeConversation.last_message_at ? new Date(activeConversation.last_message_at).getTime() : 0;
     const isIdleTooLong = lastMsgTime > 0 && (Date.now() - lastMsgTime > IDLE_TIMEOUT_MS);
@@ -240,13 +211,7 @@ export class ConversationStateMachine {
       lastMsgTime > 0 && (Date.now() - lastMsgTime > CONFIRMATION_TIMEOUT_MS);
 
     if ((isIdleTooLong || isConfirmationTimeout) && activeConversation.current_state !== ConversationState.INITIAL && !activeConversation.is_human_handling) {
-      if (isConfirmationTimeout) {
-        console.log(`[CONFIRMATION TIMEOUT] Resetting conversation ${activeConversation.id} from LOCATION_CONFIRMED to INITIAL due to 5-minute inactivity.`);
-      } else {
-        console.log(`[IDLE TIMEOUT] Resetting conversation ${activeConversation.id} from ${activeConversation.current_state} to INITIAL.`);
-      }
-      
-      // Clean up pending location jika di-reset
+      console.log(`[TIMEOUT RESET] Resetting conversation ${activeConversation.id} from ${activeConversation.current_state} to INITIAL.`);
       await customerService.clearPendingLocation(customer.id, tenantId);
       customer.pending_kelurahan = null;
       customer.pending_kecamatan = null;
@@ -268,9 +233,7 @@ export class ConversationStateMachine {
       activeConversation.current_state = ConversationState.INITIAL;
     }
 
-    let result: StateHandlerResult;
-
-    // 3. Routing ke State Handler yang sesuai
+    // 3. Cek Global Bot Deactivation
     const { AiModelConfigService } = await import('../config/ai-models.config');
     const isSandboxTest = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
     if (!AiModelConfigService.isBotActive(tenantId) && !activeConversation.is_human_handling && !isSandboxTest) {
@@ -284,298 +247,46 @@ export class ConversationStateMachine {
       );
       activeConversation.is_human_handling = true;
       activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+      return {
+        nextState: ConversationState.HUMAN_HANDLING,
+        shouldSendReply: false,
+        isHumanHandling: true,
+      };
     }
 
-    let nluResult: any = undefined;
-    let routerDecision: any = undefined;
-    let historyFormatted: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-    const routerStateSnapshot = activeConversation.current_state;
+    // --- 🚀 4. EKSEKUSI UTAMA: CONTEXT-GROUNDED SLOT-FILLING ENGINE ---
+    const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
+    const historyFormatted = recentDbMsgs.map((m) => ({
+      role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+      content: m.content || '',
+    }));
+    const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
+    
+    const result: StateHandlerResult = await processSlotEngine(handlerCtx);
 
-    // --- GATE 🚀: CONTEXT-GROUNDED SLOT-FILLING ENGINE (FEATURE FLAGGED) ---
-    const { isSlotFillingEnabledForCustomer } = await import('../config/feature-flags');
-    if (isSlotFillingEnabledForCustomer(customer.phone, tenantId)) {
-      const { messageService } = await import('../services/message.service');
-      const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
-      historyFormatted = recentDbMsgs.map((m) => ({
-        role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
-        content: m.content || '',
-      }));
-      const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
-      const { processSlotEngine } = await import('../slot-engine/slot-engine');
-      result = await processSlotEngine(handlerCtx);
-    } else {
-      // =========================================================================
-      // LEGACY ENGINE PIPELINE (UNTUK CUSTOMER NON-WHITELIST)
-      // =========================================================================
-      // --- BYPASS LLM / NLU UNTUK PESAN GREETING LEAD MURNI ---
-      const { checkLeadGreetingText } = await import('./utils/greeting-checker');
-      const rawMsgBody = (incomingMessage as any)._rawBody || rawInboundText;
-      const greetingCheck = activeConversation.current_state === ConversationState.INITIAL
-        ? await checkLeadGreetingText(incomingText, rawMsgBody, tenantId)
-        : undefined;
-      const isPureGreetingLead = activeConversation.current_state === ConversationState.INITIAL && greetingCheck?.isPureGreeting;
-
-      if (isPureGreetingLead) {
-        console.log(`[GREETING BYPASS] Pure lead greeting matched for customer ${customer.phone}. Bypassing NLU & LLM router.`);
-      }
-
-      // --- GATE 2 🧠: STRUCTURED NLU INTENT & ENTITY CLASSIFICATION ---
-      if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead) {
-        try {
-          const { NluClassifierService } = await import('../services/nlu-classifier.service');
-          const { messageService } = await import('../services/message.service');
-          const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
-          historyFormatted = recentDbMsgs.map((m) => ({
-            role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
-            content: m.content || '',
-          }));
-          nluResult = await NluClassifierService.classifyMessage(incomingText, historyFormatted, {
-            conversationId: activeConversation.id,
-            customerPhone: customer.phone,
-            correlationId: bubbleCorrelationId,
-          });
-        } catch (err: any) {
-          console.error('[NLU CLASSIFICATION ERROR IN MACHINE]:', err.message);
-        }
-      }
-
-      // --- GATE 2.1 🩺: MEDICAL DETECTION VIA NLU (SEMUA state, tanpa extra LLM call) ---
-      if (!activeConversation.is_human_handling && nluResult && (nluResult.intents || []).includes('medical_query')) {
-        console.log(`[MEDICAL NLU ESCALATION] NLU intent medical_query detected for customer ${customer.phone}. Escalating silently.`);
-        conversation.is_human_handling = true;
-        conversation.human_handling_since = new Date();
-        conversation.escalation_reason = 'medical_concern';
-        await conversationService.escalateToHumanHandling(
-          activeConversation,
-          customer.phone,
-          `Keluhan medis terdeteksi via NLU classifier (intent medical_query): "${incomingText}"`,
-          tenantId,
-          'medical_concern'
-        );
-        const isSandbox = Boolean(customer.is_sandbox_test || isDummyOrTestContact(customer.phone, customer.name, customer.is_sandbox_test));
-        if (!isSandbox) {
-          try {
-            const { AlertService, AlertType, AlertSeverity } = await import('../services/alert.service');
-            const alertService = new AlertService();
-            await alertService.notifyAlert({
-              type: AlertType.MEDICAL_CONCERN_MEDIUM,
-              severity: AlertSeverity.WARNING,
-              message: `[MEDICAL ALERT via NLU] Customer: ${customer.phone}. Text: "${incomingText}"`,
-              metadata: { customerPhone: customer.phone, incomingText },
-            });
-          } catch (alertErr: any) {
-            console.error('[MEDICAL NLU ALERT ERROR] Failed to trigger alert:', alertErr.message);
-          }
-        }
-        return {
-          nextState: ConversationState.HUMAN_HANDLING,
-          shouldSendReply: false,
-          isHumanHandling: true,
-        };
-      }
-
-      // --- GATE 2.5 🧭: AI ROUTER ENGINE (default ON per tenant, shadow-first) ---
-      if (!activeConversation.is_human_handling && incomingText && !isPureGreetingLead && AiRouterConfigService.isEnabled(tenantId)) {
-        try {
-          const { aiRouterService } = await import('../integrations/llm/ai-router');
-          routerDecision = await aiRouterService.classify({
-            currentState: activeConversation.current_state,
-            conversationHistory: historyFormatted,
-            lastCustomerMessage: incomingText,
-            conversationId: activeConversation.id,
-            customerPhone: customer.phone,
-            bubbleCorrelationId,
-          }, tenantId);
-        } catch (err: any) {
-          console.error('[AI ROUTER ERROR IN MACHINE]:', err.message);
-        }
-
-        if (routerDecision?.response && !AiRouterConfigService.isShadowMode(tenantId)) {
-          try {
-            const { handleRouterResult } = await import('../services/ai-router-evaluation.service');
-            const processed = await handleRouterResult(activeConversation, routerDecision.response, tenantId);
-            const escalateReasons: Record<string, string> = {
-              UNKNOWN_REPEATED: 'unknown_repeated',
-              MEDICAL_KEYWORD_SUSPECTED: 'medical_concern',
-              SCHEDULE_REQUEST: 'schedule_request',
-            };
-            if (processed.needs_human_escalation && escalateReasons[processed.escalation_reason]) {
-              console.warn(`[ROUTER ESCALATION] Customer ${customer.phone} auto-escalated (${processed.escalation_reason}). ${processed.reasoning_note || ''}`);
-              await conversationService.escalateToHumanHandling(
-                activeConversation,
-                customer.phone,
-                processed.reasoning_note || `Router flag ${processed.escalation_reason}`,
-                tenantId,
-                escalateReasons[processed.escalation_reason]
-              );
-              return {
-                nextState: ConversationState.HUMAN_HANDLING,
-                shouldSendReply: false,
-                isHumanHandling: true,
-              };
-            }
-          } catch (err: any) {
-            console.error('[AI ROUTER ESCALATION ERROR]:', err.message);
-          }
-        }
-      }
-
-      const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, nluResult, routerDecision, history: historyFormatted, bubbleCorrelationId };
-
-      if (activeConversation.is_human_handling) {
-        result = await handleHumanHandlingState(handlerCtx);
-      } else {
-        switch (activeConversation.current_state) {
-          case ConversationState.INITIAL:
-            result = await handleGreetingState(handlerCtx);
-            break;
-
-          case ConversationState.AWAITING_LOCATION:
-            result = await handleLocationState(handlerCtx);
-            break;
-
-          case ConversationState.LOCATION_CONFIRMED:
-            result = await handleLocationConfirmationState(handlerCtx);
-            break;
-
-          case ConversationState.AWAITING_INTEREST:
-            result = await handleInterestState(handlerCtx);
-            break;
-
-          case ConversationState.RESERVATION_SENT:
-          case ConversationState.COMPLETED:
-            result = await handleInterestState(handlerCtx);
-            break;
-
-          case ConversationState.HUMAN_HANDLING:
-            result = await handleHumanHandlingState(handlerCtx);
-            break;
-
-          default:
-            console.warn(`[STATE MACHINE] Unhandled state: ${activeConversation.current_state}. Defaulting to handleGreetingState.`);
-            result = await handleGreetingState(handlerCtx);
-            break;
-        }
-      }
-
-      // Kalibrasi State Pasca Intercept (Location/Greeting)
-      if (result && result.nextState && result.nextState !== activeConversation.current_state) {
-        console.log(`[STATE MACHINE] State updated from ${activeConversation.current_state} to ${result.nextState} via handler output.`);
-        activeConversation.current_state = result.nextState;
-      }
-    }
-
-    // --- OBSERVABILITY: log evaluasi router (shadow/full) ke ai_router_evaluations ---
-    // "Match" dihitung dari keputusan akhir (intent + escalation), bukan exact-field.
-    if (routerDecision?.response) {
-      try {
-        const { logRouterEvaluation, mapLegacyDecisionToIntent } = await import('../services/ai-router-evaluation.service');
-        const wasMedicalDetected = medicalResult.isMedical;
-        const wasScheduleQuestion =
-          !wasMedicalDetected &&
-          result.nextState === ConversationState.HUMAN_HANDLING &&
-          (nluResult?.intents?.includes('ask_schedule') ||
-            (/\b(jadwal|slot|tanggal|hari|jam)\b/i.test(incomingText) &&
-              /\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu|besok|lusa)\b/i.test(incomingText)));
-        const wasFaqAnswered =
-          !wasMedicalDetected &&
-          !wasScheduleQuestion &&
-          result.shouldSendReply === true &&
-          !!result.replyText &&
-          (result.nextState === routerStateSnapshot || result.nextState === ConversationState.AWAITING_INTEREST);
-
-        await logRouterEvaluation({
-          customerPhone: customer.phone,
-          messageText: incomingText,
-          currentState: routerStateSnapshot,
-          llmResult: routerDecision.response,
-          usedFallback: routerDecision.source === 'fallback',
-          legacy: mapLegacyDecisionToIntent({
-            stateBefore: routerStateSnapshot,
-            stateAfter: result.nextState,
-            wasMedicalDetected,
-            wasScheduleQuestion,
-            wasFaqAnswered,
-          }),
-        });
-      } catch (err: any) {
-        console.error('[AI ROUTER EVALUATION LOG ERROR]:', err.message);
-      }
-    }
-
-    // 4. Update Conversation State di Database
-    await conversationService.updateConversationState(
-      activeConversation.id,
-      {
-        currentState: result.nextState,
-        isHumanHandling: result.isHumanHandling,
-      },
-      tenantId
-    );
-
-    // --- TEMPORARY SAFETY NET: INTERCEPT & APPROVE VIA TERMINAL ---
-    if (process.env.TERMINAL_APPROVAL_ENABLED === 'true' && process.env.NODE_ENV !== 'test' && result.shouldSendReply && result.replyText) {
-      const finalReply = await this.promptTerminal(
-        result.replyText,
-        incomingMessage.text?.body || (incomingMessage.location ? '[SHARE LOCATION]' : '[MEDIA]'),
-        customer.phone
+    // 4. Update Conversation State jika berubah
+    if (result.nextState !== activeConversation.current_state) {
+      await conversationService.updateConversationState(
+        activeConversation.id,
+        {
+          currentState: result.nextState,
+          previousState: activeConversation.current_state,
+        },
+        tenantId
       );
-      if (finalReply === null) {
-        result.shouldSendReply = false;
-        console.log(`[TERMINAL ABORT] Pesan untuk ${customer.phone} dibatalkan pengirimannya.`);
-      } else {
-        result.replyText = finalReply;
-      }
     }
 
-    // 5. Kirim Balasan Otomatis via Typing Simulation Service jika required
+    // 5. Update timestamp pesan terakhir pada percakapan
+    await prisma.conversation.update({
+      where: { id: activeConversation.id },
+      data: { last_message_at: new Date() },
+    }).catch(() => {});
+
+    // --- 6. PENGIRIMAN BALASAN (JIKA DIPERLUKAN) ---
     if (result.shouldSendReply && result.replyText) {
       const incomingBody = incomingMessage.text?.body || '';
-      result.replyText = formatIslamicReply(result.replyText, incomingBody);
-
-      // --- AI OUTPUT VERIFIER (QUALITY CONTROL GUARDRAIL - HANYA UNTUK LEGACY ENGINE) ---
-      const { isSlotFillingEnabledForCustomer: isSlotActive } = await import('../config/feature-flags');
-      const isSlotFillingActive = isSlotActive(customer.phone, tenantId);
-
-      if (!isSlotFillingActive) {
-        try {
-          const { AiResponseVerifierService } = await import('../services/ai-verifier.service');
-          const { treatmentCatalogService } = await import('../services/treatment-catalog.service');
-          const allowedCatalog = treatmentCatalogService.getAllServices().map((s) => ({
-            name: s.name,
-            category: s.category,
-            minAgeMonths: s.ageTier.minAgeMonths,
-            maxAgeMonths: s.ageTier.maxAgeMonths,
-            promoPrice: s.promoPrice,
-          }));
-
-          const qc = await AiResponseVerifierService.verifyAndCorrect({
-            tenantId,
-            customerPhone: customer.phone,
-            conversationId: activeConversation.id,
-            customerMessage: incomingBody,
-            draftReply: result.replyText,
-            bubbleCorrelationId,
-            groundTruth: {
-              customerAgeMonths: (customer as any).age_months || (customer as any).preferences?.childAgeMonths || null,
-              customerLocation: customer.kelurahan ? `${customer.kelurahan}, ${customer.kecamatan || ''}` : null,
-              isLocationConfirmed: !!customer.kelurahan,
-              lastDiscussedTreatment: activeConversation.last_discussed_treatment,
-              allowedServices: allowedCatalog,
-            },
-          });
-
-          if (qc.finalReply) {
-            result.replyText = qc.finalReply;
-          }
-        } catch (verifierErr: any) {
-          console.warn('[AI VERIFIER HOOK ERROR]', verifierErr.message);
-        }
-      }
 
       // --- STEP 1: SEND PRICELIST IMAGE FIRST (JIKA DIAKTIFKAN) ---
-      // Sesuai alur: kirim gambar katalog/pricelist terlebih dahulu agar customer melihat opsi treatment,
-      // kemudian disusul bubble teks informasi ongkir & pertanyaan pilihan treatment.
       if (result.sendPricelistImage) {
         let sendOk = false;
         let sentMessageId: string | undefined = undefined;
@@ -585,8 +296,6 @@ export class ConversationStateMachine {
           const pricelistTarget = await resolvePricelistImageTarget(tenantId, gateway.providerType);
           const caption = result.pricelistCaption || `Pricelist ${getBrandIdentity().businessName} 🌸`;
 
-          // Register in-flight bot outbound untuk mencegah echo webhook WAHA menduplikat gambar di Live Chat
-          const { messageService } = await import('../services/message.service');
           messageService.registerInFlightBotOutbound(customer.phone, caption, tenantId, 60000);
           messageService.registerInFlightBotOutbound(customer.phone, `[IMAGE: ${caption}]`, tenantId, 60000);
           messageService.registerInFlightBotOutbound(customer.phone, '[IMAGE]', tenantId, 60000);
@@ -603,14 +312,12 @@ export class ConversationStateMachine {
           }
 
           if (sendOk) {
-            const { prisma } = await import('../db/client');
             await prisma.customer.update({
               where: { id: customer.id },
               data: { pricelist_sent: true },
             }).catch(() => {});
             customer.pricelist_sent = true;
 
-            // Log pesan gambar pricelist ke tabel messages & siarkan ke Live Chat
             try {
               const path = await import('path');
               const rawUrl = await (await import('../services/pricelist-config.service')).getPricelistImageUrl(tenantId);
@@ -622,7 +329,7 @@ export class ConversationStateMachine {
               await messageService.logMessage({
                 tenantId,
                 conversationId: conversation.id,
-                direction: 'OUTBOUND',
+                direction: Direction.OUTBOUND,
                 content: caption || `[IMAGE: Pricelist ${getBrandIdentity().businessName}]`,
                 waMessageId: sentMessageId,
                 senderType: 'BOT',
@@ -643,16 +350,13 @@ export class ConversationStateMachine {
             }
           }
 
-          // Beri jeda singkat agar gambar sampai terlebih dahulu di WhatsApp sebelum bubble teks masuk
           await new Promise((resolve) => setTimeout(resolve, 800));
         } catch (dbErr: any) {
           console.error('[PRICELIST ERROR] Failed to send pricelist image:', dbErr.message);
         }
       }
 
-      // --- STEP 2: SEND TEXT REPLY (INFO ONGKIR & PERTANYAAN TREATMENT) ---
-      // Selalu gunakan nomor HP asli customer (customer.phone@c.us) sebagai target chatId
-      // agar pesan tidak terkirim ke JID palsu (mis. LID number@c.us) jika resolusi LID WAHA gagal.
+      // --- STEP 2: SEND TEXT REPLY DENGAN SIMULASI MENGETIK ---
       const chatId = `${customer.phone}@c.us`;
       const resultHuman = await this.typingSvc.simulateHumanReply({
         chatId,
@@ -670,7 +374,6 @@ export class ConversationStateMachine {
         },
       });
 
-      // Audit Log Pesan Outbound (Keluar): dicatat SELALU — baik terkirim maupun gagal.
       const reason = result.aiReasoning ? { aiReasoning: result.aiReasoning } : undefined;
       await messageService.logMessage({
         tenantId,
@@ -687,42 +390,6 @@ export class ConversationStateMachine {
     }
 
     return result;
-  }
-
-  private promptTerminal(proposedReply: string, incomingText: string, phone: string): Promise<string | null> {
-    return new Promise((resolve) => {
-      const readline = require('readline');
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      console.log('\n============================================================');
-      console.log(`🌸 [SAFETY NET INTERCEPTED]`);
-      console.log(`   Customer: ${phone}`);
-      console.log(`   Pesan Masuk: "${incomingText}"`);
-      console.log(`------------------------------------------------------------`);
-      console.log(`   Proposed Bot Reply:`);
-      console.log(proposedReply);
-      console.log(`------------------------------------------------------------`);
-      console.log(`Pilihan:`);
-      console.log(`  - Tekan [Enter] atau ketik 'y' untuk SETUJU dan kirim`);
-      console.log(`  - Ketik 'n' untuk BATALKAN pengiriman`);
-      console.log(`  - Ketik kalimat kustom Anda di bawah ini untuk OVERRIDE balasan`);
-      console.log('============================================================');
-
-      rl.question('Masukkan pilihan / pesan kustom Anda: ', (answer: string) => {
-        rl.pause(); // Pause stream instead of closing, preserving process.stdin for subsequent inputs and avoiding tsx watch EOF crash
-        const clean = answer.trim();
-        if (clean === '' || clean.toLowerCase() === 'y') {
-          resolve(proposedReply);
-        } else if (clean.toLowerCase() === 'n') {
-          resolve(null);
-        } else {
-          resolve(clean);
-        }
-      });
-    });
   }
 }
 

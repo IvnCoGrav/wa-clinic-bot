@@ -866,12 +866,34 @@ export class LiveChatService {
    */
   public async generateAiSuggestion(conversationId: string, tenantId: string): Promise<string> {
     try {
-      const { llmResponseGenerator } = await import('../integrations/llm/generator');
-      const result = await llmResponseGenerator.generateCopilotDraft({
-        conversationId,
-        tenantId,
+      const { messageService } = await import('./message.service');
+      const { getLlmEndpointConfig } = await import('../integrations/llm/llm-gateway');
+      const { callChatCompletionsWithFallback } = await import('../integrations/llm/model-fallback');
+      const recent = await messageService.getRecentMessages(conversationId, 6, tenantId);
+      const historyFormatted = recent.map((m) => `${m.direction === 'INBOUND' ? 'Customer' : 'Bidan'}: ${m.content}`).join('\n');
+      const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+
+      const resp = await callChatCompletionsWithFallback({
+        model: cfg.model,
+        fallbackModel: cfg.fallbackModel,
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+        timeoutMs: cfg.timeoutMs,
+        payload: {
+          messages: [
+            {
+              role: 'system',
+              content: 'Kamu adalah Bidan Yusi dari Kala Moms & Baby Spa. Buatkan 1 saran balasan WhatsApp yang hangat, profesional, sopan, dan solutif untuk membantu tim CS/Bidan membalas chat customer.'
+            },
+            {
+              role: 'user',
+              content: `Berikut riwayat percakapan:\n${historyFormatted}\n\nBuatkan draf balasan singkat (1 bubble WhatsApp) dari sudut pandang Bidan Yusi:`
+            }
+          ],
+          max_tokens: 250,
+        }
       });
-      return result.draft;
+      return resp.data?.choices?.[0]?.message?.content?.trim() || `Halo Bunda, terima kasih atas pesannya. Ada yang bisa kami bantu? 🙏✨`;
     } catch (err: any) {
       console.warn('[AI SUGGESTION ERROR]:', err.message);
       return `Halo Bunda, terima kasih atas pesannya. Terkait pertanyaan Bunda, ada yang bisa Bidan bantu lebih lanjut hari ini? 🙏✨`;

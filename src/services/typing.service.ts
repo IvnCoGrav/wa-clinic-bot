@@ -370,7 +370,8 @@ export class TypingService {
 
         if (incomingText) {
           const readingDelayMs = this.calculateReadingDelay(incomingText);
-          await this.sleep(readingDelayMs);
+          const adjustedReading = Math.round(readingDelayMs / this.speedFactor);
+          await this.sleep(adjustedReading);
         }
 
         if (shouldAbort && (await shouldAbort())) {
@@ -404,7 +405,7 @@ export class TypingService {
             stageLog('TYPING', `Simulasi pengetikan bubble ${i + 1}/${bubbles.length} (${(adjustedMs / 1000).toFixed(1)}s)`, chatId.replace(/@.*$/, ''));
           }
           
-          await measure(`TYPING_DELAY_BUBBLE_${i + 1}`, () => this.sleep(typingDelayMs));
+          await measure(`TYPING_DELAY_BUBBLE_${i + 1}`, () => this.sleep(adjustedMs));
 
           // Stop typing secara non-blocking (fire-and-forget) agar tidak menunda pengiriman sendText
           this.client.stopTyping(chatId).catch(() => {});
@@ -440,7 +441,7 @@ export class TypingService {
             console.log(`[INTER-BUBBLE DELAY] Between bubble ${i + 1} and ${i + 2}: original=${interBubbleDelayMs}ms, speedFactor=${this.speedFactor}, adjusted=${adjustedInter}ms`);
           }
           
-          await measure(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`, () => this.sleep(interBubbleDelayMs));
+          await measure(`INTER_BUBBLE_DELAY_${i + 1}_TO_${i + 2}`, () => this.sleep(adjustedInter));
         }
       }
 

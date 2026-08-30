@@ -144,6 +144,9 @@ export function sanitizePronounsAndSlang(text: string): string {
   return text
     // Perbaiki singkatan slang "Bund" / "bund" / "Bun" / "bun" menjadi "Bunda" (case-insensitive)
     .replace(/\b(?:bund|bun)\b/gi, 'Bunda')
+    // Perbaiki typo awalan kata "Baak," / "baak" -> "Baik,"
+    .replace(/\bBaak\b/g, 'Baik')
+    .replace(/\bbaak\b/g, 'baik')
     // Perbaiki kata ganti orang pertama tunggal menjadi jamak tim "kami"
     .replace(/\b(biar|agar|akan|mau|nanti|bisa|boleh|jika|apakah|supaya)\s+saya\b/gi, '$1 kami')
     .replace(/\b(?:bantuan|arahan)\s+saya\b/gi, '$1 kami')
@@ -281,6 +284,35 @@ export function sanitizeUnsolicitedPriceAndDuration(text: string, customerInput?
   return cleaned;
 }
 
+/**
+ * Memberikan baris baru / pemisah paragraf (\n\n) setelah emoticon penutup klausa/kalimat
+ * jika langsung disambung kalimat baru berawalan huruf kapital atau tanda formatting (*),
+ * agar pesan WhatsApp tidak menumpuk menjadi satu paragraf panjang (wall of text).
+ */
+export function formatParagraphsAfterEmoji(text: string): string {
+  if (!text) return '';
+  return text
+    // 1. Emoticon diikuti spasi dan kalimat baru (huruf kapital atau tanda bintang *)
+    // Contoh: "...tersedia setiap hari ya 😊 Untuk ketersediaan..." -> "...tersedia setiap hari ya 😊\n\nUntuk ketersediaan..."
+    .replace(/([\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}😊☺️🥰🌸✨🤗🙏🤍])\s+(?=[A-Z\*(])/gu, '$1\n\n')
+    // 2. Normalisasi jika ada lebih dari 2 baris baru
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Membersihkan pertanyaan ganda yang menumpuk di kalimat penutup jika LLM menanyakan jam SEKALIGUS kelurahan rumah.
+ * Contoh: "Boleh tahu preferensi jam kunjungannya range pagi/siang/sore? Serta daerah atau kelurahan rumah Bunda agar kami bisa sekaligus bantu cek ongkirnya? 😊"
+ * -> "Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan jadwal Bidan & ongkirnya? 😊"
+ */
+export function sanitizeDoubleQuestions(text: string): string {
+  if (!text) return '';
+  return text.replace(
+    /(?:Boleh\s+tahu\s+)?preferensi\s+jam\s*(?:kunjungannya)?\s*(?:range\s*)?(?:pagi\/siang\/sore|\(pagi\/siang\/sore\))\s*\??\s*(?:Serta|Dan|dan|serta|sekaligus)\s*(?:daerah\s+atau\s+)?kelurahan\s+rumah\s+Bunda\s*(?:di\s+mana\s+ya|agar\s+kami\s+bisa\s+sekaligus\s+bantu\s+cek\s+ongkirnya)?\s*\??/gi,
+    'Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan jadwal Bidan & ongkirnya?'
+  );
+}
+
 export interface UnifiedSanitizerOptions {
   isFollowUp?: boolean;
   historyCount?: number;
@@ -311,9 +343,10 @@ export class UnifiedResponseSanitizer {
     // 3. Pronouns ("saya" -> "kami") & Slang ("Bund" -> "Bunda")
     cleaned = sanitizePronounsAndSlang(cleaned);
 
-    // 4. Repetitive Greetings & Typo & Anti-Affirmation Schedule Guard
+    // 4. Repetitive Greetings & Typo & Anti-Affirmation Schedule Guard & Single Question Guard
     cleaned = sanitizeRepetitiveGreetings(cleaned);
     cleaned = sanitizeScheduleAffirmations(cleaned);
+    cleaned = sanitizeDoubleQuestions(cleaned);
     cleaned = sanitizeUnsolicitedPriceAndDuration(cleaned, options?.customerInput);
     cleaned = sanitizeEmDash(cleaned);
     cleaned = sanitizeStrayBackslashes(cleaned);
@@ -340,6 +373,9 @@ export class UnifiedResponseSanitizer {
     if (!/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[😊☺️🥰🌸]/u.test(cleaned)) {
       cleaned = `${cleaned} 😊`;
     }
+
+    // 8. Pemisah Paragraf / Baris Baru setelah Emoticon (Anti-Wall of Text)
+    cleaned = formatParagraphsAfterEmoji(cleaned);
 
     return cleaned;
   }
