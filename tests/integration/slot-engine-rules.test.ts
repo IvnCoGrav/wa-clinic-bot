@@ -298,30 +298,44 @@ describe('Integration Test Suite: Seluruh Rules & Kebijakan Kala Spa', () => {
       },
     };
 
-    vi.spyOn(modelFallback, 'callChatCompletionsWithFallback').mockResolvedValueOnce({
-      model: 'MiniMax-M2.7-highspeed',
-      data: {
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                intents: ['select_treatment', 'request_booking'],
-                location_text: null,
-                street_detail: null,
-                child_age_months: null,
-                symptoms: [],
-                treatment_referenced: 'Pijat Pulih Ceria',
-                preferred_date_text: 'hari Sabtu',
-                preferred_time_text: null,
-                customer_name: null,
-                is_medical_emergency: false,
-                confidence_score: 0.95,
-              }),
+    vi.spyOn(modelFallback, 'callChatCompletionsWithFallback')
+      .mockResolvedValueOnce({
+        model: 'MiniMax-M2.7-highspeed',
+        data: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  intents: ['select_treatment', 'request_booking'],
+                  location_text: null,
+                  street_detail: null,
+                  child_age_months: null,
+                  symptoms: [],
+                  treatment_referenced: 'Pijat Pulih Ceria',
+                  preferred_date_text: 'hari Sabtu',
+                  preferred_time_text: null,
+                  customer_name: null,
+                  is_medical_emergency: false,
+                  confidence_score: 0.95,
+                }),
+              },
             },
-          },
-        ],
-      },
-    } as any);
+          ],
+        },
+      } as any)
+      .mockResolvedValueOnce({
+        model: 'MiniMax-M2.7-highspeed',
+        data: {
+          choices: [
+            {
+              message: {
+                content:
+                  'Baik Bunda, berikut list untuk reservasi ya bund:\n\nNama Bunda: Bunda Test\nTreatment: Pijat Pulih Ceria\nLokasi: Pradah Kalikendal, Dukuh Pakis, Kota Surabaya\nJadwal: Hari Sabtu\n\nSilakan kirim data lengkapnya ya bund! 😊',
+              },
+            },
+          ],
+        },
+      } as any);
 
     const result = await processSlotEngine({
       customer: customerWithLocation,

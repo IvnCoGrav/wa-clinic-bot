@@ -78,7 +78,7 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
 
       expect(personaRules).toContain('ATURAN PENJADWALAN & KETERSEDIAAN SLOT (ANTI-AFIRMASI JADWAL)');
       expect(personaRules).toContain('DILARANG KERAS mengafirmasi atau menggunakan kata \'Tentu bisa\', \'Bisa Bunda\', \'Bisa ya\', \'Pasti bisa\'');
-      expect(personaRules).toContain('Sampaikan secara netral dan santun bahwa ketersediaan jadwal Bidan yang bertugas akan dibantu cekkan terlebih dahulu');
+      expect(personaRules).toContain('Sampaikan secara netral dan santun bahwa ketersediaan jadwal Bidan yang bertugas di hari tersebut akan dibantu cekkan terlebih dahulu');
       expect(personaRules).not.toContain('contoh: "Tentu bisa Bunda..."');
     });
 

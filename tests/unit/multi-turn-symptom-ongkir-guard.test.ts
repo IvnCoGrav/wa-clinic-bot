@@ -53,7 +53,21 @@ describe('Multi-Turn Symptom & Ongkir Guard E2E', () => {
     ];
 
     // 1. Test GroundingComposer output
-    const grounding = await GroundingComposer.compose(slate, {
+    const extraction = {
+      intents: [] as any,
+      locationText: null,
+      streetDetail: null,
+      childAgeMonths: null,
+      symptoms: [],
+      treatmentReferenced: null,
+      preferredDateText: null,
+      preferredTimeText: null,
+      customerName: null,
+      isMedicalEmergency: false,
+      confidenceScore: 0,
+    };
+
+    const grounding = await GroundingComposer.compose(slate, extraction, {
       customerInput: '12 bulan bubid',
       tenantId: 'default-tenant',
     });

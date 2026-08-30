@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DecisionMatrix } from '../../src/slot-engine/decision-matrix';
 import { ReplyGenerator } from '../../src/slot-engine/reply-generator';
 import { CustomerSlate, ExtractedEntities, GroundingPackage } from '../../src/slot-engine/types';
+import * as modelFallback from '../../src/integrations/llm/model-fallback';
+import * as llmGateway from '../../src/integrations/llm/llm-gateway';
 
 describe('Slot Engine Turn-0 Initial Greeting Tests', () => {
   const baseSlate: CustomerSlate = {
@@ -101,6 +103,27 @@ describe('Slot Engine Turn-0 Initial Greeting Tests', () => {
       symptomsDiscussed: ['batuk', 'pilek'],
       missingSlotsToPrompt: 'LOCATION',
     };
+
+    vi.spyOn(modelFallback, 'callChatCompletionsWithFallback').mockResolvedValueOnce({
+      model: 'gpt-4o-mini',
+      baseUrl: 'https://api.test.com',
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Untuk membantu meredakan batuk pilek, kami punya Pijat Bayi Pulih Ceria dengan double aromaterapi.',
+            },
+          },
+        ],
+      },
+    } as any);
+    vi.spyOn(llmGateway, 'getLlmEndpointConfig').mockReturnValueOnce({
+      apiKey: 'test-key',
+      baseUrl: 'https://api.test.com',
+      model: 'gpt-4o-mini',
+      fallbackModel: 'gpt-4o-mini',
+      timeoutMs: 30000,
+    });
 
     const reply = await ReplyGenerator.generate(baseSlate, extraction, grounding, {
       history: [],

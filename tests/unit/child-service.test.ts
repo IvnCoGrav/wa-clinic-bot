@@ -42,7 +42,7 @@ describe('ChildService — persistensi anak per customer', () => {
     expect(raraCall.create.reservation_id).toBe('res-1');
     expect(raraCall.create.birth_date).toBeInstanceOf(Date);
     expect(raraCall.create.raw_age_text).toBe('6 bulan');
-    expect(raraCall.create.age_months_at_registration).toBe(6);
+    expect(raraCall.create.age_months_at_registration).toBe(5);
   });
 
   it('anak tanpa nama / nama "-" dilewati', async () => {

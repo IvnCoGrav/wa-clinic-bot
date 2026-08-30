@@ -43,7 +43,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   }
 
   it('[TC 21] is_hold_labeled=true & HumanHandling → AI Router mengabaikan pesan (HUMAN_HANDLING_ACTIVE_SILENT)', async () => {
-    const phone = `6287771${Date.now()}`;
+    const phone = `6287771${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Hold Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isHoldLabeled: true });
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
@@ -59,7 +59,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 22] is_admin_labeled=true → AI Router mem-bypass pesan (IGNORED_ADMIN)', async () => {
-    const phone = `6287772${Date.now()}`;
+    const phone = `6287772${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Admin Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isAdminLabeled: true });
 
@@ -73,7 +73,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 23] Customer dengan label biasa → Pesan tetap diproses', async () => {
-    const phone = `6287773${Date.now()}`;
+    const phone = `6287773${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Normal Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isHoldLabeled: false, isAdminLabeled: false });
 
@@ -87,7 +87,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 24] Manual Eskalasi → Memanggil addLabel("hold") dan set is_hold_labeled=true', async () => {
-    const phone = `6287774${Date.now()}`;
+    const phone = `6287774${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Escalate Customer', DEFAULT_TENANT_ID);
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -101,7 +101,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 25] Release state → Memanggil removeLabel("hold") dan reset is_hold_labeled=false', async () => {
-    const phone = `6287775${Date.now()}`;
+    const phone = `6287775${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Release Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isHoldLabeled: true });
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
@@ -119,7 +119,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 26] Perubahan label mendadak di DB → Router langsung mendeteksi tanpa server restart', async () => {
-    const phone = `6287776${Date.now()}`;
+    const phone = `6287776${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Dynamic Change Customer', DEFAULT_TENANT_ID);
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -137,7 +137,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 27] AI Router tidak memanggil WAHA API `getChatLabels` saat DB record customer valid', async () => {
-    const phone = `6287777${Date.now()}`;
+    const phone = `6287777${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Fast Path Customer', DEFAULT_TENANT_ID);
 
     const getLabelsSpy = vi.spyOn(wahaClient, 'getChatLabels');
@@ -147,7 +147,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 28] Eskalasi berulang → tidak memanggil addLabel ("hold") berulang kali jika sudah hold', async () => {
-    const phone = `6287778${Date.now()}`;
+    const phone = `6287778${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Repeat Escalate Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isHoldLabeled: true });
     const conv = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
@@ -159,7 +159,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 29] Multi-tenant label check → setLabelFlags untuk phone tertentu meng-update secara global', async () => {
-    const phone = `6287779${Date.now()}`;
+    const phone = `6287779${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Tenant A Cust', 'tenant-a');
     await customerService.setLabelFlags(phone, { isHoldLabeled: true });
 
@@ -168,7 +168,7 @@ describe('Stage 3: Label & AI Router Interaction (10 Test Cases)', () => {
   });
 
   it('[TC 30] Flag is_admin_labeled dan is_hold_labeled bersamaan → IGNORED_ADMIN mendapat prioritas', async () => {
-    const phone = `6287780${Date.now()}`;
+    const phone = `6287780${Date.now().toString().slice(-7)}`;
     await customerService.getOrCreateCustomer(phone, 'Both Labels Customer', DEFAULT_TENANT_ID);
     await customerService.setLabelFlags(phone, { isAdminLabeled: true, isHoldLabeled: true });
 

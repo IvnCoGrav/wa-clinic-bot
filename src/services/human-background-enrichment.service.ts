@@ -1,5 +1,7 @@
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { StateHandlerContext } from '../state-machine/types';
+import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../utils/google-maps-url-resolver';
+import { parseAdminChatDistanceAndOngkir } from '../utils/admin-chat-distance-parser';
 
 const FILLER_RE = /^(oke\s+makasih|makasih|terima\s+kasih|matur\s+nuwun|thanks|thank\s+you|sip|ok|oke|siap|baik|iya|ya|boleh|nanti\s+ya|sebentar\s+cek\s+dulu|tanya\s+suami|wait|tunggu\s+sebentar)[.!]?$/i;
 
@@ -11,11 +13,70 @@ function isFillerOnly(text: string): boolean {
 }
 
 export class HumanBackgroundEnrichmentService {
+  /**
+   * Passive Background Enrichment untuk pesan inbound dari customer saat mode Human Handling.
+   */
   public enrichAsync(ctx: StateHandlerContext, tenantId?: string): void {
     const tid = tenantId || (ctx.customer as any)?.tenant_id || DEFAULT_TENANT_ID;
     void this.enrichSync(ctx, tid).catch((err: any) => {
       console.warn('[HUMAN ENRICH] async failed:', err?.message || err);
     });
+  }
+
+  /**
+   * Passive Background Enrichment untuk pesan outbound dari Admin CS (ekstraksi jarak/ongkir dari chat CS).
+   */
+  public enrichFromAdminOutboundAsync(text: string, customerId: string, tenantId: string = DEFAULT_TENANT_ID): void {
+    void this.enrichFromAdminOutbound(text, customerId, tenantId).catch((err: any) => {
+      console.warn('[ADMIN OUTBOUND ENRICH] async failed:', err?.message || err);
+    });
+  }
+
+  public async enrichFromAdminOutbound(
+    text: string,
+    customerId: string,
+    tenantId: string = DEFAULT_TENANT_ID
+  ): Promise<{ enriched: boolean; reason: string }> {
+    if (!text || !customerId) return { enriched: false, reason: 'empty_input' };
+
+    const parsed = parseAdminChatDistanceAndOngkir(text);
+    if (!parsed.isConfident && parsed.distanceKm === null && parsed.ongkir === null) {
+      return { enriched: false, reason: 'no_admin_distance_info' };
+    }
+
+    try {
+      const { customerService } = await import('./customer.service');
+      const { deliveryService, getDeliveryTiersFromDb } = await import('./delivery.service');
+      const customer = await customerService.getCustomerById(customerId, tenantId);
+      if (!customer) return { enriched: false, reason: 'customer_not_found' };
+
+      // Jika ada jarak tapi belum ada ongkir, hitung ongkir dari jarak via delivery tiers
+      let effectiveOngkir = parsed.ongkir;
+      if (parsed.distanceKm !== null && effectiveOngkir === null) {
+        try {
+          const tiers = await getDeliveryTiersFromDb(tenantId);
+          const calc = deliveryService.calculateOngkirByDistance(parsed.distanceKm, tiers);
+          effectiveOngkir = Math.max(0, calc.normalPrice - calc.promoDiscount);
+        } catch (_) {}
+      }
+
+      await customerService.updateCustomerLocation(
+        customerId,
+        {
+          distanceKm: parsed.distanceKm !== null ? parsed.distanceKm : (customer.distance_km ?? undefined),
+          ongkir: effectiveOngkir !== null ? effectiveOngkir : (customer.ongkir ?? undefined),
+        },
+        tenantId
+      );
+
+      console.log(
+        `[ADMIN OUTBOUND ENRICH] Captured distance/ongkir for ${customer.phone}: distance=${parsed.distanceKm}km, ongkir=${effectiveOngkir}`
+      );
+      return { enriched: true, reason: 'admin_chat_captured' };
+    } catch (err: any) {
+      console.warn('[ADMIN OUTBOUND ENRICH] failed:', err?.message || err);
+      return { enriched: false, reason: 'error' };
+    }
   }
 
   public async enrichSync(ctx: StateHandlerContext, tenantId: string = DEFAULT_TENANT_ID): Promise<{ enriched: boolean; reason: string }> {
@@ -25,6 +86,7 @@ export class HumanBackgroundEnrichmentService {
     const tid = tenantId || customer?.tenant_id || DEFAULT_TENANT_ID;
 
     try {
+      // 1. PIN LOKASI ASLI WHATSAPP (type: 'location')
       if (incomingMessage?.type === 'location' && incomingMessage.location) {
         const lat = Number(incomingMessage.location.latitude);
         const lng = Number(incomingMessage.location.longitude);
@@ -52,6 +114,37 @@ export class HumanBackgroundEnrichmentService {
         }
       }
 
+      // 2. DETEKSI LINK GOOGLE MAPS DI DALAM CHAT ATAU ALAMAT (maps.app.goo.gl / goo.gl/maps)
+      if (incomingText && incomingText.trim()) {
+        const mapsUrls = extractGoogleMapsUrls(incomingText);
+        if (mapsUrls.length > 0) {
+          const resolvedUrlCoords = await resolveGoogleMapsUrl(mapsUrls[0]);
+          if (resolvedUrlCoords.success && resolvedUrlCoords.lat != null && resolvedUrlCoords.lng != null) {
+            const { geocodingService } = await import('../integrations/google-maps/geocoding');
+            const { deliveryService } = await import('./delivery.service');
+            const { customerService } = await import('./customer.service');
+            const resolved = await geocodingService.reverseGeocode(resolvedUrlCoords.lat, resolvedUrlCoords.lng);
+            const delivery = await deliveryService.calculateDelivery({ lat: resolvedUrlCoords.lat, lng: resolvedUrlCoords.lng }, undefined, tid);
+            await customerService.updateCustomerLocation(customer.id, {
+              kelurahan: resolved.kelurahan,
+              kecamatan: resolved.kecamatan,
+              kota: resolved.kota,
+              lat: resolvedUrlCoords.lat,
+              lng: resolvedUrlCoords.lng,
+              distanceKm: delivery.distanceKm,
+              ongkir: delivery.ongkir,
+              isOutOfCoverage: delivery.isOutOfCoverage,
+              zipcode: resolved.zipcode,
+              isNativePin: true,
+            }, tid);
+            await customerService.markShareLocationSent(customer.id, tid);
+            console.log(`[HUMAN ENRICH] Google Maps link resolved for ${customer.phone}: ${delivery.distanceKm}km ongkir ${delivery.ongkir}`);
+            return { enriched: true, reason: 'google_maps_url' };
+          }
+        }
+      }
+
+      // 3. DETEKSI FORMULIR RESERVASI WHATSAPP
       if (incomingText && incomingText.trim()) {
         const { isReservationFormMessage, parseReservationText } = await import('../utils/reservation-text-parser');
         const isForm = isReservationFormMessage(incomingText);
@@ -100,6 +193,7 @@ export class HumanBackgroundEnrichmentService {
         }
       }
 
+      // 4. DETEKSI TEKS BEBAS ALAMAT / KELURAHAN
       const textForEnrich = incomingText?.trim() || '';
       if (!textForEnrich || isFillerOnly(textForEnrich)) {
         return { enriched: false, reason: 'filler_or_empty' };
