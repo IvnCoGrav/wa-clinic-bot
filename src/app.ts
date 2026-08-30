@@ -84,7 +84,7 @@ export function buildApp() {
 
   // Register Rate Limiting (global protection for public endpoints)
   app.register(rateLimit, {
-    max: 1000,
+    max: process.env.NODE_ENV === 'test' ? 100 : 1000,
     timeWindow: '1 minute',
     allowList: (request) => {
       const url = request.url || '';

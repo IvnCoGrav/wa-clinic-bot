@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
 import { PersonaComposer } from '../../src/slot-engine/persona-composer';
 import { GroundingComposer } from '../../src/slot-engine/grounding-composer';
-import { CustomerSlate } from '../../src/slot-engine/types';
+import { CustomerSlate, ExtractedEntities } from '../../src/slot-engine/types';
 
 describe('Dynamic Architecture & Anti-Hardcode (Single Source of Truth) Test Suite', () => {
   describe('1. Dynamic Service Duration Generator', () => {
@@ -101,7 +101,21 @@ describe('Dynamic Architecture & Anti-Hardcode (Single Source of Truth) Test Sui
         conversationState: 'COLLECTING_SLOTS',
       };
 
-      const grounding = await GroundingComposer.compose(slate, {
+      const extraction: ExtractedEntities = {
+        intents: ['consult_symptom'],
+        locationText: null,
+        streetDetail: null,
+        childAgeMonths: 1,
+        symptoms: ['batuk', 'pilek'],
+        treatmentReferenced: null,
+        preferredDateText: null,
+        preferredTimeText: null,
+        customerName: null,
+        isMedicalEmergency: false,
+        confidenceScore: 0.9,
+      };
+
+      const grounding = await GroundingComposer.compose(slate, extraction, {
         customerInput: 'anak saya batuk pilek usia 1 bulan di alana waru',
       });
 

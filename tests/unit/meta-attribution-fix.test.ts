@@ -67,7 +67,7 @@ describe('Meta Click Catcher, CAPI Queue & Attribution Fixes Unit Tests', () => 
 
     const existingCustomer = {
       id: 'cust-existing-456',
-      phone: '6288235780925',
+      phone: '6288235780926',
       name: 'Ivan Returning',
       is_sandbox_test: false,
     };

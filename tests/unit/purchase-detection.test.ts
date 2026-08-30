@@ -140,6 +140,7 @@ describe('purchase-detection.service', () => {
         purchase_event_sent_at: null,
         purchase_occurred_at: new Date(),
         purchase_review_status: 'pending',
+        purchase_value: 250000,
         customer: { id: 'c1', adClick: { trackingCode: 'TC1' } },
       } as any);
 

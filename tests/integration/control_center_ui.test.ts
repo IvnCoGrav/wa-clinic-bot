@@ -174,6 +174,29 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
     const { conversationService } = await import('../../src/services/conversation.service');
     const { DEFAULT_TENANT_ID } = await import('../../src/config/tenant');
     const { ConversationState } = await import('@prisma/client');
+    const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+    const { ReplyGenerator } = await import('../../src/slot-engine/reply-generator');
+
+    vi.spyOn(EntityExtractor, 'extract').mockResolvedValue({
+      intents: ['greeting'],
+      symptoms: [],
+      locationText: null,
+      streetDetail: null,
+      childAgeMonths: null,
+      treatmentReferenced: null,
+      preferredDateText: null,
+      preferredTimeText: null,
+      customerName: null,
+      isMedicalEmergency: false,
+      confidenceScore: 0.9,
+    });
+
+    vi.spyOn(ReplyGenerator, 'generate').mockResolvedValue({
+      replyText: 'Perkenalkan, saya Bidan Yusi dari Klinik Kala.',
+      confidence: 1,
+      generationLatencyMs: 1,
+      modelUsed: 'mock-model',
+    } as any);
     
     const customer = await customerService.getOrCreateCustomer(testPhone, 'Mock Integration Customer', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
@@ -209,7 +232,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
     expect(resWebhook.statusCode).toBe(200);
     
     // Wait for background worker processing
-    await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     const convAfterWebhook = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
     expect(convAfterWebhook.current_state).toBe(ConversationState.AWAITING_LOCATION);

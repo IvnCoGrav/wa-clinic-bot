@@ -1,4 +1,39 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../../src/integrations/llm/llm-gateway', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/integrations/llm/llm-gateway')>();
+  return {
+    ...original,
+    getLlmEndpointConfig: vi.fn().mockReturnValue({
+      baseUrl: 'https://mock.api.openai.com/v1',
+      apiKey: 'mock-api-key',
+      timeoutMs: 30000,
+      fallbackModel: null,
+    }),
+  };
+});
+
+vi.mock('../../src/integrations/llm/model-fallback', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/integrations/llm/model-fallback')>();
+  return {
+    ...original,
+    callChatCompletionsWithFallback: vi.fn().mockResolvedValue({
+      data: {
+        choices: [{
+          message: {
+            content: 'Untuk usia 17 bulan Bunda, kami rekomendasikan paket *Pijat Bayi Ceria* untuk relaksasi dan kenyamanan si kecil. 😊',
+          },
+        }],
+      },
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      latencyMs: 100,
+      isPrimaryModel: true,
+      modelUsed: 'gpt-4o-mini',
+      retryCount: 0,
+    }),
+  };
+});
+
 import { treatmentCatalogService } from '../../src/services/treatment-catalog.service';
 import { ConversationStateMachine } from '../../src/state-machine/machine';
 import { TypingService } from '../../src/services/typing.service';

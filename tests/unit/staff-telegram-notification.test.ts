@@ -46,7 +46,7 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
       customer: {
         id: 'cust-1',
         name: 'Bunda Sarah',
-        phone: '6281234567890',
+        phone: '6281987654321',
         kelurahan: 'Rungkut Menanggal',
         kecamatan: 'Gunung Anyar',
         kota: 'Surabaya',
@@ -93,8 +93,8 @@ describe('StaffNotificationService — Therapist Telegram Assignment Dispatch & 
     expect(text).toContain('#staff-today');
 
     // 2. MUST NOT leak raw customer phone number (Privacy rule)
-    expect(text).not.toContain('6281234567890');
-    expect(text).not.toContain('081234567890');
+    expect(text).not.toContain('6281987654321');
+    expect(text).not.toContain('081987654321');
     expect(text).not.toContain('wa.me');
   });
 

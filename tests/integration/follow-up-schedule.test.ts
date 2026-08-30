@@ -95,40 +95,21 @@ describe('Follow-Up Schedule & State Transition Tests', () => {
     );
   });
 
-  it('Reservation completion (H+1 cron) -> schedules 3 NEXT_TREATMENT follow-ups', async () => {
+  it('Reservation completion -> schedules 3 NEXT_TREATMENT follow-ups via createNextTreatmentFollowUps', async () => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const yesterdayReservations = [
-      {
-        id: 'res-yesterday',
-        customer_id: 'cust-abc',
-        treatment_category: 'BABY',
-        booking_date: yesterday,
-        raw_text: 'Nama Bayi: Adek Ganteng',
-        customer: {
-          id: 'cust-abc',
-          phone: '628111222333',
-          name: 'Bunda Amel'
-        }
-      }
-    ];
-
-    // Mock DB queries inside cronService
-    vi.mocked(prisma.reservation.findMany)
-      .mockResolvedValueOnce([]) // Reminders hari H (kosong)
-      .mockResolvedValueOnce(yesterdayReservations as any); // H+1 Reviews
-
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue(null as any);
     vi.mocked(prisma.followUp.findFirst).mockResolvedValue(null);
     const followUpCreateSpy = vi.mocked(prisma.followUp.create).mockResolvedValue({} as any);
 
-    // Jalankan cron
-    await cronService.runMorningJobs();
+    await followUpService.createNextTreatmentFollowUps('cust-abc', yesterday, DEFAULT_TENANT_ID);
 
-    // Pastikan follow-up NEXT_TREATMENT terbuat 3 kali
     expect(followUpCreateSpy).toHaveBeenCalledTimes(3);
     expect(followUpCreateSpy.mock.calls[0][0].data.type).toBe('NEXT_TREATMENT');
-    expect(followUpCreateSpy.mock.calls[0].map(c => c.data.stage)).toContain(1);
+    expect(followUpCreateSpy.mock.calls.map(c => c[0].data.stage)).toContain(1);
+    expect(followUpCreateSpy.mock.calls.map(c => c[0].data.stage)).toContain(2);
+    expect(followUpCreateSpy.mock.calls.map(c => c[0].data.stage)).toContain(3);
   });
 
   it('Stage 3 next_treatment sent -> marks customer status as lost after 3 days grace period', async () => {

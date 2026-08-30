@@ -4,6 +4,39 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & Fix — Automatic Distance & Ongkir Capture: Passive Background Enrichment on Human Handling, Google Maps URL Resolver, Admin Outbound Chat Distance Parser, & Lifecycle Auto-Calculation (`human-background-enrichment.service.ts`, `google-maps-url-resolver.ts`, `admin-chat-distance-parser.ts`, `reservation-lifecycle.service.ts`, `webhook.route.ts`, `reservations.subroute.ts`) (2026-08-30)
+
+- **Latar Belakang & Gejala:**
+  - Kolom jarak (`distance_km`) dan ongkir seringkali tidak terisi (bernilai `null` / `0 km`) pada data reservasi dan profil pelanggan, khususnya saat percakapan ditangani secara manual oleh Admin CS (*Human Handling*) atau saat percakapan diberi label `hold` / `admin`.
+  - Ketika customer mengirimkan *Shareloc WhatsApp*, tautan Google Maps (`maps.app.goo.gl/xxx`), atau mengetikkan alamat rumah saat Admin CS sedang aktif mengobrol, sistem mem-bypass seluruh proses ekstraksi lokasi agar tidak mengirim balasan otomatis.
+  - Ketika Admin CS menyebutkan estimasi jarak di chat (mis. *"Jika dilihat dari jaraknya kurang lebih 16km... ongkir menjadi 20.000 saja"*), angka jarak yang sudah dicek manual oleh CS tersebut tidak tersimpan ke database.
+  - Saat form reservasi masuk atau dibuat secara manual di admin dashboard, sistem hanya menyimpan string nama kelurahan & kecamatan tanpa memicu penghitungan jarak ke klinik.
+
+- **Akar Masalah (Root Cause):**
+  1. **Webhook Inbound Human Handling Bypass**: Pada `webhook.route.ts:L1142`, percakapan dengan `is_human_handling = true` mem-bypass seluruh State Machine & Slot Engine dan tidak memanggil `HumanBackgroundEnrichmentService`. Akibatnya, Pin GPS WA, link maps, dan alamat teks tidak diproses di latar belakang.
+  2. **Shortlink Google Maps Belum Di-Resolve**: Tautan shareloc `maps.app.goo.gl` atau `goo.gl/maps` dikirim mentah ke pencarian teks alih-alih mengekstrak koordinat GPS `lat, lng` dari URL *redirect*-nya.
+  3. **Outbound Admin Chat Untapped**: Pesan keluar yang dikirim oleh Admin CS tidak diparsing untuk menangkap angka jarak dan tarif ongkir yang telah dikonfirmasi ke customer.
+  4. **Reservation Lifecycle Static Storage**: `onReservationCreated` hanya menyimpan teks kelurahan/kecamatan tanpa menjalankan fungsi geocoding/delivery calculation saat `distance_km` customer masih kosong.
+
+- **Solusi & Perbaikan Komprehensif:**
+  1. **Google Maps Shortlink & URL Coordinate Resolver (`google-maps-url-resolver.ts`)**:
+     - Modul utilitas deterministik untuk mengekstrak koordinat presisi dari format URL Google Maps apapun (`maps.app.goo.gl`, `goo.gl/maps`, `google.com/maps/@lat,lng`, `?q=lat,lng`) dengan dukungan HTTP redirect follower ber-timeout aman (0 Token LLM).
+  2. **Admin Outbound Chat Distance & Ongkir Parser (`admin-chat-distance-parser.ts`)**:
+     - Parser teks deterministik untuk menangkap angka jarak (mis. *"kurang lebih 16km"*, *"jarak 8.5 km"*) dan tarif ongkir promo/normal (mis. *"ongkir menjadi 20.000 saja"*, *"tambahan ongkir 25.000"*) dari chat keluar Admin CS (0 Token LLM).
+  3. **Passive Background Enrichment on Inbound & Outbound Webhook (`human-background-enrichment.service.ts`, `webhook.route.ts`)**:
+     - Mengaktifkan `enrichAsync` pada setiap pesan masuk saat mode *Human Handling* (Pin GPS WA, link Google Maps, form reservasi, teks alamat). Bot **tetap diam (silent)** tanpa auto-reply, namun database jarak & ongkir customer langsung diperbarui.
+     - Mengaktifkan `enrichFromAdminOutboundAsync` pada setiap pesan keluar dari Admin CS untuk menyadap jarak & ongkir yang diketik oleh admin.
+  4. **Reservation Lifecycle Background Auto-Geocoding (`reservation-lifecycle.service.ts`, `reservations.subroute.ts`)**:
+     - Pada saat reservasi dibuat/diparsing, jika customer belum memiliki `distance_km`, sistem otomatis menjalankan kalkulasi jarak & ongkir di latar belakang menggunakan data alamat/kelurahan/kecamatan yang tersedia.
+
+- **Pengujian & Verifikasi:**
+  - Unit tests `tests/unit/google-maps-url-resolver.test.ts`: **PASS (5/5 tests passed)**.
+  - Unit tests `tests/unit/admin-chat-distance-parser.test.ts`: **PASS (4/4 tests passed)**.
+  - Unit tests `tests/unit/human-background-enrichment.test.ts`: **PASS (3/3 tests passed)**.
+  - Unit tests `tests/unit/treatment-string-and-tier-calc.test.ts`: **PASS (7/7 tests passed)**.
+  - Backend TypeScript build (`npm run build`): **PASS (0 errors)**.
+  - Frontend Admin Dashboard build (`npm run build` in `packages/admin-dashboard`): **PASS (0 errors)**.
+
 #### Fix & UI/UX Overhaul — Impeccable Mobile Experience for Reservations & Today Treatments: Past Slot Filtering, Dual Android/iOS Camera Triggers, Smart GPS/Maps Link Parser, Instant Client-Side Image Compression (<200KB), Live GPS Canvas Watermarking, Always-Available Google Maps Navigation, & Mobile Action Toolbar Redesign (`TodayTreatments.tsx`, `StaffToday.tsx`, `CreateReservationModal.tsx`, `CustomerEditForm.tsx`, `Reservations.tsx`, `imageCompressor.ts`, `imageWatermark.ts`, `geoUtils.ts`, `media.service.ts`) (2026-08-30)
 
 - **Latar Belakang & 8 Kasus Temuan User:**

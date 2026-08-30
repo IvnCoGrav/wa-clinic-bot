@@ -30,7 +30,7 @@ export interface OnReservationCreatedParams {
 
 export class ReservationLifecycleService {
   public async onReservationCreated(params: OnReservationCreatedParams): Promise<void> {
-    const { customerId, reservationId, tenantId, chatId, babies = [], customerName, kecamatan, kota, kelurahan } = params;
+    const { customerId, reservationId, tenantId, chatId, babies = [], customerName, kecamatan, kota, kelurahan, address } = params;
 
     // 0. Update nama customer & alamat dari form reservasi ke database (agar sinkron ke Google Contacts & CAPI)
     try {
@@ -45,12 +45,67 @@ export class ReservationLifecycleService {
         }
       }
 
-      if (kecamatan || kota || kelurahan) {
+      if (kecamatan || kota || kelurahan || address) {
         await customerService.updateCustomerLocation(customerId, {
           kecamatan: kecamatan?.trim() || undefined,
           kota: kota?.trim() || undefined,
           kelurahan: kelurahan?.trim() || undefined,
         }, tenantId).catch(() => {});
+
+        // Background Auto-Distance Calculation jika customer belum memiliki distance_km
+        const currentCust = await customerService.getCustomerById(customerId, tenantId);
+        if (currentCust && (currentCust.distance_km == null || currentCust.lat == null)) {
+          void (async () => {
+            try {
+              const fullAddressStr = [kelurahan, address, kecamatan, kota].filter(Boolean).join(', ');
+              const { extractGoogleMapsUrls, resolveGoogleMapsUrl } = await import('../utils/google-maps-url-resolver');
+              const mapsUrls = extractGoogleMapsUrls(fullAddressStr);
+              let resolvedLat: number | undefined;
+              let resolvedLng: number | undefined;
+              let resolvedKel = kelurahan?.trim();
+              let resolvedKec = kecamatan?.trim();
+              let resolvedKota = kota?.trim();
+
+              if (mapsUrls.length > 0) {
+                const mapsRes = await resolveGoogleMapsUrl(mapsUrls[0]);
+                if (mapsRes.success && mapsRes.lat && mapsRes.lng) {
+                  resolvedLat = mapsRes.lat;
+                  resolvedLng = mapsRes.lng;
+                }
+              }
+
+              if (!resolvedLat || !resolvedLng) {
+                const { geocodingService } = await import('../integrations/google-maps/geocoding');
+                const geo = await geocodingService.geocodeText(fullAddressStr);
+                if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+                  resolvedLat = geo.lat;
+                  resolvedLng = geo.lng;
+                  resolvedKel = resolvedKel || geo.kelurahan;
+                  resolvedKec = resolvedKec || geo.kecamatan;
+                  resolvedKota = resolvedKota || geo.kota;
+                }
+              }
+
+              if (resolvedLat && resolvedLng) {
+                const { deliveryService } = await import('./delivery.service');
+                const delivery = await deliveryService.calculateDelivery({ lat: resolvedLat, lng: resolvedLng }, undefined, tenantId);
+                await customerService.updateCustomerLocation(customerId, {
+                  kelurahan: resolvedKel,
+                  kecamatan: resolvedKec,
+                  kota: resolvedKota,
+                  lat: resolvedLat,
+                  lng: resolvedLng,
+                  distanceKm: delivery.distanceKm,
+                  ongkir: delivery.ongkir,
+                  isOutOfCoverage: delivery.isOutOfCoverage,
+                }, tenantId);
+                console.log(`[RESERVATION LIFECYCLE] Auto-resolved distance for customer ${customerId}: ${delivery.distanceKm} km, ongkir: ${delivery.ongkir}`);
+              }
+            } catch (err: any) {
+              console.warn('[RESERVATION LIFECYCLE] Distance resolution failed:', err?.message || err);
+            }
+          })();
+        }
       }
     } catch (err: any) {
       console.warn('[RESERVATION LIFECYCLE] updateCustomerName/Location failed:', err.message);

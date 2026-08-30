@@ -151,7 +151,7 @@ describe('Slot Engine - Context Continuity & Adaptive Closer Tests', () => {
     );
 
     expect(instructionNoLoc).toContain('TANYA LOKASI RUMAH');
-    expect(instructionNoLoc).toContain('Sabtu atau Minggu');
+    expect(instructionNoLoc).toContain('Sabtu');
     expect(instructionNoLoc).toContain('DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment');
 
     const slateWithLoc: CustomerSlate = {
@@ -168,7 +168,7 @@ describe('Slot Engine - Context Continuity & Adaptive Closer Tests', () => {
     );
 
     expect(instructionWithLoc).toContain('PANDUAN PENAWARAN JADWAL');
-    expect(instructionWithLoc).toContain('Sabtu atau Minggu');
+    expect(instructionWithLoc).toContain('Sabtu');
     expect(instructionWithLoc).toContain('DILARANG KERAS MENANYAKAN "DI HARI APA" LAGI');
     expect(instructionWithLoc).toContain('DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment');
   });

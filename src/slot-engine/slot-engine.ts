@@ -24,6 +24,26 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   const initialSlate = SlateStore.hydrateSlate(ctx);
 
   try {
+    // 0. Cek Global Bot Deactivation
+    const { AiModelConfigService } = await import('../config/ai-models.config');
+    const isSandboxTest = Boolean(customer.is_sandbox_test);
+    if (!AiModelConfigService.isBotActive(tenantId) && !conversation.is_human_handling && !isSandboxTest) {
+      console.log(`[GLOBAL BOT DEACTIVATED] Bypassing bot responder and routing customer ${customer.phone} directly to human handling.`);
+      await conversationService.escalateToHumanHandling(
+        conversation,
+        customer.phone,
+        'Global bot disabled',
+        tenantId,
+        'global_bot_disabled'
+      );
+      conversation.is_human_handling = true;
+      conversation.current_state = ConversationState.HUMAN_HANDLING;
+      return {
+        nextState: ConversationState.HUMAN_HANDLING,
+        shouldSendReply: false,
+        isHumanHandling: true,
+      };
+    }
 
   // 1a. GERBANG UTAMA 📋: FORMULIR RESERVASI MASUK
   // Jika customer mengirimkan formulir reservasi yang sudah diisi, parse datanya, simpan ke database,

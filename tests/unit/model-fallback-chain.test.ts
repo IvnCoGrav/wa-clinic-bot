@@ -34,8 +34,8 @@ describe('getFallbackChain', () => {
     expect(getFallbackChain()).toEqual(['deepseek-v4-flash', 'qwen3.7-flash-2026-07-15']);
   });
 
-  it('env kosong → rantai kosong (perilaku legacy fallback tunggal)', () => {
-    expect(getFallbackChain()).toEqual([]);
+  it('env kosong → DEFAULT_FALLBACK_CHAIN (bukan rantai kosong)', () => {
+    expect(getFallbackChain()).toEqual(['MiniMax-M2.7-highspeed', 'mimo-v2.5', 'qwen3.7-flash-2026-07-15', 'deepseek-v4-flash']);
   });
 });
 
@@ -61,12 +61,14 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       model: 'MiniMax-M2.7-highspeed',
       fallbackModel: 'deepseek-v4-flash',
       timeoutMs: 12000,
+      transientRetry: { maxRetries: 2 },
       payload: { messages: [] },
     });
 
     expect(res.usedFallback).toBe(true);
     expect(res.model).toBe('deepseek-v4-flash');
     expect(res.baseUrl).toBe('https://ai.sumopod.com/v1');
+    // primary: 1 initial + 2 transient retry = 3, then chain deepseek = 1
     expect(postSpy).toHaveBeenCalledTimes(4);
     const chainCall = postSpy.mock.calls[3];
     expect(String(chainCall[0])).toBe('https://ai.sumopod.com/v1/chat/completions');
@@ -86,6 +88,7 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       model: 'MiniMax-M2.7-highspeed',
       fallbackModel: 'deepseek-v4-flash',
       timeoutMs: 12000,
+      transientRetry: { maxRetries: 2 },
       payload: { messages: [] },
     });
 
@@ -129,6 +132,7 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       model: 'MiniMax-M2.7-highspeed',
       fallbackModel: 'deepseek-v4-flash',
       timeoutMs: 12000,
+      transientRetry: { maxRetries: 2 },
       payload: { messages: [] },
     });
 
@@ -150,6 +154,7 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       model: 'MiniMax-M2.7-highspeed',
       fallbackModel: 'deepseek-v4-flash',
       timeoutMs: 12000,
+      transientRetry: { maxRetries: 2 },
       payload: { messages: [] },
     });
 
@@ -171,12 +176,10 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
         model: 'MiniMax-M2.7-highspeed',
         fallbackModel: 'deepseek-v4-flash',
         timeoutMs: 12000,
+        transientRetry: { maxRetries: 2 },
         payload: { messages: [] },
       })
     ).rejects.toThrow('timeout');
-    // primary (3×: 1 + 2 retry transient) + deepseek (1×) + qwen (1×) + external (1×) = 6.
-    // Transient retry HANYA untuk primary (poin Fase 3.3: 429/5xx/timeout tidak langsung
-    // menggagalkan chain) — model chain tetap 1 percobaan masing-masing.
     expect(axios.post).toHaveBeenCalledTimes(6);
   });
 
@@ -248,6 +251,7 @@ describe('callChatCompletionsWithFallback — rantai 4-lapis', () => {
       model: 'MiniMax-M2.7-highspeed',
       fallbackModel: 'deepseek-v4-flash',
       timeoutMs: 12000,
+      transientRetry: { maxRetries: 2 },
       payload: { messages: [], response_format: { type: 'json_object' } },
     });
 

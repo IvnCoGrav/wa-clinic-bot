@@ -438,6 +438,11 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           tenantId: DEFAULT_TENANT_ID,
           chatId: parsedCustomer?.phone ? `${parsedCustomer.phone}@c.us` : '',
           babies: parsed.babies || [],
+          customerName: parsed.name,
+          kecamatan: parsed.kec,
+          kota: parsed.kota,
+          kelurahan: parsed.address,
+          address: parsed.address,
         });
 
         await auditService.logAdminAction({
@@ -556,6 +561,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           tenantId: DEFAULT_TENANT_ID,
           chatId: `${customer.phone}@c.us`,
           babies: (babies || []).map((b) => ({ name: b.name, age: b.ageText || '' })),
+          customerName: customer.name,
+          kecamatan: customer.kecamatan || undefined,
+          kota: customer.kota || undefined,
+          kelurahan: customer.kelurahan || undefined,
         });
 
         if (assignedStaffId) {

@@ -110,7 +110,7 @@ Terimakasih.  ☺️`;
     expect(extracted.address).toBe('Jln gang sempati 158c, kec. Gedangan, kec. Gedangan, kab. Sidoarjo');
     expect(extracted.childName).toBe('Arviano Rizqi Al-Fatih');
     expect(extracted.childAge).toBe('1 bulan');
-    expect(extracted.treatmentName).toBe('pijat bayi pulih ceria & sinar moksa');
+    expect(extracted.treatmentName).toBe('pijat bayi pulih ceria + sinar moksa');
     expect(extracted.treatmentPrice).toBe(80000);
     expect(extracted.distanceKm).toBe(6.8);
     expect(extracted.ongkir).toBe(15000);
@@ -203,7 +203,7 @@ Terimakasih.  ☺️`;
 
     expect(extracted.bundaName).toBe('Vita'); // Cleaned, NOT "Vita Sidoarjo"
     expect(extracted.treatmentCategory).toBe('BABY'); // NOT MOMS!
-    expect(extracted.treatmentName).toBe('pijat bayi pulih ceria & sinar moksa');
+    expect(extracted.treatmentName).toBe('pijat bayi pulih ceria + sinar moksa');
     expect(extracted.childName).toBe('Arviano Rizqi Al-Fatih');
     expect(extracted.childAge).toBe('1 bulan');
     expect(extracted.address).toContain('Jln gang sempati 158c');

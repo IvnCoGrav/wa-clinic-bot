@@ -53,7 +53,7 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     } as any;
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const phone = `628500${Date.now()}`;
+    const phone = `628500${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Endpoint', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -72,7 +72,7 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
   });
 
   it('GET /api/admin/live-chat/conversations & :id/messages menampilkan thread dengan sender ADMIN', async () => {
-    const phone = `628600${Date.now()}`;
+    const phone = `628600${Date.now().toString().slice(-7)}`;
     const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Thread', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -115,13 +115,15 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
   });
 
   it('GET /api/admin/live-chat/conversations?mode=real|sandbox memisahkan chat test dari WhatsApp asli', async () => {
-    const phoneReal = `628700${Date.now()}`;
-    const phoneSand = `628800${Date.now()}`;
+    const phoneReal = `628700${Date.now().toString().slice(-7)}`;
+    const phoneSand = `628800${Date.now().toString().slice(-7)}`;
     const customerReal = await customerService.getOrCreateCustomer(phoneReal, 'Bunda Mode Real', DEFAULT_TENANT_ID);
     const convReal = await conversationService.getOrCreateConversation(customerReal.id, DEFAULT_TENANT_ID);
+    await messageService.logMessage({ tenantId: DEFAULT_TENANT_ID, conversationId: convReal.id, direction: 'INBOUND', content: 'Test real' });
     const customerSand = await customerService.getOrCreateCustomer(phoneSand, 'Bunda Mode Sandbox', DEFAULT_TENANT_ID);
     customerSand.is_sandbox_test = true; // memory store fallback (DB offline di test)
     const convSand = await conversationService.getOrCreateConversation(customerSand.id, DEFAULT_TENANT_ID);
+    await messageService.logMessage({ tenantId: DEFAULT_TENANT_ID, conversationId: convSand.id, direction: 'INBOUND', content: 'Test sandbox' });
 
     const allRes = await app.inject({
       method: 'GET',
@@ -160,7 +162,7 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     } as any;
     createTestGateway(fake, DEFAULT_TENANT_ID);
 
-    const customer = await customerService.getOrCreateCustomer(`628900${Date.now()}`, 'Bunda Sandbox Block', DEFAULT_TENANT_ID);
+    const customer = await customerService.getOrCreateCustomer(`628900${Date.now().toString().slice(-7)}`, 'Bunda Sandbox Block', DEFAULT_TENANT_ID);
     customer.is_sandbox_test = true;
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
@@ -246,7 +248,7 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
   });
 
   it('POST /api/admin/live-chat/conversations/:id/suggest-reply menghasilkan draf saran AI', async () => {
-    const phone = `628900${Date.now()}`;
+    const phone = `628900${Date.now().toString().slice(-7)}`;
     const cust = await customerService.getOrCreateCustomer(phone, 'Bunda AI Test', DEFAULT_TENANT_ID);
     const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
     const res = await app.inject({
@@ -262,7 +264,7 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
   });
 
   it('GET /api/admin/customers/:id mengembalikan detail customer & metrik', async () => {
-    const phone = `628901${Date.now()}`;
+    const phone = `628901${Date.now().toString().slice(-7)}`;
     const cust = await customerService.getOrCreateCustomer(phone, 'Bunda Detail Test', DEFAULT_TENANT_ID);
     const res = await app.inject({
       method: 'GET',

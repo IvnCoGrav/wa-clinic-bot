@@ -60,7 +60,7 @@ describe('ad-attribution.service Unit Tests', () => {
     const result = await matchAdClickAndFireContact({
       bodyText: 'Promo[a7] halo min',
       isNewCustomerRecord: false,
-      customer: { id: 'cust_existing', phone: '628123456789' },
+      customer: { id: 'cust_existing', phone: '628123456790' },
       tenantId: 'default-tenant',
     });
 
@@ -87,7 +87,7 @@ describe('ad-attribution.service Unit Tests', () => {
     const result = await matchAdClickAndFireContact({
       bodyText: 'Halo min, mau tanya lagi',
       isNewCustomerRecord: false,
-      customer: { id: 'cust_existing', phone: '628123456789' },
+      customer: { id: 'cust_existing', phone: '628123456792' },
       tenantId: 'default-tenant',
     });
 
@@ -100,7 +100,7 @@ describe('ad-attribution.service Unit Tests', () => {
     const result = await matchAdClickAndFireContact({
       bodyText: 'Halo min, mau tanya price list',
       isNewCustomerRecord: true,
-      customer: { id: 'cust_organic', phone: '628123456789' },
+      customer: { id: 'cust_organic', phone: '628123456791' },
       tenantId: 'default-tenant',
     });
 
@@ -127,7 +127,7 @@ describe('ad-attribution.service Unit Tests', () => {
     const result = await matchAdClickAndFireContact({
       bodyText: 'Halo',
       isNewCustomerRecord: true,
-      customer: { id: 'cust_ctwa', phone: '628123456789' },
+      customer: { id: 'cust_ctwa', phone: '628123456793' },
       tenantId: 'default-tenant',
       referral: {
         ctwaClid: 'CTWA_CLID_999',
@@ -146,7 +146,7 @@ describe('ad-attribution.service Unit Tests', () => {
         matchedAt: expect.any(Date),
         customerId: 'cust_ctwa',
         tenant_id: 'default-tenant',
-        phone: '628123456789',
+        phone: '628123456793',
       },
     });
   });
