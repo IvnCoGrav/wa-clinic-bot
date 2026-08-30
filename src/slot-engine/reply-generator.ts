@@ -129,7 +129,10 @@ export class ReplyGenerator {
       });
 
       const responseData = callResult.data;
-      const rawReply = responseData?.choices?.[0]?.message?.content || '';
+      const rawReply =
+        responseData?.choices?.[0]?.message?.content?.trim() ||
+        responseData?.choices?.[0]?.message?.reasoning_content?.trim() ||
+        '';
       if (!rawReply || rawReply.trim().length === 0) {
         throw new Error('Empty response content from LLM choices');
       }
@@ -143,7 +146,7 @@ export class ReplyGenerator {
         !finalReply.toLowerCase().includes('perkenalkan')
       ) {
         const { TEMPLATES } = await import('../config/persona');
-        const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+        const { hasIslamicGreeting } = await import('../utils/islamic-greeting');
         const { stripDuplicateTurn0Greeting } = await import('../utils/language-sanitizer');
         const isIslamic = hasIslamicGreeting(context?.customerInput || '');
         const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
@@ -166,13 +169,22 @@ export class ReplyGenerator {
 
       try {
         const { recordLlmExecution } = await import('../utils/llm-execution-logger');
+        const reasoningContent =
+          responseData?.choices?.[0]?.message?.reasoning_content ||
+          responseData?.choices?.[0]?.message?.reasoning ||
+          null;
+
+        const displayReasoning = reasoningContent
+          ? `[AI CoT Reasoning (${callResult.model})]:\n${reasoningContent}\n\n[Summary]: Single-pass reply generated [Model: ${modelSelection.modelName} (${modelSelection.reason})] | Grounding facts: [Loc: ${grounding.deliveryFacts?.kelurahan || '-'}, Age: ${slate.childAgeMonths} bln]`
+          : `Single-pass reply generated [Model: ${modelSelection.modelName} (${modelSelection.reason})] | Grounding facts: [Loc: ${grounding.deliveryFacts?.kelurahan || '-'}, Age: ${slate.childAgeMonths} bln]`;
+
         recordLlmExecution({
           flowType: 'SLOT_GENERATOR',
           customerPhone: context?.customerPhone || 'unknown',
           customerInput: context?.customerInput || '',
           promptPayload: { systemPrompt, userContent },
-          reasoning: `Single-pass reply generated [Model: ${modelSelection.modelName} (${modelSelection.reason})] | Grounding facts: [Loc: ${grounding.deliveryFacts?.kelurahan || '-'}, Age: ${slate.childAgeMonths} bln]`,
-          rawReasoning: rawReply,
+          reasoning: displayReasoning,
+          rawReasoning: reasoningContent || rawReply,
           groundTruthUsed: grounding,
           finalReply,
           modelUsed: callResult.model || modelSelection.modelName,

@@ -125,6 +125,10 @@ const faqs = [
   {
     "question": "Bagaimana penanganan lubang tindikan telinga bayi yang posisinya tidak pas (ketinggian)?",
     "answer": "Jika posisi tindikan kurang pas, anting yang bersangkutan (misal kanan) bisa segera dilepas dulu agar lubangnya menutup kembali secara alami. Pastikan mencuci tangan bersih dan berikan antiseptik di daun telinga bayi agar terhindar dari infeksi. Tindik ulang dapat dibetulkan pada kunjungan berikutnya."
+  },
+  {
+    "question": "Apakah bayi yang baru saja divaksin / imunisasi (seperti BCG, Polio, DPT) boleh langsung dipijat?",
+    "answer": "Setelah vaksin atau imunisasi (seperti BCG, Polio, DPT, dll.), si kecil sebaiknya diistirahatkan selama 2–3 hari terlebih dahulu sebelum dipijat, Bunda. Hal ini bertujuan untuk menghindari penekanan pada area bekas suntikan serta mengantisipasi reaksi pasca imunisasi (KIPI) seperti demam atau rewel. Setelah 2–3 hari dan kondisi si kecil sudah fit serta tidak demam, barulah sangat aman dan nyaman untuk dipijat oleh Bidan."
   }
 ];
 

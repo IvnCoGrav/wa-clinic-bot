@@ -27,10 +27,13 @@ import {
   CheckCircle2,
   Receipt,
   Percent,
+  BookmarkPlus,
 } from 'lucide-react';
 import { ClinicServiceItem, StaffOption, QuickSlotTarget } from './types';
 import { Reservation } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/deliveryTierCalculator';
+import { useFormDraft } from '../../hooks/useFormDraft';
 
 const CLINIC_COORDS = {
   lat: -7.34886,
@@ -143,8 +146,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   // Multi-Treatment Selection (Supports multiple instances of the same treatment for 2 children)
   const [selectedTreatments, setSelectedTreatments] = useState<SelectedTreatmentItem[]>([]);
   const [customServiceName, setCustomServiceName] = useState('');
-  const [customServiceDuration, setCustomServiceDuration] = useState(60);
-  const [customServicePrice, setCustomServicePrice] = useState(0);
+  const [customServiceDuration, setCustomServiceDuration] = useState<number | ''>(60);
+  const [customServicePrice, setCustomServicePrice] = useState<number | ''>(0);
   const [customCategory, setCustomCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
   const [customIsAddon, setCustomIsAddon] = useState(false);
   const [showCustomServiceInput, setShowCustomServiceInput] = useState(false);
@@ -162,8 +165,22 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [notes, setNotes] = useState('');
 
   // Payment Breakdown & Discounts
-  const [ongkir, setOngkir] = useState<number>(0);
-  const [discount, setDiscount] = useState<number>(0);
+  const [ongkir, setOngkir] = useState<number | ''>(0);
+  const [discount, setDiscount] = useState<number | ''>(0);
+
+  // Delivery Tiers State (SaaS-Ready from DB)
+  const [deliveryTiers, setDeliveryTiers] = useState<DeliveryTierItem[]>([]);
+
+  useEffect(() => {
+    apiRequest('/api/admin/delivery-tiers')
+      .then((res) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setDeliveryTiers(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Live Reservations Synchronizer
   const [loadedReservations, setLoadedReservations] = useState<Reservation[]>([]);
@@ -176,6 +193,61 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [showBookedSlotsModal, setShowBookedSlotsModal] = useState(false);
   const [recommendations, setRecommendations] = useState<SlotRecommendation[]>([]);
   const [hasCalculatedRecommendations, setHasCalculatedRecommendations] = useState(false);
+
+  // Form Draft Persistence Hook (1-hour TTL)
+  const currentFormPayload = useMemo(() => ({
+    customerId,
+    customerSearch,
+    selectedCustomerInfo,
+    treatmentCategory,
+    bookingDate,
+    bookingTime,
+    assignedStaffId,
+    status,
+    notes,
+    ongkir,
+    discount,
+    babies,
+    selectedTreatments,
+  }), [
+    customerId,
+    customerSearch,
+    selectedCustomerInfo,
+    treatmentCategory,
+    bookingDate,
+    bookingTime,
+    assignedStaffId,
+    status,
+    notes,
+    ongkir,
+    discount,
+    babies,
+    selectedTreatments,
+  ]);
+
+  const handleRestoreDraft = (restored: any) => {
+    if (!restored) return;
+    if (restored.customerId !== undefined) setCustomerId(restored.customerId);
+    if (restored.customerSearch !== undefined) setCustomerSearch(restored.customerSearch);
+    if (restored.selectedCustomerInfo !== undefined) setSelectedCustomerInfo(restored.selectedCustomerInfo);
+    if (restored.treatmentCategory !== undefined) setTreatmentCategory(restored.treatmentCategory);
+    if (restored.bookingDate !== undefined) setBookingDate(restored.bookingDate);
+    if (restored.bookingTime !== undefined) setBookingTime(restored.bookingTime);
+    if (restored.assignedStaffId !== undefined) setAssignedStaffId(restored.assignedStaffId);
+    if (restored.status !== undefined) setStatus(restored.status);
+    if (restored.notes !== undefined) setNotes(restored.notes);
+    if (restored.ongkir !== undefined) setOngkir(restored.ongkir);
+    if (restored.discount !== undefined) setDiscount(restored.discount);
+    if (restored.babies !== undefined) setBabies(restored.babies);
+    if (restored.selectedTreatments !== undefined) setSelectedTreatments(restored.selectedTreatments);
+  };
+
+  const { hasDraft, draftTimeAgo, saveDraftManually, restoreDraft, discardDraft } = useFormDraft(
+    'create_reservation',
+    currentFormPayload,
+    handleRestoreDraft,
+    { enabled: isOpen }
+  );
 
   // Load clinic services catalog
   useEffect(() => {
@@ -294,12 +366,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       );
     }
 
-    // Auto calculate & fill ongkir from customer profile / distance
+    // Auto calculate & fill ongkir from customer profile / distance via DB delivery tiers
     if (c.ongkir !== undefined && c.ongkir !== null && !isNaN(Number(c.ongkir))) {
       setOngkir(Number(c.ongkir));
     } else if (c.distance_km || c.distanceKm) {
       const dist = Number(c.distance_km || c.distanceKm);
-      setOngkir(dist <= 3.0 ? 0 : Math.round((dist - 3.0) * 3000));
+      const calc = calculateOngkirFromTiers(dist, deliveryTiers);
+      setOngkir(calc.netOngkir);
     }
   };
 
@@ -399,8 +472,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       serviceId: `custom-${Date.now()}`,
       name: customServiceName.trim(),
       category: customCategory,
-      durationMinutes: Math.max(10, customServiceDuration),
-      price: customServicePrice,
+      durationMinutes: Math.max(10, Number(customServiceDuration) || 60),
+      price: Number(customServicePrice) || 0,
       isAddon,
       assignedChildIndex: 0,
     };
@@ -738,6 +811,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       });
 
       toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
+      discardDraft(true);
       onSuccess(res?.reservation || res?.data || res);
       onClose();
     } catch (err: any) {
@@ -794,6 +868,34 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             Mendukung multi-treatment, reservasi 2 anak (kembar/kakak-adik), add-on tanpa buffer (moksa), dan rekomendasi jam
           </p>
         </div>
+
+        {/* Draft Restore Notification Banner */}
+        {hasDraft && (
+          <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 animate-in fade-in shrink-0">
+            <div className="flex items-center space-x-2">
+              <FileText size={15} className="text-amber-600 shrink-0" />
+              <span>
+                Ditemukan draf reservasi yang tersimpan <strong>{draftTimeAgo}</strong>.
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 shrink-0">
+              <button
+                type="button"
+                onClick={restoreDraft}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-xs transition cursor-pointer"
+              >
+                Pulihkan
+              </button>
+              <button
+                type="button"
+                onClick={() => discardDraft(false)}
+                className="px-2 py-1 text-amber-800 hover:text-rose-600 text-xs font-semibold cursor-pointer"
+              >
+                Buang
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overflow-x-hidden pr-1 flex-1 w-full max-w-full touch-pan-y overscroll-contain">
@@ -915,8 +1017,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     <input
                       type="number"
                       value={customServiceDuration}
-                      onChange={(e) => setCustomServiceDuration(Number(e.target.value))}
-                      placeholder="Durasi (mnt)"
+                      onChange={(e) => setCustomServiceDuration(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="60"
                       className="w-20 p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21]"
                     />
                     <span className="text-xs text-[#667781]">mnt</span>
@@ -1488,9 +1590,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <input
                   type="number"
                   value={ongkir}
-                  onChange={(e) => setOngkir(Number(e.target.value) || 0)}
+                  onChange={(e) => setOngkir(e.target.value === '' ? '' : Number(e.target.value))}
                   step={5000}
                   min={0}
+                  placeholder="0"
                   className="w-full px-3 py-1.5 bg-white border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:border-[#008069] focus:outline-none transition font-mono"
                 />
               </div>
@@ -1504,9 +1607,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 <input
                   type="number"
                   value={discount}
-                  onChange={(e) => setDiscount(Number(e.target.value) || 0)}
+                  onChange={(e) => setDiscount(e.target.value === '' ? '' : Number(e.target.value))}
                   step={5000}
                   min={0}
+                  placeholder="0"
                   className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 focus:border-rose-500 focus:outline-none transition font-mono"
                 />
               </div>
@@ -1514,35 +1618,33 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
             {/* Quick Shortcuts */}
             <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-[#e9edef]/80 text-[10px]">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[#8696a0] font-semibold">Ongkir:</span>
                 <button
                   type="button"
                   onClick={() => setOngkir(0)}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    ongkir === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-50'
+                    Number(ongkir) === 0 ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-50'
                   }`}
                 >
                   Free (0)
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOngkir(10000)}
-                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                    ongkir === 10000 ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
-                  }`}
-                >
-                  10.000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOngkir(15000)}
-                  className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                    ongkir === 15000 ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
-                  }`}
-                >
-                  15.000
-                </button>
+                {deliveryTiers.filter(t => (Number(t.fee) - Number(t.promoDiscount || 0)) > 0).map(t => {
+                  const net = Math.max(0, Number(t.fee) - Number(t.promoDiscount || 0));
+                  return (
+                    <button
+                      key={String(t.id || t.maxDist)}
+                      type="button"
+                      onClick={() => setOngkir(net)}
+                      className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
+                        Number(ongkir) === net ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                      }`}
+                      title={`Tier s/d ${t.maxDist} km`}
+                    >
+                      {net.toLocaleString('id-ID')}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -1551,7 +1653,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   type="button"
                   onClick={() => setDiscount(0)}
                   className={`px-2 py-0.5 rounded-md font-semibold border transition cursor-pointer ${
-                    discount === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    Number(discount) === 0 ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                   }`}
                 >
                   0
@@ -1560,7 +1662,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   type="button"
                   onClick={() => setDiscount(5000)}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    discount === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                    Number(discount) === 5000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
                   }`}
                 >
                   -5.000
@@ -1569,7 +1671,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   type="button"
                   onClick={() => setDiscount(10000)}
                   className={`px-2 py-0.5 rounded-md font-bold border transition cursor-pointer ${
-                    discount === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                    Number(discount) === 10000 ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
                   }`}
                 >
                   -10.000
@@ -1582,7 +1684,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               <div className="text-[#667781]">
                 <span>Total tagihan: </span>
                 <span className="text-[11px] italic text-[#8696a0]">
-                  (Layanan Rp {subtotalTreatments.toLocaleString('id-ID')} + Ongkir Rp {ongkir.toLocaleString('id-ID')}{discount > 0 ? ` - Promo Rp ${discount.toLocaleString('id-ID')}` : ''})
+                  (Layanan Rp {subtotalTreatments.toLocaleString('id-ID')} + Ongkir Rp {Number(ongkir).toLocaleString('id-ID')}{Number(discount) > 0 ? ` - Promo Rp ${Number(discount).toLocaleString('id-ID')}` : ''})
                 </span>
               </div>
               <div className="text-sm sm:text-base font-extrabold text-[#008069] font-mono">
@@ -1607,22 +1709,33 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-3 border-t border-[#e9edef] flex items-center justify-end space-x-2">
+          <div className="pt-3 border-t border-[#e9edef] flex items-center justify-between">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+              onClick={saveDraftManually}
+              className="px-3 py-2 rounded-xl bg-white border border-[#d1d7db] text-xs font-bold text-[#54656f] hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+              title="Simpan draf lokal selama 1 jam"
             >
-              Batal
+              <BookmarkPlus size={14} className="text-amber-600" />
+              <span>Simpan Draf</span>
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
-            >
-              <Check size={14} />
-              <span>{submitting ? 'Menyimpan...' : 'Simpan & Buat Jadwal'}</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+              >
+                <Check size={14} />
+                <span>{submitting ? 'Menyimpan...' : 'Simpan & Buat Jadwal'}</span>
+              </button>
+            </div>
           </div>
         </form>
 

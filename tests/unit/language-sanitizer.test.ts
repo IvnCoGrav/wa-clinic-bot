@@ -6,6 +6,7 @@ import {
   sanitizeForbiddenEnglishWords,
   sanitizeHallucinatedTerms,
   sanitizeEmDash,
+  UnifiedResponseSanitizer,
 } from '../../src/utils/language-sanitizer';
 
 describe('language-sanitizer (anti bocor aksara asing)', () => {
@@ -87,5 +88,18 @@ describe('language-sanitizer (anti bocor aksara asing)', () => {
     expect(sanitizeEmDash('')).toBe('');
     expect(sanitizeEmDash(null as any)).toBeNull();
     expect(sanitizeEmDash(undefined as any)).toBeUndefined();
+  });
+
+  it('formatParagraphsAfterEmoji memisahkan baris baru setelah emoji penutup', () => {
+    const input = 'Iya Bunda, layanan home care pijat bayi kami tersedia setiap hari ya 😊 Untuk ketersediaan jadwal Bidan hari ini, akan kami bantu cekkan terlebih dahulu. Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa kami bantu cekkan sekaligus biaya transportasinya? 😊';
+    const output = UnifiedResponseSanitizer.sanitize(input, { historyCount: 1 });
+    expect(output).toContain('tersedia setiap hari ya 😊\n\nUntuk ketersediaan');
+  });
+
+  it('sanitizeDoubleQuestions membersihkan pertanyaan ganda jam + kelurahan', () => {
+    const doubleQ = 'Boleh tahu preferensi jam kunjungannya range pagi/siang/sore? Serta daerah atau kelurahan rumah Bunda agar kami bisa sekaligus bantu cek ongkirnya? 🙏';
+    const sanitized = UnifiedResponseSanitizer.sanitize(doubleQ, { historyCount: 1 });
+    expect(sanitized).not.toContain('preferensi jam kunjungannya range pagi/siang/sore');
+    expect(sanitized).toContain('Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa');
   });
 });

@@ -15,10 +15,39 @@
  */
 import { treatmentCatalogService } from './treatment-catalog.service';
 import { TEMPLATES } from '../config/persona';
-import { isMultiChildTransportQuestion } from '../state-machine/utils/transport-policy-checker';
 import { parseAgeTextToMonths } from '../utils/age-calculator';
 
-import { checkPolicyInquiry, PolicyInquiryType } from '../state-machine/utils/policy-checker';
+export type PolicyInquiryType =
+  | 'ONGKIR_INCLUSION'
+  | 'PAYMENT_METHOD'
+  | 'THERAPIST_QUALIFICATION'
+  | 'COVERAGE_AREA'
+  | 'MULTI_CHILD_TRANSPORT'
+  | 'OPERATING_HOURS';
+
+export function checkPolicyInquiry(text: string): PolicyInquiryType | null {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (/\b(2\s*anak|dua\s*anak|kedua\s*anak|2\s*bayi|dua\s*bayi|kembar|barengan)\b/i.test(lower) && /\b(ongkir|bayar\s*2x|double|dobel|transport)\b/i.test(lower)) {
+    return 'MULTI_CHILD_TRANSPORT';
+  }
+  if (/\b(sudah\s+termasuk\s+ongkir|free\s+ongkir|termasuk\s+ongkir|ongkirnya\s+gratis|termasuk\s+transport)\b/i.test(lower)) {
+    return 'ONGKIR_INCLUSION';
+  }
+  if (/\b(bayar\s+(lewat|pakai|pake|via|bisa)|transfer|qris|cash|tunai|metode\s+pembayaran|sistem\s+pembayaran)\b/i.test(lower)) {
+    return 'PAYMENT_METHOD';
+  }
+  if (/\b(terapis|bidan|sertifikasi|bersertifikat|pengalaman|lulusan|ijazah|str|sipb)\b/i.test(lower)) {
+    return 'THERAPIST_QUALIFICATION';
+  }
+  if (/\b(jangkauan|wilayah|area|coverage|bisa\s+ke|melayani\s+area|bisa\s+dipanggil\s+ke)\b/i.test(lower)) {
+    return 'COVERAGE_AREA';
+  }
+  if (/\b(jam\s+buka|buka\s+jam|jam\s+operasional|hari\s+apa\s+saja\s+buka|buka\s+hari)\b/i.test(lower)) {
+    return 'OPERATING_HOURS';
+  }
+  return null;
+}
 
 export interface PriceAnswerResult {
   replyText: string;

@@ -496,3 +496,24 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `typing.service.ts`: Menghapus pembersihan sinkron prematur di `finally`; membiarkan TTL 45 detik (`ttlMs = 45000`) di `messageService` melindungi seluruh echo webhook WAHA dari false-positive.
   - `message.service.ts`: Menambahkan multi-bubble fragment matching (`existing.content.includes(normalizedContent)`) pada `checkAndAttachOutboundDuplicate` agar echo potongan bubble otomatis terikat ke pesan gabungan yang sudah ada tanpa duplikasi.
 - **Verifikasi:** `npx vitest run tests/unit/follow-up-livechat-sync.test.ts` (4/4 PASS), seluruh suite follow-up (36/36 PASS), TypeScript `npm run build` 100% lolos (0 error).
+
+---
+
+## 16. [Reservation / Location] Tautan Google Maps di Alamat Form & Teks Treatment Bebas Menyebabkan Jarak Null & Duplikasi Reservasi
+
+- **Status:** planned (Implementation Plan siap di `implementation_plan.md`).
+- **Ditemukan:** 2026-08-29, kasus Bunda Ifa Karangpilang (`6281455029665`).
+- **Gejala:**
+  1. Alamat form yang menyertakan tautan Google Maps (`Jl. Griya Kebraon Utama AU 18 (https://maps.app.goo.gl/DGusQAqJDvPWznBV6)`) tersimpan ke kolom `kelurahan` dan gagal di-resolve oleh Google Geocoding API -> `lat`, `lng`, `distance_km`, dan `ongkir` bernilai `NULL`.
+  2. Input treatment bebas pelanggan (`pijat ceria` + `Bundling breast massage+oksitosin`) belum terpetakan ke item resmi di tabel `clinic_services` beserta durasi & harganya.
+  3. Tercipta 2 reservasi pending (Auto-Capture bot vs Input Manual Admin) untuk jadwal kunjungan yang sama dalam selisih 13 detik.
+- **Akar Masalah:**
+  1. Ketiadaan modul ekstraksi dan ekspansi URL Google Maps pendek (`maps.app.goo.gl`) di `reservation-text-parser.ts` & `human-background-enrichment.service.ts`.
+  2. Auto-Capture mencatat string mentah tanpa pencocokan kemiripan (*fuzzy matching*) ke database layanan.
+  3. Endpoint create reservasi manual admin dan webhook bot belum memiliki logika merge/deduplikasi berbasis customer & tanggal 24 jam.
+- **Rencana Tindak Lanjut:**
+  - Eksekusi 4 tahap di `implementation_plan.md`:
+    - Tahap 1: Google Maps URL extractor & cleaner + auto-kalkulasi jarak.
+    - Tahap 2: Fuzzy Treatment Normalizer ke `clinic_services` DB.
+    - Tahap 3: Smart Deduplication & Merge Reservasi.
+    - Tahap 4: UI Admin Dashboard auto-category & price sync.

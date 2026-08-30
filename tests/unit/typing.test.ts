@@ -283,5 +283,30 @@ Bubble 3: Apakah Bunda tertarik untuk booking jadwal treatment?`;
       expect(sendTextSpy).toHaveBeenCalledTimes(2);
       expect(stopTypingSpy).toHaveBeenCalledTimes(2);
     });
+
+    it('should keep multi-paragraph message in a single bubble when singleBubble: true is specified', async () => {
+      vi.spyOn(wahaClient, 'sendSeen').mockResolvedValue(true);
+      vi.spyOn(wahaClient, 'startTyping').mockResolvedValue(true);
+      vi.spyOn(wahaClient, 'stopTyping').mockResolvedValue(true);
+      const sendTextSpy = vi.spyOn(wahaClient, 'sendText').mockResolvedValue(true);
+
+      const multiParagraphText = `Halo Bunda Rina!
+
+Bagaimana kabar hari ini?
+Semoga adik kecil sehat dan ceria selalu yaa.
+
+Apakah ada yang bisa kami bantu jadwalkan lagi Bunda? 😊`;
+
+      const result = await typingService.simulateHumanReply({
+        chatId: '628123456789@c.us',
+        replyText: multiParagraphText,
+        singleBubble: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.bubblesSent).toBe(1);
+      expect(sendTextSpy).toHaveBeenCalledTimes(1);
+      expect(sendTextSpy).toHaveBeenCalledWith('628123456789@c.us', multiParagraphText);
+    });
   });
 });

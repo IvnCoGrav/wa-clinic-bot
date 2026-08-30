@@ -1,5 +1,6 @@
 import { Reservation } from '../types';
 import { extractBabiesFromRawText } from './reservationBabies';
+import { stripBufferMetadata } from './treatmentStringParser';
 
 const INDONESIAN_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const INDONESIAN_MONTHS = [
@@ -173,7 +174,8 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
   }
 
   // 6. Treatment Detail
-  const treatment = reservation.treatment_detail || 'Layanan Homecare';
+  const rawTreatment = reservation.treatment_detail || 'Layanan Homecare';
+  const treatment = stripBufferMetadata(rawTreatment) || 'Layanan Homecare';
 
   // 7. Payment Breakdown
   // Treatment price

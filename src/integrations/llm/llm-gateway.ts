@@ -8,7 +8,7 @@
  * 2. Satu jalur ekstraksi JSON yang konsisten (reuse src/utils/json-extract.ts).
  * 3. Titik tunggal audit (llm-audit-buffer) & retry/backoff transient.
  */
-import { AiModelConfigService, AiTaskType } from '../../config/ai-models.config';
+import { AiModelConfigService, AiTaskType, sanitizeModelForProvider } from '../../config/ai-models.config';
 import { getFallbackModel, callChatCompletionsWithFallback, ChatCompletionsWithFallbackCall } from './model-fallback';
 import { parsePositiveInt } from '../../utils/env-numeric';
 
@@ -32,10 +32,14 @@ export function getLlmEndpointConfig(overrides?: {
     ? AiModelConfigService.getModelConfig(overrides.modelConfigKey)
     : null;
 
+  const baseUrl = (overrides?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const rawModel = overrides?.model || modelConfig?.modelName || process.env.OPENAI_MODEL || '';
+  const model = sanitizeModelForProvider(rawModel, baseUrl);
+
   return {
     apiKey: overrides?.apiKey || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '',
-    baseUrl: (overrides?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
-    model: overrides?.model || modelConfig?.modelName || process.env.OPENAI_MODEL || '',
+    baseUrl,
+    model,
     fallbackModel: getFallbackModel(),
     timeoutMs: overrides?.timeoutMs ?? parsePositiveInt(process.env.LLM_TIMEOUT_CHAT_MS, 30000),
   };

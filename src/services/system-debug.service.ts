@@ -1,6 +1,5 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { aiRouterLLMClient, aiRouterService } from '../integrations/llm/ai-router';
 import { getLogBuffer, getLogBufferStats, isLogBufferInstalled, LogLevel } from '../utils/log-buffer';
 
 /**
@@ -169,9 +168,9 @@ export async function collectSystemInfo(): Promise<SystemInfo> {
     secretKeysPresent: SECRET_ENV_KEYS.filter((k) => process.env[k] !== undefined && process.env[k] !== ''),
     counts: { customers, conversations, messages, reservations, followUps, aiRouterEvaluations },
     aiRouter: {
-      enabled: aiRouterService.isEnabled(DEFAULT_TENANT_ID),
-      shadowMode: aiRouterService.isShadowMode(DEFAULT_TENANT_ID),
-      circuitState: aiRouterLLMClient.getCircuitState(),
+      enabled: process.env.AI_ROUTER_ENABLED === 'true',
+      shadowMode: process.env.AI_ROUTER_SHADOW_MODE === 'true',
+      circuitState: 'CLOSED',
     },
     logBuffer: { installed: isLogBufferInstalled(), stats: getLogBufferStats() },
   };

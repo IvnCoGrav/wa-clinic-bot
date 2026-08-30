@@ -88,12 +88,17 @@ export async function callChatCompletionsWithFallback(
   ): Promise<any> => {
     const finalBaseUrl = overrideBaseUrl || call.baseUrl;
     const finalApiKey = overrideApiKey || call.apiKey;
+    const attemptTimeout = Math.min(call.timeoutMs || 15000, 15000);
+    const effectivePayload: any = { ...(payloadOverride ?? call.payload), model };
+    if (model.toLowerCase().includes('luna') || model.toLowerCase().includes('o1') || model.toLowerCase().includes('o3')) {
+      delete effectivePayload.temperature;
+    }
     const resp = await axios.post(
       `${finalBaseUrl}/chat/completions`,
-      { ...(payloadOverride ?? call.payload), model },
+      effectivePayload,
       {
         headers: { Authorization: `Bearer ${finalApiKey}`, 'Content-Type': 'application/json' },
-        timeout: call.timeoutMs,
+        timeout: attemptTimeout,
       }
     );
     const content = resp.data?.choices?.[0]?.message?.content?.trim() || '';

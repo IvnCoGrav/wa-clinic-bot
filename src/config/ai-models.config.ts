@@ -6,6 +6,8 @@
  * Tenant-aware (SaaS): registry disimpan per-tenant (`Map<tenantId, Map<task, config>>`)
  * agar konfigurasi tenant A tidak tertimpa saat tenant B di-load dari DB.
  */
+import dotenv from 'dotenv';
+dotenv.config();
 import { DEFAULT_TENANT_ID } from './tenant';
 
 export type AiTaskType = 'HARVESTING' | 'CHAT_REPLY' | 'CHAT_REPLY_DEEP' | 'MEDICAL_CHECK' | 'SUMMARIZATION' | 'PII_SCRUBBING' | 'INTENT_CLASSIFICATION' | 'AI_VERIFIER';
@@ -22,13 +24,25 @@ export interface AiTaskModelConfig {
 
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
 // Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
+export function sanitizeModelForProvider(model: string, baseUrl?: string): string {
+  if (!model) return 'MiniMax-M2.7-highspeed';
+  return model;
+}
+
+const defaultProvider = process.env.AI_PROVIDER_CHAT || 'OpenAI';
+const rawChatModel = process.env.AI_MODEL_CHAT || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const defaultChatModel = sanitizeModelForProvider(rawChatModel);
+const rawNluModel = process.env.AI_MODEL_NLU || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const defaultNluModel = sanitizeModelForProvider(rawNluModel);
+const defaultDeepModel = process.env.AI_MODEL_CHAT_DEEP || 'deepseek-v4-flash';
+
 const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
   [
     'HARVESTING',
     {
       task: 'HARVESTING',
-      provider: process.env.AI_PROVIDER_HARVESTING || 'OpenAI',
-      modelName: process.env.AI_MODEL_HARVESTING || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_HARVESTING || defaultProvider,
+      modelName: process.env.AI_MODEL_HARVESTING || defaultChatModel,
       description: 'Digunakan untuk mengekstrak Q&A dan data transaksi dari konsolidasi berkas histori chat.',
       maxTokens: 4096,
       temperature: 0.2,
@@ -38,8 +52,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY',
     {
       task: 'CHAT_REPLY',
-      provider: process.env.AI_PROVIDER_CHAT || 'OpenAI',
-      modelName: process.env.AI_MODEL_CHAT || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_CHAT || defaultProvider,
+      modelName: defaultChatModel,
       description: 'Digunakan untuk menghasilkan respon percakapan otomatis kepada customer.',
       maxTokens: 1024,
       temperature: 0.6,
@@ -49,8 +63,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'CHAT_REPLY_DEEP',
     {
       task: 'CHAT_REPLY_DEEP',
-      provider: process.env.AI_PROVIDER_CHAT_DEEP || 'Mimo',
-      modelName: process.env.AI_MODEL_CHAT_DEEP || 'mimo-v2.5',
+      provider: process.env.AI_PROVIDER_CHAT_DEEP || 'DeepSeek',
+      modelName: defaultDeepModel,
       description: 'Digunakan untuk menghasilkan respon percakapan mendalam pada konsultasi klinis multi-gejala / multi-treatment.',
       maxTokens: 1024,
       temperature: 0.5,
@@ -60,8 +74,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'MEDICAL_CHECK',
     {
       task: 'MEDICAL_CHECK',
-      provider: process.env.AI_PROVIDER_MEDICAL || 'OpenAI',
-      modelName: process.env.AI_MODEL_MEDICAL || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_MEDICAL || defaultProvider,
+      modelName: process.env.AI_MODEL_MEDICAL || defaultChatModel,
       description: 'Digunakan untuk memverifikasi dan mengevaluasi konteks medis.',
       maxTokens: 512,
       temperature: 0.1,
@@ -71,8 +85,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'SUMMARIZATION',
     {
       task: 'SUMMARIZATION',
-      provider: process.env.AI_PROVIDER_SUMMARIZATION || 'OpenAI',
-      modelName: process.env.AI_MODEL_SUMMARIZATION || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_SUMMARIZATION || defaultProvider,
+      modelName: process.env.AI_MODEL_SUMMARIZATION || defaultChatModel,
       description: 'Digunakan untuk merangkum riwayat percakapan panjang.',
       maxTokens: 1024,
       temperature: 0.3,
@@ -82,8 +96,8 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'PII_SCRUBBING',
     {
       task: 'PII_SCRUBBING',
-      provider: process.env.AI_PROVIDER_PII || 'OpenAI',
-      modelName: process.env.AI_MODEL_PII || 'gpt-4o-mini',
+      provider: process.env.AI_PROVIDER_PII || defaultProvider,
+      modelName: process.env.AI_MODEL_PII || defaultChatModel,
       description: 'Digunakan untuk membantu pembersihan nama dan data sensitif dari teks.',
       maxTokens: 512,
       temperature: 0.0,
@@ -93,23 +107,12 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'INTENT_CLASSIFICATION',
     {
       task: 'INTENT_CLASSIFICATION',
-      provider: process.env.AI_PROVIDER_NLU || 'MiniMax',
-      modelName: process.env.AI_MODEL_NLU || 'MiniMax-M2.7-highspeed',
+      provider: process.env.AI_PROVIDER_NLU || defaultProvider,
+      modelName: defaultNluModel,
       description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
       maxTokens: 1024,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
-    },
-  ],
-  [
-    'AI_VERIFIER',
-    {
-      task: 'AI_VERIFIER',
-      provider: process.env.AI_PROVIDER_VERIFIER || 'OpenAI',
-      modelName: process.env.AI_MODEL_VERIFIER || 'gpt-4o-mini',
-      description: 'Digunakan untuk Quality Control (QC) otomatis memeriksa draf balasan terhadap Ground Truth usia, katalog, dan lokasi.',
-      maxTokens: 1024,
-      temperature: 0.1,
     },
   ],
 ]);
@@ -244,8 +247,8 @@ export class AiModelConfigService {
     if (!config) {
       return {
         task,
-        provider: 'OpenAI',
-        modelName: 'gpt-4o-mini',
+        provider: defaultProvider,
+        modelName: defaultChatModel,
         description: 'Default Fallback Model',
         maxTokens: 1024,
         temperature: 0.3,
@@ -259,6 +262,11 @@ export class AiModelConfigService {
         modelName: 'Regex/Keywords (Engine 5.2)',
         description: 'Deterministik Engine (Sesuai PRD Section 5.2 - Non-Switchable)',
       };
+    }
+
+    const sanitizedModel = sanitizeModelForProvider(config.modelName);
+    if (sanitizedModel !== config.modelName) {
+      return { ...config, modelName: sanitizedModel };
     }
 
     return config;

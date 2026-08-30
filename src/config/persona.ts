@@ -312,13 +312,29 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   outOfCoverage: (params: { distanceKm: number; maxCoverageKm?: number }) =>
     `Mohon maaf bunda, lokasi Bunda berjarak ${params.distanceKm.toFixed(1)} km dari tempat kami. Saat ini area tersebut berada di luar jangkauan pengiriman/home-treatment kami (maksimal ${params.maxCoverageKm ?? 30} km) Bunda. 🙏🏻\n\nTerima kasih sudah menghubungi kami! Kami akan memberikan kabar jika area Anda sudah terjangkau kelak ya bund. 😊`,
 
-  ongkirInfo: (params: { distanceKm: number; normalPrice: number; promoPrice: number; freeTierKm?: number; candidateTreatmentName?: string }) => {
-    const ctaQuestion = params.candidateTreatmentName && params.candidateTreatmentName.trim()
-      ? `Mau pilih treatment apa Bunda untuk hari ini? Atau mau langsung dijadwalkan *${params.candidateTreatmentName.trim()}*-nya? 😊`
-      : `Rencana mau treatment apa bunda ?🤗`;
+  ongkirInfo: (params: {
+    distanceKm: number;
+    normalPrice: number;
+    promoPrice: number;
+    freeTierKm?: number;
+    candidateTreatmentName?: string;
+    preferredDate?: string;
+  }) => {
+    let ctaQuestion = 'Rencana mau treatment apa bunda ?🤗';
+
+    const treatment = params.candidateTreatmentName ? params.candidateTreatmentName.trim() : null;
+    const date = params.preferredDate ? params.preferredDate.trim() : null;
+
+    if (treatment && date) {
+      ctaQuestion = `Untuk ketersediaan jadwal Bidan ${date} dengan layanan *${treatment}*, akan kami bantu cekkan terlebih dahulu ya Bunda 😊\n\nMau kami bantu siapkan format reservasinya? 😊`;
+    } else if (treatment) {
+      ctaQuestion = `Untuk layanan *${treatment}*, rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊`;
+    } else if (date) {
+      ctaQuestion = `Untuk jadwal ${date}, rencana mau treatment apa untuk si kecil ya Bunda? 😊`;
+    }
 
     if (params.promoPrice === 0) {
-      return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya bund ☺️\n\n${ctaQuestion}`;
+      return `Wah deket Bunda, dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km (masih dalam jangkauan gratis ongkir hingga ${params.freeTierKm ?? 5} km), jadi layanan kami GRATIS ongkir ya, Bunda ☺️\n\n${ctaQuestion}`;
     }
     return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp ${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
   },

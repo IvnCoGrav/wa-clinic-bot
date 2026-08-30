@@ -51,7 +51,16 @@ export class SlateStore {
       preferredTime: preferences.preferredTime || null,
 
       pricelistSent: Boolean(customer.pricelist_sent),
-      reservationFormSent: Boolean(preferences.reservationFormSent || conversation.current_state === ConversationState.RESERVATION_SENT),
+      reservationFormSent: Boolean(
+        ctx.history?.some(
+          (h) =>
+            h.role === 'assistant' &&
+            (h.content.includes('Format Reservasi') ||
+              h.content.includes('Format Booking') ||
+              h.content.includes('Nama Bunda:') ||
+              h.content.includes('Nama Anak:'))
+        )
+      ),
       isHumanHandling: Boolean(conversation.is_human_handling),
       humanHandlingReason: conversation.escalation_reason || null,
       lastInteractionAt: conversation.last_message_at || new Date(),

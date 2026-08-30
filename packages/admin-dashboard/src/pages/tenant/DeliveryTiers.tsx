@@ -17,9 +17,9 @@ import {
 
 interface DeliveryTier {
   id: number;
-  maxDist: number;
-  fee: number;
-  promoDiscount: number;
+  maxDist: number | '';
+  fee: number | '';
+  promoDiscount: number | '';
 }
 
 export const DeliveryTiers: React.FC = () => {
@@ -53,7 +53,13 @@ export const DeliveryTiers: React.FC = () => {
     setError('');
     setSuccess('');
     try {
-      const sorted = [...tiers].sort((a, b) => a.maxDist - b.maxDist);
+      const sanitized = tiers.map(t => ({
+        ...t,
+        maxDist: Number(t.maxDist) || 0,
+        fee: Number(t.fee) || 0,
+        promoDiscount: Number(t.promoDiscount) || 0,
+      }));
+      const sorted = sanitized.sort((a, b) => a.maxDist - b.maxDist);
       await apiRequest('/api/admin/delivery-tiers', {
         method: 'POST',
         body: JSON.stringify({ tiers: sorted })
@@ -67,14 +73,14 @@ export const DeliveryTiers: React.FC = () => {
     }
   };
 
-  const updateTier = (idx: number, field: keyof DeliveryTier, value: number) => {
+  const updateTier = (idx: number, field: keyof DeliveryTier, value: number | '') => {
     const next = [...tiers];
     next[idx] = { ...next[idx], [field]: value };
     setTiers(next);
   };
 
   const addTier = () => {
-    const lastMax = tiers.length > 0 ? Math.max(...tiers.map(t => t.maxDist)) : 0;
+    const lastMax = tiers.length > 0 ? Math.max(...tiers.map(t => Number(t.maxDist) || 0)) : 0;
     setTiers([...tiers, { id: Date.now(), maxDist: lastMax + 5, fee: 30000, promoDiscount: 5000 }]);
   };
 
@@ -82,17 +88,17 @@ export const DeliveryTiers: React.FC = () => {
     setTiers(tiers.filter((_, i) => i !== idx));
   };
 
-  const sortedTiers = [...tiers].sort((a, b) => a.maxDist - b.maxDist);
+  const sortedTiers = [...tiers].sort((a, b) => (Number(a.maxDist) || 0) - (Number(b.maxDist) || 0));
 
   // Cari tier yang berlaku untuk jarak tertentu
   const tierForDistance = (km: number) => {
-    return sortedTiers.find(t => km <= t.maxDist) || null;
+    return sortedTiers.find(t => km <= (Number(t.maxDist) || 0)) || null;
   };
 
   // Validasi: pastikan maxDist berurutan & tidak ada duplikat
   const validationIssues: string[] = [];
   for (let i = 1; i < sortedTiers.length; i++) {
-    if (sortedTiers[i].maxDist <= sortedTiers[i - 1].maxDist) {
+    if ((Number(sortedTiers[i].maxDist) || 0) <= (Number(sortedTiers[i - 1].maxDist) || 0)) {
       validationIssues.push(`Tier "${sortedTiers[i].maxDist} km" harus lebih besar dari tier sebelumnya (${sortedTiers[i - 1].maxDist} km)`);
     }
   }
@@ -100,9 +106,9 @@ export const DeliveryTiers: React.FC = () => {
   const hasOutOfCoverage = !!lastTier;
 
   const previewTier = tierForDistance(previewKm);
-  const previewFee = previewTier ? previewTier.fee : null;
-  const previewPromo = previewTier ? previewTier.promoDiscount : null;
-  const previewNet = previewTier ? Math.max(0, previewTier.fee - previewTier.promoDiscount) : null;
+  const previewFee = previewTier ? Number(previewTier.fee) || 0 : null;
+  const previewPromo = previewTier ? Number(previewTier.promoDiscount) || 0 : null;
+  const previewNet = previewTier ? Math.max(0, (Number(previewTier.fee) || 0) - (Number(previewTier.promoDiscount) || 0)) : null;
 
   const formatRp = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
 
@@ -165,8 +171,8 @@ export const DeliveryTiers: React.FC = () => {
 
           <div className="space-y-2">
             {sortedTiers.map((tier, idx) => {
-              const net = Math.max(0, tier.fee - (tier.promoDiscount || 0));
-              const prevMax = idx > 0 ? sortedTiers[idx - 1].maxDist : 0;
+              const net = Math.max(0, (Number(tier.fee) || 0) - (Number(tier.promoDiscount) || 0));
+              const prevMax = idx > 0 ? (Number(sortedTiers[idx - 1].maxDist) || 0) : 0;
               return (
                 <div key={tier.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 items-center p-2.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
                   <div className="col-span-1 md:col-span-2">
@@ -176,7 +182,8 @@ export const DeliveryTiers: React.FC = () => {
                       step="0.5"
                       min="0"
                       value={tier.maxDist}
-                      onChange={(e) => updateTier(idx, 'maxDist', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => updateTier(idx, 'maxDist', e.target.value === '' ? '' : parseFloat(e.target.value))}
+                      placeholder="0"
                       className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
@@ -187,7 +194,8 @@ export const DeliveryTiers: React.FC = () => {
                       step="1000"
                       min="0"
                       value={tier.fee}
-                      onChange={(e) => updateTier(idx, 'fee', parseInt(e.target.value) || 0)}
+                      onChange={(e) => updateTier(idx, 'fee', e.target.value === '' ? '' : parseInt(e.target.value))}
+                      placeholder="0"
                       className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
@@ -197,8 +205,9 @@ export const DeliveryTiers: React.FC = () => {
                       type="number"
                       step="1000"
                       min="0"
-                      value={tier.promoDiscount || 0}
-                      onChange={(e) => updateTier(idx, 'promoDiscount', parseInt(e.target.value) || 0)}
+                      value={tier.promoDiscount}
+                      onChange={(e) => updateTier(idx, 'promoDiscount', e.target.value === '' ? '' : parseInt(e.target.value))}
+                      placeholder="0"
                       className="w-full p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                     />
                   </div>
@@ -303,16 +312,16 @@ export const DeliveryTiers: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-[#667781]">Ongkir normal</span>
-                  <span className="text-[#111b21] font-bold">{previewFee === 0 ? 'GRATIS' : formatRp(previewFee!)}</span>
+                  <span className="text-[#111b21] font-bold">{previewFee === 0 ? 'GRATIS' : formatRp(previewFee || 0)}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-[#667781]">Potongan promo</span>
-                  <span className="text-emerald-700 font-bold">- {formatRp(previewPromo!)}</span>
+                  <span className="text-emerald-700 font-bold">- {formatRp(previewPromo || 0)}</span>
                 </div>
                 <div className="border-t border-[#e9edef] pt-2 mt-2 flex justify-between text-xs font-bold">
                   <span className="text-[#111b21]">Yang dibayar customer</span>
                   <span className={previewNet === 0 ? 'text-emerald-700 font-extrabold' : 'text-[#008069] font-extrabold text-sm'}>
-                    {previewNet === 0 ? 'GRATIS' : formatRp(previewNet!)}
+                    {previewNet === 0 ? 'GRATIS' : formatRp(previewNet || 0)}
                   </span>
                 </div>
               </div>

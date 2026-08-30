@@ -17,7 +17,7 @@ export class DecisionMatrix {
     const cleanText = rawIncoming.replace(/(?:Promo|ID|Iklan|Diskon)?\s*\[\s*[\w\s]{1,10}?\s*\]/gi, '').trim();
     const rawText = cleanText.toLowerCase();
 
-    const { hasIslamicGreeting } = await import('../state-machine/utils/islamic-greeting-helper');
+    const { hasIslamicGreeting } = await import('../utils/islamic-greeting');
     const isIslamic = hasIslamicGreeting(rawIncoming);
 
     // =========================================================================
@@ -94,9 +94,14 @@ export class DecisionMatrix {
     // (misal: mandikan bayi, paket newborn harian, baby sitting, tindik, imunisasi, dll),
     // bot DIAM (silent) dan langsung mengalihkan penanganan ke CS/Bidan manusia.
     // =========================================================================
+    const isPostVaccineConsultation =
+      /\b(habis|setelah|pasca|baru|selesai)\s+(?:vaksin|imunisasi|imun)\b/i.test(rawText) ||
+      /\b(?:vaksin|imunisasi|imun)\b.*?\b(berpengaruh|boleh\s*(?:kah|ga|gak|nggak|ta)|aman\s*(?:kah|ga|gak)|bisa\s+pijat|pijatnya)\b/i.test(rawText);
+
     const isUnlistedServiceQuery =
-      extraction.intents.includes('ask_unlisted_service') ||
-      /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|imunisasi|vaksin|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText);
+      !isPostVaccineConsultation &&
+      (extraction.intents.includes('ask_unlisted_service') ||
+        /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText));
 
     if (isUnlistedServiceQuery) {
       updatedSlate.isHumanHandling = true;
@@ -231,9 +236,6 @@ export class DecisionMatrix {
       !updatedSlate.isLocationConfirmed ||
       updatedSlate.projectedState === ConversationState.INITIAL;
 
-    const { checkLeadGreetingText } = await import('../state-machine/utils/greeting-checker');
-    const greetingCheck = await checkLeadGreetingText(cleanText, rawIncoming, context?.tenantId);
-
     const hasSpecificClinicalOrPricingQuestion =
       extraction.intents.includes('ask_price') ||
       extraction.intents.includes('consult_symptom') ||
@@ -255,7 +257,7 @@ export class DecisionMatrix {
       !hasSpecificClinicalOrPricingQuestion &&
       !extraction.locationText &&
       !extraction.treatmentReferenced &&
-      (greetingCheck.isPureGreeting || isPureLeadOpener);
+      isPureLeadOpener;
 
     if (isLeadGreeting) {
       return {
@@ -284,9 +286,18 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
-    // PRIORITY 2E: NOT INTERESTED / PENOLAKAN HALUS (Tidak Jadi)
+    // PRIORITY 2E: NOT INTERESTED / PENOLAKAN HALUS (Tidak Jadi Total)
+    // HANYA dipicu jika customer benar-benar membatalkan / tidak berminat sama sekali.
+    // DILARANG dipicu jika customer hanya "change of mind" / ganti lokasi / ganti hari / ganti treatment (misal "gak jadi di wonokromo, di berbek aja")
     // =========================================================================
+    const hasAlternativeOrCorrection =
+      /\b(?:di|ke|pindah|ganti|jadinya|maksudnya|mau|ambil|paket|besok|hari|lusa|jam|aja|saja)\b/i.test(rawText) ||
+      Boolean(extraction.locationText) ||
+      Boolean(extraction.treatmentReferenced) ||
+      Boolean(extraction.preferredDateText);
+
     const isNotInterested =
+      !hasAlternativeOrCorrection &&
       /\b(tidak\s+jadi|gak\s+jadi|nggak\s+jadi|gajadi|belum\s+berminat|kemahalan\s*(kak|bund|min)?|batal\s+aja|cancel\s+aja|belum\s+butuh)\b/i.test(rawText);
 
     if (isNotInterested) {
@@ -506,7 +517,7 @@ export class DecisionMatrix {
           }
 
           // Jika customer HANYA mengirimkan lokasi (maupun disertai pertanyaan ongkir/kena berapa),
-          // gunakan TEMPLATES.ongkirInfo deterministik resmi (SOP Kala Spa)
+          // gunakan TEMPLATES.ongkirInfo deterministik resmi (SOP Kala Spa) yang kontekstual
           const isPureLocationMessage =
             !extraction.intents.includes('consult_symptom') &&
             !extraction.intents.includes('ask_clinic_origin') &&
@@ -517,10 +528,11 @@ export class DecisionMatrix {
               updatedSlate.childAgeMonths && updatedSlate.childAgeMonths > 24 ? 'Pijat Kids Ceria' : 'Pijat Bayi Ceria';
             const candidateTreatmentName =
               updatedSlate.selectedTreatmentName || (updatedSlate.childAgeMonths !== null ? defaultByAge : undefined);
+            const preferredDate = extraction.preferredDateText || updatedSlate.preferredDate || undefined;
 
             return {
               action: 'RESOLVE_LOCATION_AND_DELIVERY',
-              reason: `Lokasi terkonfirmasi (${updatedSlate.kelurahan}, ${updatedSlate.distanceKm} km, ongkir promo Rp ${updatedSlate.ongkirPromoFee?.toLocaleString('id-ID')}) -> Kirim template ongkir resmi.`,
+              reason: `Lokasi terkonfirmasi (${updatedSlate.kelurahan}, ${updatedSlate.distanceKm} km, ongkir promo Rp ${updatedSlate.ongkirPromoFee?.toLocaleString('id-ID')}) -> Kirim template ongkir resmi kontekstual.`,
               updatedSlate,
               shouldSendPricelistImage,
               deterministicTemplateReply: TEMPLATES.ongkirInfo({
@@ -528,13 +540,14 @@ export class DecisionMatrix {
                 normalPrice: updatedSlate.ongkirFee || 0,
                 promoPrice: updatedSlate.ongkirPromoFee || 0,
                 candidateTreatmentName,
+                preferredDate,
               }),
             };
           }
 
           return {
-            action: 'RESOLVE_LOCATION_AND_DELIVERY',
-            reason: `Lokasi terkonfirmasi (${updatedSlate.kelurahan}, ${updatedSlate.distanceKm} km, ongkir promo Rp ${updatedSlate.ongkirPromoFee?.toLocaleString('id-ID')}).`,
+            action: 'GENERATE_AI_RESPONSE',
+            reason: `Lokasi terkonfirmasi (${updatedSlate.kelurahan}, ${updatedSlate.distanceKm} km, ongkir promo Rp ${updatedSlate.ongkirPromoFee?.toLocaleString('id-ID')}) -> Lanjutkan ke AI Response Generation dengan Grounding Jarak & Ongkir.`,
             updatedSlate,
             shouldSendPricelistImage,
           };
@@ -559,30 +572,7 @@ export class DecisionMatrix {
       };
     }
 
-    // =========================================================================
-    // PRIORITY 6B: TANYA JADWAL / CEK KETERSEDIAAN SLOT SPESIFIK -> HUMAN HANDLING
-    // Sesuai SOP klinik: ketersediaan jadwal terapis lapangan dicek manual oleh CS/Bidan
-    // =========================================================================
-    const isAskingScheduleSlot =
-      extraction.intents.includes('ask_schedule') ||
-      Boolean(extraction.preferredTimeText) ||
-      /\b(ada\s*slot|masih\s*ada\s*slot|slot\s*(hari\s*ini|besok|minggu|sabtu|senin|selasa|rabu|kamis|jumat)|jam\s*\d+(\.\d+)?\s*(pagi|siang|sore|malam)?\s*(bisa|ada|ready|tersedia)?|bisa\s*jam\s*\d+|kapan\s*(ready|tersedia|bisa|kosong)|ketersediaan\s*jadwal|jadwal\s*(kosong|ready|tersedia)|apakah\s*bisa\s*(hari\s*ini|besok|minggu|sabtu))\b/i.test(rawText);
 
-    if (isAskingScheduleSlot && extraction.symptoms.length === 0 && !isConsultationInquiry) {
-      const dayOrTime =
-        extraction.preferredDateText ||
-        extraction.preferredTimeText ||
-        rawText.match(/\b(hari\s*ini|besok|lusa|minggu|sabtu|senin|selasa|rabu|kamis|jumat|jam\s*\d+(\.\d+)?(?:\s*(?:pagi|siang|sore|malam))?)\b/i)?.[0];
-      updatedSlate.isHumanHandling = true;
-      updatedSlate.humanHandlingReason = 'asking_schedule';
-      return {
-        action: 'ESCALATE_HUMAN_SCHEDULE',
-        reason: 'Customer menanyakan ketersediaan jadwal/slot -> Handover ke CS/Bidan manusia untuk cek kalender.',
-        updatedSlate,
-        shouldSendPricelistImage: false,
-        deterministicTemplateReply: TEMPLATES.scheduleCheckHandoff({ dayOrTime }),
-      };
-    }
 
     // =========================================================================
     // PRIORITY 7: PERCAKAPAN RESERVASI & BOOKING READY

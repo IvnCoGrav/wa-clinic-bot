@@ -66,12 +66,12 @@ export const ClinicServices: React.FC = () => {
   const [formName, setFormName] = useState('');
   const [formCategory, setFormCategory] = useState<ClinicServiceCategory>('BABY');
   const [formBundleItemIds, setFormBundleItemIds] = useState<string[]>([]);
-  const [formMinAge, setFormMinAge] = useState(0);
-  const [formMaxAge, setFormMaxAge] = useState<number | string>('');
+  const [formMinAge, setFormMinAge] = useState<number | ''>(0);
+  const [formMaxAge, setFormMaxAge] = useState<number | ''>('');
   const [formAgeLabel, setFormAgeLabel] = useState('');
-  const [formDuration, setFormDuration] = useState(40);
-  const [formOriginalPrice, setFormOriginalPrice] = useState(80000);
-  const [formPromoPrice, setFormPromoPrice] = useState(60000);
+  const [formDuration, setFormDuration] = useState<number | ''>(40);
+  const [formOriginalPrice, setFormOriginalPrice] = useState<number | ''>(80000);
+  const [formPromoPrice, setFormPromoPrice] = useState<number | ''>(60000);
   const [formDescription, setFormDescription] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
 
@@ -145,7 +145,8 @@ export const ClinicServices: React.FC = () => {
       if (newTotalOriginalPrice > 0) {
         setFormOriginalPrice(newTotalOriginalPrice);
         // Suggest a discounted bundle promo price (e.g. ~20% discount if not already set lower)
-        if (formPromoPrice >= newTotalOriginalPrice || formPromoPrice === 0) {
+        const currentPromo = Number(formPromoPrice) || 0;
+        if (currentPromo >= newTotalOriginalPrice || currentPromo === 0) {
           setFormPromoPrice(Math.round((newTotalOriginalPrice * 0.8) / 5000) * 5000);
         }
       }
@@ -249,13 +250,13 @@ export const ClinicServices: React.FC = () => {
       bundleItemIds: isBundle ? formBundleItemIds : undefined,
       isAddon: isAddon,
       ageTier: {
-        minAgeMonths: Number(formMinAge),
+        minAgeMonths: formMinAge === '' ? 0 : Number(formMinAge),
         maxAgeMonths: formMaxAge === '' ? null : Number(formMaxAge),
-        label: formAgeLabel || `${formMinAge} - ${formMaxAge || 'Any'} Bulan`
+        label: formAgeLabel || `${formMinAge === '' ? 0 : formMinAge} - ${formMaxAge || 'Any'} Bulan`
       },
-      durationMinutes: Number(formDuration),
-      originalPrice: Number(formOriginalPrice),
-      promoPrice: Number(formPromoPrice),
+      durationMinutes: formDuration === '' ? 40 : Number(formDuration),
+      originalPrice: formOriginalPrice === '' ? 0 : Number(formOriginalPrice),
+      promoPrice: formPromoPrice === '' ? 0 : Number(formPromoPrice),
       description: formDescription,
       isActive: formIsActive
     };
@@ -836,18 +837,18 @@ export const ClinicServices: React.FC = () => {
                     </div>
 
                     {formBundleItemIds.length >= 2 ? (
-                      formPromoPrice < bundleComponentDetails.totalOriginalPrice ? (
+                      (Number(formPromoPrice) || 0) < bundleComponentDetails.totalOriginalPrice ? (
                         <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-[11px] font-semibold flex items-center space-x-1.5">
                           <Tag size={13} />
                           <span>
-                            Paket Hemat! Customer berhemat Rp {(bundleComponentDetails.totalOriginalPrice - formPromoPrice).toLocaleString('id-ID')} ({Math.round(((bundleComponentDetails.totalOriginalPrice - formPromoPrice) / bundleComponentDetails.totalOriginalPrice) * 100)}% lebih murah).
+                            Paket Hemat! Customer berhemat Rp {(bundleComponentDetails.totalOriginalPrice - (Number(formPromoPrice) || 0)).toLocaleString('id-ID')} ({Math.round(((bundleComponentDetails.totalOriginalPrice - (Number(formPromoPrice) || 0)) / bundleComponentDetails.totalOriginalPrice) * 100)}% lebih murah).
                           </span>
                         </div>
                       ) : (
                         <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px] font-semibold flex items-center space-x-1.5">
                           <AlertCircle size={13} />
                           <span>
-                            Harga Bundle (Rp {formPromoPrice.toLocaleString('id-ID')}) harus lebih murah dari total harga normal layanan (Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}).
+                            Harga Bundle (Rp {(Number(formPromoPrice) || 0).toLocaleString('id-ID')}) harus lebih murah dari total harga normal layanan (Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}).
                           </span>
                         </div>
                       )
@@ -934,7 +935,8 @@ export const ClinicServices: React.FC = () => {
                     type="number"
                     required
                     value={formDuration}
-                    onChange={(e) => setFormDuration(Number(e.target.value))}
+                    onChange={(e) => setFormDuration(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="40"
                     className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
@@ -947,7 +949,8 @@ export const ClinicServices: React.FC = () => {
                     type="number"
                     required
                     value={formMinAge}
-                    onChange={(e) => setFormMinAge(Number(e.target.value))}
+                    onChange={(e) => setFormMinAge(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
@@ -983,7 +986,8 @@ export const ClinicServices: React.FC = () => {
                     type="number"
                     required
                     value={formOriginalPrice}
-                    onChange={(e) => setFormOriginalPrice(Number(e.target.value))}
+                    onChange={(e) => setFormOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
@@ -995,7 +999,8 @@ export const ClinicServices: React.FC = () => {
                     type="number"
                     required
                     value={formPromoPrice}
-                    onChange={(e) => setFormPromoPrice(Number(e.target.value))}
+                    onChange={(e) => setFormPromoPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-bold text-[#008069]"
                   />
                 </div>

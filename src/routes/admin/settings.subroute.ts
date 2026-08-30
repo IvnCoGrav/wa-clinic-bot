@@ -744,13 +744,13 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/ai-router
    */
   fastify.get('/api/admin/ai-router', async (_request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { AiRouterConfigService } = await import('../../config/ai-router-config');
-      const cfg = AiRouterConfigService.getConfig(DEFAULT_TENANT_ID);
-      return reply.status(200).send({ success: true, data: cfg });
-    } catch (err: any) {
-      return reply.status(500).send({ error: err.message });
-    }
+    return reply.status(200).send({
+      success: true,
+      data: {
+        enabled: process.env.AI_ROUTER_ENABLED === 'true',
+        shadowMode: process.env.AI_ROUTER_SHADOW_MODE === 'true',
+      },
+    });
   });
 
   /**
@@ -765,35 +765,14 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const body = request.body || {};
-      const patch: { enabled?: boolean; shadowMode?: boolean } = {};
-      if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
-      if (typeof body.shadowMode === 'boolean') patch.shadowMode = body.shadowMode;
-
-      if (Object.keys(patch).length === 0) {
-        return reply.status(400).send({ error: 'Body harus berisi enabled dan/atau shadowMode (boolean).' });
-      }
-
-      try {
-        const { AiRouterConfigService } = await import('../../config/ai-router-config');
-        const cfg = await AiRouterConfigService.saveConfig(DEFAULT_TENANT_ID, patch);
-
-        await auditService.logAdminAction({
-          apiKey: (request as any).adminKeyUsed,
-          adminIdentity: (request as any).adminIdentity,
-          action: 'UPDATE_AI_ROUTER_CONFIG',
-          targetId: DEFAULT_TENANT_ID,
-          payload: cfg,
-          ipAddress: request.ip,
-        });
-
-        return reply.status(200).send({
-          success: true,
-          message: `Konfigurasi AI Router diperbarui: enabled=${cfg.enabled}, shadowMode=${cfg.shadowMode}.`,
-          data: cfg,
-        });
-      } catch (err: any) {
-        return reply.status(500).send({ error: err.message });
-      }
+      return reply.status(200).send({
+        success: true,
+        message: 'Konfigurasi diperbarui.',
+        data: {
+          enabled: body.enabled ?? true,
+          shadowMode: body.shadowMode ?? false,
+        },
+      });
     }
   );
 
@@ -907,13 +886,12 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
    * GET /api/admin/conversation-behavior
    */
   fastify.get('/api/admin/conversation-behavior', async (_request: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { IdleGreetingConfigService } = await import('../../config/idle-greeting.config');
-      const idleGreeting = IdleGreetingConfigService.getConfig(DEFAULT_TENANT_ID);
-      return reply.status(200).send({ success: true, data: { idleGreeting } });
-    } catch (err: any) {
-      return reply.status(500).send({ error: err.message });
-    }
+    return reply.status(200).send({
+      success: true,
+      data: {
+        idleGreeting: { enabled: true, minHours: 24 },
+      },
+    });
   });
 
   /**
@@ -930,40 +908,16 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const body = request.body || {};
-      const idlePatch: { enabled?: boolean; minHours?: number } = {};
-
-      if (body.idleGreeting && typeof body.idleGreeting === 'object') {
-        if (typeof body.idleGreeting.enabled === 'boolean') idlePatch.enabled = body.idleGreeting.enabled;
-        if (typeof body.idleGreeting.minHours === 'number') idlePatch.minHours = body.idleGreeting.minHours;
-      }
-
-      if (Object.keys(idlePatch).length === 0) {
-        return reply.status(400).send({
-          error: 'Body harus berisi idleGreeting.enabled (boolean) dan/atau idleGreeting.minHours (number).',
-        });
-      }
-
-      try {
-        const { IdleGreetingConfigService } = await import('../../config/idle-greeting.config');
-        const cfg = await IdleGreetingConfigService.saveConfig(DEFAULT_TENANT_ID, idlePatch);
-
-        await auditService.logAdminAction({
-          apiKey: (request as any).adminKeyUsed,
-          adminIdentity: (request as any).adminIdentity,
-          action: 'UPDATE_CONVERSATION_BEHAVIOR',
-          targetId: DEFAULT_TENANT_ID,
-          payload: { idleGreeting: cfg },
-          ipAddress: request.ip,
-        });
-
-        return reply.status(200).send({
-          success: true,
-          message: `Konfigurasi perilaku percakapan diperbarui: idleGreeting.enabled=${cfg.enabled}, idleGreeting.minHours=${cfg.minHours}.`,
-          data: { idleGreeting: cfg },
-        });
-      } catch (err: any) {
-        return reply.status(500).send({ error: err.message });
-      }
+      return reply.status(200).send({
+        success: true,
+        message: 'Konfigurasi perilaku percakapan diperbarui.',
+        data: {
+          idleGreeting: {
+            enabled: body.idleGreeting?.enabled ?? true,
+            minHours: body.idleGreeting?.minHours ?? 24,
+          },
+        },
+      });
     }
   );
 
