@@ -4,6 +4,34 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhancement & Fix — Reservation List View Nearest-Time Sorting (`booking_date ASC`) & Strict WIB Timezone Parser (`Reservations.tsx`, `reservations.subroute.ts`, `reservation-text-parser.ts`) (2026-08-31)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  1. **Urutan Tampilan List Reservasi**: Pengguna menanyakan mengapa tampilan daftar/tabel reservasi tidak diurutkan berdasarkan jam kunjungan yang paling dekat.
+  2. **Verifikasi Keakuratan Jam Reservasi**: Pengguna meminta memastikan jam yang tercatat di reservasi benar-benar sesuai dengan teks konfirmasi/pemesanan customer dan tidak asal-asalan (*ngarang*).
+
+- **Akar Masalah & Temuan Audit:**
+  1. **Default Sorting di Tabel Reservasi**:
+     - `Reservations.tsx` dan `reservations.subroute.ts` sebelumnya memiliki nilai default `sortField = 'created_at'` dan `sortOrder = 'desc'`. Hal ini menyebabkan tabel mengurutkan data berdasarkan waktu input reservasi dibuat di database (entri terbaru di atas), bukan berdasarkan jam jadwal kunjungan (`booking_date`).
+  2. **Potensi Pergeseran Jam Timezone & Dotted Date Parse**:
+     - Parser tanggal sebelumnya menggunakan `new Date(year, month, day, hours, minutes)` yang bergantung pada timezone lokal server. Di lingkungan server Docker / VM berbasis UTC, jam 10:00 WIB yang tersimpan sebagai 10:00 UTC akan bergeser 7 jam menjadi 17:00 (5 sore) saat dibuka di browser Indonesia.
+     - Penulisan tanggal dengan titik seperti `10.08.2026` sebelumnya berisiko tertangkap oleh regex waktu `10.08` sebagai jam 10:08 pagi jika tidak ada jam eksplisit.
+
+- **Solusi & Implementasi Teknis:**
+  1. **Pengurutan Default List View ke Jam Terdekat (`booking_date ASC`)**:
+     - `Reservations.tsx`: Mengubah default `sortField` menjadi `'booking_date'` dan `sortOrder` menjadi `'asc'`.
+     - `src/routes/admin/reservations.subroute.ts`: Mengubah default query param `sortBy` ke `'booking_date'` dan `sortOrder` ke `'asc'`, dengan pengurutan Prisma `[{ booking_date: 'asc' }, { created_at: 'desc' }]` serta sorting in-memory fallback.
+     - Reservasi terdekat hari ini (pukul 09:00, 10:00, 13:00, dst.) kini otomatis tampil paling atas di view list/tabel.
+  2. **Parser Waktu & Timezone WIB Presisi (`src/utils/reservation-text-parser.ts`)**:
+     - Ditambahkan helper `createWibDate(year, month, day, hours, minutes)` yang menyematkan offset ISO `+07:00` secara eksplisit, menjamin jam tidak pernah bergeser di server mana pun.
+     - Regex waktu diperketat untuk mendeteksi penanda waktu eksplisit (`jam 10.00`, `pukul 14.30`, `pk 09.00`, `10.00 wib`, `jam 1 siang` $\rightarrow$ 13:00, `jam 3 sore` $\rightarrow$ 15:00, `10:00`).
+     - Tanggal numerik dengan titik (`10.08.2026`, `29.08.2026`) kini diparsing dengan benar sebagai tanggal 10 Agustus tanpa salah terbaca sebagai jam 10:08.
+  3. **Unit Tests & Verifikasi**:
+     - `tests/unit/reservation-text-parser.test.ts`: **19/19 tests passed (100% green)**.
+     - Full Vitest suite: **198 test files, 1541 tests passed (100% green)**.
+     - Frontend dashboard: **PASS (0 error, built in 10.38s)**.
+     - Backend server: **PASS (0 error)**.
+
 #### Enhancement & Fix — Reservation Card Length, Total Duration & Buffer Time Synchronization (`durationCalculator.ts`, `DayScheduleGrid.tsx`, `WeekScheduleGrid.tsx`, `MonthScheduleGrid.tsx`, `ReservationDetailModal.tsx`, `Reservations.tsx`) (2026-08-31)
 
 - **Latar Belakang & Permintaan Pengguna:**
