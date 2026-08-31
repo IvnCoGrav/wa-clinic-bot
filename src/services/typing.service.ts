@@ -340,6 +340,15 @@ export class TypingService {
    */
   public async simulateHumanReply(params: HumanReplyParams): Promise<HumanReplyResult> {
     const { chatId, incomingMessageId, incomingText, replyText, shouldAbort, tenantId } = params;
+    const effectiveTenantId = tenantId || 'default-tenant';
+
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(effectiveTenantId);
+    if (isCutOff) {
+      console.warn(`[TYPING CUT-OFF ACTIVE] Outbound human reply simulation to ${chatId} blocked by internal safety cut-off.`);
+      return { success: false, bubblesSent: 0, error: 'WAHA_INTERNAL_CUTOFF: Outbound cut-off is active.' };
+    }
+
     const isEnabled = (process.env.HUMANIZER_ENABLED ?? 'true') !== 'false' && this.speedFactor >= 0.01;
 
     let bubblesSent = 0;
@@ -350,7 +359,6 @@ export class TypingService {
     // agar echo webhook dari WAHA tidak memicu false positive human takeover
     try {
       const { messageService } = await import('./message.service');
-      const effectiveTenantId = tenantId || 'default-tenant';
       for (const bubbleContent of bubbles) {
         messageService.registerInFlightBotOutbound(chatId, bubbleContent, effectiveTenantId);
       }

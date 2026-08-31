@@ -2,6 +2,7 @@ import { ConversationState } from '@prisma/client';
 import { StateHandlerContext } from '../state-machine/types';
 import { CustomerSlate, ExtractedEntities } from './types';
 import { prisma } from '../db/client';
+import { getGazetteerAreas, escapeRegex } from '../utils/gazetteer';
 
 export class SlateStore {
   /**
@@ -19,7 +20,15 @@ export class SlateStore {
       childAgeCategory = childAgeMonths <= 24 ? 'BABY' : 'KIDS';
     }
 
-    const isLocationConfirmed = Boolean(customer.kelurahan && customer.lat && customer.lng);
+    const distanceKm = customer.distance_km ?? preferences.distanceKm ?? null;
+    const ongkirPromoFee = customer.ongkir ?? preferences.ongkirPromoFee ?? preferences.ongkirFee ?? null;
+    const ongkirFee = preferences.ongkirFee ?? ongkirPromoFee ?? null;
+    const isOutOfCoverage = customer.is_out_of_coverage ?? Boolean(preferences.isOutOfCoverage);
+
+    const isLocationConfirmed = Boolean(
+      (customer.kelurahan && (customer.lat != null || distanceKm != null)) ||
+      (customer.lat != null && customer.lng != null)
+    );
     const symptoms: string[] = Array.isArray(preferences.symptoms) ? preferences.symptoms : [];
 
     const slate: CustomerSlate = {
@@ -32,14 +41,14 @@ export class SlateStore {
       kelurahan: customer.kelurahan || null,
       kecamatan: customer.kecamatan || null,
       kota: customer.kota || null,
-      lat: customer.lat || null,
-      lng: customer.lng || null,
+      lat: customer.lat ?? null,
+      lng: customer.lng ?? null,
       streetDetail: preferences.streetDetail || null,
-      distanceKm: preferences.distanceKm || null,
-      ongkirFee: preferences.ongkirFee || null,
-      ongkirPromoFee: preferences.ongkirPromoFee || null,
+      distanceKm,
+      ongkirFee,
+      ongkirPromoFee,
       isLocationConfirmed,
-      isOutOfCoverage: Boolean(preferences.isOutOfCoverage),
+      isOutOfCoverage,
 
       childAgeMonths,
       childAgeCategory,
@@ -67,8 +76,114 @@ export class SlateStore {
       projectedState: conversation.current_state || ConversationState.AWAITING_LOCATION,
     };
 
+    // 1b. Passive Ground Truth Harvesting dari riwayat pesan jika data penting belum terisi
+    if (ctx.history && ctx.history.length > 0) {
+      this.harvestGroundTruthFromHistorySync(slate, ctx.history);
+    }
+
     slate.projectedState = this.computeProjectedState(slate);
     return slate;
+  }
+
+  /**
+   * Ekstraksi informasi fakta (Ground Truth) secara pasif dari riwayat pesan sebelumnya.
+   * 0 Token, < 1ms, murni deterministik.
+   */
+  public static harvestGroundTruthFromHistorySync(
+    slate: CustomerSlate,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): boolean {
+    let modified = false;
+
+    // 1. Ekstraksi Admin Outbound (jarak & ongkir yang sudah dikutip oleh CS)
+    if (slate.distanceKm === null || slate.ongkirPromoFee === null) {
+      try {
+        const { parseAdminChatDistanceAndOngkir } = require('../utils/admin-chat-distance-parser');
+        for (let i = history.length - 1; i >= 0; i--) {
+          const msg = history[i];
+          if (msg.role === 'assistant') {
+            const parsed = parseAdminChatDistanceAndOngkir(msg.content);
+            if (parsed.isConfident && (parsed.distanceKm !== null || parsed.ongkir !== null)) {
+              if (parsed.distanceKm !== null && slate.distanceKm === null) {
+                slate.distanceKm = parsed.distanceKm;
+                modified = true;
+              }
+              if (parsed.ongkir !== null && slate.ongkirPromoFee === null) {
+                slate.ongkirPromoFee = parsed.ongkir;
+                slate.ongkirFee = parsed.normalOngkir || parsed.ongkir;
+                modified = true;
+              }
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Ekstraksi User Inbound (nama wilayah / kelurahan yang sudah diinfokan customer)
+    if (!slate.kelurahan) {
+      const gazetteer = getGazetteerAreas();
+      for (let i = history.length - 1; i >= 0; i--) {
+        const msg = history[i];
+        if (msg.role === 'user') {
+          const clean = msg.content.toLowerCase().trim()
+            .replace(/^(?:saya\s+)?(?:di|daerah|ke|posisi|area)\s+/i, '')
+            .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan)$/i, '')
+            .trim();
+          if (clean && gazetteer.has(clean)) {
+            slate.kelurahan = gazetteer.get(clean)!;
+            modified = true;
+            break;
+          } else {
+            for (const [areaLower, areaOrig] of gazetteer.entries()) {
+              const reg = new RegExp(`\\b${escapeRegex(areaLower)}\\b`, 'i');
+              if (reg.test(msg.content)) {
+                slate.kelurahan = areaOrig;
+                modified = true;
+                break;
+              }
+            }
+            if (slate.kelurahan) break;
+          }
+        }
+      }
+    }
+
+    // 3. Treatment yang pernah dibahas di history
+    if (!slate.selectedTreatmentName) {
+      const treatmentKeywords = [
+        { key: 'oksitosin', name: 'Pijat Oksitosin' },
+        { key: 'laktasi', name: 'Pijat Laktasi' },
+        { key: 'pulih ceria', name: 'Pijat Bayi Pulih Ceria' },
+        { key: 'batuk', name: 'Pijat Bayi Pulih Ceria' },
+        { key: 'pilek', name: 'Pijat Bayi Pulih Ceria' },
+        { key: 'grok', name: 'Pijat Bayi Pulih Ceria' },
+        { key: 'kolik', name: 'Pijat Bayi Kolik & Sembelit' },
+        { key: 'sembelit', name: 'Pijat Bayi Kolik & Sembelit' },
+        { key: 'tumbuh ceria', name: 'Pijat Bayi Tumbuh Ceria' },
+        { key: 'bayi ceria', name: 'Pijat Bayi Ceria' },
+        { key: 'pijat bayi', name: 'Pijat Bayi Ceria' },
+        { key: 'pijat hamil', name: 'Pijat Relaksasi Ibu Hamil' },
+        { key: 'pijat nifas', name: 'Pijat Relaksasi Ibu Nifas' },
+      ];
+      for (let i = history.length - 1; i >= 0; i--) {
+        const lower = history[i].content.toLowerCase();
+        for (const t of treatmentKeywords) {
+          if (lower.includes(t.key)) {
+            slate.selectedTreatmentName = t.name;
+            modified = true;
+            break;
+          }
+        }
+        if (slate.selectedTreatmentName) break;
+      }
+    }
+
+    if (slate.kelurahan && (slate.distanceKm !== null || slate.lat !== null)) {
+      slate.isLocationConfirmed = true;
+    }
+
+    return modified;
   }
 
   /**
@@ -198,6 +313,9 @@ export class SlateStore {
           kota: slate.kota || undefined,
           lat: slate.lat || undefined,
           lng: slate.lng || undefined,
+          distance_km: slate.distanceKm ?? undefined,
+          ongkir: slate.ongkirPromoFee ?? slate.ongkirFee ?? undefined,
+          is_out_of_coverage: slate.isOutOfCoverage ?? undefined,
           pricelist_sent: slate.pricelistSent,
           preferences,
         },

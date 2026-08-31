@@ -210,8 +210,8 @@ export const WhatsAppProviderPanel: React.FC<Props> = ({
                 </h4>
                 <p className="text-[11px] text-[#667781] leading-relaxed">
                   {wahaOutboundCutoff
-                    ? 'Pengiriman pesan bot keluar ke WAHA sedang DIPUTUS secara internal. Sesi WhatsApp di HP tetap login dan aman (tanpa perlu scan QR ulang).'
-                    : 'Koneksi aliran pesan bot ke WAHA normal. Putuskan darurat jika ingin menahan semua pengiriman pesan keluar seketika.'}
+                    ? 'SEMUA pesan keluar sistem (Bot AI, Follow-Up, Reminder, Broadcast, & Live Chat) sedang DINONAKTIFKAN TOTAL. Sesi WhatsApp di HP tetap login dan aman.'
+                    : 'Koneksi aliran pesan sistem normal. Aktifkan Cut-Off Darurat jika ingin mematikan seluruh pesan keluar sistem seketika.'}
                 </p>
               </div>
 

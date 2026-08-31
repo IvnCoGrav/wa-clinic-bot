@@ -353,7 +353,6 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const gateway = await getGateway(tenantId);
 
       if (isTyping) {
-        console.log(`[LIVE CHAT TYPING] Admin started typing -> conversation: ${id}, phone: ${phone}`);
         // 1. Kirim sinyal markAsRead (sendSeen / centang biru)
         if (typeof gateway.markAsRead === 'function') {
           await gateway.markAsRead(phone).catch((err: any) => console.warn('[TYPING ERROR] markAsRead failed:', err.message));
@@ -366,7 +365,6 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           await gateway.sendTypingIndicator(phone, undefined, 4000).catch(() => {});
         }
       } else {
-        console.log(`[LIVE CHAT TYPING] Admin stopped typing -> conversation: ${id}, phone: ${phone}`);
         // Hentikan status typing
         if (gateway.providerType === 'WAHA') {
           const { wahaClient } = await import('../../integrations/waha/client');
@@ -674,6 +672,122 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
     }
   );
+
+  /**
+   * PATCH /api/admin/conversation/:id/takeover
+   * POST /api/admin/live-chat/conversations/:id/takeover
+   * Endpoint manual takeover untuk mengambil alih percakapan dari bot ke mode HUMAN_HANDLING (CS/Admin).
+   */
+  const handleTakeoverRoute = async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    try {
+      let existing: any = null;
+      try {
+        existing = await prisma.conversation.findUnique({ where: { id } });
+      } catch {
+        existing = null;
+      }
+      if (!existing) {
+        existing = await conversationService.getConversationById(id, DEFAULT_TENANT_ID);
+      }
+      if (!existing) {
+        return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan.' });
+      }
+
+      if (existing.is_human_handling) {
+        return reply.status(200).send({
+          success: true,
+          message: 'Percakapan sudah berada dalam mode penanganan manusia (Human Handling).',
+          data: existing,
+        });
+      }
+
+      const now = new Date();
+      let updated: any = null;
+      try {
+        updated = await prisma.conversation.update({
+          where: { id },
+          data: {
+            is_human_handling: true,
+            human_handling_since: now,
+            escalation_reason: 'manual_takeover',
+            previous_state: existing.current_state || 'INITIAL',
+          },
+        });
+      } catch (dbErr: any) {
+        console.warn('[ADMIN TAKEOVER DB ERROR]', dbErr.message);
+      }
+
+      if (!updated) {
+        updated = await conversationService.updateConversationState(
+          id,
+          {
+            isHumanHandling: true,
+            humanHandlingSince: now,
+            escalationReason: 'manual_takeover',
+            previousState: existing.current_state || 'INITIAL',
+          },
+          DEFAULT_TENANT_ID
+        );
+      }
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'CONVERSATION_MANUAL_TAKEOVER',
+        targetId: id,
+        payload: { takenOverAt: now, previousState: existing.current_state },
+        ipAddress: request.ip,
+      });
+
+      // Auto set Hold flag di customer record
+      try {
+        if (updated?.customer_id) {
+          const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
+          if (customer) {
+            await prisma.customer.update({
+              where: { id: customer.id },
+              data: { is_hold_labeled: true },
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[LABEL ERROR] Failed to set hold flag during manual admin takeover:`, err.message);
+      }
+
+      const enableHoldLabel = process.env.ENABLE_WAHA_HOLD_LABEL === 'true';
+      if (enableHoldLabel && updated?.customer_id) {
+        try {
+          const { wahaClient } = await import('../../integrations/waha/client');
+          const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
+          if (customer) {
+            await wahaClient.addLabel(`${customer.phone}@c.us`, 'hold');
+          }
+        } catch (err: any) {
+          console.warn(`[LABEL ERROR] Failed to auto-add WAHA hold label during manual admin takeover:`, err.message);
+        }
+      }
+
+      getLiveChatHub()
+        .publish({
+          type: 'conversation.updated',
+          tenantId: DEFAULT_TENANT_ID,
+          payload: buildConversationUpdatedPayload(updated),
+        })
+        .catch(() => {});
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Percakapan berhasil diambil alih oleh admin (CS). Bot dinonaktifkan untuk percakapan ini.',
+        data: updated,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal mengambil alih percakapan.' });
+    }
+  };
+
+  fastify.patch('/api/admin/conversation/:id/takeover', handleTakeoverRoute);
+  fastify.post('/api/admin/live-chat/conversations/:id/takeover', handleTakeoverRoute);
 
   /**
    * POST /api/admin/live-chat/customers/:id/refresh-profile-picture

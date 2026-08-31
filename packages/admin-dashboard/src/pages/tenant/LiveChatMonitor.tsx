@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo, startTransition } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
@@ -28,6 +28,8 @@ import {
   RefreshCw,
   Trash2,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Tag,
   Plus,
   Check,
@@ -52,7 +54,10 @@ import {
   CalendarPlus,
   Receipt,
   Smile,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -61,7 +66,30 @@ import { CreateReservationModal } from '../../components/calendar/CreateReservat
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
+import { formatChatDateSeparatorWib, isDifferentDayWib, formatLastChatWib, formatWibTime } from '../../utils/dateWib';
 import { emitBootPhase } from '../../lib/bootProgress';
+
+function renderHighlightedText(text: string, query: string) {
+  if (!query || !query.trim() || !text) return text;
+  const q = query.trim();
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try {
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = text.split(regex);
+    if (parts.length <= 1) return text;
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-amber-300 text-amber-950 font-bold px-0.5 rounded shadow-2xs">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  } catch {
+    return text;
+  }
+}
 
 interface QuotedMessageData {
   id?: string;
@@ -115,37 +143,11 @@ function extractQuotedMessage(msg: any): QuotedMessageData | undefined {
 }
 
 function formatChatDateSeparator(dateStr: string): string {
-  if (!dateStr) return '';
-  const msgDate = new Date(dateStr);
-  const now = new Date();
-
-  // Reset to midnight for exact calendar day comparison
-  const msgMidnight = new Date(msgDate.getFullYear(), msgDate.getMonth(), msgDate.getDate()).getTime();
-  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-  const diffDays = Math.round((nowMidnight - msgMidnight) / (24 * 60 * 60 * 1000));
-
-  if (diffDays === 0) {
-    return 'Hari ini';
-  } else if (diffDays === 1) {
-    return 'Kemarin';
-  } else if (diffDays >= 2 && diffDays < 7) {
-    const dayName = msgDate.toLocaleDateString('id-ID', { weekday: 'long' });
-    return dayName.charAt(0).toUpperCase() + dayName.slice(1);
-  } else {
-    return msgDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' });
-  }
+  return formatChatDateSeparatorWib(dateStr);
 }
 
 function isDifferentDay(d1Str: string, d2Str?: string | null): boolean {
-  if (!d2Str) return true;
-  const d1 = new Date(d1Str);
-  const d2 = new Date(d2Str);
-  return (
-    d1.getFullYear() !== d2.getFullYear() ||
-    d1.getMonth() !== d2.getMonth() ||
-    d1.getDate() !== d2.getDate()
-  );
+  return isDifferentDayWib(d1Str, d2Str);
 }
 
 function extractMedia(msg: any): ChatMediaData | undefined {
@@ -198,6 +200,11 @@ interface LiveChatItem {
   customerId: string;
   customerName: string | null;
   customerPhone: string | null;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  distanceKm?: number | null;
+  ongkir?: number | null;
   currentState: string;
   isHumanHandling: boolean;
   humanHandlingSince: string | null;
@@ -346,6 +353,18 @@ export const LiveChatMonitor: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
+
+  // In-Chat Search & Target Message Highlighting — unified dengan global searchQuery
+  const [matchingMessageIds, setMatchingMessageIds] = useState<string[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
+
+  // Derived: searchQuery digunakan sebagai in-chat search jika ada percakapan aktif
+  const effectiveInChatQuery = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!selectedId || !q || q.length < 2) return '';
+    return q;
+  }, [searchQuery, selectedId]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
@@ -375,8 +394,61 @@ export const LiveChatMonitor: React.FC = () => {
     }, 1500);
   };
 
-  // ✍️ WhatsApp Typing Presence & Seen Notification
+  // 🛑 Global Bot Cut-Off (Emergency Kill-Switch)
+  const [globalBotCutoff, setGlobalBotCutoff] = useState(false);
+  const [togglingBotCutoff, setTogglingBotCutoff] = useState(false);
+
+  const loadBotCutoffStatus = async () => {
+    try {
+      const data = await apiRequest('/api/admin/whatsapp-provider');
+      if (data && typeof data.wahaOutboundCutoff === 'boolean') {
+        setGlobalBotCutoff(data.wahaOutboundCutoff);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    loadBotCutoffStatus();
+  }, []);
+
+  const handleToggleGlobalBot = async (enableBot: boolean) => {
+    const nextCutOff = !enableBot;
+
+    const isConfirm = await confirm({
+      title: nextCutOff ? 'Matikan Seluruh Bot & Pesan Keluar?' : 'Aktifkan Kembali Seluruh Bot?',
+      message: nextCutOff
+        ? 'PERINGATAN: Mematikan bot global akan menghentikan SEMUA pesan keluar dari sistem (Bot AI, Follow-Up otomatis, Reminder, Broadcast, & balasan Live Chat). Sesi WhatsApp di HP tetap aktif dan pesan masuk tetap tersimpan.'
+        : 'Aktifkan kembali seluruh pengiriman pesan bot otomatis dan sistem WhatsApp?',
+      confirmText: nextCutOff ? 'Ya, Matikan Bot Global' : 'Ya, Aktifkan Bot',
+      danger: nextCutOff,
+    });
+    if (!isConfirm) return;
+
+    setTogglingBotCutoff(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/cutoff', {
+        method: 'PATCH',
+        body: JSON.stringify({ cutOff: nextCutOff }),
+      });
+      if (res && res.success) {
+        setGlobalBotCutoff(Boolean(res.wahaOutboundCutoff));
+        toast(
+          nextCutOff
+            ? 'Bot Global DINONAKTIFKAN (Kill-Switch AKTIF). Seluruh pesan keluar sistem dimatikan.'
+            : 'Bot Global DIAKTIFKAN KEMBALI. Seluruh pesan keluar sistem normal.',
+          nextCutOff ? 'info' : 'success'
+        );
+      }
+    } catch (err: any) {
+      toast(`Gagal mengubah status Bot Global: ${err?.message || err}`, 'error');
+    } finally {
+      setTogglingBotCutoff(false);
+    }
+  };
+
+  // ✍️ WhatsApp Typing Presence & Seen Notification — debounce untuk hindari spam saat ketik
   const typingTimerRef = useRef<any>(null);
+  const typingStartTimerRef = useRef<any>(null);
   const isTypingActiveRef = useRef(false);
 
   const notifyTyping = (isTyping: boolean) => {
@@ -399,13 +471,18 @@ export const LiveChatMonitor: React.FC = () => {
     if (!selectedIdRef.current) return;
 
     if (isNotEmpty) {
-      notifyTyping(true);
+      // Debounce 500ms sebelum kirim startTyping — hindari goyang akibat SSE balik tiap karakter
+      if (typingStartTimerRef.current) clearTimeout(typingStartTimerRef.current);
+      typingStartTimerRef.current = setTimeout(() => {
+        notifyTyping(true);
+      }, 500);
 
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       typingTimerRef.current = setTimeout(() => {
         notifyTyping(false);
       }, 3000);
     } else {
+      if (typingStartTimerRef.current) clearTimeout(typingStartTimerRef.current);
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       notifyTyping(false);
     }
@@ -547,6 +624,8 @@ export const LiveChatMonitor: React.FC = () => {
   const chatListContainerRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchInputFocusedRef = useRef(false);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
 
@@ -850,7 +929,7 @@ export const LiveChatMonitor: React.FC = () => {
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
       if (reset) {
-        setChats(data);
+        startTransition(() => setChats(data));
         chatsRef.current = data;
       } else {
         const merged = [...chatsRef.current];
@@ -861,7 +940,7 @@ export const LiveChatMonitor: React.FC = () => {
             seen.add(item.conversationId);
           }
         }
-        setChats(merged);
+        startTransition(() => setChats(merged));
         chatsRef.current = merged;
       }
       setHasMore(nextHasMore);
@@ -965,48 +1044,92 @@ export const LiveChatMonitor: React.FC = () => {
   }, [mobileView]);
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsDesktop(window.innerWidth >= 1024);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(min-width: 1024px)');
+    setIsDesktop(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
   }, []);
 
+  // Focus restoration: jika search input fokus sebelum re-render (loadChats/SSE), restore fokusnya
+  useEffect(() => {
+    if (searchInputFocusedRef.current && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  });
+
   const scrollToBottom = useCallback((smooth = false, forceMulti = true) => {
+    // Goyang fix: hanya scroll jika user dekat bawah (tidak ganggu saat baca history), dan kurangi multi-timeout.
+    const isNearBottom = (() => {
+      const el = chatContainerRef.current;
+      if (!el) return true;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      return distanceFromBottom < 300; // threshold 300px
+    })();
+    if (!isNearBottom && !forceMulti) return;
     const doScroll = () => {
       if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
       }
-      if (messagesEndRef.current) {
+      // scrollIntoView hanya jika nearBottom untuk hindari fight dengan scrollTop
+      if (isNearBottom && messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
       }
     };
     doScroll();
     requestAnimationFrame(doScroll);
     if (forceMulti) {
-      setTimeout(doScroll, 30);
-      setTimeout(doScroll, 100);
-      setTimeout(doScroll, 250);
-      setTimeout(doScroll, 500);
+      // kurangi dari 4 → 1 rAF tambahan untuk hemat jank
+      setTimeout(doScroll, 120);
     }
   }, []);
 
-  // 📱 Visual Viewport API: Saat keyboard iOS muncul/berubah ukuran, auto-scroll chat agar tidak tertutup
+  const scrollToMessage = useCallback((msgId: string, smooth = true) => {
+    setHighlightedMsgId(msgId);
+    const doScroll = () => {
+      const el = document.getElementById(`msg-${msgId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 40);
+    setTimeout(doScroll, 120);
+    setTimeout(doScroll, 300);
+
+    // Hilangkan flash highlight setelah 3.5 detik
+    setTimeout(() => {
+      setHighlightedMsgId((prev) => (prev === msgId ? null : prev));
+    }, 3500);
+  }, []);
+
+  // 📱 Visual Viewport API: throttle 200ms + cek nearBottom untuk hindari goyang saat ketik
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
+    let throttleTimer: any = null;
+    let lastVpHeight = window.visualViewport?.height || 0;
     const handleViewportChange = () => {
-      if (mobileView === 'chat') {
-        scrollToBottom(true);
-      }
+      if (mobileView !== 'chat') return;
+      // hanya scroll jika tinggi viewport berubah signifikan (>80px = keyboard open/close), bukan tiap karakter
+      const newH = window.visualViewport?.height || 0;
+      if (Math.abs(newH - lastVpHeight) < 80) return;
+      lastVpHeight = newH;
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null;
+        scrollToBottom(true, false); // false = hanya jika nearBottom
+      }, 200);
     };
     const vp = window.visualViewport;
     vp.addEventListener('resize', handleViewportChange);
-    vp.addEventListener('scroll', handleViewportChange);
+    // scroll event tidak perlu, hanya resize untuk keyboard
     return () => {
       vp.removeEventListener('resize', handleViewportChange);
-      vp.removeEventListener('scroll', handleViewportChange);
+      if (throttleTimer) clearTimeout(throttleTimer);
     };
-  }, [mobileView]);
+  }, [mobileView, scrollToBottom]);
 
   // ⬅️ Listener untuk Edge Swipe-Back Navigation dari Layout (Kembali dari Chat ke List di Mobile)
   useEffect(() => {
@@ -1094,12 +1217,75 @@ export const LiveChatMonitor: React.FC = () => {
     selectedReservation,
   ]);
 
+  // Saat pindah percakapan, reset in-chat search agar banner tidak persisten.
   useEffect(() => {
-    // Auto scroll down to latest message when messages change or new chat opened
+    setMatchingMessageIds([]);
+    setCurrentMatchIndex(-1);
+    setHighlightedMsgId(null);
+  }, [selectedId]);
+
+  // Hitung daftar matching message IDs dalam thread percakapan aktif — minimal 2 karakter agar tidak spam untuk nomor pendek
+  useEffect(() => {
+    const q = effectiveInChatQuery;
+    if (!q || messages.length === 0) {
+      setMatchingMessageIds([]);
+      setCurrentMatchIndex(-1);
+      return;
+    }
+    const matches = messages
+      .filter((m) => m.content && m.content.toLowerCase().includes(q))
+      .map((m) => m.id);
+
+    setMatchingMessageIds(matches);
+    if (matches.length > 0) {
+      setCurrentMatchIndex((prev) => (prev >= 0 && prev < matches.length ? prev : matches.length - 1));
+    } else {
+      setCurrentMatchIndex(-1);
+    }
+  }, [effectiveInChatQuery, messages]);
+
+  const handlePrevMatch = () => {
+    if (matchingMessageIds.length === 0) return;
+    const newIdx = currentMatchIndex > 0 ? currentMatchIndex - 1 : matchingMessageIds.length - 1;
+    setCurrentMatchIndex(newIdx);
+    const targetId = matchingMessageIds[newIdx];
+    if (targetId) scrollToMessage(targetId, true);
+  };
+
+  const handleNextMatch = () => {
+    if (matchingMessageIds.length === 0) return;
+    const newIdx = currentMatchIndex < matchingMessageIds.length - 1 ? currentMatchIndex + 1 : 0;
+    setCurrentMatchIndex(newIdx);
+    const targetId = matchingMessageIds[newIdx];
+    if (targetId) scrollToMessage(targetId, true);
+  };
+
+  const handleClearInChatSearch = () => {
+    setSearchQuery('');
+    setMatchingMessageIds([]);
+    setCurrentMatchIndex(-1);
+    setHighlightedMsgId(null);
+    scrollToBottom(true);
+  };
+
+  useEffect(() => {
+    // Smart auto-scroll: jika ada keyword pencarian dalam-bubble dan pesan cocok, scroll langsung ke target
     if (messages.length > 0) {
+      const q = effectiveInChatQuery;
+      if (q) {
+        const matches = messages
+          .filter((m) => m.content && m.content.toLowerCase().includes(q))
+          .map((m) => m.id);
+
+        if (matches.length > 0) {
+          const targetId = matches[matches.length - 1];
+          scrollToMessage(targetId, false);
+          return;
+        }
+      }
       scrollToBottom(false, true);
     }
-  }, [messages, selectedId, scrollToBottom]);
+  }, [messages, selectedId, effectiveInChatQuery, scrollToBottom, scrollToMessage]);
 
   const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
     return [...list].sort((a, b) => {
@@ -1261,13 +1447,13 @@ export const LiveChatMonitor: React.FC = () => {
       },
       onEvent: (type, payload) => {
         if (type === 'conversation.updated' && payload?.allRead) {
-          setChats((prev) =>
+          startTransition(() => setChats((prev) =>
             prev.map((c) => ({
               ...c,
               unreadCount: 0,
               isManualUnread: false,
             }))
-          );
+          ));
           return;
         }
 
@@ -1345,7 +1531,7 @@ export const LiveChatMonitor: React.FC = () => {
                   }
             );
             const sorted = sortChats(updated);
-            setChats(sorted);
+            startTransition(() => setChats(sorted));
             chatsRef.current = sorted;
           } else {
             // Percakapan baru muncul → reload daftar dari awal
@@ -1373,7 +1559,7 @@ export const LiveChatMonitor: React.FC = () => {
               : c
           );
           const sorted = sortChats(updated);
-          setChats(sorted);
+          startTransition(() => setChats(sorted));
           chatsRef.current = sorted;
         } else if (type === 'message.updated' && payload?.messageId) {
           const { messageId, content, isRevoked } = payload;
@@ -1663,6 +1849,44 @@ export const LiveChatMonitor: React.FC = () => {
       toast('Percakapan berhasil dikembalikan ke bot.', 'success');
     } catch (err: any) {
       toast(`Gagal merilis percakapan ke bot: ${err.message}`, 'error');
+    } finally {
+      setReleasingId(null);
+    }
+  };
+
+  const handleTakeover = async (chat: LiveChatItem) => {
+    const isConfirmed = await confirm({
+      title: 'Ambil Alih Percakapan (CS)?',
+      message: `Apakah Anda yakin ingin mengambil alih percakapan dengan ${chat.customerName || chat.customerPhone || 'pelanggan'}? Bot AI akan berhenti merespon secara otomatis agar Anda dapat melayani secara manual.`,
+      confirmText: 'Ya, Ambil Alih',
+    });
+    if (!isConfirmed) return;
+
+    setReleasingId(chat.conversationId);
+    try {
+      await apiRequest(`/api/admin/conversation/${chat.conversationId}/takeover`, {
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      });
+
+      // Optimistic in-place update
+      setChats((prev) =>
+        prev.map((c) =>
+          c.conversationId === chat.conversationId
+            ? { ...c, isHumanHandling: true, escalationReason: 'manual_takeover', lastHandledBy: 'human' }
+            : c
+        )
+      );
+      chatsRef.current = chatsRef.current.map((c) =>
+        c.conversationId === chat.conversationId
+          ? { ...c, isHumanHandling: true, escalationReason: 'manual_takeover', lastHandledBy: 'human' }
+          : c
+      );
+
+      loadChats(false);
+      toast('Percakapan berhasil diambil alih oleh admin (CS).', 'success');
+    } catch (err: any) {
+      toast(`Gagal mengambil alih percakapan: ${err.message || err}`, 'error');
     } finally {
       setReleasingId(null);
     }
@@ -2083,7 +2307,7 @@ export const LiveChatMonitor: React.FC = () => {
     return 'all';
   };
 
-  const filteredChats = chats.filter((chat) => {
+  const filteredChats = useMemo(() => chats.filter((chat) => {
     // 1. Filter label
     if (labelFilter !== 'all' && getChatLabel(chat) !== labelFilter) {
       return false;
@@ -2107,7 +2331,7 @@ export const LiveChatMonitor: React.FC = () => {
     }
 
     return true;
-  });
+  }), [chats, labelFilter, searchQuery]);
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
@@ -2115,16 +2339,7 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const formatLastChat = (dateStr: string | null) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
-
-    if (diffMins < 1) return 'Baru saja';
-    if (diffMins < 60) return `${diffMins} menit lalu`;
-    if (diffMins < 6 * 60) return `${Math.floor(diffMins / 60)} jam lalu`;
-    if (diffMins < 24 * 60) return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    if (diffMins < 7 * 24 * 60) return `${Math.floor(diffMins / (24 * 60))} hari yang lalu`;
-    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    return formatLastChatWib(dateStr);
   };
 
   const senderLabel = (m: ChatMessage) => {
@@ -2166,8 +2381,23 @@ export const LiveChatMonitor: React.FC = () => {
           </div>
         </div>
 
-        {/* Sync Controls */}
-        <div className="flex items-center space-x-1.5">
+        {/* Controls: Global Bot Switch + Sync */}
+        <div className="flex items-center space-x-2">
+          <ToggleSwitch
+            checked={!globalBotCutoff}
+            onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+            disabled={togglingBotCutoff}
+            loading={togglingBotCutoff}
+            variant={globalBotCutoff ? 'rose' : 'emerald'}
+            onLabel="BOT ON"
+            offLabel="BOT OFF"
+            size="sm"
+            title={
+              globalBotCutoff
+                ? 'Status: Bot & Semua Pesan Keluar Sistem Nonaktif (Cut-Off Aktif). Klik untuk mengaktifkan kembali.'
+                : 'Status: Bot & Pesan Sistem Aktif (Normal). Klik untuk mematikan semua bot & pesan keluar.'
+            }
+          />
           <button
             onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
@@ -2178,6 +2408,26 @@ export const LiveChatMonitor: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Global Bot Cut-Off Active Warning Banner */}
+      {globalBotCutoff && (
+        <div className="p-2 sm:p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+          <div className="flex items-center space-x-2 min-w-0">
+            <ShieldAlert size={16} className="text-rose-600 shrink-0" />
+            <div className="truncate">
+              <span className="font-bold text-rose-700">BOT GLOBAL NONAKTIF (CUT-OFF AKTIF):</span>{' '}
+              <span className="text-rose-800">Seluruh pesan bot otomatis, follow-up, reminder, dan pesan keluar sistem dimatikan.</span>
+            </div>
+          </div>
+          <button
+            onClick={() => handleToggleGlobalBot(true)}
+            disabled={togglingBotCutoff}
+            className="px-2.5 py-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+          >
+            Aktifkan Bot
+          </button>
+        </div>
+      )}
 
       {/* Real-time Background Sync Banner */}
       {bgSyncProgress.isSyncing && (
@@ -2251,14 +2501,27 @@ export const LiveChatMonitor: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setShowSyncInfoModal(true)}
-                  disabled={bgSyncProgress.isSyncing}
-                  className="p-1.5 rounded-lg bg-[#008069] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
-                  title="Sinkronisasi Seluruh Chat WhatsApp"
-                >
-                  <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center space-x-1.5">
+                  <ToggleSwitch
+                    checked={!globalBotCutoff}
+                    onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+                    disabled={togglingBotCutoff}
+                    loading={togglingBotCutoff}
+                    variant={globalBotCutoff ? 'rose' : 'emerald'}
+                    onLabel="ON"
+                    offLabel="OFF"
+                    size="sm"
+                    title="Toggle Bot Global"
+                  />
+                  <button
+                    onClick={() => setShowSyncInfoModal(true)}
+                    disabled={bgSyncProgress.isSyncing}
+                    className="p-1.5 rounded-lg bg-[#008069] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+                    title="Sinkronisasi Seluruh Chat WhatsApp"
+                  >
+                    <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
 
               {/* Header Toolbar: Source Filter + Label Dropdown (Normal in-flow, scrolls away on scroll down) */}
@@ -2349,11 +2612,18 @@ export const LiveChatMonitor: React.FC = () => {
                       )}
                     </span>
                     <input
+                      ref={searchInputRef}
                       type="text"
                       value={searchQuery}
                       onChange={(e) => {
                         setSearchQuery(e.target.value);
                         triggerDebouncedSearch(e.target.value);
+                      }}
+                      onFocus={() => { searchInputFocusedRef.current = true; }}
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          searchInputFocusedRef.current = false;
+                        }
                       }}
                       placeholder="Cari nama, no. HP, atau keyword chat..."
                       className="w-full pl-8 pr-7 py-1.5 bg-[#f0f2f5] hover:bg-[#e9edef] focus:bg-white border border-[#e9edef] focus:border-[#008069] rounded-lg text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#008069]/20 transition-all shadow-2xs"
@@ -2832,31 +3102,32 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   </div>
 
-                    {/* Bot Release Button in Chat Header (Icon-based) */}
-                    <div className="shrink-0">
+                    {/* Header actions: Bot Release/Takeover */}
+                    <div className="shrink-0 flex items-center gap-1.5">
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}
                           disabled={releasingId === selectedChat.conversationId}
                           title="Kembalikan percakapan ke Bot AI"
-                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                         >
                           <Bot size={14} />
                           <span className="hidden sm:inline">Kembalikan ke Bot</span>
                         </button>
                       ) : (
-                        <span
-                          title="Ditangani Bot AI"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] rounded-xl text-xs font-semibold uppercase tracking-wider"
+                        <button
+                          onClick={() => handleTakeover(selectedChat)}
+                          disabled={releasingId === selectedChat.conversationId}
+                          title="Ambil alih percakapan (CS / Manual). Bot AI akan dinonaktifkan untuk percakapan ini."
+                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
                         >
-                          <Bot size={13} />
-                          <span>Bot</span>
-                        </span>
+                          <User size={14} className="text-amber-600" />
+                          <span>Ambil Alih (CS)</span>
+                        </button>
                       )}
                     </div>
                   </div>
                 </div>
-
 
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
@@ -2868,6 +3139,59 @@ export const LiveChatMonitor: React.FC = () => {
                     overscrollBehavior: 'contain',
                   }}
                 >
+                  {/* Floating In-Chat Search Navigation Bar — unified dengan searchQuery global */}
+                  {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length > 0 && (
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-amber-50/95 backdrop-blur-md border border-amber-300 shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-amber-900 animate-fadeIn select-none">
+                      <Search size={13} className="text-amber-600 shrink-0" />
+                      <span className="truncate">
+                        Hasil pencarian: <span className="font-semibold text-amber-950">"{searchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
+                      </span>
+                      <div className="flex items-center gap-0.5 border-l border-amber-200 pl-1.5 shrink-0">
+                        <button
+                          type="button"
+                          title="Pesan Sebelumnya (Lebih Lama)"
+                          onClick={handlePrevMatch}
+                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-800 transition active:scale-90 cursor-pointer"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Pesan Berikutnya (Lebih Baru)"
+                          onClick={handleNextMatch}
+                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-800 transition active:scale-90 cursor-pointer"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Tutup Navigasi Pencarian"
+                          onClick={handleClearInChatSearch}
+                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-600 hover:text-amber-900 ml-0.5 transition active:scale-90 cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length === 0 && (
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-slate-50/95 backdrop-blur-md border border-slate-300 shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-slate-600 animate-fadeIn select-none">
+                      <Info size={13} className="text-slate-500 shrink-0" />
+                      <span className="truncate">
+                        Tidak ada bubble pesan berisi <span className="font-semibold">"{searchQuery}"</span> di percakapan ini
+                      </span>
+                      <button
+                        type="button"
+                        title="Tutup"
+                        onClick={handleClearInChatSearch}
+                        className="p-0.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 ml-1 transition active:scale-90 cursor-pointer"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs">
                       <MessageCircle size={32} className="mb-2 text-[#8696a0]" />
@@ -2886,6 +3210,10 @@ export const LiveChatMonitor: React.FC = () => {
                       const hasMedia = !!msg.media;
                       const quotedMsg = msg.quoted_message || extractQuotedMessage(msg);
                       const showDateSeparator = isDifferentDay(msg.created_at, messages[idx - 1]?.created_at);
+
+                      // Pencarian match & highlight status
+                      const isMatchBubble = effectiveInChatQuery ? matchingMessageIds.includes(msg.id) : false;
+                      const isCurrentActiveMatch = effectiveInChatQuery ? (matchingMessageIds[currentMatchIndex] === msg.id || highlightedMsgId === msg.id) : false;
 
                       // Lokasi valid = latitude/longitude ada dan bukan 0,0 (image WA Web sering kebawa location kosong)
                       const rawLoc = (msg as any).payload_raw?.location || (msg as any).payloadRaw?.location;
@@ -2941,7 +3269,13 @@ export const LiveChatMonitor: React.FC = () => {
                           )}
                           <div
                             id={`msg-${msg.id}`}
-                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300 relative`}
+                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300 relative ${
+                              isCurrentActiveMatch
+                                ? 'ring-3 ring-amber-400/90 bg-amber-200/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
+                                : isMatchBubble
+                                ? 'ring-1 ring-amber-300/60 bg-amber-100/20 rounded-2xl p-0.5 -m-0.5'
+                                : ''
+                            }`}
                           >
                             {/* Floating WhatsApp-Style Quick Emoji Reaction Toolbar */}
                             {activeReactionMsgId === msg.id && (
@@ -3017,7 +3351,7 @@ export const LiveChatMonitor: React.FC = () => {
                               {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
                                 <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
                                   isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
-                                }}`}>
+                                }`}>
                                   {!isCustomer && !isAdmin && <Bot size={10} />}
                                   <span>{senderLabel(msg)}</span>
                                 </span>
@@ -3103,7 +3437,9 @@ export const LiveChatMonitor: React.FC = () => {
                                     </div>
                                   )}
                                   {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
-                                    <p className="font-sans whitespace-pre-wrap select-text cursor-text">{msg.content}</p>
+                                    <p className="font-sans whitespace-pre-wrap select-text cursor-text">
+                                      {renderHighlightedText(msg.content, searchQuery)}
+                                    </p>
                                   )}
                                 </>
                               )}
@@ -3112,16 +3448,16 @@ export const LiveChatMonitor: React.FC = () => {
                                   <span className="text-[9px] text-[#667781] italic mr-0.5">diedit</span>
                                 )}
                                 <span>
-                                  {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', '.') : ''}
+                                  {msg.created_at ? formatWibTime(msg.created_at) : ''}
                                 </span>
                                 {!isCustomer && (
                                   <span
                                     className="inline-flex items-center ml-0.5"
                                     title={
                                       msg.delivery_status === 'read'
-                                        ? `Dibaca ${msg.read_at ? new Date(msg.read_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                                        ? `Dibaca ${msg.read_at ? formatWibTime(msg.read_at) : ''}`
                                         : msg.delivery_status === 'delivered'
-                                        ? `Diterima di HP ${msg.delivered_at ? new Date(msg.delivered_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                                        ? `Diterima di HP ${msg.delivered_at ? formatWibTime(msg.delivered_at) : ''}`
                                         : msg.delivery_status === 'failed'
                                         ? 'Gagal terkirim'
                                         : 'Terkirim'
@@ -3465,7 +3801,7 @@ export const LiveChatMonitor: React.FC = () => {
                       aria-multiline="true"
                       data-placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
                       onFocus={() => {
-                        setTimeout(() => scrollToBottom(true), 200);
+                        // viewport handler throttle sudah handle, tidak perlu scroll paksa lagi saat fokus untuk hindari goyang
                       }}
                       onInput={(e) => {
                         handleInputChange(e.currentTarget.innerText || '');
@@ -3608,23 +3944,25 @@ export const LiveChatMonitor: React.FC = () => {
                     <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
                       <div>
                         <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat / Kelurahan</p>
-                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
+                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || selectedChat?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
                         <div>
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Kecamatan</p>
-                          <p className="font-medium text-[#111b21]">{customerDetailData?.kecamatan || '-'}</p>
+                          <p className="font-medium text-[#111b21]">{customerDetailData?.kecamatan || selectedChat?.kecamatan || '-'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Kota / Kabupaten</p>
-                          <p className="font-medium text-[#111b21]">{customerDetailData?.kota || '-'}</p>
+                          <p className="font-medium text-[#111b21]">{customerDetailData?.kota || selectedChat?.kota || '-'}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
                         <div>
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Jarak & Ongkir</p>
                           <p className="font-bold text-[#008069]">
-                            {customerDetailData?.distance_km != null ? `${customerDetailData.distance_km} km` : '-'} (Rp {Number(customerDetailData?.ongkir || 0).toLocaleString('id-ID')})
+                            {(customerDetailData?.distance_km != null ? customerDetailData.distance_km : selectedChat?.distanceKm != null ? selectedChat.distanceKm : null) != null
+                              ? `${customerDetailData?.distance_km ?? selectedChat?.distanceKm} km`
+                              : '-'} (Rp {Number(customerDetailData?.ongkir ?? selectedChat?.ongkir ?? 0).toLocaleString('id-ID')})
                           </p>
                         </div>
                         <div>
@@ -3906,12 +4244,25 @@ export const LiveChatMonitor: React.FC = () => {
                 onClick={() => {
                   const c = contextMenu.chat;
                   setContextMenu(null);
-                  handleRelease(c);
+                  if (c.isHumanHandling) {
+                    handleRelease(c);
+                  } else {
+                    handleTakeover(c);
+                  }
                 }}
                 className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#54656f] cursor-pointer"
               >
-                <Bot size={16} />
-                <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+                {contextMenu.chat.isHumanHandling ? (
+                  <>
+                    <Bot size={16} />
+                    <span>Kembalikan ke Bot AI</span>
+                  </>
+                ) : (
+                  <>
+                    <User size={16} className="text-amber-600" />
+                    <span>Ambil Alih Manual (CS)</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -3966,12 +4317,25 @@ export const LiveChatMonitor: React.FC = () => {
                 onClick={() => {
                   const c = contextMenu.chat;
                   setContextMenu(null);
-                  handleRelease(c);
+                  if (c.isHumanHandling) {
+                    handleRelease(c);
+                  } else {
+                    handleTakeover(c);
+                  }
                 }}
                 className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition text-[#54656f] font-medium cursor-pointer"
               >
-                <Bot size={14} />
-                <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+                {contextMenu.chat.isHumanHandling ? (
+                  <>
+                    <Bot size={14} />
+                    <span>Kembalikan ke Bot AI</span>
+                  </>
+                ) : (
+                  <>
+                    <User size={14} className="text-amber-600" />
+                    <span>Ambil Alih Manual (CS)</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

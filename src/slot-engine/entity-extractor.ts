@@ -6,6 +6,7 @@ import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { extractJsonContent } from '../utils/json-extract';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getGazetteerAreas, escapeRegex } from '../utils/gazetteer';
 
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
@@ -22,7 +23,7 @@ const RawLlmExtractionSchema = z.object({
 });
 
 const GENERIC_TREATMENT_RE = /^(?:layanan\s+)?(?:home[-\s]?treatment|home[-\s]?care|homecare|care|treatment|perawatan|pijat|spa|layanan|paket|promo|info\s+treatment|layanan\s+kami)$/i;
-const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo)$/i;
+const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|sana|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo|mana|mn|mna|dimana|dmana|mana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|mn\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk))$/i;
 const NON_SYMPTOM_TOKENS = new Set([
   'sehat', 'selalu', 'info', 'konsultasi', 'tanya', 'tertarik', 'booking', 'reservasi', 'bisa',
   'jadwal', 'promo', 'biaya', 'harga', 'ongkir', 'homecare', 'hometreatment', 'treatment',
@@ -127,38 +128,47 @@ export class EntityExtractor {
 
     const cleanedLocationCandidate = normalizedLower
       .replace(/^(?:gak\s+jadi\s+)?(?:di|daerah|ke|posisi|area)\s+/i, '')
-      .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan)$/i, '')
+      .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan|kk)$/i, '')
       .trim();
 
-    const KNOWN_SURABAYA_SIDOARJO_AREAS = [
-      'berbek', 'rungkut', 'jambangan', 'ketintang', 'tropodo', 'sedati', 'sukodono', 'candi',
-      'taman', 'gayungan', 'wonokromo', 'gubeng', 'wiyung', 'kenjeran', 'sawahan', 'karangpilang',
-      'sukolilo', 'mulyorejo', 'benowo', 'pakal', 'lakarsantri', 'sambikerep', 'dukuh pakis',
-      'tegalsari', 'genteng', 'bubutan', 'simokerto', 'semampir', 'pabean cantikan', 'krembangan',
-      'bulak', 'tambaksari', 'waru', 'gedangan', 'buduran', 'krian', 'driyorejo', 'pepelegi',
-      'deltasari', 'pondok tjandra', 'medokan', 'gunung anyar', 'panjang jiwo', 'tenggilis',
-      'kutisari', 'kendangsari', 'siwalankerto', 'jemursari', 'margorejo', 'menanggal', 'kebonsari',
-      'pagesangan', 'karah', 'keputih', 'gebang', 'klampis', 'manyar', 'kertajaya', 'dharmahusada',
-      'baratajaya', 'ngagel', 'bratang', 'kalirungkut', 'rungkut kidul', 'rungkut tengah', 'rungkut menanggal',
-      'penjaringan sari', 'wonorejo', 'rungkut asri', 'puri surya jaya', 'taman pinang', 'kahuripan'
-    ];
+    const hasStreetDetailKeywords = /\b(jalan|jl|jln|gang|gg|blok|no|nomor|rt|rw)\b/i.test(normalizedLower);
 
-    if (!result.locationText) {
-      for (const area of KNOWN_SURABAYA_SIDOARJO_AREAS) {
-        if (
-          cleanedLocationCandidate === area ||
-          cleanedLocationCandidate.startsWith(area + ' ') ||
-          cleanedLocationCandidate.endsWith(' ' + area) ||
-          normalizedLower.includes(`di ${area}`) ||
-          normalizedLower.includes(`ke ${area}`) ||
-          normalizedLower.includes(`daerah ${area}`)
-        ) {
-          result.locationText = area.charAt(0).toUpperCase() + area.slice(1);
-          result.intents = result.intents || [];
-          if (!result.intents.includes('provide_location')) {
-            result.intents.push('provide_location');
+    // 1c. Deteksi Kuadran / Kawasan Wilayah Luas (misal: "SBY barat", "Surabaya Timur", "Sidoarjo Selatan", "Sidoarjo Kota")
+    const quadrantPattern = /\b(?:di\s+|ke\s+|daerah\s+|area\s+)?((?:sby|surabaya|sidoarjo|sda|gresik)\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))\b/i;
+    const quadMatch = normalizedLower.match(quadrantPattern);
+    if (!result.locationText && quadMatch && quadMatch[1]) {
+      const quadName = quadMatch[1].trim();
+      result.locationText = quadName;
+      result.intents = result.intents || [];
+      if (!result.intents.includes('provide_location')) {
+        result.intents.push('provide_location');
+      }
+    }
+
+    if (!result.locationText && !hasStreetDetailKeywords) {
+      const gazetteer = getGazetteerAreas();
+      if (cleanedLocationCandidate && gazetteer.has(cleanedLocationCandidate)) {
+        result.locationText = gazetteer.get(cleanedLocationCandidate)!;
+        result.intents = result.intents || [];
+        if (!result.intents.includes('provide_location')) {
+          result.intents.push('provide_location');
+        }
+      } else {
+        for (const [areaLower, areaOrig] of gazetteer.entries()) {
+          if (
+            cleanedLocationCandidate.startsWith(areaLower + ' ') ||
+            cleanedLocationCandidate.endsWith(' ' + areaLower) ||
+            normalizedLower.includes(`di ${areaLower}`) ||
+            normalizedLower.includes(`ke ${areaLower}`) ||
+            normalizedLower.includes(`daerah ${areaLower}`)
+          ) {
+            result.locationText = areaOrig;
+            result.intents = result.intents || [];
+            if (!result.intents.includes('provide_location')) {
+              result.intents.push('provide_location');
+            }
+            break;
           }
-          break;
         }
       }
     }
@@ -211,7 +221,7 @@ export class EntityExtractor {
     }
 
     // 5. Deteksi Pertanyaan Asal Klinik
-    if (/\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower)) {
+    if (/\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana)\b/i.test(lower) || /\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower)) {
       result.intents = result.intents || [];
       if (!result.intents.includes('ask_clinic_origin')) {
         result.intents.push('ask_clinic_origin');
