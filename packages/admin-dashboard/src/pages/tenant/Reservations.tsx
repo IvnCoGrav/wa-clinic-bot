@@ -122,8 +122,8 @@ export const Reservations: React.FC = () => {
     status: 'upcoming',
   });
 
-  const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortField, setSortField] = useState<'booking_date' | 'customer' | 'category' | 'status' | 'created_at'>('booking_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [googleCalendarMockActive, setGoogleCalendarMockActive] = useState(true);
   const [editDate, setEditDate] = useState('');

@@ -79,8 +79,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const searchParam = request.query?.search?.trim();
       const startDateParam = request.query?.startDate?.trim();
       const endDateParam = request.query?.endDate?.trim();
-      const sortByParam = request.query?.sortBy?.trim() || 'created_at';
-      const sortOrderParam = (request.query?.sortOrder?.toLowerCase() === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+      const sortByParam = request.query?.sortBy?.trim() || 'booking_date';
+      const sortOrderParam = (request.query?.sortOrder?.toLowerCase() === 'desc' ? 'desc' : 'asc') as 'asc' | 'desc';
 
       const now = new Date();
       const overdueThreshold = new Date(Date.now() - 3 * 3600 * 1000);
@@ -154,15 +154,17 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }
 
       // Sort Order
-      let orderBy: any = { created_at: sortOrderParam };
-      if (sortByParam === 'booking_date') {
-        orderBy = { booking_date: sortOrderParam };
+      let orderBy: any = [{ booking_date: sortOrderParam }, { created_at: 'desc' }];
+      if (sortByParam === 'created_at') {
+        orderBy = { created_at: sortOrderParam };
+      } else if (sortByParam === 'booking_date') {
+        orderBy = [{ booking_date: sortOrderParam }, { created_at: 'desc' }];
       } else if (sortByParam === 'status') {
-        orderBy = { status: sortOrderParam };
+        orderBy = [{ status: sortOrderParam }, { booking_date: 'asc' }];
       } else if (sortByParam === 'category' || sortByParam === 'treatment_category') {
-        orderBy = { treatment_category: sortOrderParam };
+        orderBy = [{ treatment_category: sortOrderParam }, { booking_date: 'asc' }];
       } else if (sortByParam === 'customer') {
-        orderBy = { customer: { name: sortOrderParam } };
+        orderBy = [{ customer: { name: sortOrderParam } }, { booking_date: 'asc' }];
       }
 
       try {
@@ -367,6 +369,37 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               return t >= start && t <= end;
             });
           }
+
+          data.sort((a: any, b: any) => {
+            if (sortByParam === 'booking_date') {
+              const timeA = a.booking_date ? new Date(a.booking_date).getTime() : (sortOrderParam === 'asc' ? Infinity : -Infinity);
+              const timeB = b.booking_date ? new Date(b.booking_date).getTime() : (sortOrderParam === 'asc' ? Infinity : -Infinity);
+              if (timeA !== timeB) {
+                return sortOrderParam === 'asc' ? timeA - timeB : timeB - timeA;
+              }
+            } else if (sortByParam === 'status') {
+              const sA = (a.status || '').toLowerCase();
+              const sB = (b.status || '').toLowerCase();
+              if (sA !== sB) {
+                return sortOrderParam === 'asc' ? sA.localeCompare(sB) : sB.localeCompare(sA);
+              }
+            } else if (sortByParam === 'category' || sortByParam === 'treatment_category') {
+              const cA = (a.treatment_category || '').toLowerCase();
+              const cB = (b.treatment_category || '').toLowerCase();
+              if (cA !== cB) {
+                return sortOrderParam === 'asc' ? cA.localeCompare(cB) : cB.localeCompare(cA);
+              }
+            } else if (sortByParam === 'customer') {
+              const nA = (a.customer?.name || '').toLowerCase();
+              const nB = (b.customer?.name || '').toLowerCase();
+              if (nA !== nB) {
+                return sortOrderParam === 'asc' ? nA.localeCompare(nB) : nB.localeCompare(nA);
+              }
+            }
+            const cAtA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const cAtB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return sortOrderParam === 'asc' ? cAtA - cAtB : cAtB - cAtA;
+          });
 
           const total = data.length;
           const paginated = data.slice((page - 1) * pageSize, page * pageSize);
