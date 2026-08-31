@@ -31,6 +31,8 @@ import {
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { Reservation } from '../../types';
+import { CreateReservationModal } from '../calendar/CreateReservationModal';
+import { extractDurationMinutes } from '../../utils/durationCalculator';
 
 interface StaffOption {
   id: string;
@@ -100,21 +102,6 @@ const formatBookingDate = (dateStr: string | null | undefined, detail?: string |
   }
 };
 
-const extractDurationMinutes = (detail?: string | null): number => {
-  if (!detail) return 60;
-  const totalMatch = detail.match(/=\s*(\d+)\s*m/i);
-  if (totalMatch && totalMatch[1]) {
-    const parsed = parseInt(totalMatch[1], 10);
-    if (!isNaN(parsed) && parsed > 0) return parsed;
-  }
-  const match = detail.match(/(\d+)\s*(?:menit|mins|m)\b/i);
-  if (match && match[1]) {
-    const parsed = parseInt(match[1], 10);
-    if (!isNaN(parsed) && parsed > 0) return parsed;
-  }
-  return 60;
-};
-
 export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   reservation,
   staffList,
@@ -146,121 +133,8 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   const [submittingLocation, setSubmittingLocation] = useState(false);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Full Edit Mode State
+  // Full Edit Mode State (delegates to unified CreateReservationModal in edit mode)
   const [isEditing, setIsEditing] = useState(false);
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  // Edit Form Fields
-  const [editCustomerName, setEditCustomerName] = useState('');
-  const [editCustomerPhone, setEditCustomerPhone] = useState('');
-  const [editAddress, setEditAddress] = useState('');
-  const [editKecamatan, setEditKecamatan] = useState('');
-  const [editKota, setEditKota] = useState('');
-  const [editKelurahan, setEditKelurahan] = useState('');
-  const [editLandmarkDetail, setEditLandmarkDetail] = useState('');
-  const [editCategory, setEditCategory] = useState<'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE'>('BABY');
-  const [editTreatmentDetail, setEditTreatmentDetail] = useState('');
-  const [editPurchaseValue, setEditPurchaseValue] = useState<number>(0);
-  const [editBookingDateTime, setEditBookingDateTime] = useState('');
-  const [editStaffId, setEditStaffId] = useState('');
-  const [editPaymentMethod, setEditPaymentMethod] = useState<string>('');
-  const [editStatus, setEditStatus] = useState<string>('pending');
-  const [editNotes, setEditNotes] = useState('');
-  const [editBabies, setEditBabies] = useState<Array<{ name: string; ageText: string }>>([]);
-
-  const initEditForm = () => {
-    if (!reservation) return;
-    setEditCustomerName(reservation.customer?.name || '');
-    setEditCustomerPhone(reservation.customer?.phone || '');
-    setEditAddress((reservation.customer as any)?.address || '');
-    setEditKecamatan(reservation.customer?.kecamatan || '');
-    setEditKota(reservation.customer?.kota || '');
-    setEditKelurahan(reservation.customer?.kelurahan || '');
-    setEditLandmarkDetail((reservation.customer?.preferences as any)?.landmark || '');
-    setEditCategory((reservation.treatment_category as any) || 'BABY');
-    setEditTreatmentDetail(reservation.treatment_detail || '');
-    setEditPurchaseValue(reservation.purchase_value || 0);
-    setEditStaffId(reservation.assigned_staff_id || '');
-    setEditPaymentMethod(reservation.payment_method || '');
-    setEditStatus(reservation.status || 'pending');
-    setEditNotes((reservation as any)?.notes || '');
-
-    if (reservation.booking_date) {
-      const d = new Date(reservation.booking_date);
-      const tzOffset = d.getTimezoneOffset() * 60000;
-      const localIso = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
-      setEditBookingDateTime(localIso);
-    } else {
-      setEditBookingDateTime('');
-    }
-
-    const babies = getBabyRows(reservation).map((b) => ({ name: b.name, ageText: b.age }));
-    setEditBabies(babies.length > 0 ? babies : [{ name: '', ageText: '' }]);
-  };
-
-  const handleStartEdit = () => {
-    initEditForm();
-    setIsEditing(true);
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-  };
-
-  const handleSaveFullEdit = async () => {
-    if (!reservation) return;
-    if (!editTreatmentDetail.trim()) {
-      toast('Rincian treatment wajib diisi', 'error');
-      return;
-    }
-
-    setSavingEdit(true);
-    try {
-      let isoDate: string | null = null;
-      if (editBookingDateTime) {
-        const d = new Date(editBookingDateTime);
-        if (!isNaN(d.getTime())) {
-          isoDate = d.toISOString();
-        }
-      }
-
-      const payload = {
-        treatmentCategory: editCategory,
-        treatmentDetail: editTreatmentDetail.trim(),
-        purchaseValue: Number(editPurchaseValue) || 0,
-        bookingDate: isoDate,
-        assignedStaffId: editStaffId || null,
-        status: editStatus,
-        notes: editNotes.trim(),
-        paymentMethod: editPaymentMethod || null,
-        customerName: editCustomerName.trim() || undefined,
-        customerPhone: editCustomerPhone.trim() || undefined,
-        address: editAddress.trim() || undefined,
-        kecamatan: editKecamatan.trim() || undefined,
-        kota: editKota.trim() || undefined,
-        kelurahan: editKelurahan.trim() || undefined,
-        landmark: editLandmarkDetail.trim() || undefined,
-        babies: editBabies.filter((b) => b.name.trim().length > 0),
-      };
-
-      const res = await apiRequest(`/api/admin/reservation/${reservation.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(payload),
-      });
-
-      if (res && res.success !== false) {
-        toast('Perubahan reservasi berhasil disimpan!', 'success');
-        setIsEditing(false);
-        onUpdate();
-      } else {
-        toast(res?.error || 'Gagal menyimpan perubahan reservasi', 'error');
-      }
-    } catch (err: any) {
-      toast(`Gagal menyimpan: ${err.message}`, 'error');
-    } finally {
-      setSavingEdit(false);
-    }
-  };
 
   useEffect(() => {
     if (reservation?.booking_date) {
@@ -448,6 +322,23 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  if (isEditing) {
+    return (
+      <CreateReservationModal
+        isOpen={true}
+        mode="edit"
+        initialReservation={reservation}
+        staffList={staffList}
+        onClose={() => setIsEditing(false)}
+        onSuccess={() => {
+          setIsEditing(false);
+          onUpdate();
+          onClose();
+        }}
+      />
+    );
+  }
+
   return createPortal(
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
@@ -469,326 +360,30 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
           <div>
             <h3 className="text-base sm:text-lg font-bold text-[#111b21] flex items-center space-x-2">
               <Info size={18} className="text-[#008069] flex-shrink-0" />
-              <span>{isEditing ? 'Edit Data Reservasi' : 'Detail Reservasi'}</span>
+              <span>Detail Reservasi</span>
             </h3>
             <p className="text-xs text-[#667781] mt-0.5">
-              {isEditing
-                ? 'Perbarui data pasien, jadwal, layanan, tarif, status, atau terapis'
-                : 'Kelola penugasan terapis, tanggal jadwal, dan status pembayaran'}
+              Kelola penugasan terapis, tanggal jadwal, dan status pembayaran
             </p>
           </div>
 
-          {!isEditing && (
-            <button
-              type="button"
-              onClick={handleStartEdit}
-              className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
-              title="Edit Data Reservasi"
-            >
-              <PenLine size={13} />
-              <span>Edit Reservasi</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#008069] border border-emerald-300 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+            title="Edit Data Reservasi"
+          >
+            <PenLine size={13} />
+            <span>Edit Reservasi</span>
+          </button>
         </div>
 
         {/* ========================================================= */}
-        {/* EDIT MODE FORM */}
+        {/* STANDARD DETAIL VIEW */}
         {/* ========================================================= */}
-        {isEditing ? (
-          <div className="space-y-4 text-xs">
-            {/* Bagian 1: Data Pasien */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-3">
-              <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block flex items-center gap-1.5">
-                <User size={13} />
-                <span>1. Data Pasien</span>
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Nama Pasien / Bunda</label>
-                  <input
-                    type="text"
-                    value={editCustomerName}
-                    onChange={(e) => setEditCustomerName(e.target.value)}
-                    placeholder="Contoh: Bunda Maya"
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">No. WhatsApp</label>
-                  <input
-                    type="text"
-                    value={editCustomerPhone}
-                    onChange={(e) => setEditCustomerPhone(e.target.value)}
-                    placeholder="Contoh: 081234567890"
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-semibold text-[#54656f]">Alamat Lengkap</label>
-                <textarea
-                  rows={2}
-                  value={editAddress}
-                  onChange={(e) => setEditAddress(e.target.value)}
-                  placeholder="Contoh: Jl. Rungkut Asri Timur No. 10"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-semibold text-[#54656f]">Kecamatan</label>
-                  <input
-                    type="text"
-                    value={editKecamatan}
-                    onChange={(e) => setEditKecamatan(e.target.value)}
-                    placeholder="Contoh: Rungkut"
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-semibold text-[#54656f]">Kota / Kab</label>
-                  <input
-                    type="text"
-                    value={editKota}
-                    onChange={(e) => setEditKota(e.target.value)}
-                    placeholder="Contoh: Surabaya"
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-                <div className="space-y-1 col-span-2 sm:col-span-1">
-                  <label className="block text-[10px] font-semibold text-[#54656f]">Patokan Rumah</label>
-                  <input
-                    type="text"
-                    value={editLandmarkDetail}
-                    onChange={(e) => setEditLandmarkDetail(e.target.value)}
-                    placeholder="Contoh: Pagar kayu hitam"
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Bagian 2: Data Bayi / Anak */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block flex items-center gap-1.5">
-                  <Baby size={13} />
-                  <span>2. Data Bayi / Anak ({editBabies.length})</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setEditBabies([...editBabies, { name: '', ageText: '' }])}
-                  className="text-[11px] font-bold text-[#008069] hover:underline flex items-center gap-1"
-                >
-                  <Plus size={12} />
-                  <span>Tambah Anak</span>
-                </button>
-              </div>
-
-              {editBabies.map((b, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={b.name}
-                    onChange={(e) => {
-                      const copy = [...editBabies];
-                      copy[idx].name = e.target.value;
-                      setEditBabies(copy);
-                    }}
-                    placeholder={`Nama Anak #${idx + 1}`}
-                    className="flex-1 px-3 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                  <input
-                    type="text"
-                    value={b.ageText}
-                    onChange={(e) => {
-                      const copy = [...editBabies];
-                      copy[idx].ageText = e.target.value;
-                      setEditBabies(copy);
-                    }}
-                    placeholder="Usia (contoh: 6 bulan)"
-                    className="w-36 px-3 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                  {editBabies.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setEditBabies(editBabies.filter((_, i) => i !== idx))}
-                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition"
-                      title="Hapus baris anak"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Bagian 3: Layanan & Tarif */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-3">
-              <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block flex items-center gap-1.5">
-                <Receipt size={13} />
-                <span>3. Layanan &amp; Tarif</span>
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Kategori Layanan</label>
-                  <select
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  >
-                    <option value="BABY">👶 BABY (Bayi &amp; Balita)</option>
-                    <option value="KIDS">🧒 KIDS (Anak-anak)</option>
-                    <option value="MOMS">🤰 MOMS (Ibu Hamil &amp; Pasca Lahir)</option>
-                    <option value="BOTH">👩‍👧 BOTH (Ibu &amp; Anak Sekaligus)</option>
-                    <option value="BUNDLE">🎁 BUNDLE (Paket Khusus)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Tarif Treatment (Rp)</label>
-                  <input
-                    type="number"
-                    value={editPurchaseValue || ''}
-                    onChange={(e) => setEditPurchaseValue(Number(e.target.value) || 0)}
-                    placeholder="Contoh: 120000"
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] font-mono font-bold focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-semibold text-[#54656f]">Rincian Treatment</label>
-                <textarea
-                  rows={2}
-                  value={editTreatmentDetail}
-                  onChange={(e) => setEditTreatmentDetail(e.target.value)}
-                  placeholder="Contoh: Baby Spa & Pijat Kolik [60m]"
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Bagian 4: Jadwal, Staff, & Status */}
-            <div className="p-3.5 rounded-2xl bg-[#f8fafc] border border-[#e9edef] space-y-3">
-              <span className="text-[11px] text-[#008069] font-bold uppercase tracking-wider block flex items-center gap-1.5">
-                <CalendarIcon size={13} />
-                <span>4. Jadwal, Staff &amp; Status</span>
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Jadwal Kunjungan</label>
-                  <input
-                    type="datetime-local"
-                    value={editBookingDateTime}
-                    onChange={(e) => setEditBookingDateTime(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Terapis / Staff</label>
-                  <select
-                    value={editStaffId}
-                    onChange={(e) => setEditStaffId(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  >
-                    <option value="">-- Belum Ditugaskan --</option>
-                    {staffList
-                      .filter((s) => s.active !== false || s.id === editStaffId)
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} {s.active === false ? '(Nonaktif)' : ''}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Status Reservasi</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  >
-                    <option value="pending">⏳ Pending (Belum Lunas)</option>
-                    <option value="confirmed">✅ Confirmed (Lunas)</option>
-                    <option value="completed">🎉 Completed (Selesai Treatment)</option>
-                    <option value="cancelled">❌ Cancelled (Dibatalkan)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-[#54656f]">Metode Pembayaran</label>
-                  <select
-                    value={editPaymentMethod}
-                    onChange={(e) => setEditPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069]"
-                  >
-                    <option value="">-- Belum Ada --</option>
-                    <option value="TRANSFER">Transfer Bank</option>
-                    <option value="QRIS">QRIS</option>
-                    <option value="CASH">Tunai (Cash)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-semibold text-[#54656f]">Catatan Tambahan (Notes)</label>
-                <textarea
-                  rows={2}
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Catatan khusus dari pasien / instruksi untuk terapis..."
-                  className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Action Buttons for Edit Mode */}
-            <div className="pt-3 border-t border-[#e9edef] flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                disabled={savingEdit}
-                className="px-4 py-2.5 rounded-xl border border-[#d1d7db] text-xs font-semibold text-[#54656f] hover:bg-[#f0f2f5] transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveFullEdit}
-                disabled={savingEdit}
-                className="px-5 py-2.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
-              >
-                {savingEdit ? (
-                  <>
-                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} />
-                    <span>Simpan Perubahan</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* ========================================================= */
-          /* STANDARD DETAIL VIEW */
-          /* ========================================================= */
-          <>
-            {/* Info contents split layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 text-xs">
+        <div className="space-y-4 sm:space-y-5">
+          {/* Info contents split layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 text-xs">
               <div className="space-y-3">
                 <div className="p-3.5 rounded-xl bg-[#f8fafc] border border-[#e9edef] space-y-2">
                   <div className="flex items-center justify-between">
@@ -1136,7 +731,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
               {/* Right Action Group: Edit, Riwayat Chat, Invoice WA, Action Status */}
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
                 <button
-                  onClick={handleStartEdit}
+                  onClick={() => setIsEditing(true)}
                   className="flex-1 sm:flex-initial justify-center px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-[#008069] hover:bg-emerald-100 transition text-xs font-bold flex items-center space-x-1.5 shadow-2xs cursor-pointer"
                   title="Buka Formulir Edit Reservasi"
                 >
@@ -1225,8 +820,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                 )}
               </div>
             </div>
-          </>
-        )}
+        </div>
       </div>
     </div>,
     document.body

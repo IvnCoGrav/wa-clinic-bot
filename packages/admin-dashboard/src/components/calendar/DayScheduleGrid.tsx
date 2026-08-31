@@ -12,6 +12,8 @@ interface DayScheduleGridProps {
   onQuickAdd: (target: QuickSlotTarget) => void;
 }
 
+import { extractDurationMinutes, cleanTreatmentDetailForDisplay } from '../../utils/durationCalculator';
+
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
 export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
@@ -73,28 +75,6 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
       d1.getMonth() === d2.getMonth() &&
       d1.getDate() === d2.getDate()
     );
-  };
-
-  const extractDurationMinutes = (detail?: string | null): number => {
-    if (!detail) return 60;
-    const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
-    if (totalMatch) return parseInt(totalMatch[1], 10);
-    const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
-    if (minMatches && minMatches.length > 0) {
-      let sum = 0;
-      for (const m of minMatches) {
-        const num = parseInt(m.replace(/\D/g, ''), 10);
-        if (num > 0 && num <= 360) sum += num;
-      }
-      if (sum > 0) return sum;
-    }
-    const items = detail.split(/\s*(?:\+|\b(?:dan|&)\b)\s*/i).filter((s) => s.trim().length > 2);
-    if (items.length > 1) return Math.min(240, items.length * 60);
-    const lower = detail.toLowerCase();
-    if (lower.includes('nifas') || lower.includes('hamil') || lower.includes('moms') || lower.includes('paket')) {
-      return 90;
-    }
-    return 60;
   };
 
   const formatHourLabel = (hour: number) => {
@@ -344,11 +324,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
                 .trim();
               const displayName = cleanName || rawName;
-
-              const cleanDetail = (res.treatment_detail || 'Layanan Perawatan')
-                .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
-                .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
-                .trim();
+              const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
 
               const evWidth =
                 pos.totalCols > 1
@@ -445,18 +421,6 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           <User size={12} className="text-[#008069]" />
                           <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
                         </div>
-                        {res.customer?.phone && (
-                          <a
-                            href={`https://wa.me/${res.customer.phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-2 rounded-xl bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] shadow-xs transition-all cursor-pointer"
-                            title="Chat WhatsApp Pasien"
-                          >
-                            <MessageCircle size={14} />
-                          </a>
-                        )}
                       </div>
                     </div>
                   )}

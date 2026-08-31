@@ -1,22 +1,7 @@
 import React from 'react';
 import { Reservation } from '../../types';
 import { QuickSlotTarget } from './types';
-
-function extractDurationMinutes(detail?: string | null): number {
-  if (!detail) return 60;
-  const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
-  if (totalMatch) return parseInt(totalMatch[1], 10);
-  const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
-  if (minMatches && minMatches.length > 0) {
-    let sum = 0;
-    for (const m of minMatches) {
-      const num = parseInt(m.replace(/\D/g, ''), 10);
-      if (num > 0 && num <= 300) sum += num;
-    }
-    if (sum > 0) return sum;
-  }
-  return 60;
-}
+import { extractDurationMinutes } from '../../utils/durationCalculator';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;

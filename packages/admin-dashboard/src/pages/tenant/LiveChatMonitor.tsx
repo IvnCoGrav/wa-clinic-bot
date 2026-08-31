@@ -4043,7 +4043,7 @@ function clearConversationDraft(convId: string) {
               ) : (
                 <>
                   {/* Quick Metric Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-3 gap-2.5">
                     <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl text-center space-y-1">
                       <p className="text-[10px] text-[#667781] font-semibold uppercase">Total Order</p>
                       <p className="text-base font-bold text-[#111b21]">{customerDetailData?.purchaseCount || customerDetailData?.reservations?.length || 0}x</p>
@@ -4058,15 +4058,6 @@ function clearConversationDraft(convId: string) {
                         {customerDetailData?.is_legacy_source ? 'Legacy' : (customerDetailData?.purchaseCount > 0 ? 'Repeat' : 'New Customer')}
                       </p>
                     </div>
-                    <a
-                      href={`https://wa.me/${(customerDetailData?.phone || '').replace(/\D/g, '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-3 bg-[#e8f5f2] hover:bg-[#c2e7e0] border border-[#c2e7e0] rounded-xl text-center space-y-1 transition flex flex-col items-center justify-center text-[#008069] font-bold shadow-2xs"
-                    >
-                      <Phone size={14} />
-                      <span className="text-[10px]">Chat WA</span>
-                    </a>
                   </div>
 
                   {/* Customer Labels Section */}
@@ -4257,6 +4248,7 @@ function clearConversationDraft(convId: string) {
             id: customerDetailData?.id || selectedChat?.customerId || '',
             name: customerDetailData?.name || selectedChat?.customerName || null,
             phone: customerDetailData?.phone || selectedChat?.customerPhone || '',
+            address: customerDetailData?.preferences?.address || customerDetailData?.preferences?.full_address || '',
             kelurahan: customerDetailData?.kelurahan || null,
             kecamatan: customerDetailData?.kecamatan || null,
             kota: customerDetailData?.kota || null,
@@ -4264,6 +4256,7 @@ function clearConversationDraft(convId: string) {
             landmark: customerDetailData?.preferences?.landmark || customerDetailData?.preferences?.address_notes || null,
             lat: customerDetailData?.lat ?? null,
             lng: customerDetailData?.lng ?? null,
+            children: customerDetailData?.children || [],
             preferences: customerDetailData?.preferences,
           }}
           onSave={handleSaveCustomerDetail}

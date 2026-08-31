@@ -21,38 +21,8 @@ const TIME_GUTTER = 70; // kolom label jam
 const DAY_COL_WIDTH = 140; // minmax(140px,1fr) pada kolom hari
 const HEADER_HEIGHT = 50;
 
-export function extractDurationMinutes(detail?: string | null): number {
-  if (!detail) return 60;
-
-  // 1. Tag eksplisit [Total 120m] atau [Total 90 mins]
-  const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
-  if (totalMatch) return parseInt(totalMatch[1], 10);
-
-  // 2. Penjumlahan semua menit eksplisit (misal "Pijat 60m + Laktasi 60m")
-  const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
-  if (minMatches && minMatches.length > 0) {
-    let sum = 0;
-    for (const m of minMatches) {
-      const num = parseInt(m.replace(/\D/g, ''), 10);
-      if (num > 0 && num <= 360) sum += num;
-    }
-    if (sum > 0) return sum;
-  }
-
-  // 3. Deteksi bundling paket dengan pemisah '+' atau '&' atau 'dan'
-  const items = detail.split(/\s*(?:\+|\b(?:dan|&)\b)\s*/i).filter((s) => s.trim().length > 2);
-  if (items.length > 1) {
-    return Math.min(240, items.length * 60);
-  }
-
-  // 4. Estimasi durasi dari kata kunci paket layanan
-  const lower = detail.toLowerCase();
-  if (lower.includes('nifas') || lower.includes('hamil') || lower.includes('moms') || lower.includes('paket')) {
-    return 90;
-  }
-
-  return 60;
-}
+export { extractDurationMinutes } from '../../utils/durationCalculator';
+import { extractDurationMinutes, cleanTreatmentDetailForDisplay } from '../../utils/durationCalculator';
 
 interface PositionedEvent {
   res: Reservation;
@@ -539,10 +509,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       .trim();
                     const firstName = cleanName.split(/\s+/)[0] || cleanName;
 
-                    const cleanDetail = (res.treatment_detail || res.treatment_category || '')
-                      .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
-                      .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
-                      .trim();
+                    const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
 
                     const evWidth =
                       pos.totalCols > 1

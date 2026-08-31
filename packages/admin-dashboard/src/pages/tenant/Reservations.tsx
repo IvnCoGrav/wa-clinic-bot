@@ -4,6 +4,7 @@ import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Reservation } from '../../types';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
+import { extractDurationMinutes } from '../../utils/durationCalculator';
 import { Pagination } from '../../components/common/Pagination';
 import { 
   Search, 
@@ -305,21 +306,6 @@ export const Reservations: React.FC = () => {
     }, 300);
     return () => clearTimeout(handler);
   }, [filterState.searchQuery]);
-
-  const extractDurationMinutes = (detail?: string | null): number => {
-    if (!detail) return 60;
-    const totalMatch = detail.match(/=\s*(\d+)\s*m/i);
-    if (totalMatch && totalMatch[1]) {
-      const parsed = parseInt(totalMatch[1], 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
-    }
-    const match = detail.match(/(\d+)\s*(?:menit|mins|m)\b/i);
-    if (match && match[1]) {
-      const parsed = parseInt(match[1], 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
-    }
-    return 60;
-  };
 
   const formatBookingDate = (dateStr: string | null | undefined, detail?: string | null) => {
     if (!dateStr) return '';
