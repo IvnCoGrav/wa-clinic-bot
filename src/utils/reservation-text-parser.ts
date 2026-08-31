@@ -537,13 +537,24 @@ function splitMultiValue(value: string): string[] {
  * - Numerik: "29-08-2026", "29/08/26", "2026-08-29"
  * - Jam: "jam 09.00-09.30", "pukul 10.30", "pk 14.00", "10.00 wib", "10.00", "jam 10", "jam 1 siang"
  */
+function createWibDate(year: number, monthZeroIndexed: number, day: number, hours: number, minutes: number): Date {
+  const y = String(year).padStart(4, '0');
+  const mo = String(monthZeroIndexed + 1).padStart(2, '0');
+  const d = String(day).padStart(2, '0');
+  const h = String(hours).padStart(2, '0');
+  const mi = String(minutes).padStart(2, '0');
+  return new Date(`${y}-${mo}-${d}T${h}:${mi}:00+07:00`);
+}
+
 export function tryParseIndonesianDate(dateStr: string): Date | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const cleanStr = dateStr.toLowerCase().replace(/[*_~`]/g, '').trim();
   if (!cleanStr) return null;
 
   const now = new Date();
-  const currentYear = now.getFullYear();
+  // Waktu referensi dalam WIB (UTC+7)
+  const wibNow = new Date(now.getTime() + (now.getTimezoneOffset() + 420) * 60000);
+  const currentYear = wibNow.getFullYear();
 
   // 1. Ekstrak Jam & Menit jika ada
   let hours = 9; // Default jam kunjungan klinik (09:00 WIB) jika jam tidak disebutkan
@@ -556,14 +567,20 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     isPmModifier = true;
   }
 
-  const timeMatch =
-    cleanStr.match(/(?:jam|pukul|pk|@)?\s*(\d{1,2})[.:](\d{2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?/i) ||
-    cleanStr.match(/(?:jam|pukul|pk)\s*(\d{1,2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2})?(?!\d)/i) ||
-    cleanStr.match(/\b(\d{1,2})[.:](\d{2})\s*(?:wib|wit|wita)?\b/i);
+  // Cari pola waktu spesifik:
+  // - "jam 10.00", "pukul 14.30", "pk 09.00", "@10.00"
+  // - "jam 10", "pukul 2", "pk 1"
+  // - "10.00 wib", "14.30 wit"
+  // - "10:00" (dengan titik dua murni, bukan titik tanggal)
+  const explicitTimeMatch =
+    cleanStr.match(/(?:jam|pukul|pk|@)\s*(\d{1,2})[.:](\d{2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?/i) ||
+    cleanStr.match(/(?:jam|pukul|pk|@)\s*(\d{1,2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2})?(?!\d)/i) ||
+    cleanStr.match(/\b(\d{1,2})[.:](\d{2})\s*(?:wib|wit|wita)\b/i) ||
+    cleanStr.match(/(?:^|\s)(\d{1,2}):(\d{2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2}:\d{2})?(?:\s|$)/i);
 
-  if (timeMatch) {
-    let h = parseInt(timeMatch[1], 10);
-    const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+  if (explicitTimeMatch) {
+    let h = parseInt(explicitTimeMatch[1], 10);
+    const m = explicitTimeMatch[2] ? parseInt(explicitTimeMatch[2], 10) : 0;
     if (isPmModifier && h >= 1 && h <= 11) {
       h += 12;
     }
@@ -574,24 +591,24 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     }
   }
 
-  // 2. Format ISO YYYY-MM-DD
-  const isoMatch = cleanStr.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  // 2. Format ISO YYYY-MM-DD (pemisah -, /, .)
+  const isoMatch = cleanStr.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
   if (isoMatch) {
     const year = parseInt(isoMatch[1], 10);
     const month = parseInt(isoMatch[2], 10) - 1;
     const day = parseInt(isoMatch[3], 10);
-    const date = new Date(year, month, day, hours, minutes);
+    const date = createWibDate(year, month, day, hours, minutes);
     if (!isNaN(date.getTime())) return date;
   }
 
-  // 3. Format DD-MM-YYYY atau DD-MM-YY (atau pemisah '/')
-  const indNumMatch = cleanStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+  // 3. Format DD-MM-YYYY atau DD-MM-YY (pemisah -, /, .)
+  const indNumMatch = cleanStr.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
   if (indNumMatch) {
     let year = parseInt(indNumMatch[3], 10);
     if (year < 100) year += 2000;
     const month = parseInt(indNumMatch[2], 10) - 1;
     const day = parseInt(indNumMatch[1], 10);
-    const date = new Date(year, month, day, hours, minutes);
+    const date = createWibDate(year, month, day, hours, minutes);
     if (!isNaN(date.getTime())) return date;
   }
 
@@ -622,27 +639,24 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     if (month !== undefined && day >= 1 && day <= 31) {
       let year = rawYear ? parseInt(rawYear, 10) : currentYear;
       if (year < 100) year += 2000;
-      const date = new Date(year, month, day, hours, minutes);
+      const date = createWibDate(year, month, day, hours, minutes);
       if (!isNaN(date.getTime())) return date;
     }
   }
 
   // 5. Format Kata Relatif: "hari ini", "besok", "lusa"
   if (cleanStr.includes('hari ini')) {
-    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-    return date;
+    return createWibDate(wibNow.getFullYear(), wibNow.getMonth(), wibNow.getDate(), hours, minutes);
   }
   if (cleanStr.includes('besok')) {
-    const tomorrow = new Date(now);
+    const tomorrow = new Date(wibNow);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const date = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), hours, minutes);
-    return date;
+    return createWibDate(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), hours, minutes);
   }
   if (cleanStr.includes('lusa')) {
-    const lusa = new Date(now);
+    const lusa = new Date(wibNow);
     lusa.setDate(lusa.getDate() + 2);
-    const date = new Date(lusa.getFullYear(), lusa.getMonth(), lusa.getDate(), hours, minutes);
-    return date;
+    return createWibDate(lusa.getFullYear(), lusa.getMonth(), lusa.getDate(), hours, minutes);
   }
 
   // 6. Format Nama Hari: "senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"
@@ -657,12 +671,12 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
   };
   for (const [dName, targetDayOfWeek] of Object.entries(dayNames)) {
     if (cleanStr.includes(dName)) {
-      const currentDayOfWeek = now.getDay();
+      const currentDayOfWeek = wibNow.getDay();
       let diff = targetDayOfWeek - currentDayOfWeek;
       if (diff <= 0) diff += 7; // Ambil hari tersebut di minggu ini/mendatang
-      const targetDate = new Date(now);
+      const targetDate = new Date(wibNow);
       targetDate.setDate(targetDate.getDate() + diff);
-      return new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hours, minutes);
+      return createWibDate(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hours, minutes);
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseReservationText, extractBabyDetails } from '../../src/utils/reservation-text-parser';
+import { parseReservationText, extractBabyDetails, tryParseIndonesianDate } from '../../src/utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
 
 describe('Reservation Text Parser Unit Tests', () => {
@@ -387,6 +387,38 @@ Terimakasih.  ☺️`;
     expect(res.reservation!.payment!.ongkir).toBe(15000);
     expect(res.reservation!.payment!.promo).toBe(5000);
     expect(res.reservation!.payment!.totalPrice).toBe(70000);
+  });
+
+  it('18. should accurately parse afternoon and morning time modifiers (jam 1 siang -> 13:00, jam 3 sore -> 15:00)', () => {
+    const d1 = tryParseIndonesianDate('Sabtu 29 Agt 2026 jam 1 siang');
+    expect(d1).toBeDefined();
+    expect(d1!.getHours()).toBe(13);
+    expect(d1!.getMinutes()).toBe(0);
+
+    const d2 = tryParseIndonesianDate('Sabtu 29 Agt 2026 jam 3 sore');
+    expect(d2).toBeDefined();
+    expect(d2!.getHours()).toBe(15);
+    expect(d2!.getMinutes()).toBe(0);
+
+    const d3 = tryParseIndonesianDate('Sabtu 29 Agt 2026 pukul 14.30 wib');
+    expect(d3).toBeDefined();
+    expect(d3!.getHours()).toBe(14);
+    expect(d3!.getMinutes()).toBe(30);
+
+    const d4 = tryParseIndonesianDate('Sabtu 29 Agt 2026 jam 10.00 - 11.00');
+    expect(d4).toBeDefined();
+    expect(d4!.getHours()).toBe(10);
+    expect(d4!.getMinutes()).toBe(0);
+  });
+
+  it('19. should not confuse dotted dates (e.g. 10.08.2026) as time 10:08', () => {
+    const d = tryParseIndonesianDate('10.08.2026');
+    expect(d).toBeDefined();
+    expect(d!.getFullYear()).toBe(2026);
+    expect(d!.getMonth()).toBe(7); // Agustus
+    expect(d!.getDate()).toBe(10);
+    expect(d!.getHours()).toBe(9); // Default 09:00 WIB, bukan 10:08
+    expect(d!.getMinutes()).toBe(0);
   });
 });
 
