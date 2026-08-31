@@ -115,14 +115,13 @@ Non-tujuan: ubah SOP greeting/ongkir penolakan out-of-coverage (tetap determinis
 * Tambah `GET /api/admin/live-chat/sync-health` — return `{phantomCount, driftCount, nullWaIdCount, wahaStatus, lastSyncAt}` (reuse Fase 0 queries, no auth tambahan selain `ADMIN_API_KEY`). Frontend `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` tampil banner kuning jika `driftCount>0` (link ke repair script).
 * Log `src/routes/webhook.route.ts:372` `OUTBOUND_DUPLICATE_SKIPPED` dan `STALE MESSAGE GUARD` sudah ada — tambah `stageLog` structured agar `logs/app-*.log` grepable untuk next executor: `grep "STALE GUARD BYPASS\|OUTBOUND_DUPLICATE\|IN-FLIGHT BOT MATCH" logs/app-*.log`.
 
-### Fase 6 — Search-to-Message Jump, Keyword Highlighting & Quick Copy Action (0.5 hari)
+### Fase 6 — Search-to-Message Jump & Keyword Highlighting (0.5 hari)
 
 **Masalah:**
 * Saat admin mencari keyword tertentu di search bar (misal `"5km"`, format ongkir, atau template jawaban tertentu), hasil filter percakapan di daftar kiri sudah memfilter percakapan yang relevan.
 * Namun saat percakapan dipilih/diklik, view chat selalu auto-scroll ke pesan paling bawah (`scrollToBottom`), sehingga admin harus scroll manual ke atas mencari bubble pesan yang dimaksud.
 * Tidak ada visual highlight (penanda warna/pulsing) pada kata kunci maupun bubble pesan target di dalam chat thread.
 * Sulit menemukan pesan yang cocok jika thread memiliki puluhan hingga ratusan riwayat pesan.
-* Proses menyalin (copy-paste) pesan untuk digunakan kembali ke customer lain masih manual (harus drag teks atau menu context).
 
 **Ubah:**
 1. **Penerusan Konteks Pencarian ke Chat Thread (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`):**
@@ -139,10 +138,7 @@ Non-tujuan: ubah SOP greeting/ongkir penolakan out-of-coverage (tetap determinis
      * Indikator: `🔍 "5km" (Pesan X dari Y)`
      * Tombol 🔼 (Pesan sebelumnya / older match)
      * Tombol 🔽 (Pesan berikutnya / newer match)
-     * Tombol 📋 (Salin Teks Pesan Ini)
-     * Tombol ✖ (Tutup navigasi pencarian)
-4. **1-Click Quick Copy Action pada Pesan:**
-   * Tambahkan tombol ikon copy cepat (📋) pada hover action / message toolbar agar admin dapat langsung menyalin teks bubble pesan yang ditemukan dalam 1 kali klik tanpa perlu blok seleksi teks.
+     * Tombol ✖ (Tutup navigasi pencarian / reset fokus)
 
 ---
 
@@ -156,7 +152,7 @@ Non-tujuan: ubah SOP greeting/ongkir penolakan out-of-coverage (tetap determinis
 | 3 history media | 0.5d | 0 | low (idempotent dedup) |
 | 4 null ack | 0.5d | 1 | low |
 | 5 observability | 0.5d | 1-4 | low |
-| 6 search-jump & copy | 0.5d | none (UI only) | low |
+| 6 search-jump & highlight | 0.5d | none (UI only) | low |
 | **Total** | **~4.0 hari** | | |
 
 ---

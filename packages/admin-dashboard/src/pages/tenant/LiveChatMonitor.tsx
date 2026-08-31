@@ -28,6 +28,8 @@ import {
   RefreshCw,
   Trash2,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Tag,
   Plus,
   Check,
@@ -65,6 +67,28 @@ import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorM
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
 import { emitBootPhase } from '../../lib/bootProgress';
+
+function renderHighlightedText(text: string, query: string) {
+  if (!query || !query.trim() || !text) return text;
+  const q = query.trim();
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try {
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = text.split(regex);
+    if (parts.length <= 1) return text;
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-amber-300 text-amber-950 font-bold px-0.5 rounded shadow-2xs">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  } catch {
+    return text;
+  }
+}
 
 interface QuotedMessageData {
   id?: string;
@@ -354,6 +378,12 @@ export const LiveChatMonitor: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
+
+  // In-Chat Search & Target Message Highlighting
+  const [inChatSearchQuery, setInChatSearchQuery] = useState('');
+  const [matchingMessageIds, setMatchingMessageIds] = useState<string[]>([]);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
@@ -1051,6 +1081,26 @@ export const LiveChatMonitor: React.FC = () => {
     }
   }, []);
 
+  const scrollToMessage = useCallback((msgId: string, smooth = true) => {
+    setHighlightedMsgId(msgId);
+    const doScroll = () => {
+      const el = document.getElementById(`msg-${msgId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+      }
+    };
+    doScroll();
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 40);
+    setTimeout(doScroll, 120);
+    setTimeout(doScroll, 300);
+
+    // Hilangkan flash highlight setelah 3.5 detik
+    setTimeout(() => {
+      setHighlightedMsgId((prev) => (prev === msgId ? null : prev));
+    }, 3500);
+  }, []);
+
   // 📱 Visual Viewport API: Saat keyboard iOS muncul/berubah ukuran, auto-scroll chat agar tidak tertutup
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
@@ -1154,12 +1204,75 @@ export const LiveChatMonitor: React.FC = () => {
     selectedReservation,
   ]);
 
+  // Sinkronisasi inChatSearchQuery dari searchQuery saat ganti chat atau search query berubah
   useEffect(() => {
-    // Auto scroll down to latest message when messages change or new chat opened
+    if (searchQuery.trim()) {
+      setInChatSearchQuery(searchQuery.trim());
+    }
+  }, [searchQuery, selectedId]);
+
+  // Hitung daftar matching message IDs dalam thread percakapan aktif
+  useEffect(() => {
+    const q = inChatSearchQuery.trim().toLowerCase();
+    if (!q || messages.length === 0) {
+      setMatchingMessageIds([]);
+      setCurrentMatchIndex(-1);
+      return;
+    }
+    const matches = messages
+      .filter((m) => m.content && m.content.toLowerCase().includes(q))
+      .map((m) => m.id);
+
+    setMatchingMessageIds(matches);
+    if (matches.length > 0) {
+      setCurrentMatchIndex((prev) => (prev >= 0 && prev < matches.length ? prev : matches.length - 1));
+    } else {
+      setCurrentMatchIndex(-1);
+    }
+  }, [inChatSearchQuery, messages]);
+
+  const handlePrevMatch = () => {
+    if (matchingMessageIds.length === 0) return;
+    const newIdx = currentMatchIndex > 0 ? currentMatchIndex - 1 : matchingMessageIds.length - 1;
+    setCurrentMatchIndex(newIdx);
+    const targetId = matchingMessageIds[newIdx];
+    if (targetId) scrollToMessage(targetId, true);
+  };
+
+  const handleNextMatch = () => {
+    if (matchingMessageIds.length === 0) return;
+    const newIdx = currentMatchIndex < matchingMessageIds.length - 1 ? currentMatchIndex + 1 : 0;
+    setCurrentMatchIndex(newIdx);
+    const targetId = matchingMessageIds[newIdx];
+    if (targetId) scrollToMessage(targetId, true);
+  };
+
+  const handleClearInChatSearch = () => {
+    setInChatSearchQuery('');
+    setMatchingMessageIds([]);
+    setCurrentMatchIndex(-1);
+    setHighlightedMsgId(null);
+    scrollToBottom(true);
+  };
+
+  useEffect(() => {
+    // Smart auto-scroll: jika ada keyword pencarian dan pesan cocok, scroll langsung ke target
     if (messages.length > 0) {
+      const q = inChatSearchQuery.trim().toLowerCase();
+      if (q) {
+        const matches = messages
+          .filter((m) => m.content && m.content.toLowerCase().includes(q))
+          .map((m) => m.id);
+
+        if (matches.length > 0) {
+          const targetId = matches[matches.length - 1];
+          scrollToMessage(targetId, false);
+          return;
+        }
+      }
       scrollToBottom(false, true);
     }
-  }, [messages, selectedId, scrollToBottom]);
+  }, [messages, selectedId, inChatSearchQuery, scrollToBottom, scrollToMessage]);
 
   const sortChats = (list: LiveChatItem[]): LiveChatItem[] => {
     return [...list].sort((a, b) => {
@@ -3005,7 +3118,6 @@ export const LiveChatMonitor: React.FC = () => {
                   </div>
                 </div>
 
-
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
                   ref={chatContainerRef} 
@@ -3016,6 +3128,59 @@ export const LiveChatMonitor: React.FC = () => {
                     overscrollBehavior: 'contain',
                   }}
                 >
+                  {/* Floating In-Chat Search Navigation Bar */}
+                  {inChatSearchQuery.trim() && matchingMessageIds.length > 0 && (
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-amber-50/95 backdrop-blur-md border border-amber-300 shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-amber-900 animate-fadeIn select-none">
+                      <Search size={13} className="text-amber-600 shrink-0" />
+                      <span className="truncate">
+                        Hasil pencarian: <span className="font-semibold text-amber-950">"{inChatSearchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
+                      </span>
+                      <div className="flex items-center gap-0.5 border-l border-amber-200 pl-1.5 shrink-0">
+                        <button
+                          type="button"
+                          title="Pesan Sebelumnya (Lebih Lama)"
+                          onClick={handlePrevMatch}
+                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-800 transition active:scale-90 cursor-pointer"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Pesan Berikutnya (Lebih Baru)"
+                          onClick={handleNextMatch}
+                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-800 transition active:scale-90 cursor-pointer"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Tutup Navigasi Pencarian"
+                          onClick={handleClearInChatSearch}
+                          className="p-1 rounded-full hover:bg-amber-200/70 text-amber-600 hover:text-amber-900 ml-0.5 transition active:scale-90 cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {inChatSearchQuery.trim() && matchingMessageIds.length === 0 && (
+                    <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-slate-50/95 backdrop-blur-md border border-slate-300 shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-slate-600 animate-fadeIn select-none">
+                      <Info size={13} className="text-slate-500 shrink-0" />
+                      <span className="truncate">
+                        Tidak ada bubble pesan berisi <span className="font-semibold">"{inChatSearchQuery}"</span> di percakapan ini
+                      </span>
+                      <button
+                        type="button"
+                        title="Tutup"
+                        onClick={handleClearInChatSearch}
+                        className="p-0.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-700 ml-1 transition active:scale-90 cursor-pointer"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs">
                       <MessageCircle size={32} className="mb-2 text-[#8696a0]" />
@@ -3034,6 +3199,10 @@ export const LiveChatMonitor: React.FC = () => {
                       const hasMedia = !!msg.media;
                       const quotedMsg = msg.quoted_message || extractQuotedMessage(msg);
                       const showDateSeparator = isDifferentDay(msg.created_at, messages[idx - 1]?.created_at);
+
+                      // Pencarian match & highlight status
+                      const isMatchBubble = inChatSearchQuery.trim() ? matchingMessageIds.includes(msg.id) : false;
+                      const isCurrentActiveMatch = inChatSearchQuery.trim() ? (matchingMessageIds[currentMatchIndex] === msg.id || highlightedMsgId === msg.id) : false;
 
                       // Lokasi valid = latitude/longitude ada dan bukan 0,0 (image WA Web sering kebawa location kosong)
                       const rawLoc = (msg as any).payload_raw?.location || (msg as any).payloadRaw?.location;
@@ -3089,7 +3258,13 @@ export const LiveChatMonitor: React.FC = () => {
                           )}
                           <div
                             id={`msg-${msg.id}`}
-                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300 relative`}
+                            className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} group transition-all duration-300 relative ${
+                              isCurrentActiveMatch
+                                ? 'ring-3 ring-amber-400/90 bg-amber-200/30 rounded-2xl p-1 -m-1 shadow-md scale-[1.01]'
+                                : isMatchBubble
+                                ? 'ring-1 ring-amber-300/60 bg-amber-100/20 rounded-2xl p-0.5 -m-0.5'
+                                : ''
+                            }`}
                           >
                             {/* Floating WhatsApp-Style Quick Emoji Reaction Toolbar */}
                             {activeReactionMsgId === msg.id && (
@@ -3165,7 +3340,7 @@ export const LiveChatMonitor: React.FC = () => {
                               {(!hasMediaOnly || (!isCustomer && !isAdmin)) && !isRevoked && (
                                 <span className={`block text-[10px] font-bold mb-0.5 flex items-center space-x-1 ${
                                   isCustomer ? 'text-[#667781]' : isAdmin ? 'text-[#008069]' : 'text-[#008069]'
-                                }}`}>
+                                }`}>
                                   {!isCustomer && !isAdmin && <Bot size={10} />}
                                   <span>{senderLabel(msg)}</span>
                                 </span>
@@ -3251,7 +3426,9 @@ export const LiveChatMonitor: React.FC = () => {
                                     </div>
                                   )}
                                   {msg.content && !/^\[(IMAGE|MEDIA|LOCATION)/.test(msg.content) && !effectiveIsLocationMsg && (
-                                    <p className="font-sans whitespace-pre-wrap select-text cursor-text">{msg.content}</p>
+                                    <p className="font-sans whitespace-pre-wrap select-text cursor-text">
+                                      {renderHighlightedText(msg.content, inChatSearchQuery)}
+                                    </p>
                                   )}
                                 </>
                               )}
