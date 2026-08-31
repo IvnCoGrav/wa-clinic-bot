@@ -115,6 +115,35 @@ Non-tujuan: ubah SOP greeting/ongkir penolakan out-of-coverage (tetap determinis
 * Tambah `GET /api/admin/live-chat/sync-health` — return `{phantomCount, driftCount, nullWaIdCount, wahaStatus, lastSyncAt}` (reuse Fase 0 queries, no auth tambahan selain `ADMIN_API_KEY`). Frontend `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` tampil banner kuning jika `driftCount>0` (link ke repair script).
 * Log `src/routes/webhook.route.ts:372` `OUTBOUND_DUPLICATE_SKIPPED` dan `STALE MESSAGE GUARD` sudah ada — tambah `stageLog` structured agar `logs/app-*.log` grepable untuk next executor: `grep "STALE GUARD BYPASS\|OUTBOUND_DUPLICATE\|IN-FLIGHT BOT MATCH" logs/app-*.log`.
 
+### Fase 6 — Search-to-Message Jump, Keyword Highlighting & Quick Copy Action (0.5 hari)
+
+**Masalah:**
+* Saat admin mencari keyword tertentu di search bar (misal `"5km"`, format ongkir, atau template jawaban tertentu), hasil filter percakapan di daftar kiri sudah memfilter percakapan yang relevan.
+* Namun saat percakapan dipilih/diklik, view chat selalu auto-scroll ke pesan paling bawah (`scrollToBottom`), sehingga admin harus scroll manual ke atas mencari bubble pesan yang dimaksud.
+* Tidak ada visual highlight (penanda warna/pulsing) pada kata kunci maupun bubble pesan target di dalam chat thread.
+* Sulit menemukan pesan yang cocok jika thread memiliki puluhan hingga ratusan riwayat pesan.
+* Proses menyalin (copy-paste) pesan untuk digunakan kembali ke customer lain masih manual (harus drag teks atau menu context).
+
+**Ubah:**
+1. **Penerusan Konteks Pencarian ke Chat Thread (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`):**
+   * Kirim query pencarian aktif (`searchQuery`) saat percakapan dibuka.
+   * Saat `messages` selesai dimuat pada `loadThread`:
+     * Deteksi apakah terdapat pesan yang mengandung `searchQuery` (case-insensitive substring).
+     * Jika ditemukan, ganti perilaku default `scrollToBottom` menjadi scroll halus terarah ke pesan target: `document.getElementById('msg-' + targetMsgId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })`.
+     * Jika terdapat lebih dari 1 pesan yang cocok, default lompat ke pesan yang paling baru / relevan.
+2. **Visual Highlight & Pulse Animation (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`):**
+   * Bungkus kata kunci yang cocok di dalam teks pesan menggunakan tag penanda visual (`<mark className="bg-amber-200 text-amber-900 font-medium px-1 rounded">`).
+   * Berikan animasi kilat/highlight sementara (`ring-2 ring-amber-400 bg-amber-50/50 transition-all duration-700`) pada container bubble pesan `msg-${msg.id}` agar mata admin langsung tertuju ke posisi pesan tersebut.
+3. **In-Chat Match Navigation Bar (Sticky Toolbar):**
+   * Saat mode pencarian aktif dan terdapat match di dalam chat yang sedang dibuka, tampilkan bar navigasi ringkas di bagian atas chat:
+     * Indikator: `🔍 "5km" (Pesan X dari Y)`
+     * Tombol 🔼 (Pesan sebelumnya / older match)
+     * Tombol 🔽 (Pesan berikutnya / newer match)
+     * Tombol 📋 (Salin Teks Pesan Ini)
+     * Tombol ✖ (Tutup navigasi pencarian)
+4. **1-Click Quick Copy Action pada Pesan:**
+   * Tambahkan tombol ikon copy cepat (📋) pada hover action / message toolbar agar admin dapat langsung menyalin teks bubble pesan yang ditemukan dalam 1 kali klik tanpa perlu blok seleksi teks.
+
 ---
 
 ## 5. Urutan Eksekusi & Estimasi
@@ -127,7 +156,8 @@ Non-tujuan: ubah SOP greeting/ongkir penolakan out-of-coverage (tetap determinis
 | 3 history media | 0.5d | 0 | low (idempotent dedup) |
 | 4 null ack | 0.5d | 1 | low |
 | 5 observability | 0.5d | 1-4 | low |
-| **Total** | **~3.5 hari** | | |
+| 6 search-jump & copy | 0.5d | none (UI only) | low |
+| **Total** | **~4.0 hari** | | |
 
 ---
 

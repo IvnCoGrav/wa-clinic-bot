@@ -2,51 +2,7 @@ import { ConversationState } from '@prisma/client';
 import { StateHandlerContext } from '../state-machine/types';
 import { CustomerSlate, ExtractedEntities } from './types';
 import { prisma } from '../db/client';
-import fs from 'fs';
-import path from 'path';
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-let cachedGazetteerAreas: Map<string, string> | null = null;
-
-function getGazetteerAreas(): Map<string, string> {
-  if (cachedGazetteerAreas) return cachedGazetteerAreas;
-  const map = new Map<string, string>();
-  try {
-    const candidates = [
-      path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-      path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
-      path.resolve(__dirname, '../config/surabaya_sidoarjo_subdistricts.json'),
-      path.resolve(__dirname, '../../src/config/surabaya_sidoarjo_subdistricts.json'),
-    ];
-    for (const c of candidates) {
-      if (fs.existsSync(c)) {
-        const data = JSON.parse(fs.readFileSync(c, 'utf-8'));
-        for (const item of data) {
-          if (item.Kelurahan_Desa) {
-            const raw = item.Kelurahan_Desa.trim();
-            const lower = raw.toLowerCase();
-            if (lower.length >= 3 && !['surabaya', 'sidoarjo', 'desa', 'kota'].includes(lower)) {
-              map.set(lower, raw);
-            }
-          }
-          if (item.Kecamatan) {
-            const raw = item.Kecamatan.trim();
-            const lower = raw.toLowerCase();
-            if (lower.length >= 3 && !['surabaya', 'sidoarjo', 'kota'].includes(lower)) {
-              map.set(lower, raw);
-            }
-          }
-        }
-        break;
-      }
-    }
-  } catch (_) {}
-  cachedGazetteerAreas = map;
-  return map;
-}
+import { getGazetteerAreas, escapeRegex } from '../utils/gazetteer';
 
 export class SlateStore {
   /**
@@ -85,8 +41,8 @@ export class SlateStore {
       kelurahan: customer.kelurahan || null,
       kecamatan: customer.kecamatan || null,
       kota: customer.kota || null,
-      lat: customer.lat || null,
-      lng: customer.lng || null,
+      lat: customer.lat ?? null,
+      lng: customer.lng ?? null,
       streetDetail: preferences.streetDetail || null,
       distanceKm,
       ongkirFee,
@@ -122,11 +78,7 @@ export class SlateStore {
 
     // 1b. Passive Ground Truth Harvesting dari riwayat pesan jika data penting belum terisi
     if (ctx.history && ctx.history.length > 0) {
-      const harvested = this.harvestGroundTruthFromHistorySync(slate, ctx.history);
-      if (harvested) {
-        // Fire-and-forget persist ke DB agar update permanen
-        void this.persistSlate(slate).catch(() => {});
-      }
+      this.harvestGroundTruthFromHistorySync(slate, ctx.history);
     }
 
     slate.projectedState = this.computeProjectedState(slate);
