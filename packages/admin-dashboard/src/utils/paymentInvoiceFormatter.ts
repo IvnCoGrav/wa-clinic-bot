@@ -1,6 +1,7 @@
 import { Reservation } from '../types';
 import { extractBabiesFromRawText } from './reservationBabies';
 import { stripBufferMetadata } from './treatmentStringParser';
+import { calculateOngkirFromTiers } from './deliveryTierCalculator';
 
 const INDONESIAN_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const INDONESIAN_MONTHS = [
@@ -173,9 +174,19 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     }
   }
 
+function stripDurationFromTreatment(rawStr?: string | null): string {
+  if (!rawStr) return '';
+  return stripBufferMetadata(rawStr)
+    .replace(/\s*\[\s*\d+\s*m(?:\s*Addon)?\s*\]/gi, '')
+    .replace(/\s*\(\s*\d+\s*(?:menit|mins?|m)\s*\)/gi, '')
+    .replace(/\s*\b\d+\s*(?:menit|mins?)\b/gi, '')
+    .replace(/\s*\[Total\s*\d+m.*?\]/gi, '')
+    .trim();
+}
+
   // 6. Treatment Detail
   const rawTreatment = reservation.treatment_detail || 'Layanan Homecare';
-  const treatment = stripBufferMetadata(rawTreatment) || 'Layanan Homecare';
+  const treatment = stripDurationFromTreatment(rawTreatment) || 'Layanan Homecare';
 
   // 7. Payment Breakdown
   // Treatment price
@@ -187,25 +198,27 @@ export function generateReservationInvoiceText(params: GenerateInvoiceParams): s
     }
   }
 
-  // Distance & Ongkir
+  // Distance & Ongkir Calculation
   const distanceKm = customer?.distance_km ?? (reservation.customer as any)?.distance_km ?? null;
-  const ongkirVal = customer?.ongkir ?? (reservation.customer as any)?.ongkir ?? 0;
+  const rawOngkir = customer?.ongkir ?? (reservation.customer as any)?.ongkir ?? 0;
+  const effectiveDiscount = Number(discount) || 0;
 
+  let ongkirFee = rawOngkir;
   let ongkirLine = 'Ongkir = free';
+
   if (distanceKm !== null && distanceKm !== undefined) {
     const distStr = distanceKm.toFixed(1).replace('.', ',');
-    if (ongkirVal <= 0 || distanceKm <= 3.0) {
+    if (rawOngkir <= 0 || distanceKm <= 3.0) {
       ongkirLine = `Ongkir ${distStr} km = free`;
+      ongkirFee = 0;
     } else {
-      ongkirLine = `Ongkir ${distStr} km = ${formatThousand(ongkirVal)}`;
+      ongkirLine = `Ongkir ${distStr} km = ${formatThousand(rawOngkir)}`;
     }
-  } else if (ongkirVal > 0) {
-    ongkirLine = `Ongkir = ${formatThousand(ongkirVal)}`;
+  } else if (rawOngkir > 0) {
+    ongkirLine = `Ongkir = ${formatThousand(rawOngkir)}`;
   }
 
-  const effectiveOngkir = (distanceKm !== null && distanceKm <= 3.0) ? 0 : ongkirVal;
-  const effectiveDiscount = Number(discount) || 0;
-  const totalVal = Math.max(0, (treatmentPrice || 0) + (effectiveOngkir || 0) - effectiveDiscount);
+  const totalVal = Math.max(0, (treatmentPrice || 0) + (ongkirFee || 0) - effectiveDiscount);
 
   // 8. Susun Template Teks Bersih
   const lines: string[] = [
