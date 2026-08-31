@@ -94,9 +94,9 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   };
 
   const formatHourLabel = (hour: number) => {
-    if (hour === 12) return '12:00 PM';
-    if (hour > 12) return `${(hour - 12).toString().padStart(2, '0')}:00 PM`;
-    return `${hour.toString().padStart(2, '0')}:00 AM`;
+    if (hour === 12) return '12 pm';
+    if (hour > 12) return `${hour - 12} pm`;
+    return `${hour} am`;
   };
 
   const dayDateFormatted = selectedDate.toLocaleDateString('id-ID', {
