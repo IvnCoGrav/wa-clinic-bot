@@ -614,6 +614,45 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
       expect(result.isHumanHandling).toBe(true);
       expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
     });
+
+    it('DecisionMatrix: "SBY barat kk" asks for specific kelurahan, does NOT confirm location or send pricelist', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const { SlateStore } = await import('../../src/slot-engine/slate-store');
+      const slate = SlateStore.hydrateSlate({
+        customer: { id: 'c_test_sby_barat', phone: '6285792185307' } as any,
+        conversation: { current_state: 'INITIAL' } as any,
+      });
+      const extraction = await EntityExtractor.extract('SBY barat kk');
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'SBY barat kk',
+      });
+
+      expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+      expect(decision.updatedSlate.isLocationConfirmed).toBe(false);
+      expect(decision.shouldSendPricelistImage).toBe(false);
+      expect(decision.deterministicTemplateReply).toMatch(/kelurahan|desa/i);
+    });
+
+    it('DecisionMatrix: "Ini daerah mn kak" triggers clinic origin policy', async () => {
+      const { DecisionMatrix } = await import('../../src/slot-engine/decision-matrix');
+      const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
+      const { SlateStore } = await import('../../src/slot-engine/slate-store');
+      const slate = SlateStore.hydrateSlate({
+        customer: { id: 'c_test_origin', phone: '6281230133633' } as any,
+        conversation: { current_state: 'INITIAL' } as any,
+      });
+      const extraction = await EntityExtractor.extract('Ini daerah mn kak');
+
+      const decision = await DecisionMatrix.evaluate(slate, extraction, {
+        incomingText: 'Ini daerah mn kak',
+      });
+
+      expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+      expect(decision.shouldSendPricelistImage).toBe(false);
+      expect(decision.deterministicTemplateReply).toMatch(/Waru.*Sidoarjo/i);
+    });
   });
 });
 
