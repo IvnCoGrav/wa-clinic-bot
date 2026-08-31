@@ -25,7 +25,7 @@ export interface AiTaskModelConfig {
 // In-Memory dynamic registry (can be persisted or updated via Admin API / UI)
 // Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
 export function sanitizeModelForProvider(model: string, baseUrl?: string): string {
-  if (!model) return 'MiniMax-M2.7-highspeed';
+  if (!model) return 'gpt-4o-mini';
   return model;
 }
 
