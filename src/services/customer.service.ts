@@ -208,10 +208,26 @@ export class CustomerService {
       // dan update ini BUKAN dari Pin GPS baru, pertahankan koordinat presisi asli (jangan timpa dengan centroid kelurahan teks)!
       const preserveExactGps = existing.share_location_sent && !data.isNativePin && existing.lat !== null && existing.lng !== null;
 
-      const effectiveLat = preserveExactGps ? existing.lat : CustomerService.toNumberOrNull(data.lat);
-      const effectiveLng = preserveExactGps ? existing.lng : CustomerService.toNumberOrNull(data.lng);
-      const effectiveDistance = preserveExactGps ? existing.distance_km : data.distanceKm;
-      const effectiveOngkir = preserveExactGps ? existing.ongkir : data.ongkir;
+      const effectiveLat = preserveExactGps
+        ? existing.lat
+        : data.lat !== undefined
+          ? CustomerService.toNumberOrNull(data.lat)
+          : existing.lat;
+      const effectiveLng = preserveExactGps
+        ? existing.lng
+        : data.lng !== undefined
+          ? CustomerService.toNumberOrNull(data.lng)
+          : existing.lng;
+      const effectiveDistance = preserveExactGps
+        ? existing.distance_km
+        : data.distanceKm !== undefined
+          ? data.distanceKm
+          : existing.distance_km;
+      const effectiveOngkir = preserveExactGps
+        ? existing.ongkir
+        : data.ongkir !== undefined
+          ? data.ongkir
+          : existing.ongkir;
 
       const updated = await prisma.customer.update({
         where: { id: customerId },

@@ -154,8 +154,16 @@ export class BroadcastQueueService {
   /**
    * Logika Worker memproses pengiriman pesan broadcast tunggal
    */
-  public async processBroadcastJob(data: BroadcastJobData): Promise<void> {
-    const { followUpId, customerId, tenantId } = data;
+  public async processBroadcastJob(jobData: BroadcastJobData): Promise<void> {
+    const { followUpId, customerId } = jobData;
+    const targetTenantId = jobData.tenantId || DEFAULT_TENANT_ID;
+
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(targetTenantId);
+    if (isCutOff) {
+      console.log(`[Broadcast Queue] Outbound Cut-Off is ACTIVE for tenant ${targetTenantId}. Skipping broadcast job ${followUpId}.`);
+      return;
+    }
 
     // 1. Cek Jam Kerja (09:00 - 18:00)
     const now = new Date();
