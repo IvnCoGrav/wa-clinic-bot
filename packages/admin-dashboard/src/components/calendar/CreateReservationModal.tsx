@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
@@ -81,6 +81,55 @@ function formatMinutesToTime(totalMinutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+export function parseTreatmentsFromDetail(
+  detail: string | null | undefined,
+  catalog: ClinicServiceItem[] = []
+): SelectedTreatmentItem[] {
+  if (!detail) return [];
+  const cleanSummary = detail
+    .replace(/\[\s*Total\s+.*?\]/gi, '')
+    .trim();
+  
+  const parts = cleanSummary.split(/\s*[\+,]\s*/).map((p) => p.trim()).filter(Boolean);
+  const items: SelectedTreatmentItem[] = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    const durationMatch = p.match(/\[\s*(\d+)\s*m.*?\s*\]/i);
+    const durationMinutes = durationMatch ? parseInt(durationMatch[1], 10) : 60;
+    
+    const cleanName = p
+      .replace(/\(.*?\)/g, '')
+      .replace(/\[.*?\]/g, '')
+      .trim();
+
+    if (!cleanName) continue;
+
+    const matchedService = catalog.find(
+      (s) => s.name.toLowerCase() === cleanName.toLowerCase() ||
+             cleanName.toLowerCase().includes(s.name.toLowerCase()) ||
+             s.name.toLowerCase().includes(cleanName.toLowerCase())
+    );
+
+    const price = matchedService ? (matchedService.promoPrice || matchedService.originalPrice || 0) : 0;
+    const category = matchedService ? matchedService.category : 'BABY';
+    const isAddon = matchedService ? (matchedService.isAddon || isAddonService(matchedService)) : false;
+
+    items.push({
+      instanceId: `edit-treatment-${i + 1}-${Math.random().toString(36).substring(2, 7)}`,
+      serviceId: matchedService?.id || `custom-${i + 1}`,
+      name: matchedService?.name || cleanName,
+      category: category || 'BABY',
+      durationMinutes: durationMinutes || matchedService?.durationMinutes || 60,
+      price: price || 0,
+      isAddon: isAddon,
+      assignedChildIndex: 0,
+    });
+  }
+
+  return items;
+}
+
 export interface SelectedTreatmentItem {
   instanceId: string;
   serviceId: string;
@@ -114,6 +163,8 @@ interface CreateReservationModalProps {
   initialCustomer?: any | null;
   initialCustomerId?: string;
   existingReservations?: Reservation[];
+  mode?: 'create' | 'edit';
+  initialReservation?: Reservation | any;
 }
 
 export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
@@ -125,6 +176,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   initialCustomer,
   initialCustomerId,
   existingReservations = [],
+  mode = 'create',
+  initialReservation,
 }) => {
   const { user } = useAuth();
   const { toast } = useUiFeedback();
@@ -193,6 +246,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [showBookedSlotsModal, setShowBookedSlotsModal] = useState(false);
   const [recommendations, setRecommendations] = useState<SlotRecommendation[]>([]);
   const [hasCalculatedRecommendations, setHasCalculatedRecommendations] = useState(false);
+  const initializedEditIdRef = useRef<string | null>(null);
 
   // Form Draft Persistence Hook (1-hour TTL)
   const currentFormPayload = useMemo(() => ({
@@ -263,7 +317,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     currentFormPayload,
     handleRestoreDraft,
     {
-      enabled: isOpen,
+      enabled: isOpen && mode !== 'edit',
       isMeaningful: isReservationDraftMeaningful,
     }
   );
@@ -341,7 +395,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   useEffect(() => {
     if (isOpen && initialCustomer) {
       handleSelectCustomer(initialCustomer);
-    } else if (isOpen && initialCustomerId && !customerId) {
+    } else if (isOpen && initialCustomerId && !customerId && mode !== 'edit') {
       apiRequest(`/api/admin/customers/${initialCustomerId}`)
         .then((res) => {
           const c = res?.customer || res?.data || res;
@@ -349,7 +403,80 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         })
         .catch(() => {});
     }
-  }, [isOpen, initialCustomer, initialCustomerId]);
+  }, [isOpen, initialCustomer, initialCustomerId, mode]);
+
+  // Pre-fill state when opened in edit mode
+  useEffect(() => {
+    if (isOpen && mode === 'edit' && initialReservation) {
+      if (initializedEditIdRef.current === initialReservation.id) {
+        return;
+      }
+      initializedEditIdRef.current = initialReservation.id;
+
+      const res = initialReservation;
+      const cust = res.customer;
+      if (cust) {
+        setCustomerId(cust.id || res.customer_id || '');
+        setSelectedCustomerInfo(cust);
+        setCustomerSearch(`${cust.name || 'Bunda'} (${cust.phone || ''})`);
+        if (cust.ongkir !== undefined && cust.ongkir !== null && !isNaN(Number(cust.ongkir))) {
+          setOngkir(Number(cust.ongkir));
+        }
+      } else if (res.customer_id) {
+        setCustomerId(res.customer_id);
+      }
+
+      if (res.treatment_category) {
+        const cat = res.treatment_category as any;
+        setTreatmentCategory(cat === 'KIDS' ? 'BABY' : (cat === 'BUNDLE' ? 'BOTH' : cat));
+      }
+
+      if (res.booking_date) {
+        try {
+          const d = new Date(res.booking_date);
+          if (!isNaN(d.getTime())) {
+            const yr = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            const dy = String(d.getDate()).padStart(2, '0');
+            setBookingDate(`${yr}-${mo}-${dy}`);
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            setBookingTime(`${hh}:${mm}`);
+          }
+        } catch {}
+      }
+
+      if (res.assigned_staff_id || res.assigned_staff?.id) {
+        setAssignedStaffId(res.assigned_staff_id || res.assigned_staff?.id || '');
+      }
+
+      setStatus(res.status === 'confirmed' ? 'confirmed' : 'pending');
+      setNotes(res.notes || '');
+
+      // Children / babies pre-fill
+      const rawBabies = cust?.children || res.children || [];
+      if (Array.isArray(rawBabies) && rawBabies.length > 0) {
+        setBabies(
+          rawBabies.map((b: any) => ({
+            name: b.name || '',
+            ageText: b.raw_age_text || b.ageText || b.current_age || '',
+          }))
+        );
+      }
+
+      // Treatments pre-fill
+      if (res.treatment_detail) {
+        try {
+          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services);
+          if (parsed.length > 0) {
+            setSelectedTreatments(parsed);
+          }
+        } catch {}
+      }
+    } else if (!isOpen) {
+      initializedEditIdRef.current = null;
+    }
+  }, [isOpen, mode, initialReservation, services]);
 
   // Customer search
   const handleCustomerSearch = async (query: string) => {
@@ -833,27 +960,49 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
     setSubmitting(true);
     try {
-      const res = await apiRequest('/api/admin/reservation', {
-        method: 'POST',
-        body: JSON.stringify({
-          customerId,
-          treatmentCategory: computedCategory,
-          treatmentDetail: finalTreatmentDetail,
-          bookingDate: fullBookingIso,
-          assignedStaffId: assignedStaffId || undefined,
-          status,
-          notes: notes.trim() || undefined,
-          babies: babies.filter((b) => b.name.trim().length > 0),
-          purchaseValue: totalPaymentAmount,
-        }),
-      });
+      if (mode === 'edit' && initialReservation?.id) {
+        const res = await apiRequest(`/api/admin/reservation/${initialReservation.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            customerId,
+            treatmentCategory: computedCategory,
+            treatmentDetail: finalTreatmentDetail,
+            bookingDate: fullBookingIso,
+            assignedStaffId: assignedStaffId || undefined,
+            status,
+            notes: notes.trim() || undefined,
+            babies: babies.filter((b) => b.name.trim().length > 0),
+            purchaseValue: totalPaymentAmount,
+          }),
+        });
 
-      toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
-      discardDraft(true);
-      onSuccess(res?.reservation || res?.data || res);
-      onClose();
+        toast('Perubahan reservasi berhasil disimpan!', 'success');
+        discardDraft(true);
+        onSuccess(res?.reservation || res?.data || res || initialReservation);
+        onClose();
+      } else {
+        const res = await apiRequest('/api/admin/reservation', {
+          method: 'POST',
+          body: JSON.stringify({
+            customerId,
+            treatmentCategory: computedCategory,
+            treatmentDetail: finalTreatmentDetail,
+            bookingDate: fullBookingIso,
+            assignedStaffId: assignedStaffId || undefined,
+            status,
+            notes: notes.trim() || undefined,
+            babies: babies.filter((b) => b.name.trim().length > 0),
+            purchaseValue: totalPaymentAmount,
+          }),
+        });
+
+        toast('Jadwal reservasi multi-treatment berhasil dibuat!', 'success');
+        discardDraft(true);
+        onSuccess(res?.reservation || res?.data || res);
+        onClose();
+      }
     } catch (err: any) {
-      toast(`Gagal membuat jadwal: ${err.message || 'Terjadi kesalahan'}`, 'error');
+      toast(`Gagal ${mode === 'edit' ? 'memperbarui' : 'membuat'} jadwal: ${err.message || 'Terjadi kesalahan'}`, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -900,10 +1049,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         <div className="mb-4 pr-6">
           <h3 className="text-base sm:text-lg font-bold text-[#111b21] flex items-center space-x-2">
             <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
-            <span>Buat Jadwal Reservasi Baru</span>
+            <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : 'Buat Jadwal Reservasi Baru'}</span>
           </h3>
           <p className="text-xs text-[#667781] mt-0.5">
-            Mendukung multi-treatment, reservasi 2 anak (kembar/kakak-adik), add-on tanpa buffer (moksa), dan rekomendasi jam
+            {mode === 'edit'
+              ? 'Perbarui rincian layanan, pasien anak, tanggal, jam, terapis, dan tarif reservasi'
+              : 'Mendukung multi-treatment, reservasi 2 anak (kembar/kakak-adik), add-on tanpa buffer (moksa), dan rekomendasi jam'}
           </p>
         </div>
 
@@ -1771,7 +1922,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
               >
                 <Check size={14} />
-                <span>{submitting ? 'Menyimpan...' : 'Simpan & Buat Jadwal'}</span>
+                <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : 'Simpan & Buat Jadwal')}</span>
               </button>
             </div>
           </div>

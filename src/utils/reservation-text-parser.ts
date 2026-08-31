@@ -532,25 +532,41 @@ function splitMultiValue(value: string): string[] {
 /**
  * Helper untuk mem-parse tanggal bahasa Indonesia secara toleran dan akurat.
  * Mendukung format:
- * - Teks: "sbtu 29 agt 26 jam 09.00-09.30", "Selasa, 21 Juli 2026", "29 agt 2026", "29 agt 26"
+ * - Teks: "sbtu 29 agt 26 jam 09.00-09.30", "Selasa, 21 Juli 2026", "29 agt 2026", "29 agt 26", "29 Agustus jam 10.00"
+ * - Relatif: "hari ini jam 10.00", "besok jam 10.00", "lusa jam 14.00", "rabu jam 10.00"
  * - Numerik: "29-08-2026", "29/08/26", "2026-08-29"
- * - Jam: "jam 09.00-09.30", "pukul 10.30", "pk 14.00", "09.00"
+ * - Jam: "jam 09.00-09.30", "pukul 10.30", "pk 14.00", "10.00 wib", "10.00", "jam 10", "jam 1 siang"
  */
 export function tryParseIndonesianDate(dateStr: string): Date | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const cleanStr = dateStr.toLowerCase().replace(/[*_~`]/g, '').trim();
   if (!cleanStr) return null;
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
   // 1. Ekstrak Jam & Menit jika ada
-  let hours = 0;
+  let hours = 9; // Default jam kunjungan klinik (09:00 WIB) jika jam tidak disebutkan
   let minutes = 0;
   let hasExplicitTime = false;
 
-  const timeMatch = cleanStr.match(/(?:jam|pukul|pk|@)?\s*(\d{1,2})[.:](\d{2})(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?/i) ||
-                    cleanStr.match(/(?:jam|pukul|pk)\s*(\d{1,2})(?:\s*[-–]\s*\d{1,2})?(?!\d)/i);
+  // Cek kata penunjuk waktu: siang/sore/malam/pagi
+  let isPmModifier = false;
+  if (/siang|sore|malam/i.test(cleanStr)) {
+    isPmModifier = true;
+  }
+
+  const timeMatch =
+    cleanStr.match(/(?:jam|pukul|pk|@)?\s*(\d{1,2})[.:](\d{2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2}[.:]\d{2})?/i) ||
+    cleanStr.match(/(?:jam|pukul|pk)\s*(\d{1,2})(?:\s*(?:wib|wit|wita))?(?:\s*[-–]\s*\d{1,2})?(?!\d)/i) ||
+    cleanStr.match(/\b(\d{1,2})[.:](\d{2})\s*(?:wib|wit|wita)?\b/i);
+
   if (timeMatch) {
-    const h = parseInt(timeMatch[1], 10);
+    let h = parseInt(timeMatch[1], 10);
     const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+    if (isPmModifier && h >= 1 && h <= 11) {
+      h += 12;
+    }
     if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
       hours = h;
       minutes = m;
@@ -564,7 +580,7 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     const year = parseInt(isoMatch[1], 10);
     const month = parseInt(isoMatch[2], 10) - 1;
     const day = parseInt(isoMatch[3], 10);
-    const date = new Date(year, month, day, hasExplicitTime ? hours : 0, hasExplicitTime ? minutes : 0);
+    const date = new Date(year, month, day, hours, minutes);
     if (!isNaN(date.getTime())) return date;
   }
 
@@ -575,7 +591,7 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     if (year < 100) year += 2000;
     const month = parseInt(indNumMatch[2], 10) - 1;
     const day = parseInt(indNumMatch[1], 10);
-    const date = new Date(year, month, day, hasExplicitTime ? hours : 0, hasExplicitTime ? minutes : 0);
+    const date = new Date(year, month, day, hours, minutes);
     if (!isNaN(date.getTime())) return date;
   }
 
@@ -595,7 +611,7 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     des: 11, desember: 11, december: 11,
   };
 
-  // 4. Format Teks: "sbtu 29 agt 26 jam 09.00-09.30", "Selasa, 21 Juli 2026", "29 agt 2026", "29 agt 26"
+  // 4. Format Teks Bulan: "sbtu 29 agt 26 jam 09.00", "Selasa, 21 Juli 2026", "29 agt 2026", "29 agustus jam 10.00"
   const textMatch = cleanStr.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{2,4}))?/i);
   if (textMatch) {
     const day = parseInt(textMatch[1], 10);
@@ -604,16 +620,53 @@ export function tryParseIndonesianDate(dateStr: string): Date | null {
     const month = indMonths[monthName];
 
     if (month !== undefined && day >= 1 && day <= 31) {
-      if (rawYear) {
-        let year = parseInt(rawYear, 10);
-        if (year < 100) year += 2000;
-        const date = new Date(year, month, day, hasExplicitTime ? hours : 0, hasExplicitTime ? minutes : 0);
-        if (!isNaN(date.getTime())) return date;
-      }
+      let year = rawYear ? parseInt(rawYear, 10) : currentYear;
+      if (year < 100) year += 2000;
+      const date = new Date(year, month, day, hours, minutes);
+      if (!isNaN(date.getTime())) return date;
     }
   }
 
-  // Jika formatnya ambigu / tidak ada tahun (contoh "Selasa, 21 Juli"), return null (non-blocking)
+  // 5. Format Kata Relatif: "hari ini", "besok", "lusa"
+  if (cleanStr.includes('hari ini')) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+    return date;
+  }
+  if (cleanStr.includes('besok')) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const date = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), hours, minutes);
+    return date;
+  }
+  if (cleanStr.includes('lusa')) {
+    const lusa = new Date(now);
+    lusa.setDate(lusa.getDate() + 2);
+    const date = new Date(lusa.getFullYear(), lusa.getMonth(), lusa.getDate(), hours, minutes);
+    return date;
+  }
+
+  // 6. Format Nama Hari: "senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"
+  const dayNames: { [key: string]: number } = {
+    minggu: 0, ahad: 0,
+    senin: 1,
+    selasa: 2,
+    rabu: 3,
+    kamis: 4,
+    jumat: 5, "jum'at": 5,
+    sabtu: 6,
+  };
+  for (const [dName, targetDayOfWeek] of Object.entries(dayNames)) {
+    if (cleanStr.includes(dName)) {
+      const currentDayOfWeek = now.getDay();
+      let diff = targetDayOfWeek - currentDayOfWeek;
+      if (diff <= 0) diff += 7; // Ambil hari tersebut di minggu ini/mendatang
+      const targetDate = new Date(now);
+      targetDate.setDate(targetDate.getDate() + diff);
+      return new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), hours, minutes);
+    }
+  }
+
+  // Jika formatnya tidak dikenali sama sekali
   return null;
 }
 

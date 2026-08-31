@@ -1356,18 +1356,7 @@ export const CustomerDatabase: React.FC = () => {
                   <Send size={13} />
                   <span>Kirim Event Meta</span>
                 </button>
-
-                <a
-                  href={`https://wa.me/${(activeDetailCustomer.phone || '').replace(/\D/g, '')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold transition flex items-center space-x-1.5 shadow-xs"
-              >
-                <Phone size={13} />
-                <span>Buka di WhatsApp</span>
-                <ExternalLink size={11} />
-              </a>
-            </div>
+              </div>
 
               <button
                 type="button"
@@ -1375,7 +1364,7 @@ className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-
                 className="px-4 py-2 bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0] text-xs font-semibold rounded-xl transition shadow-xs flex items-center space-x-1.5"
               >
                 <PenLine size={13} />
-                <span>Edit Profil</span>
+                <span>Edit Profil & Data Anak</span>
               </button>
             <button
               onClick={() => setActiveDetailCustomer(null)}
@@ -1394,7 +1383,8 @@ className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-
           customer={{
             id: activeDetailCustomer.id,
             name: detailData?.name || activeDetailCustomer.name,
-            phone: activeDetailCustomer.phone,
+            phone: detailData?.phone || activeDetailCustomer.phone,
+            address: detailData?.preferences?.address || detailData?.preferences?.full_address || '',
             kelurahan: detailData?.kelurahan,
             kecamatan: detailData?.kecamatan,
             kota: detailData?.kota,
@@ -1402,6 +1392,7 @@ className="px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white text-
             landmark: detailData?.preferences?.landmark || detailData?.preferences?.address_notes,
             lat: detailData?.lat,
             lng: detailData?.lng,
+            children: detailData?.children || [],
             preferences: detailData?.preferences,
           }}
           onSave={handleSaveCustomerDetail}
