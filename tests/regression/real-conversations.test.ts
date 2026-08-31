@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DecisionMatrix } from '../../src/slot-engine/decision-matrix';
 import { EntityExtractor } from '../../src/slot-engine/entity-extractor';
 import { GroundingComposer } from '../../src/slot-engine/grounding-composer';
@@ -183,5 +183,49 @@ describe('Real Customer WhatsApp Conversation Regression Test Suite', () => {
     expect(grounding.suggestedPreFilledForm).toContain('Berbek');
     expect(grounding.suggestedPreFilledForm).toContain('Pijat Bayi Pulih Ceria');
     expect(grounding.suggestedPreFilledForm).toContain('hari ini');
+  });
+
+  it('Skenario 4: Pesan Pertama ("Halo Bu Bidan, Saya mau Reservasi Home Sevice. Bagaimana Caranya ?") HARUS membalas template greeting resmi Kala Spa (0 Token) & tidak mengunci treatment sembarangan', async () => {
+    const rawInquiry = 'Halo Bu Bidan, Saya mau Reservasi Home Sevice. Bagaimana Caranya ?';
+    const extraction: ExtractedEntities = {
+      intents: ['chitchat'],
+      locationText: null,
+      streetDetail: null,
+      childAgeMonths: null,
+      symptoms: [],
+      treatmentReferenced: null,
+      preferredDateText: null,
+      preferredTimeText: null,
+      customerName: null,
+      isMedicalEmergency: false,
+      confidenceScore: 0.95,
+    };
+
+    const decision = await DecisionMatrix.evaluate(baseSlate, extraction, {
+      incomingText: rawInquiry,
+      history: [],
+    });
+
+    expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+    expect(decision.deterministicTemplateReply).toBeDefined();
+    expect(decision.deterministicTemplateReply).toContain('Halo Bunda ! ✨');
+    expect(decision.deterministicTemplateReply).toContain('Perkenalkan, saya Bidan Yusi');
+    expect(decision.deterministicTemplateReply).toContain('Kalau boleh tau rumahnya dimana ya Bunda?');
+    expect(decision.updatedSlate.selectedTreatmentName).toBeNull();
+
+    // Verifikasi SlateStore tidak salah mengunci jika bot sebelumnya menyebut Pijat Pulih Ceria
+    const { SlateStore } = await import('../../src/slot-engine/slate-store');
+    const testSlate: CustomerSlate = { ...baseSlate };
+    const simulatedHistory = [
+      { role: 'user' as const, content: rawInquiry },
+      {
+        role: 'assistant' as const,
+        content: 'Halo Bunda! Kami ada Pijat Bayi Ceria dan Pijat Bayi Pulih Ceria. Rumah Bunda di mana ya?',
+      },
+    ];
+
+    SlateStore.harvestGroundTruthFromHistorySync(testSlate, simulatedHistory);
+    // WAJIB: selectedTreatmentName tetap null karena customer belum memilih!
+    expect(testSlate.selectedTreatmentName).toBeNull();
   });
 });

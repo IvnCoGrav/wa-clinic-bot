@@ -6,18 +6,42 @@
  */
 
 const COMMON_DISTRICTS = [
-  'jambangan', 'bubutan', 'petikan', 'petiken', 'karang pilang', 'karangpilang', 'ngagel',
-  'kalijudan', 'buduran', 'simomulyo', 'candi', 'sedati', 'gresik', 'kemayoran', 'manukan',
-  'siwalankerto', 'tambaksari', 'tambak sari sby', 'sidotopo wetan', 'sidotopo', 'sekawan nyaman',
-  'banyuurip', 'banyu urip', 'kodam', 'rungkut', 'pepelegi', 'taman', 'mulyorejo',
-  'tenggilis', 'tanggulangin', 'kandangan', 'dukuh pakis', 'sukomanunggal', 'lidah kulon', 'lidah wetan',
-  'gedangan', 'bungurasih', 'wonocolo', 'tegalsari', 'bratang', 'bulusidokare', 'citraland wiyung',
-  'citraland', 'damarsih', 'kenjeran', 'klampis', 'sambikerep', 'gunungsari', 'sawotratap',
-  'simokerto', 'tambak oso', 'kutisari', 'kertajaya', 'wonosari', 'sukodono', 'pabean',
-  'gunung anyar', 'tambak wedi', 'semolowaru', 'pakuwon city', 'jojoran', 'waru', 'krian',
-  'medokan ayu', 'medokan', 'grogol sby', 'grogol', 'babatan', 'kepuh', 'sidoarjo', 'surabaya',
-  'wiyung', 'gayungan', 'benowo', 'pakal', 'asemrowo', 'krembangan', 'genteng', 'sawahan'
-];
+  // Multi-word districts / areas / clusters (Panjang dulu agar matching lebih spesifik)
+  'tambak sari sby', 'sidotopo wetan', 'sekawan nyaman', 'citraland wiyung', 'medokan semampir',
+  'gunung anyar tambak', 'tenggilis mejoyo', 'pabean cantian', 'pabean cantikan', 'lidah kulon',
+  'lidah wetan', 'karang pilang', 'karangpilang', 'wisata bukit mas', 'grand pakuwon', 'pakuwon city',
+  'pakuwon indah', 'graha family', 'royal residence', 'puri surya jaya', 'medokan ayu', 'medokan asri',
+  'tambak sumur', 'tambaksumur', 'tambak sawah', 'tambaksawah', 'tambak oso', 'tambakoso',
+  'banyu urip', 'banyuurip', 'dukuh pakis', 'dukuh kupang', 'dukuh menanggal', 'sukomanunggal',
+  'suko manunggal', 'rungkut kidul', 'rungkut tengah', 'rungkut menanggal', 'kalirungkut', 'kali rungkut',
+  'manukan kulon', 'manukan wetan', 'bluru kidul', 'rangkah kidul', 'masangan kulon', 'masangan wetan',
+  'grogol sby', 'delta sari', 'deltasari', 'balas klumprik', 'jajar tunggal', 'pradah kalikendal',
+  'genting kalianak', 'morokrembangan', 'krembangan selatan', 'krembangan utara', 'alun-alun contong',
+  'tembok dukuh', 'pacar kembang', 'pacar keling', 'dukuh setro', 'bulak banteng', 'tambak wedi',
+  'kedung cowek', 'embong kaliasin', 'kupang krajan', 'putat jaya', 'babat jerawat', 'banjar sugihan',
+  'perak barat', 'perak timur', 'gebang putih', 'ngagel rejo', 'ngagelrejo',
+
+  // Single-word districts / kecamatan / kelurahan (Surabaya, Sidoarjo, Gresik)
+  'semampir', 'sarirogo', 'wonokromo', 'sukolilo', 'gubeng', 'tandes', 'lakarsantri', 'bulak',
+  'krembangan', 'asemrowo', 'benowo', 'pakal', 'sambikerep', 'sawahan', 'tegalsari', 'genteng',
+  'bubutan', 'simokerto', 'tambaksari', 'kenjeran', 'mulyorejo', 'rungkut', 'tenggilis', 'jambangan',
+  'gayungan', 'wonocolo', 'wiyung', 'pabean', 'ampel', 'pegirian', 'ujung', 'sidotopo', 'wonokusumo',
+  'perak', 'darmo', 'dinoyo', 'keputran', 'ngagel', 'jagir', 'bratang', 'baratajaya', 'menur', 'manyar',
+  'mojo', 'airlangga', 'kertajaya', 'keputih', 'klampis', 'kutisari', 'siwalankerto', 'jemursari',
+  'kendangsari', 'prapen', 'margorejo', 'sidosermo', 'simomulyo', 'manukan', 'balongsari', 'kandangan',
+  'sememi', 'dupak', 'kemayoran', 'gundih', 'jepara', 'kapasari', 'simolawang', 'sidodadi', 'ploso',
+  'rangkah', 'gading', 'petemon', 'pakis', 'kebraon', 'kedurus', 'warugunung', 'pagesangan', 'kebonsari',
+  'karah', 'ketintang', 'citraland', 'pakuwon', 'kodam', 'jojoran', 'petikan', 'petiken', 'buduran',
+  'candi', 'sedati', 'gresik', 'gedangan', 'bungurasih', 'damarsih', 'gunungsari', 'sawotratap',
+  'sukodono', 'waru', 'krian', 'babatan', 'kepuh', 'sidoarjo', 'surabaya', 'porong', 'krembung',
+  'tulangan', 'tanggulangin', 'jabon', 'balongbendo', 'prambon', 'tarik', 'wonoayu', 'taman', 'lebo',
+  'suko', 'cemengkalang', 'urangagung', 'bluru', 'sekardangan', 'magersari', 'pucang', 'sidokare',
+  'bulusidokare', 'celep', 'lemahputro', 'gebang', 'kemiri', 'banjarbendo', 'sumokali', 'pepelegi',
+  'berbek', 'wadungasri', 'tropodo', 'wedoro', 'aloha', 'betro', 'kalanganyar', 'pranti', 'pagerwojo',
+  'entalsewu', 'sepande', 'sumorame', 'kalitengah', 'ngaban', 'boro', 'jumputrejo', 'panjunan', 'bangah',
+  'wage', 'bohar', 'bebekan', 'trosobo', 'kletek', 'gilang', 'driyorejo', 'menganti', 'kebomas',
+  'cerme', 'benjeng', 'bambe', 'tenaru'
+].sort((a, b) => b.length - a.length);
 
 const GENERIC_NAME_PLACEHOLDERS = new Set([
   'bunda', 'ibu', 'mama', 'moms', 'momm', 'mbak', 'mas', 'kak', 'kakak', 'ny', 'ny.',
@@ -29,7 +53,7 @@ const GENERIC_NAME_PLACEHOLDERS = new Set([
  * Membersihkan nama customer agar hanya berupa nama panggilan/nama asli orang.
  * Menghilangkan:
  * 1. Prefix: "Bunda", "Ibu", "Mama", "Moms", "~", "Suami Bunda"
- * 2. Suffix Alamat/Lokasi: ", Sidotopo Wetan", "Kecamatan Sukodono", "rungkut", "Sedati"
+ * 2. Suffix Alamat/Lokasi: ", Sidotopo Wetan", "Kecamatan Sukodono", "rungkut", "Sedati", "Semampir"
  * 3. Catatan/Status: "+ Alamat", "(Bunda Fatma)", "- Leave ur Chat-Busy"
  * 4. Emoji dan simbol karakter khusus
  */
@@ -54,11 +78,11 @@ export function sanitizeCustomerNameForGreeting(rawName?: string | null): string
     }
   }
 
-  // 3. Buang bagian setelah tanda koma (biasanya alamat: "Bunda Balqis, Sidotopo Wetan")
-  name = name.split(',')[0].trim();
+  // 3. Buang bagian setelah tanda koma atau pipe (biasanya alamat/wilayah: "Bunda Balqis, Sidotopo Wetan")
+  name = name.split(/[,|]/)[0].trim();
 
-  // 4. Buang catatan status/tambahan seperti "- Leave ur Chat", "+ Alamat", "/ Alamat"
-  name = name.split(/\s+[-+/]\s+|\s*\+\s*alamat/i)[0].trim();
+  // 4. Buang catatan status/tambahan seperti "- Leave ur Chat", "+ Alamat", "/ Alamat", "- Semampir"
+  name = name.split(/\s+[-+/:]\s+|\s*\+\s*alamat/i)[0].trim();
 
   // 5. Buang awalan sapaan (Bunda, Ibu, Mama, Moms, Suami Bunda, Ny, Mrs, ~)
   name = name.replace(/^(?:suami\s+bunda|bunda|ibu|mama|moms|momm|mbak|mas|mrs|ny|ny\.|kakak|kak|~)\s+/i, '').trim();
@@ -66,12 +90,20 @@ export function sanitizeCustomerNameForGreeting(rawName?: string | null): string
   // 6. Buang kata "Kecamatan ..." atau "Kelurahan ..." di tengah/belakang
   name = name.replace(/\b(?:kecamatan|kelurahan|desa|kabupaten|kota)\s+[a-zA-Z0-9_-]+/gi, '').trim();
 
-  // 7. Buang nama-nama kecamatan/kelurahan umum Surabaya/Sidoarjo di akhir string
-  for (const d of COMMON_DISTRICTS) {
-    const re = new RegExp(`\\s+${d}$`, 'i');
-    if (re.test(name)) {
-      name = name.replace(re, '').trim();
-      break;
+  // 6b. Buang frasa penunjuk lokasi seperti "dari Semampir", "area Rungkut", "di Sedati"
+  name = name.replace(/\s+(?:dari|di|area|daerah|lokasi)\s+[a-zA-Z0-9_\s-]+$/i, '').trim();
+
+  // 7. Buang nama-nama kecamatan/kelurahan umum Surabaya/Sidoarjo di akhir string (bisa berulang misal "Semampir Sidoarjo")
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const d of COMMON_DISTRICTS) {
+      const re = new RegExp(`\\s+${d}$`, 'i');
+      if (re.test(name)) {
+        name = name.replace(re, '').trim();
+        changed = true;
+        break;
+      }
     }
   }
 

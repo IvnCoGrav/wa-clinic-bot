@@ -4,6 +4,52 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Pinch-to-Zoom & Semantic Time Density Scaling untuk Kalender Mingguan & Harian (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`, `useCalendarZoom.ts`, `CalendarZoomControls.tsx`) (2026-08-31)
+
+- **Latar Belakang & Kebutuhan Pengguna:**
+  - Pengguna membutuhkan fleksibilitas tampilan kalender mingguan (*Week View*) dan harian (*Day View*) agar dapat di-zoom in / zoom out (termasuk gesture pinch cubit 2 jari di HP) untuk melihat ringkasan kepadatan seluruh jam dalam 1 layar (*Overview*) maupun melihat rincian lengkap treatment & jadwal yang berhimpitan (*Detail*).
+
+- **Solusi & Implementasi:**
+  1. **Custom Hook `useCalendarZoom` (`packages/admin-dashboard/src/hooks/useCalendarZoom.ts`)**:
+     - Mengelola state `hourHeight` (rentang dinamis 44px s/d 180px, default 90px).
+     - Mengintegrasikan event listener multi-touch 2 jari (`touchstart`, `touchmove`, `touchend`) dengan kalkulasi jarak Euclidean distance untuk gesture cubit (*pinch*) yang mulus.
+     - Mengisolasi gesture zoom dari default browser full-page zoom (`e.preventDefault()`) dan mempertahankan fokus anchor scroll vertikal saat di-zoom.
+     - Mendukung desktop zoom melalui `Ctrl + MouseWheel`.
+     - Menyimpan preferensi kerapatan jam ke `localStorage` per-perangkat.
+  2. **Komponen `CalendarZoomControls` (`packages/admin-dashboard/src/components/calendar/CalendarZoomControls.tsx`)**:
+     - Menyediakan kontrol zoom 1-klik dengan 3 preset:
+       - 🤏 **Kompak (`52px`)**: Seluruh jam kerja (06:00 s/d 21:00) muat dalam 1 layar HP tanpa perlu scroll.
+       - 📱 **Standar (`90px`)**: Tampilan seimbang default.
+       - 🔍 **Detail (`150px`)**: Tampilan tinggi untuk rincian lengkap.
+     - Tombol Zoom In `[+]`, Zoom Out `[-]`, dan Reset Zoom `[↺]` jika zoom tidak di 100%.
+  3. **Adaptive Semantic Level-of-Detail (LOD) pada `WeekScheduleGrid.tsx` & `DayScheduleGrid.tsx`**:
+     - **Kompak (`< 65px`)**: Kartu jadwal dirender sebagai chip mini hemat ruang (Nama Depan + Jam Mulai + Warna Kategori).
+     - **Standar (`65px - 119px`)**: Tampilan seimbang dengan jam, nama, kategori, status lunas/pending, dan terapis.
+     - **Detail (`>= 120px`)**: Tampilan kaya memuat nama lengkap bunda, nama & usia anak, rincian lengkap treatment, durasi, status pembayaran, dan alamat/kontak.
+  4. **Pengujian & Verifikasi:**
+     - Frontend build (`npm run build` di `packages/admin-dashboard`): **PASS (0 error, 35.6s)**.
+     - Backend build (`npm run build` di root): **PASS (0 error)**.
+     - Vitest Unit Test Suite: **PASS (197/197 test files green)**.
+
+#### Fix — Smart Customer Name Sanitization & Complete District/Location Stripping (`name-sanitizer.ts`, `name-sanitizer.test.ts`) (2026-08-31)
+
+- **Latar Belakang & Pertanyaan Pengguna:**
+  - Pengguna menanyakan mengapa bot mengirim sapaan *"Halo Bunda Hera Semampir"* pada pesan follow-up dan tidak mengenali bahwa kata "Semampir" adalah nama wilayah/kecamatan/kelurahan yang tercantum pada nama kontak buku telepon / profil WhatsApp.
+
+- **Akar Masalah (Root Cause):**
+  - Modul pembersih nama (`src/utils/name-sanitizer.ts`) memiliki daftar `COMMON_DISTRICTS` yang belum lengkap (kecamatan *Semampir*, *Sukolilo*, *Gubeng*, *Wonokromo*, *Tandes*, *Lakarsantri*, *Porong*, dll. belum terdaftar).
+  - Normalisasi nama belum memproses suffix lokasi bertingkat (misal: "Semampir Sidoarjo") dan penanda lokasi berpemisah (seperti `|`, `:`, `/`, `-`, atau frasa *"dari Semampir"*).
+
+- **Solusi & Perbaikan:**
+  1. **Daftar Lengkap Kecamatan & Kelurahan Surabaya, Sidoarjo, dan Gresik**:
+     - Memperluas `COMMON_DISTRICTS` menjadi cakupan menyeluruh untuk 31 kecamatan Surabaya, 18 kecamatan Sidoarjo, kelurahan populer, dan perumahan (termasuk *Semampir*, *Sarirogo*, *Lebo*, *Sukolilo*, *Medokan Semampir*, dll.), diurutkan descending berdasarkan panjang karakter agar pencocokan multi-kata lebih presisi.
+  2. **Iterative District & Location Phrase Stripping**:
+     - Menambahkan loop `while (changed)` untuk menghapus beberapa tingkatan suffix lokasi di akhir nama (contoh: *"Bunda Anita Semampir Sidoarjo"* -> *"Anita"*).
+     - Menambahkan filter pembersih frasa lokasi (*"dari Semampir"*, *"area Rungkut"*, *"di Sedati"*).
+     - Menangani pemisah wilayah seperti koma, pipe (`|`), titik dua (`:`), minus, dan slash.
+  3. **Unit Testing (`tests/unit/name-sanitizer.test.ts`)**:
+     - Menambahkan automated test untuk *"Bunda Hera Semampir"* -> *"Hera"* (sapaan: *"Bunda Hera"*), *"Bunda Iren, Sarirogo"* -> *"Iren"*, *"Bunda Nia Medokan Semampir"* -> *"Nia"*, dan variasi wilayah lainnya.
+
 #### Fix & Enhancement — Live Chat State Synchronization, Hold-Press System Label Manager & Smart Bullet Indicator (`LiveChatMonitor.tsx`) (2026-08-31)
 
 - **Latar Belakang & Gejala:**

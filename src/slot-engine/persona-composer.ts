@@ -106,7 +106,10 @@ export class PersonaComposer {
       1. Jika treatment belum dipilih -> Tanyakan rencana treatment apa yang diinginkan.
       2. Jika hari belum disebut -> Tanyakan rencana mau di hari apa.
       3. Jika kelurahan rumah belum ada -> Tanyakan kelurahan/daerah rumah Bunda.
-      4. Jika data sudah lengkap -> Ajak Bunda melengkapi format reservasi.`;
+      4. Jika data sudah lengkap -> Ajak Bunda melengkapi format reservasi.
+16. ATURAN ANTI-ASUMSI TREATMENT DI AWAL CHAT:
+    - DILARANG KERAS mengasumsikan, merekomendasikan, atau mencontohkan paket tertentu (seperti *Pijat Bayi Pulih Ceria* atau *Pijat Oksitosin*) jika customer HANYA bertanya cara reservasi umum atau sapaan pembuka tanpa menyebut keluhan/layanan spesifik.
+    - Cukup sapa secara ramah, perkenalkan Bidan Yusi, dan tanyakan kelurahan/daerah rumah Bunda.`;
   }
 
   /**

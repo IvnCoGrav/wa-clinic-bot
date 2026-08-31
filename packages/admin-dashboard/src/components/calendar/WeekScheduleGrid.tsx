@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { Reservation } from '../../types';
 import { Plus, User, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { QuickSlotTarget } from './types';
+import { useCalendarZoom } from '../../hooks/useCalendarZoom';
+import { CalendarZoomControls } from './CalendarZoomControls';
 
 interface WeekScheduleGridProps {
   selectedDate: Date;
@@ -14,10 +16,9 @@ interface WeekScheduleGridProps {
 // Hours to display (6 am to 9 pm / 06:00 to 21:00)
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
 
-// Ukuran layout untuk kalkulasi auto-scroll (harus sinkron dengan class Tailwind).
+// Ukuran layout dasar untuk kalkulasi auto-scroll
 const TIME_GUTTER = 70; // kolom label jam
 const DAY_COL_WIDTH = 140; // minmax(140px,1fr) pada kolom hari
-const HOUR_ROW_HEIGHT = 90; // min-h-[90px] tiap baris jam
 const HEADER_HEIGHT = 60; // sticky header hari (kira-kira)
 
 function extractDurationMinutes(detail?: string | null): number {
@@ -43,7 +44,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   onSelectReservation,
   onQuickAdd,
 }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const zoomState = useCalendarZoom();
+  const { hourHeight, zoomLevel, containerRef } = zoomState;
+
   const isDraggingRef = useRef(false);
   const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
@@ -51,10 +54,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Hanya abaikan jika klik pada input atau form controls
     const target = e.target as HTMLElement;
-    if (target.closest('input') || target.closest('select') || target.closest('textarea')) {
+    if (target.closest('input') || target.closest('select') || target.closest('textarea') || target.closest('button')) {
       return;
     }
-    const container = scrollRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
     isDraggingRef.current = true;
@@ -69,7 +72,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
-    const container = scrollRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
     const dx = e.clientX - dragStartRef.current.x;
@@ -92,7 +95,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
-    const container = scrollRef.current;
+    const container = containerRef.current;
     if (container) {
       try {
         container.releasePointerCapture?.(e.pointerId);
@@ -158,7 +161,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   // Auto-scroll saat minggu dibuka: ke treatment terdekat dari sekarang;
   // bila tidak ada, ke kolom hari ini + jam sekarang.
   useEffect(() => {
-    const el = scrollRef.current;
+    const el = containerRef.current;
     if (!el) return;
 
     const now = new Date();
@@ -192,16 +195,21 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const maxLeft = el.scrollWidth - viewportW;
     el.scrollLeft = Math.min(targetLeft, Math.max(0, maxLeft));
 
-    const targetTop = Math.max(0, (targetHour - 6) * HOUR_ROW_HEIGHT - HEADER_HEIGHT / 2);
+    const targetTop = Math.max(0, (targetHour - 6) * hourHeight - HEADER_HEIGHT / 2);
     const maxTop = el.scrollHeight - el.clientHeight;
     el.scrollTop = Math.min(targetTop, Math.max(0, maxTop));
-  }, [reservations, selectedDate]);
+  }, [reservations, selectedDate, hourHeight]);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col">
+    <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col relative group/calendar">
+      {/* Floating Zoom Controls Bar (Accessible on Mobile Pinch & Click) */}
+      <div className="absolute top-3 right-3 z-40 hidden sm:block">
+        <CalendarZoomControls zoomState={zoomState} variant="floating" />
+      </div>
+
       {/* Scrollable Container with sticky header for continuous vertical line alignment */}
       <div
-        ref={scrollRef}
+        ref={containerRef}
         data-horizontal-scroll="true"
         data-no-swipe-back="true"
         onPointerDown={handlePointerDown}
@@ -264,7 +272,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] h-[90px] min-h-[90px] divide-x divide-[#e9edef] group"
+              style={{ height: `${hourHeight}px`, minHeight: `${hourHeight}px` }}
+              className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] group"
             >
               {/* Time label column (frozen horizontally on scroll) */}
               <div className="sticky left-0 z-20 p-2 text-right pr-3 text-xs font-semibold text-[#8696a0] select-none bg-[#fafafa] flex items-start justify-end pt-2 border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
@@ -279,7 +288,8 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                 return (
                   <div
                     key={dayIdx}
-                    className={`relative transition-colors group/slot h-[90px] ${
+                    style={{ height: `${hourHeight}px` }}
+                    className={`relative transition-colors group/slot ${
                       isSelectedDay ? 'bg-emerald-50/20' : 'hover:bg-gray-50/60'
                     }`}
                   >
@@ -322,8 +332,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
                       // Posisi menit awal (0..59) dan tinggi proporsional durasi
                       const startMinutes = bDate.getMinutes();
-                      const topOffsetPx = Math.round((startMinutes / 60) * HOUR_ROW_HEIGHT);
-                      const heightPx = Math.max(54, Math.round((duration / 60) * HOUR_ROW_HEIGHT - 6));
+                      const topOffsetPx = Math.round((startMinutes / 60) * hourHeight);
+                      const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
+                      const heightPx = Math.max(minCardHeight, Math.round((duration / 60) * hourHeight - 4));
                       const evCount = events.length;
                       const evWidth = evCount > 1 ? `calc(${100 / evCount}% - 6px)` : 'calc(100% - 8px)';
                       const evLeft = evCount > 1 ? `calc(${(evIdx * 100) / evCount}% + 3px)` : '4px';
@@ -338,54 +349,69 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                             onSelectReservation(res);
                           }}
                           style={{
-                            top: `${topOffsetPx + 3}px`,
+                            top: `${topOffsetPx + 2}px`,
                             height: `${heightPx}px`,
                             left: evLeft,
                             width: evWidth,
                           }}
-                          className={`absolute z-10 p-2 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
+                          className={`absolute z-10 p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
                         >
-                          {/* Baris Atas: Jam Mulai & Status Badge */}
-                          <div className="flex items-center justify-between text-[10.5px] font-bold shrink-0">
-                            <span className="flex items-center space-x-1 font-mono text-[#111b21]">
-                              <Clock size={10} className="opacity-75 shrink-0" />
-                              <span>{startTimeStr}</span>
-                            </span>
-                            {res.status === 'confirmed' ? (
-                              <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800 shrink-0">
-                                <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
-                                Lunas
+                          {zoomLevel === 'compact' ? (
+                            /* COMPACT VIEW LOD (<65px) */
+                            <div className="flex items-center justify-between gap-1 h-full">
+                              <span className="font-extrabold text-[10.5px] text-[#111b21] truncate leading-tight">
+                                {firstName}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8.5px] font-bold bg-amber-600/10 text-amber-800 shrink-0">
-                                <AlertCircle size={9} className="mr-0.5 text-amber-600" />
-                                Pending
+                              <span className="font-mono text-[9px] font-bold text-[#54656f] shrink-0">
+                                {startTimeStr}
                               </span>
-                            )}
-                          </div>
-
-                          {/* Baris Tengah: Nama Depan Saja (Bold) & Detail Treatment jika cukup tinggi */}
-                          <div className="my-auto py-0.5 overflow-hidden space-y-0.5">
-                            <h5 className="font-extrabold text-xs text-[#111b21] truncate leading-tight" title={res.customer?.name || ''}>
-                              {firstName}
-                            </h5>
-                            {heightPx >= 68 && cleanDetail && (
-                              <p className="text-[10px] opacity-90 line-clamp-1 font-medium leading-tight">
-                                {cleanDetail}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Baris Bawah: Nama Terapis & Durasi */}
-                          <div className="pt-0.5 border-t border-black/10 flex items-center justify-between text-[9.5px] opacity-85 shrink-0">
-                            <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f]">
-                              <User size={9} className="shrink-0 text-[#008069]" />
-                              <span className="truncate">{res.assigned_staff?.name ? res.assigned_staff.name.split(/\s+/)[0] : 'Unassigned'}</span>
                             </div>
-                            <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 shrink-0 ml-1">
-                              {duration}m
-                            </span>
-                          </div>
+                          ) : (
+                            /* STANDARD & DETAILED VIEW LOD */
+                            <>
+                              {/* Baris Atas: Jam Mulai & Status Badge */}
+                              <div className="flex items-center justify-between text-[10px] sm:text-[10.5px] font-bold shrink-0">
+                                <span className="flex items-center space-x-1 font-mono text-[#111b21]">
+                                  <Clock size={10} className="opacity-75 shrink-0" />
+                                  <span>{startTimeStr}</span>
+                                </span>
+                                {res.status === 'confirmed' ? (
+                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800 shrink-0">
+                                    <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
+                                    Lunas
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 text-amber-800 shrink-0">
+                                    <AlertCircle size={9} className="mr-0.5 text-amber-600" />
+                                    Pending
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Baris Tengah: Nama Pasien & Detail Layanan */}
+                              <div className="my-auto py-0.5 overflow-hidden space-y-0.5">
+                                <h5 className="font-extrabold text-xs text-[#111b21] truncate leading-tight" title={res.customer?.name || ''}>
+                                  {zoomLevel === 'detailed' ? cleanName : firstName}
+                                </h5>
+                                {heightPx >= 58 && cleanDetail && (
+                                  <p className="text-[10px] opacity-90 line-clamp-1 font-medium leading-tight">
+                                    {cleanDetail}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Baris Bawah: Nama Terapis & Durasi */}
+                              <div className="pt-0.5 border-t border-black/10 flex items-center justify-between text-[9px] sm:text-[9.5px] opacity-85 shrink-0">
+                                <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f]">
+                                  <User size={9} className="shrink-0 text-[#008069]" />
+                                  <span className="truncate">{res.assigned_staff?.name ? res.assigned_staff.name.split(/\s+/)[0] : 'Unassigned'}</span>
+                                </div>
+                                <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 shrink-0 ml-1">
+                                  {duration}m
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       );
                     })}
@@ -395,6 +421,11 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Floating Bottom Toolbar for Mobile Screen */}
+      <div className="p-2 sm:hidden flex justify-end border-t border-[#e9edef] bg-[#fafafa]">
+        <CalendarZoomControls zoomState={zoomState} variant="inline" />
       </div>
     </div>
   );
