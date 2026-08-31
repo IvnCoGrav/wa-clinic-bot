@@ -77,20 +77,24 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
   const extractDurationMinutes = (detail?: string | null): number => {
     if (!detail) return 60;
-    const match = detail.match(/(\d+)\s*(?:menit|mins|m)\b/i);
-    if (match && match[1]) {
-      const parsed = parseInt(match[1], 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+    const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
+    if (totalMatch) return parseInt(totalMatch[1], 10);
+    const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
+    if (minMatches && minMatches.length > 0) {
+      let sum = 0;
+      for (const m of minMatches) {
+        const num = parseInt(m.replace(/\D/g, ''), 10);
+        if (num > 0 && num <= 360) sum += num;
+      }
+      if (sum > 0) return sum;
+    }
+    const items = detail.split(/\s*(?:\+|\b(?:dan|&)\b)\s*/i).filter((s) => s.trim().length > 2);
+    if (items.length > 1) return Math.min(240, items.length * 60);
+    const lower = detail.toLowerCase();
+    if (lower.includes('nifas') || lower.includes('hamil') || lower.includes('moms') || lower.includes('paket')) {
+      return 90;
     }
     return 60;
-  };
-
-  const getEventsForHour = (hour: number) => {
-    return reservations.filter((r) => {
-      if (!r.booking_date) return false;
-      const bDate = new Date(r.booking_date);
-      return isSameDay(bDate, selectedDate) && bDate.getHours() === hour;
-    });
   };
 
   const formatHourLabel = (hour: number) => {
@@ -161,6 +165,90 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     el.scrollTop = Math.min(targetTop, Math.max(0, maxTop));
   }, [reservations, selectedDate, hourHeight]);
 
+  const minCardHeight = zoomLevel === 'compact' ? 36 : 52;
+  const dayReservations = reservations.filter(
+    (r) => r.booking_date && isSameDay(new Date(r.booking_date), selectedDate)
+  );
+
+  // Clustering and layout for day events
+  const eventsWithTiming = dayReservations
+    .map((r) => {
+      const bDate = new Date(r.booking_date!);
+      const duration = extractDurationMinutes(r.treatment_detail);
+      const startMinutes = (bDate.getHours() - 6) * 60 + bDate.getMinutes();
+      const endMinutes = startMinutes + duration;
+      return { res: r, startMinutes, endMinutes, duration };
+    })
+    .sort((a, b) => a.startMinutes - b.startMinutes || b.duration - a.duration);
+
+  const positionedEvents: Array<{
+    res: Reservation;
+    startMinutes: number;
+    endMinutes: number;
+    duration: number;
+    topPx: number;
+    heightPx: number;
+    colIndex: number;
+    totalCols: number;
+  }> = [];
+
+  let currentCluster: typeof eventsWithTiming = [];
+  let clusterEnd = -1;
+
+  const processCluster = (cluster: typeof eventsWithTiming) => {
+    if (cluster.length === 0) return;
+    const columns: Array<{ endMinutes: number }> = [];
+    const clusterPositions: Array<{ colIndex: number }> = [];
+
+    for (const ev of cluster) {
+      let placedCol = -1;
+      for (let c = 0; c < columns.length; c++) {
+        if (columns[c].endMinutes <= ev.startMinutes) {
+          columns[c].endMinutes = ev.endMinutes;
+          placedCol = c;
+          break;
+        }
+      }
+      if (placedCol === -1) {
+        placedCol = columns.length;
+        columns.push({ endMinutes: ev.endMinutes });
+      }
+      clusterPositions.push({ colIndex: placedCol });
+    }
+
+    const totalCols = Math.max(1, columns.length);
+    cluster.forEach((ev, idx) => {
+      const colIndex = clusterPositions[idx].colIndex;
+      const topPx = Math.max(0, Math.round((ev.startMinutes / 60) * hourHeight));
+      const heightPx = Math.max(minCardHeight, Math.round((ev.duration / 60) * hourHeight - 4));
+      positionedEvents.push({
+        res: ev.res,
+        startMinutes: ev.startMinutes,
+        endMinutes: ev.endMinutes,
+        duration: ev.duration,
+        topPx,
+        heightPx,
+        colIndex,
+        totalCols,
+      });
+    });
+  };
+
+  for (const ev of eventsWithTiming) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(ev);
+      clusterEnd = ev.endMinutes;
+    } else if (ev.startMinutes < clusterEnd) {
+      currentCluster.push(ev);
+      clusterEnd = Math.max(clusterEnd, ev.endMinutes);
+    } else {
+      processCluster(currentCluster);
+      currentCluster = [ev];
+      clusterEnd = ev.endMinutes;
+    }
+  }
+  processCluster(currentCluster);
+
   return (
     <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col relative group/calendar">
       {/* Day Header Banner with Integrated Zoom Controls */}
@@ -188,7 +276,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         </div>
       </div>
 
-      {/* Hourly Timeline with Dynamic Hour Height & Pinch-to-Zoom */}
+      {/* Hourly Timeline with Continuous Multi-Hour Column Canvas */}
       <div
         ref={containerRef}
         data-horizontal-scroll="true"
@@ -197,29 +285,35 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="divide-y divide-[#e9edef] max-h-[720px] overflow-y-auto select-none cursor-grab active:cursor-grabbing"
+        className="max-h-[720px] overflow-y-auto select-none cursor-grab active:cursor-grabbing"
         style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
       >
-        {HOURS.map((hour) => {
-          const events = getEventsForHour(hour);
-
-          return (
-            <div
-              key={hour}
-              style={{ height: `${hourHeight}px`, minHeight: `${hourHeight}px` }}
-              className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] group"
-            >
-              {/* Hour Label (Sticky horizontally on the left) */}
-              <div className="sticky left-0 z-20 p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold text-[#8696a0] bg-[#fafafa] select-none flex items-start justify-end border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+        <div
+          className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] relative"
+          style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
+        >
+          {/* Hour Label Column (Sticky left) */}
+          <div className="sticky left-0 z-20 bg-[#fafafa] divide-y divide-[#e9edef] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+            {HOURS.map((hour) => (
+              <div
+                key={hour}
+                style={{ height: `${hourHeight}px` }}
+                className="p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold text-[#8696a0] select-none flex items-start justify-end"
+              >
                 <span>{formatHourLabel(hour)}</span>
               </div>
+            ))}
+          </div>
 
-              {/* Event slot cell */}
+          {/* Continuous Day Column */}
+          <div className="relative divide-y divide-[#e9edef]">
+            {/* Background Hourly Slot Grids & Hover Add Buttons */}
+            {HOURS.map((hour) => (
               <div
+                key={hour}
                 style={{ height: `${hourHeight}px` }}
-                className="relative transition-colors group/slot hover:bg-gray-50/40"
+                className="relative group/slot hover:bg-gray-50/40 transition-colors"
               >
-                {/* Empty Slot Hover Quick-Add Button */}
                 <button
                   onClick={() => onQuickAdd({ date: selectedDate, hour })}
                   className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
@@ -228,149 +322,149 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                   <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
                   <span>+ Tambah Jadwal</span>
                 </button>
-
-                {/* Event Cards: Spanning proportionally based on dynamic hourHeight */}
-                {events.map((res, evIdx) => {
-                  const theme = getCategoryTheme(res.treatment_category);
-                  const bDate = new Date(res.booking_date!);
-                  const duration = extractDurationMinutes(res.treatment_detail);
-                  const endDate = new Date(bDate.getTime() + duration * 60000);
-                  const startTimeStr = bDate
-                    .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                    .replace('.', ':');
-                  const endTimeStr = endDate
-                    .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                    .replace('.', ':');
-                  const timeRangeStr = `${startTimeStr} - ${endTimeStr}`;
-
-                  const rawName = res.customer?.name || 'Pasien';
-                  const cleanName = rawName
-                    .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
-                    .trim();
-                  const displayName = cleanName || rawName;
-
-                  const cleanDetail = (res.treatment_detail || 'Layanan Perawatan')
-                    .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
-                    .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
-                    .trim();
-
-                  // Posisi menit awal (0..59) dan tinggi proporsional durasi
-                  const startMinutes = bDate.getMinutes();
-                  const topOffsetPx = Math.round((startMinutes / 60) * hourHeight);
-                  const minCardHeight = zoomLevel === 'compact' ? 36 : 52;
-                  const heightPx = Math.max(minCardHeight, Math.round((duration / 60) * hourHeight - 4));
-                  const evCount = events.length;
-                  const evWidth = evCount > 1 ? `calc(${100 / evCount}% - 8px)` : 'calc(100% - 12px)';
-                  const evLeft = evCount > 1 ? `calc(${(evIdx * 100) / evCount}% + 4px)` : '6px';
-
-                  return (
-                    <div
-                      key={res.id}
-                      data-event-card="true"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectReservation(res);
-                      }}
-                      style={{
-                        top: `${topOffsetPx + 2}px`,
-                        height: `${heightPx}px`,
-                        left: evLeft,
-                        width: evWidth,
-                      }}
-                      className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${theme.card}`}
-                    >
-                      {zoomLevel === 'compact' ? (
-                        /* COMPACT DAY LOD (<65px) */
-                        <div className="flex items-center justify-between gap-2 h-full">
-                          <div className="flex items-center space-x-2 truncate">
-                            <span className="font-bold text-xs text-[#111b21] truncate">
-                              {displayName}
-                            </span>
-                            <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
-                              {startTimeStr} ({duration}m)
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-1 shrink-0">
-                            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${theme.badge}`}>
-                              {res.treatment_category}
-                            </span>
-                            <span className="text-[10px] font-semibold text-[#54656f] hidden sm:inline">
-                              {res.assigned_staff?.name?.split(' ')[0] || 'Unassigned'}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        /* STANDARD & DETAILED DAY LOD */
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                          <div className="space-y-1 min-w-0">
-                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                              <span className="font-bold text-sm text-[#111b21] truncate">
-                                {displayName}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
-                                {res.treatment_category}
-                              </span>
-                              <span className="text-xs font-bold flex items-center space-x-1 font-mono opacity-85">
-                                <Clock size={12} />
-                                <span>{timeRangeStr}</span>
-                              </span>
-                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 font-mono">
-                                {duration}m
-                              </span>
-                              {res.status === 'confirmed' ? (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
-                                  <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
-                                  Lunas
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 text-amber-800">
-                                  <AlertCircle size={10} className="mr-0.5 text-amber-600" />
-                                  Pending
-                                </span>
-                              )}
-                            </div>
-
-                            <p className="text-xs font-semibold opacity-95 line-clamp-1">
-                              {cleanDetail}
-                            </p>
-
-                            {res.customer?.kelurahan && (
-                              <div className="flex items-center space-x-1 text-[11px] opacity-80">
-                                <MapPin size={12} />
-                                <span>
-                                  {res.customer.kelurahan}, {res.customer.kecamatan} ({res.customer.distance_km?.toFixed(1) || '0'} km)
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
-                            <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 px-2.5 py-1 rounded-lg border border-black/10">
-                              <User size={12} className="text-[#008069]" />
-                              <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
-                            </div>
-                            {res.customer?.phone && (
-                              <a
-                                href={`https://wa.me/${res.customer.phone.replace(/\D/g, '')}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="p-2 rounded-xl bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] shadow-xs transition-all cursor-pointer"
-                                title="Chat WhatsApp Pasien"
-                              >
-                                <MessageCircle size={14} />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
-            </div>
-          );
-        })}
+            ))}
+
+            {/* Absolute Continuous Event Blocks Spanning Multi-Hours */}
+            {positionedEvents.map((pos) => {
+              const res = pos.res;
+              const theme = getCategoryTheme(res.treatment_category);
+              const bDate = new Date(res.booking_date!);
+              const endDate = new Date(bDate.getTime() + pos.duration * 60000);
+              const startTimeStr = bDate
+                .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
+                .replace('.', ':');
+              const endTimeStr = endDate
+                .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
+                .replace('.', ':');
+              const timeRangeStr = `${startTimeStr} - ${endTimeStr}`;
+
+              const rawName = res.customer?.name || 'Pasien';
+              const cleanName = rawName
+                .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
+                .trim();
+              const displayName = cleanName || rawName;
+
+              const cleanDetail = (res.treatment_detail || 'Layanan Perawatan')
+                .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
+                .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
+                .trim();
+
+              const evWidth =
+                pos.totalCols > 1
+                  ? `calc(${100 / pos.totalCols}% - 8px)`
+                  : 'calc(100% - 12px)';
+              const evLeft =
+                pos.totalCols > 1
+                  ? `calc(${(pos.colIndex * 100) / pos.totalCols}% + 4px)`
+                  : '6px';
+
+              return (
+                <div
+                  key={res.id}
+                  data-event-card="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectReservation(res);
+                  }}
+                  style={{
+                    top: `${pos.topPx + 2}px`,
+                    height: `${pos.heightPx}px`,
+                    left: evLeft,
+                    width: evWidth,
+                  }}
+                  className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${theme.card}`}
+                >
+                  {zoomLevel === 'compact' ? (
+                    /* COMPACT DAY LOD (<65px) */
+                    <div className="flex items-center justify-between gap-2 h-full">
+                      <div className="flex items-center space-x-2 truncate">
+                        <span className="font-bold text-xs text-[#111b21] truncate">
+                          {displayName}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
+                          {startTimeStr} ({pos.duration}m)
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1 shrink-0">
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${theme.badge}`}>
+                          {res.treatment_category}
+                        </span>
+                        <span className="text-[10px] font-semibold text-[#54656f] hidden sm:inline">
+                          {res.assigned_staff?.name?.split(' ')[0] || 'Unassigned'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* STANDARD & DETAILED DAY LOD */
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                          <span className="font-bold text-sm text-[#111b21] truncate">
+                            {displayName}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
+                            {res.treatment_category}
+                          </span>
+                          <span className="text-xs font-bold flex items-center space-x-1 font-mono opacity-85">
+                            <Clock size={12} />
+                            <span>{timeRangeStr}</span>
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 font-mono">
+                            {pos.duration}m
+                          </span>
+                          {res.status === 'confirmed' ? (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
+                              <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
+                              Lunas
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 text-amber-800">
+                              <AlertCircle size={10} className="mr-0.5 text-amber-600" />
+                              Pending
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs font-semibold opacity-95 line-clamp-1">
+                          {cleanDetail}
+                        </p>
+
+                        {res.customer?.kelurahan && (
+                          <div className="flex items-center space-x-1 text-[11px] opacity-80">
+                            <MapPin size={12} />
+                            <span>
+                              {res.customer.kelurahan}, {res.customer.kecamatan} ({res.customer.distance_km?.toFixed(1) || '0'} km)
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
+                        <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 px-2.5 py-1 rounded-lg border border-black/10">
+                          <User size={12} className="text-[#008069]" />
+                          <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
+                        </div>
+                        {res.customer?.phone && (
+                          <a
+                            href={`https://wa.me/${res.customer.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-2 rounded-xl bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] shadow-xs transition-all cursor-pointer"
+                            title="Chat WhatsApp Pasien"
+                          >
+                            <MessageCircle size={14} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

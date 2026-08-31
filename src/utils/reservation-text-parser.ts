@@ -172,6 +172,7 @@ export function parseReservationText(rawText: string): ParseResult {
   let phone = '';
   let address = '';
   let dateStr = '';
+  let timeStr = '';
   let kec = '';
   let kota = '';
 
@@ -236,6 +237,7 @@ export function parseReservationText(rawText: string): ParseResult {
           else if (pendingField === 'phone') phone = value;
           else if (pendingField === 'address') address = value;
           else if (pendingField === 'date') dateStr = value;
+          else if (pendingField === 'time') timeStr = value;
           else if (pendingField === 'kec') kec = value;
           else if (pendingField === 'kota') kota = value;
           else if (pendingField === 'babyName') { babyName = value; babyNameLines.push(value); }
@@ -270,8 +272,10 @@ export function parseReservationText(rawText: string): ParseResult {
         setOrPending(value, 'phone', (v) => (phone = v));
       } else if (label.includes('alamat')) {
         setOrPending(value, 'address', (v) => (address = v));
-      } else if (label.includes('hari') || label.includes('tanggal')) {
+      } else if (label.includes('hari') || label.includes('tanggal') || label === 'tgl') {
         setOrPending(value, 'date', (v) => (dateStr = v));
+      } else if (label === 'jam' || label === 'pukul' || label === 'waktu' || label.includes('jam ') || label.includes('waktu ')) {
+        setOrPending(value, 'time', (v) => (timeStr = v));
       } else if (label === 'kec' || label.includes('kecamatan')) {
         setOrPending(value, 'kec', (v) => (kec = v));
       } else if (label === 'kota' || label.includes('kabupaten') || label.includes('kab')) {
@@ -388,8 +392,9 @@ export function parseReservationText(rawText: string): ParseResult {
 
   // Parse Booking Date (toleran, non-blocking)
   let bookingDate: Date | null = null;
-  if (dateStr) {
-    bookingDate = tryParseIndonesianDate(dateStr);
+  const fullDateToParse = timeStr && dateStr && !dateStr.includes(timeStr) ? `${dateStr} jam ${timeStr}` : (dateStr || (timeStr ? `hari ini jam ${timeStr}` : ''));
+  if (fullDateToParse) {
+    bookingDate = tryParseIndonesianDate(fullDateToParse);
   }
 
   // Normalisasi Nomor HP: hilangkan non-digit, 08xx -> 628xx
