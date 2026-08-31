@@ -52,7 +52,10 @@ import {
   CalendarPlus,
   Receipt,
   Smile,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
+import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
 import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
@@ -373,6 +376,58 @@ export const LiveChatMonitor: React.FC = () => {
     setTimeout(() => {
       setIconTooltip(null);
     }, 1500);
+  };
+
+  // 🛑 Global Bot Cut-Off (Emergency Kill-Switch)
+  const [globalBotCutoff, setGlobalBotCutoff] = useState(false);
+  const [togglingBotCutoff, setTogglingBotCutoff] = useState(false);
+
+  const loadBotCutoffStatus = async () => {
+    try {
+      const data = await apiRequest('/api/admin/whatsapp-provider');
+      if (data && typeof data.wahaOutboundCutoff === 'boolean') {
+        setGlobalBotCutoff(data.wahaOutboundCutoff);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    loadBotCutoffStatus();
+  }, []);
+
+  const handleToggleGlobalBot = async (enableBot: boolean) => {
+    const nextCutOff = !enableBot;
+
+    const isConfirm = await confirm({
+      title: nextCutOff ? 'Matikan Seluruh Bot & Pesan Keluar?' : 'Aktifkan Kembali Seluruh Bot?',
+      message: nextCutOff
+        ? 'PERINGATAN: Mematikan bot global akan menghentikan SEMUA pesan keluar dari sistem (Bot AI, Follow-Up otomatis, Reminder, Broadcast, & balasan Live Chat). Sesi WhatsApp di HP tetap aktif dan pesan masuk tetap tersimpan.'
+        : 'Aktifkan kembali seluruh pengiriman pesan bot otomatis dan sistem WhatsApp?',
+      confirmText: nextCutOff ? 'Ya, Matikan Bot Global' : 'Ya, Aktifkan Bot',
+      danger: nextCutOff,
+    });
+    if (!isConfirm) return;
+
+    setTogglingBotCutoff(true);
+    try {
+      const res = await apiRequest('/api/admin/whatsapp-provider/cutoff', {
+        method: 'PATCH',
+        body: JSON.stringify({ cutOff: nextCutOff }),
+      });
+      if (res && res.success) {
+        setGlobalBotCutoff(Boolean(res.wahaOutboundCutoff));
+        toast(
+          nextCutOff
+            ? 'Bot Global DINONAKTIFKAN (Kill-Switch AKTIF). Seluruh pesan keluar sistem dimatikan.'
+            : 'Bot Global DIAKTIFKAN KEMBALI. Seluruh pesan keluar sistem normal.',
+          nextCutOff ? 'info' : 'success'
+        );
+      }
+    } catch (err: any) {
+      toast(`Gagal mengubah status Bot Global: ${err?.message || err}`, 'error');
+    } finally {
+      setTogglingBotCutoff(false);
+    }
   };
 
   // ✍️ WhatsApp Typing Presence & Seen Notification
@@ -1668,6 +1723,44 @@ export const LiveChatMonitor: React.FC = () => {
     }
   };
 
+  const handleTakeover = async (chat: LiveChatItem) => {
+    const isConfirmed = await confirm({
+      title: 'Ambil Alih Percakapan (CS)?',
+      message: `Apakah Anda yakin ingin mengambil alih percakapan dengan ${chat.customerName || chat.customerPhone || 'pelanggan'}? Bot AI akan berhenti merespon secara otomatis agar Anda dapat melayani secara manual.`,
+      confirmText: 'Ya, Ambil Alih',
+    });
+    if (!isConfirmed) return;
+
+    setReleasingId(chat.conversationId);
+    try {
+      await apiRequest(`/api/admin/conversation/${chat.conversationId}/takeover`, {
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      });
+
+      // Optimistic in-place update
+      setChats((prev) =>
+        prev.map((c) =>
+          c.conversationId === chat.conversationId
+            ? { ...c, isHumanHandling: true, escalationReason: 'manual_takeover', lastHandledBy: 'human' }
+            : c
+        )
+      );
+      chatsRef.current = chatsRef.current.map((c) =>
+        c.conversationId === chat.conversationId
+          ? { ...c, isHumanHandling: true, escalationReason: 'manual_takeover', lastHandledBy: 'human' }
+          : c
+      );
+
+      loadChats(false);
+      toast('Percakapan berhasil diambil alih oleh admin (CS).', 'success');
+    } catch (err: any) {
+      toast(`Gagal mengambil alih percakapan: ${err.message || err}`, 'error');
+    } finally {
+      setReleasingId(null);
+    }
+  };
+
   const handleGenerateAiDraft = async () => {
     if (!selectedId) return;
     setGeneratingDraft(true);
@@ -2166,8 +2259,23 @@ export const LiveChatMonitor: React.FC = () => {
           </div>
         </div>
 
-        {/* Sync Controls */}
-        <div className="flex items-center space-x-1.5">
+        {/* Controls: Global Bot Switch + Sync */}
+        <div className="flex items-center space-x-2">
+          <ToggleSwitch
+            checked={!globalBotCutoff}
+            onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+            disabled={togglingBotCutoff}
+            loading={togglingBotCutoff}
+            variant={globalBotCutoff ? 'rose' : 'emerald'}
+            onLabel="BOT ON"
+            offLabel="BOT OFF"
+            size="sm"
+            title={
+              globalBotCutoff
+                ? 'Status: Bot & Semua Pesan Keluar Sistem Nonaktif (Cut-Off Aktif). Klik untuk mengaktifkan kembali.'
+                : 'Status: Bot & Pesan Sistem Aktif (Normal). Klik untuk mematikan semua bot & pesan keluar.'
+            }
+          />
           <button
             onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
@@ -2178,6 +2286,26 @@ export const LiveChatMonitor: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Global Bot Cut-Off Active Warning Banner */}
+      {globalBotCutoff && (
+        <div className="p-2 sm:p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+          <div className="flex items-center space-x-2 min-w-0">
+            <ShieldAlert size={16} className="text-rose-600 shrink-0" />
+            <div className="truncate">
+              <span className="font-bold text-rose-700">BOT GLOBAL NONAKTIF (CUT-OFF AKTIF):</span>{' '}
+              <span className="text-rose-800">Seluruh pesan bot otomatis, follow-up, reminder, dan pesan keluar sistem dimatikan.</span>
+            </div>
+          </div>
+          <button
+            onClick={() => handleToggleGlobalBot(true)}
+            disabled={togglingBotCutoff}
+            className="px-2.5 py-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+          >
+            Aktifkan Bot
+          </button>
+        </div>
+      )}
 
       {/* Real-time Background Sync Banner */}
       {bgSyncProgress.isSyncing && (
@@ -2251,14 +2379,27 @@ export const LiveChatMonitor: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setShowSyncInfoModal(true)}
-                  disabled={bgSyncProgress.isSyncing}
-                  className="p-1.5 rounded-lg bg-[#008069] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
-                  title="Sinkronisasi Seluruh Chat WhatsApp"
-                >
-                  <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center space-x-1.5">
+                  <ToggleSwitch
+                    checked={!globalBotCutoff}
+                    onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+                    disabled={togglingBotCutoff}
+                    loading={togglingBotCutoff}
+                    variant={globalBotCutoff ? 'rose' : 'emerald'}
+                    onLabel="ON"
+                    offLabel="OFF"
+                    size="sm"
+                    title="Toggle Bot Global"
+                  />
+                  <button
+                    onClick={() => setShowSyncInfoModal(true)}
+                    disabled={bgSyncProgress.isSyncing}
+                    className="p-1.5 rounded-lg bg-[#008069] text-white shadow-2xs transition flex items-center justify-center disabled:opacity-50 cursor-pointer"
+                    title="Sinkronisasi Seluruh Chat WhatsApp"
+                  >
+                    <RefreshCw size={13} className={bgSyncProgress.isSyncing ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
 
               {/* Header Toolbar: Source Filter + Label Dropdown (Normal in-flow, scrolls away on scroll down) */}
@@ -2832,26 +2973,28 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   </div>
 
-                    {/* Bot Release Button in Chat Header (Icon-based) */}
+                    {/* Bot Release / Takeover Button in Chat Header */}
                     <div className="shrink-0">
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}
                           disabled={releasingId === selectedChat.conversationId}
                           title="Kembalikan percakapan ke Bot AI"
-                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50"
+                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                         >
                           <Bot size={14} />
                           <span className="hidden sm:inline">Kembalikan ke Bot</span>
                         </button>
                       ) : (
-                        <span
-                          title="Ditangani Bot AI"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] rounded-xl text-xs font-semibold uppercase tracking-wider"
+                        <button
+                          onClick={() => handleTakeover(selectedChat)}
+                          disabled={releasingId === selectedChat.conversationId}
+                          title="Ambil alih percakapan (CS / Manual). Bot AI akan dinonaktifkan untuk percakapan ini."
+                          className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
                         >
-                          <Bot size={13} />
-                          <span>Bot</span>
-                        </span>
+                          <User size={14} className="text-amber-600" />
+                          <span>Ambil Alih (CS)</span>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -3906,12 +4049,25 @@ export const LiveChatMonitor: React.FC = () => {
                 onClick={() => {
                   const c = contextMenu.chat;
                   setContextMenu(null);
-                  handleRelease(c);
+                  if (c.isHumanHandling) {
+                    handleRelease(c);
+                  } else {
+                    handleTakeover(c);
+                  }
                 }}
                 className="w-full px-3.5 py-3 text-left rounded-xl bg-[#f8fafc] hover:bg-[#f0f2f5] active:bg-[#e9edef] flex items-center space-x-3 transition font-medium text-xs text-[#54656f] cursor-pointer"
               >
-                <Bot size={16} />
-                <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+                {contextMenu.chat.isHumanHandling ? (
+                  <>
+                    <Bot size={16} />
+                    <span>Kembalikan ke Bot AI</span>
+                  </>
+                ) : (
+                  <>
+                    <User size={16} className="text-amber-600" />
+                    <span>Ambil Alih Manual (CS)</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -3966,12 +4122,25 @@ export const LiveChatMonitor: React.FC = () => {
                 onClick={() => {
                   const c = contextMenu.chat;
                   setContextMenu(null);
-                  handleRelease(c);
+                  if (c.isHumanHandling) {
+                    handleRelease(c);
+                  } else {
+                    handleTakeover(c);
+                  }
                 }}
                 className="w-full px-3.5 py-2.5 text-left hover:bg-[#f5f6f6] flex items-center space-x-2.5 transition text-[#54656f] font-medium cursor-pointer"
               >
-                <Bot size={14} />
-                <span>{contextMenu.chat.isHumanHandling ? 'Kembalikan ke Bot AI' : 'Ambil Alih Manual (CS)'}</span>
+                {contextMenu.chat.isHumanHandling ? (
+                  <>
+                    <Bot size={14} />
+                    <span>Kembalikan ke Bot AI</span>
+                  </>
+                ) : (
+                  <>
+                    <User size={14} className="text-amber-600" />
+                    <span>Ambil Alih Manual (CS)</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

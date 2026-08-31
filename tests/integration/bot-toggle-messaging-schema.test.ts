@@ -27,8 +27,8 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
   });
 
   it('Verifikasi Lengkap: AI Chatbot Aktif Saat ON -> Silent Saat TOGGLE OFF -> Aktif Kembali Saat TOGGLE ON', async () => {
-    const phone = `628555${Date.now()}`;
-    const customer = await customerService.getOrCreateCustomer(phone, 'Pelanggan Uji Toggle', DEFAULT_TENANT_ID);
+    const phone = `62855${Math.floor(1000000 + Math.random() * 9000000)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Ibu Rina', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
     // ==========================================
@@ -136,8 +136,8 @@ describe('Skema Testing Full Cycle: Bot Toggle ON/OFF & Kirim Pesan', () => {
 
   it('Verifikasi Auto-Release Global Bot Toggle: saat globalBotActive = true via PATCH API, percakapan otomatis di-release dari Human Handling', async () => {
     const { AiModelConfigService } = await import('../../src/config/ai-models.config');
-    const phone = `628556${Date.now()}`;
-    const cust = await customerService.getOrCreateCustomer(phone, 'Customer Global Toggle', DEFAULT_TENANT_ID);
+    const phone = `62855${Math.floor(1000000 + Math.random() * 9000000)}`;
+    const cust = await customerService.getOrCreateCustomer(phone, 'Ibu Dewi', DEFAULT_TENANT_ID);
     const conv = await conversationService.getOrCreateConversation(cust.id, DEFAULT_TENANT_ID);
 
     // 1. Matikan global bot

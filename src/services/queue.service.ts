@@ -143,6 +143,14 @@ export class QueueService {
               return;
             }
 
+            // EMERGENCY KILL-SWITCH GUARD: Jika cut-off outbound aktif, jangan proses balasan bot
+            const { whatsappProviderService } = await import('./whatsapp-provider.service');
+            const isCutOff = await whatsappProviderService.isOutboundCutOff(ctx.tenantId);
+            if (isCutOff) {
+              console.log(`[QUEUE CUT-OFF] Outbound Cut-Off is ACTIVE for tenant ${ctx.tenantId}. Dropping queued bot reply for customer: ${hashPiiPhone(ctx.customer.phone)}.`);
+              return;
+            }
+
             console.log(`[QUEUE BullMQ - Shard ${i}] Processing message for customer: ${hashPiiPhone(ctx.customer.phone)} (Tenant: ${ctx.tenantId})`);
             await stateMachine.processMessage(ctx);
           } catch (err: any) {
@@ -265,6 +273,14 @@ export class QueueService {
       // batalkan eksekusi antrian bot agar tidak menimpa/bocor ke chat CS!
       if (ctx.conversation?.is_human_handling) {
         console.log(`[QUEUE ABORT] Conversation ${ctx.conversation.id} (customer: ${phone}) is in HUMAN_HANDLING mode. Dropping in-memory queued bot reply.`);
+        return;
+      }
+
+      // EMERGENCY KILL-SWITCH GUARD: Jika cut-off outbound aktif, jangan proses balasan bot
+      const { whatsappProviderService } = await import('./whatsapp-provider.service');
+      const isCutOff = await whatsappProviderService.isOutboundCutOff(ctx.tenantId);
+      if (isCutOff) {
+        console.log(`[QUEUE CUT-OFF] Outbound Cut-Off is ACTIVE for tenant ${ctx.tenantId}. Dropping in-memory queued bot reply for customer: ${phone}.`);
         return;
       }
 
