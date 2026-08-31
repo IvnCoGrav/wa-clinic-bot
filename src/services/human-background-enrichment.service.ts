@@ -60,9 +60,38 @@ export class HumanBackgroundEnrichmentService {
         } catch (_) {}
       }
 
+      // Jika customer belum memiliki kelurahan, telusuri histori chat inbound untuk mencari nama wilayah/kelurahan yang disebutkan
+      let resolvedLoc: any = null;
+      if (!customer.kelurahan) {
+        try {
+          const { messageService } = await import('./message.service');
+          const { conversationService } = await import('./conversation.service');
+          const conv = await conversationService.getOrCreateConversation(customerId, tenantId);
+          if (conv) {
+            const msgs = await messageService.getRecentMessages(conv.id, 10, tenantId);
+            const { geocodingService } = await import('../integrations/google-maps/geocoding');
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const m = msgs[i];
+              if (m.direction === 'INBOUND' && m.content) {
+                const geo = await geocodingService.geocodeText(m.content);
+                if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+                  resolvedLoc = geo;
+                  break;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
       await customerService.updateCustomerLocation(
         customerId,
         {
+          kelurahan: resolvedLoc?.kelurahan || customer.kelurahan || undefined,
+          kecamatan: resolvedLoc?.kecamatan || customer.kecamatan || undefined,
+          kota: resolvedLoc?.kota || customer.kota || undefined,
+          lat: resolvedLoc?.lat !== undefined ? resolvedLoc.lat : (customer.lat ?? undefined),
+          lng: resolvedLoc?.lng !== undefined ? resolvedLoc.lng : (customer.lng ?? undefined),
           distanceKm: parsed.distanceKm !== null ? parsed.distanceKm : (customer.distance_km ?? undefined),
           ongkir: effectiveOngkir !== null ? effectiveOngkir : (customer.ongkir ?? undefined),
         },
@@ -70,7 +99,7 @@ export class HumanBackgroundEnrichmentService {
       );
 
       console.log(
-        `[ADMIN OUTBOUND ENRICH] Captured distance/ongkir for ${customer.phone}: distance=${parsed.distanceKm}km, ongkir=${effectiveOngkir}`
+        `[ADMIN OUTBOUND ENRICH] Captured distance/ongkir for ${customer.phone}: distance=${parsed.distanceKm}km, ongkir=${effectiveOngkir}, location=${resolvedLoc?.kelurahan || customer.kelurahan || '-'}`
       );
       return { enriched: true, reason: 'admin_chat_captured' };
     } catch (err: any) {

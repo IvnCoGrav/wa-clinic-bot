@@ -201,6 +201,11 @@ interface LiveChatItem {
   customerId: string;
   customerName: string | null;
   customerPhone: string | null;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  distanceKm?: number | null;
+  ongkir?: number | null;
   currentState: string;
   isHumanHandling: boolean;
   humanHandlingSince: string | null;
@@ -3751,23 +3756,25 @@ export const LiveChatMonitor: React.FC = () => {
                     <div className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
                       <div>
                         <p className="text-[10px] text-[#667781] font-semibold uppercase">Alamat / Kelurahan</p>
-                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
+                        <p className="font-medium text-[#111b21]">{customerDetailData?.kelurahan || selectedChat?.kelurahan || customerDetailData?.address || customerDetailData?.preferences?.address || '-'}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
                         <div>
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Kecamatan</p>
-                          <p className="font-medium text-[#111b21]">{customerDetailData?.kecamatan || '-'}</p>
+                          <p className="font-medium text-[#111b21]">{customerDetailData?.kecamatan || selectedChat?.kecamatan || '-'}</p>
                         </div>
                         <div>
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Kota / Kabupaten</p>
-                          <p className="font-medium text-[#111b21]">{customerDetailData?.kota || '-'}</p>
+                          <p className="font-medium text-[#111b21]">{customerDetailData?.kota || selectedChat?.kota || '-'}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#e9edef]">
                         <div>
                           <p className="text-[10px] text-[#667781] font-semibold uppercase">Jarak & Ongkir</p>
                           <p className="font-bold text-[#008069]">
-                            {customerDetailData?.distance_km != null ? `${customerDetailData.distance_km} km` : '-'} (Rp {Number(customerDetailData?.ongkir || 0).toLocaleString('id-ID')})
+                            {(customerDetailData?.distance_km != null ? customerDetailData.distance_km : selectedChat?.distanceKm != null ? selectedChat.distanceKm : null) != null
+                              ? `${customerDetailData?.distance_km ?? selectedChat?.distanceKm} km`
+                              : '-'} (Rp {Number(customerDetailData?.ongkir ?? selectedChat?.ongkir ?? 0).toLocaleString('id-ID')})
                           </p>
                         </div>
                         <div>

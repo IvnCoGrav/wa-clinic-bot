@@ -14,6 +14,11 @@ export interface LiveChatConversationItem {
   customerId: string;
   customerName: string | null;
   customerPhone: string | null;
+  kelurahan?: string | null;
+  kecamatan?: string | null;
+  kota?: string | null;
+  distanceKm?: number | null;
+  ongkir?: number | null;
   currentState: string;
   isHumanHandling: boolean;
   humanHandlingSince: Date | null;
@@ -461,6 +466,12 @@ export class LiveChatService {
       payloadRaw: Object.keys(payloadRaw).length > 0 ? payloadRaw : undefined,
     });
 
+    // Background enrichment jika pesan admin mengandung jarak / ongkir / info lokasi
+    try {
+      const { humanBackgroundEnrichmentService } = await import('./human-background-enrichment.service');
+      humanBackgroundEnrichmentService.enrichFromAdminOutboundAsync(content, customer.id, tenantId);
+    } catch (_) {}
+
     // Auto-escalation: balasan admin menandakan percakapan ditangani manusia.
     // forceEscalate=true (balasan Staff/Bidan) selalu mengaktifkan mode human,
     // sehingga bot tidak ikut membalas di tengah percakapan terapis.
@@ -853,6 +864,11 @@ export class LiveChatService {
       customerId: c.customer_id,
       customerName: c.customer?.name || null,
       customerPhone: c.customer?.phone || null,
+      kelurahan: c.customer?.kelurahan || null,
+      kecamatan: c.customer?.kecamatan || null,
+      kota: c.customer?.kota || null,
+      distanceKm: c.customer?.distance_km ?? null,
+      ongkir: c.customer?.ongkir ?? null,
       currentState: c.current_state,
       isHumanHandling: !!c.is_human_handling,
       humanHandlingSince: c.human_handling_since || null,
