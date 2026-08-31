@@ -4,6 +4,19 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix & Enhancement — Custom Treatment: Hapus Auto-Detect Addon & Tambah Input Harga (`CreateReservationModal.tsx`) (2026-08-31)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  1. Saat admin menambahkan treatment kustom di modal reservasi, treatment tersebut otomatis diklasifikasikan sebagai addon jika namanya mengandung keyword tertentu (moksa, tambahan, taping, kinesio, dsb.), meskipun admin tidak mengaktifkan toggle addon. Admin meminta agar custom treatment hanya dianggap addon jika toggle manual dinyalakan.
+  2. Admin ingin bisa memasukkan harga saat membuat treatment kustom, namun field harga tidak tersedia di UI form treatment kustom.
+
+- **Solusi & Implementasi:**
+  1. **Hapus Auto-Detect Addon untuk Custom Treatment**: Mengubah `handleAddCustomTreatment()` agar hanya menggunakan toggle manual admin (`customIsAddon`) tanpa memanggil `isAddonService()` dengan name-based heuristic. Custom treatment kini 100% dikontrol oleh admin via toggle.
+  2. **Tambah Input Harga**: Menambahkan field harga (`Rp` prefix) di grid form treatment kustom (4 kolom: Nama, Durasi+Toggle, Harga, Tombol Tambahkan). Harga direset ke `0` setelah treatment berhasil ditambahkan.
+  3. **Reset State**: `customServicePrice` direset ke `0` setelah submit, bersama `customServiceName` dan `customIsAddon`.
+
+- **File yang Dipengaruhi:** `packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx`
+
 #### Enhancement & Fix — Reservation List View Nearest-Time Sorting (`booking_date ASC`) & Strict WIB Timezone Parser (`Reservations.tsx`, `reservations.subroute.ts`, `reservation-text-parser.ts`) (2026-08-31)
 
 - **Latar Belakang & Permintaan Pengguna:**
