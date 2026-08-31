@@ -135,8 +135,9 @@ export async function knowledgeAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
-        const { wahaClient } = await import('../../integrations/waha/client');
-        await wahaClient.sendText(`${conversation.customer.phone}@c.us`, answer);
+        const { resolveGatewayForTenant } = await import('../../integrations/whatsapp/factory');
+        const gateway = await resolveGatewayForTenant(DEFAULT_TENANT_ID);
+        await gateway.sendTextMessage(conversation.customer.phone, answer);
 
         const { messageService } = await import('../../services/message.service');
         await messageService.logMessage({

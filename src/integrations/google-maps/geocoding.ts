@@ -8,6 +8,7 @@ import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
+import { escapeRegex } from '../../utils/gazetteer';
 dotenv.config();
 
 const INDONESIAN_STOP_WORDS = new Set([
@@ -472,7 +473,12 @@ export class GeocodingService {
 
     const cleanNorm = cleanText.replace(/\s+/g, '');
     const lowerNorm = lower.replace(/\s+/g, '');
-    const staticImpreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
+    const staticImpreciseWords = [
+      'surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru',
+      'sby', 'sda', 'sbybarat', 'surabayabarat', 'sbytimur', 'surabayatimur', 'sbyselatan', 'surabayaselatan',
+      'sbyutara', 'surabayautara', 'sbypusat', 'surabayapusat', 'sidoarjobarat', 'sidoarjotimur',
+      'sidoarjoselatan', 'sidoarjoutara', 'sidoarjokota'
+    ];
 
     // Cek apakah cleanNorm persis sama dengan nama kelurahan tertentu di gazetteer
     // atau apakah teks mengandung nama kelurahan riil di database
@@ -491,7 +497,8 @@ export class GeocodingService {
           const kelLower = entry.Kelurahan_Desa.toLowerCase().trim();
           if (kelLower.length < 3) return false;
           if (['sidoarjo', 'surabaya', 'kota', 'desa'].includes(kelLower)) return false;
-          return lower.includes(kelLower);
+          const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
+          return reg.test(lower);
         });
       }
     } catch (_) {}
@@ -500,7 +507,9 @@ export class GeocodingService {
     let matchedKecSubdistricts: any[] | null = null;
     let matchedKecName = '';
     for (const [kecKey, entries] of kecamatanMap.entries()) {
-      const isDirectMatch = cleanNorm === kecKey || lowerNorm.includes(kecKey);
+      const origKec = entries[0]?.Kecamatan ? entries[0].Kecamatan.toLowerCase() : kecKey;
+      const kecRegex = new RegExp(`\\b${escapeRegex(origKec)}\\b`, 'i');
+      const isDirectMatch = cleanNorm === kecKey || kecRegex.test(lower);
       const sim = !isDirectMatch ? getStringSimilarity(cleanNorm, kecKey) : 1.0;
       const kecThreshold = kecKey.length <= 4 ? 0.85 : 0.75;
       if (isDirectMatch || sim >= kecThreshold) {
@@ -519,7 +528,8 @@ export class GeocodingService {
     const hasSpecificKelurahanInText = matchedKecSubdistricts ? matchedKecSubdistricts.some(d => {
       const kelLower = d.Kelurahan_Desa.toLowerCase();
       const kecLower = d.Kecamatan.toLowerCase();
-      return kelLower !== kecLower && lower.includes(kelLower);
+      const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
+      return kelLower !== kecLower && reg.test(lower);
     }) : false;
     const hasStreetAddressKeyword = /\b(jalan|jl|jln|gang|gg|perum|perumahan|komplek|kompleks|blok|no|nomor|residence|residences|regency|cluster|villa|apartemen|apartment|mansion|land|park|townhouse|village|garden|green|estate|kost|kos|graha|griya|wisma|dusun|rt|rw|pos|rumdis|tni|al|lanudal|asrama|kavling|kav)\b/i.test(lower);
 
@@ -751,18 +761,22 @@ export class GeocodingService {
           const kotaName = d.Kabupaten_Kota.toLowerCase();
           
           let score = 0;
-          if (cleanText.includes(kelName)) {
+          const kelRegex = new RegExp(`\\b${escapeRegex(kelName)}\\b`, 'i');
+          if (kelRegex.test(cleanText)) {
             score += 10;
-            if (cleanText.startsWith(kelName)) {
+            const startsWithRegex = new RegExp(`^${escapeRegex(kelName)}\\b`, 'i');
+            if (startsWithRegex.test(cleanText)) {
               score += 5;
             }
           }
           if (score === 0) return { item: d, score: 0 };
 
-          if (cleanText.includes(kecName)) {
+          const kecRegex = new RegExp(`\\b${escapeRegex(kecName)}\\b`, 'i');
+          if (kecRegex.test(cleanText)) {
             score += 2;
           }
-          if (cleanText.includes(kotaName)) {
+          const kotaRegex = new RegExp(`\\b${escapeRegex(kotaName)}\\b`, 'i');
+          if (kotaRegex.test(cleanText)) {
             score += 1;
           }
           return { item: d, score };

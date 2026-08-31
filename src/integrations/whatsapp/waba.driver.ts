@@ -24,12 +24,14 @@ export class WabaGatewayDriver implements WhatsAppGateway {
   private phoneNumberId: string;
   private accessToken: string;
   private baseUrl: string;
+  private tenantId: string;
   private recentTypingMessages = new Map<string, number>();
 
-  constructor(config: WabaGatewayDriverConfig) {
+  constructor(config: WabaGatewayDriverConfig, tenantId: string = 'default-tenant') {
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
     this.baseUrl = config.baseUrl || GRAPH_API_BASE_URL;
+    this.tenantId = tenantId;
   }
 
   async deleteMessage(): Promise<{ success: boolean; error?: string }> {
@@ -47,6 +49,17 @@ export class WabaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendReactionMessage(to: string, messageId: string, emoji: string): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WABA CUT-OFF ACTIVE] Outbound reaction message to ${to} blocked by internal safety cut-off.`);
+      return {
+        success: false,
+        provider: 'WABA',
+        error: { code: 'WABA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     try {
       const payload: any = {
         messaging_product: 'whatsapp',
@@ -90,6 +103,17 @@ export class WabaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendTextMessage(to: string, text: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WABA CUT-OFF ACTIVE] Outbound text message to ${to} blocked by internal safety cut-off.`);
+      return {
+        success: false,
+        provider: 'WABA',
+        error: { code: 'WABA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     try {
       const payload: any = {
         messaging_product: 'whatsapp',
@@ -124,6 +148,17 @@ export class WabaGatewayDriver implements WhatsAppGateway {
     languageCode: string,
     components: TemplateComponent[]
   ): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WABA CUT-OFF ACTIVE] Outbound template message to ${to} blocked by internal safety cut-off.`);
+      return {
+        success: false,
+        provider: 'WABA',
+        error: { code: 'WABA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     const waComponents = components.map(c => ({
       type: c.type,
       parameters: c.parameters.map(p => ({
@@ -159,6 +194,17 @@ export class WabaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendImageMessage(to: string, imageUrl: string, caption?: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WABA CUT-OFF ACTIVE] Outbound image message to ${to} blocked by internal safety cut-off.`);
+      return {
+        success: false,
+        provider: 'WABA',
+        error: { code: 'WABA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     try {
       const imagePayload: Record<string, unknown> = { link: imageUrl };
       const payload: any = {
@@ -188,6 +234,9 @@ export class WabaGatewayDriver implements WhatsAppGateway {
 
   async sendTypingIndicator(to: string, incomingMessageId?: string, durationMs?: number): Promise<void> {
     if (!incomingMessageId) return;
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) return;
 
     const cappedDuration = Math.min(Math.max(0, durationMs ?? 3000), TYPING_INDICATOR_MAX_MS);
     this.recentTypingMessages.set(incomingMessageId, Date.now());
@@ -211,6 +260,10 @@ export class WabaGatewayDriver implements WhatsAppGateway {
 
   async markAsRead(chatId: string, messageId?: string): Promise<void> {
     if (!messageId) return;
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) return;
+
     if (this.recentTypingMessages.has(messageId)) {
       this.recentTypingMessages.delete(messageId);
       return;

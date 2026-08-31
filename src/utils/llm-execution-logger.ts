@@ -3,14 +3,6 @@ import fs from 'fs';
 import path from 'path';
 
 export type LlmFlowType =
-  | 'CHATBOT_AUTO'
-  | 'COPILOT_DRAFT'
-  | 'CLINICAL_ESCALATION'
-  | 'REASONING_ONLY'
-  | 'NLU_CLASSIFICATION'
-  | 'AI_ROUTER'
-  | 'AI_VERIFIER'
-  | 'PHRASING'
   | 'SLOT_EXTRACTOR'
   | 'SLOT_GENERATOR'
   | 'SLOT_FAST_FAQ';
@@ -124,7 +116,7 @@ export function recordLlmExecution(
   const entry: LlmExecutionRecord = {
     id: data.id || `llm_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     timestamp: data.timestamp || new Date().toISOString(),
-    flowType: data.flowType || 'CHATBOT_AUTO',
+    flowType: data.flowType || 'SLOT_GENERATOR',
     customerPhone: data.customerPhone,
     customerName: data.customerName,
     customerInput: data.customerInput || '',
@@ -238,42 +230,19 @@ export function getLlmExecutionLogs(limit = 100, flowFilter?: string): LlmExecut
 }
 
 /**
- * Normalisasi input customer untuk mencocokkan teks asli yang diekstrak
- * dari berbagai wrapper metadata (misal Router [State: ...] atau Verifier [DRAFT QC] ... (User: "...")).
+ * Normalisasi input customer — slot-engine sudah kirim teks bersih,
+ * hanya trim + lepas quote luar.
  */
 export function normalizeCustomerInput(input: string): string {
   if (!input) return '';
-  let cleaned = input.trim();
-
-  // Pattern 1: Router '[State: INITIAL] "Halo mau tanya"'
-  const routerMatch = cleaned.match(/^\[State:[^\]]+\]\s*"([\s\S]*)"$/);
-  if (routerMatch && routerMatch[1]) {
-    cleaned = routerMatch[1].trim();
-  }
-
-  // Pattern 2: Verifier '[DRAFT QC] "..." (User: "Halo mau tanya")'
-  const verifierMatch = cleaned.match(/\(User:\s*"([\s\S]*)"\)\s*$/);
-  if (verifierMatch && verifierMatch[1]) {
-    cleaned = verifierMatch[1].trim();
-  } else {
-    // Fallback if closed differently
-    const verifierMatchAlt = cleaned.match(/\(User:\s*"([\s\S]*?)"\)/);
-    if (verifierMatchAlt && verifierMatchAlt[1]) {
-      cleaned = verifierMatchAlt[1].trim();
-    }
-  }
-
-  // Pattern 3: Hapus tanda petik ganda/tunggal di awal & akhir jika tersisa
-  cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
-
-  return cleaned;
+  return input.trim().replace(/^["']|["']$/g, '').trim();
 }
 
 /**
  * Ambil riwayat log eksekusi LLM terkelompok secara hierarkis 3-Level:
  * Level 1: Nomor Telepon Customer
  * Level 2: Bubble Chat / Input Masuk Pasien
- * Level 3: Daftar Panggilan AI (NLU, Router, Generator, Verifier) untuk bubble tersebut
+ * Level 3: Daftar Panggilan AI (Slot Extractor, Generator / Fast FAQ) untuk bubble tersebut
  */
 export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): GroupedCustomerLlmLogs[] {
   const rawLogs = getLlmExecutionLogs(limit, flowFilter);
@@ -291,13 +260,8 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
 
   const FLOW_ORDER: Record<string, number> = {
     SLOT_EXTRACTOR: 1,
-    NLU_CLASSIFICATION: 1,
-    AI_ROUTER: 2,
-    SLOT_GENERATOR: 3,
-    CHATBOT_AUTO: 3,
-    COPILOT_DRAFT: 3,
-    AI_VERIFIER: 4,
-    PHRASING: 5,
+    SLOT_GENERATOR: 2,
+    SLOT_FAST_FAQ: 2,
   };
 
   for (const [phone, phoneLogs] of phoneMap.entries()) {
@@ -364,7 +328,7 @@ export function getGroupedLlmExecutionLogs(limit = 100, flowFilter?: string): Gr
       }
     }
 
-    // Urutkan tahapan AI di dalam setiap bubble secara sekuensial logis (NLU -> Router -> Generator -> QC)
+    // Urutkan tahapan AI: Extractor -> Generator / Fast FAQ
     for (const b of bubbles) {
       b.aiCalls.sort((a, b) => {
         const orderA = FLOW_ORDER[a.flowType] || 99;

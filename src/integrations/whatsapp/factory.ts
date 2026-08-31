@@ -28,7 +28,7 @@ export async function resolveGatewayForTenant(tenantId: string): Promise<WhatsAp
       if (tenant.waba_business_account_id) {
         config.businessAccountId = tenant.waba_business_account_id;
       }
-      gateway = new WabaGatewayDriver(config);
+      gateway = new WabaGatewayDriver(config, tenantId);
     } else {
       gateway = new WahaGatewayDriver(undefined, tenantId);
     }
@@ -54,7 +54,7 @@ export function getWabaGateway(config: WabaGatewayDriverConfig, tenantId?: strin
   const key = tenantId ? `waba:${tenantId}` : '__waba_default__';
   const cached = gatewayCache.get(key);
   if (cached) return cached;
-  const gw = new WabaGatewayDriver(config);
+  const gw = new WabaGatewayDriver(config, tenantId);
   gatewayCache.set(key, gw);
   return gw;
 }
