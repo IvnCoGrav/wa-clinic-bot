@@ -10,5 +10,24 @@ app.kalababyspa.online {
         -Server
     }
 
-    reverse_proxy app:3000
+    # Route khusus Server-Sent Events (SSE) agar data event di-flush instan tanpa buffering
+    @sse path /api/admin/live-chat/events
+    handle @sse {
+        reverse_proxy app:3000 {
+            flush_interval -1
+            transport http {
+                keepalive 60s
+                keepalive_idle_conns 100
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy app:3000 {
+            transport http {
+                keepalive 60s
+                keepalive_idle_conns 100
+            }
+        }
+    }
 }

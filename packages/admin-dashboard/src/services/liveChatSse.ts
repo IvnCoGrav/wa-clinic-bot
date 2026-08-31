@@ -10,16 +10,19 @@ let sharedEs: EventSource | null = null;
 let watchdogTimer: any = null;
 let graceCloseTimer: any = null;
 let isConnected = false;
+let networkListenersAttached = false;
 const subscribers = new Set<LiveChatSseOptions>();
 
 function resetWatchdog() {
   if (watchdogTimer) clearTimeout(watchdogTimer);
+  // Backend mengirim ping setiap 15 detik. Jika 18 detik tanpa event/ping,
+  // berarti koneksi mobile UDP/TCP hang/stalled, lakukan reconnect instan.
   watchdogTimer = setTimeout(() => {
     if (subscribers.size > 0) {
-      console.warn('[LIVE CHAT SSE] Watchdog timeout (35s silent), reconnecting...');
+      console.warn('[LIVE CHAT SSE] Watchdog timeout (18s silent), reconnecting...');
       reconnectShared();
     }
-  }, 35000);
+  }, 18000);
 }
 
 function notifyStatus(status: boolean) {
@@ -58,10 +61,34 @@ function reconnectShared() {
   }
 }
 
+function attachNetworkListenersOnce() {
+  if (networkListenersAttached || typeof window === 'undefined') return;
+  networkListenersAttached = true;
+
+  // Saat koneksi HP kembali online setelah blackout sinyal di jalan
+  window.addEventListener('online', () => {
+    if (subscribers.size > 0) {
+      console.info('[LIVE CHAT SSE] Network back online, fast reconnecting SSE...');
+      reconnectShared();
+    }
+  });
+
+  // Saat admin membuka kembali tab browser / membuka kunci layar HP
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && subscribers.size > 0) {
+      // Jika koneksi sempat drop saat layar mati, segera refresh koneksi
+      if (!isConnected || !sharedEs || sharedEs.readyState === EventSource.CLOSED) {
+        reconnectShared();
+      }
+    }
+  });
+}
+
 function openShared() {
   if (sharedEs || typeof window === 'undefined' || !window.EventSource) return;
 
   try {
+    attachNetworkListenersOnce();
     sharedEs = new EventSource('/api/admin/live-chat/events');
 
     sharedEs.onopen = () => {
@@ -134,3 +161,4 @@ export function connectLiveChatSse(options: LiveChatSseOptions): () => void {
     }
   };
 }
+
