@@ -70,8 +70,9 @@ export class BurstCoalesceService {
     return Number.isNaN(parsed) || parsed < 1 ? 10 : parsed;
   }
 
-  private isTextMessage(msg: any): boolean {
-    return msg?.type === 'text' || (!!msg?.text?.body && typeof msg.text.body === 'string');
+  private isCoalesceableMessage(msg: any): boolean {
+    if (msg?.location) return false;
+    return msg?.type === 'text' || msg?.type === 'image' || !!msg?.text?.body || !!msg?.media;
   }
 
   private isCommandText(text: string): boolean {
@@ -93,8 +94,8 @@ export class BurstCoalesceService {
       return { handled: false };
     }
 
-    // 2. Pesan non-text (location/media) → flush buffer tertunda (jika ada) lalu passthrough.
-    if (!this.isTextMessage(incomingMessage)) {
+    // 2. Pesan GPS location / non-coalesceable → flush buffer tertunda (jika ada) lalu passthrough.
+    if (!this.isCoalesceableMessage(incomingMessage)) {
       if (existing) {
         await this.flush(key);
       }
@@ -120,11 +121,13 @@ export class BurstCoalesceService {
     }
 
     // 4. Log pesan asli SEKARANG (audit trail + live chat realtime + idempotency lock).
+    const hasMedia = !!(incomingMessage.media || incomingMessage.type === 'image');
+    const logContent = incomingMessage.text?.body || (hasMedia ? (incomingMessage.media?.caption ? `[IMAGE: ${incomingMessage.media.caption}]` : '[IMAGE]') : '[TEXT]');
     await messageService.logMessage({
       tenantId,
       conversationId: conversation.id,
       direction: Direction.INBOUND,
-      content: incomingMessage.text?.body || '[TEXT]',
+      content: logContent,
       waMessageId: incomingMessage.id,
       payloadRaw: incomingMessage,
     });
@@ -173,16 +176,18 @@ export class BurstCoalesceService {
     this.buffers.delete(key);
 
     const last = messages[messages.length - 1];
+    const imageMessage = messages.find((m) => m.type === 'image' || m.media);
     const mergedBody = messages.map((m) => (m.text?.body || '').trim()).filter(Boolean).join('\n');
-    if (!mergedBody) return;
+    if (!mergedBody && !imageMessage) return;
 
     const mergedMessage: any = {
       id: last.id,
       from: phone,
       chatId,
       timestamp: last.timestamp || String(Math.floor(Date.now() / 1000)),
-      type: 'text',
-      text: { body: mergedBody },
+      type: imageMessage ? 'image' : 'text',
+      text: mergedBody ? { body: mergedBody } : undefined,
+      media: imageMessage?.media,
       _preLogged: true,
       _mergedCount: messages.length,
       _data: last._data,
