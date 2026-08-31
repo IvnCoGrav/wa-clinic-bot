@@ -353,7 +353,6 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const gateway = await getGateway(tenantId);
 
       if (isTyping) {
-        console.log(`[LIVE CHAT TYPING] Admin started typing -> conversation: ${id}, phone: ${phone}`);
         // 1. Kirim sinyal markAsRead (sendSeen / centang biru)
         if (typeof gateway.markAsRead === 'function') {
           await gateway.markAsRead(phone).catch((err: any) => console.warn('[TYPING ERROR] markAsRead failed:', err.message));
@@ -366,7 +365,6 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           await gateway.sendTypingIndicator(phone, undefined, 4000).catch(() => {});
         }
       } else {
-        console.log(`[LIVE CHAT TYPING] Admin stopped typing -> conversation: ${id}, phone: ${phone}`);
         // Hentikan status typing
         if (gateway.providerType === 'WAHA') {
           const { wahaClient } = await import('../../integrations/waha/client');

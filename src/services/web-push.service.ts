@@ -268,7 +268,6 @@ export class WebPushService {
             urgency: 'high',
           });
           sent++;
-          console.log(`[WEB PUSH] Delivered push successfully to ${sub.endpoint.slice(0, 45)}...`);
         } catch (err: any) {
           failed++;
           const status = err.statusCode || err.status;
