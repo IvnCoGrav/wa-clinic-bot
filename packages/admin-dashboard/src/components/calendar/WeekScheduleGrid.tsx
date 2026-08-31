@@ -47,6 +47,29 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const zoomState = useCalendarZoom();
   const { hourHeight, zoomLevel, containerRef } = zoomState;
 
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const isSyncingScrollRef = useRef(false);
+
+  const handleTopScroll = () => {
+    if (isSyncingScrollRef.current) return;
+    if (!topScrollRef.current || !containerRef.current) return;
+    isSyncingScrollRef.current = true;
+    containerRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  };
+
+  const handleMainScroll = () => {
+    if (isSyncingScrollRef.current) return;
+    if (!topScrollRef.current || !containerRef.current) return;
+    isSyncingScrollRef.current = true;
+    topScrollRef.current.scrollLeft = containerRef.current.scrollLeft;
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  };
+
   const isDraggingRef = useRef(false);
   const dragMovedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
@@ -59,6 +82,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
     const container = containerRef.current;
     if (!container) return;
+
+    // Untuk touch device, biarkan browser menangani native pan & pinch gesture
+    if (e.pointerType !== 'mouse') return;
 
     isDraggingRef.current = true;
     dragMovedRef.current = false;
@@ -207,9 +233,37 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
         <CalendarZoomControls zoomState={zoomState} variant="floating" />
       </div>
 
+      {/* Top Synchronized Thin Horizontal Scrollbar */}
+      <div
+        ref={topScrollRef}
+        onScroll={handleTopScroll}
+        className="overflow-x-auto overflow-y-hidden border-b border-[#e9edef] bg-[#f8fafc] z-30 shrink-0 select-none"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#008069 #e9edef',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <div className="min-w-[1050px] h-2 sm:h-2.5 flex items-center px-1">
+          <div className="w-[70px] shrink-0" />
+          {weekDays.map((d, i) => {
+            const isSel = isSameDay(d, selectedDate);
+            return (
+              <div
+                key={i}
+                className={`flex-1 min-w-[140px] h-1 rounded-full mx-1 transition-colors ${
+                  isSel ? 'bg-[#008069]' : 'bg-[#d1d7db]'
+                }`}
+              />
+            );
+          })}
+        </div>
+      </div>
+
       {/* Scrollable Container with sticky header for continuous vertical line alignment */}
       <div
         ref={containerRef}
+        onScroll={handleMainScroll}
         data-horizontal-scroll="true"
         data-no-swipe-back="true"
         onPointerDown={handlePointerDown}
