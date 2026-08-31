@@ -606,7 +606,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       toast('Nama treatment kustom wajib diisi', 'error');
       return;
     }
-    const isAddon = customIsAddon || isAddonService({ name: customServiceName, category: customCategory });
+    const isAddon = customIsAddon;
     const hasMainService = selectedTreatments.some((t) => !isAddonService(t));
     if (isAddon && !hasMainService) {
       toast(`Layanan kustom "${customServiceName}" adalah Add-on dan tidak bisa berdiri sendiri. Silakan pilih minimal 1 layanan utama terlebih dahulu.`, 'error');
@@ -625,6 +625,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     };
     setSelectedTreatments((prev) => [...prev, newItem]);
     setCustomServiceName('');
+    setCustomServicePrice(0);
     setCustomIsAddon(false);
     setShowCustomServiceInput(false);
   };
@@ -1193,7 +1194,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             {showCustomServiceInput && (
               <div className="p-3 bg-[#f8fafc] border border-[#e9edef] rounded-xl space-y-2">
                 <p className="text-xs font-bold text-[#111b21]">Tambah Treatment Manual / Kustom</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <input
                     type="text"
                     value={customServiceName}
@@ -1218,6 +1219,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                       onLabel="Add-on (0m)"
                       offLabel="Standar"
                       title="Add-on: treatment tambahan tanpa buffer perjalanan (0 menit)"
+                    />
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[#667781]">Rp</span>
+                    <input
+                      type="number"
+                      value={customServicePrice}
+                      onChange={(e) => setCustomServicePrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="0"
+                      className="w-full pl-8 pr-2 p-2 bg-white border border-[#d1d7db] rounded-lg text-xs text-[#111b21]"
                     />
                   </div>
                   <button
