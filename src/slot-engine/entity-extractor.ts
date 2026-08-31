@@ -23,7 +23,7 @@ const RawLlmExtractionSchema = z.object({
 });
 
 const GENERIC_TREATMENT_RE = /^(?:layanan\s+)?(?:home[-\s]?treatment|home[-\s]?care|homecare|care|treatment|perawatan|pijat|spa|layanan|paket|promo|info\s+treatment|layanan\s+kami)$/i;
-const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo)$/i;
+const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|sana|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo|mana|mn|mna|dimana|dmana|mana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|mn\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk))$/i;
 const NON_SYMPTOM_TOKENS = new Set([
   'sehat', 'selalu', 'info', 'konsultasi', 'tanya', 'tertarik', 'booking', 'reservasi', 'bisa',
   'jadwal', 'promo', 'biaya', 'harga', 'ongkir', 'homecare', 'hometreatment', 'treatment',
@@ -128,10 +128,22 @@ export class EntityExtractor {
 
     const cleanedLocationCandidate = normalizedLower
       .replace(/^(?:gak\s+jadi\s+)?(?:di|daerah|ke|posisi|area)\s+/i, '')
-      .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan)$/i, '')
+      .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan|kk)$/i, '')
       .trim();
 
     const hasStreetDetailKeywords = /\b(jalan|jl|jln|gang|gg|blok|no|nomor|rt|rw)\b/i.test(normalizedLower);
+
+    // 1c. Deteksi Kuadran / Kawasan Wilayah Luas (misal: "SBY barat", "Surabaya Timur", "Sidoarjo Selatan", "Sidoarjo Kota")
+    const quadrantPattern = /\b(?:di\s+|ke\s+|daerah\s+|area\s+)?((?:sby|surabaya|sidoarjo|sda|gresik)\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))\b/i;
+    const quadMatch = normalizedLower.match(quadrantPattern);
+    if (!result.locationText && quadMatch && quadMatch[1]) {
+      const quadName = quadMatch[1].trim();
+      result.locationText = quadName;
+      result.intents = result.intents || [];
+      if (!result.intents.includes('provide_location')) {
+        result.intents.push('provide_location');
+      }
+    }
 
     if (!result.locationText && !hasStreetDetailKeywords) {
       const gazetteer = getGazetteerAreas();
@@ -209,7 +221,7 @@ export class EntityExtractor {
     }
 
     // 5. Deteksi Pertanyaan Asal Klinik
-    if (/\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower)) {
+    if (/\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana)\b/i.test(lower) || /\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower)) {
       result.intents = result.intents || [];
       if (!result.intents.includes('ask_clinic_origin')) {
         result.intents.push('ask_clinic_origin');

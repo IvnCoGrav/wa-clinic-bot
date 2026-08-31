@@ -211,10 +211,12 @@ export class DecisionMatrix {
     // E. Pertanyaan Alamat / Homebase Klinik
     const isClinicOriginQuery =
       extraction.intents.includes('ask_clinic_origin') ||
+      /\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana)\b/i.test(rawText) ||
       /\b((?:alamat|lokasi|posisi)\s*(?:nya)?\s+(?:sby|surabaya|sidoarjo|dimana|di\s*mana|mana)|(?:lokasi|alamat|posisi)\s+klinik(?:nya)?(?:\s+ada)?\s+(?:dimana|di\s*mana|mana)|klinik(?:nya)?\s+(?:dimana|di\s*mana|mana|ada\s+dimana|ada\s+di\s*mana)|dari\s+mana)\b/i.test(rawText);
 
     const isGenericCityLocationOnly =
       !extraction.locationText ||
+      /^(?:sby|surabaya|sidoarjo|sda|gresik)(?:\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))?$/i.test((extraction.locationText || '').trim()) ||
       ['sby', 'surabaya', 'sidoarjo', 'sda'].includes((extraction.locationText || '').toLowerCase().trim());
 
     if (isClinicOriginQuery && isGenericCityLocationOnly && extraction.symptoms.length === 0) {
@@ -401,7 +403,7 @@ export class DecisionMatrix {
         }
         if (!resolved.isPrecise && extraction.locationText) {
           const locResolved = await geocodingService.geocodeText(extraction.locationText);
-          if (locResolved.isPrecise || (locResolved.lat && locResolved.lng)) {
+          if (locResolved.isPrecise) {
             resolved = locResolved;
           }
         }
@@ -463,24 +465,35 @@ export class DecisionMatrix {
           }
         }
 
-        // Jika lokasi yang disebutkan HANYA nama kota umum tanpa kelurahan spesifik:
-        const locLower = (extraction.locationText || '').toLowerCase().trim();
-        const isGenericCityOnly =
-          ['sidoarjo', 'surabaya', 'sda', 'sby', 'gresik'].includes(locLower) &&
-          !extraction.streetDetail &&
-          !resolved.kelurahan;
+        // Jika lokasi yang disebutkan merupakan kuadran wilayah luas / nama kota umum tanpa kelurahan spesifik:
+        const locLower = (extraction.locationText || compositeQuery || rawText || '').toLowerCase().trim();
+        const isGenericCityOrQuadrant =
+          /^(?:sidoarjo|surabaya|sda|sby|gresik)(?:\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))?$/i.test(locLower) ||
+          ['sidoarjo', 'surabaya', 'sda', 'sby', 'gresik'].includes(locLower);
 
-        if (isGenericCityOnly) {
+        if ((isGenericCityOrQuadrant || !resolved.isPrecise) && !extraction.streetDetail && !resolved.kelurahan) {
+          const areaDisplay = extraction.locationText || compositeQuery || 'area tersebut';
           return {
             action: 'RESOLVE_LOCATION_AND_DELIVERY',
-            reason: `Lokasi yang diinput hanya nama kota (${extraction.locationText}) tanpa kelurahan/kecamatan -> Minta detail kelurahan.`,
+            reason: `Lokasi yang diinput (${areaDisplay}) merupakan kawasan luas/umum tanpa kelurahan spesifik -> Minta detail kelurahan.`,
             updatedSlate,
             shouldSendPricelistImage: false,
-            deterministicTemplateReply: `Boleh diinfokan detail kelurahan atau desa di ${extraction.locationText} Bunda agar kami bantu cekkan ongkir presisinya? 😊`,
+            deterministicTemplateReply: `Boleh diinfokan detail kelurahan atau desa di ${areaDisplay} Bunda agar kami bantu cekkan ongkir presisinya? 😊`,
           };
         }
 
-        if (resolved.lat && resolved.lng) {
+        if (!resolved.isPrecise || !resolved.lat || !resolved.lng) {
+          const areaDisplay = extraction.locationText || compositeQuery || 'area tersebut';
+          return {
+            action: 'RESOLVE_LOCATION_AND_DELIVERY',
+            reason: `Lokasi yang diinput (${areaDisplay}) belum terdeteksi presisi ke tingkat kelurahan/desa -> Minta detail kelurahan.`,
+            updatedSlate,
+            shouldSendPricelistImage: false,
+            deterministicTemplateReply: `Boleh diinfokan detail kelurahan atau desa di ${areaDisplay} Bunda agar kami bantu cekkan ongkir presisinya? 😊`,
+          };
+        }
+
+        if (resolved.isPrecise && resolved.lat && resolved.lng) {
           const delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
 
           updatedSlate.kelurahan = resolved.kelurahan || resolved.kecamatan || extraction.locationText || 'Surabaya';

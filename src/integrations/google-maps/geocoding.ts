@@ -473,7 +473,12 @@ export class GeocodingService {
 
     const cleanNorm = cleanText.replace(/\s+/g, '');
     const lowerNorm = lower.replace(/\s+/g, '');
-    const staticImpreciseWords = ['surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru'];
+    const staticImpreciseWords = [
+      'surabaya', 'jakarta', 'bandung', 'sidoarjo', 'gresik', 'malang', 'rungkut', 'gubeng', 'waru',
+      'sby', 'sda', 'sbybarat', 'surabayabarat', 'sbytimur', 'surabayatimur', 'sbyselatan', 'surabayaselatan',
+      'sbyutara', 'surabayautara', 'sbypusat', 'surabayapusat', 'sidoarjobarat', 'sidoarjotimur',
+      'sidoarjoselatan', 'sidoarjoutara', 'sidoarjokota'
+    ];
 
     // Cek apakah cleanNorm persis sama dengan nama kelurahan tertentu di gazetteer
     // atau apakah teks mengandung nama kelurahan riil di database
