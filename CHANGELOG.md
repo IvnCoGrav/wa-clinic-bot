@@ -4,6 +4,42 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix & Enhancement — Live Chat State Synchronization, Hold-Press System Label Manager & Smart Bullet Indicator (`LiveChatMonitor.tsx`) (2026-08-31)
+
+- **Latar Belakang & Gejala:**
+  1. Header percakapan berganti ke kontak baru namun isi riwayat chat tetap menampilkan pesan milik kontak sebelumnya akibat *race condition* dan ketiadaan *stale request guard* saat berpindah kontak.
+  2. Kebutuhan menambahkan/mengelola label pelanggan (label sistem internal CRM klinik, bukan label WhatsApp asli) langsung saat card percakapan di-hold (tekan lama) di mobile maupun klik kanan di desktop.
+  3. Penyelarasan indikator status bullet: bullet oranye saat chat sudah dibaca (*read*) harus berubah menjadi **warna abu-abu**, dan ketika pesan keluar (*outbound*) terkirim (baik dari Bot AI, admin via dashboard, maupun admin via WhatsApp HP asli), bullet tersebut harus **hilang sepenuhnya**.
+
+- **Akar Masalah (Root Cause):**
+  1. `selectedId` berubah seketika di React state, namun `messages` tidak di-reset dan fungsi `loadThread` tidak memiliki sequence token atau validasi `if (selectedIdRef.current !== conversationId) return;`. Jika request percakapan sebelumnya selesai lebih lambat, respon lama menimpa chat kontak baru.
+  2. Kontainer chat bubble di panel kanan tidak memiliki `key` isolasi lifecycle dan tidak memiliki loading skeleton saat transisi thread.
+  3. Modal context menu (hold-press) belum menyediakan picker label sistem.
+  4. Indikator `isAwaitingReply` sebelumnya memakai styling oranye (`bg-amber-500`) dan belum beradaptasi menjadi abu-abu setelah dibuka.
+
+- **Solusi & Implementasi:**
+  1. **Stale Request Guard & Request Sequence Token**:
+     - Menambahkan ref `activeThreadRequestIdRef` dan validasi `if (activeThreadRequestIdRef.current !== reqId || selectedIdRef.current !== conversationId) return;` di `loadThread`.
+     - Respon jaringan dari percakapan lama otomatis diabaikan.
+  2. **Instant State Reset & Loading Skeleton**:
+     - Seketika `selectedId` berganti, state `messages` langsung di-reset (`setMessages([])`) dan `isThreadLoading` diset `true`.
+     - Menampilkan indikator loading / spinner yang bersih selama pengambilan data thread berlangsung.
+  3. **React Key Lifecycle Boundary**:
+     - Menyematkan `key={selectedChat?.conversationId || 'empty'}` pada kontainer pesan untuk memastikan re-mount DOM dan scroll position terisolasi bersih per percakapan.
+  4. **Pengelolaan Label Sistem via Hold-Press (CRM System Labels)**:
+     - Menambahkan section **"🏷️ Label Pasien (Sistem CRM)"** pada context menu mobile (bottom sheet) dan desktop (popover).
+     - Menampilkan daftar label sistem dengan warna dan badge checkmark interaktif.
+     - Mengintegrasikan toggle instan (`handleToggleLabel`) dengan update optimistik pada `contextMenu.chat.customerLabels` dan sinkronisasi ke backend `/api/admin/customers/:id/labels` tanpa menyentuh label WhatsApp asli.
+  5. **Penyempurnaan Indikator Bullet Status**:
+     - Mengubah bullet `chat.isAwaitingReply` menjadi **bullet abu-abu (`bg-[#8696a0]`)** saat pesan masuk telah dibaca.
+     - Memastikan bullet hilang sepenuhnya (`isAwaitingReply = false`) saat pesan balasan keluar (*outbound*) dikirim oleh bot, admin live chat, atau admin via WhatsApp HP asli.
+
+- **Pengujian & Verifikasi:**
+  - Build frontend Vite `packages/admin-dashboard`: **PASS (0 errors, build in 10.64s)**.
+  - Build backend TypeScript: **PASS (0 errors)**.
+  - Vitest Unit Tests `live-chat.service.test.ts`: **17/17 PASS (100%)**.
+
+
 #### Fix & Optimization — Mobile Network Resilience & Fast Reconnect: SSE Watchdog 18s, Mobile Online/Visibility Auto-Recovery, AbortController In-Flight Cancellation, Adaptive API Timeout, & Caddy Instant Flush (`liveChatSse.ts`, `api.ts`, `LiveChatMonitor.tsx`, `Caddyfile`) (2026-08-31)
 
 - **Latar Belakang & Gejala:**
