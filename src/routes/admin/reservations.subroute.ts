@@ -860,6 +860,204 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * PATCH /api/admin/reservation/:id
+   * Edit lengkap rincian reservasi: data pasien, anak/bayi, jadwal, layanan, tarif, status, penugasan terapis, dll.
+   */
+  fastify.patch(
+    '/api/admin/reservation/:id',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: {
+          treatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE';
+          treatmentDetail?: string;
+          bookingDate?: string | null;
+          assignedStaffId?: string | null;
+          purchaseValue?: number;
+          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+          notes?: string;
+          rawText?: string;
+          paymentMethod?: 'CASH' | 'TRANSFER' | 'QRIS' | null;
+          customerName?: string;
+          customerPhone?: string;
+          address?: string;
+          kecamatan?: string;
+          kota?: string;
+          kelurahan?: string;
+          landmark?: string;
+          babies?: Array<{ name: string; ageText?: string; birthDate?: string }>;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { id } = request.params;
+      const body = request.body || {};
+      const {
+        treatmentCategory,
+        treatmentDetail,
+        bookingDate,
+        assignedStaffId,
+        purchaseValue,
+        status,
+        notes,
+        rawText,
+        paymentMethod,
+        customerName,
+        customerPhone,
+        address,
+        kecamatan,
+        kota,
+        kelurahan,
+        landmark,
+        babies,
+      } = body;
+
+      try {
+        const existing = await prisma.reservation.findFirst({
+          where: { id, tenant_id: DEFAULT_TENANT_ID },
+          include: { customer: { include: { children: true } } },
+        });
+
+        if (!existing) {
+          throw new Error('Reservation not found');
+        }
+
+        const updateData: any = {};
+        if (treatmentCategory !== undefined) updateData.treatment_category = treatmentCategory;
+        if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
+        if (purchaseValue !== undefined) updateData.purchase_value = purchaseValue;
+        if (status !== undefined) updateData.status = status;
+        if (notes !== undefined) updateData.notes = notes;
+        if (rawText !== undefined) updateData.raw_text = rawText;
+        if (paymentMethod !== undefined) updateData.payment_method = paymentMethod;
+
+        if (assignedStaffId !== undefined) {
+          updateData.assigned_staff_id = assignedStaffId || null;
+        }
+
+        let parsedBookingDate: Date | null | undefined = undefined;
+        if (bookingDate !== undefined) {
+          if (bookingDate === null || bookingDate === '') {
+            updateData.booking_date = null;
+            parsedBookingDate = null;
+          } else {
+            const d = new Date(bookingDate);
+            if (!isNaN(d.getTime())) {
+              updateData.booking_date = d;
+              parsedBookingDate = d;
+            }
+          }
+        }
+
+        const updated = await prisma.reservation.update({
+          where: { id },
+          data: updateData,
+          include: {
+            customer: {
+              include: {
+                children: true,
+              },
+            },
+            assigned_staff: true,
+          },
+        });
+
+        // Sync customer details if provided
+        if (existing.customer_id && (customerName || customerPhone || address || kecamatan || kota || kelurahan || landmark)) {
+          const custUpdate: any = {};
+          if (customerName) custUpdate.name = customerName;
+          if (customerPhone) custUpdate.phone = customerPhone.replace(/\D/g, '');
+          if (address) custUpdate.address = address;
+          if (kecamatan) custUpdate.kecamatan = kecamatan;
+          if (kota) custUpdate.kota = kota;
+          if (kelurahan) custUpdate.kelurahan = kelurahan;
+          if (landmark) {
+            const currentPrefs = (existing.customer?.preferences as any) || {};
+            custUpdate.preferences = { ...currentPrefs, landmark };
+          }
+          await prisma.customer.update({
+            where: { id: existing.customer_id },
+            data: custUpdate,
+          });
+        }
+
+        // Sync babies if provided
+        if (existing.customer_id && Array.isArray(babies) && babies.length > 0) {
+          for (const b of babies) {
+            if (!b.name) continue;
+            const existingChild = existing.customer?.children?.find((c: any) => c.name.toLowerCase() === b.name.toLowerCase());
+            if (existingChild) {
+              await prisma.child.update({
+                where: { id: existingChild.id },
+                data: {
+                  raw_age_text: b.ageText || existingChild.raw_age_text,
+                },
+              });
+            } else {
+              await prisma.child.create({
+                data: {
+                  tenant_id: DEFAULT_TENANT_ID,
+                  customer_id: existing.customer_id,
+                  name: b.name,
+                  raw_age_text: b.ageText || '',
+                },
+              });
+            }
+          }
+        }
+
+        // Google Calendar sync
+        if (updated.google_calendar_event_id && parsedBookingDate) {
+          try {
+            const cName = customerName || existing.customer?.name || 'Bunda';
+            await googleCalendarService.updateEvent(updated.google_calendar_event_id, updated, cName);
+          } catch (gcErr) {
+            console.error('[Admin API] Google Calendar Event update failed:', gcErr);
+          }
+        }
+
+        // Reschedule follow-ups if date changed
+        if (parsedBookingDate) {
+          try {
+            const { followUpService } = await import('../../services/follow-up.service');
+            await followUpService.onReservationRescheduled(id, parsedBookingDate, existing.tenant_id || DEFAULT_TENANT_ID);
+          } catch (fuErr: any) {
+            console.warn('[Admin API] Failed to reschedule follow-ups on reservation edit:', fuErr.message);
+          }
+        }
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'UPDATE_RESERVATION_DETAIL',
+          targetId: id,
+          payload: body,
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({ success: true, data: updated });
+      } catch (error: any) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          if (treatmentCategory !== undefined) mock.treatment_category = treatmentCategory;
+          if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
+          if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
+          if (status !== undefined) mock.status = status;
+          if (notes !== undefined) mock.notes = notes;
+          if (rawText !== undefined) mock.raw_text = rawText;
+          if (paymentMethod !== undefined) mock.payment_method = paymentMethod;
+          if (assignedStaffId !== undefined) mock.assigned_staff_id = assignedStaffId;
+          if (bookingDate !== undefined) mock.booking_date = bookingDate ? new Date(bookingDate) : null;
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
+        }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
+    }
+  );
+
+  /**
    * PATCH /api/admin/reservation/:id/status
    * Mengubah status reservasi secara fleksibel ('pending' | 'confirmed' | 'completed' | 'cancelled')
    */

@@ -4,6 +4,46 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Bug Fix — LiveChat 24-Hour Draft Memory Lifecycle & Cross-Menu Navigation Persistence (`LiveChatMonitor.tsx`) (2026-08-31)
+
+- **Latar Belakang & Gejala Permasalahan:**
+  - CS / Admin yang sedang mengetik draf balasan di Live Chat kehilangan teks ketikan ketika berpindah ke menu lain di admin dashboard (misal membuka menu Reservasi, Customer, Kalender, dsb.) dan kembali ke Live Chat.
+  - **Akar Masalah**: Saat komponen `LiveChatMonitor` remount ketika admin kembali dari menu lain, `selectedChat` awalnya bernilai `undefined` (karena daftar percakapan masih dalam proses fetch). Komponen merender placeholder kosong dan `chatInputRef.current` belum ada di DOM (`null`). Efek `useEffect([selectedId])` berjalan sebelum elemen input terpasang di DOM sehingga pemulihan draf dari `localStorage` gagal secara senyap. Ketika data percakapan selesai dimuat, elemen input baru masuk ke DOM dalam keadaan kosong tanpa memicu pemulihan draf ulang.
+
+- **Solusi & Perbaikan:**
+  1. **Callback Ref `setChatInputRef`**: Menggunakan callback ref pada elemen `contentEditable` `<div ref={setChatInputRef}>`. Kapan pun elemen input terpasang (*mount*) ke DOM (baik saat inisialisasi awal, saat data chat selesai diambil dari backend, maupun saat kembali dari menu lain), draf 24 jam dari `localStorage` (`liveChat:draft:${convId}`) langsung dipulihkan secara instan ke dalam `innerText` dan mengaktifkan tombol kirim (`hasReplyText = true`).
+  2. **Sinkronisasi Siklus Hidup `selectedChat`**: Menambahkan dependency `selectedChat?.conversationId` pada efek pemulihan draf agar perubahan status percakapan selalu mengecek dan menyinkronkan draf aktif.
+  3. **Auto-Save Saat Pindah Menu & Window Lifecycle**: Menambahkan listener `unmount` komponen, `pagehide`, dan `beforeunload` untuk menjamin setiap ketikan terakhir sebelum berpindah halaman selalu tersimpan secara sinkron ke `localStorage`.
+  4. **Penyimpanan Draf Otomatis untuk AI Copilot & Invoice Generator**: Draf yang dihasilkan dari tombol *AI Copilot* maupun *Generate Invoice* kini juga langsung disimpan ke `localStorage` sehingga tidak hilang jika admin berpindah menu sebelum menekan kirim.
+
+#### Feature & Fix — Full Reservation Editing Modal & 1:1 Synchronized Top Scrollbar Track for Weekly Calendar (`ReservationDetailModal.tsx`, `reservations.subroute.ts`, `WeekScheduleGrid.tsx`, `admin-create-reservation.test.ts`) (2026-08-31)
+
+- **Latar Belakang & Kebutuhan Pengguna:**
+  1. **Tombol & Fitur Edit pada Detail Reservasi**: Pengguna menginginkan tombol Edit langsung pada popup Detail Reservasi (`ReservationDetailModal`) untuk dapat mengubah rincian pasien (nama bunda, no WA, alamat, patokan, kecamatan/kota), data bayi/anak, kategori treatment, rincian layanan, tarif purchase value (Rp), jadwal kunjungan, penugasan terapis (staff), status reservasi, dan metode pembayaran.
+  2. **Perbaikan Bug Scroll Kalender Mingguan**: Scrollbar horizontal di atas hari sebelumnya memiliki ketidaksinkronan rasio scrollLeft dengan container grid utama (akibat container tombol hari hanya selebar ~350px sedangkan tabel utama selebar 1050px), serta auto-scroll yang menimpa scroll manual pengguna setiap kali me-render ulang / berpindah tanggal.
+
+- **Solusi & Implementasi:**
+  1. **Backend Endpoint `PATCH /api/admin/reservation/:id` (`src/routes/admin/reservations.subroute.ts`)**:
+     - Mendukung pengeditan menyeluruh kolom reservasi: `treatmentCategory`, `treatmentDetail`, `purchaseValue`, `bookingDate`, `assignedStaffId`, `status`, `paymentMethod`, `notes`, dan `rawText`.
+     - Melakukan sinkronisasi otomatis ke tabel `Customer` (`name`, `phone`, `address`, `kecamatan`, `kota`, `kelurahan`, `landmark`).
+     - Melakukan sinkronisasi otomatis ke tabel `Child` (memperbarui atau membuat record anak/bayi baru).
+     - Menjadwalkan ulang pengingat follow-up otomatis jika `bookingDate` berubah.
+     - Memperbarui event Google Calendar jika terhubung (`google_calendar_event_id`).
+     - Mencatat audit log `UPDATE_RESERVATION_DETAIL`.
+     - Mendukung fallback in-memory untuk pengujian offline.
+  2. **Mode Edit Komprehensif pada `ReservationDetailModal.tsx`**:
+     - Menambahkan tombol **"✏️ Edit Reservasi"** di header modal dan bar aksi bawah.
+     - Menyediakan antarmuka form pengeditan terstruktur 4 bagian (Data Pasien, Data Bayi/Anak dinamis, Layanan & Tarif, Jadwal/Staff/Status).
+     - Tombol **"💾 Simpan Perubahan"** dengan indikator loading dan penanganan error.
+  3. **1:1 Synchronized Top Scrollbar Track pada `WeekScheduleGrid.tsx`**:
+     - Memisahkan bar navigasi hari (tombol chip hari `Sen 24`, `Sel 25`, dst.) dari scrollbar fisik.
+     - Menambahkan track scrollbar horizontal dedicated selebar **1050px** yang tersinkronisasi 1:1 pixel-for-pixel dengan grid kalender.
+     - Menjaga auto-scroll hanya berjalan sekali pada initial mount (`hasAutoScrolledRef.current = true`) sehingga tidak pernah mengganggu atau me-reset scroll manual pengguna.
+  4. **Pengujian & Verifikasi**:
+     - Frontend build (`packages/admin-dashboard`): **PASS (0 error, 10.10s)**.
+     - Backend build (`root`): **PASS (0 error)**.
+     - Vitest suite: **PASS (7/7 tests green)**.
+
 #### Enhancement & Fix — 8-Point Comprehensive Punch List: Calendar 2D Navigation, Multi-Hour Card Spanning, Visit Schedule Timing, Invoice Cleanup & LiveChat 24h Draft (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`, `reservation-text-parser.ts`, `paymentInvoiceFormatter.ts`, `InvoiceGeneratorModal.tsx`, `LiveChatMonitor.tsx`) (2026-08-31)
 
 - **Latar Belakang & Gejala Permasalahan:**
