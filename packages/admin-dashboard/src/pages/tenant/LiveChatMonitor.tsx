@@ -309,6 +309,8 @@ export const LiveChatMonitor: React.FC = () => {
     }
   });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isThreadLoading, setIsThreadLoading] = useState(false);
+  const activeThreadRequestIdRef = useRef(0);
   const replyTextRef = useRef('');
   const [hasReplyText, setHasReplyText] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -353,6 +355,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
+  const loadChatsAbortControllerRef = useRef<AbortController | null>(null);
 
   // In-Chat Search & Target Message Highlighting — unified dengan global searchQuery
   const [matchingMessageIds, setMatchingMessageIds] = useState<string[]>([]);
@@ -800,6 +803,7 @@ export const LiveChatMonitor: React.FC = () => {
       else sessionStorage.removeItem('liveChat:selectedId');
     } catch {}
     if (selectedId) {
+      setMessages([]);
       loadThread(selectedId);
       // Jika conversation belum ada di chats list (misal dibuka langsung dari URL / Push notif), ambil detailnya
       if (!chatsRef.current.some((c) => c.conversationId === selectedId)) {
@@ -816,6 +820,9 @@ export const LiveChatMonitor: React.FC = () => {
           })
           .catch(() => {});
       }
+    } else {
+      setMessages([]);
+      setIsThreadLoading(false);
     }
   }, [selectedId]);
 
@@ -859,6 +866,18 @@ export const LiveChatMonitor: React.FC = () => {
         );
         chatsRef.current = updated;
         return updated;
+      });
+
+      // Optimistic update for contextMenu if open
+      setContextMenu((prev) => {
+        if (!prev || prev.chat.customerId !== customerId) return prev;
+        return {
+          ...prev,
+          chat: {
+            ...prev.chat,
+            customerLabels: nextLabels,
+          },
+        };
       });
 
       // Optimistic update for customer detail modal if open
@@ -910,6 +929,15 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const loadChats = async (reset = false, search = searchQuery, isSearchOperation = false) => {
+    // Batalkan request loadChats sebelumnya yang masih in-flight (mencegah bottleneck saat koneksi seluler lambat)
+    if (reset && loadChatsAbortControllerRef.current) {
+      loadChatsAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    if (reset) {
+      loadChatsAbortControllerRef.current = abortController;
+    }
+
     // Hanya aktifkan full-page loader saat boot awal (chats belum pernah dimuat sama sekali)
     if (reset && chatsRef.current.length === 0) {
       setLoading(true);
@@ -925,7 +953,10 @@ export const LiveChatMonitor: React.FC = () => {
     try {
       const offset = reset ? 0 : chatsRef.current.length;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}${searchParam}`);
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}${searchParam}`, {
+        signal: abortController.signal,
+        timeoutMs: isSearchOperation ? 8000 : 10000,
+      });
       const data = Array.isArray(res) ? res : (res?.data || []);
       const nextHasMore = typeof res?.hasMore === 'boolean' ? res.hasMore : data.length === 50;
       if (reset) {
@@ -946,9 +977,16 @@ export const LiveChatMonitor: React.FC = () => {
       setHasMore(nextHasMore);
       setErrorMessage(null);
     } catch (err: any) {
+      if (err.name === 'AbortError' || abortController.signal.aborted) {
+        // Request dibatalkan oleh pencarian baru atau navigasi, abaikan error
+        return;
+      }
       console.error('Failed to load live chat conversations:', err);
       setErrorMessage(err.message || 'Gagal memuat percakapan.');
     } finally {
+      if (reset && loadChatsAbortControllerRef.current === abortController) {
+        loadChatsAbortControllerRef.current = null;
+      }
       loadingMoreRef.current = false;
       setLoadingMore(false);
       setIsSearching(false);
@@ -982,8 +1020,13 @@ export const LiveChatMonitor: React.FC = () => {
   };
 
   const loadThread = async (conversationId: string) => {
+    const reqId = ++activeThreadRequestIdRef.current;
+    setIsThreadLoading(true);
     try {
       const res = await apiRequest(`/api/admin/live-chat/conversations/${conversationId}/messages`);
+      if (activeThreadRequestIdRef.current !== reqId || selectedIdRef.current !== conversationId) {
+        return;
+      }
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
       
       // Client-side deduplication filter (mencegah double render bubble pesan/gambar identik)
@@ -1010,10 +1053,18 @@ export const LiveChatMonitor: React.FC = () => {
         }
       }
 
-      setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) })));
+      if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
+        setMessages(deduped.map((m) => ({ ...m, media: extractMedia(m), quoted_message: extractQuotedMessage(m) })));
+      }
     } catch (err: any) {
-      console.error('Failed to load conversation thread:', err);
-      setMessages([]);
+      if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
+        console.error('Failed to load conversation thread:', err);
+        setMessages([]);
+      }
+    } finally {
+      if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
+        setIsThreadLoading(false);
+      }
     }
   };
 
@@ -2851,8 +2902,8 @@ export const LiveChatMonitor: React.FC = () => {
                               )
                             ) : chat.isAwaitingReply ? (
                               <span
-                                title="Sudah dibaca, menunggu balasan (< 24 jam)"
-                                className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-2xs ring-2 ring-white inline-block animate-pulse"
+                                title="Sudah dibaca, menunggu balasan"
+                                className="w-2.5 h-2.5 rounded-full bg-[#8696a0] shadow-2xs ring-1.5 ring-white inline-block"
                               />
                             ) : null}
                           </div>
@@ -3131,6 +3182,7 @@ export const LiveChatMonitor: React.FC = () => {
 
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
+                  key={selectedChat?.conversationId || 'empty'}
                   ref={chatContainerRef} 
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
@@ -3192,7 +3244,12 @@ export const LiveChatMonitor: React.FC = () => {
                     </div>
                   )}
 
-                  {messages.length === 0 ? (
+                  {isThreadLoading ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs py-16 animate-fadeIn">
+                      <Loader className="animate-spin text-[#008069] mb-2" size={26} />
+                      <p className="font-semibold text-[#54656f]">Memuat riwayat chat...</p>
+                    </div>
+                  ) : messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-[#667781] text-xs">
                       <MessageCircle size={32} className="mb-2 text-[#8696a0]" />
                       <p>Belum ada pesan di percakapan ini.</p>
@@ -4266,6 +4323,56 @@ export const LiveChatMonitor: React.FC = () => {
               </button>
             </div>
 
+            {/* System Labels Section */}
+            <div className="pt-2 pb-1 border-t border-[#f0f2f5] space-y-1.5">
+              <div className="flex items-center justify-between px-1 text-[11px] font-bold text-[#667781]">
+                <span className="flex items-center space-x-1.5">
+                  <Tag size={13} className="text-[#008069]" />
+                  <span>Label Pasien (Sistem CRM)</span>
+                </span>
+                <a
+                  href="/admin/labels"
+                  className="text-[10px] text-[#008069] hover:underline font-semibold"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Kelola Label
+                </a>
+              </div>
+              {allLabels.length === 0 ? (
+                <p className="text-[11px] text-[#8696a0] px-1 py-0.5">Belum ada label sistem.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-36 overflow-y-auto">
+                  {allLabels.map((lbl) => {
+                    const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
+                    return (
+                      <button
+                        key={lbl.id}
+                        type="button"
+                        onClick={() => handleToggleLabel(contextMenu.chat.customerId, lbl)}
+                        disabled={togglingLabelId === lbl.id}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer shadow-2xs border active:scale-95 ${
+                          isAssigned
+                            ? 'text-white border-transparent'
+                            : 'bg-[#f8fafc] text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                        }`}
+                        style={{
+                          backgroundColor: isAssigned ? lbl.color || '#008069' : undefined,
+                        }}
+                        title={`Klik untuk ${isAssigned ? 'lepas' : 'pasang'} label ${lbl.name}`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: isAssigned ? '#ffffff' : lbl.color }}
+                        />
+                        <span>{lbl.name}</span>
+                        {isAssigned && <Check size={12} className="text-white shrink-0 ml-0.5 stroke-[3]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {/* Cancel Button */}
             <button
               type="button"
@@ -4337,6 +4444,56 @@ export const LiveChatMonitor: React.FC = () => {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* System Labels Section (Desktop) */}
+            <div className="py-2 px-3 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-[#667781]">
+                <span className="flex items-center space-x-1">
+                  <Tag size={12} className="text-[#008069]" />
+                  <span>Label Sistem (CRM)</span>
+                </span>
+                <a
+                  href="/admin/labels"
+                  className="text-[10px] text-[#008069] hover:underline font-semibold"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Kelola
+                </a>
+              </div>
+              {allLabels.length === 0 ? (
+                <p className="text-[11px] text-[#8696a0] py-0.5">Belum ada label sistem.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1 pt-0.5 max-h-32 overflow-y-auto">
+                  {allLabels.map((lbl) => {
+                    const isAssigned = (contextMenu.chat.customerLabels || []).some((l) => l.id === lbl.id);
+                    return (
+                      <button
+                        key={lbl.id}
+                        type="button"
+                        onClick={() => handleToggleLabel(contextMenu.chat.customerId, lbl)}
+                        disabled={togglingLabelId === lbl.id}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center space-x-1 transition cursor-pointer shadow-2xs border ${
+                          isAssigned
+                            ? 'text-white border-transparent'
+                            : 'bg-[#f8fafc] text-[#54656f] border-[#d1d7db] hover:bg-[#f0f2f5]'
+                        }`}
+                        style={{
+                          backgroundColor: isAssigned ? lbl.color || '#008069' : undefined,
+                        }}
+                        title={`Klik untuk ${isAssigned ? 'lepas' : 'pasang'} label ${lbl.name}`}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{ backgroundColor: isAssigned ? '#ffffff' : lbl.color }}
+                        />
+                        <span>{lbl.name}</span>
+                        {isAssigned && <Check size={11} className="text-white shrink-0 ml-0.5 stroke-[3]" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
