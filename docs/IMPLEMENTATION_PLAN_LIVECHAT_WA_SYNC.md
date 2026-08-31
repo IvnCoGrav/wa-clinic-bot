@@ -1,199 +1,162 @@
-# Implementation Plan — LiveChat vs WA Web Last Message Tidak Sinkron
+# Implementation Plan — LiveChat Comprehensive Fix (Goyang Typing + Search + Tanggal + WA Sync)
 
-**Tanggal:** 2026-08-29  
-**Branch rencana:** `plan/livechat-wa-sync`  
-**Status:** Plan (belum eksekusi kode) — push ke GitHub untuk eksekusi selanjutnya  
-**Penulis investigasi:** Muse Spark (analisa DB lokal 2026-08-29)
+**Tanggal:** 2026-09-01  
+**Branch rencana:** `plan/livechat-wa-sync` (update v2)  
+**Status:** Plan → Build (disetujui user 2026-09-01)  
+**Penulis:** Muse Spark — audit impeccable LiveChatMonitor 4237 baris + live-chat.service + conversation/message  
+**Prasyarat:** `AGENTS.md` SaaS-readiness, `docs/KNOWN_ISSUES.md#9 #10 #11 #18`, `docs/PERF_AUDIT_2026-08-08.md` P1+P7
 
 ---
 
-## 1. Ringkasan Masalah (Faktual, bukan hipotesa)
+## 1. Ringkasan Masalah (Faktual)
 
-Laporan: “livechat dan WA web tidak sama untuk message terakhir”.
+### 1a. Goyang saat Typing (laporan 2026-08-31)
+- **Gejala:** Input LiveChat goyang saat ketik, terutama iOS Safari/PWA. Keyboard `∧∨✓` + bubble lompat.
+- **Akar (7 faktor konkuren, verified read-only):**
+  1. `LiveChatMonitor.tsx:1105` `visualViewport resize/scroll → scrollToBottom(true)` fire 5-10×/detik saat ketik (prediksi bar, tinggi `contentEditable` berubah) × `scrollToBottom:1065` paksa 5× (`scrollTop=scrollHeight+99999` + `scrollIntoView` + rAF + 4× setTimeout) → jitter vertikal.
+  2. `LiveChatMonitor.tsx:338,483` `hasReplyText` di root → full re-render 4237 baris tiap karakter (list 50 + 30 bubble).
+  3. `3788` `contentEditable="plaintext-only"` → iOS `UITextInputAssistantItem` debt (`KNOWN_ISSUES#9`), `innerText` + selection reset tiap input → tinggi `min-h-[38px] max-h-[220px]` tumbuh/ciut.
+  4. `3122:3129` `chatContainer overscroll-contain` + `Layout.tsx:493` `h-screen overflow-hidden` vs `index.css:60` `dvh` dobel.
+  5. SSE `message.created:1497` + `visualViewport` bersamaan → double-jump.
+  6. Sticky `2601` + `3132` collision.
+  7. Typing presence `472:502` spam `POST /typing` tiap 3s → SSE balik.
 
-Verifikasi lokal (DB `clinic-postgres` 2026-08-29, `7519` messages, `609` conversations, `613` customers):
-* **64 phantom conversations** — `conversations.last_message_at IS NOT NULL` tapi `LEFT JOIN messages = 0` (`SELECT count(*) FROM conversations c LEFT JOIN messages m ON m.conversation_id=c.id WHERE m.id IS NULL` → `64`). Contoh `23228037-9b93-4bb5-b09a-1989262d42ba` (`6289999215847`, `INITIAL`, `last_message_at 2026-08-28 06:56:02.77`) — dibuat `src/services/conversation.service.ts:31-77` `getOrCreateConversation`, tapi tidak ada `messages` yang pernah ter-log (early return / HUMAN_HANDLING / stale guard).
-* **197 conversations `last_message_at` desync** dengan `max(messages.created_at)` (`src/services/message.service.ts:343-349` vs `src/services/waha-history-sync.service.ts:268-283`). Diff terbesar 48 hari (`ab597f1b 6281234285950`: `last_at 2026-07-09` vs `max_msg 2026-08-26`, `+4202852s`). Urutan LiveChat `src/services/conversation.service.ts:184-188` `orderBy [is_pinned desc, last_message_at desc]` vs WA Web sort by WA timestamp asli → last preview beda bubble.
-* **173 outbound `wa_message_id IS NULL`** — `typingService.simulateHumanReply` + `messageService.logMessage` tanpa `messageId` saat WAHA `DISCONNECTED` (log `WAHA_DISCONNECTED` berulang, queue `PAUSED`, `waha` container tidak ada di `docker ps` lokal). `updateDeliveryStatus` `src/services/message.service.ts:558-640` by `wa_message_id` tidak pernah match → centang `sent ✓` stuck.
-* **Environment lokal tidak merepresentasikan prod:** `WAHA_BASE_URL=http://localhost:3001` timeout, app tidak listen `3000`, `waha` container hilang. DB lokal stale (`max created_at 2026-08-28 00:53:55`). Live prod butuh cek terpisah (2-step gate, lihat §6).
+### 1b. Search salah (laporan 2026-09-01)
+- **Gejala:** Cari `628113141111` (nomor) → banner “Tidak ada bubble pesan berisi "628113141111" di percakapan ini” + tidak ter-close saat pindah chat.
+- **Akar:**
+  1. Kopling salah `LiveChatMonitor.tsx:1207:1212` `useEffect([searchQuery,selectedId]) → setInChatSearchQuery(searchQuery)` → global search (nama/nomor via `filteredChats:2297` & `conversation.service:174` `customer.name/phone`) ikut trigger in-chat search (`1214` filter `messages[].content`). Nomor tidak ada di bubble → banner `3167` muncul.
+  2. `handleClearInChatSearch:1250` hanya reset `inChatSearchQuery`, tidak reset pindah chat → effect isi ulang lagi.
+  3. Banner guard `3167` `inChatSearchQuery && matching===0` terlalu agresif (walau `messages.length===0` atau q=numerik).
 
-Akar di kode (sudah ada tapi belum konsisten):
-* Preview LiveChat `src/services/live-chat.service.ts:116-131` (`WITH ranked … rn<=3`) dan `src/services/live-chat.service.ts:765` `effectiveLastMsgAt = lastMsg.created_at || last_message_at` — kalau `last_message_at` stale, list sort tetap stale walau `lastMsg` benar.
-* History sync filter `src/services/waha-history-sync.service.ts:197,379` `m.body && trim().length>0` → image/video tanpa caption ter-drop (WA Web ada, LiveChat hilang). Webhook inbound `src/routes/webhook.route.ts:637-729` sudah benar (download sebelum stale guard), tapi sync path belum.
-* `src/routes/webhook.route.ts:734-780` stale guard 180s (`MAX_INBOUND_MESSAGE_AGE_SECONDS`) + `src/services/message.service.ts:47-125` in-flight dedup 45s — jika admin HP balas teks mirip bot dalam window, `OUTBOUND_DUPLICATE_SKIPPED` → hilang di LiveChat.
+- **Ekspektasi benar:** Search nomor/nama = filter list kiri (`filteredChats`), bukan bubble. Search bubble = hanya jika admin memang cari isi pesan.
 
-Referensi file: semua `file:line` di atas + `src/routes/webhook.route.ts:232-290` (outbound HP gate), `src/routes/admin/livechat.subroute.ts:453` (SSE).
+### 1c. Bug Tanggal
+- **Gejala:** Separator “Hari ini/Kemarin/Senin” kadang off-by-one, `formatLastChat:2328` tanpa tahun.
+- **Akar:**
+  1. `formatChatDateSeparator:144` pakai `Math.round` + `getFullYear` lokal vs UTC → 23:30 WIB bisa jadi “Kemarin”.
+  2. `isDifferentDay:167` sama → midnight lokal.
+  3. `formatLastChat` tanpa `timeZone:'Asia/Jakarta'`, threshold `Math.floor` tapi tanpa tahun.
+  4. `live-chat.service:843` `effectiveLastMsgAt = lastMsg.created_at || last_message_at` bisa desync 197 rows (drift terbesar 48 hari, `docs/IMPLEMENTATION_PLAN_LIVECHAT_WA_SYNC.md#1`).
+
+### 1d. WA Sync (plan lama, tetap valid)
+- 64 phantom conv, 197 drift, 173 `wa_message_id NULL`, history media drop – detail §1 Fase 0-5 lama (dipertahankan).
 
 ---
 
 ## 2. Tujuan
 
-* LiveChat `lastMessageAt` + `lastMessages[0..2]` **identik** dengan WA Web untuk semua percakapan (single source: WA timestamp + `messages` table).
-* Phantom conversation tidak muncul di list, atau muncul konsisten (collapsed).
-* Tidak ada lagi `last_message_at` drift > 5 detik dari `max(messages.created_at)`.
-* Media tanpa caption tetap tampil (via history sync & webhook).
-* Deploy aman: idempotent, no `prisma migrate diff --from-migrations` break (lihat `docs/KNOWN_ISSUES.md#1`), no data loss.
-
-Non-tujuan: ubah SOP greeting/ongkir penolakan out-of-coverage (tetap deterministik), tidak ganti pinned WAHA `devlikeapro/waha:noweb-2026.7.2`.
+- **Goyang hilang:** Ketik 30 detik di iOS tanpa jitter, FPS 60, `visualViewport` throttle.
+- **Search benar:** Cari nomor/nama → list terfilter, **tanpa** banner bubble. Cari isi bubble → highlight + navigasi ↑↓ + auto-close saat pindah chat.
+- **Tanggal benar:** Separator WIB akurat, no off-by-one, `lastMessageAt` single source.
+- **WA Sync:** `last_message_at` ≡ `max(messages.created_at)`, phantom tidak naik ke atas.
+- Non-tujuan: Ubah SOP greeting/ongkir, ganti WAHA `noweb-2026.7.2`.
 
 ---
 
 ## 3. Prinsip
 
-* Tenant-aware: semua query filter `tenant_id` (`DEFAULT_TENANT_ID`) — jangan hardcode.
-* Idempotent & re-runnable (sync bisa jalan ulang tanpa duplikat `wa_message_id`).
-* Defense-in-depth seperti fix Siska #777 (`docs/KNOWN_ISSUES.md#12`).
-* Offline test green: `tests/setup.ts` mock DB tetap hijau.
+- Tenant-aware (`tenant_id` filter, tidak hardcode).
+- Idempotent & re-runnable.
+- Offline test green (`tests/setup.ts` mock).
+- **Rekomendasi disetujui:** (1) Pisah dua kotak search (global atas list + in-chat dalam thread), (2) WIB hardcode `Asia/Jakarta`, (3) Global search tetap saat pindah chat, in-chat reset.
 
 ---
 
-## 4. Fase Implementasi
+## 4. Fase Implementasi (Update v2)
 
-### Fase 0 — Diagnostic & Guard (0.5 hari, no code prod, read-only)
+### Fase 0 — Diagnostic & Guard (0.5 hari, read-only) — TETAP
+*Skrip `check-livechat-sync.ts` + `npm run check:livechat-sync` seperti plan lama (phantom/drift/nullWa).*  
+*Tambah:* `check-livechat-search-date.ts` → cek `isDifferentDay` batas 23:55 WIB, cek `searchQuery → inChatSearchQuery` kopling.
 
-**Deliverable:** skrip `src/scripts/check-livechat-sync.ts` + `npm run check:livechat-sync`.
+### Fase 1 — Fix `last_message_at` Single Source (1 hari) — TETAP
+*`message.service:324` effectiveMsgDate, `conversation.service:328` touch flag, `live-chat.service:764` serialize, `repair-last-message-at.ts` seperti plan lama.*
 
-* Query laporan (read-only):
-  ```sql
-  -- phantom
-  SELECT c.id, cust.phone FROM conversations c JOIN customers cust ON cust.id=c.customer_id LEFT JOIN messages m ON m.conversation_id=c.id WHERE m.id IS NULL LIMIT 20;
-  -- drift
-  SELECT c.id, cust.phone, c.last_message_at, (SELECT max(m.created_at) FROM messages m WHERE m.conversation_id=c.id) AS max_at FROM conversations c JOIN customers cust ON cust.id=c.customer_id WHERE (SELECT max(m.created_at) FROM messages m WHERE m.conversation_id=c.id) IS NOT NULL AND c.last_message_at <> (SELECT max(m.created_at) FROM messages m WHERE m.conversation_id=c.id) LIMIT 20;
-  -- null wa id
-  SELECT count(*), min(created_at), max(created_at) FROM messages WHERE wa_message_id IS NULL;
-  -- history media drop check: WAHA getChats vs DB (butuh waha up)
-  ```
-* Output JSON + exit code (fail jika `phantom>0` atau `drift>0`). Mirip `src/scripts/check-router-accuracy.ts`.
-* Log WAHA health: `wahaClient.getSessionStatus()` + `docker ps waha` — fail gate jika `DISCONNECTED`.
-* **Notes eksekutor:** jalankan dulu di lokal (`WAHA_MOCK=true` expect phantom 64), lalu di staging & prod (read-only, no write).
+### Fase 2 — Phantom & History Media (0.5+0.5 hari) — TETAP
+*Seperti plan lama.*
 
-### Fase 1 — Fix `last_message_at` Single Source (1 hari, high impact)
+### Fase 3 — `wa_message_id` NULL & Ack (0.5 hari) — TETAP
 
-**Masalah:** 197 drift.
+### Fase 4 — Goyang Typing P0 (1 hari, high impact) — BARU, PRIORITAS 1
+**Ubah `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`:**
+1. **Isolasi Composer:** Ekstrak `components/livechat/Composer.tsx` (`React.memo`), state `hasReplyText/typingTimer` lokal, root hanya `onSend`. Hapus `setHasReplyText` di root `483`.
+2. **Throttled viewport:** Ganti `1105:1119` → `throttle 200ms + isNearBottom (>80%) + !isComposing`. Hanya `scrollTop`, hapus `scrollIntoView` duplikat & `onFocus 200ms` `3792`. Kurangi `forceMulti` dari 4 timeout jadi 1 rAF.
+3. **Debounce typing:** `handleInputChange` debounce 500ms → `notifyTyping(true)`, `stop 1500ms`, `AbortController`. Server `livechat.subroute.ts:320` tambah `per-phone 1 req/2s` rate-limit.
+4. **Verifikasi:** Profiler renders -90%, `visualViewport` count, `npm run build`, 3 test baru `typing-throttle.test.ts`.
 
-**Ubah:**
-* `src/services/message.service.ts:324-353` — `logMessage` sudah `Promise.all [create, conversation.update last_message_at=effectiveMsgDate]`. Pastikan `effectiveMsgDate` selalu `createdAt` (WA timestamp) bukan `new Date()` saat `createdAt` ada. Tambah `await prisma.conversation.update` retry + fallback `memoryConversations` (sudah ada tapi tidak set `last_message_at` saat `existing` null).
-* `src/services/conversation.service.ts:328-371` `updateConversationState` — jangan set `last_message_at=now` otomatis saat hanya ubah `is_human_handling` / `current_state`. Pisah: `touchLastMessageAt: boolean` param. Call site `escalateToHumanHandling`, `checkAndApplyAutoRelease`, `setManualUnread`, `togglePinConversation` harus `touch=false`. Hanya `logMessage` dan `waha-history-sync` yang `touch=true`. Saat ini `updateConversationState` selalu `last_message_at: new Date()` → overwrite drift.
-* `src/services/live-chat.service.ts:764-766` `serialize` — `effectiveLastMsgAt = lastMsg?.created_at || c.last_message_at || c.updated_at` biarkan, tapi `listConversations` order harus `COALESCE(last_message_at, updated_at) desc` sama dengan serialize (sudah, tapi tambah komentar).
-* **Migrasi repair (idempotent, no schema change):** tambah `src/scripts/repair-last-message-at.ts` yang `UPDATE conversations SET last_message_at = (SELECT max(created_at) FROM messages WHERE conversation_id=conversations.id) WHERE last_message_at <> (SELECT max(...))` — jalan sekali di prod via `docker compose exec app npx tsx src/scripts/repair-last-message-at.ts --dry-run` dulu.
+### Fase 5 — Search Decoupling P0 (0.5 hari, high impact) — BARU, PRIORITAS 1
+**Ubah `LiveChatMonitor.tsx`:**
+1. **Hapus kopling** `1207:1212` → `searchQuery` tidak pernah set `inChatSearchQuery`. Dua state independen.
+2. **Banner guard** `3167` → `inChatSearchActive && messages.length>0 && q.length>=2 && !isGlobalSearch`. Tambah `isInChatSearchActive` boolean.
+3. **Auto-clear saat pindah chat:** `useEffect([selectedId]) => handleClearInChatSearch()` (reset `inChatSearchQuery/matching/highlighted`), **tanpa** sentuh `searchQuery`. `handleClearInChatSearch` juga dipanggil di `loadThread` selesai.
+4. **Global search tetap:** `filteredChats:2297` sudah benar (name/phone/message), tambah highlight phone/name di list.
+5. **In-chat search visible:** Tambah input kecil dalam thread (icon Search → expand) yang set `inChatSearchQuery`. Global input tetap di `2600:2635`.
 
-**Test:** `tests/unit/conversation.test.ts` + `tests/unit/message.test.ts` — mock `logMessage` lalu assert `conversation.last_message_at === message.created_at`. Tambah `tests/unit/livechat-serialize.test.ts` (pinned vs lastMessageAt).
+### Fase 6 — Tanggal WIB P1 (1 hari) — BARU, PRIORITAS 1
+**Ubah `LiveChatMonitor.tsx:144:176,2328` + `live-chat.service.ts:843`:**
+1. Buat `src/utils/dateWib.ts` → `toWibMidnight`, `formatWib(date, opts:{timeZone:'Asia/Jakarta'})`, `diffCalendarDaysWib`.
+2. `formatChatDateSeparator` → pakai `differenceInCalendarDays` floor + WIB, bukan `Math.round`.
+3. `isDifferentDay` → bandingkan `YYYY-MM-DD` WIB string.
+4. `formatLastChat` → branch `>1 tahun` tampil tahun, `>7 hari` `dd MMM yyyy` WIB, semua `toLocale*` dengan `timeZone:'Asia/Jakarta'`.
+5. `serialize:876` → `lastMessageAt` konsisten, `listConversations` order `COALESCE(last_message_at,updated_at)`.
+6. Test `tests/unit/date-wib.test.ts` (23:55 vs 00:05, round vs floor, tahun).
 
-**Verifikasi:** `npx tsc` (`npm run build`) + `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` harus `-- This is an empty migration.`
+### Fase 7 — Observabilitas (0.5 hari) — TETAP
+*`GET /api/admin/live-chat/sync-health` + banner drift.*
 
-### Fase 2 — Phantom Conversations Hardening (0.5 hari)
-
-**Masalah:** 64 rows `conversations` tanpa `messages` ter-sort paling atas.
-
-**Ubah:**
-* `src/services/conversation.service.ts:159-215` `listConversations` where `messages:{some:{}}` sudah benar untuk Prisma, tapi fallback memory `all` tidak respect `messages.some` untuk `mode=all` (hanya filter `mode !== all`). Fix memory fallback: filter `all.filter(c => memoryMessages.some(m=>m.conversation_id===c.id))` sebelum slice.
-* **Cleanup one-off (opsional, soft):** `src/scripts/cleanup-phantom-conversations.ts` — tidak delete (audit), tapi set `last_message_at = created_at` dan `updated_at = created_at` agar turun ke bawah list, atau DELETE jika `created_at > 7 hari` dan `last_message_at = created_at` dan `0 messages` (dengan `--dry-run` default).
-* **Prevention:** `getOrCreateConversation` tidak set `last_message_at` ke `now` saat create — set `null` atau `created_at` saja, biarkan `logMessage` yang isi. Ubah `src/services/conversation.service.ts:42-46` `create { last_message_at: null }` atau hapus default.
-
-**Test:** `tests/unit/conversation-phantom.test.ts` — create conv tanpa message, assert `listConversations` tidak return.
-
-### Fase 3 — History Sync Media Tanpa Body (0.5 hari)
-
-**Masalah:** `waha-history-sync` drop media tanpa caption.
-
-**Ubah:**
-* `src/services/waha-history-sync.service.ts:196-199,378-381` — ganti filter `m.body && trim().length>0` menjadi `hasContent = (m.body && trim().length>0) || isMedia(m)` (`isMedia` cek `m.type==='image'|| m.hasMedia || m.mediaUrl`). Simpan `content = m.body || '[IMAGE]'` dan `payload_raw.media` jika ada (reuse logic `src/routes/webhook.route.ts:636-722` `isInboundImage` + `mergeMediaIntoPayload`). Idempotent via `isDuplicateMessage`.
-* `src/services/waha-history-sync.service.ts:195,377` `getMessages` sudah sort `a.timestamp - b.timestamp` — pastikan `latestMsgDate` dihitung dari `rawTimestamp` termasuk media-only messages.
-
-**Test:** `tests/unit/waha-history-sync.test.ts` — mock `wahaClient.getMessages` return `[{id:'x', body:'', type:'image', mediaUrl:'http://...'}]` assert `messageService.logMessage` dipanggil dengan `content='[IMAGE]'` dan `payload_raw.media.url`.
-
-### Fase 4 — `wa_message_id` NULL & Ack Reconciliation (0.5 hari)
-
-**Masalah:** 173 null → centang stuck.
-
-**Ubah:**
-* `src/services/typing.service.ts` / `src/services/follow-up.service.ts` / `cron` — sudah explicit `logMessage` dengan `wa_message_id` dari `sendTextDetailed` (fix follow-up 2026-08-26). Audit `src/routes/webhook.route.ts:461-471` outbound HP: `logMessage` dengan `waMessageId=payload.id` sudah benar. Tapi `src/services/live-chat.service.ts:402-412` admin reply via LiveChat: `logMessage` dengan `sendResult.messageId` — jika `sendResult.success=false` (WAHA down) jangan log `null`, tapi log dengan `delivery_status='failed'` + `wa_message_id=null` dan UI tampil `failed` (sudah ada cabang `if (!sendResult.success)` return error, tidak log — biarkan, tapi tambah alert `THIRD_PARTY_OUTAGE` sudah ada). Untuk `success=true` tapi `messageId` undefined (edge WAHA), fallback `wa_message_id='pending_'+logged.id` dan reconciliation cron `src/services/waha-monitor.service.ts` coba `getChats` later.
-* Tambah `src/scripts/reconcile-null-wa-ids.ts` — `SELECT id FROM messages WHERE wa_message_id IS NULL AND created_at > now()-7d` → `wahaClient.getMessages(chatId)` lookup by `created_at ±5m` + `content` exact match → `UPDATE messages SET wa_message_id=...`.
-
-### Fase 5 — Observabilitas (0.5 hari)
-
-* Tambah `GET /api/admin/live-chat/sync-health` — return `{phantomCount, driftCount, nullWaIdCount, wahaStatus, lastSyncAt}` (reuse Fase 0 queries, no auth tambahan selain `ADMIN_API_KEY`). Frontend `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` tampil banner kuning jika `driftCount>0` (link ke repair script).
-* Log `src/routes/webhook.route.ts:372` `OUTBOUND_DUPLICATE_SKIPPED` dan `STALE MESSAGE GUARD` sudah ada — tambah `stageLog` structured agar `logs/app-*.log` grepable untuk next executor: `grep "STALE GUARD BYPASS\|OUTBOUND_DUPLICATE\|IN-FLIGHT BOT MATCH" logs/app-*.log`.
-
-### Fase 6 — Search-to-Message Jump & Keyword Highlighting (0.5 hari)
-
-**Masalah:**
-* Saat admin mencari keyword tertentu di search bar (misal `"5km"`, format ongkir, atau template jawaban tertentu), hasil filter percakapan di daftar kiri sudah memfilter percakapan yang relevan.
-* Namun saat percakapan dipilih/diklik, view chat selalu auto-scroll ke pesan paling bawah (`scrollToBottom`), sehingga admin harus scroll manual ke atas mencari bubble pesan yang dimaksud.
-* Tidak ada visual highlight (penanda warna/pulsing) pada kata kunci maupun bubble pesan target di dalam chat thread.
-* Sulit menemukan pesan yang cocok jika thread memiliki puluhan hingga ratusan riwayat pesan.
-
-**Ubah:**
-1. **Penerusan Konteks Pencarian ke Chat Thread (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`):**
-   * Kirim query pencarian aktif (`searchQuery`) saat percakapan dibuka.
-   * Saat `messages` selesai dimuat pada `loadThread`:
-     * Deteksi apakah terdapat pesan yang mengandung `searchQuery` (case-insensitive substring).
-     * Jika ditemukan, ganti perilaku default `scrollToBottom` menjadi scroll halus terarah ke pesan target: `document.getElementById('msg-' + targetMsgId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })`.
-     * Jika terdapat lebih dari 1 pesan yang cocok, default lompat ke pesan yang paling baru / relevan.
-2. **Visual Highlight & Pulse Animation (`packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`):**
-   * Bungkus kata kunci yang cocok di dalam teks pesan menggunakan tag penanda visual (`<mark className="bg-amber-200 text-amber-900 font-medium px-1 rounded">`).
-   * Berikan animasi kilat/highlight sementara (`ring-2 ring-amber-400 bg-amber-50/50 transition-all duration-700`) pada container bubble pesan `msg-${msg.id}` agar mata admin langsung tertuju ke posisi pesan tersebut.
-3. **In-Chat Match Navigation Bar (Sticky Toolbar):**
-   * Saat mode pencarian aktif dan terdapat match di dalam chat yang sedang dibuka, tampilkan bar navigasi ringkas di bagian atas chat:
-     * Indikator: `🔍 "5km" (Pesan X dari Y)`
-     * Tombol 🔼 (Pesan sebelumnya / older match)
-     * Tombol 🔽 (Pesan berikutnya / newer match)
-     * Tombol ✖ (Tutup navigasi pencarian / reset fokus)
+### Fase 8 — Search-to-Jump & Highlight Polish P2 (0.5 hari) — TETAP (Fase 6 lama)
+*Seperti plan lama Fase 6: scroll ke target, `<mark>`, pill `🔍 "5km" (X dari Y)` ↑↓✖ — sudah ada `3131:3182` tapi sekarang decoupled, tinggal polish.*
 
 ---
 
-## 5. Urutan Eksekusi & Estimasi
+## 5. Urutan Eksekusi & Estimasi (Update)
 
-| Fase | Estimasi | Ketergantungan | Risiko |
-|------|----------|----------------|--------|
-| 0 diagnostic | 0.5d | none | read-only, no risk |
-| 1 last_message_at | 1d | 0 | medium (write DB) — but idempotent, test `prisma migrate diff` |
-| 2 phantom | 0.5d | 1 | low |
-| 3 history media | 0.5d | 0 | low (idempotent dedup) |
-| 4 null ack | 0.5d | 1 | low |
-| 5 observability | 0.5d | 1-4 | low |
-| 6 search-jump & highlight | 0.5d | none (UI only) | low |
-| **Total** | **~4.0 hari** | | |
+| Fase | Estimasi | Ketergantungan | Risiko | Status |
+|------|----------|----------------|--------|--------|
+| 0 diagnostic | 0.5d | none | read-only | pending |
+| 1 last_message_at | 1d | 0 | medium (write DB idempotent) | pending |
+| 2 phantom+media | 1d | 1 | low | pending |
+| 3 null wa_id | 0.5d | 1 | low | pending |
+| **4 goyang P0** | **1d** | **0** | **low (UI only)** | **next** |
+| **5 search P0** | **0.5d** | **0** | **low** | **next** |
+| **6 tanggal P1** | **1d** | **0** | **low** | **next** |
+| 7 observabilitas | 0.5d | 1-6 | low | pending |
+| 8 jump & highlight | 0.5d | 5 | low | pending |
+| **Total v2** | **~6.5 hari** | | | |
+
+Rekomendasi eksekusi: **Fase 4+5+6 dulu** (2.5 hari, impact langsung ke laporan user), lalu Fase 1-3.
 
 ---
 
 ## 6. Verifikasi & Deploy
 
-* **Lokal:** `WAHA_MOCK=true npm test` (full Vitest, `tests/setup.ts` DB offline mock), `npm run build` (`tsc`), `npx prisma migrate diff --from-url` empty.
-* **Staging (wajib):** deploy `docker compose up -d` dengan `devlikeapro/waha:noweb-2026.7.2` pinned, `waha` container healthy, `GET /api/admin/live-chat/sync-health` phantom=0, `repair-last-message-at --dry-run` 0 rows, manual test: kirim WA image tanpa caption → LiveChat muncul `[IMAGE]`, kirim 2 bubble admin cepat → tidak `OUTBOUND_DUPLICATE_SKIPPED` palsu.
-* **Prod deploy (2-step gate, lihat `.agents/rules/server-update-gate.md` & `docs/KNOWN_ISSUES.md#1`):**
-  1. Backup: `docker exec clinic-postgres pg_dump -U postgres wa_clinic_db > /tmp/pre-livechat-fix.sql` + `npx prisma migrate diff --from-url` catat.
-  2. Jalankan repair scripts dengan `--dry-run` dulu, lalu tanpa flag (idempotent). Log ke `logs/repair-*.log`.
-  3. `docker compose up -d app` (jangan `latest` untuk WAHA), `docker compose logs -f app` 2 menit cek `WAHA_DISCONNECTED` tidak muncul.
-  4. `GET /api/admin/live-chat/conversations?limit=5` bandingkan dengan WA Web manual (2 nomor sample).
-  5. Jika drift masih >0, rollback `psql < /tmp/pre-livechat-fix.sql` atau `git revert`.
+- **Lokal:** `WAHA_MOCK=true npm test` (Vitest), `npm run build` (`tsc` + `vite build`), `npx prisma migrate diff --from-url` empty.
+- **Staging:** `docker compose up -d` pinned `noweb-2026.7.2`, `waha` healthy, test iOS ketik 30s, test search `628113141111` (list filter tanpa banner), test tanggal 23:55 WIB.
+- **Prod (2-step gate, `.agents/rules/server-update-gate.md`):** Backup `pg_dump`, repair `--dry-run` dulu, `docker compose up -d --no-deps app` (jangan `latest` WAHA), `docker logs -f app` 2 menit, bandingkan 2 nomor sample WA Web vs LiveChat.
 
 ---
 
 ## 7. Risiko & Mitigasi
 
-* **WAHA down saat repair** → repair tetap aman (hanya DB), tapi `sync-health` akan `wahaStatus=DISCONNECTED` → tunda Fase 3/4 sampai `waha` healthy.
-* **Migrasi drift false alarm** → ikuti `docs/KNOWN_ISSUES.md#1` workaround `--from-url`, jangan `--from-migrations`.
-* **Duplicate `wa_message_id`** → `messageService.isDuplicateMessage` + `checkAndAttachOutboundDuplicate` sudah handle, Fase 3 reuse dedup yang sama.
+- **WAHA down saat repair** → tunda Fase 1-3, Fase 4-6 tetap jalan (UI only).
+- **Migrasi drift** → `--from-url` bukan `--from-migrations` (`KNOWN_ISSUES#1`).
+- **Goyang regresi** → feature flag `LIVECHAT_VIEWPORT_FIX=false`, revert 1 commit.
+- **Search regresi** → jika global search butuh `messages.content` like, index sudah ada (`knowledge_chunks_tenant_id_idx`).
 
 ---
 
-## 8. Notes untuk Eksekutor Selanjutnya
+## 8. Notes Eksekutor
 
-* **Lokasi plan ini:** `docs/IMPLEMENTATION_PLAN_LIVECHAT_WA_SYNC.md` (branch `plan/livechat-wa-sync`). Jangan edit `master` langsung — PR dari branch ini.
-* **File yang akan diubah:** `src/services/message.service.ts`, `src/services/conversation.service.ts`, `src/services/live-chat.service.ts`, `src/services/waha-history-sync.service.ts`, `src/routes/webhook.route.ts`, `src/routes/admin/livechat.subroute.ts`, `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx` (banner), tambah `src/scripts/check-livechat-sync.ts`, `repair-last-message-at.ts`, `cleanup-phantom-conversations.ts`, `reconcile-null-wa-ids.ts`.
-* **Cara lanjut:**
+- **File diubah Fase 4-6:** `packages/admin-dashboard/src/pages/tenant/LiveChatMonitor.tsx`, `src/utils/dateWib.ts` (baru), `components/livechat/Composer.tsx` (baru), `src/routes/admin/livechat.subroute.ts:320` (rate-limit typing).
+- **Cara lanjut:**
   ```bash
   git checkout plan/livechat-wa-sync
-  # Fase 0 dulu (read-only)
-  npx tsx src/scripts/check-livechat-sync.ts --json | jq
-  # Fase 1
-  # edit src/services/conversation.service.ts#328 touch flag, src/services/message.service.ts#343 effectiveMsgDate
+  # Fase 4+5+6 dulu
+  # edit LiveChatMonitor.tsx:483,1065,1105,1207,3167 + buat Composer.tsx + dateWib.ts
   npm run build && npm test
   npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script
-  git commit -m "fix(livechat): sync last_message_at to max(messages.created_at)"
+  git commit -m "fix(livechat): goyang typing + search decoupling + tanggal WIB"
   git push origin plan/livechat-wa-sync
   ```
-* **Jangan deploy Jumat malam / jam ramai iklan.** Staging wajib `waha` `WORKING` (`docker logs waha | grep SESSION_STATUS`).
-* **Jika butuh data live:** minta 1-2 `phone` contoh yang mismatch + `conversationId` (dari `GET /api/admin/live-chat/conversations?search=phone`), lalu `docker exec clinic-postgres psql -c "SELECT ..."` seperti §6. Tanpa itu, eksekusi blind.
-* **Catat ke `docs/KNOWN_ISSUES.md` setelah selesai:** tambah entry baru `#15 LiveChat WA sync mismatch` dengan `Status: fixed (2026-08-29)` + link commit, seperti entri `#14` & `#12`.
+- **Jangan deploy Jumat malam / jam iklan.**
+- **Catat ke `docs/KNOWN_ISSUES.md` setelah selesai:** tambah `#19 Goyang Typing` + `#20 Search Banner` + `#21 Tanggal WIB` dengan `Status: fixed (2026-09-01)`.
+
