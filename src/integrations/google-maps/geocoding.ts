@@ -14,6 +14,10 @@ const INDONESIAN_STOP_WORDS = new Set([
   'saya', 'kamu', 'dia', 'mereka', 'kita', 'kami', 'anda', 'bunda', 'bund', 'kak', 'kakak', 'min', 'admin', 'sis', 'gan', 'mbak', 'mas', 'ya', 'ampun', 'elah', 'yaelah', 'yaampun', 'kok', 'gitu', 'sih', 'dong', 'saja', 'aja', 'mahal', 'murah', 'ongkir', 'ongkirnya', 'tarif', 'tarifnya', 'biaya', 'biayanya', 'ongkos', 'ongkosnya', 'harga', 'harganya', 'berapa', 'berapaan', 'kena', 'hitung', 'itung', 'cek', 'info', 'tanya', 'lokasi', 'alamat', 'rumah', 'jalan', 'gang', 'no', 'nomor', 'rt', 'rw', 'kelurahan', 'kecamatan', 'kabupaten', 'kota', 'desa', 'dusun', 'provinsi', 'homecare', 'spa', 'treatment', 'massage', 'pijat', 'booking', 'reservasi', 'jadwal', 'hari', 'tanggal', 'bulan', 'tahun', 'jam', 'waktu', 'bisa', 'mau', 'ingin', 'akan', 'sudah', 'belum', 'tidak', 'bukan', 'ada', 'tidakada', 'gratis', 'free', 'promo', 'diskon', 'banget', 'sangat', 'sekali', 'itu', 'ini', 'yang', 'dari', 'ke', 'di', 'pada', 'untuk', 'dengan', 'atau', 'dan', 'adalah', 'seperti', 'kalau', 'kalo', 'jika', 'bila', 'karena', 'sebab', 'tetapi', 'tapi', 'namun', 'melayani', 'panggil', 'datang', 'selamat', 'pagi', 'siang', 'sore', 'malam', 'halo', 'hola', 'hei', 'helo', 'assalamualaikum', 'salam', 'permisi', 'terima', 'kasih', 'terimakasih', 'thank', 'you'
 ]);
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export interface ResolvedLocation {
   isPrecise: boolean;
   isFuzzyMatch?: boolean;
@@ -491,7 +495,8 @@ export class GeocodingService {
           const kelLower = entry.Kelurahan_Desa.toLowerCase().trim();
           if (kelLower.length < 3) return false;
           if (['sidoarjo', 'surabaya', 'kota', 'desa'].includes(kelLower)) return false;
-          return lower.includes(kelLower);
+          const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
+          return reg.test(lower);
         });
       }
     } catch (_) {}
@@ -500,7 +505,9 @@ export class GeocodingService {
     let matchedKecSubdistricts: any[] | null = null;
     let matchedKecName = '';
     for (const [kecKey, entries] of kecamatanMap.entries()) {
-      const isDirectMatch = cleanNorm === kecKey || lowerNorm.includes(kecKey);
+      const origKec = entries[0]?.Kecamatan ? entries[0].Kecamatan.toLowerCase() : kecKey;
+      const kecRegex = new RegExp(`\\b${escapeRegex(origKec)}\\b`, 'i');
+      const isDirectMatch = cleanNorm === kecKey || kecRegex.test(lower);
       const sim = !isDirectMatch ? getStringSimilarity(cleanNorm, kecKey) : 1.0;
       const kecThreshold = kecKey.length <= 4 ? 0.85 : 0.75;
       if (isDirectMatch || sim >= kecThreshold) {
@@ -519,7 +526,8 @@ export class GeocodingService {
     const hasSpecificKelurahanInText = matchedKecSubdistricts ? matchedKecSubdistricts.some(d => {
       const kelLower = d.Kelurahan_Desa.toLowerCase();
       const kecLower = d.Kecamatan.toLowerCase();
-      return kelLower !== kecLower && lower.includes(kelLower);
+      const reg = new RegExp(`\\b${escapeRegex(kelLower)}\\b`, 'i');
+      return kelLower !== kecLower && reg.test(lower);
     }) : false;
     const hasStreetAddressKeyword = /\b(jalan|jl|jln|gang|gg|perum|perumahan|komplek|kompleks|blok|no|nomor|residence|residences|regency|cluster|villa|apartemen|apartment|mansion|land|park|townhouse|village|garden|green|estate|kost|kos|graha|griya|wisma|dusun|rt|rw|pos|rumdis|tni|al|lanudal|asrama|kavling|kav)\b/i.test(lower);
 
@@ -751,7 +759,8 @@ export class GeocodingService {
           const kotaName = d.Kabupaten_Kota.toLowerCase();
           
           let score = 0;
-          if (cleanText.includes(kelName)) {
+          const kelRegex = new RegExp(`\\b${escapeRegex(kelName)}\\b`, 'i');
+          if (kelRegex.test(cleanText)) {
             score += 10;
             if (cleanText.startsWith(kelName)) {
               score += 5;

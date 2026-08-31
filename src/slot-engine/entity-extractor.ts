@@ -6,6 +6,51 @@ import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { extractJsonContent } from '../utils/json-extract';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import fs from 'fs';
+import path from 'path';
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+let cachedGazetteerAreas: Map<string, string> | null = null;
+
+function getGazetteerAreas(): Map<string, string> {
+  if (cachedGazetteerAreas) return cachedGazetteerAreas;
+  const map = new Map<string, string>();
+  try {
+    const candidates = [
+      path.join(process.cwd(), 'src', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+      path.join(process.cwd(), 'dist', 'config', 'surabaya_sidoarjo_subdistricts.json'),
+      path.resolve(__dirname, '../config/surabaya_sidoarjo_subdistricts.json'),
+      path.resolve(__dirname, '../../src/config/surabaya_sidoarjo_subdistricts.json'),
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        const data = JSON.parse(fs.readFileSync(c, 'utf-8'));
+        for (const item of data) {
+          if (item.Kelurahan_Desa) {
+            const raw = item.Kelurahan_Desa.trim();
+            const lower = raw.toLowerCase();
+            if (lower.length >= 3 && !['surabaya', 'sidoarjo', 'desa', 'kota'].includes(lower)) {
+              map.set(lower, raw);
+            }
+          }
+          if (item.Kecamatan) {
+            const raw = item.Kecamatan.trim();
+            const lower = raw.toLowerCase();
+            if (lower.length >= 3 && !['surabaya', 'sidoarjo', 'kota'].includes(lower)) {
+              map.set(lower, raw);
+            }
+          }
+        }
+        break;
+      }
+    }
+  } catch (_) {}
+  cachedGazetteerAreas = map;
+  return map;
+}
 
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
@@ -130,35 +175,32 @@ export class EntityExtractor {
       .replace(/\s+(?:aja|saja|bund|bunda|kak|sis|ya|kakak|mba|mbak|bu|bidan)$/i, '')
       .trim();
 
-    const KNOWN_SURABAYA_SIDOARJO_AREAS = [
-      'berbek', 'rungkut', 'jambangan', 'ketintang', 'tropodo', 'sedati', 'sukodono', 'candi',
-      'taman', 'gayungan', 'wonokromo', 'gubeng', 'wiyung', 'kenjeran', 'sawahan', 'karangpilang',
-      'sukolilo', 'mulyorejo', 'benowo', 'pakal', 'lakarsantri', 'sambikerep', 'dukuh pakis',
-      'tegalsari', 'genteng', 'bubutan', 'simokerto', 'semampir', 'pabean cantikan', 'krembangan',
-      'bulak', 'tambaksari', 'waru', 'gedangan', 'buduran', 'krian', 'driyorejo', 'pepelegi',
-      'deltasari', 'pondok tjandra', 'medokan', 'gunung anyar', 'panjang jiwo', 'tenggilis',
-      'kutisari', 'kendangsari', 'siwalankerto', 'jemursari', 'margorejo', 'menanggal', 'kebonsari',
-      'pagesangan', 'karah', 'keputih', 'gebang', 'klampis', 'manyar', 'kertajaya', 'dharmahusada',
-      'baratajaya', 'ngagel', 'bratang', 'kalirungkut', 'rungkut kidul', 'rungkut tengah', 'rungkut menanggal',
-      'penjaringan sari', 'wonorejo', 'rungkut asri', 'puri surya jaya', 'taman pinang', 'kahuripan'
-    ];
+    const hasStreetDetailKeywords = /\b(jalan|jl|jln|gang|gg|blok|no|nomor|rt|rw)\b/i.test(normalizedLower);
 
-    if (!result.locationText) {
-      for (const area of KNOWN_SURABAYA_SIDOARJO_AREAS) {
-        if (
-          cleanedLocationCandidate === area ||
-          cleanedLocationCandidate.startsWith(area + ' ') ||
-          cleanedLocationCandidate.endsWith(' ' + area) ||
-          normalizedLower.includes(`di ${area}`) ||
-          normalizedLower.includes(`ke ${area}`) ||
-          normalizedLower.includes(`daerah ${area}`)
-        ) {
-          result.locationText = area.charAt(0).toUpperCase() + area.slice(1);
-          result.intents = result.intents || [];
-          if (!result.intents.includes('provide_location')) {
-            result.intents.push('provide_location');
+    if (!result.locationText && !hasStreetDetailKeywords) {
+      const gazetteer = getGazetteerAreas();
+      if (cleanedLocationCandidate && gazetteer.has(cleanedLocationCandidate)) {
+        result.locationText = gazetteer.get(cleanedLocationCandidate)!;
+        result.intents = result.intents || [];
+        if (!result.intents.includes('provide_location')) {
+          result.intents.push('provide_location');
+        }
+      } else {
+        for (const [areaLower, areaOrig] of gazetteer.entries()) {
+          if (
+            cleanedLocationCandidate.startsWith(areaLower + ' ') ||
+            cleanedLocationCandidate.endsWith(' ' + areaLower) ||
+            normalizedLower.includes(`di ${areaLower}`) ||
+            normalizedLower.includes(`ke ${areaLower}`) ||
+            normalizedLower.includes(`daerah ${areaLower}`)
+          ) {
+            result.locationText = areaOrig;
+            result.intents = result.intents || [];
+            if (!result.intents.includes('provide_location')) {
+              result.intents.push('provide_location');
+            }
+            break;
           }
-          break;
         }
       }
     }
