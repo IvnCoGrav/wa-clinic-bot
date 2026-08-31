@@ -154,7 +154,7 @@ export async function apiRequest<T = any>(
     }
   }
 
-  const timeoutMs = options.timeoutMs ?? 15000; // Default 15s timeout
+  const timeoutMs = options.timeoutMs ?? (isGet ? 10000 : 15000); // 10s default timeout untuk GET interaktif (agar cepat retry di mobile)
   const needsJsonBody = ['POST', 'PUT', 'PATCH'].includes(method);
   
   const headers: Record<string, string> = {
@@ -177,12 +177,21 @@ export async function apiRequest<T = any>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Jika caller mengirimkan signal sendiri, hubungkan dengan timeout abort controller
+  if (options.signal) {
+    if (options.signal.aborted) {
+      controller.abort();
+    } else {
+      options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+  }
+
   const mergedOptions: RequestInit = {
     ...options,
     cache: (options as any).cache ?? 'no-store',
     credentials: 'include',
     headers,
-    signal: options.signal || controller.signal,
+    signal: controller.signal,
     ...(body !== undefined ? { body } : {}),
   };
 
@@ -217,7 +226,17 @@ export async function apiRequest<T = any>(
   } catch (err: any) {
     clearTimeout(timeoutId);
 
-    // Stale-While-Revalidate Fallback: Jika koneksi sempat drop / sleep, gunakan data cache yang ada
+    // Auto-retry 1x on network transient abort / failure sebelum fallback ke cache lama
+    const retries = options.retryCount ?? 0;
+    if (retries < 1 && isGet && (err.name === 'AbortError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))) {
+      try {
+        return await apiRequest<T>(endpoint, { ...options, retryCount: retries + 1, timeoutMs: 12000 });
+      } catch (retryErr) {
+        // Lanjutkan ke stale fallback jika retry juga gagal
+      }
+    }
+
+    // Stale-While-Revalidate Fallback: Jika koneksi drop di jalan, gunakan data cache yang ada
     if (isGet) {
       const fallbackCache = getCachedApiResponse<T>(url);
       if (fallbackCache) {
@@ -226,14 +245,8 @@ export async function apiRequest<T = any>(
       }
     }
 
-    // Auto-retry 1x on network transient abort
-    const retries = options.retryCount ?? 0;
-    if (retries < 1 && isGet && (err.name === 'AbortError' || err.message?.includes('Failed to fetch'))) {
-      return apiRequest<T>(endpoint, { ...options, retryCount: retries + 1, timeoutMs: 20000 });
-    }
-
     if (err.name === 'AbortError') {
-      throw new Error(`Koneksi server/database lambat (Timeout ${Math.round(timeoutMs / 1000)}s). Silakan coba lagi.`);
+      throw new Error(`Koneksi internet lambat (Timeout ${Math.round(timeoutMs / 1000)}s). Silakan coba lagi.`);
     }
     throw err;
   }

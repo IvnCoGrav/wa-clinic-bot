@@ -4,7 +4,31 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-#### Feature & Fix — Automatic Distance & Ongkir Capture: Passive Background Enrichment on Human Handling, Google Maps URL Resolver, Admin Outbound Chat Distance Parser, & Lifecycle Auto-Calculation (`human-background-enrichment.service.ts`, `google-maps-url-resolver.ts`, `admin-chat-distance-parser.ts`, `reservation-lifecycle.service.ts`, `webhook.route.ts`, `reservations.subroute.ts`) (2026-08-30)
+#### Fix & Optimization — Mobile Network Resilience & Fast Reconnect: SSE Watchdog 18s, Mobile Online/Visibility Auto-Recovery, AbortController In-Flight Cancellation, Adaptive API Timeout, & Caddy Instant Flush (`liveChatSse.ts`, `api.ts`, `LiveChatMonitor.tsx`, `Caddyfile`) (2026-08-31)
+
+- **Latar Belakang & Gejala:**
+  - Admin klinik yang sedang berada di jalan (*mobile on-the-road*) mengalami loading sangat lama (*stalled / freeze*) saat mengakses panel Live Chat dan daftar percakapan di jaringan seluler (Android/iOS). Setelah menunggu lama, koneksi tiba-tiba instan kembali normal.
+- **Akar Masalah (Root Cause):**
+  1. **Mobile Handover & HTTP/3 UDP Stalling**: Pada jaringan seluler yang berpindah BTS, paket UDP HTTP/3 mengalami silent packet drop. Browser menunggu socket hang tanpa segera memutus koneksi hingga timeout browser (~30-60 detik).
+  2. **SSE Watchdog 35s & Missing Wakeup Listener**: Watchdog EventSource sebelumnya menunggu 35 detik dan tidak mendengarkan event `online` atau `visibilitychange` (layar HP dibuka kembali), sehingga saat koneksi seluler pulih, SSE tidak langsung reconnect.
+  3. **No In-Flight Request Cancellation on Search**: Pengetikan keyword search atau pagination di koneksi seluler lambat menumpuk request HTTP tanpa dibatalkan (`AbortController`), menyebabkan antrean respon macet.
+  4. **Caddy Reverse Proxy Buffer on SSE**: Caddy tidak memiliki konfigurasi eksplisit `flush_interval -1` dan `keepalive` teroptimasi untuk route `/api/admin/live-chat/events`.
+- **Solusi & Perbaikan Komprehensif:**
+  1. **SSE Fast Reconnect & Mobile Network Listeners (`liveChatSse.ts`)**:
+     - Mempersingkat watchdog timeout dari 35s ke 18s (sinkron dengan interval ping server 15s).
+     - Menambahkan listener `window.addEventListener('online')` dan `document.addEventListener('visibilitychange')` untuk reconnect instan saat sinyal pulih atau layar HP di-unlock.
+  2. **Adaptive Timeout & Client-Side Stale Fallback (`api.ts`)**:
+     - Menurunkan default timeout GET interaktif menjadi 10s dengan auto-retry 1x yang cepat sebelum menyajikan stale-while-revalidate cache.
+     - Menyambungkan `AbortController.signal` secara konsisten pada setiap request API.
+  3. **In-Flight Cancellation pada Live Chat Search & Pagination (`LiveChatMonitor.tsx`)**:
+     - Mengintegrasikan `loadChatsAbortControllerRef` agar setiap pencarian baru atau pergantian filter otomatis membatalkan request sebelumnya yang masih berjalan di jaringan lambat.
+  4. **Caddy Reverse Proxy Buffer Bypass (`Caddyfile`)**:
+     - Menambahkan blok khusus `@sse path /api/admin/live-chat/events` dengan `flush_interval -1` dan `transport http { keepalive 60s }` untuk memastikan streaming real-time tidak tertahan buffer proxy.
+- **Pengujian & Verifikasi:**
+  - Vitest test suite (`npm test`): **PASS (197 files, 1528 passed)**.
+  - Frontend admin dashboard build (`npm run build`): **PASS (0 errors)**.
+  - TypeScript backend build (`npm run build`): **PASS (0 errors)**.
+
 
 - **Latar Belakang & Gejala:**
   - Kolom jarak (`distance_km`) dan ongkir seringkali tidak terisi (bernilai `null` / `0 km`) pada data reservasi dan profil pelanggan, khususnya saat percakapan ditangani secara manual oleh Admin CS (*Human Handling*) atau saat percakapan diberi label `hold` / `admin`.
