@@ -668,6 +668,12 @@ export class FollowUpService {
       throw new Error('Follow-up ini sudah pernah dikirim sebelumnya.');
     }
 
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      throw new Error('Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).');
+    }
+
     console.log(`[FollowUp Service] Manual Send Triggered by Admin for Follow-Up #${id} (${fu.customer?.phone})`);
     const success = await this.executeFollowUp(fu, tenantId);
     return success;
@@ -857,6 +863,13 @@ export class FollowUpService {
    *   Jika AUTO_FOLLOWUP_ENABLED !== 'true', status PENDING menunggu admin mengklik "Jadwalkan" di Dashboard.
    */
   public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      console.log(`[FollowUp Worker] Outbound Cut-Off is ACTIVE for tenant ${tenantId}. Skipping follow-up execution until cut-off is deactivated.`);
+      return 0;
+    }
+
     const targetStatuses = process.env.AUTO_FOLLOWUP_ENABLED === 'true'
       ? ['QUEUED', 'PENDING']
       : ['QUEUED'];
@@ -1016,6 +1029,13 @@ export class FollowUpService {
    */
   public async executeFollowUp(fu: any, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
     try {
+      const { whatsappProviderService } = await import('./whatsapp-provider.service');
+      const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+      if (isCutOff) {
+        console.warn(`[FollowUp Service] Cannot execute follow-up #${fu.id} because Outbound Cut-Off is ACTIVE.`);
+        return false;
+      }
+
       if (!fu.customer || !fu.customer.phone) {
         await prisma.followUp.update({
           where: { id: fu.id },

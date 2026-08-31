@@ -53,6 +53,12 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async deleteMessage(chatId: string, messageId: string, everyone = true): Promise<{ success: boolean; error?: string }> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      return { success: false, error: 'Koneksi internal bot ke WAHA sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
+    }
+
     const targetChatId = this.toChatId(chatId);
     try {
       const ok = await this.client.deleteMessage(targetChatId, messageId, everyone);
@@ -63,6 +69,12 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async editMessage(chatId: string, messageId: string, newText: string): Promise<{ success: boolean; error?: string }> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      return { success: false, error: 'Koneksi internal bot ke WAHA sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
+    }
+
     const targetChatId = this.toChatId(chatId);
     try {
       const ok = await this.client.editMessage(targetChatId, messageId, newText);
@@ -73,6 +85,17 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async sendReactionMessage(to: string, messageId: string, emoji: string): Promise<SendResult> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) {
+      console.warn(`[WAHA CUT-OFF ACTIVE] Outbound reaction message to ${to} blocked by internal safety cut-off.`);
+      return {
+        success: false,
+        provider: 'WAHA',
+        error: { code: 'WAHA_INTERNAL_CUTOFF', message: 'Koneksi internal bot ke WAHA sedang diputus oleh Administrator (Cut-Off Darurat aktif).' },
+      };
+    }
+
     const targetChatId = this.toChatId(to);
     try {
       const ok = await this.client.sendReaction(targetChatId, messageId, emoji);
@@ -146,6 +169,10 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   }
 
   async markAsRead(chatId: string, messageId?: string): Promise<void> {
+    const { whatsappProviderService } = await import('../../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(this.tenantId);
+    if (isCutOff) return;
+
     try {
       await this.client.sendSeen(chatId, messageId);
     } catch { /* best-effort */ }
