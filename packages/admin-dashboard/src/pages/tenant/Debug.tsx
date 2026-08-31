@@ -659,18 +659,7 @@ function ConversationsSection() {
 interface LlmLogEntry {
   id: string;
   timestamp: string;
-  flowType:
-    | 'CHATBOT_AUTO'
-    | 'COPILOT_DRAFT'
-    | 'CLINICAL_ESCALATION'
-    | 'REASONING_ONLY'
-    | 'NLU_CLASSIFICATION'
-    | 'AI_ROUTER'
-    | 'AI_VERIFIER'
-    | 'PHRASING'
-    | 'SLOT_EXTRACTOR'
-    | 'SLOT_GENERATOR'
-    | 'SLOT_FAST_FAQ';
+  flowType: 'SLOT_EXTRACTOR' | 'SLOT_GENERATOR' | 'SLOT_FAST_FAQ';
   customerPhone?: string;
   customerName?: string;
   customerInput: string;
@@ -706,26 +695,12 @@ interface GroupedCustomerLlmLogs {
 
 const getFlowBadge = (flowType: string) => {
   switch (flowType) {
-    case 'NLU_CLASSIFICATION':
-      return { label: '1. NLU Intent & Entitas', short: 'NLU', icon: '🔍', cls: 'bg-cyan-50 text-cyan-800 border-cyan-200' };
-    case 'AI_ROUTER':
-      return { label: '2. AI Router Decision', short: 'ROUTER', icon: '🧭', cls: 'bg-indigo-50 text-indigo-800 border-indigo-200' };
-    case 'CHATBOT_AUTO':
-      return { label: '3. RAG Generator', short: 'GENERATOR', icon: '🤖', cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
-    case 'AI_VERIFIER':
-      return { label: '4. AI QC Verifier', short: 'QC VERIFIER', icon: '🛡️', cls: 'bg-amber-50 text-amber-900 border-amber-300' };
-    case 'COPILOT_DRAFT':
-      return { label: 'AI Copilot Draft', short: 'COPILOT', icon: '💡', cls: 'bg-purple-50 text-purple-800 border-purple-200' };
-    case 'PHRASING':
-      return { label: '5. Persona Phrasing', short: 'PHRASING', icon: '✍️', cls: 'bg-teal-50 text-teal-800 border-teal-200' };
     case 'SLOT_EXTRACTOR':
-      return { label: 'Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 text-violet-800 border-violet-200' };
+      return { label: '1. Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 text-violet-800 border-violet-200' };
     case 'SLOT_GENERATOR':
-      return { label: 'Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200' };
+      return { label: '2. Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200' };
     case 'SLOT_FAST_FAQ':
       return { label: 'Fast-Track FAQ (1-Call)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 text-amber-900 border-amber-300' };
-    case 'CLINICAL_ESCALATION':
-      return { label: 'Clinical Escalation', short: 'ESCALATE', icon: '🚨', cls: 'bg-rose-50 text-rose-800 border-rose-200' };
     default:
       return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 text-slate-800 border-slate-200' };
   }
@@ -945,7 +920,7 @@ function LlmLogsSection() {
             </span>
           </div>
           <p className="text-xs text-[#667781] mt-0.5">
-            Observability alur penuh: <span className="font-semibold text-[#111b21]">NLU Intent ➔ AI Router ➔ RAG Generator ➔ QC Verifier</span>.
+            Observability slot-engine: <span className="font-semibold text-[#111b21]">Slot Extractor ➔ Slot Generator / Fast FAQ</span>.
           </p>
         </div>
 
@@ -1028,12 +1003,12 @@ function LlmLogsSection() {
         </div>
 
         <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
-            <ShieldCheck size={15} />
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+            <Zap size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">QC Verifier Active</p>
-            <p className="text-base font-extrabold text-amber-900">4 Pilar Aktif</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Slot Engine</p>
+            <p className="text-base font-extrabold text-emerald-900">Extractor → Generator</p>
           </div>
         </div>
       </div>
@@ -1044,12 +1019,9 @@ function LlmLogsSection() {
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'all', label: 'Semua Flow' },
-            { id: 'NLU_CLASSIFICATION', label: '🔍 1. NLU Intent' },
-            { id: 'AI_ROUTER', label: '🧭 2. AI Router' },
-            { id: 'CHATBOT_AUTO', label: '🤖 3. Generator' },
-            { id: 'AI_VERIFIER', label: '🛡️ 4. QC Verifier' },
-            { id: 'PHRASING', label: '✍️ 5. Phrasing' },
-            { id: 'COPILOT_DRAFT', label: '💡 Copilot' },
+            { id: 'SLOT_EXTRACTOR', label: '🎰 Slot Extractor' },
+            { id: 'SLOT_GENERATOR', label: '🎯 Slot Generator' },
+            { id: 'SLOT_FAST_FAQ', label: '⚡ Fast FAQ' },
           ].map((f) => (
             <button
               key={f.id}
@@ -1184,7 +1156,6 @@ function LlmLogsSection() {
                         const isBubbleExpanded = !!expandedBubbles[bubble.correlationId];
                         const totalBubbleDuration = bubble.aiCalls.reduce((acc, c) => acc + (c.durationMs || 0), 0);
                         const lastModel = bubble.aiCalls[bubble.aiCalls.length - 1]?.modelUsed;
-                        const qcStep = bubble.aiCalls.find((c) => c.flowType === 'AI_VERIFIER');
 
                         return (
                           <div
@@ -1246,15 +1217,7 @@ function LlmLogsSection() {
                                   );
                                 })}
 
-                                {qcStep && (
-                                  <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                                    qcStep.reasoning?.includes('VIOLATION')
-                                      ? 'bg-amber-50 text-amber-900 border-amber-300'
-                                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                  }`}>
-                                    {qcStep.reasoning?.includes('VIOLATION') ? '⚠️ QC: Terkoreksi' : '🛡️ QC: Lolos Aman'}
-                                  </span>
-                                )}
+
                               </div>
                             </div>
 
@@ -1324,225 +1287,7 @@ function LlmLogsSection() {
                                         </div>
                                       </div>
 
-                                      {/* STEP BODY BY FLOW TYPE */}
-
-                                      {/* FLOW TYPE 1: NLU_CLASSIFICATION */}
-                                      {call.flowType === 'NLU_CLASSIFICATION' && (
-                                        <div className="space-y-2.5 text-xs">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block mb-1">
-                                                💬 Input Teks Customer
-                                              </span>
-                                              <p className="text-sky-950 font-medium">{call.customerInput || '-'}</p>
-                                            </div>
-
-                                            <div className="bg-cyan-50/70 border border-cyan-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-cyan-800 uppercase tracking-wider block mb-1">
-                                                🎯 Intent &amp; Entitas Terdeteksi
-                                              </span>
-                                              <p className="text-cyan-950 font-bold">{call.finalReply || '-'}</p>
-                                              {call.groundTruthUsed?.extractedEntities && (
-                                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                                  {Object.entries(call.groundTruthUsed.extractedEntities).map(([k, v]) => (
-                                                    <span key={k} className="text-[10px] font-mono bg-white text-cyan-900 px-1.5 py-0.5 rounded border border-cyan-200">
-                                                      {k}: {String(v)}
-                                                    </span>
-                                                  ))}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {call.reasoning && (
-                                            <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block mb-1">
-                                                🧠 NLU Reasoning Note
-                                              </span>
-                                              <p className="text-purple-950 text-[11px] font-mono">{call.reasoning}</p>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* FLOW TYPE 2: AI_ROUTER */}
-                                      {call.flowType === 'AI_ROUTER' && (
-                                        <div className="space-y-2.5 text-xs">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block mb-1">
-                                                💬 Snapshot State &amp; Pesan
-                                              </span>
-                                              <p className="text-sky-950 font-medium">{call.customerInput || '-'}</p>
-                                            </div>
-
-                                            <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block mb-1">
-                                                🧭 Keputusan Rute AI
-                                              </span>
-                                              <p className="text-indigo-950 font-bold">{call.finalReply || '-'}</p>
-                                              {call.groundTruthUsed?.shadowMatch !== undefined && (
-                                                <span className={`inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                                                  call.groundTruthUsed.shadowMatch
-                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                                    : 'bg-amber-50 text-amber-900 border-amber-200'
-                                                }`}>
-                                                  Shadow Mode: {call.groundTruthUsed.shadowMatch ? '✅ Cocok dengan Rule' : '⚠️ Berbeda dari Rule'}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {call.reasoning && (
-                                            <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-purple-800 uppercase tracking-wider block mb-1">
-                                                🧠 Alasan Rute (Reasoning)
-                                              </span>
-                                              <p className="text-purple-950 text-[11px] font-mono">{call.reasoning}</p>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* FLOW TYPE 3: CHATBOT_AUTO & COPILOT_DRAFT */}
-                                      {(call.flowType === 'CHATBOT_AUTO' || call.flowType === 'COPILOT_DRAFT') && (
-                                        <div className="space-y-2.5 text-xs">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block mb-1">
-                                                💬 Pertanyaan / Prompt Masuk
-                                              </span>
-                                              <p className="text-sky-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
-                                            </div>
-
-                                            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3">
-                                              <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
-                                                📚 Ground Truth &amp; KB Chunks
-                                              </span>
-                                              {call.groundTruthUsed?.contextChunks ? (
-                                                <div className="space-y-1">
-                                                  <span className="text-[11px] font-semibold text-amber-900">
-                                                    {call.groundTruthUsed.contextChunks.length} Referensi KB Digunakan:
-                                                  </span>
-                                                  <div className="flex flex-wrap gap-1">
-                                                    {call.groundTruthUsed.contextChunks.map((chunk: string, idx: number) => (
-                                                      <span key={idx} className="text-[10px] font-mono bg-white text-amber-900 px-1.5 py-0.5 rounded border border-amber-200">
-                                                        {chunk}
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <p className="text-amber-800/80 italic text-[11px]">Konteks standar persona.</p>
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {/* Full AI Reasoning & Chain-of-Thought */}
-                                          <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 space-y-2">
-                                            <div className="flex items-center justify-between border-b border-purple-200/60 pb-1.5">
-                                              <span className="text-[10px] font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                                                <BrainCircuit size={13} className="text-purple-600" />
-                                                <span>🔍 AI Reasoning &amp; Chain-of-Thought Lengkap</span>
-                                              </span>
-                                              <button
-                                                type="button"
-                                                onClick={() => copyText(call.id, displayReasoning)}
-                                                className="text-[11px] font-semibold text-purple-700 hover:text-purple-950 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs"
-                                              >
-                                                {copiedId === call.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                                                <span>{copiedId === call.id ? 'Tersalin!' : 'Salin Reasoning'}</span>
-                                              </button>
-                                            </div>
-                                            <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-64">
-                                              {displayReasoning}
-                                            </pre>
-                                          </div>
-
-                                          {/* Final Reply */}
-                                          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
-                                            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                                              ✉️ Balasan Akhir (Outbound Reply)
-                                            </span>
-                                            <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* FLOW TYPE 4: AI_VERIFIER (QC) */}
-                                      {call.flowType === 'AI_VERIFIER' && (
-                                        <div className="space-y-2.5 text-xs">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            {/* QC Status & Violations */}
-                                            <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
-                                                🛡️ Evaluasi 4 Pilar QC Verifier
-                                              </span>
-                                              <p className="text-amber-950 font-bold text-[11px]">{call.reasoning || '-'}</p>
-                                            </div>
-
-                                            {/* Final QC Verdict Reply */}
-                                            <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                                                ✉️ Output Draf Terverifikasi / Terkoreksi
-                                              </span>
-                                              <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
-                                            </div>
-                                          </div>
-
-                                          {/* Raw QC Reasoning */}
-                                          {call.rawReasoning && (
-                                            <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3 space-y-1.5">
-                                              <div className="flex items-center justify-between border-b border-purple-200/60 pb-1">
-                                                <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider">
-                                                  🔍 Raw QC JSON Output
-                                                </span>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => copyText(`${call.id}_raw`, call.rawReasoning || '')}
-                                                  className="text-[10px] font-semibold text-purple-700 flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-purple-200"
-                                                >
-                                                  {copiedId === `${call.id}_raw` ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
-                                                  <span>Salin</span>
-                                                </button>
-                                              </div>
-                                              <pre className="text-purple-950 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-48">
-                                                {call.rawReasoning}
-                                              </pre>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* FLOW TYPE 5: PHRASING */}
-                                      {call.flowType === 'PHRASING' && (
-                                        <div className="space-y-2.5 text-xs">
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            {/* Acuan & Fakta Template */}
-                                            <div className="bg-teal-50/70 border border-teal-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider block">
-                                                📝 Template Acuan & Fakta
-                                              </span>
-                                              <p className="text-teal-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
-                                              {call.groundTruthUsed && (
-                                                <div className="pt-1.5 border-t border-teal-200/60 text-[10px] text-teal-800 font-mono">
-                                                  Fakta: {JSON.stringify(call.groundTruthUsed)}
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            {/* Output Variasi Natural */}
-                                            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                                                ✍️ Hasil Variasi Natural Persona
-                                              </span>
-                                              <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* FLOW TYPE: SLOT_EXTRACTOR, SLOT_GENERATOR & SLOT_FAST_FAQ */}
+                                      {/* STEP BODY — SLOT ENGINE ONLY */}
                                       {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -1608,14 +1353,8 @@ function LlmLogsSection() {
                                         </div>
                                       )}
 
-                                      {/* GENERIC FALLBACK FOR OTHER FLOW TYPES */}
-                                      {call.flowType !== 'NLU_CLASSIFICATION' &&
-                                        call.flowType !== 'AI_ROUTER' &&
-                                        call.flowType !== 'CHATBOT_AUTO' &&
-                                        call.flowType !== 'COPILOT_DRAFT' &&
-                                        call.flowType !== 'AI_VERIFIER' &&
-                                        call.flowType !== 'PHRASING' &&
-                                        call.flowType !== 'SLOT_EXTRACTOR' &&
+                                      {/* GENERIC FALLBACK — legacy rehydrate */}
+                                      {call.flowType !== 'SLOT_EXTRACTOR' &&
                                         call.flowType !== 'SLOT_GENERATOR' &&
                                         call.flowType !== 'SLOT_FAST_FAQ' && (
                                           <div className="space-y-2.5 text-xs">
