@@ -308,6 +308,7 @@ export const LiveChatMonitor: React.FC = () => {
       return null;
     }
   });
+  const selectedChat = chats.find((c) => c.conversationId === selectedId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const activeThreadRequestIdRef = useRef(0);
@@ -341,7 +342,7 @@ export const LiveChatMonitor: React.FC = () => {
   const [clinicServices, setClinicServices] = useState<any[]>([]);
   const [selectedImage, setSelectedImage] = useState<{ file: File; preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const chatInputRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLDivElement | null>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [editingMsg, setEditingMsg] = useState<{ id: string; content: string } | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -485,13 +486,21 @@ function loadConversationDraft(convId: string): string {
     const key = `${DRAFT_KEY_PREFIX}${convId}`;
     const raw = localStorage.getItem(key);
     if (!raw) return '';
-    const parsed = JSON.parse(raw);
-    // Bertahan 24 jam (86.400.000 ms)
-    if (Date.now() - (parsed.timestamp || 0) > 86400000) {
-      localStorage.removeItem(key);
-      return '';
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        // Bertahan 24 jam (86.400.000 ms)
+        if (Date.now() - (parsed.timestamp || 0) > 86400000) {
+          localStorage.removeItem(key);
+          return '';
+        }
+        return parsed.text || '';
+      }
+    } catch {
+      // Fallback jika tersimpan format string biasa
+      return raw;
     }
-    return parsed.text || '';
+    return '';
   } catch (_) {
     return '';
   }
@@ -838,17 +847,34 @@ function clearConversationDraft(convId: string) {
     }
   };
 
+  const setChatInputRef = (node: HTMLDivElement | null) => {
+    chatInputRef.current = node;
+    if (node && selectedIdRef.current) {
+      const draft = loadConversationDraft(selectedIdRef.current);
+      if (draft && node.innerText !== draft) {
+        node.innerText = draft;
+        replyTextRef.current = draft;
+        setHasReplyText(true);
+      }
+    }
+  };
+
   useEffect(() => {
     selectedIdRef.current = selectedId;
     setReplyingTo(null);
     setEmojiPickerOpen(false);
 
     // Muat draft tersimpan 24 jam untuk percakapan ini jika ada
-    const draft = selectedId ? loadConversationDraft(selectedId) : '';
-    replyTextRef.current = draft;
-    setHasReplyText(draft.trim().length > 0);
-    if (chatInputRef.current) {
-      chatInputRef.current.innerText = draft;
+    if (selectedId) {
+      const draft = loadConversationDraft(selectedId);
+      replyTextRef.current = draft;
+      setHasReplyText(draft.trim().length > 0);
+      if (chatInputRef.current && chatInputRef.current.innerText !== draft) {
+        chatInputRef.current.innerText = draft;
+      }
+    } else {
+      replyTextRef.current = '';
+      setHasReplyText(false);
     }
 
     try {
@@ -877,7 +903,28 @@ function clearConversationDraft(convId: string) {
       setMessages([]);
       setIsThreadLoading(false);
     }
-  }, [selectedId]);
+  }, [selectedId, selectedChat?.conversationId]);
+
+  // Auto-save draft saat berpindah menu (unmount) atau meninggalkan halaman
+  useEffect(() => {
+    const saveCurrentDraft = () => {
+      if (selectedIdRef.current && chatInputRef.current) {
+        const currentText = chatInputRef.current.innerText || replyTextRef.current || '';
+        if (currentText.trim()) {
+          saveConversationDraft(selectedIdRef.current, currentText);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', saveCurrentDraft);
+    window.addEventListener('pagehide', saveCurrentDraft);
+
+    return () => {
+      saveCurrentDraft();
+      window.removeEventListener('beforeunload', saveCurrentDraft);
+      window.removeEventListener('pagehide', saveCurrentDraft);
+    };
+  }, []);
 
   // Load gateway capability & available customer labels on mount
   useEffect(() => {
@@ -2009,6 +2056,9 @@ function clearConversationDraft(convId: string) {
         if (chatInputRef.current) {
           chatInputRef.current.innerText = res.data.draftText;
         }
+        if (selectedId) {
+          saveConversationDraft(selectedId, res.data.draftText);
+        }
         toast('Draf jawaban AI berhasil dibuat! Anda dapat mengedit sebelum mengirim.', 'success');
       } else {
         toast('Gagal mendapatkan saran balasan AI.', 'error');
@@ -2132,6 +2182,9 @@ function clearConversationDraft(convId: string) {
       chatInputRef.current.innerText = text;
       replyTextRef.current = text;
       setHasReplyText(true);
+      if (selectedIdRef.current) {
+        saveConversationDraft(selectedIdRef.current, text);
+      }
       chatInputRef.current.focus();
     }
   };
@@ -2401,8 +2454,6 @@ function clearConversationDraft(convId: string) {
       img.onerror = () => reject(new Error('Gagal membuat thumbnail.'));
       img.src = dataUrl;
     });
-
-  const selectedChat = chats.find((c) => c.conversationId === selectedId);
 
   const getChatLabel = (chat: LiveChatItem): 'medical_concern' | 'unresolved_faq' | 'human_request' | 'all' => {
     if (chat.escalationReason === 'medical_concern') return 'medical_concern';
@@ -3905,7 +3956,7 @@ function clearConversationDraft(convId: string) {
                     </div>
 
                     <div
-                      ref={chatInputRef}
+                      ref={setChatInputRef}
                       contentEditable="plaintext-only"
                       role="textbox"
                       aria-multiline="true"
