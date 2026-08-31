@@ -35,7 +35,7 @@ describe('getFallbackChain', () => {
   });
 
   it('env kosong → DEFAULT_FALLBACK_CHAIN (bukan rantai kosong)', () => {
-    expect(getFallbackChain()).toEqual(['MiniMax-M2.7-highspeed', 'mimo-v2.5', 'qwen3.7-flash-2026-07-15', 'deepseek-v4-flash']);
+    expect(getFallbackChain()).toEqual(['gpt-4o-mini', 'deepseek-v4-flash', 'MiniMax-M2.7-highspeed', 'mimo-v2.5']);
   });
 });
 
