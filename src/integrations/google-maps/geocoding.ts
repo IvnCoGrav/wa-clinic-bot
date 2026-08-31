@@ -8,15 +8,12 @@ import { CircuitBreaker } from '../../utils/circuit-breaker';
 import { measure } from '../../utils/timer';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../llm/model-fallback';
 import { findPopularLandmark } from '../../config/landmarks';
+import { escapeRegex } from '../../utils/gazetteer';
 dotenv.config();
 
 const INDONESIAN_STOP_WORDS = new Set([
   'saya', 'kamu', 'dia', 'mereka', 'kita', 'kami', 'anda', 'bunda', 'bund', 'kak', 'kakak', 'min', 'admin', 'sis', 'gan', 'mbak', 'mas', 'ya', 'ampun', 'elah', 'yaelah', 'yaampun', 'kok', 'gitu', 'sih', 'dong', 'saja', 'aja', 'mahal', 'murah', 'ongkir', 'ongkirnya', 'tarif', 'tarifnya', 'biaya', 'biayanya', 'ongkos', 'ongkosnya', 'harga', 'harganya', 'berapa', 'berapaan', 'kena', 'hitung', 'itung', 'cek', 'info', 'tanya', 'lokasi', 'alamat', 'rumah', 'jalan', 'gang', 'no', 'nomor', 'rt', 'rw', 'kelurahan', 'kecamatan', 'kabupaten', 'kota', 'desa', 'dusun', 'provinsi', 'homecare', 'spa', 'treatment', 'massage', 'pijat', 'booking', 'reservasi', 'jadwal', 'hari', 'tanggal', 'bulan', 'tahun', 'jam', 'waktu', 'bisa', 'mau', 'ingin', 'akan', 'sudah', 'belum', 'tidak', 'bukan', 'ada', 'tidakada', 'gratis', 'free', 'promo', 'diskon', 'banget', 'sangat', 'sekali', 'itu', 'ini', 'yang', 'dari', 'ke', 'di', 'pada', 'untuk', 'dengan', 'atau', 'dan', 'adalah', 'seperti', 'kalau', 'kalo', 'jika', 'bila', 'karena', 'sebab', 'tetapi', 'tapi', 'namun', 'melayani', 'panggil', 'datang', 'selamat', 'pagi', 'siang', 'sore', 'malam', 'halo', 'hola', 'hei', 'helo', 'assalamualaikum', 'salam', 'permisi', 'terima', 'kasih', 'terimakasih', 'thank', 'you'
 ]);
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 export interface ResolvedLocation {
   isPrecise: boolean;
@@ -762,16 +759,19 @@ export class GeocodingService {
           const kelRegex = new RegExp(`\\b${escapeRegex(kelName)}\\b`, 'i');
           if (kelRegex.test(cleanText)) {
             score += 10;
-            if (cleanText.startsWith(kelName)) {
+            const startsWithRegex = new RegExp(`^${escapeRegex(kelName)}\\b`, 'i');
+            if (startsWithRegex.test(cleanText)) {
               score += 5;
             }
           }
           if (score === 0) return { item: d, score: 0 };
 
-          if (cleanText.includes(kecName)) {
+          const kecRegex = new RegExp(`\\b${escapeRegex(kecName)}\\b`, 'i');
+          if (kecRegex.test(cleanText)) {
             score += 2;
           }
-          if (cleanText.includes(kotaName)) {
+          const kotaRegex = new RegExp(`\\b${escapeRegex(kotaName)}\\b`, 'i');
+          if (kotaRegex.test(cleanText)) {
             score += 1;
           }
           return { item: d, score };
