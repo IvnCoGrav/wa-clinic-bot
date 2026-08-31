@@ -37,6 +37,20 @@ describe('Name & BabyName Sanitizer Unit Tests', () => {
       expect(sanitizeCustomerNameForGreeting('🇮🇩 Herman_Zhu 🇮🇩')).toBe('Herman_Zhu');
     });
 
+    it('removes Semampir district from "Bunda Hera Semampir" and "Hera Semampir"', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Hera Semampir')).toBe('Hera');
+      expect(sanitizeCustomerNameForGreeting('Hera Semampir')).toBe('Hera');
+      expect(formatGreetingBunda(sanitizeCustomerNameForGreeting('Bunda Hera Semampir'))).toBe('Bunda Hera');
+    });
+
+    it('removes complex district and separator combinations', () => {
+      expect(sanitizeCustomerNameForGreeting('Bunda Iren, Sarirogo')).toBe('Iren');
+      expect(sanitizeCustomerNameForGreeting('Bunda Maya - Semampir')).toBe('Maya');
+      expect(sanitizeCustomerNameForGreeting('Bunda Nia Medokan Semampir')).toBe('Nia');
+      expect(sanitizeCustomerNameForGreeting('Bunda Siska dari Sukolilo')).toBe('Siska');
+      expect(sanitizeCustomerNameForGreeting('Bunda Anita Semampir Sidoarjo')).toBe('Anita');
+    });
+
     it('removes WA status suffix from "Lili - Leave ur Chat-Busy"', () => {
       expect(sanitizeCustomerNameForGreeting('Lili - Leave ur Chat-Busy')).toBe('Lili');
     });

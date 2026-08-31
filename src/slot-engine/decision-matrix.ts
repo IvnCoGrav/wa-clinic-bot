@@ -250,7 +250,7 @@ export class DecisionMatrix {
 
     const isPureLeadOpener =
       /^(?:halo|hola|hi|hei|p|assalamu'?alaikum|assalamualaikum|(?:selamat|selmat|slmt|met)\s+(?:pagi|siang|sore|malam)|pagi|siang|sore|malam|permisi|bisa|bisa\s+kah|bisa\s+gak|bisa\s+ya|apakah\s+bisa|bisa\s+homecare|mau\s+tanya|info|info\s+lengkap|tertarik|min|bunda|admin)[!.\s?]*$/i.test(cleanText) ||
-      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan)\b/i.test(rawText);
+      /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|home\s*service|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan|mau\s+reservasi|mau\s+booking|bisa\s+reservasi|bisa\s+booking|cara\s+reservasi|cara\s+booking|bagaimana\s+caranya|gimana\s+caranya|alur\s+reservasi|alur\s+booking|mau\s+pesan|cara\s+pesan|info\s+reservasi)\b/i.test(rawText);
 
     const isLeadGreeting =
       cleanText.length > 0 &&

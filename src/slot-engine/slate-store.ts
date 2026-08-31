@@ -149,7 +149,7 @@ export class SlateStore {
       }
     }
 
-    // 3. Treatment yang pernah dibahas di history
+    // 3. Treatment yang pernah dibahas di history (HANYA DARI PESAN CUSTOMER)
     if (!slate.selectedTreatmentName) {
       const treatmentKeywords = [
         { key: 'oksitosin', name: 'Pijat Oksitosin' },
@@ -167,6 +167,7 @@ export class SlateStore {
         { key: 'pijat nifas', name: 'Pijat Relaksasi Ibu Nifas' },
       ];
       for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role !== 'user') continue;
         const lower = history[i].content.toLowerCase();
         for (const t of treatmentKeywords) {
           if (lower.includes(t.key)) {

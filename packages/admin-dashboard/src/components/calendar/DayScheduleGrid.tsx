@@ -2,6 +2,8 @@ import React, { useRef, useEffect } from 'react';
 import { Reservation } from '../../types';
 import { Plus, User, Clock, MapPin, MessageCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 import { QuickSlotTarget } from './types';
+import { useCalendarZoom } from '../../hooks/useCalendarZoom';
+import { CalendarZoomControls } from './CalendarZoomControls';
 
 interface DayScheduleGridProps {
   selectedDate: Date;
@@ -11,7 +13,6 @@ interface DayScheduleGridProps {
 }
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
-const HOUR_ROW_HEIGHT = 90; // Standard pixel height for 1 hour
 
 export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   selectedDate,
@@ -19,16 +20,18 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   onSelectReservation,
   onQuickAdd,
 }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const zoomState = useCalendarZoom();
+  const { hourHeight, zoomLevel, containerRef } = zoomState;
+
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('[data-event-card]') || target.closest('input')) {
+    if (target.closest('button') || target.closest('[data-event-card]') || target.closest('input') || target.closest('a')) {
       return;
     }
-    const container = scrollRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
     isDraggingRef.current = true;
@@ -43,7 +46,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
-    const container = scrollRef.current;
+    const container = containerRef.current;
     if (!container) return;
 
     const dx = e.clientX - dragStartRef.current.x;
@@ -56,7 +59,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
     isDraggingRef.current = false;
-    const container = scrollRef.current;
+    const container = containerRef.current;
     if (container) {
       try {
         container.releasePointerCapture?.(e.pointerId);
@@ -136,7 +139,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
   // Auto-scroll ke jam jadwal paling awal hari ini atau jam 8 pagi
   useEffect(() => {
-    const el = scrollRef.current;
+    const el = containerRef.current;
     if (!el) return;
 
     const dayAppointments = reservations.filter((r) => {
@@ -153,15 +156,15 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     }
 
     const hourIndex = Math.max(0, targetHour - 6);
-    const targetTop = Math.max(0, hourIndex * HOUR_ROW_HEIGHT - 20);
+    const targetTop = Math.max(0, hourIndex * hourHeight - 20);
     const maxTop = el.scrollHeight - el.clientHeight;
     el.scrollTop = Math.min(targetTop, Math.max(0, maxTop));
-  }, [reservations, selectedDate]);
+  }, [reservations, selectedDate, hourHeight]);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col">
-      {/* Day Header Banner */}
-      <div className="p-4 border-b border-[#e9edef] bg-[#fafafa] flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+    <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col relative group/calendar">
+      {/* Day Header Banner with Integrated Zoom Controls */}
+      <div className="p-3.5 sm:p-4 border-b border-[#e9edef] bg-[#fafafa] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
         <div>
           <h3 className="font-extrabold text-base sm:text-lg text-[#111b21]">
             {dayDateFormatted}
@@ -170,18 +173,24 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
             Agenda jadwal kunjungan &amp; perawatan harian
           </p>
         </div>
-        <button
-          onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
-          className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
-        >
-          <Plus size={14} />
-          <span>+ Tambah di Tanggal Ini</span>
-        </button>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          {/* Zoom Controls Bar */}
+          <CalendarZoomControls zoomState={zoomState} variant="inline" />
+
+          <button
+            onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
+            className="px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>+ Tambah di Tanggal Ini</span>
+          </button>
+        </div>
       </div>
 
-      {/* Hourly Timeline with Absolute Multi-Hour Spanning & 2D Drag Panning */}
+      {/* Hourly Timeline with Dynamic Hour Height & Pinch-to-Zoom */}
       <div
-        ref={scrollRef}
+        ref={containerRef}
         data-horizontal-scroll="true"
         data-no-swipe-back="true"
         onPointerDown={handlePointerDown}
@@ -197,16 +206,20 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
           return (
             <div
               key={hour}
-              className="grid grid-cols-[80px_1fr] sm:grid-cols-[100px_1fr] h-[90px] min-h-[90px] divide-x divide-[#e9edef] group"
+              style={{ height: `${hourHeight}px`, minHeight: `${hourHeight}px` }}
+              className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] group"
             >
               {/* Hour Label (Sticky horizontally on the left) */}
-              <div className="sticky left-0 z-20 p-3 text-right pr-4 text-xs font-semibold text-[#8696a0] bg-[#fafafa] select-none flex items-start justify-end border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+              <div className="sticky left-0 z-20 p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold text-[#8696a0] bg-[#fafafa] select-none flex items-start justify-end border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
                 <span>{formatHourLabel(hour)}</span>
               </div>
 
               {/* Event slot cell */}
-              <div className="relative transition-colors group/slot h-[90px] hover:bg-gray-50/40">
-                {/* Empty Slot Hover Quick-Add Button (Always available behind cards) */}
+              <div
+                style={{ height: `${hourHeight}px` }}
+                className="relative transition-colors group/slot hover:bg-gray-50/40"
+              >
+                {/* Empty Slot Hover Quick-Add Button */}
                 <button
                   onClick={() => onQuickAdd({ date: selectedDate, hour })}
                   className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
@@ -216,7 +229,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                   <span>+ Tambah Jadwal</span>
                 </button>
 
-                {/* Event Cards: Absolutely positioned & Spanning proportionally out of the cell */}
+                {/* Event Cards: Spanning proportionally based on dynamic hourHeight */}
                 {events.map((res, evIdx) => {
                   const theme = getCategoryTheme(res.treatment_category);
                   const bDate = new Date(res.booking_date!);
@@ -243,8 +256,9 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
                   // Posisi menit awal (0..59) dan tinggi proporsional durasi
                   const startMinutes = bDate.getMinutes();
-                  const topOffsetPx = Math.round((startMinutes / 60) * HOUR_ROW_HEIGHT);
-                  const heightPx = Math.max(54, Math.round((duration / 60) * HOUR_ROW_HEIGHT - 6));
+                  const topOffsetPx = Math.round((startMinutes / 60) * hourHeight);
+                  const minCardHeight = zoomLevel === 'compact' ? 36 : 52;
+                  const heightPx = Math.max(minCardHeight, Math.round((duration / 60) * hourHeight - 4));
                   const evCount = events.length;
                   const evWidth = evCount > 1 ? `calc(${100 / evCount}% - 8px)` : 'calc(100% - 12px)';
                   const evLeft = evCount > 1 ? `calc(${(evIdx * 100) / evCount}% + 4px)` : '6px';
@@ -258,75 +272,98 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                         onSelectReservation(res);
                       }}
                       style={{
-                        top: `${topOffsetPx + 3}px`,
+                        top: `${topOffsetPx + 2}px`,
                         height: `${heightPx}px`,
                         left: evLeft,
                         width: evWidth,
                       }}
-                      className={`absolute z-10 p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${theme.card}`}
+                      className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${theme.card}`}
                     >
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                            <span className="font-bold text-sm text-[#111b21] truncate">
+                      {zoomLevel === 'compact' ? (
+                        /* COMPACT DAY LOD (<65px) */
+                        <div className="flex items-center justify-between gap-2 h-full">
+                          <div className="flex items-center space-x-2 truncate">
+                            <span className="font-bold text-xs text-[#111b21] truncate">
                               {displayName}
                             </span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
+                            <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
+                              {startTimeStr} ({duration}m)
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1 shrink-0">
+                            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${theme.badge}`}>
                               {res.treatment_category}
                             </span>
-                            <span className="text-xs font-bold flex items-center space-x-1 font-mono opacity-85">
-                              <Clock size={12} />
-                              <span>{timeRangeStr}</span>
+                            <span className="text-[10px] font-semibold text-[#54656f] hidden sm:inline">
+                              {res.assigned_staff?.name?.split(' ')[0] || 'Unassigned'}
                             </span>
-                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 font-mono">
-                              {duration}m
-                            </span>
-                            {res.status === 'confirmed' ? (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
-                                <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
-                                Lunas
+                          </div>
+                        </div>
+                      ) : (
+                        /* STANDARD & DETAILED DAY LOD */
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                              <span className="font-bold text-sm text-[#111b21] truncate">
+                                {displayName}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 text-amber-800">
-                                <AlertCircle size={10} className="mr-0.5 text-amber-600" />
-                                Pending
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
+                                {res.treatment_category}
                               </span>
+                              <span className="text-xs font-bold flex items-center space-x-1 font-mono opacity-85">
+                                <Clock size={12} />
+                                <span>{timeRangeStr}</span>
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 font-mono">
+                                {duration}m
+                              </span>
+                              {res.status === 'confirmed' ? (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
+                                  <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
+                                  Lunas
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 text-amber-800">
+                                  <AlertCircle size={10} className="mr-0.5 text-amber-600" />
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs font-semibold opacity-95 line-clamp-1">
+                              {cleanDetail}
+                            </p>
+
+                            {res.customer?.kelurahan && (
+                              <div className="flex items-center space-x-1 text-[11px] opacity-80">
+                                <MapPin size={12} />
+                                <span>
+                                  {res.customer.kelurahan}, {res.customer.kecamatan} ({res.customer.distance_km?.toFixed(1) || '0'} km)
+                                </span>
+                              </div>
                             )}
                           </div>
 
-                          <p className="text-xs font-semibold opacity-95 line-clamp-1">
-                            {cleanDetail}
-                          </p>
-
-                          {res.customer?.kelurahan && (
-                            <div className="flex items-center space-x-1 text-[11px] opacity-80">
-                              <MapPin size={12} />
-                              <span>
-                                {res.customer.kelurahan}, {res.customer.kecamatan} ({res.customer.distance_km?.toFixed(1) || '0'} km)
-                              </span>
+                          <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
+                            <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 px-2.5 py-1 rounded-lg border border-black/10">
+                              <User size={12} className="text-[#008069]" />
+                              <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
                             </div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
-                          <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 px-2.5 py-1 rounded-lg border border-black/10">
-                            <User size={12} className="text-[#008069]" />
-                            <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
+                            {res.customer?.phone && (
+                              <a
+                                href={`https://wa.me/${res.customer.phone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-2 rounded-xl bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] shadow-xs transition-all cursor-pointer"
+                                title="Chat WhatsApp Pasien"
+                              >
+                                <MessageCircle size={14} />
+                              </a>
+                            )}
                           </div>
-                          {res.customer?.phone && (
-                            <a
-                              href={`https://wa.me/${res.customer.phone.replace(/\D/g, '')}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="p-2 rounded-xl bg-white hover:bg-[#008069] text-[#111b21] hover:text-white border border-[#d1d7db] shadow-xs transition-all cursor-pointer"
-                              title="Chat WhatsApp Pasien"
-                            >
-                              <MessageCircle size={14} />
-                            </a>
-                          )}
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
