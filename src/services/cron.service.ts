@@ -131,7 +131,198 @@ export class CronService {
     }
   }
 
+  /**
+   * Mengirim reminder untuk reservasi hari ini dengan laju pengiriman throttled (Priority Safety Bypass)
+   */
+  private async sendMorningReminders(): Promise<void> {
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID);
+    if (isCutOff) {
+      console.log(`[Cron Service] Outbound Cut-Off is ACTIVE. Skipping morning reminders.`);
+      return;
+    }
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const todayReservations = await prisma.reservation.findMany({
+      where: {
+        status: 'confirmed',
+        booking_date: {
+          gte: startOfToday,
+          lte: endOfToday,
+        },
+        tenant_id: DEFAULT_TENANT_ID,
+      },
+      include: { customer: true },
+    });
+
+    console.log(`[Cron Service] Found ${todayReservations.length} confirmed reservations for today.`);
+
+    // Urutkan berdasarkan booking_date ASCENDING
+    todayReservations.sort((a, b) => {
+      if (!a.booking_date || !b.booking_date) return 0;
+      return a.booking_date.getTime() - b.booking_date.getTime();
+    });
+
+    let accumulatedDelayMs = 0;
+
+    for (const res of todayReservations) {
+      if (!res.customer || !res.booking_date) continue;
+
+      const now = new Date();
+      const timeToTreatment = res.booking_date.getTime() - now.getTime();
+
+      // Estimasi waktu kirim dengan safety buffer (max jitter 45s + 5s typing simulation)
+      const maxJitter = 45000;
+      const typingTime = 5000;
+      const estimatedDuration = maxJitter + typingTime;
+
+      // Pengaman Prioritas: jika delay antrian terakumulasi melebihi waktu dimulainya treatment, bypass throttle!
+      const shouldBypassThrottle = (accumulatedDelayMs + estimatedDuration) >= timeToTreatment;
+
+      if (!shouldBypassThrottle) {
+        // Throttling normal: jeda acak 20-45 detik
+        const isTest = process.env.NODE_ENV === 'test';
+        const jitter = isTest ? 1 : Math.floor(Math.random() * (45000 - 20000 + 1)) + 20000;
+
+        console.log(`[Cron Service] Throttling morning reminder: waiting for ${jitter / 1000}s`);
+        await new Promise((resolve) => setTimeout(resolve, jitter));
+        accumulatedDelayMs += jitter;
+      } else {
+        console.log(`[Cron Service] Bypassing throttle for urgent reminder: booking at ${res.booking_date.toISOString()}`);
+      }
+
+      const customerName = sanitizeCustomerNameForGreeting(res.customer.name);
+      const timeStr = this.formatTime(res.booking_date);
+
+      const messageText = TEMPLATES.morningReminder({
+        name: customerName,
+        time: timeStr,
+      });
+
+      console.log(`[Cron Service] Sending morning reminder to ${res.customer.phone} (${customerName || 'Bunda'})`);
+      const targetTenantId = res.tenant_id || DEFAULT_TENANT_ID;
+
+      // Pre-log pesan reminder ke tabel messages untuk Live Chat
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(res.customer_id, targetTenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId: targetTenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: messageText,
+            senderType: 'BOT',
+            senderName: 'Bot (Morning Reminder)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[Cron Service] Failed to log morning reminder to messages:', logErr.message);
+      }
+
+      await typingService.simulateHumanReply({
+        chatId: res.customer.phone,
+        replyText: messageText,
+        tenantId: targetTenantId,
+      });
+    }
+  }
+
+  /**
+   * Mengirim review H+1 jam 07:00 untuk reservasi kemarin,
+   * dan mendaftarkan follow-up NEXT_TREATMENT (+1, +2, +3 bulan)
+   */
+  private async sendYesterdayReviewsAndScheduleNextFollowups(): Promise<void> {
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(DEFAULT_TENANT_ID);
+    if (isCutOff) {
+      console.log(`[Cron Service] Outbound Cut-Off is ACTIVE. Skipping yesterday reviews.`);
+      return;
+    }
+
+    const startOfYesterday = new Date();
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+    startOfYesterday.setHours(0, 0, 0, 0);
+    const endOfYesterday = new Date();
+    endOfYesterday.setDate(endOfYesterday.getDate() - 1);
+    endOfYesterday.setHours(23, 59, 59, 999);
+
+    const yesterdayReservations = await prisma.reservation.findMany({
+      where: {
+        status: 'confirmed',
+        booking_date: {
+          gte: startOfYesterday,
+          lte: endOfYesterday,
+        },
+        tenant_id: DEFAULT_TENANT_ID,
+      },
+      include: {
+        customer: {
+          include: { children: true },
+        },
+      },
+    });
+
+    console.log(`[Cron Service] Found ${yesterdayReservations.length} confirmed reservations completed yesterday.`);
+
+    for (const res of yesterdayReservations) {
+      if (!res.customer || !res.booking_date) continue;
+
+      const customerName = sanitizeCustomerNameForGreeting(res.customer.name);
+      let messageText = '';
+
+      // 1. Tentukan template review berdasarkan kategori
+      if (res.treatment_category === 'BABY' || res.treatment_category === 'BOTH') {
+        const babyName = formatBabyNamesForGreeting(res.customer.children, res.raw_text, { prefixDek: true });
+        messageText = TEMPLATES.followUpReviewBaby({
+          name: customerName,
+          babyName,
+        });
+      } else {
+        // MOMS
+        messageText = TEMPLATES.followUpReviewMoms({
+          name: customerName,
+        });
+      }
+
+      // 2. Kirim pesan review H+1
+      console.log(`[Cron Service] Sending H+1 review to ${res.customer.phone} (${customerName || 'Bunda'}, Baby: ${res.treatment_category === 'MOMS' ? '-' : 'bayi'})`);
+      const targetTenantId = res.tenant_id || DEFAULT_TENANT_ID;
+
+      // Pre-log pesan review H+1 ke tabel messages untuk Live Chat
+      try {
+        const { conversationService } = await import('./conversation.service');
+        const { messageService } = await import('./message.service');
+        const conv = await conversationService.getOrCreateConversation(res.customer_id, targetTenantId);
+        if (conv) {
+          await messageService.logMessage({
+            tenantId: targetTenantId,
+            conversationId: conv.id,
+            direction: 'OUTBOUND',
+            content: messageText,
+            senderType: 'BOT',
+            senderName: 'Bot (Review H+1)',
+          });
+        }
+      } catch (logErr: any) {
+        console.warn('[Cron Service] Failed to log H+1 review to messages:', logErr.message);
+      }
+
+      await typingService.simulateHumanReply({
+        chatId: res.customer.phone,
+        replyText: messageText,
+        tenantId: targetTenantId,
+      });
+
+      // 3. Daftarkan 3 row follow_ups NEXT_TREATMENT (+1, +2, +3 bulan)
+      await followUpService.createNextTreatmentFollowUps(res.customer_id, res.booking_date, DEFAULT_TENANT_ID);
+    }
+  }
 
   /**
    * Helper format Date ke string HH:MM

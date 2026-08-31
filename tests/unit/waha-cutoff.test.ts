@@ -77,4 +77,47 @@ describe('WAHA Internal Outbound Cut-Off Unit Tests', () => {
     expect(res2.success).toBe(true);
     expect(mockWahaClient.sendTextDetailed).toHaveBeenCalled();
   });
+
+  it('6. Reaction messages are blocked when internal cut-off is active (true)', async () => {
+    await whatsappProviderService.setOutboundCutOff(DEFAULT_TENANT_ID, true);
+    const driver = new WahaGatewayDriver(mockWahaClient, DEFAULT_TENANT_ID);
+
+    mockWahaClient.sendReaction = vi.fn().mockResolvedValue(true);
+    const result = await driver.sendReactionMessage('628123456789', 'msg-123', '👍');
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe('WAHA_INTERNAL_CUTOFF');
+    expect(mockWahaClient.sendReaction).not.toHaveBeenCalled();
+  });
+
+  it('7. TypingService.simulateHumanReply is blocked immediately when cut-off is active', async () => {
+    const { TypingService } = await import('../../src/services/typing.service');
+    const typingSvc = new TypingService(mockWahaClient);
+
+    await whatsappProviderService.setOutboundCutOff(DEFAULT_TENANT_ID, true);
+
+    const result = await typingSvc.simulateHumanReply({
+      chatId: '628123456789',
+      replyText: 'Halo Bunda, ini pesan simulasi!',
+      tenantId: DEFAULT_TENANT_ID,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('WAHA_INTERNAL_CUTOFF');
+    expect(mockWahaClient.sendText).not.toHaveBeenCalled();
+    expect(mockWahaClient.startTyping).not.toHaveBeenCalled();
+  });
+
+  it('8. WABA Gateway Driver blocks outbound messages when cut-off is active', async () => {
+    const { WabaGatewayDriver } = await import('../../src/integrations/whatsapp/waba.driver');
+    const wabaDriver = new WabaGatewayDriver({
+      phoneNumberId: '123456789',
+      accessToken: 'test-token',
+    }, DEFAULT_TENANT_ID);
+
+    await whatsappProviderService.setOutboundCutOff(DEFAULT_TENANT_ID, true);
+
+    const res = await wabaDriver.sendTextMessage('628123456789', 'Pesan via WABA');
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('WABA_INTERNAL_CUTOFF');
+  });
 });

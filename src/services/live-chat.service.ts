@@ -286,6 +286,19 @@ export class LiveChatService {
 
     const gateway = await resolveGatewayForTenant(tenantId);
 
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      return {
+        success: false,
+        error: {
+          code: 'OUTBOUND_CUTOFF_ACTIVE',
+          message: 'Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif). Mohon aktifkan kembali koneksi di menu Pengaturan Provider WhatsApp atau toggle Bot di atas.',
+        },
+        provider: gateway.providerType,
+      };
+    }
+
     // Resolusi quoted message / wa_message_id jika ada replyToMessageId
     let replyToWaMessageId: string | undefined = undefined;
     let quotedMeta: any = undefined;
@@ -540,6 +553,12 @@ export class LiveChatService {
       return { success: false, error: 'Data nomor WhatsApp customer tidak ditemukan.' };
     }
 
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      return { success: false, error: 'Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
+    }
+
     // Cari pesan di DB / memory
     let msg: any = null;
     try {
@@ -638,6 +657,12 @@ export class LiveChatService {
       return { success: false, error: 'Data nomor WhatsApp customer tidak ditemukan.' };
     }
 
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      return { success: false, error: 'Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
+    }
+
     // Cari pesan di DB / memory
     let msg: any = null;
     try {
@@ -728,6 +753,12 @@ export class LiveChatService {
     const customer = await customerService.getCustomerById(conversation.customer_id, tenantId);
     if (!customer?.phone) {
       return { success: false, error: 'Data nomor WhatsApp customer tidak ditemukan.' };
+    }
+
+    const { whatsappProviderService } = await import('./whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      return { success: false, error: 'Koneksi outbound WhatsApp sedang diputus oleh Administrator (Cut-Off Darurat aktif).' };
     }
 
     // Cari pesan di DB / memory

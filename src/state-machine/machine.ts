@@ -28,6 +28,17 @@ export class ConversationStateMachine {
     const { customer, conversation, incomingMessage } = ctx;
     const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
 
+    // --- GATE 🛑: EMERGENCY OUTBOUND CUT-OFF (KILL-SWITCH GUARD) ---
+    const { whatsappProviderService } = await import('../services/whatsapp-provider.service');
+    const isCutOff = await whatsappProviderService.isOutboundCutOff(tenantId);
+    if (isCutOff) {
+      console.log(`[STATE MACHINE CUT-OFF] Outbound Cut-Off is ACTIVE for tenant ${tenantId}. Skipping bot processing for customer ${customer.phone}.`);
+      return {
+        nextState: conversation.current_state,
+        shouldSendReply: false,
+      };
+    }
+
     // --- GATE KELAS 🔴: BLOCKED CUSTOMER ---
     if (customer.status === 'blocked') {
       console.warn(`[SECURITY WARNING] [BLOCKED CUSTOMER] Phone ${customer.phone} is blocked. Bypassing processing.`);
