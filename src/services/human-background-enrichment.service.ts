@@ -69,14 +69,21 @@ export class HumanBackgroundEnrichmentService {
           const conv = await conversationService.getOrCreateConversation(customerId, tenantId);
           if (conv) {
             const msgs = await messageService.getRecentMessages(conv.id, 10, tenantId);
+            const { EntityExtractor } = await import('../slot-engine/entity-extractor');
             const { geocodingService } = await import('../integrations/google-maps/geocoding');
+            
             for (let i = msgs.length - 1; i >= 0; i--) {
               const m = msgs[i];
               if (m.direction === 'INBOUND' && m.content) {
-                const geo = await geocodingService.geocodeText(m.content);
-                if (geo.isPrecise && geo.lat != null && geo.lng != null) {
-                  resolvedLoc = geo;
-                  break;
+                // 1. Coba deteksi deterministik dulu (0 API call, 0ms)
+                const det = EntityExtractor.preExtractDeterministic(m.content);
+                const locCandidate = det.locationText;
+                if (locCandidate) {
+                  const geo = await geocodingService.geocodeText(locCandidate);
+                  if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+                    resolvedLoc = geo;
+                    break;
+                  }
                 }
               }
             }
