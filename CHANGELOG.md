@@ -4,6 +4,59 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhancement & Fix — Reservation Card Length, Total Duration & Buffer Time Synchronization (`durationCalculator.ts`, `DayScheduleGrid.tsx`, `WeekScheduleGrid.tsx`, `MonthScheduleGrid.tsx`, `ReservationDetailModal.tsx`, `Reservations.tsx`) (2026-08-31)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  - Pengguna menanyakan dan meminta memastikan bahwa panjang (*height* / rentang waktu) kartu reservasi di tampilan kalender (`DayScheduleGrid`, `WeekScheduleGrid`, `MonthScheduleGrid`) sudah sesuai dengan total durasi riil slot reservasi yang dijadwalkan, termasuk waktu *buffer* (waktu jeda/persiapan/perjalanan).
+
+- **Akar Masalah & Temuan Audit:**
+  - Format string detail reservasi dari `CreateReservationModal` menyertakan durasi murni + buffer, contoh: `"[Total 120m + Buffer 15m = 135m]"` atau `"[Total 45m + Buffer 15m = 60m]"`.
+  - Sebelumnya, regex `extractDurationMinutes` di `DayScheduleGrid.tsx` dan `WeekScheduleGrid.tsx` mencocokkan `[Total 120m` terlebih dahulu dan langsung mengembalikan `120` menit murni (2 jam), mengabaikan tambahan buffer `15m` (`= 135m`). Akibatnya, kartu di kalender dirender lebih pendek 15 menit dari jadwal blok waktu yang sebenarnya.
+
+- **Solusi & Implementasi Teknis:**
+  1. **Centralized Duration Calculator (`packages/admin-dashboard/src/utils/durationCalculator.ts`)**:
+     - `extractDurationMinutes`: Mengutamakan total durasi hasil kalkulasi yang menyertakan buffer (`= (\d+)m`), mendukung penjumlahan eksplisit `Total Xm + Buffer Ym`, durasi per item treatment + buffer, parsing menit alami, serta fallback cerdas per kategori treatment (nifas/paket 90m, standar 60m).
+     - `cleanTreatmentDetailForDisplay`: Membersihkan tag internal buffer/durasi dari nama treatment agar kartu kalender menampilkan nama treatment yang rapi tanpa teks rumus internal.
+  2. **Sinkronisasi Kalender & Modal Detail**:
+     - Menghubungkan `DayScheduleGrid.tsx`, `WeekScheduleGrid.tsx`, `MonthScheduleGrid.tsx`, `ReservationDetailModal.tsx`, dan `Reservations.tsx` ke modul `durationCalculator.ts`.
+     - Rentang jam (`startTime - endTime`), badge durasi (`135m`), dan tinggi piksel kartu (`heightPx`) di kalender kini 100% presisi mencerminkan total waktu reservasi + buffer.
+  3. **Unit Tests & Verifikasi**:
+     - Dibuat unit test lengkap di `tests/unit/duration-calculator.test.ts` (9 test cases, 100% pass).
+     - Full test suite: **198 test files, 1541 tests passed (100% green)**.
+     - Frontend build: **PASS (0 error, built in 10.26s)**.
+
+#### Enhancement & Fix — Full Customer & Children Data Editor, Unified Reservation Edit UI, Enhanced Date/Time Parsing & WhatsApp Button Removal (`CustomerEditForm.tsx`, `customer.service.ts`, `customers.subroute.ts`, `CreateReservationModal.tsx`, `ReservationDetailModal.tsx`, `reservation-text-parser.ts`, `CustomerDatabase.tsx`, `LiveChatMonitor.tsx`, `DayScheduleGrid.tsx`) (2026-08-31)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  1. **Edit Lengkap Profil Customer Hingga Data Anak**: Pengguna dapat mengedit seluruh data customer (nama bunda, no WhatsApp, alamat lengkap, kelurahan, kecamatan, kota, patokan rumah, GPS assist) dan data dinamis anak/bayi (tambah anak, ubah nama dan usia, hapus anak).
+  2. **Penyatuan UI Edit Reservasi dengan Form Buat Reservasi Baru**: UI form edit reservasi kini disamakan 100% dengan modal Buat Reservasi Baru (`CreateReservationModal`), di mana seluruh data reservasi, layanan, multi-anak, jadwal, terapis, status, catatan, dan diskon telah terisi (*pre-filled*), mendukung katalog live dan rekomendasi slot.
+  3. **Perbaikan Waktu Default Jam 7 Pagi pada Reservasi**: Mengatasi masalah jam reservasi yang sebelumnya jatuh ke default jam 7 pagi WIB (karena parser tanggal jatuh ke 00:00 UTC = 07:00 WIB saat tahun diabaikan atau format waktu terpisah).
+  4. **Pembersihan Tombol Chat WhatsApp**: Menghapus tombol/link eksternal WhatsApp (`wa.me`) di popup detail customer (`CustomerDatabase.tsx`), panel detail customer LiveChat (`LiveChatMonitor.tsx`), dan kartu reservasi kalender harian (`DayScheduleGrid.tsx`) agar alur komunikasi tetap terpusat di Live Chat dan tidak mengganggu alur kerja admin.
+
+- **Solusi & Implementasi Teknis:**
+  1. **Backend Customer & Dynamic Children Sync (`src/services/customer.service.ts` & `src/routes/admin/customers.subroute.ts`)**:
+     - Memperluas `updateCustomer` untuk menerima `phone`, `address`, dan array `children`.
+     - Mengembangkan sinkronisasi atomik data anak pada tabel `Child` (membuat, memperbarui nama & usia, dan menghapus anak yang dihapus admin) serta mendukung in-memory fallback.
+     - Menyediakan endpoint `PUT /api/admin/customers/:id` dan alias `PATCH /api/admin/customers/:id`.
+  2. **Form Edit Customer & Data Anak (`CustomerEditForm.tsx`, `CustomerDatabase.tsx`, `LiveChatMonitor.tsx`)**:
+     - Form mencakup Nama Bunda, No WhatsApp, Alamat Lengkap textarea, Kelurahan, Kecamatan, Kota, Kode Pos, Patokan Rumah, GPS Smart Assistant, dan list dinamis Data Bayi/Anak (`+ Tambah Anak`, hapus anak, edit nama & usia).
+  3. **Unified Modal Reservasi Edit Mode (`CreateReservationModal.tsx` & `ReservationDetailModal.tsx`)**:
+     - Menambahkan props `mode?: 'create' | 'edit'` dan `initialReservation?: Reservation | any` ke `CreateReservationModal`.
+     - Mem-parsing dan mengisi otomatis customer, data anak, daftar treatment (`parseTreatmentsFromDetail`), tanggal, jam, terapis, status, catatan, ongkir, dan diskon.
+     - Menyimpan perubahan via `PATCH /api/admin/reservation/:id`.
+     - Mengarahkan tombol **"✏️ Edit Reservasi"** pada `ReservationDetailModal` langsung ke `CreateReservationModal` mode edit.
+     - Memperbaiki urutan eksekusi React Hooks pada `ReservationDetailModal` (menghilangkan *early return* sebelum `useEffect`) dan menambahkan `useRef` guard pada `CreateReservationModal` sehingga modal edit terbuka mulus tanpa *whitespace/crash* React.
+  4. **Robust Indonesian Date & Time Parser (`src/utils/reservation-text-parser.ts`)**:
+     - Meningkatkan `tryParseIndonesianDate` untuk mengenali tanggal relatif ("hari ini", "besok", "lusa"), nama hari ("senin", "rabu"), resolusi tahun otomatis jika tidak dituliskan, dan default jam kerja 09:00 WIB.
+  5. **Penghapusan Tombol WhatsApp Eksternal**:
+     - Menghapus tombol "Buka di WhatsApp" dari `CustomerDatabase.tsx`.
+     - Menghapus card "Chat WA" dari `LiveChatMonitor.tsx` (grid metriks disesuaikan 3 kolom).
+     - Menghapus icon chat WhatsApp dari kartu reservasi `DayScheduleGrid.tsx`.
+  6. **Verifikasi & Build**:
+     - `packages/admin-dashboard`: **PASS (0 errors, build in 10.26s)**.
+     - Backend (`root`): **PASS (0 errors)**.
+     - Vitest suite: **197 files, 1532 tests passed (100% green)**.
+
 #### Bug Fix — LiveChat 24-Hour Draft Memory Lifecycle & Cross-Menu Navigation Persistence (`LiveChatMonitor.tsx`) (2026-08-31)
 
 - **Latar Belakang & Gejala Permasalahan:**

@@ -478,78 +478,91 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * PUT /api/admin/customers/:id
-   * Update field dasar customer (nama, alamat, koordinat, landmark).
-   * Body: { name?, kelurahan?, kecamatan?, kota?, zipcode?, landmark?, lat?, lng? }
+   * PUT /api/admin/customers/:id & PATCH /api/admin/customers/:id
+   * Update field dasar customer (nama, phone, alamat, koordinat, landmark, dan data anak).
+   * Body: { name?, phone?, address?, kelurahan?, kecamatan?, kota?, zipcode?, landmark?, lat?, lng?, children? }
    */
-  fastify.put(
-    '/api/admin/customers/:id',
-    async (
-      request: FastifyRequest<{
-        Params: { id: string };
-        Body: {
-          name?: string;
-          kelurahan?: string | null;
-          kecamatan?: string | null;
-          kota?: string | null;
-          zipcode?: string | null;
-          landmark?: string | null;
-          lat?: number | null;
-          lng?: number | null;
-        };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const { id } = request.params;
-      const { name, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng } = request.body || {};
+  const handleUpdateCustomer = async (
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: {
+        name?: string;
+        phone?: string;
+        address?: string;
+        kelurahan?: string | null;
+        kecamatan?: string | null;
+        kota?: string | null;
+        zipcode?: string | null;
+        landmark?: string | null;
+        lat?: number | null;
+        lng?: number | null;
+        children?: Array<{
+          id?: string;
+          name: string;
+          ageText?: string;
+          raw_age_text?: string;
+          birthDate?: string | null;
+        }>;
+      };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id } = request.params;
+    const { name, phone, address, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng, children } =
+      request.body || {};
 
-      // Validasi minimal ada satu field yang diupdate
-      if (
-        name === undefined &&
-        kelurahan === undefined &&
-        kecamatan === undefined &&
-        kota === undefined &&
-        zipcode === undefined &&
-        landmark === undefined &&
-        lat === undefined &&
-        lng === undefined
-      ) {
-        return reply.status(400).send({ success: false, error: 'Minimal satu field harus diisi untuk update.' });
-      }
-
-      try {
-        const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
-
-        if (!customer) {
-          return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
-        }
-
-        const updatedCustomer = await customerService.updateCustomer(
-          id,
-          { name, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng },
-          DEFAULT_TENANT_ID
-        );
-
-        await auditService.logAdminAction({
-          apiKey: (request as any).adminKeyUsed,
-          adminIdentity: (request as any).adminIdentity,
-          action: 'UPDATE_CUSTOMER_PROFILE',
-          targetId: id,
-          payload: { name, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng },
-          ipAddress: request.ip,
-        });
-
-        return reply.status(200).send({
-          success: true,
-          message: 'Profil customer berhasil diperbarui.',
-          data: updatedCustomer,
-        });
-      } catch (err: any) {
-        console.error('[ADMIN CUSTOMER] Error updating customer profile:', err.message);
-        return reply.status(500).send({ success: false, error: err.message });
-      }
+    // Validasi minimal ada satu field yang diupdate
+    if (
+      name === undefined &&
+      phone === undefined &&
+      address === undefined &&
+      kelurahan === undefined &&
+      kecamatan === undefined &&
+      kota === undefined &&
+      zipcode === undefined &&
+      landmark === undefined &&
+      lat === undefined &&
+      lng === undefined &&
+      children === undefined
+    ) {
+      return reply.status(400).send({ success: false, error: 'Minimal satu field harus diisi untuk update.' });
     }
-  );
+
+    try {
+      const customer = await customerService.getCustomerById(id, DEFAULT_TENANT_ID);
+
+      if (!customer) {
+        return reply.status(404).send({ success: false, error: 'Customer tidak ditemukan.' });
+      }
+
+      const updatedCustomer = await customerService.updateCustomer(
+        id,
+        { name, phone, address, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng, children },
+        DEFAULT_TENANT_ID
+      );
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        action: 'UPDATE_CUSTOMER_PROFILE',
+        targetId: id,
+        payload: { name, phone, address, kelurahan, kecamatan, kota, zipcode, landmark, lat, lng, childrenCount: children?.length },
+        ipAddress: request.ip,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Profil customer berhasil diperbarui.',
+        data: updatedCustomer,
+      });
+    } catch (err: any) {
+      console.error('[ADMIN CUSTOMER] Error updating customer profile:', err.message);
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  };
+
+  fastify.put('/api/admin/customers/:id', handleUpdateCustomer);
+  fastify.patch('/api/admin/customers/:id', handleUpdateCustomer);
 
   /**
    * PUT /api/admin/customers/:id/location

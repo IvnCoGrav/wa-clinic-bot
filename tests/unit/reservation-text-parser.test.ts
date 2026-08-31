@@ -96,7 +96,7 @@ Treatment : Pijat Bayi Rileks`;
     
     const res = result.reservation!;
     expect(res.name).toBe('Bunda Sendy');
-    expect(res.bookingDate).toBeNull(); // Tanggal tanpa tahun dibiarkan null
+    expect(res.bookingDate).toBeInstanceOf(Date); // Tanggal tanpa tahun otomatis di-resolve ke tahun berjalan (misal 2026-07-21)
   });
 
   it('4. should successfully parse combined Kec & Kota line (e.g. Kec & Kota : Sukolilo, Surabaya)', () => {

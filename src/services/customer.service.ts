@@ -632,12 +632,14 @@ export class CustomerService {
   /**
    * Update field dasar customer (nama, alamat, koordinat, landmark).
    * Digunakan oleh admin dashboard untuk edit profil customer.
-   * Field yang didukung: name, kelurahan, kecamatan, kota, zipcode, landmark/address_notes, lat, lng
+   * Field yang didukung: name, phone, address, kelurahan, kecamatan, kota, zipcode, landmark/address_notes, lat, lng, children
    */
   public async updateCustomer(
     customerId: string,
     data: {
       name?: string;
+      phone?: string;
+      address?: string;
       kelurahan?: string | null;
       kecamatan?: string | null;
       kota?: string | null;
@@ -645,29 +647,105 @@ export class CustomerService {
       landmark?: string | null; // alias address_notes
       lat?: number | null;
       lng?: number | null;
+      children?: Array<{
+        id?: string;
+        name: string;
+        ageText?: string;
+        raw_age_text?: string;
+        birthDate?: string | null;
+      }>;
     },
     tenantId: string
   ): Promise<any> {
-    const updateData: any = { ...data };
-    // Normalize landmark -> address_notes di preferences
-    if (data.landmark !== undefined) {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.kelurahan !== undefined) updateData.kelurahan = data.kelurahan;
+    if (data.kecamatan !== undefined) updateData.kecamatan = data.kecamatan;
+    if (data.kota !== undefined) updateData.kota = data.kota;
+    if (data.zipcode !== undefined) updateData.zipcode = data.zipcode;
+    if (data.lat !== undefined) updateData.lat = CustomerService.toNumberOrNull(data.lat);
+    if (data.lng !== undefined) updateData.lng = CustomerService.toNumberOrNull(data.lng);
+
+    if (data.phone !== undefined && data.phone.trim()) {
+      let normalizedPhone = data.phone.replace(/\D/g, '');
+      if (normalizedPhone.startsWith('0')) normalizedPhone = '62' + normalizedPhone.substring(1);
+      updateData.phone = normalizedPhone;
+    }
+
+    // Normalize address & landmark -> preferences
+    if (data.address !== undefined || data.landmark !== undefined) {
       const customer = await this.getCustomerById(customerId, tenantId);
       const currentPrefs = (customer?.preferences as any) || {};
-      updateData.preferences = {
-        ...currentPrefs,
-        landmark: data.landmark,
-        address_notes: data.landmark,
-        location_updated_at: new Date().toISOString(),
-        location_updated_by_staff_name: 'Admin CS',
-      };
-      delete updateData.landmark;
+      const newPrefs: any = { ...currentPrefs };
+      if (data.address !== undefined) {
+        newPrefs.address = data.address;
+        newPrefs.full_address = data.address;
+      }
+      if (data.landmark !== undefined) {
+        newPrefs.landmark = data.landmark;
+        newPrefs.address_notes = data.landmark;
+      }
+      newPrefs.location_updated_at = new Date().toISOString();
+      newPrefs.location_updated_by_staff_name = 'Admin CS';
+      updateData.preferences = newPrefs;
     }
 
     try {
       const updated = await prisma.customer.update({
         where: { id: customerId },
         data: updateData,
+        include: { children: true },
       });
+
+      // Synchronize Children records if provided
+      if (Array.isArray(data.children)) {
+        const existingChildren = await prisma.child.findMany({
+          where: { customer_id: customerId },
+        });
+
+        const incomingValidChildren = data.children.filter((c) => c.name && c.name.trim());
+        const processedChildIds = new Set<string>();
+
+        for (const childItem of incomingValidChildren) {
+          const childName = childItem.name.trim();
+          const ageText = childItem.raw_age_text || childItem.ageText || null;
+          const birthDate = childItem.birthDate ? new Date(childItem.birthDate) : null;
+
+          const matchedExisting = childItem.id
+            ? existingChildren.find((ec) => ec.id === childItem.id)
+            : existingChildren.find((ec) => ec.name.toLowerCase() === childName.toLowerCase());
+
+          if (matchedExisting) {
+            processedChildIds.add(matchedExisting.id);
+            await prisma.child.update({
+              where: { id: matchedExisting.id },
+              data: {
+                name: childName,
+                raw_age_text: ageText,
+                birth_date: birthDate,
+              },
+            });
+          } else {
+            const createdChild = await prisma.child.create({
+              data: {
+                tenant_id: tenantId,
+                customer_id: customerId,
+                name: childName,
+                raw_age_text: ageText,
+                birth_date: birthDate,
+              },
+            });
+            processedChildIds.add(createdChild.id);
+          }
+        }
+
+        // Remove deleted children
+        for (const ec of existingChildren) {
+          if (!processedChildIds.has(ec.id)) {
+            await prisma.child.delete({ where: { id: ec.id } }).catch(() => {});
+          }
+        }
+      }
 
       // Google Contacts auto-sync (best-effort, non-blocking)
       import('./google-contacts.service')
@@ -676,20 +754,33 @@ export class CustomerService {
         })
         .catch(() => {});
 
-      return updated;
+      const finalCustomer = await this.getCustomerById(customerId, tenantId);
+      return finalCustomer || updated;
     } catch (error) {
       // Memory fallback update
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
-          Object.assign(cust, data);
-          if (data.landmark !== undefined) {
+          Object.assign(cust, updateData);
+          if (data.address !== undefined || data.landmark !== undefined) {
             cust.preferences = {
               ...(cust.preferences as any),
-              landmark: data.landmark,
-              address_notes: data.landmark,
+              ...(data.address !== undefined ? { address: data.address, full_address: data.address } : {}),
+              ...(data.landmark !== undefined ? { landmark: data.landmark, address_notes: data.landmark } : {}),
               location_updated_at: new Date().toISOString(),
               location_updated_by_staff_name: 'Admin CS',
             };
+          }
+          if (Array.isArray(data.children)) {
+            cust.children = data.children.map((c, idx) => ({
+              id: c.id || `mock-child-${idx + 1}`,
+              customer_id: customerId,
+              tenant_id: tenantId,
+              name: c.name,
+              raw_age_text: c.raw_age_text || c.ageText || null,
+              birth_date: c.birthDate || null,
+              created_at: new Date(),
+              updated_at: new Date(),
+            }));
           }
           return cust;
         }
