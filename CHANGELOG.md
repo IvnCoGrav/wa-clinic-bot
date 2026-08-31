@@ -4,6 +4,45 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Enhancement & Fix — 8-Point Comprehensive Punch List: Calendar 2D Navigation, Multi-Hour Card Spanning, Visit Schedule Timing, Invoice Cleanup & LiveChat 24h Draft (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`, `reservation-text-parser.ts`, `paymentInvoiceFormatter.ts`, `InvoiceGeneratorModal.tsx`, `LiveChatMonitor.tsx`) (2026-08-31)
+
+- **Latar Belakang & Gejala Permasalahan:**
+  1. **Scroll Horizontal Kalender Mingguan Sulit Diakses / Tidak Bisa Diklik**: Scrollbar tipis sebelumnya hanya berukuran 8px (`h-2`) sehingga tidak dapat disentuh di layar sentuh mobile.
+  2. **Card Treatment Hanya Berada di 1 Cell (Tidak Sesuai Durasi Menit)**: Event card dirender di dalam row per jam terpisah sehingga saat durasi layanan > 60 menit (misal 90m, 120m, 150m), card terpotong oleh row jam berikutnya di DOM.
+  3. **Jadwal Kunjungan di Menu Treatment Default Jam 7 Pagi**: Saat format booking chat memisahkan baris tanggal dan baris jam terpisah (`Jam: 10.00`), parser teks melewatkan jam dan mem-parse tanggal tanpa jam sehingga fallback ke tengah malam UTC (`00:00 UTC`), yang di WIB (+7) menjadi `07:00 (7 Pagi)`.
+  4. **Menit Treatment Muncul di Invoice**: Invoice pembayaran masih mencantumkan durasi menit (`[60m]`, `(60 menit)`) pada nama layanan.
+  5. **Ongkir di Invoice Menampilkan Harga Normal Tanpa Potongan**: Invoice belum menampilkan rincian promo ongkir / potongan ongkir sesuai delivery tier.
+  6. **Draft Input LiveChat Hilang Saat Pindah Layar**: CS yang sedang mengetik balasan chat kehilangan teks ketika berpindah percakapan atau navigasi menu.
+  7. **Tinggi Textfield Input LiveChat Terlalu Tinggi**: Textfield expanding memanjang hingga 220px yang mengorbankan ruang layar thread percakapan.
+  8. **Layar HP Blank/White Space di Halaman Kalender**: Konflik touch listener non-passive dan layout kalkulasi pada viewport mobile.
+
+- **Solusi & Perbaikan Komprehensif:**
+  1. **Top Interactive Day Navigation Bar (`WeekScheduleGrid.tsx`)**:
+     - Mengganti scrollbar tipis dengan Day Navigator Bar interaktif (`h-9` / `h-10`) yang memuat chip tombol hari (`Sen 24`, `Sel 25`, `Rab 26`, dll.) dan tombol panah navigasi `◀` dan `▶`.
+     - 1-klik / 1-tap pada chip hari langsung melakukan smooth scrolling ke kolom hari tersebut.
+     - Scroll dua arah tersinkronisasi mulus antara navigator hari dan grid kalender.
+  2. **Continuous Multi-Hour Column Timeline Architecture (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`)**:
+     - Mengubah arsitektur grid: setiap kolom hari dirender sebagai satu kanvas vertikal utuh (`height = 16 * hourHeight`).
+     - Seluruh card event diposisikan secara absolut dengan kalkulasi presisi `top = (startMinutes / 60) * hourHeight` dan `height = (duration / 60) * hourHeight - 4`.
+     - Mendukung clustering event tumpang tindih (split width berdampingan otomatis).
+     - Durasi 60m, 90m, 120m, 150m, 180m sekarang merentang sempurna melintasi beberapa cell jam tanpa terpotong batas row DOM.
+     - Memperkaya `extractDurationMinutes` dengan deteksi bundling paket (`+`, `&`, `dan`), penjumlahan eksplisit menit, dan keyword treatment.
+  3. **Robust Separate Time Field Extraction (`src/utils/reservation-text-parser.ts`)**:
+     - Menambahkan penangkapan field `Jam:`, `Pukul:`, `Waktu:`, `Jadwal:` yang terpisah baris dari `Hari dan Tanggal:`.
+     - Menggabungkan `dateStr` dan `timeStr` sebelum dikonversi ke `Date`, memastikan jam yang dipesan customer (misal 09:00, 10:00, 13:00) tersimpan akurat dan tidak lagi default 07:00 WIB.
+  4. **Pembersihan Durasi Menit dari Invoice (`paymentInvoiceFormatter.ts`, `InvoiceGeneratorModal.tsx`)**:
+     - Menghapus tag menit `[XXm]`, `(XX menit)`, `XX menit` dari baris treatment di invoice.
+  5. **Perhitungan Ongkir Normal & Promo Ongkir Transparan (`paymentInvoiceFormatter.ts`, `InvoiceGeneratorModal.tsx`)**:
+     - Menampilkan rincian ongkir normal dan potongan `Promo ongkir = - Rp X.XXX` secara transparan pada invoice teks WhatsApp.
+  6. **LiveChat 24-Hour Draft Memory per Percakapan (`LiveChatMonitor.tsx`)**:
+     - Mengimplementasikan `saveConversationDraft`, `loadConversationDraft`, dan `clearConversationDraft` berbasis `localStorage` dengan masa aktif 24 jam (`86.400.000 ms`).
+     - Teks yang sedang diketik otomatis tersimpan saat berpindah percakapan dan dimuat kembali saat percakapan dibuka.
+     - Draft otomatis dibersihkan saat pesan berhasil dikirim.
+  7. **Textfield Input Max 5 Lines (`LiveChatMonitor.tsx`)**:
+     - Mengatur tinggi maksimal chat input menjadi `max-h-[125px]` (~5 baris) dengan scrolling vertikal mulus.
+  8. **Mobile Viewport Stability & Safe Gestures (`WeekScheduleGrid.tsx`, `useCalendarZoom.ts`)**:
+     - Mengisolasi pointer dragging mouse khusus untuk desktop (`e.pointerType === 'mouse'`), membebaskan touch event mobile 100% native dan bebas lag/white screen.
+
 #### Feature — Pinch-to-Zoom & Semantic Time Density Scaling untuk Kalender Mingguan & Harian (`WeekScheduleGrid.tsx`, `DayScheduleGrid.tsx`, `useCalendarZoom.ts`, `CalendarZoomControls.tsx`) (2026-08-31)
 
 - **Latar Belakang & Kebutuhan Pengguna:**

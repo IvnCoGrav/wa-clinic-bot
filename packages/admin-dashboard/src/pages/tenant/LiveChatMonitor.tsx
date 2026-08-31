@@ -465,6 +465,45 @@ export const LiveChatMonitor: React.FC = () => {
     }).catch(() => {});
   };
 
+const DRAFT_KEY_PREFIX = 'liveChat:draft:';
+
+function saveConversationDraft(convId: string, text: string) {
+  if (!convId) return;
+  try {
+    const key = `${DRAFT_KEY_PREFIX}${convId}`;
+    if (!text || !text.trim()) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify({ text, timestamp: Date.now() }));
+    }
+  } catch (_) {}
+}
+
+function loadConversationDraft(convId: string): string {
+  if (!convId) return '';
+  try {
+    const key = `${DRAFT_KEY_PREFIX}${convId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    // Bertahan 24 jam (86.400.000 ms)
+    if (Date.now() - (parsed.timestamp || 0) > 86400000) {
+      localStorage.removeItem(key);
+      return '';
+    }
+    return parsed.text || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function clearConversationDraft(convId: string) {
+  if (!convId) return;
+  try {
+    localStorage.removeItem(`${DRAFT_KEY_PREFIX}${convId}`);
+  } catch (_) {}
+}
+
   const handleInputChange = (text: string) => {
     replyTextRef.current = text;
     const isNotEmpty = text.trim().length > 0;
@@ -472,6 +511,7 @@ export const LiveChatMonitor: React.FC = () => {
       setHasReplyText(isNotEmpty);
     }
     if (!selectedIdRef.current) return;
+    saveConversationDraft(selectedIdRef.current, text);
 
     if (isNotEmpty) {
       // Debounce 500ms sebelum kirim startTyping — hindari goyang akibat SSE balik tiap karakter
@@ -785,7 +825,10 @@ export const LiveChatMonitor: React.FC = () => {
     handleInputChange(updatedText);
   };
 
-  const resetChatInput = () => {
+  const resetChatInput = (clearStorage = true) => {
+    if (clearStorage && selectedIdRef.current) {
+      clearConversationDraft(selectedIdRef.current);
+    }
     replyTextRef.current = '';
     setHasReplyText(false);
     setReplyingTo(null);
@@ -797,7 +840,17 @@ export const LiveChatMonitor: React.FC = () => {
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
-    resetChatInput();
+    setReplyingTo(null);
+    setEmojiPickerOpen(false);
+
+    // Muat draft tersimpan 24 jam untuk percakapan ini jika ada
+    const draft = selectedId ? loadConversationDraft(selectedId) : '';
+    replyTextRef.current = draft;
+    setHasReplyText(draft.trim().length > 0);
+    if (chatInputRef.current) {
+      chatInputRef.current.innerText = draft;
+    }
+
     try {
       if (selectedId) sessionStorage.setItem('liveChat:selectedId', selectedId);
       else sessionStorage.removeItem('liveChat:selectedId');
@@ -3869,7 +3922,7 @@ export const LiveChatMonitor: React.FC = () => {
                           handleSendReply();
                         }
                       }}
-                      className="chat-contenteditable flex-1 w-full min-w-0 rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[220px] overflow-y-auto leading-relaxed outline-none"
+                      className="chat-contenteditable flex-1 w-full min-w-0 rounded-xl bg-white border border-[#d1d7db] focus:border-[#008069] focus:ring-1 focus:ring-[#008069] focus:outline-none text-[16px] sm:text-sm text-[#111b21] py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none"
                       style={{ fontSize: '16px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
                     />
                     <button

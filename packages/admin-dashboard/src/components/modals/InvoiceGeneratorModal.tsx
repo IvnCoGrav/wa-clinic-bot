@@ -257,8 +257,16 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
     ];
 
     const treatList = selectedTreatments.length > 0
-      ? selectedTreatments.map(t => `${t.name} [${t.durationMinutes}m${t.isAddon ? ' Addon' : ''}]`)
-      : (treatmentName || '').split(/\s*\+\s*/).map(s => stripBufferMetadata(s)).filter(Boolean);
+      ? selectedTreatments.map(t => t.name)
+      : (treatmentName || '')
+          .split(/\s*\+\s*/)
+          .map(s =>
+            stripBufferMetadata(s)
+              .replace(/\s*\[\s*\d+\s*m.*?\]/gi, '')
+              .replace(/\s*\(\s*\d+\s*(?:menit|mins?|m)\s*\)/gi, '')
+              .trim()
+          )
+          .filter(Boolean);
 
     const isBundle = category === 'BUNDLE' || (treatList.length > 1 && (category === 'BABY' || category === 'MOMS'));
     if (category === 'BUNDLE' || (treatList.length > 1 && treatList.some(t=>/mom|hamil|laktasi|nifas|breast/i.test(t)))) {

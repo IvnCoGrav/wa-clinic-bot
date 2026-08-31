@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Reservation } from '../../types';
-import { Plus, User, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, User, Clock, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { QuickSlotTarget } from './types';
 import { useCalendarZoom } from '../../hooks/useCalendarZoom';
 import { CalendarZoomControls } from './CalendarZoomControls';
@@ -19,22 +19,127 @@ const HOURS = Array.from({ length: 16 }, (_, i) => i + 6);
 // Ukuran layout dasar untuk kalkulasi auto-scroll
 const TIME_GUTTER = 70; // kolom label jam
 const DAY_COL_WIDTH = 140; // minmax(140px,1fr) pada kolom hari
-const HEADER_HEIGHT = 60; // sticky header hari (kira-kira)
+const HEADER_HEIGHT = 50;
 
-function extractDurationMinutes(detail?: string | null): number {
+export function extractDurationMinutes(detail?: string | null): number {
   if (!detail) return 60;
+
+  // 1. Tag eksplisit [Total 120m] atau [Total 90 mins]
   const totalMatch = detail.match(/\[Total\s*(\d+)m/i);
   if (totalMatch) return parseInt(totalMatch[1], 10);
+
+  // 2. Penjumlahan semua menit eksplisit (misal "Pijat 60m + Laktasi 60m")
   const minMatches = detail.match(/(\d+)\s*(?:menit|mins?|m\b)/gi);
   if (minMatches && minMatches.length > 0) {
     let sum = 0;
     for (const m of minMatches) {
       const num = parseInt(m.replace(/\D/g, ''), 10);
-      if (num > 0 && num <= 300) sum += num;
+      if (num > 0 && num <= 360) sum += num;
     }
     if (sum > 0) return sum;
   }
+
+  // 3. Deteksi bundling paket dengan pemisah '+' atau '&' atau 'dan'
+  const items = detail.split(/\s*(?:\+|\b(?:dan|&)\b)\s*/i).filter((s) => s.trim().length > 2);
+  if (items.length > 1) {
+    return Math.min(240, items.length * 60);
+  }
+
+  // 4. Estimasi durasi dari kata kunci paket layanan
+  const lower = detail.toLowerCase();
+  if (lower.includes('nifas') || lower.includes('hamil') || lower.includes('moms') || lower.includes('paket')) {
+    return 90;
+  }
+
   return 60;
+}
+
+interface PositionedEvent {
+  res: Reservation;
+  startMinutes: number; // Menit terhitung dari jam 06:00
+  endMinutes: number;
+  duration: number;
+  topPx: number;
+  heightPx: number;
+  colIndex: number;
+  totalCols: number;
+}
+
+function layoutEventsForDay(
+  dayReservations: Reservation[],
+  hourHeight: number,
+  minCardHeight: number
+): PositionedEvent[] {
+  const eventsWithTiming = dayReservations
+    .filter((r) => !!r.booking_date)
+    .map((r) => {
+      const bDate = new Date(r.booking_date!);
+      const duration = extractDurationMinutes(r.treatment_detail);
+      const startMinutes = (bDate.getHours() - 6) * 60 + bDate.getMinutes();
+      const endMinutes = startMinutes + duration;
+      return { res: r, startMinutes, endMinutes, duration };
+    })
+    .sort((a, b) => a.startMinutes - b.startMinutes || b.duration - a.duration);
+
+  const positioned: PositionedEvent[] = [];
+  let currentCluster: typeof eventsWithTiming = [];
+  let clusterEnd = -1;
+
+  const processCluster = (cluster: typeof eventsWithTiming) => {
+    if (cluster.length === 0) return;
+    const columns: Array<{ endMinutes: number }> = [];
+    const clusterPositions: Array<{ colIndex: number }> = [];
+
+    for (const ev of cluster) {
+      let placedCol = -1;
+      for (let c = 0; c < columns.length; c++) {
+        if (columns[c].endMinutes <= ev.startMinutes) {
+          columns[c].endMinutes = ev.endMinutes;
+          placedCol = c;
+          break;
+        }
+      }
+      if (placedCol === -1) {
+        placedCol = columns.length;
+        columns.push({ endMinutes: ev.endMinutes });
+      }
+      clusterPositions.push({ colIndex: placedCol });
+    }
+
+    const totalCols = Math.max(1, columns.length);
+    cluster.forEach((ev, idx) => {
+      const colIndex = clusterPositions[idx].colIndex;
+      const topPx = Math.max(0, Math.round((ev.startMinutes / 60) * hourHeight));
+      const heightPx = Math.max(minCardHeight, Math.round((ev.duration / 60) * hourHeight - 4));
+      positioned.push({
+        res: ev.res,
+        startMinutes: ev.startMinutes,
+        endMinutes: ev.endMinutes,
+        duration: ev.duration,
+        topPx,
+        heightPx,
+        colIndex,
+        totalCols,
+      });
+    });
+  };
+
+  for (const ev of eventsWithTiming) {
+    if (currentCluster.length === 0) {
+      currentCluster.push(ev);
+      clusterEnd = ev.endMinutes;
+    } else if (ev.startMinutes < clusterEnd) {
+      currentCluster.push(ev);
+      clusterEnd = Math.max(clusterEnd, ev.endMinutes);
+    } else {
+      processCluster(currentCluster);
+      currentCluster = [ev];
+      clusterEnd = ev.endMinutes;
+    }
+  }
+  processCluster(currentCluster);
+
+  return positioned;
 }
 
 export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
@@ -75,15 +180,14 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Hanya abaikan jika klik pada input atau form controls
     const target = e.target as HTMLElement;
-    if (target.closest('input') || target.closest('select') || target.closest('textarea') || target.closest('button')) {
+    if (target.closest('input') || target.closest('select') || target.closest('textarea') || target.closest('button') || target.closest('[data-event-card]')) {
       return;
     }
     const container = containerRef.current;
     if (!container) return;
 
-    // Untuk touch device, biarkan browser menangani native pan & pinch gesture
+    // Hanya aktifkan pointer drag untuk mouse di desktop (agar mobile touch scroll 100% native dan lancar)
     if (e.pointerType !== 'mouse') return;
 
     isDraggingRef.current = true;
@@ -105,7 +209,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const dy = e.clientY - dragStartRef.current.y;
     const distance = Math.hypot(dx, dy);
 
-    // Aktifkan drag setelah threshold 4px agar klik biasa tetap berfungsi
     if (distance > 4) {
       if (!dragMovedRef.current) {
         dragMovedRef.current = true;
@@ -153,13 +256,13 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
   const isToday = (d: Date) => isSameDay(d, new Date());
 
-  // Map reservations by day index (0..6) and hour (6..21)
-  const getEventsForSlot = (dayDate: Date, hour: number) => {
-    return reservations.filter((r) => {
-      if (!r.booking_date) return false;
-      const bDate = new Date(r.booking_date);
-      return isSameDay(bDate, dayDate) && bDate.getHours() === hour;
-    });
+  const scrollToDayIndex = (idx: number) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const dayStart = TIME_GUTTER + idx * DAY_COL_WIDTH;
+    const viewportW = el.clientWidth;
+    const targetLeft = Math.max(0, dayStart - (viewportW - DAY_COL_WIDTH) / 2);
+    el.scrollTo({ left: targetLeft, behavior: 'smooth' });
   };
 
   const formatHourLabel = (hour: number) => {
@@ -184,8 +287,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
   };
 
-  // Auto-scroll saat minggu dibuka: ke treatment terdekat dari sekarang;
-  // bila tidak ada, ke kolom hari ini + jam sekarang.
+  // Auto-scroll saat minggu dibuka
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -211,7 +313,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     if (targetHour < 6) targetHour = 6;
     if (targetHour > 21) targetHour = 21;
 
-    // Kolom target dalam minggu (0=Senin..6=Minggu)
     const tIdx = weekDays.findIndex((d) => isSameDay(d, targetDay));
     if (tIdx === -1) return;
 
@@ -226,76 +327,130 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     el.scrollTop = Math.min(targetTop, Math.max(0, maxTop));
   }, [reservations, selectedDate, hourHeight]);
 
+  const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
+
   return (
     <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col relative group/calendar">
-      {/* Floating Zoom Controls Bar (Accessible on Mobile Pinch & Click) */}
+      {/* Floating Zoom Controls Bar (Desktop & Tablet) */}
       <div className="absolute top-3 right-3 z-40 hidden sm:block">
         <CalendarZoomControls zoomState={zoomState} variant="floating" />
       </div>
 
-      {/* Top Synchronized Thin Horizontal Scrollbar */}
-      <div
-        ref={topScrollRef}
-        onScroll={handleTopScroll}
-        className="overflow-x-auto overflow-y-hidden border-b border-[#e9edef] bg-[#f8fafc] z-30 shrink-0 select-none"
-        style={{
-          scrollbarWidth: 'thin',
-          scrollbarColor: '#008069 #e9edef',
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        <div className="min-w-[1050px] h-2 sm:h-2.5 flex items-center px-1">
-          <div className="w-[70px] shrink-0" />
+      {/* Top Interactive Day Navigation Bar */}
+      <div className="flex items-center justify-between border-b border-[#e9edef] bg-[#f8fafc] px-2 py-1.5 z-30 shrink-0 select-none">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              const prev = new Date(selectedDate);
+              prev.setDate(prev.getDate() - 1);
+              onSelectDate(prev);
+              const idx = weekDays.findIndex((d) => isSameDay(d, prev));
+              if (idx !== -1) scrollToDayIndex(idx);
+            }}
+            className="p-1 rounded-lg hover:bg-white border border-transparent hover:border-[#d1d7db] text-[#54656f] transition-all cursor-pointer"
+            title="Hari Sebelumnya"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-xs font-bold text-[#111b21] hidden sm:inline px-1">
+            Navigasi Hari:
+          </span>
+        </div>
+
+        {/* Clickable Day Pills with Scroll Sync */}
+        <div
+          ref={topScrollRef}
+          onScroll={handleTopScroll}
+          className="flex-1 flex items-center gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+        >
           {weekDays.map((d, i) => {
             const isSel = isSameDay(d, selectedDate);
+            const isTod = isToday(d);
+            const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+            const dayNum = d.getDate();
+
             return (
-              <div
+              <button
                 key={i}
-                className={`flex-1 min-w-[140px] h-1 rounded-full mx-1 transition-colors ${
-                  isSel ? 'bg-[#008069]' : 'bg-[#d1d7db]'
+                type="button"
+                onClick={() => {
+                  onSelectDate(d);
+                  scrollToDayIndex(i);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                  isSel
+                    ? 'bg-[#008069] text-white shadow-xs'
+                    : isTod
+                    ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]'
+                    : 'bg-white hover:bg-[#e9edef] text-[#54656f] border border-[#e9edef]'
                 }`}
-              />
+              >
+                <span>{dayName}</span>
+                <span className="font-mono">{dayNum}</span>
+              </button>
             );
           })}
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const next = new Date(selectedDate);
+            next.setDate(next.getDate() + 1);
+            onSelectDate(next);
+            const idx = weekDays.findIndex((d) => isSameDay(d, next));
+            if (idx !== -1) scrollToDayIndex(idx);
+          }}
+          className="p-1 rounded-lg hover:bg-white border border-transparent hover:border-[#d1d7db] text-[#54656f] transition-all cursor-pointer"
+          title="Hari Berikutnya"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
 
-      {/* Scrollable Container with sticky header for continuous vertical line alignment */}
+      {/* Main 2D Scrollable Timeline View */}
       <div
         ref={containerRef}
-        onScroll={handleMainScroll}
         data-horizontal-scroll="true"
         data-no-swipe-back="true"
+        onScroll={handleMainScroll}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="overflow-x-auto overflow-y-auto max-h-[720px] overscroll-x-contain select-none cursor-grab active:cursor-grabbing"
-        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
+        className="overflow-x-auto overflow-y-auto max-h-[720px] select-none cursor-grab active:cursor-grabbing"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#008069 #e9edef',
+        }}
       >
         <div className="min-w-[1050px] w-full divide-y divide-[#e9edef]">
-          {/* Week Header Days Bar */}
+          {/* Sticky Header: Day Names & Dates */}
           <div className="sticky top-0 z-30 grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] border-b border-[#e9edef] bg-[#fafafa] shadow-xs">
-            {/* Empty top-left time cell (frozen horizontally & vertically) */}
-            <div className="sticky top-0 left-0 z-40 p-3 flex items-center justify-center text-[#8696a0] bg-[#fafafa] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
-              <Clock size={16} />
+            {/* Top-left corner box */}
+            <div className="sticky left-0 z-40 bg-[#fafafa] border-r border-[#e9edef] flex items-center justify-center p-2 text-xs font-bold text-[#8696a0] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+              GMT+7
             </div>
 
-            {/* 7 Day Columns */}
-            {weekDays.map((day, idx) => {
+            {/* 7 Days Header Columns */}
+            {weekDays.map((day, i) => {
+              const dayName = day.toLocaleDateString('id-ID', { weekday: 'short' });
+              const dayNum = day.getDate();
               const isSelected = isSameDay(day, selectedDate);
               const currentDay = isToday(day);
-              const dayName = day.toLocaleDateString('id-ID', { weekday: 'long' });
-              const dayNum = day.getDate();
 
               return (
                 <button
-                  key={idx}
+                  key={i}
                   onClick={() => {
                     if (dragMovedRef.current) return;
                     onSelectDate(day);
+                    scrollToDayIndex(i);
                   }}
-                  className={`p-2.5 sm:p-3 text-center transition-all flex flex-col items-center justify-center cursor-pointer ${
+                  className={`p-2 sm:p-2.5 text-center flex flex-col items-center justify-center transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-[#111b21] text-white shadow-sm'
                       : currentDay
@@ -303,18 +458,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       : 'hover:bg-[#f0f2f5] text-[#54656f] bg-[#fafafa]'
                   }`}
                 >
-                  <span
-                    className={`text-[11px] font-medium uppercase tracking-wider ${
-                      isSelected ? 'text-gray-300' : currentDay ? 'text-[#008069]' : 'text-[#8696a0]'
-                    }`}
-                  >
+                  <span className={`text-[11px] font-medium uppercase tracking-wider ${isSelected ? 'text-gray-300' : currentDay ? 'text-[#008069]' : 'text-[#8696a0]'}`}>
                     {dayName}
                   </span>
-                  <span
-                    className={`text-base sm:text-lg font-extrabold mt-0.5 ${
-                      isSelected ? 'text-white' : currentDay ? 'text-[#008069]' : 'text-[#111b21]'
-                    }`}
-                  >
+                  <span className={`text-base sm:text-lg font-extrabold mt-0.5 ${isSelected ? 'text-white' : currentDay ? 'text-[#008069]' : 'text-[#111b21]'}`}>
                     {dayNum}
                   </span>
                 </button>
@@ -322,158 +469,179 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
             })}
           </div>
 
-          {/* Hourly Timeline Grid */}
-          {HOURS.map((hour) => (
-            <div
-              key={hour}
-              style={{ height: `${hourHeight}px`, minHeight: `${hourHeight}px` }}
-              className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] group"
-            >
-              {/* Time label column (frozen horizontally on scroll) */}
-              <div className="sticky left-0 z-20 p-2 text-right pr-3 text-xs font-semibold text-[#8696a0] select-none bg-[#fafafa] flex items-start justify-end pt-2 border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
-                <span>{formatHourLabel(hour)}</span>
-              </div>
+          {/* Continuous Multi-Hour Timeline Canvas */}
+          <div
+            className="grid grid-cols-[70px_repeat(7,minmax(140px,1fr))] divide-x divide-[#e9edef] relative"
+            style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
+          >
+            {/* Time label column (frozen horizontally on scroll) */}
+            <div className="sticky left-0 z-20 bg-[#fafafa] divide-y divide-[#e9edef] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  style={{ height: `${hourHeight}px` }}
+                  className="p-2 text-right pr-3 text-xs font-semibold text-[#8696a0] select-none flex items-start justify-end pt-2"
+                >
+                  <span>{formatHourLabel(hour)}</span>
+                </div>
+              ))}
+            </div>
 
-              {/* Day Slots */}
-              {weekDays.map((day, dayIdx) => {
-                const events = getEventsForSlot(day, hour);
-                const isSelectedDay = isSameDay(day, selectedDate);
+            {/* 7 Continuous Day Columns */}
+            {weekDays.map((day, dayIdx) => {
+              const isSelectedDay = isSameDay(day, selectedDate);
+              const dayReservations = reservations.filter(
+                (r) => r.booking_date && isSameDay(new Date(r.booking_date), day)
+              );
+              const positionedEvents = layoutEventsForDay(dayReservations, hourHeight, minCardHeight);
 
-                return (
-                  <div
-                    key={dayIdx}
-                    style={{ height: `${hourHeight}px` }}
-                    className={`relative transition-colors group/slot ${
-                      isSelectedDay ? 'bg-emerald-50/20' : 'hover:bg-gray-50/60'
-                    }`}
-                  >
-                    {/* Empty Slot Hover Quick-Add Button (Always available behind cards) */}
-                    <button
-                      onClick={(e) => {
-                        if (dragMovedRef.current) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          return;
-                        }
-                        onQuickAdd({ date: day, hour });
-                      }}
-                      className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
-                      title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
+              return (
+                <div
+                  key={dayIdx}
+                  className={`relative divide-y divide-[#e9edef] transition-colors ${
+                    isSelectedDay ? 'bg-emerald-50/20' : ''
+                  }`}
+                >
+                  {/* Background Hourly Slot Grids & Hover Add Buttons */}
+                  {HOURS.map((hour) => (
+                    <div
+                      key={hour}
+                      style={{ height: `${hourHeight}px` }}
+                      className="relative group/slot hover:bg-gray-50/60 transition-colors"
                     >
-                      <Plus size={16} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
-                    </button>
-
-                    {/* Event Blocks (Spanning proportionally by start minute & total duration) */}
-                    {events.map((res, evIdx) => {
-                      const bDate = new Date(res.booking_date!);
-                      const duration = extractDurationMinutes(res.treatment_detail);
-                      const startTimeStr = bDate
-                        .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
-                        .replace('.', ':');
-                      const categoryStyles = getCategoryStyles(res.treatment_category);
-
-                      // Bersihkan gelar/sapaan "Bunda/Ibu" dan ambil nama depan saja
-                      const rawName = res.customer?.name || 'Pasien';
-                      const cleanName = rawName
-                        .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
-                        .trim();
-                      const firstName = cleanName.split(/\s+/)[0] || cleanName;
-
-                      const cleanDetail = (res.treatment_detail || res.treatment_category || '')
-                        .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
-                        .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
-                        .trim();
-
-                      // Posisi menit awal (0..59) dan tinggi proporsional durasi
-                      const startMinutes = bDate.getMinutes();
-                      const topOffsetPx = Math.round((startMinutes / 60) * hourHeight);
-                      const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
-                      const heightPx = Math.max(minCardHeight, Math.round((duration / 60) * hourHeight - 4));
-                      const evCount = events.length;
-                      const evWidth = evCount > 1 ? `calc(${100 / evCount}% - 6px)` : 'calc(100% - 8px)';
-                      const evLeft = evCount > 1 ? `calc(${(evIdx * 100) / evCount}% + 3px)` : '4px';
-
-                      return (
-                        <div
-                          key={res.id}
-                          data-event-card="true"
-                          onClick={(e) => {
+                      <button
+                        onClick={(e) => {
+                          if (dragMovedRef.current) {
+                            e.preventDefault();
                             e.stopPropagation();
-                            if (dragMovedRef.current) return;
-                            onSelectReservation(res);
-                          }}
-                          style={{
-                            top: `${topOffsetPx + 2}px`,
-                            height: `${heightPx}px`,
-                            left: evLeft,
-                            width: evWidth,
-                          }}
-                          className={`absolute z-10 p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-15 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
-                        >
-                          {zoomLevel === 'compact' ? (
-                            /* COMPACT VIEW LOD (<65px) */
-                            <div className="flex items-center justify-between gap-1 h-full">
-                              <span className="font-extrabold text-[10.5px] text-[#111b21] truncate leading-tight">
-                                {firstName}
+                            return;
+                          }
+                          onQuickAdd({ date: day, hour });
+                        }}
+                        className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] flex items-center justify-center transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
+                        title={`Tambah Jadwal pada ${day.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })} jam ${formatHourLabel(hour)}`}
+                      >
+                        <Plus size={16} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Absolute Continuous Event Blocks Spanning Across Multi-Hours */}
+                  {positionedEvents.map((pos) => {
+                    const res = pos.res;
+                    const bDate = new Date(res.booking_date!);
+                    const startTimeStr = bDate
+                      .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
+                      .replace('.', ':');
+                    const categoryStyles = getCategoryStyles(res.treatment_category);
+
+                    const rawName = res.customer?.name || 'Pasien';
+                    const cleanName = rawName
+                      .replace(/^(?:Bunda|Ibu|Ny\.|Nn\.|Sdri\.|Mama|Mom|Moms)\s+/i, '')
+                      .trim();
+                    const firstName = cleanName.split(/\s+/)[0] || cleanName;
+
+                    const cleanDetail = (res.treatment_detail || res.treatment_category || '')
+                      .replace(/\[\s*(?:total\s*)?buffer\s*=[^\]]*\]/gi, '')
+                      .replace(/\[\s*total\s*\d+\s*m?\s*\+\s*buffer\s*\d+\s*m?\s*=\s*\d+\s*m?\s*\]/gi, '')
+                      .trim();
+
+                    const evWidth =
+                      pos.totalCols > 1
+                        ? `calc(${100 / pos.totalCols}% - 6px)`
+                        : 'calc(100% - 8px)';
+                    const evLeft =
+                      pos.totalCols > 1
+                        ? `calc(${(pos.colIndex * 100) / pos.totalCols}% + 3px)`
+                        : '4px';
+
+                    return (
+                      <div
+                        key={res.id}
+                        data-event-card="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (dragMovedRef.current) return;
+                          onSelectReservation(res);
+                        }}
+                        style={{
+                          top: `${pos.topPx + 2}px`,
+                          height: `${pos.heightPx}px`,
+                          left: evLeft,
+                          width: evWidth,
+                        }}
+                        className={`absolute z-10 p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${categoryStyles}`}
+                      >
+                        {zoomLevel === 'compact' ? (
+                          /* COMPACT VIEW LOD (<65px) */
+                          <div className="flex items-center justify-between gap-1 h-full">
+                            <span className="font-extrabold text-[10.5px] text-[#111b21] truncate leading-tight">
+                              {firstName}
+                            </span>
+                            <span className="font-mono text-[9px] font-bold text-[#54656f] shrink-0">
+                              {startTimeStr} ({pos.duration}m)
+                            </span>
+                          </div>
+                        ) : (
+                          /* STANDARD & DETAILED VIEW LOD */
+                          <>
+                            {/* Baris Atas: Jam Mulai & Status Badge */}
+                            <div className="flex items-center justify-between text-[10px] sm:text-[10.5px] font-bold shrink-0">
+                              <span className="flex items-center space-x-1 font-mono text-[#111b21]">
+                                <Clock size={10} className="opacity-75 shrink-0" />
+                                <span>{startTimeStr}</span>
                               </span>
-                              <span className="font-mono text-[9px] font-bold text-[#54656f] shrink-0">
-                                {startTimeStr}
+                              {res.status === 'confirmed' ? (
+                                <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800 shrink-0">
+                                  <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
+                                  Lunas
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 text-amber-800 shrink-0">
+                                  <AlertCircle size={9} className="mr-0.5 text-amber-600" />
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Baris Tengah: Nama Pasien & Detail Layanan */}
+                            <div className="my-auto py-0.5 overflow-hidden space-y-0.5">
+                              <h5
+                                className="font-extrabold text-xs text-[#111b21] truncate leading-tight"
+                                title={res.customer?.name || ''}
+                              >
+                                {zoomLevel === 'detailed' ? cleanName : firstName}
+                              </h5>
+                              {pos.heightPx >= 58 && cleanDetail && (
+                                <p className="text-[10px] opacity-90 line-clamp-1 font-medium leading-tight">
+                                  {cleanDetail}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Baris Bawah: Nama Terapis & Durasi */}
+                            <div className="pt-0.5 border-t border-black/10 flex items-center justify-between text-[9px] sm:text-[9.5px] opacity-85 shrink-0">
+                              <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f]">
+                                <User size={9} className="shrink-0 text-[#008069]" />
+                                <span className="truncate">
+                                  {res.assigned_staff?.name
+                                    ? res.assigned_staff.name.split(/\s+/)[0]
+                                    : 'Unassigned'}
+                                </span>
+                              </div>
+                              <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 shrink-0 ml-1">
+                                {pos.duration}m
                               </span>
                             </div>
-                          ) : (
-                            /* STANDARD & DETAILED VIEW LOD */
-                            <>
-                              {/* Baris Atas: Jam Mulai & Status Badge */}
-                              <div className="flex items-center justify-between text-[10px] sm:text-[10.5px] font-bold shrink-0">
-                                <span className="flex items-center space-x-1 font-mono text-[#111b21]">
-                                  <Clock size={10} className="opacity-75 shrink-0" />
-                                  <span>{startTimeStr}</span>
-                                </span>
-                                {res.status === 'confirmed' ? (
-                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800 shrink-0">
-                                    <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
-                                    Lunas
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 text-amber-800 shrink-0">
-                                    <AlertCircle size={9} className="mr-0.5 text-amber-600" />
-                                    Pending
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Baris Tengah: Nama Pasien & Detail Layanan */}
-                              <div className="my-auto py-0.5 overflow-hidden space-y-0.5">
-                                <h5 className="font-extrabold text-xs text-[#111b21] truncate leading-tight" title={res.customer?.name || ''}>
-                                  {zoomLevel === 'detailed' ? cleanName : firstName}
-                                </h5>
-                                {heightPx >= 58 && cleanDetail && (
-                                  <p className="text-[10px] opacity-90 line-clamp-1 font-medium leading-tight">
-                                    {cleanDetail}
-                                  </p>
-                                )}
-                              </div>
-
-                              {/* Baris Bawah: Nama Terapis & Durasi */}
-                              <div className="pt-0.5 border-t border-black/10 flex items-center justify-between text-[9px] sm:text-[9.5px] opacity-85 shrink-0">
-                                <div className="flex items-center space-x-1 truncate font-semibold text-[#54656f]">
-                                  <User size={9} className="shrink-0 text-[#008069]" />
-                                  <span className="truncate">{res.assigned_staff?.name ? res.assigned_staff.name.split(/\s+/)[0] : 'Unassigned'}</span>
-                                </div>
-                                <span className="font-mono font-bold text-[8.5px] px-1 py-0.2 rounded bg-black/5 shrink-0 ml-1">
-                                  {duration}m
-                                </span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
