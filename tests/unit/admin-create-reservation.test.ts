@@ -180,4 +180,61 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
       }),
     }));
   });
+
+  it('PATCH /api/admin/reservation/:id updates reservation details and customer/children correctly', async () => {
+    const reservationId = 'res-edit-test-1';
+    const customerId = 'cust-edit-1';
+    const existingRes = {
+      id: reservationId,
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: customerId,
+      treatment_category: 'BABY',
+      treatment_detail: 'Pijat Bayi',
+      purchase_value: 60000,
+      status: 'pending',
+      booking_date: null,
+      customer: {
+        id: customerId,
+        name: 'Bunda Aisyah',
+        phone: '081234567890',
+        children: [{ id: 'child-1', name: 'Adek Kenzo', raw_age_text: '4 bulan' }],
+      },
+    };
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(existingRes as any);
+    vi.mocked(prisma.reservation.update).mockResolvedValueOnce({
+      ...existingRes,
+      treatment_category: 'MOMS',
+      treatment_detail: 'Pijat Laktasi',
+      purchase_value: 120000,
+      status: 'confirmed',
+    } as any);
+    vi.mocked(prisma.customer.update).mockResolvedValueOnce({} as any);
+    vi.mocked(prisma.child.update).mockResolvedValueOnce({} as any);
+    const auditSpy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/reservation/${reservationId}`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        treatmentCategory: 'MOMS',
+        treatmentDetail: 'Pijat Laktasi',
+        purchaseValue: 120000,
+        status: 'confirmed',
+        customerName: 'Bunda Aisyah Updated',
+        address: 'Jl. Ahmad Yani No. 12',
+        babies: [{ name: 'Adek Kenzo', ageText: '5 bulan' }],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(auditSpy).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'UPDATE_RESERVATION_DETAIL',
+      targetId: reservationId,
+    }));
+  });
 });

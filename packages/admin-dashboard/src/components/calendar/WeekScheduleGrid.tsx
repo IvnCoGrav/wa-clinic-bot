@@ -152,14 +152,15 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
   const zoomState = useCalendarZoom();
   const { hourHeight, zoomLevel, containerRef } = zoomState;
 
-  const topScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollbarRef = useRef<HTMLDivElement>(null);
   const isSyncingScrollRef = useRef(false);
+  const hasAutoScrolledRef = useRef(false);
 
-  const handleTopScroll = () => {
+  const handleTopScrollbar = () => {
     if (isSyncingScrollRef.current) return;
-    if (!topScrollRef.current || !containerRef.current) return;
+    if (!topScrollbarRef.current || !containerRef.current) return;
     isSyncingScrollRef.current = true;
-    containerRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    containerRef.current.scrollLeft = topScrollbarRef.current.scrollLeft;
     requestAnimationFrame(() => {
       isSyncingScrollRef.current = false;
     });
@@ -167,9 +168,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
 
   const handleMainScroll = () => {
     if (isSyncingScrollRef.current) return;
-    if (!topScrollRef.current || !containerRef.current) return;
+    if (!topScrollbarRef.current || !containerRef.current) return;
     isSyncingScrollRef.current = true;
-    topScrollRef.current.scrollLeft = containerRef.current.scrollLeft;
+    topScrollbarRef.current.scrollLeft = containerRef.current.scrollLeft;
     requestAnimationFrame(() => {
       isSyncingScrollRef.current = false;
     });
@@ -187,7 +188,6 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     const container = containerRef.current;
     if (!container) return;
 
-    // Hanya aktifkan pointer drag untuk mouse di desktop (agar mobile touch scroll 100% native dan lancar)
     if (e.pointerType !== 'mouse') return;
 
     isDraggingRef.current = true;
@@ -287,45 +287,30 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
     }
   };
 
-  // Auto-scroll saat minggu dibuka
+  // Auto-scroll sekali saat kalender pertama kali dimuat
   useEffect(() => {
+    if (hasAutoScrolledRef.current) return;
     const el = containerRef.current;
     if (!el) return;
 
     const now = new Date();
-    const upcoming = reservations
-      .filter((r) => r.booking_date && new Date(r.booking_date).getTime() >= now.getTime())
-      .sort(
-        (a, b) =>
-          new Date(a.booking_date!).getTime() - new Date(b.booking_date!).getTime()
-      );
-    const target = upcoming[0] ? new Date(upcoming[0].booking_date!) : null;
+    const tIdx = weekDays.findIndex((d) => isSameDay(d, selectedDate) || isSameDay(d, now));
+    const activeIdx = tIdx !== -1 ? tIdx : 0;
 
-    let targetDay: Date;
-    let targetHour: number;
-    if (target) {
-      targetDay = target;
-      targetHour = target.getHours();
-    } else {
-      targetDay = new Date();
-      targetHour = now.getHours();
-    }
-    if (targetHour < 6) targetHour = 6;
-    if (targetHour > 21) targetHour = 21;
-
-    const tIdx = weekDays.findIndex((d) => isSameDay(d, targetDay));
-    if (tIdx === -1) return;
-
-    const dayStart = TIME_GUTTER + tIdx * DAY_COL_WIDTH;
-    const viewportW = el.clientWidth;
+    const dayStart = TIME_GUTTER + activeIdx * DAY_COL_WIDTH;
+    const viewportW = el.clientWidth || 360;
     const targetLeft = Math.max(0, dayStart - (viewportW - DAY_COL_WIDTH) / 2);
     const maxLeft = el.scrollWidth - viewportW;
     el.scrollLeft = Math.min(targetLeft, Math.max(0, maxLeft));
 
+    const currentHour = now.getHours();
+    const targetHour = Math.max(6, Math.min(currentHour, 20));
     const targetTop = Math.max(0, (targetHour - 6) * hourHeight - HEADER_HEIGHT / 2);
     const maxTop = el.scrollHeight - el.clientHeight;
     el.scrollTop = Math.min(targetTop, Math.max(0, maxTop));
-  }, [reservations, selectedDate, hourHeight]);
+
+    hasAutoScrolledRef.current = true;
+  }, []);
 
   const minCardHeight = zoomLevel === 'compact' ? 32 : 50;
 
@@ -348,7 +333,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
               const idx = weekDays.findIndex((d) => isSameDay(d, prev));
               if (idx !== -1) scrollToDayIndex(idx);
             }}
-            className="p-1 rounded-lg hover:bg-white border border-transparent hover:border-[#d1d7db] text-[#54656f] transition-all cursor-pointer"
+            className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#d1d7db] text-[#54656f] transition-all cursor-pointer"
             title="Hari Sebelumnya"
           >
             <ChevronLeft size={16} />
@@ -358,11 +343,9 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
           </span>
         </div>
 
-        {/* Clickable Day Pills with Scroll Sync */}
+        {/* Clickable Day Pills */}
         <div
-          ref={topScrollRef}
-          onScroll={handleTopScroll}
-          className="flex-1 flex items-center gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
+          className="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scrollbar mx-1 px-1 py-0.5"
           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
         >
           {weekDays.map((d, i) => {
@@ -379,16 +362,16 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                   onSelectDate(d);
                   scrollToDayIndex(i);
                 }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
                   isSel
-                    ? 'bg-[#008069] text-white shadow-xs'
+                    ? 'bg-[#111b21] text-white shadow-xs'
                     : isTod
                     ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]'
-                    : 'bg-white hover:bg-[#e9edef] text-[#54656f] border border-[#e9edef]'
+                    : 'bg-white hover:bg-[#f0f2f5] text-[#54656f] border border-[#e9edef]'
                 }`}
               >
                 <span>{dayName}</span>
-                <span className="font-mono">{dayNum}</span>
+                <span className="font-bold">{dayNum}</span>
               </button>
             );
           })}
@@ -403,11 +386,26 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
             const idx = weekDays.findIndex((d) => isSameDay(d, next));
             if (idx !== -1) scrollToDayIndex(idx);
           }}
-          className="p-1 rounded-lg hover:bg-white border border-transparent hover:border-[#d1d7db] text-[#54656f] transition-all cursor-pointer"
+          className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-[#d1d7db] text-[#54656f] transition-all cursor-pointer"
           title="Hari Berikutnya"
         >
           <ChevronRight size={16} />
         </button>
+      </div>
+
+      {/* Dedicated Top Horizontal Scrollbar Track (1:1 Synchronized with 1050px Calendar Grid) */}
+      <div
+        ref={topScrollbarRef}
+        onScroll={handleTopScrollbar}
+        className="overflow-x-auto overflow-y-hidden h-3 sm:h-3.5 bg-[#f0f2f5] border-b border-[#e9edef] select-none cursor-pointer"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#008069 #e9edef',
+        }}
+        title="Geser kalender secara horizontal"
+      >
+        <div style={{ width: '1050px', height: '1px' }} />
       </div>
 
       {/* Main 2D Scrollable Timeline View */}
