@@ -82,8 +82,7 @@ describe('Zero-Regex Chat Handling & Anti-Loop Scenario Tests', () => {
       tenantId: 'default-tenant',
     });
 
-    // With location_text from deterministic, isGenericCityLocationOnly is false,
-    // so the clinic origin policy doesn't fire — instead falls through to GENERATE_AI_RESPONSE
-    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
+    expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
+    expect(decision.deterministicTemplateReply).toMatch(/Waru.*Sidoarjo/i);
   });
 });
