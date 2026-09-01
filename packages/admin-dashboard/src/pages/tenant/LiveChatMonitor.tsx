@@ -2769,6 +2769,7 @@ function clearConversationDraft(convId: string) {
                     <input
                       ref={searchInputRef}
                       type="text"
+                      tabIndex={mobileView === 'chat' ? -1 : 0}
                       value={searchQuery}
                       onChange={(e) => {
                         setSearchQuery(e.target.value);
@@ -3722,7 +3723,7 @@ function clearConversationDraft(convId: string) {
                 </div>
 
                 {/* Reply Composer */}
-                <div className="border-t border-[#e9edef] pt-1 sm:pt-1.5 shrink-0">
+                <div className="chat-composer-container border-t border-[#e9edef] pt-1 sm:pt-1.5 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0 bg-white">
                   {selectedChat.isSandboxTest ? (
                     <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
                       <FlaskConical size={13} />
@@ -3960,9 +3961,21 @@ function clearConversationDraft(convId: string) {
                       contentEditable="plaintext-only"
                       role="textbox"
                       aria-multiline="true"
+                      tabIndex={0}
+                      inputMode="text"
+                      enterKeyHint="send"
+                      autoCapitalize="sentences"
+                      autoCorrect="on"
+                      spellCheck={true}
                       data-placeholder="Tulis balasan... (Enter baris baru, klik Kirim)"
                       onFocus={() => {
-                        // viewport handler throttle sudah handle, tidak perlu scroll paksa lagi saat fokus untuk hindari goyang
+                        if (typeof window !== 'undefined') {
+                          window.scrollTo(0, 0);
+                          setTimeout(() => {
+                            window.scrollTo(0, 0);
+                            scrollToBottom(true, false);
+                          }, 100);
+                        }
                       }}
                       onInput={(e) => {
                         handleInputChange(e.currentTarget.innerText || '');

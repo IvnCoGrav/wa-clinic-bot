@@ -2,7 +2,35 @@
 
 Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/2.0.0.html).
+dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+#### Enhancement & Fix — iPhone Header Safe-Area Inset & LiveChat Virtual Keyboard Viewport (`Layout.tsx`, `LiveChatMonitor.tsx`, `index.css`) (2026-09-01)
+
+- **Latar Belakang & Masalah yang Dilaporkan Pengguna di iPhone:**
+  1. **Textfield Input Chat Tenggelam di Belakang Keyboard**: Saat mengetik di LiveChat pada iPhone (Safari/PWA), kolom input balasan ("Tulis balasan... [Kirim]") tertutup di balik virtual keyboard iOS.
+  2. **Header Atas Mepet Status Bar tapi Bawahnya Sangat Longgar**: Teks judul panel "Kala Moms & Baby Spa Panel" bertabrakan dengan jam (19.15) dan baterai status bar iPhone, sementara ruang di bawah tombol Online/Menu sangat renggang/kosong.
+- **Akar Masalah Teknis:**
+  1. **LiveChat Keyboard Viewport (`Layout.tsx`)**: Menggunakan tinggi statis `h-screen` (`100vh`). Pada iOS Safari, `100vh` tidak otomatis menyusut ketika keyboard muncul, sehingga area komposer bawah tetap berada di koordinat dasar layar (di balik keyboard 300px).
+  2. **Header Layout Wrapper (`Layout.tsx`)**: Header memiliki `pt-[env(safe-area-inset-top)]` dan `min-h-[calc(3rem+safe-area)]`, tetapi seluruh konten di dalamnya diberi `flex items-center` pada container luar 95px tanpa pemisahan baris. Akibatnya teks berada di tengah-tengah tinggi total (bertabrakan dengan notch 50px di atas) dan menyisakan ruang kosong besar 45px di bawahnya.
+- **Solusi & Implementasi Teknis (Lokal):**
+  1. **Dynamic Visual Viewport Tracker (`--vvh`)**:
+     - Ditambahkan hook listener `window.visualViewport` di `Layout.tsx` yang menuliskan CSS variable `--vvh: ${window.visualViewport.height}px` secara dinamis ke `document.documentElement`.
+     - Container LiveChat kini menggunakan `height: var(--vvh, 100dvh)` dan `maxHeight: var(--vvh, 100dvh)`, sehingga saat keyboard iPhone terbuka, seluruh layar chat otomatis menyusut dan mengangkat kolom input tepat di atas keyboard.
+     - **Anti-Fly Input Fix**: Menghapus pemanggilan `scrollIntoView()` pada elemen text input yang sebelumnya menyebabkan Safari menggulung seluruh halaman web ke atas sehingga input terbang ke bawah jam. Mengunci scroll window (`overflow: hidden` saat di halaman chat) dan menjaga jangkar `window.scrollTo(0,0)`, sehingga hanya container bubble chat yang menyusut dan textfield tetap menempel tepat di atas keyboard.
+     - **Keyboard-Flush Auto Padding (`data-keyboard-open`)**: Mengurangi padding bawah dari 34px (`safe-area-inset-bottom`) menjadi 2px saat keyboard aktif, sehingga kolom chat menempel rapat/mepet presisi tanpa celah kosong di atas keyboard.
+     - **Supresi Toolbar Safari (`enterKeyHint`, `tabIndex`)**: Menambahkan `enterKeyHint="send"`, `inputMode="text"`, dan mematikan `tabIndex` pada elemen latar belakang saat membuka chat agar Safari menonaktifkan panah navigasi form (`^ v`).
+  2. **Struktur Header Safe-Area Terpisah (`Layout.tsx`)**:
+     - Memisahkan container header menjadi wrapper luar dengan `pt-[env(safe-area-inset-top, 0px)]` sebagai bantalan notch murni, dan bar dalam `<div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">`.
+     - Judul panel dan tombol status/menu kini berada tepat di baris 48px di bawah jam & notch iPhone, dan ruang kosong di bawahnya 100% hilang (rapi dan proporsional di iPhone maupun Android).
+  3. **Penyelarasan Warna Status Bar iPhone & Integrasi Logo Kala Resmi (`index.html`, `index.css`, `Layout.tsx`)**:
+     - Mengubah `<meta name="theme-color" content="#ffffff">` dan `html { background-color: #ffffff; }` sehingga area notch/jam di bagian paling atas iPhone menyatu 100% dengan warna putih bersih (*seamless pure white*) tanpa garis potongan warna gelap (#008069 atau abu-abu).
+     - Mengganti teks panjang "Kala Moms & Baby Spa Panel" di top header dengan Logo Kala resmi yang ramping & bersih berlabel "KALA SPA".
+     - Mengganti kotak hijau inisial "K" di sidebar navigation dengan Logo Kala resmi (`/admin/apple-touch-icon.png`).
+  4. **Universal Sticky Header di Seluruh Halaman (`index.css`)**:
+     - Mengganti `overflow-x: hidden` pada `body` dan `#root` menjadi `overflow-x: clip`. Sesuai standar CSS W3C, `overflow-x: hidden` membuat browser memicu formatting context baru yang merusak `position: sticky; top: 0` saat halaman panjang di-scroll. Dengan `clip`, header kini **100% menempel (sticky) di bagian atas layar di semua halaman** (Reservations, Customer Database, Settings, Clinic Services, dll).
+  5. **Build & Verifikasi**:
+     - Frontend `packages/admin-dashboard`: **PASS (built in 10.23s)**.
+     - Backend server: **PASS (0 error)**.
 
 #### Enhancement — Prioritas Utama Perawatan Lanjutan Bulanan (NEXT_TREATMENT) & Peningkatan Kapasitas 25 Pesan/Hari (`follow-up.service.ts`, `follow-up-engine.test.ts`) (2026-09-01)
 
