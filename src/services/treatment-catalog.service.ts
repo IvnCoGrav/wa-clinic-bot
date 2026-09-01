@@ -26,6 +26,8 @@ export interface ClinicServiceItem {
   promoPrice: number;          // Harga Promo / Khusus (Rp)
   description: string;         // Deskripsi detail & manfaat treatment
   isActive: boolean;           // Status keaktifan layanan
+  totalSessions?: number;      // null = single visit, 14 = paket 14 sesi
+  sessionScheduleType?: string; // "manual" = admin atur jam per sesi
 }
 
 const SERVICES_FILE = path.join(process.cwd(), 'services_custom.json');
@@ -467,6 +469,8 @@ export async function loadServicesFromDb(tenantId: string): Promise<void> {
           promoPrice: s.promo_price,
           description: desc,
           isActive: s.is_active,
+          totalSessions: s.total_sessions ?? undefined,
+          sessionScheduleType: s.session_schedule_type ?? undefined,
         });
       });
       return;

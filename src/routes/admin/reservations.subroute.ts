@@ -2066,4 +2066,199 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  // ─── Reservation Series Endpoints ───────────────────────────────────────
+
+  /**
+   * POST /api/admin/reservation-series
+   * Create a multi-session reservation series.
+   */
+  fastify.post(
+    '/api/admin/reservation-series',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          customerId: string;
+          treatmentName: string;
+          totalSessions: number;
+          purchaseValue?: number;
+          assignedStaffId?: string;
+          notes?: string;
+          sessions: Array<{
+            sessionNumber: number;
+            bookingDate: string;
+            assignedStaffId?: string;
+          }>;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { customerId, treatmentName, totalSessions, purchaseValue, assignedStaffId, notes, sessions } = request.body || {};
+
+      if (!customerId || !treatmentName || !totalSessions || !sessions?.length) {
+        return reply.status(400).send({ success: false, error: 'customerId, treatmentName, totalSessions, dan sessions wajib diisi.' });
+      }
+
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const series = await reservationSeriesService.createSeries(
+          { customerId, treatmentName, totalSessions, purchaseValue, assignedStaffId, notes, sessions },
+          DEFAULT_TENANT_ID
+        );
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'CREATE_RESERVATION_SERIES',
+          targetId: series.id,
+          payload: { customerId, treatmentName, totalSessions, purchaseValue, sessionCount: sessions.length },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(201).send({ success: true, data: series });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/reservation-series/:id
+   * Get a single series with all sessions.
+   */
+  fastify.get(
+    '/api/admin/reservation-series/:id',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const series = await reservationSeriesService.getSeries(request.params.id, DEFAULT_TENANT_ID);
+        if (!series) return reply.status(404).send({ success: false, error: 'Series tidak ditemukan.' });
+        return reply.status(200).send({ success: true, data: series });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/reservation-series/customer/:customerId
+   * Get all active series for a customer.
+   */
+  fastify.get(
+    '/api/admin/reservation-series/customer/:customerId',
+    async (request: FastifyRequest<{ Params: { customerId: string } }>, reply: FastifyReply) => {
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const series = await reservationSeriesService.getCustomerSeries(request.params.customerId, DEFAULT_TENANT_ID);
+        return reply.status(200).send({ success: true, data: series });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation-series/:id/pause
+   * Pause remaining sessions.
+   */
+  fastify.patch(
+    '/api/admin/reservation-series/:id/pause',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const result = await reservationSeriesService.pauseSeries(request.params.id, DEFAULT_TENANT_ID);
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'PAUSE_RESERVATION_SERIES',
+          targetId: request.params.id,
+          payload: result,
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, data: result });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation-series/:id/resume
+   * Resume a paused series.
+   */
+  fastify.patch(
+    '/api/admin/reservation-series/:id/resume',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const result = await reservationSeriesService.resumeSeries(request.params.id, DEFAULT_TENANT_ID);
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'RESUME_RESERVATION_SERIES',
+          targetId: request.params.id,
+          payload: result,
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, data: result });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation-series/:id/cancel
+   * Cancel remaining sessions.
+   */
+  fastify.patch(
+    '/api/admin/reservation-series/:id/cancel',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const result = await reservationSeriesService.cancelSeries(request.params.id, DEFAULT_TENANT_ID);
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'CANCEL_RESERVATION_SERIES',
+          targetId: request.params.id,
+          payload: result,
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, data: result });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation-series/:id/session/:reservationId
+   * Update a single session (date, staff, or status).
+   */
+  fastify.patch(
+    '/api/admin/reservation-series/:id/session/:reservationId',
+    async (
+      request: FastifyRequest<{
+        Params: { id: string; reservationId: string };
+        Body: { bookingDate?: string; assignedStaffId?: string; status?: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const { bookingDate, assignedStaffId, status } = request.body || {};
+      try {
+        const { reservationSeriesService } = await import('../../services/reservation-series.service');
+        const updated = await reservationSeriesService.updateSession(
+          request.params.reservationId,
+          { bookingDate, assignedStaffId, status },
+          DEFAULT_TENANT_ID
+        );
+        // Auto-check if series is now complete
+        await reservationSeriesService.checkAndCompleteSeries(request.params.id, DEFAULT_TENANT_ID);
+        return reply.status(200).send({ success: true, data: updated });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err.message });
+      }
+    }
+  );
 }
