@@ -1386,13 +1386,37 @@ export class CustomerService {
   /**
    * Phase 4: Recalculate and persist ltv_cache for a single customer.
    * Called after reservation create/update/cancel to keep ltv_cache in sync.
+   * Konsisten dengan listCustomers: jika purchase_value NULL/0, resolve via katalog treatment.
    */
   public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<void> {
     try {
       const where: any = { customer_id: customerId, status: { notIn: ['cancelled', 'rejected'] } };
       if (tenantId) where.tenant_id = tenantId;
-      const agg = await prisma.reservation.aggregate({ where, _sum: { purchase_value: true } });
-      const ltv = agg?._sum?.purchase_value || 0;
+      const reservations = await prisma.reservation.findMany({
+        where,
+        select: { purchase_value: true, treatment_detail: true, raw_text: true },
+      });
+      let ltv = 0;
+      let needsResolve = false;
+      for (const r of reservations) {
+        if (r.purchase_value !== null && r.purchase_value !== undefined && r.purchase_value !== 0) {
+          ltv += r.purchase_value;
+        } else {
+          needsResolve = true;
+        }
+      }
+      if (needsResolve) {
+        const { resolveTreatmentValue } = await import('./capi.service');
+        for (const r of reservations) {
+          if (r.purchase_value === null || r.purchase_value === undefined || r.purchase_value === 0) {
+            const text = r.treatment_detail || r.raw_text;
+            if (text) {
+              const resolved = (await resolveTreatmentValue(text)) ?? 0;
+              ltv += resolved;
+            }
+          }
+        }
+      }
       await prisma.customer.update({ where: { id: customerId }, data: { ltv_cache: ltv } });
     } catch (err: any) {
       console.warn('[CUSTOMER] recalculateCustomerLtv failed:', err.message);

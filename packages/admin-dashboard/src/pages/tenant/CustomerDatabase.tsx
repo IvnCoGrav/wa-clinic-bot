@@ -188,9 +188,9 @@ export const CustomerDatabase: React.FC = () => {
 
   useEffect(() => {
     loadCustomers();
-  }, [page, segment, sortBy, sortOrder, retryCount]);
+  }, [page, segment, sortBy, sortOrder, debouncedSearch, retryCount]);
 
-  // Search debounce: trigger 300ms after user stops typing
+  // Search debounce: trigger 300ms after user stops typing (single source, no double-fetch)
   useEffect(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
@@ -201,11 +201,6 @@ export const CustomerDatabase: React.FC = () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [search]);
-
-  // Re-fetch when debouncedSearch changes (not covered by retryCount effect)
-  useEffect(() => {
-    loadCustomers();
-  }, [debouncedSearch]);
 
   // Phase 3: Stats fetched independently, stale-while-revalidate 60s
   useEffect(() => {
@@ -1411,7 +1406,8 @@ export const CustomerDatabase: React.FC = () => {
                       </h4>
                       <div className="space-y-2">
                         {customerSeries.map((series: any) => {
-                          const progress = series.total_sessions > 0 ? (series.completed_sessions / series.total_sessions) * 100 : 0;
+                          const completedCount = series.completed_sessions ?? (series.reservations?.filter((r: any) => r.status === 'completed').length || 0);
+                          const progress = series.total_sessions > 0 ? (completedCount / series.total_sessions) * 100 : 0;
                           const statusColor = series.status === 'active' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                             : series.status === 'paused' ? 'text-amber-700 bg-amber-50 border-amber-200'
                             : series.status === 'completed' ? 'text-blue-700 bg-blue-50 border-blue-200'
@@ -1426,7 +1422,7 @@ export const CustomerDatabase: React.FC = () => {
                                   </span>
                                 </div>
                                 <span className="text-[10px] text-[#8696a0] font-mono">
-                                  {series.completed_sessions}/{series.total_sessions} sesi
+                                  {completedCount}/{series.total_sessions} sesi
                                 </span>
                               </div>
                               {/* Progress bar */}
