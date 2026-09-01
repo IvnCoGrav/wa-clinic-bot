@@ -556,17 +556,24 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                                 <Clock size={10} className="opacity-75 shrink-0" />
                                 <span>{startTimeStr}</span>
                               </span>
-                              {res.status === 'confirmed' ? (
-                                <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800 shrink-0">
-                                  <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
-                                  Lunas
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 text-amber-800 shrink-0">
-                                  <AlertCircle size={9} className="mr-0.5 text-amber-600" />
-                                  Pending
-                                </span>
-                              )}
+                              <div className="flex items-center space-x-1 shrink-0">
+                                {res.session_number != null && res.total_sessions != null && (
+                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-blue-600/10 text-blue-800">
+                                    Sesi {res.session_number}/{res.total_sessions}
+                                  </span>
+                                )}
+                                {res.status === 'confirmed' ? (
+                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800">
+                                    <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
+                                    Lunas
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-amber-600/10 text-amber-800">
+                                    <AlertCircle size={9} className="mr-0.5 text-amber-600" />
+                                    Pending
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {/* Baris Tengah: Nama Pasien & Detail Layanan */}
