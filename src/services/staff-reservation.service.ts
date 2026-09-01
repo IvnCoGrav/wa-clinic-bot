@@ -2,6 +2,7 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { calculateHaversineDistance, Coordinates } from '../utils/haversine';
 import { clinicConfig } from '../config/clinic';
+import { resolveTreatmentValue } from './capi.service';
 
 export interface StaffTaskChild {
   name: string;
@@ -249,7 +250,8 @@ export class StaffReservationService {
       let prevOriginName = 'Klinik';
       let isFirstPatient = true;
 
-      return rows.map((r) => {
+      return Promise.all(
+        rows.map(async (r) => {
         const cust = r.customer;
         const lat = cust?.lat;
         const lng = cust?.lng;
@@ -305,7 +307,11 @@ export class StaffReservationService {
         const childrenList = Array.from(uniqueChildrenMap.values());
 
         // Pricing calculation
-        const treatmentFee = r.purchase_value || 0;
+        let treatmentFee = r.purchase_value || 0;
+        if (treatmentFee <= 0 && r.treatment_detail) {
+          const resolved = await resolveTreatmentValue(r.treatment_detail);
+          if (resolved && resolved > 0) treatmentFee = resolved;
+        }
         const deliveryFee = cust?.ongkir || 0;
         const totalFee = treatmentFee + deliveryFee;
         const isLunas = !!r.purchase_occurred_at;
@@ -366,7 +372,8 @@ export class StaffReservationService {
             ltv: (cust?.reservations || []).reduce((acc: number, curr: any) => acc + (curr.purchase_value || 0), 0) || pricing.totalFee,
           },
         };
-      });
+      })
+      );
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error fetching today tasks:', err.message);
       return [];
@@ -445,7 +452,8 @@ export class StaffReservationService {
       let prevOriginName = 'Klinik';
       let isFirstPatientOfDay = true;
 
-      return rows.map((r) => {
+      return Promise.all(
+        rows.map(async (r) => {
         const cust = r.customer;
         const lat = cust?.lat;
         const lng = cust?.lng;
@@ -503,7 +511,11 @@ export class StaffReservationService {
         }
         const childrenList = Array.from(uniqueChildrenMap.values());
 
-        const treatmentFee = r.purchase_value || 0;
+        let treatmentFee = r.purchase_value || 0;
+        if (treatmentFee <= 0 && r.treatment_detail) {
+          const resolved = await resolveTreatmentValue(r.treatment_detail);
+          if (resolved && resolved > 0) treatmentFee = resolved;
+        }
         const deliveryFee = cust?.ongkir || 0;
         const totalFee = treatmentFee + deliveryFee;
         const isLunas = !!r.purchase_occurred_at;
@@ -547,7 +559,8 @@ export class StaffReservationService {
           shareLocationText: null,
           customerProfilePictureUrl: cust?.profile_picture_url || null,
         };
-      });
+      })
+      );
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error fetching upcoming schedule:', err.message);
       return [];
@@ -630,7 +643,8 @@ export class StaffReservationService {
         orderBy: { booking_date: 'desc' },
       });
 
-      return rows.map((r) => {
+      return Promise.all(
+        rows.map(async (r) => {
         const cust = r.customer;
         const addressText = buildAddressText(cust || {});
         const mapsUrl =
@@ -657,7 +671,11 @@ export class StaffReservationService {
         }
         const childrenList = Array.from(uniqueChildrenMap.values());
 
-        const treatmentFee = r.purchase_value || 0;
+        let treatmentFee = r.purchase_value || 0;
+        if (treatmentFee <= 0 && r.treatment_detail) {
+          const resolved = await resolveTreatmentValue(r.treatment_detail);
+          if (resolved && resolved > 0) treatmentFee = resolved;
+        }
         const deliveryFee = cust?.ongkir || 0;
         const totalFee = treatmentFee + deliveryFee;
         const isLunas = !!r.purchase_occurred_at || r.status === 'completed' || r.status === 'COMPLETED';
@@ -701,7 +719,8 @@ export class StaffReservationService {
           shareLocationText: null,
           customerProfilePictureUrl: cust?.profile_picture_url || null,
         };
-      });
+      })
+      );
     } catch (err: any) {
       console.error('[STAFF RESERVATION] Error fetching completed tasks:', err.message);
       return [];

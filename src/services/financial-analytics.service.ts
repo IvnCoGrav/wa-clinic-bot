@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
+import { resolveTreatmentValue } from './capi.service';
 
 export interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -196,7 +197,13 @@ export class FinancialAnalyticsService {
     const nowMs = Date.now();
 
     for (const r of rows) {
-      const treatmentFee = r.purchase_value || 0;
+      let treatmentFee = r.purchase_value || 0;
+      if (treatmentFee <= 0 && r.treatment_detail) {
+        const resolved = await resolveTreatmentValue(r.treatment_detail);
+        if (resolved && resolved > 0) {
+          treatmentFee = resolved;
+        }
+      }
       const deliveryFee = r.customer?.ongkir || 0;
       const totalFee = treatmentFee + deliveryFee;
 
