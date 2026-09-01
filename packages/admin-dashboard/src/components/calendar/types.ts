@@ -26,6 +26,8 @@ export interface ClinicServiceItem {
   promoPrice: number;
   description: string;
   isActive: boolean;
+  totalSessions?: number;
+  sessionScheduleType?: string;
 }
 
 export interface StaffOption {

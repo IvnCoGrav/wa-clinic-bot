@@ -221,6 +221,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [ongkir, setOngkir] = useState<number | ''>(0);
   const [discount, setDiscount] = useState<number | ''>(0);
 
+  // Multi-Session Package State
+  const [isMultiSession, setIsMultiSession] = useState(false);
+  const [multiSessionTotal, setMultiSessionTotal] = useState(0);
+  const [multiSessionSchedule, setMultiSessionSchedule] = useState<Array<{
+    sessionNumber: number;
+    date: string;
+    time: string;
+    staffId: string;
+  }>>([]);
+
   // Delivery Tiers State (SaaS-Ready from DB)
   const [deliveryTiers, setDeliveryTiers] = useState<DeliveryTierItem[]>([]);
 
@@ -564,6 +574,25 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     setSelectedTreatments((prev) => [...prev, newItem]);
     if (!isAddon && srv.category !== 'ADD_ON') {
       setTreatmentCategory(srv.category as any);
+    }
+
+    // Detect multi-session treatment and generate schedule
+    if (srv.totalSessions && srv.totalSessions > 1) {
+      setIsMultiSession(true);
+      setMultiSessionTotal(srv.totalSessions);
+      // Generate default schedule: starting from tomorrow, daily 09:00 + 15:00
+      const schedule = [];
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      for (let i = 0; i < srv.totalSessions; i++) {
+        const dayOffset = Math.floor(i / 2);
+        const date = new Date(tomorrow);
+        date.setDate(date.getDate() + dayOffset);
+        const dateStr = date.toISOString().split('T')[0];
+        const time = i % 2 === 0 ? '09:00' : '15:00';
+        schedule.push({ sessionNumber: i + 1, date: dateStr, time, staffId: assignedStaffId || '' });
+      }
+      setMultiSessionSchedule(schedule);
     }
   };
 
@@ -981,6 +1010,30 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         discardDraft(true);
         onSuccess(res?.reservation || res?.data || res || initialReservation);
         onClose();
+      } else if (isMultiSession && multiSessionSchedule.length > 0) {
+        // Multi-Session Series Creation
+        const primaryTreatment = selectedTreatments.find((t) => !isAddonService(t));
+        const res = await apiRequest('/api/admin/reservation-series', {
+          method: 'POST',
+          body: JSON.stringify({
+            customerId,
+            treatmentName: primaryTreatment?.name || treatmentSummary,
+            totalSessions: multiSessionTotal,
+            purchaseValue: totalPaymentAmount,
+            assignedStaffId: assignedStaffId || undefined,
+            notes: notes.trim() || undefined,
+            sessions: multiSessionSchedule.map((s) => ({
+              sessionNumber: s.sessionNumber,
+              bookingDate: new Date(`${s.date}T${s.time}:00`).toISOString(),
+              assignedStaffId: s.staffId || assignedStaffId || undefined,
+            })),
+          }),
+        });
+
+        toast(`Paket ${multiSessionTotal} sesi berhasil dibuat!`, 'success');
+        discardDraft(true);
+        onSuccess(res?.data || res);
+        onClose();
       } else {
         const res = await apiRequest('/api/admin/reservation', {
           method: 'POST',
@@ -1050,7 +1103,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         <div className="mb-4 pr-6">
           <h3 className="text-base sm:text-lg font-bold text-[#111b21] flex items-center space-x-2">
             <CalendarIcon size={18} className="text-[#008069] flex-shrink-0" />
-            <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : 'Buat Jadwal Reservasi Baru'}</span>
+            <span>{mode === 'edit' ? '✏️ Edit Data Reservasi' : isMultiSession ? `📅 Buat Paket ${multiSessionTotal} Sesi` : 'Buat Jadwal Reservasi Baru'}</span>
           </h3>
           <p className="text-xs text-[#667781] mt-0.5">
             {mode === 'edit'
@@ -1632,6 +1685,69 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 </p>
               </div>
             )}
+
+            {/* Multi-Session Schedule Builder */}
+            {isMultiSession && multiSessionSchedule.length > 0 && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-700 flex items-center space-x-1.5">
+                    <CalendarDays size={14} />
+                    <span>Jadwal Paket {multiSessionTotal} Sesi</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMultiSession(false); setMultiSessionSchedule([]); }}
+                    className="text-[10px] text-blue-600 hover:text-red-600 font-bold cursor-pointer"
+                  >
+                    Batal Paket
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1.5">
+                  {multiSessionSchedule.map((s, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 border border-blue-100">
+                      <span className="text-[10px] font-bold text-blue-600 w-12 shrink-0">Sesi {s.sessionNumber}</span>
+                      <input
+                        type="date"
+                        value={s.date}
+                        onChange={(e) => {
+                          const newSchedule = [...multiSessionSchedule];
+                          newSchedule[idx].date = e.target.value;
+                          setMultiSessionSchedule(newSchedule);
+                        }}
+                        className="flex-1 min-w-0 px-2 py-1 border border-[#d1d7db] rounded-lg text-[11px] text-[#111b21] focus:outline-none focus:border-[#008069]"
+                      />
+                      <input
+                        type="time"
+                        value={s.time}
+                        onChange={(e) => {
+                          const newSchedule = [...multiSessionSchedule];
+                          newSchedule[idx].time = e.target.value;
+                          setMultiSessionSchedule(newSchedule);
+                        }}
+                        className="w-24 px-2 py-1 border border-[#d1d7db] rounded-lg text-[11px] text-[#111b21] font-bold focus:outline-none focus:border-[#008069]"
+                      />
+                      <select
+                        value={s.staffId}
+                        onChange={(e) => {
+                          const newSchedule = [...multiSessionSchedule];
+                          newSchedule[idx].staffId = e.target.value;
+                          setMultiSessionSchedule(newSchedule);
+                        }}
+                        className="w-28 px-2 py-1 border border-[#d1d7db] rounded-lg text-[11px] text-[#111b21] focus:outline-none focus:border-[#008069] truncate"
+                      >
+                        <option value="">Default</option>
+                        {staffList.map((st) => (
+                          <option key={st.id} value={st.id}>{st.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-blue-600 italic">
+                  * Atur tanggal & jam per sesi. Klik "Buat Paket" untuk membuat {multiSessionTotal} reservasi sekaligus.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Section 4: Staff / Terapis Assignment & Status */}
@@ -1933,7 +2049,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                 className="px-5 py-2 rounded-xl bg-[#008069] hover:bg-[#00a884] disabled:opacity-50 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
               >
                 <Check size={14} />
-                <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : 'Simpan & Buat Jadwal')}</span>
+                <span>{submitting ? 'Menyimpan...' : (mode === 'edit' ? 'Simpan Perubahan Reservasi' : isMultiSession ? `Buat Paket ${multiSessionTotal} Sesi` : 'Simpan & Buat Jadwal')}</span>
               </button>
             </div>
           </div>
