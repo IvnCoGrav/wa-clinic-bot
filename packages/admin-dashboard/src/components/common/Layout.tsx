@@ -716,8 +716,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {/* Main Content Area */}
       <div className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
         
-        {/* Top Header */}
-        <header className="border-b border-[#e9edef] px-3 sm:px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] h-12 md:h-13 min-h-[3rem] md:min-h-[3.25rem] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
+        {/* Top Header — iPhone safe-area: notch/Dynamic Island */}
+        <header className="border-b border-[#e9edef] px-3 sm:px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-2xs shrink-0 min-h-[calc(3rem+env(safe-area-inset-top,0px))] md:min-h-[3.25rem] md:pt-0 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
           <div className="flex items-center space-x-3">
             <h1 className="text-sm font-bold md:text-base text-[#111b21] truncate max-w-[200px] sm:max-w-none">
               {BRAND.panelName}
