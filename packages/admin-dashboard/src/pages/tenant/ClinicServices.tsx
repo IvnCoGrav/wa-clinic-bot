@@ -74,6 +74,7 @@ export const ClinicServices: React.FC = () => {
   const [formDuration, setFormDuration] = useState<number | ''>(40);
   const [formOriginalPrice, setFormOriginalPrice] = useState<number | ''>(80000);
   const [formPromoPrice, setFormPromoPrice] = useState<number | ''>(60000);
+  const [formTotalSessions, setFormTotalSessions] = useState<number | ''>('');
   const [formDescription, setFormDescription] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
 
@@ -173,6 +174,7 @@ export const ClinicServices: React.FC = () => {
     setFormDuration(45);
     setFormOriginalPrice(80000);
     setFormPromoPrice(60000);
+    setFormTotalSessions('');
     setFormDescription('');
     setFormIsActive(true);
     setIsModalOpen(true);
@@ -195,6 +197,7 @@ export const ClinicServices: React.FC = () => {
     setFormDuration(srv.durationMinutes);
     setFormOriginalPrice(srv.originalPrice);
     setFormPromoPrice(srv.promoPrice);
+    setFormTotalSessions(srv.totalSessions ?? '');
     setFormDescription(srv.description);
     setFormIsActive(srv.isActive);
     setIsModalOpen(true);
@@ -259,6 +262,7 @@ export const ClinicServices: React.FC = () => {
       durationMinutes: formDuration === '' ? 40 : Number(formDuration),
       originalPrice: formOriginalPrice === '' ? 0 : Number(formOriginalPrice),
       promoPrice: formPromoPrice === '' ? 0 : Number(formPromoPrice),
+      totalSessions: formTotalSessions === '' ? undefined : Number(formTotalSessions),
       description: formDescription,
       isActive: formIsActive
     };
@@ -1006,6 +1010,20 @@ export const ClinicServices: React.FC = () => {
                     className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-bold text-[#008069]"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] text-[#667781] uppercase font-bold block">Jumlah Sesi Paket (Opsional)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={formTotalSessions}
+                  onChange={(e) => setFormTotalSessions(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Contoh: 14 (kosongkan jika bukan paket sesi)"
+                  className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                />
+                <p className="text-[10px] text-[#8696a0]">Jika diisi, layanan ini akan menawarkan pembuatan paket multi-sesi otomatis saat reservasi.</p>
               </div>
 
               <div className="space-y-1">
