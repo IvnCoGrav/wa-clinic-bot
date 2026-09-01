@@ -29,6 +29,8 @@ export class QueueService {
   // In-Memory Queue Fallback properties
   private memoryQueues: Map<string, QueuePayload[]> = new Map();
   private memoryProcessing: Set<string> = new Set();
+  // BullMQ in-flight per-phone guard (FIFO per customer, cegah salip saat typing delay)
+  private bullProcessing: Set<string> = new Set();
 
 
   constructor() {
@@ -132,6 +134,13 @@ export class QueueService {
       const worker = new Worker(
         queueName,
         async (job: Job<QueuePayload>) => {
+          const phoneKey = job.data?.phone || job.data?.customerId || 'unknown';
+          if (this.bullProcessing.has(phoneKey)) {
+            console.warn(`[QUEUE BullMQ - Shard ${i}] In-flight lock active for ${hashPiiPhone(phoneKey)}, re-queueing job ${job.id} dengan delay.`);
+            // Throw agar BullMQ retry dengan backoff, FIFO tetap terjaga via concurrency 1 + retry
+            throw new Error(`In-flight lock: phone ${hashPiiPhone(phoneKey)} masih diproses`);
+          }
+          this.bullProcessing.add(phoneKey);
           try {
             const ctx = await this.resolveFreshContext(job.data);
             if (!ctx) return;
@@ -156,6 +165,8 @@ export class QueueService {
           } catch (err: any) {
             console.error(`[QUEUE BullMQ - Shard ${i}] Exception during processMessage for job ${job.id}:`, err.message);
             throw err; // Throw agar BullMQ mencatat attempt gagal dan menjalankan retry backoff
+          } finally {
+            this.bullProcessing.delete(phoneKey);
           }
         },
         {

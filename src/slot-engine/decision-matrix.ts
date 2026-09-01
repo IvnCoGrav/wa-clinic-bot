@@ -10,7 +10,12 @@ export class DecisionMatrix {
   public static async evaluate(
     slate: CustomerSlate,
     extraction: ExtractedEntities,
-    context?: { tenantId?: string; incomingText?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> }
+    context?: {
+      tenantId?: string;
+      incomingText?: string;
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      lastDiscussedTreatment?: string;
+    }
   ): Promise<DecisionResult> {
     const updatedSlate = SlateStore.updateSlateWithExtraction(slate, extraction);
     const rawIncoming = context?.incomingText || '';
@@ -537,10 +542,11 @@ export class DecisionMatrix {
             extraction.symptoms.length === 0;
 
           if (isPureLocationMessage) {
-            const defaultByAge =
-              updatedSlate.childAgeMonths && updatedSlate.childAgeMonths > 24 ? 'Pijat Kids Ceria' : 'Pijat Bayi Ceria';
+            // Zero hardcode: ambil treatment aktif dari state/riwayat, tanpa menebak paket
             const candidateTreatmentName =
-              updatedSlate.selectedTreatmentName || (updatedSlate.childAgeMonths !== null ? defaultByAge : undefined);
+              updatedSlate.selectedTreatmentName ||
+              (context as any)?.lastDiscussedTreatment ||
+              undefined;
             const preferredDate = extraction.preferredDateText || updatedSlate.preferredDate || undefined;
 
             return {

@@ -3,6 +3,7 @@ import { SlateStore } from './slate-store';
 import { treatmentCatalogService } from '../services/treatment-catalog.service';
 import { knowledgeBaseService } from '../services/knowledge.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getBrandIdentity } from '../config/brand';
 
 export class GroundingComposer {
   /**
@@ -45,32 +46,55 @@ export class GroundingComposer {
       });
     }
 
-    // Prioritaskan treatment yang sudah dipilih atau sesuai gejala (misal Pulih Ceria) di urutan pertama
-    const effectiveSelectedTreatment = slate.selectedTreatmentName || extraction.treatmentReferenced;
+    // Prioritaskan treatment yang sudah dipilih — hanya jika kompatibel dengan usia baru (cegah stale Kids untuk Baby 16 bulan)
+    let effectiveSelectedTreatment: string | null = slate.selectedTreatmentName || extraction.treatmentReferenced || null;
+    if (effectiveSelectedTreatment && slate.childAgeMonths !== null) {
+      const allForCheck = treatmentCatalogService.getAllServices();
+      const matchedForCheck = allForCheck.find((s) => s.name.toLowerCase() === effectiveSelectedTreatment!.toLowerCase() || effectiveSelectedTreatment!.toLowerCase().includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(effectiveSelectedTreatment!.toLowerCase()));
+      if (matchedForCheck) {
+        const compat = treatmentCatalogService.filterServicesByAudience([matchedForCheck], { ageMonths: slate.childAgeMonths });
+        if (compat.length === 0) {
+          // Treatment lama tidak kompatibel dengan usia baru → jangan prioritaskan, biarkan filteredServices age-filtered yang menentukan
+          effectiveSelectedTreatment = null;
+        }
+      } else {
+        const lower = effectiveSelectedTreatment.toLowerCase();
+        if ((slate.childAgeCategory === 'BABY' && lower.includes('kids')) || (slate.childAgeCategory === 'KIDS' && lower.includes('bayi ceria') && !lower.includes('kids'))) {
+          effectiveSelectedTreatment = null;
+        }
+      }
+    }
     if (effectiveSelectedTreatment) {
       filteredServices.sort((a, b) => {
-        const aMatch = a.name.toLowerCase().includes(effectiveSelectedTreatment.toLowerCase());
-        const bMatch = b.name.toLowerCase().includes(effectiveSelectedTreatment.toLowerCase());
+        const aMatch = a.name.toLowerCase().includes(effectiveSelectedTreatment!.toLowerCase());
+        const bMatch = b.name.toLowerCase().includes(effectiveSelectedTreatment!.toLowerCase());
         if (aMatch && !bMatch) return -1;
         if (!aMatch && bMatch) return 1;
         return 0;
       });
     } else if ((slate.symptoms && slate.symptoms.length > 0) || (extraction.symptoms && extraction.symptoms.length > 0)) {
-      filteredServices.sort((a, b) => {
-        const aMatch = a.name.toLowerCase().includes('pulih');
-        const bMatch = b.name.toLowerCase().includes('pulih');
-        if (aMatch && !bMatch) return -1;
-        if (!aMatch && bMatch) return 1;
-        return 0;
-      });
+      const symptomQuery = [...(slate.symptoms || []), ...(extraction.symptoms || [])].join(' ');
+      const ranked = treatmentCatalogService.searchCatalogItems(symptomQuery);
+      if (ranked.length > 0) {
+        const rankMap = new Map(ranked.map((s, idx) => [s.id, idx]));
+        filteredServices.sort((a, b) => {
+          const aRank = rankMap.has(a.id) ? rankMap.get(a.id)! : 999;
+          const bRank = rankMap.has(b.id) ? rankMap.get(b.id)! : 999;
+          if (aRank !== bRank) return aRank - bRank;
+          return 0;
+        });
+      }
+      // Jika TANPA keluhan yang cocok di DB, biarkan urutan katalog default (relaksasi di atas)
     }
 
     const maxItems = mentionsMoms ? 6 : 5;
     const filteredCatalog = filteredServices.slice(0, maxItems).map((s) => ({
       name: s.name,
       category: s.category,
-      promoPrice: s.promoPrice,
+      ageTierLabel: (s as any).ageTier?.label || '',
       durationMinutes: s.durationMinutes,
+      promoPrice: s.promoPrice,
+      originalPrice: (s as any).originalPrice,
       description: s.description,
     }));
 
@@ -84,10 +108,12 @@ export class GroundingComposer {
         }
       : null;
 
-    // 3. FAKTA ASAL KLINIK & HOMEBASE
+    // 3. FAKTA ASAL KLINIK & HOMEBASE (dinamis dari Brand Identity)
+    const brand = getBrandIdentity();
     const clinicFacts = {
-      homebase: 'Waru, Sidoarjo',
-      coverage: 'Surabaya & Sidoarjo (Homecare - Bidan datang langsung ke rumah Bunda)',
+      homebase: (brand as any).homebase || 'Waru, Sidoarjo',
+      coverage: (brand as any).coverage || 'Surabaya & Sidoarjo (Homecare - Bidan datang langsung ke rumah Bunda)',
+      brandName: brand.businessName,
     };
 
     // 4. RAG LOKAL: Query Top-2 Chunk FAQ Relevan dari PostgreSQL knowledge_chunks

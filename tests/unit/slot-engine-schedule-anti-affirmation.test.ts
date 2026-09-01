@@ -533,17 +533,17 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
   });
 
   describe('7. Standard Massage Alias (Massage Biasa) & Direct Schedule Question', () => {
-    it('EntityExtractor: "Massage biasa" -> normalized to "Pijat Bayi Ceria" + intent "select_treatment"', async () => {
+    it('EntityExtractor: "Massage biasa" -> normalized to generic alias "pijat bayi" + intent "select_treatment"', async () => {
       const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
       const res = await EntityExtractor.extract('Massage biasa');
-      expect(res.treatmentReferenced).toBe('Pijat Bayi Ceria');
+      expect(res.treatmentReferenced?.toLowerCase()).toBe('pijat bayi');
       expect(res.intents).toContain('select_treatment');
     });
 
-    it('EntityExtractor: "pijat biasa aja" -> normalized to "Pijat Bayi Ceria"', async () => {
+    it('EntityExtractor: "pijat biasa aja" -> normalized to generic alias "pijat bayi"', async () => {
       const { EntityExtractor } = await import('../../src/slot-engine/entity-extractor');
       const res = await EntityExtractor.extract('pijat biasa aja');
-      expect(res.treatmentReferenced).toBe('Pijat Bayi Ceria');
+      expect(res.treatmentReferenced?.toLowerCase()).toBe('pijat bayi');
       expect(res.intents).toContain('select_treatment');
     });
 

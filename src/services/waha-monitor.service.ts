@@ -1,6 +1,6 @@
 import { wahaClient } from '../integrations/waha/client';
 import { AlertService, AlertType, AlertSeverity } from './alert.service';
-import { QueueService } from './queue.service';
+import { QueueService, queueService as singletonQueueService } from './queue.service';
 
 export class WahaMonitorService {
   private static instance: WahaMonitorService | null = null;
@@ -14,7 +14,7 @@ export class WahaMonitorService {
 
   private constructor(alertService?: AlertService, queueService?: QueueService) {
     this.alertService = alertService || new AlertService();
-    this.queueService = queueService || new QueueService();
+    this.queueService = queueService || singletonQueueService;
   }
 
   public static getInstance(alertService?: AlertService, queueService?: QueueService): WahaMonitorService {

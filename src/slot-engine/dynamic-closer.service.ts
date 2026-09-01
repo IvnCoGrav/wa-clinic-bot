@@ -1,4 +1,5 @@
 import { CustomerSlate } from './types';
+import { treatmentCatalogService } from '../services/treatment-catalog.service';
 
 export class DynamicCloserService {
   /**
@@ -63,9 +64,18 @@ export class DynamicCloserService {
     const isAskingMomsOrOksitosin = /\b(oksitosin|laktasi|pijat\s+ibu|treatment\s+ibu|postpartum|nifas)\b/i.test(lowerRaw);
     const isSwitchingToBaby = /\b(untuk\s+baby|buat\s+baby|baby\s+aja|anak\s+aja|buat\s+anak|bayi\s+aja)\b/i.test(lowerRaw);
 
-    const targetTreatment = slate?.selectedTreatmentName
-      ? `*${slate.selectedTreatmentName}*`
-      : (slate?.symptoms && slate.symptoms.length > 0 ? '*Pijat Bayi Pulih Ceria*' : 'perawatannya');
+    const resolveDynamicTreatment = (): string => {
+      if (slate?.selectedTreatmentName) return `*${slate.selectedTreatmentName}*`;
+      if (slate?.symptoms && slate.symptoms.length > 0) {
+        const candidates = slate.childAgeMonths !== null
+          ? treatmentCatalogService.filterServicesByAudience(treatmentCatalogService.getAllServices(), { ageMonths: slate.childAgeMonths })
+          : treatmentCatalogService.getAllServices();
+        const suggested = candidates.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates[0]?.name;
+        return suggested ? `*${suggested}*` : 'perawatannya';
+      }
+      return 'perawatannya';
+    };
+    const targetTreatment = resolveDynamicTreatment();
 
     // Jika customer mengajukan pertanyaan spesifik FAQ/teknis (dan form reservasi belum dikirim), prioritaskan panduan kontekstual
     if (!preFilledForm && !slate?.reservationFormSent) {
@@ -172,9 +182,17 @@ ${ongkirGuard}`;
       }
 
       case 'SCHEDULE': {
-        const targetTreatment = slate?.selectedTreatmentName
-          ? `*${slate.selectedTreatmentName}*`
-          : (slate?.symptoms && slate.symptoms.length > 0 ? '*Pijat Bayi Pulih Ceria*' : 'perawatannya');
+        const targetTreatment2 = (() => {
+          if (slate?.selectedTreatmentName) return `*${slate.selectedTreatmentName}*`;
+          if (slate?.symptoms && slate.symptoms.length > 0) {
+            const cands = slate.childAgeMonths !== null
+              ? treatmentCatalogService.filterServicesByAudience(treatmentCatalogService.getAllServices(), { ageMonths: slate.childAgeMonths })
+              : treatmentCatalogService.getAllServices();
+            const sug = cands.find((s) => s.name.toLowerCase().includes('pulih'))?.name || cands[0]?.name;
+            return sug ? `*${sug}*` : 'perawatannya';
+          }
+          return 'perawatannya';
+        })();
 
         if (preFilledForm && !slate?.reservationFormSent) {
           return `PANDUAN RESERVASI & PENUTUP:
@@ -206,8 +224,8 @@ ${ongkirGuard}`;
         }
 
         return `PANDUAN PENAWARAN JADWAL (SCHEDULE):
-1. Jika customer sudah memilih/menentukan treatment (misal *Pijat Bayi Ceria*, *Pijat Bayi Pulih Ceria*, dll), DILARANG KERAS menjelaskan ulang manfaat, rincian, atau minyak/aromaterapi dari treatment tersebut! Cukup sambut pilihan Bunda secara hangat.
-2. Tawarkan rencana hari reservasi secara santun dan natural (contoh: "Baik Bunda, untuk ${targetTreatment} rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊" atau "Baik Bunda, rencana mau treatment di hari apa ya Bunda? 🙏😊").
+1. Jika customer sudah memilih/menentukan treatment (misal treatment apapun yang tertera di katalog aktif), DILARANG KERAS menjelaskan ulang manfaat, rincian, atau minyak/aromaterapi dari treatment tersebut! Cukup sambut pilihan Bunda secara hangat.
+2. Tawarkan rencana hari reservasi secara santun dan natural (contoh: "Baik Bunda, untuk ${targetTreatment2} rencana mau kami bantu jadwalkan di hari apa ya Bunda? 🙏😊" atau "Baik Bunda, rencana mau treatment di hari apa ya Bunda? 🙏😊").
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"!
 ⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer! Usia akan dilengkapi saat pengisian form reservasi.
 ⚠️ DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia secara sepihak!
