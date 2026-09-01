@@ -4,6 +4,25 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/2.0.0.html).
 
+#### Fitur — Paket Multi-Sesi (ReservationSeries) (`prisma/schema.prisma`, `reservation-series.service.ts`, `reservations.subroute.ts`, `CreateReservationModal.tsx`) (2026-09-01)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  Banyak treatment bersifat berulang — misalnya "Newborn Bathing 30 Hari" membutuhkan 30 sesi (1×/hari). Admin harus membuat reservasi satu per satu manual → ribet, mudah lupa jadwal, tidak bisa pantau progres.
+  Diminta fitur **Paket Multi-Sesi** agar admin bisa membuat N sesi sekaligus dari satu klik.
+
+- **Solusi:**
+  - **Schema:** Tabel `reservation_series` baru (id, customer_id, clinic_service_id, title, status, start_date, total_sessions, completed_sessions, notes). Kolom `series_id` + `session_number` + `total_sessions` di `reservations`.
+  - **Backend (`reservation-series.service.ts`):** Service lengkap — createSeries (generate N reservasi sekaligus), getSeries, getCustomerSeries, pauseSeries, resumeSeries, cancelSeries, updateSession, checkAndCompleteSeries (auto-complete saat semua sesi done).
+  - **Backend Endpoints:** POST/GET series, PATCH pause/resume/cancel, PATCH session update — 7 endpoint baru.
+  - **Frontend (`CreateReservationModal.tsx`):** Admin memilih layanan paket → auto-detect `totalSessions` dari catalog → schedule builder muncul → admin atur tanggal & jam per sesi → klik "Buat Paket" → semua reservasi dibuat sekaligus.
+  - **Frontend Types:** `ClinicServiceItem` + `ClinicServices` interface updated dengan `totalSessions` + `sessionScheduleType`.
+
+- **File berubah:** 8 file (new: `reservation-series.service.ts`, `migration.sql`; modified: `schema.prisma`, `reservations.subroute.ts`, `treatment-catalog.service.ts`, `CreateReservationModal.tsx`, `types.ts`, `ClinicServices.tsx`)
+
+- **Verifikasi:** `tsc --noEmit` 0 error, `vite build` 10.20s pass, live server deploy — migration applied, app boot clean, no errors.
+
+- **Phase 4 (next):** Series view di calendar (badge "Sesi 2/7") + customer detail tab "Paket Sesi".
+
 #### Fix & Enhancement — Customer Database: Skeleton Ringan + Retry Manual + Timeout 10s Fix (`CustomerDatabase.tsx`, `customer.service.ts`, `customers.subroute.ts`, `schema.prisma`, `docker-compose.yml`) (2026-09-01)
 
 - **Latar Belakang & Permintaan Pengguna:**
