@@ -16,11 +16,11 @@ describe('Centralized Architecture & PersonaComposer Test Suite', () => {
       expect(facts).toContain('DILARANG KERAS menyarankan menunggu hingga 1 bulan');
     });
 
-    it('harus memuat durasi standar resmi dan kebijakan operasional lengkap', () => {
+    it('harus memuat prinsip katalog dinamis dan kebijakan operasional lengkap (ground-truth first)', () => {
       const facts = PersonaComposer.getClinicalAndOperationalFacts();
-      expect(facts).toContain('Pijat Bayi / Baby (0-24 bulan): ~40 menit');
-      expect(facts).toContain('Pijat Anak / Kids (>2-8 tahun): ~45 menit');
-      expect(facts).toContain('Pijat Ibu Hamil / Nifas / Oksitosin: ~60 menit');
+      expect(facts).toContain('DURASI, TARIF, DAN RENTANG USIA LAYANAN');
+      expect(facts).toContain('WAJIB menggunakan nama layanan');
+      expect(facts).toContain('dari daftar katalog dinamis');
       expect(facts).toContain('Buka SETIAP HARI');
       expect(facts).toContain('QRIS Universal');
       expect(facts).toContain('1 kali per kunjungan rumah');

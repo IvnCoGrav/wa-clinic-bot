@@ -201,7 +201,8 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
 
   // 3. Evaluasi Decision Matrix (0 Token, Pure TypeScript)
   const rawTextForEvaluation = incomingMessage?.originalText || (incomingMessage as any)?._rawBody || incomingText;
-  const decision = await DecisionMatrix.evaluate(initialSlate, extraction, { tenantId, incomingText: rawTextForEvaluation, history });
+  const lastDiscussedTreatment = conversation.last_discussed_treatment || initialSlate.selectedTreatmentName || undefined;
+  const decision = await DecisionMatrix.evaluate(initialSlate, extraction, { tenantId, incomingText: rawTextForEvaluation, history, lastDiscussedTreatment });
 
   // 4. Handle Kasus 1: Eskalasi Darurat Medis
   if (decision.action === 'ESCALATE_HUMAN_EMERGENCY') {
@@ -351,6 +352,13 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     customerInput: incomingText,
     tenantId,
   });
+  // Sync last_discussed_treatment secara dinamis dari katalog aktif (tanpa hardcode) untuk kontinuitas turn berikutnya
+  if (!decision.updatedSlate.selectedTreatmentName && grounding.filteredCatalog.length > 0) {
+    const topCandidate = grounding.filteredCatalog[0] as any;
+    if (topCandidate?.name) {
+      decision.updatedSlate.selectedTreatmentName = topCandidate.name;
+    }
+  }
   const replyText = await ReplyGenerator.generate(decision.updatedSlate, extraction, grounding, {
     history,
     customerPhone: customer.phone,

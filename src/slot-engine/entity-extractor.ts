@@ -245,7 +245,7 @@ export class EntityExtractor {
       /\b(?:massage|pijat)\s+(?:biasa|aja|saja|reguler|standar|rutin)\b/i.test(lower) ||
       /^(?:massage|pijat)\s+(?:biasa|aja|saja|reguler|standar|rutin)$/i.test(lower.trim())
     ) {
-      result.treatmentReferenced = 'Pijat Bayi Ceria';
+      result.treatmentReferenced = 'pijat bayi';
       result.intents = result.intents || [];
       if (!result.intents.includes('select_treatment')) {
         result.intents.push('select_treatment');
@@ -344,8 +344,8 @@ ATURAN EKSTRAKSI (SANGAT KETAT):
 11. Jika customer menyebutkan kombinasi lebih dari 1 treatment (contoh: "Pijat bayi ceria + cukur", "Pulih ceria dan sinar", "Laktasi plus oksitosin"), gabungkan nama treatment lengkapnya ke "treatment_referenced" (contoh: "Pijat Bayi Ceria + Cukur Rambut Bayi") dan sertakan intent "select_treatment".
 12. AREA LAYANAN (SURABAYA & SIDOARJO) & NORMALISASI TYPO WILAYAH:
 Klinik berlokasi di Sidoarjo dan melayani area Surabaya & Sidoarjo. Jika terdapat typo penulisan nama wilayah/kecamatan/kelurahan di Surabaya/Sidoarjo (contoh: "kencjeran" -> "Kenjeran", "jambangn" -> "Jambangan", "rungkot" -> "Rungkut", "wru" -> "Waru", "sdoarjo" -> "Sidoarjo", "gdangan" -> "Gedangan", "budurn" -> "Buduran"), normalisasikan ke nama wilayah Surabaya/Sidoarjo yang dimaksud pada "location_text", JANGAN mengubahnya menjadi nama kota/daerah lain di luar Jawa Timur (seperti mengubah "kencjeran" menjadi "Kencana").
-13. ALIAS TREATMENT STANDAR / BIASA:
-Jika customer menyebutkan "pijat bayi", "massage bayi", "pijat baby", "pijat newborn", "massage biasa", "pijat biasa", "massage aja", "pijat aja", "pijat reguler", "massage reguler", "pijat rutin", atau "pijat standar", ini adalah nama sebutan untuk perawatan kebugaran umum si kecil. Masukkan ke "treatment_referenced": "Pijat Bayi Ceria" (atau "Pijat Kids Ceria" jika usia anak > 2 tahun) dan sertakan intent "select_treatment".
+13. ALIAS TREATMENT STANDAR / BIASA (DINAMIS):
+Jika customer menyebutkan "pijat bayi", "massage bayi", "pijat baby", "pijat newborn", "massage biasa", "pijat biasa", "massage aja", "pijat aja", "pijat reguler", "massage reguler", "pijat rutin", atau "pijat standar", ini adalah sebutan generik untuk perawatan kebugaran umum si kecil. Ekstrak intent "select_treatment" dan isi "treatment_referenced" dengan alias generik "pijat bayi" saja — JANGAN paksa menjadi "Pijat Bayi Ceria" atau "Pijat Kids Ceria". Nama spesifik akan dipadankan secara dinamis dengan katalog aktif dari database (treatmentCatalogService) berdasarkan usia pasien.
 14. LAYANAN DI LUAR KATALOG RESMI (UNLISTED SERVICE) VS KONSULTASI PASCA VAKSIN:
 Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan layanan pijat/spa/terapi resmi klinik (contoh: "Ada PL homecare mandikan bayi?", "bisa baby sitting?", "bisa suntik vaksin/imunisasi?"), sertakan intent "ask_unlisted_service".
 NAMUN jika customer bertanya apakah bayi yang baru divaksin/imunisasi boleh dipijat (contoh: "anak saya habis vaksin boleh pijat?", "anak saya baru imunisasi bcg polio boleh dipijat hari ini?"), ini adalah KONSULTASI KLINIS biasa (intent: "consult_symptom" atau "chitchat"), DILARANG menandainya sebagai "ask_unlisted_service"!

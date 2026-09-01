@@ -3,6 +3,7 @@ import { StateHandlerContext } from '../state-machine/types';
 import { CustomerSlate, ExtractedEntities } from './types';
 import { prisma } from '../db/client';
 import { getGazetteerAreas, escapeRegex } from '../utils/gazetteer';
+import { treatmentCatalogService } from '../services/treatment-catalog.service';
 
 export class SlateStore {
   /**
@@ -201,10 +202,42 @@ export class SlateStore {
       updated.name = extraction.customerName;
     }
 
-    // 2. Update Usia Anak & Kategori
+    // 2. Update Usia Anak & Kategori + Rekonsiliasi Treatment yang tidak kompatibel
+    const prevCategory = updated.childAgeCategory;
+    const prevAge = updated.childAgeMonths;
     if (extraction.childAgeMonths !== null && extraction.childAgeMonths > 0) {
       updated.childAgeMonths = extraction.childAgeMonths;
       updated.childAgeCategory = extraction.childAgeMonths <= 24 ? 'BABY' : 'KIDS';
+    }
+    // Jika kategori usia berpindah (KIDS↔BABY) dan treatment lama tidak kompatibel dengan usia baru → rekonsiliasi
+    const categoryChanged = prevCategory !== null && prevCategory !== updated.childAgeCategory;
+    const ageChanged = prevAge !== updated.childAgeMonths;
+    if ((categoryChanged || ageChanged) && updated.selectedTreatmentName && !extraction.treatmentReferenced) {
+      const currentTreatment = updated.selectedTreatmentName;
+      const allServices = treatmentCatalogService.getAllServices();
+      // Cari service yang sesuai nama lama (fuzzy)
+      const matched = allServices.find((s) => s.name.toLowerCase() === currentTreatment.toLowerCase() || currentTreatment.toLowerCase().includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(currentTreatment.toLowerCase()));
+      let isCompatible = false;
+      if (matched) {
+        const filtered = treatmentCatalogService.filterServicesByAudience([matched], { ageMonths: updated.childAgeMonths });
+        isCompatible = filtered.length > 0;
+      } else {
+        // Fallback heuristic: Kids Ceria vs Baby
+        const lower = currentTreatment.toLowerCase();
+        if (updated.childAgeCategory === 'BABY' && lower.includes('kids')) isCompatible = false;
+        else if (updated.childAgeCategory === 'KIDS' && lower.includes('bayi ceria') && !lower.includes('kids')) {
+          // Bayi Ceria untuk Kids 6 tahun masih bisa ditolerir? anggap kompatibel jika tidak ada Kids spesifik
+          isCompatible = false;
+        } else {
+          isCompatible = true;
+        }
+      }
+      if (!isCompatible) {
+        // Dynamic ground-truth first: ambil treatment pertama yang kompatibel dengan usia baru dari katalog aktif
+        const candidates = treatmentCatalogService.filterServicesByAudience(allServices, { ageMonths: updated.childAgeMonths });
+        const fallback = candidates[0]?.name || null;
+        updated.selectedTreatmentName = fallback;
+      }
     }
 
     // 3. Update Keluhan/Gejala Pasien (Append tanpa duplikasi)

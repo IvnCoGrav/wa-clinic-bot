@@ -160,4 +160,38 @@ describe('Customer Entity Slate & State Projection Model (Part 2)', () => {
       })
     );
   });
+
+  it('should dynamically reconcile incompatible treatment when age switches from KIDS (6yo) to BABY (16 months)', () => {
+    // Initial slate from discussing 6yo (Kids Ceria)
+    const initialSlate: CustomerSlate = {
+      ...SlateStore.hydrateSlate(mockContext),
+      childAgeMonths: 72,
+      childAgeCategory: 'KIDS',
+      selectedTreatmentName: 'Pijat Kids Ceria',
+    };
+
+    // Customer asks: "Kalau umur 16 bulan bu juga sama 45 menit?" -> Extractor extracts age 16 months without new treatment
+    const extraction: ExtractedEntities = {
+      intents: ['provide_age', 'ask_duration'],
+      locationText: null,
+      streetDetail: null,
+      childAgeMonths: 16,
+      symptoms: [],
+      treatmentReferenced: null,
+      preferredDateText: null,
+      preferredTimeText: null,
+      customerName: null,
+      isMedicalEmergency: false,
+      confidenceScore: 0.95,
+    };
+
+    const updated = SlateStore.updateSlateWithExtraction(initialSlate, extraction);
+
+    expect(updated.childAgeMonths).toBe(16);
+    expect(updated.childAgeCategory).toBe('BABY');
+    // Pijat Kids Ceria (for >2yo) MUST be reconciled to Baby category treatment, NOT retained (dynamic catalog)
+    expect(updated.selectedTreatmentName).toContain('Pijat Bayi Ceria');
+    expect(updated.selectedTreatmentName).not.toContain('Kids');
+  });
 });
+
