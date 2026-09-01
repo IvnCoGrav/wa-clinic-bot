@@ -21,7 +21,7 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/2.0.0.h
 
 - **Verifikasi:** `tsc --noEmit` 0 error, `vite build` 10.20s pass, live server deploy — migration applied, app boot clean, no errors.
 
-- **Phase 4 (next):** Series view di calendar (badge "Sesi 2/7") + customer detail tab "Paket Sesi".
+- **Phase 4 (2026-09-01 13:17):** Badge "Sesi X/Y" di calendar view (`WeekScheduleGrid` + `DayScheduleGrid`) + section "Paket Sesi" di customer detail modal dengan progress bar per series. Deployed clean.
 
 #### Fix & Enhancement — Customer Database: Skeleton Ringan + Retry Manual + Timeout 10s Fix (`CustomerDatabase.tsx`, `customer.service.ts`, `customers.subroute.ts`, `schema.prisma`, `docker-compose.yml`) (2026-09-01)
 
