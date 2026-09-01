@@ -13,7 +13,26 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
   fastify.addHook('onResponse', async (request) => {
     const method = request.method;
     if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && request.url.includes('/customers')) {
-      responseCacheService.invalidatePrefix('customers:');
+      // Phase 3: only invalidate list cache, preserve stats cache (60s)
+      if (!request.url.includes('/stats')) {
+        responseCacheService.invalidatePrefix('customers:list:');
+      }
+    }
+  });
+
+  /**
+   * GET /api/admin/customers/stats
+   * Phase 3: Stats terpisah — cached 60s, tidak memblok list query.
+   */
+  fastify.get('/api/admin/customers/stats', async (request, reply) => {
+    try {
+      const stats = await customerService.getCustomerStats(DEFAULT_TENANT_ID);
+      return reply
+        .header('Cache-Control', 'private, max-age=5, stale-while-revalidate=30')
+        .status(200)
+        .send({ success: true, stats });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message });
     }
   });
 

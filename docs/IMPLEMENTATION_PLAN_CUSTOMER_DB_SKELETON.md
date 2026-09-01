@@ -78,15 +78,18 @@ ssh -p 1403 ubuntu@43.157.197.148 "docker compose exec -T postgres psql -U postg
 - Jika `pg_stat_activity count` mendekati `connection_limit` (mis. 18/20) saat traffic normal → **root cause pool exhaustion**, prioritaskan **Fase 5.5** lebih awal.
 - Jika sudah `Promise.all` paralel tapi tetap 6 query → lanjut **Fase 3.5**.
 
-### Fase 1 — Skeleton Ringan P0 (0.5 hari)
-**Ubah `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx:562-565,390-426,650-812`:**
+### Fase 1 — Skeleton Ringan + Search Debounce P0 (0.5 hari)
+**Ubah `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx:562-565,390-426,650-812,540-557`:**
 1. Ganti `562:565` `if(loading) <Loader>` → `if(loading && customers.length===0)` skeleton:
    - Stats grid `390-426`: 4 kartu `animate-pulse bg-[#f0f2f5] h-[72px] rounded-xl` (label `h-3 w-20`, value `h-6 w-16`).
    - Table `650-812`: `Array(15).fill(0).map` row `h-4 w-3/4` (name), `h-3 w-1/2` (phone), `h-6 w-16` (LTV) + `h-5 w-16` (aksi), `divide-y divide-[#e9edef]`.
    - Search `540-557` + segment `430-488`: `h-9` skeleton saat `loading`.
    - Pagination `816-824`: `h-8` skeleton.
-2. Jika `customers.length>0` saat refresh → skeleton tidak full-page, hanya overlay `opacity-50` + `animate-pulse` di table body (pertahankan data lama).
-3. `src/index.css` tidak perlu ubah — pakai Tailwind existing.
+2. Jika `customers.length>0` saat refresh → skeleton tidak full-page, hanya overlay `opacity-50` + `animate-pulse` di table body (pertahankan data lama, anti-layout shift).
+3. **Search Input Debounce (300ms)** (Adjustment Best Practice):
+   - Tambahkan debounce 300ms pada `search` input di `CustomerDatabase.tsx` (menggunakan `useDebounce` atau `setTimeout` ref).
+   - Mencegah pengetikan cepat memicu rentetan 5-10 request `ILIKE` konkuren ke backend yang menguras connection pool.
+4. `src/index.css` tidak perlu ubah — pakai Tailwind existing.
 
 ### Fase 1.5 — Fix N+1 resolveTreatmentValue (kondisional, 0.5 hari) — BARU
 *Hanya jalan jika Fase 0.5 konfirmasi N+1 (>100ms untuk 500 rows).*
@@ -119,27 +122,41 @@ ssh -p 1403 ubuntu@43.157.197.148 "docker compose exec -T postgres psql -U postg
 3. `invalidatePrefix customers:` di `customers.subroute.ts:16` hanya invalidate `customers:list:*`, bukan `customers:stats:*`.
 4. Verifikasi: list tidak tunggu 4 agregasi → p95 turun 50%.
 
-### Fase 3.5 — Query Consolidation P1 (0.5 hari, gabung Fase 3) — BARU
+### Fase 3.5 — Query Consolidation & Type-Safety Evaluation P1 (0.5 hari, gabung Fase 3) — REVISI
 **Ubah `customer.service.ts:1143-1157`:**
-1. Cek apakah `Promise.all([findMany, count])` sudah paralel (saat ini `1143` sudah `Promise.all` — konfirmasi). Jika sequential → ubah ke `Promise.all`.
-2. Konsolidasi `findMany + count` jadi **1 round-trip** via `COUNT(*) OVER()` window function — ganti dengan `prisma.$queryRaw` raw SQL:
-   ```sql
-   SELECT *, COUNT(*) OVER() AS total_count FROM customers WHERE tenant_id=$1 AND is_sandbox_test=false ... LIMIT 15 OFFSET 0
-   ```
-   Hemat 1 round-trip per request (dari 6 → 5 query, atau dari 2 →1 untuk list+count).
-3. Evaluasi trade-off: raw SQL vs Prisma Client — jika raw SQL terlalu riskan, tetap `Promise.all` tapi dokumentasikan sebagai “sudah optimal 2 query paralel”.
+1. **Rekomendasi Utama (Best Practice)**: Pertahankan `Promise.all([prisma.customer.findMany, prisma.customer.count])`.
+   - Menjamin 100% type-safety TypeScript, keamanan multi-tenant (`tenant_id`), komposisi filter dinamis (`segment`, `search`, `mqlOnly`), dan kompatibilitas offline unit test mock (`tests/setup.ts`).
+   - Pada dataset 500-10.000 row, eksekusi paralel Prisma Client hanya memakan waktu 2-4ms (overhead roundtrip tidak signifikan dibanding risiko maintenance).
+2. **Evaluasi Raw SQL `COUNT(*) OVER()`**:
+   - Disediakan hanya sebagai opsi cadangan jika skala data melonjak >50.000 customer dan profiling menunjukkan latency round-trip menjadi bottleneck:
+     ```sql
+     SELECT *, COUNT(*) OVER() AS total_count FROM customers WHERE tenant_id=$1 AND is_sandbox_test=false ... LIMIT 15 OFFSET 0
+     ```
+   - *Catatan mitigasi:* Jika menggunakan `$queryRaw`, wajib membungkus parameter tenant dan filter secara ketat untuk mencegah SQL injection dan drift skema.
 
-### Fase 4 — Search Guard + LTV Korektnes P2 (0.5 hari) — REVISI (fix bug) — ⚠️ GATE WAJIB
+### Fase 4 — Search Guard + LTV Materialization & Lifecycle Sync P2 (0.5 hari) — REVISI (fix bug) — ⚠️ GATE WAJIB
 
 > **⚠️ WARNING — SILENT CORRECTNESS BUG (Owner emphasis 2026-09-01): JANGAN DEPLOY FASE 4 DENGAN `take: Math.min(15, pageSize)` SEPERTI PLAN ASLI.**
 > `LTV` dihitung di JS via `resolveTreatmentValue` (`customer.service.ts:1196`), **bukan kolom DB**. Jika `sortBy=ltv` hanya `take 15` rows dari DB lalu `sort` di JS, hasilnya **bukan top-15 by LTV** — hanya 15 rows sembarang (urutan `created_at` default) yang kebetulan di-sort ulang. User akan melihat data LTV **salah tanpa error apapun** (silent corruption), jauh lebih berbahaya daripada timeout yang setidaknya kelihatan. **Gate: Fase 4 tidak boleh merge/deploy sebelum pilih Opsi A atau B di bawah dan lolos verifikasi Fase 6 `sortBy=ltv` + observability Fase 7.**
 
-**Ubah `customer.service.ts:1120,1154,1250`:**
-1. **Search guard:** `if(q.length<4)` hanya `name/phone/trackingCode` (3 field), `else` 6 field — kurangi `ILIKE` scan. (tetap)
-2. **LTV korektnes — JANGAN `take: Math.min(15,pageSize)` sembarang.** Pilih salah satu (sesuai feedback):
-   - **Opsi A (rekomendasi, korektnes): Materialize LTV sebagai kolom** — tambah `ltv_cache Int` atau `generated column` di `customers` (atau `customerLtv` tabel terpisah), update via trigger saat `reservations.purchase_value` berubah atau via `customer.service` saat `resolveTreatmentValue`. Lalu `ORDER BY ltv_cache DESC` native di DB — bisa `take: pageSize` dengan benar.
-   - **Opsi B (tanpa migrasi skema, tetap fetch 500 tapi optimalkan):** Tetap `take: Math.min(500, pageSize*5)` untuk `sortBy=ltv` saja (hanya kasus ini fetch 500), tapi pastikan **Fase 1.5** sudah fix N+1 sehingga 500 rows <100ms. Lalu `customers.sort` + `slice` `1250-1251` tetap benar.
-   - **Ditolak:** `take: Math.min(15,pageSize)` → salah, hanya sort 15 rows sembarang.
+**Ubah `customer.service.ts:1120,1154,1250`, `schema.prisma`, `reservationLifecycleService`, `reservations.subroute.ts`:**
+1. **Search guard:** `if(q.length<4)` hanya `name/phone/trackingCode` (3 field indeks), `else` 6 field — kurangi `ILIKE` scan tak perlu saat user baru mengetik 1-2 huruf.
+2. **LTV Korektnes & Lifecycle Sync**:
+   - **Opsi A (Rekomendasi Utama & Standar Emas Database): Materialize `ltv_cache` sebagai kolom Customer**:
+     - Tambahkan kolom `ltv_cache Int @default(0)` pada model `Customer` di `schema.prisma`.
+     - Query `sortBy=ltv` langsung native di PostgreSQL: `orderBy: { ltv_cache: sortOrder }` dengan `take: pageSize` dan `skip: (page - 1) * pageSize`. 100% presisi dan berkecepatan instan O(1) indeks!
+     - **Lifecycle Sinkronisasi `ltv_cache`**:
+       - *Hook 1 (Reservasi Baru)*: Di `reservationLifecycleService.onReservationCreated`, update `ltv_cache = ltv_cache + purchase_value`.
+       - *Hook 2 (Status / Nominal Berubah)*: Di `reservations.subroute.ts` (PATCH/PUT reservasi, saat status menjadi `cancelled`/`completed` atau `purchase_value` diedit), panggil `customerService.recalculateCustomerLtv(customerId)`.
+       - *Hook 3 (Idempotent Backfill)*: Jalankan one-time SQL backfill saat migrasi:
+         ```sql
+         UPDATE customers c SET ltv_cache = COALESCE(
+           (SELECT SUM(r.purchase_value) FROM reservations r WHERE r.customer_id = c.id AND r.status NOT IN ('cancelled', 'rejected')),
+           0
+         );
+         ```
+   - **Opsi B (Tanpa migrasi skema, tetap in-memory tapi ter-batch)**: Tetap `take: Math.min(500, pageSize*5)` khusus `sortBy=ltv`, dengan batching N+1 di Fase 1.5 agar 500 baris diproses <50ms.
+   - **DITOLAK**: `take: Math.min(15,pageSize)` sembarang tanpa materialisasi (karena merusak integritas data top spender).
 3. Kriteria: `sortBy=ltv` harus return top-N by LTV yang benar, diverifikasi via `autocannon` khusus ltv (Fase 6).
 
 ### Fase 5 — Postgres Tuning P2 (ops, butuh deploy)

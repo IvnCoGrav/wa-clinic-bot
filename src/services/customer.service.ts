@@ -1117,14 +1117,22 @@ export class CustomerService {
         where.reservations = { none: {} };
       }
       if (search) {
-        where.OR = [
-          { name: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search } },
-          { kecamatan: { contains: search, mode: 'insensitive' } },
-          { kota: { contains: search, mode: 'insensitive' } },
-          { kelurahan: { contains: search, mode: 'insensitive' } },
-          { adClick: { trackingCode: { contains: search, mode: 'insensitive' } } },
-        ];
+        // Phase 4: Search guard — short queries only scan indexed fields (name/phone/trackingCode)
+        const isShortQuery = search.length < 4;
+        where.OR = isShortQuery
+          ? [
+              { name: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
+              { adClick: { trackingCode: { contains: search, mode: 'insensitive' } } },
+            ]
+          : [
+              { name: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
+              { kecamatan: { contains: search, mode: 'insensitive' } },
+              { kota: { contains: search, mode: 'insensitive' } },
+              { kelurahan: { contains: search, mode: 'insensitive' } },
+              { adClick: { trackingCode: { contains: search, mode: 'insensitive' } } },
+            ];
       }
 
       let orderBy: any = { created_at: sortOrder };
@@ -1134,12 +1142,14 @@ export class CustomerService {
       else if (sortBy === 'kota') orderBy = { kota: sortOrder };
       else if (sortBy === 'mqlBubbleCount') orderBy = { mql_bubble_count: sortOrder };
       else if (sortBy === 'created_at') orderBy = { created_at: sortOrder };
+      else if (sortBy === 'ltv') orderBy = { ltv_cache: sortOrder };
       else if (sortBy === 'reservations' || sortBy === 'reservationCount') {
         orderBy = { reservations: { _count: sortOrder } };
       }
 
       const isLtvSort = sortBy === 'ltv';
 
+      const t0 = Date.now();
       const [rawCustomers, total] = await Promise.all([
         prisma.customer.findMany({
           where,
@@ -1149,12 +1159,13 @@ export class CustomerService {
               where: { status: { notIn: ['cancelled', 'rejected'] } },
             },
           },
-          orderBy: isLtvSort ? { created_at: 'desc' } : orderBy,
-          skip: isLtvSort ? 0 : (page - 1) * pageSize,
-          take: isLtvSort ? Math.min(500, pageSize * 5) : pageSize,
+          orderBy: isLtvSort ? { ltv_cache: sortOrder } : orderBy,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
         }),
         prisma.customer.count({ where }),
       ]);
+      const findManyMs = Date.now() - t0;
 
       const cacheKeyStats = `customers:stats:${tenantId}`;
       let stats = responseCacheService.get<any>(cacheKeyStats);
@@ -1194,10 +1205,28 @@ export class CustomerService {
       }
 
       const { resolveTreatmentValue } = await import('./capi.service');
-      const treatmentMemoMap = new Map<string, number>();
 
-      let customers = await Promise.all(
-        rawCustomers.map(async (c) => {
+      // Phase 1.5: Batch-resolve unique treatment texts to avoid N+1 per-row awaits
+      const tResolve = Date.now();
+      const uniqueTexts = new Set<string>();
+      for (const c of rawCustomers) {
+        if (c.reservations) {
+          for (const r of c.reservations) {
+            if ((r.purchase_value === null || r.purchase_value === undefined || r.purchase_value === 0) && (r.treatment_detail || r.raw_text)) {
+              uniqueTexts.add((r.treatment_detail || r.raw_text) as string);
+            }
+          }
+        }
+      }
+      const treatmentMemoMap = new Map<string, number>();
+      if (uniqueTexts.size > 0) {
+        const textArr = Array.from(uniqueTexts);
+        const results = await Promise.all(textArr.map(async (t) => [t, (await resolveTreatmentValue(t)) ?? 0] as const));
+        for (const [t, v] of results) treatmentMemoMap.set(t, v);
+      }
+      const resolveMs = Date.now() - tResolve;
+
+      let customers = rawCustomers.map((c) => {
           let ltv = 0;
           if (c.reservations && c.reservations.length > 0) {
             for (const r of c.reservations) {
@@ -1205,10 +1234,6 @@ export class CustomerService {
               if (val === null || val === undefined || val === 0) {
                 const text = r.treatment_detail || r.raw_text;
                 if (text) {
-                  if (!treatmentMemoMap.has(text)) {
-                    const resolved = (await resolveTreatmentValue(text)) ?? 0;
-                    treatmentMemoMap.set(text, resolved);
-                  }
                   val = treatmentMemoMap.get(text) ?? 0;
                 } else {
                   val = 0;
@@ -1243,12 +1268,16 @@ export class CustomerService {
             distanceKm: c.distance_km ?? null,
             ongkir: c.ongkir ?? null,
           };
-        })
-      );
+        });
 
-      if (isLtvSort) {
-        customers.sort((a, b) => (sortOrder === 'asc' ? a.ltv - b.ltv : b.ltv - a.ltv));
-        customers = customers.slice((page - 1) * pageSize, page * pageSize);
+      // Phase 4: LTV sort now handled by DB-level ltv_cache — no JS sort needed
+      // (removed: customers.sort + slice for isLtvSort)
+
+      // Phase 7: Observability — structured log per request
+      const elapsed = Date.now() - t0;
+      console.log(JSON.stringify({ route: 'listCustomers', elapsed, findManyMs, resolveMs, page, sortBy, total, customersReturned: customers.length }));
+      if (elapsed > 500) {
+        console.warn(JSON.stringify({ route: 'listCustomers', elapsed, slow: true, findManyMs, resolveMs }));
       }
 
       return {
@@ -1304,6 +1333,84 @@ export class CustomerService {
         totalPages: Math.max(1, Math.ceil(list.length / pageSize)),
       };
     }
+  }
+
+  /**
+   * Phase 3: Separate stats endpoint — cached 60s, independent from list query.
+   */
+  public async getCustomerStats(tenantId: string): Promise<{
+    totalCustomers: number;
+    totalPurchasers: number;
+    totalMql: number;
+    totalProspects: number;
+    totalRevenue: number;
+  }> {
+    const cacheKey = `customers:stats:${tenantId}`;
+    let stats = responseCacheService.get<any>(cacheKey);
+    if (stats) return stats;
+
+    try {
+      const [totalCustomersCount, totalPurchasersCount, totalMqlCount, totalRevAgg] = await Promise.all([
+        prisma.customer.count({ where: { tenant_id: tenantId, is_sandbox_test: false } }),
+        prisma.customer.count({
+          where: { tenant_id: tenantId, is_sandbox_test: false, reservations: { some: { status: { notIn: ['cancelled', 'rejected'] } } } },
+        }),
+        prisma.customer.count({
+          where: { tenant_id: tenantId, is_sandbox_test: false, is_mql: true },
+        }),
+        prisma.reservation.aggregate({
+          where: { tenant_id: tenantId, status: { notIn: ['cancelled', 'rejected'] }, customer: { is_sandbox_test: false } },
+          _sum: { purchase_value: true },
+        }),
+      ]);
+      stats = {
+        totalCustomers: totalCustomersCount,
+        totalPurchasers: totalPurchasersCount,
+        totalMql: totalMqlCount,
+        totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
+        totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
+      };
+      responseCacheService.set(cacheKey, stats, 60);
+    } catch {
+      stats = {
+        totalCustomers: 0,
+        totalPurchasers: 0,
+        totalMql: 0,
+        totalProspects: 0,
+        totalRevenue: 0,
+      };
+    }
+    return stats;
+  }
+
+  /**
+   * Phase 4: Recalculate and persist ltv_cache for a single customer.
+   * Called after reservation create/update/cancel to keep ltv_cache in sync.
+   */
+  public async recalculateCustomerLtv(customerId: string, tenantId?: string): Promise<void> {
+    try {
+      const where: any = { customer_id: customerId, status: { notIn: ['cancelled', 'rejected'] } };
+      if (tenantId) where.tenant_id = tenantId;
+      const agg = await prisma.reservation.aggregate({ where, _sum: { purchase_value: true } });
+      const ltv = agg?._sum?.purchase_value || 0;
+      await prisma.customer.update({ where: { id: customerId }, data: { ltv_cache: ltv } });
+    } catch (err: any) {
+      console.warn('[CUSTOMER] recalculateCustomerLtv failed:', err.message);
+    }
+  }
+
+  /**
+   * Phase 4: One-time backfill of ltv_cache for all customers.
+   * Run via: npx tsx -e "import('./src/services/customer.service').then(s => s.customerService.backfillAllLtvCache())"
+   */
+  public async backfillAllLtvCache(): Promise<number> {
+    const customers = await prisma.customer.findMany({ select: { id: true } });
+    let count = 0;
+    for (const c of customers) {
+      await this.recalculateCustomerLtv(c.id);
+      count++;
+    }
+    return count;
   }
 
   /**
