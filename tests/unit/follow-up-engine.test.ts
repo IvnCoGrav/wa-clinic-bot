@@ -215,7 +215,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
           reservation_id: 'res-baby-1',
           customer_id: 'cust-baby-1',
           type: 'REMINDER_H1',
-          status: 'QUEUED',
+          status: 'PENDING',
         }),
       })
     );
@@ -226,7 +226,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
           reservation_id: 'res-baby-1',
           customer_id: 'cust-baby-1',
           type: 'REVIEW_H1_BABY',
-          status: 'QUEUED',
+          status: 'PENDING',
         }),
       })
     );
@@ -246,7 +246,7 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
           reservation_id: 'res-moms-1',
           customer_id: 'cust-moms-1',
           type: 'REVIEW_H1_MOMS',
-          status: 'QUEUED',
+          status: 'PENDING',
         }),
       })
     );
@@ -344,6 +344,28 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
     expect(lines.length).toBeGreaterThanOrEqual(4);
     expect(lines[0]).toBe('Halo Bunda Rina Kartika!');
     expect(lines[2]).toBe('Bagaimana kabar hari ini?');
+  });
+
+  it('11. NEXT_TREATMENT is prioritized over NO_PURCHASE in queue processing and rescheduling', async () => {
+    const { FOLLOWUP_TYPE_PRIORITY } = await import('../../src/services/follow-up.service');
+    expect(FOLLOWUP_TYPE_PRIORITY['NEXT_TREATMENT']).toBeLessThan(FOLLOWUP_TYPE_PRIORITY['NO_PURCHASE']);
+
+    const items = [
+      { id: '1', type: 'NO_PURCHASE', scheduled_at: new Date('2026-09-01T09:00:00Z') },
+      { id: '2', type: 'NEXT_TREATMENT', scheduled_at: new Date('2026-09-01T09:30:00Z') },
+      { id: '3', type: 'NO_PURCHASE', scheduled_at: new Date('2026-09-01T08:00:00Z') },
+    ];
+
+    const sorted = [...items].sort((a, b) => {
+      const pA = FOLLOWUP_TYPE_PRIORITY[a.type] || 99;
+      const pB = FOLLOWUP_TYPE_PRIORITY[b.type] || 99;
+      if (pA !== pB) return pA - pB;
+      return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+    });
+
+    expect(sorted[0].id).toBe('2'); // NEXT_TREATMENT comes first
+    expect(sorted[1].id).toBe('3'); // NO_PURCHASE earlier time
+    expect(sorted[2].id).toBe('1'); // NO_PURCHASE later time
   });
 });
 

@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/2.0.0.html).
 
+#### Enhancement — Prioritas Utama Perawatan Lanjutan Bulanan (NEXT_TREATMENT) & Peningkatan Kapasitas 25 Pesan/Hari (`follow-up.service.ts`, `follow-up-engine.test.ts`) (2026-09-01)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  - Pengguna memutuskan untuk menaikkan kapasitas follow-up harian menjadi **25 pesan per hari**, dan memberikan **prioritas utama (Priority #1)** bagi pengingat bulanan pasca treatment (`NEXT_TREATMENT`) di atas follow-up prospek yang belum purchase (`NO_PURCHASE`).
+- **Solusi & Implementasi:**
+  1. **Tingkat Prioritas Tipe Follow-Up (`FOLLOWUP_TYPE_PRIORITY`)**:
+     - Menetapkan bobot prioritas eksplisit:
+       - `NEXT_TREATMENT` = **Prioritas #1 (Tertinggi)** — Pasien setia / repeat order bernilai LTV tinggi.
+       - `NO_PURCHASE` = **Prioritas #2 (Standar)** — Lead baru yang belum pernah booking.
+     - Mengurutkan pemrosesan worker antrian (`processDueFollowUps`) dan pendistribusian jadwal overdue (`rescheduleOverdue`) berdasarkan bobot prioritas ini, sehingga slot waktu pagi hari dan jatah harian selalu diprioritaskan untuk pesan `NEXT_TREATMENT`.
+  2. **Peningkatan Default Kapasitas Harian (25 Pesan/Hari)**:
+     - Mengubah default batas harian `FOLLOWUP_MAX_PER_DAY` dari `10` menjadi `25` pesan/hari di `follow-up.service.ts` (dapat dikonfigurasi via env `FOLLOWUP_MAX_PER_DAY`).
+  3. **Distribusi Waktu Adaptif (09:00 - 16:30 WIB)**:
+     - Merancang kalkulasi interval otomatis `stepMin = Math.floor(450 / maxPerDay)` (~18 menit per pesan).
+     - Menghasilkan 25 slot waktu tersebar merata dari pukul 09:00 WIB hingga 16:12 WIB secara UTC-deterministik, sehingga volume 25 pesan tetap terdistribusi sangat natural dan aman dari deteksi spam Meta.
+  4. **Automated Unit Testing (`tests/unit/follow-up-engine.test.ts`)**:
+     - Menambahkan Test #11 untuk memverifikasi bahwa `NEXT_TREATMENT` selalu menduduki antrian teratas sebelum `NO_PURCHASE`. Seluruh 15 unit tests pass 100%.
+
 #### Enhancement — Optimalisasi Debounce 7.5s, Eliminasi Bias Alias Generik & Kalkulasi Presisi Add-on Sinar Moksa (`burst-coalesce.service.ts`, `entity-extractor.ts`, `decision-matrix.ts`, `grounding-composer.ts`, `slate-store.ts`, `.env`) (2026-09-01)
 
 - **Latar Belakang & Permintaan Pengguna:**

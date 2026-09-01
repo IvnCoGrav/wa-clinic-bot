@@ -19,6 +19,15 @@ const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE
 const LOST_CUSTOMER_GRACE_DAYS = parsePositiveInt(process.env.LOST_CUSTOMER_GRACE_DAYS, 3);
 const FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS = parsePositiveInt(process.env.FOLLOWUP_RECENT_CHAT_COOLDOWN_HOURS, 72);
 
+// Prioritas Tipe Follow-Up: NEXT_TREATMENT (Prioritas 1) lebih diutamakan daripada NO_PURCHASE (Prioritas 2)
+export const FOLLOWUP_TYPE_PRIORITY: Record<string, number> = {
+  NEXT_TREATMENT: 1, // Prioritas #1: Pasien pasca treatment / repeat order bernilai tinggi LTV
+  NO_PURCHASE: 2,    // Prioritas #2: Lead baru yang belum pernah purchase
+  REMINDER_H1: 3,
+  REVIEW_H1_BABY: 4,
+  REVIEW_H1_MOMS: 5,
+};
+
 export class FollowUpService {
   /**
    * Mengambil semua template follow-up dari database (dengan fallback ke hardcode default).
@@ -474,17 +483,17 @@ export class FollowUpService {
                 type: 'REMINDER_H1',
                 stage: 1,
                 scheduled_at: effectiveReminderDate,
-                status: 'QUEUED',
+                status: 'PENDING',
               },
             });
-            console.log(`[FollowUp Service] Queued REMINDER_H1 for reservation: ${reservationId} at ${effectiveReminderDate.toISOString()}`);
+            console.log(`[FollowUp Service] Created (POSTPONED) REMINDER_H1 for reservation: ${reservationId} at ${effectiveReminderDate.toISOString()}`);
           } catch (err: any) {
             console.warn('[FollowUp Service] Failed to create REMINDER_H1:', err.message);
           }
         }
       }
 
-      // 5. Jadwalkan Review H+1 Pasca Treatment
+      // 5. Jadwalkan Review H+1 Pasca Treatment (POSTPONED)
       let existingReview = null;
       try {
         existingReview = await prisma.followUp?.findFirst?.({
@@ -507,10 +516,10 @@ export class FollowUpService {
               type: reviewType as any,
               stage: 1,
               scheduled_at: reviewDate,
-              status: 'QUEUED',
+              status: 'PENDING',
             },
           });
-          console.log(`[FollowUp Service] Queued ${reviewType} for reservation: ${reservationId} at ${reviewDate.toISOString()}`);
+          console.log(`[FollowUp Service] Created (POSTPONED) ${reviewType} for reservation: ${reservationId} at ${reviewDate.toISOString()}`);
         } catch (err: any) {
           console.warn(`[FollowUp Service] Failed to create ${reviewType}:`, err.message);
         }
@@ -792,26 +801,39 @@ export class FollowUpService {
     daysCount: number;
     distribution: Record<string, number>;
   }> {
-    const maxPerDay = Math.max(1, options.maxPerDay || 10);
+    const defaultMax = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 25);
+    const maxPerDay = Math.max(1, options.maxPerDay || defaultMax);
 
-    let baseDate: Date;
+    const now = new Date();
+    const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+    let startYear: number;
+    let startMonth: number;
+    let startDay: number;
+
     if (options.startDate) {
-      baseDate = new Date(options.startDate);
+      const sWib = new Date(new Date(options.startDate).getTime() + 7 * 60 * 60 * 1000);
+      startYear = sWib.getUTCFullYear();
+      startMonth = sWib.getUTCMonth();
+      startDay = sWib.getUTCDate();
     } else {
-      baseDate = new Date();
+      startYear = nowWib.getUTCFullYear();
+      startMonth = nowWib.getUTCMonth();
+      startDay = nowWib.getUTCDate();
       // jika jam sekarang sudah >= 16:00 WIB, mulai dari besok pagi
-      const currentWibHour = (baseDate.getUTCHours() + 7) % 24;
-      if (currentWibHour >= 16) {
-        baseDate.setDate(baseDate.getDate() + 1);
+      if (nowWib.getUTCHours() >= 16) {
+        startDay += 1;
       }
     }
-    baseDate.setHours(9, 0, 0, 0);
+
+    // Jam 09:00 WIB = 02:00 UTC
+    const baseCutoff = new Date(Date.UTC(startYear, startMonth, startDay, 2, 0, 0, 0));
 
     const overdueFollowUps = await prisma.followUp.findMany({
       where: {
         tenant_id: tenantId,
         status: 'PENDING',
-        scheduled_at: { lt: baseDate },
+        scheduled_at: { lt: baseCutoff },
       },
       orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
     });
@@ -820,25 +842,30 @@ export class FollowUpService {
       return { rescheduledCount: 0, daysCount: 0, distribution: {} };
     }
 
+    // Urutkan overdue: NEXT_TREATMENT lebih diprioritaskan daripada NO_PURCHASE
+    const sortedOverdue = [...overdueFollowUps].sort((a, b) => {
+      const pA = FOLLOWUP_TYPE_PRIORITY[a.type] || 99;
+      const pB = FOLLOWUP_TYPE_PRIORITY[b.type] || 99;
+      if (pA !== pB) return pA - pB;
+      return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+    });
+
     const distribution: Record<string, number> = {};
     let currentDayIndex = 0;
     let countInCurrentDay = 0;
 
-    // Stagger hours during the day (09:00, 09:40, 10:20, 11:00, 11:40, 13:00, 13:40, 14:20, 15:00, 15:40)
-    const slotMinutes = [0, 40, 80, 120, 160, 240, 280, 320, 360, 400];
+    // Distribusi merata sepanjang jam 09:00 - 16:30 WIB (450 menit)
+    const stepMin = maxPerDay > 1 ? Math.floor(450 / maxPerDay) : 30;
 
-    for (const fu of overdueFollowUps) {
+    for (const fu of sortedOverdue) {
       if (countInCurrentDay >= maxPerDay) {
         currentDayIndex++;
         countInCurrentDay = 0;
       }
 
-      const targetDate = new Date(baseDate);
-      targetDate.setDate(targetDate.getDate() + currentDayIndex);
-
-      const offsetMin = slotMinutes[countInCurrentDay % slotMinutes.length] || (countInCurrentDay * 30);
-      targetDate.setHours(9, 0, 0, 0);
-      targetDate.setMinutes(targetDate.getMinutes() + offsetMin);
+      const offsetMin = countInCurrentDay * stepMin;
+      // 09:00 WIB + offsetMin = 02:00 UTC + offsetMin
+      const targetDate = new Date(Date.UTC(startYear, startMonth, startDay + currentDayIndex, 2, offsetMin, 0, 0));
 
       await prisma.followUp.update({
         where: { id: fu.id },
@@ -850,9 +877,9 @@ export class FollowUpService {
       countInCurrentDay++;
     }
 
-    console.log(`[FollowUp Service] Rescheduled ${overdueFollowUps.length} overdue follow-ups across ${currentDayIndex + 1} days (max ${maxPerDay}/day).`);
+    console.log(`[FollowUp Service] Rescheduled ${sortedOverdue.length} overdue follow-ups across ${currentDayIndex + 1} days (max ${maxPerDay}/day, interval ~${stepMin}m, NEXT_TREATMENT prioritized).`);
     return {
-      rescheduledCount: overdueFollowUps.length,
+      rescheduledCount: sortedOverdue.length,
       daysCount: currentDayIndex + 1,
       distribution,
     };
@@ -919,7 +946,14 @@ export class FollowUpService {
         orderBy: [{ scheduled_at: 'asc' }, { created_at: 'asc' }],
         take: FOLLOWUP_BATCH_LIMIT,
       });
-      const dueFollowUps = rawDueFollowUps || [];
+
+      // Urutkan due items berdasarkan prioritas bisnis: NEXT_TREATMENT (#1) > NO_PURCHASE (#2)
+      const dueFollowUps = (rawDueFollowUps || []).sort((a, b) => {
+        const pA = FOLLOWUP_TYPE_PRIORITY[a.type] || 99;
+        const pB = FOLLOWUP_TYPE_PRIORITY[b.type] || 99;
+        if (pA !== pB) return pA - pB;
+        return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+      });
 
       if (!dueFollowUps || dueFollowUps.length === 0) {
         return 0;
@@ -931,6 +965,12 @@ export class FollowUpService {
       const cooldownMs = cooldownHours * 60 * 60 * 1000;
 
       for (const fu of dueFollowUps) {
+        // Kebijakan Klinik: Follow-up Reminder H-1 dan Review H+1 di-postpone (ditunda pengirimannya sementara)
+        if (fu.type === 'REMINDER_H1' || fu.type === 'REVIEW_H1_BABY' || fu.type === 'REVIEW_H1_MOMS') {
+          console.log(`[FollowUp Worker] FollowUp #${fu.id} (${fu.type}) for ${fu.customer?.phone} is POSTPONED by clinic policy. Skipping automatic send.`);
+          continue;
+        }
+
         // Anti-blast overdue protection: jika jadwal sudah terlewat lebih dari 48 jam, tandai SKIPPED
         if (fu.scheduled_at < fortyEightHoursAgo) {
           console.warn(`[FollowUp Worker] FollowUp #${fu.id} (${fu.customer?.phone}) is overdue (>48h). Marked as SKIPPED to prevent spam blast.`);
