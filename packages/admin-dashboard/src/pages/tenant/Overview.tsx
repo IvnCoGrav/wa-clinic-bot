@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiRequest, getCachedApiResponse } from '../../services/api';
 import { 
   MessageSquare, 
@@ -106,22 +107,31 @@ export const Overview: React.FC = () => {
             </span>
           </p>
         </div>
-        <button 
-          onClick={() => { setLoading(true); fetchStatus(); }}
-          className="flex items-center space-x-2 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] shadow-xs transition-colors"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
-          <span>Refresh Metrics</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <Link
+            to="/admin/financial-analytics"
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+          >
+            <TrendingUp size={14} />
+            <span>Dashboard Transaksi & Omset →</span>
+          </Link>
+          <button 
+            onClick={() => { setLoading(true); fetchStatus(); }}
+            className="flex items-center space-x-2 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] shadow-xs transition-colors"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
+            <span>Refresh Metrics</span>
+          </button>
+        </div>
       </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Chat Masuk */}
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+        <Link to="/admin/live-chat" className="bg-white border border-[#e9edef] hover:border-[#008069] rounded-2xl p-5 shadow-xs transition block group">
           <div className="flex justify-between items-start mb-3">
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Chat Masuk</span>
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider group-hover:text-[#008069] transition">Chat Masuk</span>
               <p className="text-2xl font-black text-[#111b21]">{stats.incomingChats}</p>
             </div>
             <div className="p-2.5 rounded-xl bg-[#e8f5f2] text-[#008069]">
@@ -132,13 +142,13 @@ export const Overview: React.FC = () => {
             <TrendingUp size={13} className="mr-1" />
             <span>+14.2% dari kemarin</span>
           </div>
-        </div>
+        </Link>
 
         {/* Reservasi */}
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+        <Link to="/admin/reservations" className="bg-white border border-[#e9edef] hover:border-purple-500 rounded-2xl p-5 shadow-xs transition block group">
           <div className="flex justify-between items-start mb-3">
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Reservasi</span>
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider group-hover:text-purple-700 transition">Reservasi</span>
               <p className="text-2xl font-black text-[#111b21]">{stats.reservations}</p>
             </div>
             <div className="p-2.5 rounded-xl bg-purple-50 text-purple-700">
@@ -149,13 +159,13 @@ export const Overview: React.FC = () => {
             <TrendingUp size={13} className="mr-1" />
             <span>Reservasi masuk hari ini</span>
           </div>
-        </div>
+        </Link>
 
         {/* Est. Omset */}
-        <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
+        <Link to="/admin/financial-analytics" className="bg-white border border-[#e9edef] hover:border-[#008069] rounded-2xl p-5 shadow-xs transition block group">
           <div className="flex justify-between items-start mb-3">
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider">Est. Omset</span>
+              <span className="text-xs font-bold text-[#667781] uppercase tracking-wider group-hover:text-[#008069] transition">Est. Omset</span>
               <p className="text-2xl font-black text-[#111b21] truncate">{formatRevenue(stats.revenue)}</p>
             </div>
             <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
@@ -164,9 +174,9 @@ export const Overview: React.FC = () => {
           </div>
           <div className="flex items-center text-xs text-emerald-700 font-semibold">
             <TrendingUp size={13} className="mr-1" />
-            <span>+8% dibanding minggu lalu</span>
+            <span>Lihat laporan omset & histori →</span>
           </div>
-        </div>
+        </Link>
 
         {/* Conversion Rate */}
         <div className="bg-white border border-[#e9edef] rounded-2xl p-5 shadow-xs">
