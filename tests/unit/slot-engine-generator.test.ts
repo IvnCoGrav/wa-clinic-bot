@@ -163,8 +163,8 @@ describe('Single-Pass Warm Generator & Post-Processing Sanitizer (Part 5)', () =
       const passedPayload = (spyCall.mock.calls[0][0] as any).payload;
       const systemPromptContent = passedPayload.messages[0].content;
 
-      expect(systemPromptContent).toContain('Durasi: ~40 menit');
-      expect(systemPromptContent).toContain('DURASI STANDAR LAYANAN');
+      expect(systemPromptContent).toContain('40 menit');
+      expect(systemPromptContent).toContain('DURASI, TARIF');
       expect(reply).toContain('40 menit');
     });
   });

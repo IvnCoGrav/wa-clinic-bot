@@ -1,4 +1,5 @@
 import { CustomerSlate, ExtractedEntities } from './types';
+import { treatmentCatalogService } from '../services/treatment-catalog.service';
 
 export interface ConversationSummaryOptions {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -39,12 +40,16 @@ export class ConversationStateSummarizer {
       janganDiulang.push('Menanyakan usia atau umur anak (sudah diketahui)');
     }
 
-    // 3. EVALUASI KELUHAN & TREATMENT
+    // 3. EVALUASI KELUHAN & TREATMENT (dinamis dari katalog)
     if (slate.selectedTreatmentName) {
       sudahDibahas.push(`Treatment yang dipilih/ditanyakan: *${slate.selectedTreatmentName}*`);
       janganDiulang.push('Menanyakan ulang "rencana mau treatment apa" dari awal');
     } else if (slate.symptoms && slate.symptoms.length > 0) {
-      sudahDibahas.push(`Keluhan si kecil: ${slate.symptoms.join(', ')} (disarankan *Pijat Bayi Pulih Ceria*)`);
+      const candidates = slate.childAgeMonths !== null
+        ? treatmentCatalogService.filterServicesByAudience(treatmentCatalogService.getAllServices(), { ageMonths: slate.childAgeMonths })
+        : treatmentCatalogService.getAllServices();
+      const suggested = candidates.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates[0]?.name || 'treatment sesuai katalog';
+      sudahDibahas.push(`Keluhan si kecil: ${slate.symptoms.join(', ')} (disarankan *${suggested}* dari katalog aktif)`);
       janganDiulang.push('Menanyakan ulang keluhan si kecil');
     }
 
@@ -86,8 +91,12 @@ export class ConversationStateSummarizer {
     } else if (extraction.intents.includes('consult_symptom')) {
       const symptomList = extraction.symptoms.length > 0 ? extraction.symptoms.join(', ') : 'keluhan fisik si kecil';
       sedangDibahas = `Bunda berkonsultasi mengenai keluhan: ${symptomList}`;
+      const candidates2 = slate.childAgeMonths !== null
+        ? treatmentCatalogService.filterServicesByAudience(treatmentCatalogService.getAllServices(), { ageMonths: slate.childAgeMonths })
+        : treatmentCatalogService.getAllServices();
+      const suggested2 = extraction.symptoms?.length ? (candidates2.find((s) => s.name.toLowerCase().includes('pulih'))?.name || candidates2[0]?.name) : (candidates2[0]?.name || 'treatment sesuai katalog');
       yangPerluDijawab =
-        'Rekomendasikan paket treatment yang tepat (*Pijat Bayi Pulih Ceria* untuk bapil/flu) secara suportif dan empatik, jelaskan manfaat terapinya, lalu tawarkan jadwal kunjungan';
+        `Rekomendasikan paket treatment yang tepat (*${suggested2}* untuk keluhan tersebut) secara suportif dan empatik, jelaskan manfaat terapinya dari katalog dinamis, lalu tawarkan jadwal kunjungan`;
     } else if (extraction.intents.includes('provide_location') || extraction.locationText) {
       sedangDibahas = `Bunda menginformasikan lokasi rumah (${extraction.locationText || slate.kelurahan || 'alamat'})`;
       yangPerluDijawab =
