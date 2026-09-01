@@ -1068,6 +1068,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
+        // Phase 4: Sync ltv_cache when purchase_value or status changes
+        if (purchaseValue !== undefined || status !== undefined) {
+          try {
+            const { customerService } = await import('../../services/customer.service');
+            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID);
+          } catch (ltvErr: any) {
+            console.warn('[Admin API] Failed to recalculate ltv_cache on reservation edit:', ltvErr.message);
+          }
+        }
+
         return reply.status(200).send({ success: true, data: updated });
       } catch (error: any) {
         const mock = memoryReservations.get(id);
@@ -1148,6 +1158,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           payload: { status },
           ipAddress: request.ip,
         });
+
+        // Phase 4: Sync ltv_cache when status changes to/from cancelled
+        if (status === 'cancelled' || existing.status === 'cancelled') {
+          try {
+            const { customerService } = await import('../../services/customer.service');
+            await customerService.recalculateCustomerLtv(existing.customer_id, existing.tenant_id || DEFAULT_TENANT_ID);
+          } catch (ltvErr: any) {
+            console.warn('[Admin API] Failed to recalculate ltv_cache on status change:', ltvErr.message);
+          }
+        }
 
         return reply.status(200).send({ success: true, data: reservation });
       } catch (error) {

@@ -17,7 +17,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/wa_clinic_db?schema=public&connection_limit=20&pool_timeout=10
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/wa_clinic_db?schema=public&connection_limit=20&pool_timeout=15
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - WAHA_WEBHOOK_SECRET=${WAHA_WEBHOOK_SECRET}
       - WAHA_BASE_URL=${WAHA_BASE_URL:-http://waha:3000}

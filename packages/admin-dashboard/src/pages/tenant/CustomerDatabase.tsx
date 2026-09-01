@@ -98,6 +98,10 @@ export const CustomerDatabase: React.FC = () => {
   });
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  // Retry & Error State (Phase 2)
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
   // Sorting State
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -147,28 +151,31 @@ export const CustomerDatabase: React.FC = () => {
   const [eventCurrency, setEventCurrency] = useState('IDR');
   const [sendingEvent, setSendingEvent] = useState(false);
 
+  // Search debounce ref (Phase 1)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   const loadCustomers = async () => {
     if (customers.length === 0) setLoading(true);
+    setLoadError(null);
     try {
       const query = new URLSearchParams({
         page: String(page),
         pageSize: '15',
         sortBy,
         sortOrder,
-        ...(search ? { search } : {}),
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
         ...(segment !== 'all' ? { segment } : {}),
       });
 
-      const res = await apiRequest(`/api/admin/customers?${query.toString()}`);
+      const res = await apiRequest(`/api/admin/customers?${query.toString()}`, { timeoutMs: 20000 });
       if (res && res.success) {
         setCustomers(res.customers || []);
         setTotalPages(res.totalPages || 1);
         setTotalCount(res.total || 0);
-        if (res.stats) {
-          setStats(res.stats);
-        }
       }
     } catch (err: any) {
+      setLoadError(err.message);
       toast(`Gagal memuat database customer: ${err.message}`, 'error');
     } finally {
       setLoading(false);
@@ -177,7 +184,39 @@ export const CustomerDatabase: React.FC = () => {
 
   useEffect(() => {
     loadCustomers();
-  }, [page, segment, sortBy, sortOrder]);
+  }, [page, segment, sortBy, sortOrder, retryCount]);
+
+  // Search debounce: trigger 300ms after user stops typing
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [search]);
+
+  // Re-fetch when debouncedSearch changes (not covered by retryCount effect)
+  useEffect(() => {
+    loadCustomers();
+  }, [debouncedSearch]);
+
+  // Phase 3: Stats fetched independently, stale-while-revalidate 60s
+  useEffect(() => {
+    let cancelled = false;
+    const loadStats = async () => {
+      try {
+        const res = await apiRequest('/api/admin/customers/stats', { timeoutMs: 15000 });
+        if (!cancelled && res?.success && res.stats) {
+          setStats(res.stats);
+        }
+      } catch {}
+    };
+    loadStats();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -263,8 +302,10 @@ export const CustomerDatabase: React.FC = () => {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Debounce already handles re-fetch; just ensure page resets
     setPage(1);
-    loadCustomers();
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    setDebouncedSearch(search);
   };
 
   const handleCopyCode = (code: string) => {
@@ -557,12 +598,57 @@ export const CustomerDatabase: React.FC = () => {
         </form>
       </div>
 
+      {/* Retry Error Banner (Phase 2) */}
+      {loadError && !loading && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center justify-between">
+          <span className="text-xs text-rose-700 flex items-center gap-1.5"><AlertCircle size={14}/>{loadError}</span>
+          <button onClick={()=>{setRetryCount(c=>c+1);}} disabled={loading} className="px-3 py-1.5 bg-[#008069] text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">Coba Lagi</button>
+        </div>
+      )}
+
       {/* Customer Table & Mobile Cards */}
-      <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader className="animate-spin text-[#008069]" size={32} />
-          </div>
+      <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs relative">
+        {/* Loading Overlay (refresh — data exists) */}
+        {loading && customers.length > 0 && (
+          <div className="absolute inset-0 z-10 bg-white/60 animate-pulse" />
+        )}
+
+        {loading && customers.length === 0 ? (
+          /* Skeleton: Stats grid */
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+              {Array(4).fill(0).map((_, i) => (
+                <div key={i} className="bg-[#f0f2f5] h-[72px] rounded-xl animate-pulse flex flex-col justify-center px-4 space-y-2">
+                  <div className="h-3 w-20 bg-[#d1d7db] rounded" />
+                  <div className="h-6 w-16 bg-[#d1d7db] rounded" />
+                </div>
+              ))}
+            </div>
+            {/* Skeleton: Search + Segment bar */}
+            <div className="px-4 pb-3 space-y-2.5">
+              <div className="h-9 bg-[#f0f2f5] rounded-xl animate-pulse" />
+              <div className="h-9 bg-[#f0f2f5] rounded-xl animate-pulse w-3/4" />
+            </div>
+            {/* Skeleton: Table rows */}
+            <div className="divide-y divide-[#e9edef]">
+              {Array(15).fill(0).map((_, i) => (
+                <div key={i} className="flex items-center space-x-4 px-4 py-3.5">
+                  <div className="w-8 h-8 rounded-full bg-[#f0f2f5] animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3.5 w-3/4 bg-[#f0f2f5] rounded animate-pulse" />
+                    <div className="h-3 w-1/2 bg-[#f0f2f5] rounded animate-pulse" />
+                  </div>
+                  <div className="h-3 w-1/4 bg-[#f0f2f5] rounded animate-pulse" />
+                  <div className="h-6 w-16 bg-[#f0f2f5] rounded animate-pulse" />
+                  <div className="h-5 w-16 bg-[#f0f2f5] rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+            {/* Skeleton: Pagination */}
+            <div className="px-4 py-3 border-t border-[#e9edef]">
+              <div className="h-8 w-48 bg-[#f0f2f5] rounded animate-pulse" />
+            </div>
+          </>
         ) : customers.length === 0 ? (
           <div className="text-center py-16 text-[#667781] text-xs">
             <AlertCircle className="mx-auto text-[#8696a0] mb-2" size={32} />

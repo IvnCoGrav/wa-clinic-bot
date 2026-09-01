@@ -541,3 +541,30 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. Belum ada in-chat match counter & navigasi loncat pesan (🔼 / 🔽).
 - **Rencana Tindak Lanjut:** Implementasi **Fase 6** di [`docs/IMPLEMENTATION_PLAN_LIVECHAT_WA_SYNC.md`](file:///c:/Users/User/Documents/chatbot%20AG/docs/IMPLEMENTATION_PLAN_LIVECHAT_WA_SYNC.md) (Search-to-Message Jump, Keyword Highlighting, & In-Chat Match Navigation).
 
+---
+
+## 19. [Customer DB] Timeout 10s pada Database Customer (500 rows) — Skeleton + Retry + LTV Materialization
+
+- **Status:** mitigated (2026-09-01) — Fase 0.5-5.5 di `IMPLEMENTATION_PLAN_CUSTOMER_DB_SKELETON.md`.
+- **Ditemukan:** 2026-09-01.
+- **Gejala:** Buka Database Customer → loading lama → toast "Gagal memuat database customer: Koneksi internet lambat (Timeout 10s)" meskipun data hanya 500 baris.
+- **Akar Masalah:** 5 faktor konkuren:
+  1. N+1 `resolveTreatmentValue` per-row (500 unique texts × sequential await).
+  2. 6 query paralel per request (findMany + count + 4 stats) memblok response.
+  3. `pool_timeout=10` = FE timeout 10s → race condition.
+  4. Search `ILIKE %q%` pada 6 field tanpa index trigram.
+  5. UI hanya spinner, tidak ada skeleton atau retry.
+- **Fix yang Diterapkan:**
+  - Skeleton `animate-pulse` + retry banner manual (Phase 1+2).
+  - Batch resolve N+1 via `Promise.all` + Map (Phase 1.5).
+  - Stats endpoint terpisah cached 60s (Phase 3).
+  - Observability structured logging >500ms warning (Phase 3.5).
+  - Search guard: <4 huruf = 3 field, ≥4 huruf = 6 field (Phase 4).
+  - `ltv_cache` kolom DB + hook sync + backfill SQL (Phase 4).
+  - `pool_timeout=10→15` (Phase 5.5).
+  - Composite indexes: `tenant_id+is_sandbox_test`, `tenant_id+is_mql`, `tenant_id+is_sandbox_test+created_at`, `ltv_cache` (Phase 4).
+- **Sisa Risiko:**
+  - `ltv_cache` perlu backfill saat deploy: `UPDATE customers SET ltv_cache = COALESCE((SELECT SUM...)` — sudah ada di migration SQL.
+  - Index GIN `pg_trgm` belum ditambahkan (opsional, hanya jika search lokasi sering dipakai).
+  - Load test `autocannon -c 8 -d 20` belum dijalankan di staging — needs Phase 6 sebelum prod.
+

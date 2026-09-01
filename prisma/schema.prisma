@@ -104,8 +104,14 @@ model Customer {
   google_etag                String?
   google_synced_at           DateTime?
 
+  ltv_cache               Int            @default(0)
+
   @@index([tenant_id])
   @@index([tenant_id, created_at])
+  @@index([tenant_id, is_sandbox_test])
+  @@index([tenant_id, is_mql])
+  @@index([tenant_id, is_sandbox_test, created_at])
+  @@index([ltv_cache])
   @@map("customers")
 }
 
