@@ -1363,13 +1363,25 @@ export const StaffToday: React.FC = () => {
     }
   };
 
+  const isPastStaffTask = (t: StaffTask) => {
+    if (!t.bookingDate) return false;
+    return Date.now() >= new Date(t.bookingDate).getTime();
+  };
+
+  const activeTodayTasks = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isPastStaffTask(t));
+  const pastOrCompletedTodayTasks = tasks.filter((t) => t.status.toLowerCase() === 'completed' || isPastStaffTask(t));
+  const combinedCompletedTasks = [
+    ...completedTasks,
+    ...pastOrCompletedTodayTasks.filter((t) => !completedTasks.some((c) => c.reservationId === t.reservationId)),
+  ];
+
   // Filter list
   const activeList =
     activeTab === 'today'
-      ? tasks
+      ? activeTodayTasks
       : activeTab === 'upcoming'
       ? upcomingTasks
-      : completedTasks;
+      : combinedCompletedTasks;
 
   const filteredTasks = activeList.filter((t) => {
     if (!searchQuery.trim()) return true;
@@ -1455,7 +1467,7 @@ export const StaffToday: React.FC = () => {
                     activeTab === 'today' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
                   }`}
                 >
-                  {tasks.length}
+                  {activeTodayTasks.length}
                 </span>
               </button>
 
@@ -1495,7 +1507,7 @@ export const StaffToday: React.FC = () => {
                     activeTab === 'completed' ? 'bg-[#d9fdd3] text-[#008069]' : 'bg-[#e9edef] text-[#667781]'
                   }`}
                 >
-                  {completedTasks.length}
+                  {combinedCompletedTasks.length}
                 </span>
               </button>
             </div>
@@ -1559,7 +1571,7 @@ export const StaffToday: React.FC = () => {
                 activeTab === 'today' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
               }`}
             >
-              {tasks.length}
+              {activeTodayTasks.length}
             </span>
           </button>
 
@@ -1599,7 +1611,7 @@ export const StaffToday: React.FC = () => {
                 activeTab === 'completed' ? 'bg-white/20 text-white' : 'bg-[#e9edef] text-[#667781]'
               }`}
             >
-              {completedTasks.length}
+              {combinedCompletedTasks.length}
             </span>
           </button>
         </nav>

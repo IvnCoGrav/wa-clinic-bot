@@ -197,7 +197,7 @@ export const TodayTreatments: React.FC = () => {
   const [tasks, setTasks] = useState<TreatmentTask[]>(() => Array.isArray(cachedTasksRes?.data) ? cachedTasksRes.data : []);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'OTW' | 'COMPLETED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'UPCOMING' | 'COMPLETED' | 'OTW' | 'ALL'>('UPCOMING');
   const [scopeFilter, setScopeFilter] = useState<string>('mine');
   const [isSupervisor, setIsSupervisor] = useState(false);
 
@@ -397,6 +397,16 @@ export const TodayTreatments: React.FC = () => {
     }
   };
 
+  // Helper untuk menentukan apakah waktu treatment sudah lewat jamnya
+  const isTaskPastTime = (t: TreatmentTask) => {
+    if (!t.bookingDate) return false;
+    return Date.now() >= new Date(t.bookingDate).getTime();
+  };
+
+  const isTaskCompletedOrPast = (t: TreatmentTask) => {
+    return t.status.toLowerCase() === 'completed' || isTaskPastTime(t);
+  };
+
   // Filtered Tasks
   const filteredTasks = tasks.filter((t) => {
     if (scopeFilter.startsWith('staff:')) {
@@ -413,18 +423,26 @@ export const TodayTreatments: React.FC = () => {
       if (!matchName && !matchTreat && !matchAddr && !matchStaff) return false;
     }
 
-    if (statusFilter === 'PENDING' && t.status.toLowerCase() !== 'pending') return false;
-    if (statusFilter === 'OTW' && t.status.toLowerCase() !== 'otw') return false;
-    if (statusFilter === 'COMPLETED' && t.status.toLowerCase() !== 'completed') return false;
+    if (statusFilter === 'UPCOMING') {
+      // Jadwal yang belum selesai dan jamnya belum lewat
+      return t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t);
+    }
+    if (statusFilter === 'COMPLETED') {
+      // Jadwal yang sudah selesai ATAU jamnya sudah lewat (walau belum lunas/klik selesai)
+      return isTaskCompletedOrPast(t);
+    }
+    if (statusFilter === 'OTW') {
+      return t.status.toLowerCase() === 'otw';
+    }
 
     return true;
   });
 
   // Summary Metrics
   const totalCount = tasks.length;
-  const completedCount = tasks.filter((t) => t.status.toLowerCase() === 'completed').length;
+  const upcomingCount = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isTaskPastTime(t)).length;
+  const completedCount = tasks.filter((t) => isTaskCompletedOrPast(t)).length;
   const otwCount = tasks.filter((t) => t.status.toLowerCase() === 'otw').length;
-  const pendingCount = tasks.filter((t) => t.status.toLowerCase() === 'pending').length;
   const lunasCount = tasks.filter((t) => t.pricing.paymentStatus === 'LUNAS').length;
   const totalRevenue = tasks.reduce((sum, t) => sum + (t.pricing.totalFee || 0), 0);
 
@@ -961,24 +979,24 @@ export const TodayTreatments: React.FC = () => {
 
         <div className="flex items-center space-x-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
           <button
-            onClick={() => setStatusFilter('ALL')}
+            onClick={() => setStatusFilter('UPCOMING')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-              statusFilter === 'ALL'
+              statusFilter === 'UPCOMING'
                 ? 'bg-[#008069] text-white shadow-xs'
                 : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
             }`}
           >
-            Semua ({tasks.length})
+            Akan Datang ({upcomingCount})
           </button>
           <button
-            onClick={() => setStatusFilter('PENDING')}
+            onClick={() => setStatusFilter('COMPLETED')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-              statusFilter === 'PENDING'
+              statusFilter === 'COMPLETED'
                 ? 'bg-[#008069] text-white shadow-xs'
                 : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
             }`}
           >
-            Menunggu ({pendingCount})
+            Selesai ({completedCount})
           </button>
           <button
             onClick={() => setStatusFilter('OTW')}
@@ -991,14 +1009,14 @@ export const TodayTreatments: React.FC = () => {
             OTW ({otwCount})
           </button>
           <button
-            onClick={() => setStatusFilter('COMPLETED')}
+            onClick={() => setStatusFilter('ALL')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-              statusFilter === 'COMPLETED'
+              statusFilter === 'ALL'
                 ? 'bg-[#008069] text-white shadow-xs'
                 : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
             }`}
           >
-            Selesai ({completedCount})
+            Semua ({totalCount})
           </button>
         </div>
       </div>
@@ -1028,8 +1046,9 @@ export const TodayTreatments: React.FC = () => {
       ) : (
         <div className="flex flex-col gap-4 max-w-4xl mx-auto w-full">
           {filteredTasks.map((task, index) => {
-            const isCompleted = task.status.toLowerCase() === 'completed';
-            const isOtw = task.status.toLowerCase() === 'otw';
+            const isPast = isTaskPastTime(task);
+            const isCompleted = task.status.toLowerCase() === 'completed' || isPast;
+            const isOtw = !isCompleted && task.status.toLowerCase() === 'otw';
             const isLunas = task.pricing.paymentStatus === 'LUNAS';
             const catCfg = getCategoryIcon(task.treatmentCategory);
             const otwReady = isOtwAllowed(task);
@@ -1126,8 +1145,9 @@ export const TodayTreatments: React.FC = () => {
                         <span>Sedang OTW</span>
                       </span>
                     ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                        Menunggu
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                        <Clock size={12} />
+                        <span>Akan Datang</span>
                       </span>
                     )}
 
