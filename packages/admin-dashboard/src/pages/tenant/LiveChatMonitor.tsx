@@ -2514,7 +2514,7 @@ function clearConversationDraft(convId: string) {
   };
 
   return (
-    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-1 sm:space-y-1.5">
+    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5">
       {/* Top Header (Desktop / Large screen only - on mobile it scrolls with the list) */}
       <div className="hidden lg:flex justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">
@@ -2625,14 +2625,14 @@ function clearConversationDraft(convId: string) {
           <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : (
-        <div data-no-swipe-menu="true" className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 overflow-hidden">
+        <div data-no-swipe-menu="true" className="flex-1 min-h-0 flex flex-col lg:flex-row gap-0 lg:gap-2 overflow-hidden">
           {/* Section 1: Conversations List */}
           <div
             onTouchStart={handleListTouchStart}
             onTouchMove={handleListTouchMove}
             onTouchEnd={() => { listTouchStartRef.current = null; }}
             onTouchCancel={() => { listTouchStartRef.current = null; }}
-            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl shadow-xs overflow-hidden min-h-0`}
+            className={`${mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'} w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-white border-0 lg:border border-[#e9edef] rounded-none lg:rounded-2xl shadow-none lg:shadow-xs overflow-hidden min-h-0`}
           >
             {/* Scrollable Container covering entire panel: Header & filter bar scroll off, Searchbar sticks at top-0 */}
             <div
@@ -3136,11 +3136,11 @@ function clearConversationDraft(convId: string) {
             className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex animate-mobile-chat-enter lg:animate-none'} flex-1 min-w-0 h-full min-h-0 flex-col`}
           >
             {selectedChat ? (
-              <div className="bg-white border border-[#e9edef] rounded-xl sm:rounded-2xl p-1 sm:p-2.5 md:p-3 h-full flex flex-col justify-between shadow-xs overflow-hidden min-h-0">
+              <div className="bg-white border-0 lg:border border-[#e9edef] rounded-none lg:rounded-2xl p-1 sm:p-2 md:p-2.5 h-full flex flex-col justify-between shadow-none lg:shadow-xs overflow-hidden min-h-0">
                 {/* Header Info: Clickable Card to view full customer detail modal */}
-                <div className="border-b border-[#e9edef] pb-1.5 sm:pb-2 space-y-1 sm:space-y-1.5 shrink-0">
+                <div className="border-b border-[#e9edef] pb-1 sm:pb-1.5 space-y-1 shrink-0">
                   {selectedChat.isSandboxTest && (
-                    <div className="flex items-center space-x-2 px-2.5 py-0.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="flex items-center space-x-2 px-2 py-0.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold uppercase tracking-wider">
                       <FlaskConical size={11} />
                       <span>QA TEST — chat simulasi</span>
                     </div>
@@ -3151,17 +3151,17 @@ function clearConversationDraft(convId: string) {
                       <button
                         type="button"
                         onClick={handleBackToList}
-                        className="lg:hidden flex items-center justify-center w-10 h-10 -ml-1 mr-1.5 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-90 touch-manipulation z-20 cursor-pointer shadow-2xs"
+                        className="lg:hidden flex items-center justify-center w-8 h-8 -ml-1 mr-1.5 rounded-lg bg-[#f0f2f5] hover:bg-[#e9edef] active:bg-[#d1d7db] text-[#111b21] transition shrink-0 active:scale-90 touch-manipulation z-20 cursor-pointer shadow-2xs"
                         title="Kembali ke daftar percakapan"
                         aria-label="Kembali ke daftar percakapan"
                       >
-                        <ChevronLeft size={22} className="stroke-[2.5]" />
+                        <ChevronLeft size={20} className="stroke-[2.5]" />
                       </button>
 
                       {/* Clickable Customer Header Box */}
                       <div
                         onClick={() => handleOpenCustomerDetail(selectedChat)}
-                        className="flex items-center space-x-2 p-1 -m-1 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0 flex-1"
+                        className="flex items-center space-x-2.5 p-1 -m-1 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition border border-transparent hover:border-[#e9edef] group min-w-0 flex-1"
                         title="Klik untuk melihat detail lengkap profil customer"
                       >
                         <CustomerAvatar
@@ -3170,37 +3170,37 @@ function clearConversationDraft(convId: string) {
                           phone={selectedChat.customerPhone}
                           size="sm"
                         />
-                        <div className="min-w-0">
-                          <h3 className="text-xs sm:text-sm font-bold text-[#111b21] flex items-center space-x-1 group-hover:text-[#008069] transition truncate">
+                        <div className="min-w-0 flex flex-col justify-center">
+                          <h3 className="text-xs sm:text-sm font-bold text-[#111b21] flex items-center space-x-1 group-hover:text-[#008069] transition truncate leading-none">
                             <span className="truncate">{selectedChat.customerName || 'Customer'}</span>
                             <ExternalLink size={11} className="text-[#8696a0] group-hover:text-[#008069] shrink-0" />
                           </h3>
-                        <div className="flex items-center space-x-1.5 mt-0.5 flex-wrap gap-y-1">
-                          <p className="text-[11px] text-[#667781] font-mono">
-                            {selectedChat.customerPhone || 'Unknown'}
-                          </p>
+                          <div className="flex items-center space-x-1.5 mt-1 flex-wrap gap-y-1">
+                            <p className="text-[11px] text-[#667781] font-mono leading-none">
+                              {selectedChat.customerPhone || 'Unknown'}
+                            </p>
 
-                          {/* Active Label Colored Dots */}
-                          {(selectedChat.customerLabels || []).map((lbl) => (
-                            <span
-                              key={lbl.id}
-                              className="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-2xs cursor-help ring-1 ring-white"
-                              style={{ backgroundColor: lbl.color || '#008069' }}
-                              title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
-                            />
-                          ))}
+                            {/* Active Label Colored Dots */}
+                            {(selectedChat.customerLabels || []).map((lbl) => (
+                              <span
+                                key={lbl.id}
+                                className="w-2.5 h-2.5 rounded-full inline-block shrink-0 shadow-2xs cursor-help ring-1 ring-white"
+                                style={{ backgroundColor: lbl.color || '#008069' }}
+                                title={`Label: ${lbl.name}${lbl.description ? ` (${lbl.description})` : ''}`}
+                              />
+                            ))}
 
-                          {/* Add / Manage Label Button (+) right next to phone & dots */}
-                          <div className="relative inline-flex" ref={labelPopoverRef} onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
-                              className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-md text-[10px] font-bold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] hover:text-[#008069] border border-[#d1d7db] transition shadow-2xs active:scale-95 ml-0.5"
-                              title="Tambah / Kelola Label Pasien"
-                              aria-label="Tambah Label"
-                            >
-                              <Plus size={10} />
-                            </button>
+                            {/* Add / Manage Label Button (+) right next to phone & dots */}
+                            <div className="relative inline-flex items-center" ref={labelPopoverRef} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => setLabelPopoverOpen(!labelPopoverOpen)}
+                                className="no-touch-min inline-flex items-center justify-center w-4 h-4 min-w-[16px] min-h-[16px] max-h-[16px] aspect-square rounded-full text-[10px] font-bold bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] hover:text-[#008069] border border-[#d1d7db] transition shadow-2xs active:scale-95 ml-0.5 shrink-0"
+                                title="Tambah / Kelola Label Pasien"
+                                aria-label="Tambah Label"
+                              >
+                                <Plus size={10} />
+                              </button>
 
                             {/* Label Picker Popover */}
                             {labelPopoverOpen && (
