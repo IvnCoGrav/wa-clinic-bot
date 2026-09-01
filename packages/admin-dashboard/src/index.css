@@ -8,6 +8,7 @@
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
+    --vvh: 100dvh;
 
     --background: 210 20% 98%;
     --foreground: 200 30% 10%;
@@ -43,7 +44,7 @@
 }
 
 html {
-  background-color: #f0f2f5;
+  background-color: #ffffff;
   color: #111b21;
   -webkit-text-size-adjust: 100%;
   width: 100%;
@@ -60,7 +61,7 @@ body {
   min-height: 100dvh;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   overscroll-behavior-x: none;
   touch-action: pan-y;
   position: relative;
@@ -75,7 +76,7 @@ body {
   min-height: 100dvh;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -85,6 +86,13 @@ body {
 body.body-scroll-locked {
   overflow: hidden !important;
   touch-action: none !important;
+}
+
+/* 📱 Ketika keyboard iOS aktif, hilangkan safe-area-inset-bottom agar kolom chat mepet presisi di atas keyboard */
+html[data-keyboard-open="true"] .chat-composer-container {
+  padding-bottom: 2px !important;
+  padding-top: 4px !important;
+  margin-bottom: 0px !important;
 }
 
 /* Modal & Sidebar Backdrop overscroll isolation */

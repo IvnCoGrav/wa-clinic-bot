@@ -109,6 +109,26 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [redisQueueFallback, setRedisQueueFallback] = useState<boolean>(false);
   const [capiPendingCount, setCapiPendingCount] = useState<number>(0);
 
+  // 📱 iPhone / iOS Safari Dynamic Keyboard & Visual Viewport Height Tracker
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const updateVvh = () => {
+      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      document.documentElement.style.setProperty('--vvh', `${vh}px`);
+      const isKbOpen = window.visualViewport ? window.visualViewport.height < window.innerHeight - 80 : false;
+      document.documentElement.setAttribute('data-keyboard-open', isKbOpen ? 'true' : 'false');
+    };
+    updateVvh();
+    window.visualViewport?.addEventListener('resize', updateVvh);
+    window.visualViewport?.addEventListener('scroll', updateVvh);
+    window.addEventListener('resize', updateVvh);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateVvh);
+      window.visualViewport?.removeEventListener('scroll', updateVvh);
+      window.removeEventListener('resize', updateVvh);
+    };
+  }, []);
+
   useEffect(() => {
     emitBootPhase('mount');
     emitBootPhase('done');
@@ -489,8 +509,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   const isLiveChat = location.pathname.includes('/live-chat');
 
+  // 🔒 Lock outer window scroll strictly when on LiveChat, preventing iOS Safari from scrolling window on input focus
+  useEffect(() => {
+    if (isLiveChat) {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      window.scrollTo(0, 0);
+      return () => {
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+      };
+    }
+  }, [isLiveChat]);
+
   return (
-    <div className={`${isLiveChat ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative overscroll-y-contain`}>
+    <div
+      style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
+      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative overscroll-y-contain`}
+    >
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
         <div
@@ -606,7 +642,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         {/* Brand/Header */}
         <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
           <div className="flex items-center space-x-2.5">
-            <div className="h-8 w-8 rounded-lg bg-[#008069] flex items-center justify-center font-black text-white shadow-xs text-sm tracking-wider">K</div>
+            <img
+              src="/admin/apple-touch-icon.png"
+              alt="Kala Logo"
+              className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] shrink-0"
+            />
             <div className="flex flex-col">
               <span className="font-extrabold text-sm tracking-wider text-[#111b21] uppercase">KALA SPA</span>
               <span className="text-[10px] text-[#667781] font-medium leading-none">Management Bot</span>
@@ -714,15 +754,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content Area */}
-      <div className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
+      <div
+        style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
+        className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden min-h-0' : 'min-h-screen'}`}
+      >
         
         {/* Top Header — iPhone safe-area: notch/Dynamic Island */}
-        <header className="border-b border-[#e9edef] px-3 sm:px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-2xs shrink-0 min-h-[calc(3rem+env(safe-area-inset-top,0px))] md:min-h-[3.25rem] md:pt-0 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-sm font-bold md:text-base text-[#111b21] truncate max-w-[200px] sm:max-w-none">
-              {BRAND.panelName}
-            </h1>
-          </div>
+        <header className="border-b border-[#e9edef] bg-white sticky top-0 z-40 shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
+          <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <img
+                src="/admin/apple-touch-icon.png"
+                alt="Kala Logo"
+                className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] shrink-0"
+              />
+              <span className="font-extrabold text-xs sm:text-sm tracking-wide text-[#111b21]">
+                KALA SPA
+              </span>
+            </div>
 
           {/* Right Header: System Liveness Alerts & Mobile Hamburger Menu Button */}
           <div className="relative flex items-center space-x-2">
@@ -914,6 +963,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 </div>
               </>
             )}
+          </div>
           </div>
         </header>
 
