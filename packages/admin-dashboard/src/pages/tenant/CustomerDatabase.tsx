@@ -38,6 +38,9 @@ import {
   Navigation,
   PenLine,
   ChevronRight,
+  Package,
+  CheckCircle2,
+  Pause,
 } from 'lucide-react';
 
 interface CustomerItem {
@@ -110,6 +113,7 @@ export const CustomerDatabase: React.FC = () => {
   const [activeDetailCustomer, setActiveDetailCustomer] = useState<CustomerItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailData, setDetailData] = useState<any | null>(null);
+  const [customerSeries, setCustomerSeries] = useState<any[]>([]);
   const [detailEditMode, setDetailEditMode] = useState(false);
   // Reservation detail dari riwayat (klik row/card)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
@@ -232,6 +236,7 @@ export const CustomerDatabase: React.FC = () => {
     setActiveDetailCustomer(customer);
     setLoadingDetail(true);
     setDetailData(null);
+    setCustomerSeries([]);
     try {
       const res = await apiRequest(`/api/admin/customers/${customer.id}`);
       if (res && res.success) {
@@ -239,6 +244,13 @@ export const CustomerDatabase: React.FC = () => {
       } else {
         toast(res?.error || 'Gagal memuat detail data customer', 'error');
       }
+      // Fetch series data
+      try {
+        const seriesRes = await apiRequest(`/api/admin/reservation-series/customer/${customer.id}`);
+        if (seriesRes?.success && Array.isArray(seriesRes.data)) {
+          setCustomerSeries(seriesRes.data);
+        }
+      } catch { /* series endpoint might not have data */ }
     } catch (err: any) {
       toast(`Gagal memuat detail customer: ${err.message}`, 'error');
     } finally {
@@ -1389,6 +1401,51 @@ export const CustomerDatabase: React.FC = () => {
                       <p className="text-[10px] text-[#8696a0] italic flex items-center space-x-1"><Eye size={10} /><span>Klik baris untuk lihat detail lengkap</span></p>
                     )}
                   </div>
+
+                  {/* Section: Paket Sesi / Session Packages */}
+                  {customerSeries.length > 0 && (
+                    <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-3 shadow-2xs">
+                      <h4 className="font-bold text-xs text-[#111b21] flex items-center space-x-1.5 text-[#008069]">
+                        <Package size={15} />
+                        <span>Paket Sesi ({customerSeries.length} aktif)</span>
+                      </h4>
+                      <div className="space-y-2">
+                        {customerSeries.map((series: any) => {
+                          const progress = series.total_sessions > 0 ? (series.completed_sessions / series.total_sessions) * 100 : 0;
+                          const statusColor = series.status === 'active' ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                            : series.status === 'paused' ? 'text-amber-700 bg-amber-50 border-amber-200'
+                            : series.status === 'completed' ? 'text-blue-700 bg-blue-50 border-blue-200'
+                            : 'text-red-700 bg-red-50 border-red-200';
+                          return (
+                            <div key={series.id} className="p-3 rounded-xl border border-[#e9edef] bg-[#f8fafc] space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-bold text-[11px] text-[#111b21]">{series.treatment_name}</span>
+                                  <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase border ${statusColor}`}>
+                                    {series.status === 'active' ? 'Aktif' : series.status === 'paused' ? 'Jeda' : series.status === 'completed' ? 'Selesai' : 'Batal'}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-[#8696a0] font-mono">
+                                  {series.completed_sessions}/{series.total_sessions} sesi
+                                </span>
+                              </div>
+                              {/* Progress bar */}
+                              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-[#008069] rounded-full transition-all duration-300"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-[#8696a0]">
+                                <span>{Math.round(progress)}% selesai</span>
+                                {series.assigned_staff && <span>Terapis: {series.assigned_staff.name}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Section 4: Atribusi Meta Ads & Label */}
                   <div className="p-4 bg-white border border-[#e9edef] rounded-2xl space-y-2 shadow-2xs">

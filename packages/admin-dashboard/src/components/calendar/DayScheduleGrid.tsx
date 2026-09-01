@@ -382,6 +382,11 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
                             {res.treatment_category}
                           </span>
+                          {res.session_number != null && res.total_sessions != null && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 text-blue-800">
+                              Sesi {res.session_number}/{res.total_sessions}
+                            </span>
+                          )}
                           <span className="text-xs font-bold flex items-center space-x-1 font-mono opacity-85">
                             <Clock size={12} />
                             <span>{timeRangeStr}</span>
