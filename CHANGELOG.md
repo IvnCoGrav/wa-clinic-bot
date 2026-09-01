@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature & UX Enhancement — Auto-Move Jadwal Lewat Jam ke Tab Selesai & Default View "Akan Datang" (`TodayTreatments.tsx`, `StaffToday.tsx`) (2026-09-01)
+
+- **Latar Belakang & Kebutuhan Bisnis**:
+  - Pada halaman **Treatment Hari Ini**, admin dan terapis ingin fokus pada jadwal yang *sedang/akan datang*.
+  - Ketika jam jadwal treatment hari ini sudah terlewati (misal jadwal jam 10:00 dan waktu saat ini jam 11:00), tugas tersebut diharapkan otomatis berpindah ke kelompok **Selesai / Sudah Lewat**, tanpa perlu menunggu status diubah manual menjadi lunas/selesai oleh admin.
+- **Implementasi Teknis**:
+  1. **Klasifikasi Waktu Otomatis (`isTaskPastTime`)**:
+     - Ditambahkan helper `isTaskPastTime` yang membandingkan timestamp `bookingDate` dengan `Date.now()`.
+     - Tugas diklasifikasikan sebagai `isCompleted` jika status DB adalah `completed` **ATAU** jam kunjungannya sudah lewat.
+  2. **Default Filter "Akan Datang" (`TodayTreatments.tsx`)**:
+     - Mengubah filter default dari `ALL` menjadi `UPCOMING` ("Akan Datang") sehingga saat membuka halaman, hanya jadwal yang belum lewat yang tampil.
+     - Menyediakan tombol filter jelas: `Akan Datang`, `Selesai`, `OTW`, dan `Semua`.
+     - Mempertahankan transparansi status keuangan: jadwal yang sudah lewat waktu tetap menampilkan rincian `Tagih di Tempat` atau `Lunas` dengan jelas.
+  3. **Partisi Jadwal Petugas Lapangan (`StaffToday.tsx`)**:
+     - Menyelaraskan tab `Hari Ini` pada aplikasi terapis agar otomatis menyaring tugas aktif (`activeTodayTasks`) dan memindahkan jadwal lewat jam ke tab `Selesai` (`combinedCompletedTasks`), lengkap dengan update counter badge real-time.
+
 #### Enhancement & Fix — iPhone Header Safe-Area Inset & LiveChat Virtual Keyboard Viewport (`Layout.tsx`, `LiveChatMonitor.tsx`, `index.css`) (2026-09-01)
 
 - **Latar Belakang & Masalah yang Dilaporkan Pengguna di iPhone:**
