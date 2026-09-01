@@ -76,6 +76,7 @@ model Customer {
   updated_at              DateTime       @updatedAt
   conversations           Conversation[]
   reservations            Reservation[]
+  reservationSeries       ReservationSeries[]
   follow_ups              FollowUp[]
   children                Child[]
   adClick                 AdClick?
@@ -270,6 +271,10 @@ model Reservation {
   payment_method           String?
   proof_url                String?
   is_repeat_order          Boolean           @default(false)
+  series_id                String?
+  series                   ReservationSeries? @relation(fields: [series_id], references: [id], onDelete: SetNull)
+  session_number           Int?
+  total_sessions           Int?
   created_at               DateTime          @default(now())
   updated_at               DateTime          @updatedAt
   children                 Child[]
@@ -282,7 +287,29 @@ model Reservation {
   @@index([customer_id])
   @@index([customer_id, status])
   @@index([assigned_staff_id])
+  @@index([series_id])
   @@map("reservations")
+}
+
+model ReservationSeries {
+  id                String         @id @default(uuid())
+  tenant_id         String         @default("default-tenant")
+  customer_id       String
+  customer          Customer       @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  treatment_name    String
+  total_sessions    Int
+  purchase_value    Int?
+  status            String         @default("active") // active | paused | completed | cancelled
+  assigned_staff_id String?
+  assigned_staff    Staff?         @relation(fields: [assigned_staff_id], references: [id], onDelete: SetNull)
+  notes             String?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+  reservations      Reservation[]
+
+  @@index([tenant_id, customer_id])
+  @@index([tenant_id, status])
+  @@map("reservation_series")
 }
 
 enum FollowUpType {
@@ -349,6 +376,8 @@ model ClinicService {
   description      String
   is_active        Boolean  @default(true)
   sort_order       Int      @default(0)
+  total_sessions   Int?     // null = single visit, 14 = paket 14 sesi
+  session_schedule_type String? // "manual" = admin atur jam per sesi
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
@@ -735,6 +764,7 @@ model Staff {
   created_at             DateTime       @default(now())
   updated_at             DateTime       @updatedAt
   reservations  Reservation[]
+  seriesAssignments ReservationSeries[]
   sessions      StaffSession[]
 
   @@index([tenant_id])
