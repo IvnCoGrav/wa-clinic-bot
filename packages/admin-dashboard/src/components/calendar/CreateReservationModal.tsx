@@ -81,11 +81,39 @@ function formatMinutesToTime(totalMinutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+export const DEFAULT_CLINIC_SERVICES_FALLBACK: ClinicServiceItem[] = [
+  { id: 'baby-massage-ceria', name: 'Pijat Bayi Ceria (Rileksasi)', category: 'BABY', durationMinutes: 40, originalPrice: 80000, promoPrice: 60000, description: 'Pijat relaksasi bayi', isActive: true },
+  { id: 'baby-massage-pulih-ceria', name: 'Pijat Bayi Pulih Ceria (Terapi Bapil / Kembung)', category: 'BABY', durationMinutes: 40, originalPrice: 90000, promoPrice: 70000, description: 'Pijat terapi bapil', isActive: true },
+  { id: 'baby-massage-lahap-juara', name: 'Pijat Lahap Juara (Nafsu Makan)', category: 'BABY', durationMinutes: 40, originalPrice: 95000, promoPrice: 75000, description: 'Pijat nafsu makan', isActive: true },
+  { id: 'baby-cukur', name: 'Cukur Rambut Bayi', category: 'BABY', durationMinutes: 15, originalPrice: 30000, promoPrice: 25000, description: 'Cukur rambut bayi', isActive: true },
+  { id: 'baby-tindik', name: 'Tindik Telinga Bayi', category: 'BABY', durationMinutes: 15, originalPrice: 70000, promoPrice: 50000, description: 'Tindik telinga bayi', isActive: true },
+  { id: 'baby-paket-selapan', name: 'Paket Selapan (Cukur + Pijat Ceria)', category: 'BUNDLE', durationMinutes: 55, originalPrice: 85000, promoPrice: 80000, description: 'Paket selapan', isActive: true },
+  { id: 'baby-cukur-pijat-terapi', name: 'Cukur + Pijat Terapi', category: 'BUNDLE', durationMinutes: 55, originalPrice: 95000, promoPrice: 85000, description: 'Cukur + Pijat Terapi', isActive: true },
+  { id: 'moms-prenatal-massage', name: 'Prenatal Massage (Pijat Hamil)', category: 'MOMS', durationMinutes: 60, originalPrice: 125000, promoPrice: 100000, description: 'Pijat hamil', isActive: true },
+  { id: 'moms-prenatal-yoga', name: 'Prenatal Yoga', category: 'MOMS', durationMinutes: 45, originalPrice: 70000, promoPrice: 50000, description: 'Yoga hamil', isActive: true },
+  { id: 'moms-laktasi-oksitosin', name: 'Paket Laktasi (Breast + Oksitosin)', category: 'MOMS', durationMinutes: 75, originalPrice: 100000, promoPrice: 80000, description: 'Paket laktasi', isActive: true },
+  { id: 'moms-laktasi-breast', name: 'Paket Laktasi (Breast Massage)', category: 'MOMS', durationMinutes: 40, originalPrice: 70000, promoPrice: 50000, description: 'Breast massage', isActive: true },
+  { id: 'moms-oksitosin-fullbody', name: 'Oksitosin Massage Fullbody', category: 'MOMS', durationMinutes: 60, originalPrice: 130000, promoPrice: 105000, description: 'Oksitosin fullbody', isActive: true },
+  { id: 'moms-oksitosin-non-fullbody', name: 'Oksitosin Massage Non-Fullbody', category: 'MOMS', durationMinutes: 40, originalPrice: 70000, promoPrice: 50000, description: 'Oksitosin non-fullbody', isActive: true },
+  { id: 'moms-perineum', name: 'Perineum Massage', category: 'MOMS', durationMinutes: 30, originalPrice: 60000, promoPrice: 45000, description: 'Perineum massage', isActive: true },
+  { id: 'moms-laktasi-oksitosin-full', name: 'Breast + Oksitoksin Fullbody Massage', category: 'MOMS', durationMinutes: 75, originalPrice: 200000, promoPrice: 155000, description: 'Breast + Oksitosin Fullbody', isActive: true },
+  { id: 'moms-bundle-pra-kelahiran', name: 'Paket Pra Kelahiran Lengkap (Perineum + Yoga + Breast)', category: 'MOMS', durationMinutes: 105, originalPrice: 185000, promoPrice: 135000, description: 'Paket pra kelahiran lengkap', isActive: true },
+  { id: 'kids-massage-2-4', name: 'Pijat Kids Ceria (Usia 2-4 th)', category: 'KIDS', durationMinutes: 45, originalPrice: 90000, promoPrice: 70000, description: 'Pijat kids 2-4 tahun', isActive: true },
+  { id: 'kids-massage-4-6', name: 'Pijat Kids Ceria (Usia >4-6 th)', category: 'KIDS', durationMinutes: 45, originalPrice: 100000, promoPrice: 80000, description: 'Pijat kids 4-6 tahun', isActive: true },
+  { id: 'kids-massage-6-8', name: 'Pijat Kids Ceria (Usia >6-8 th)', category: 'KIDS', durationMinutes: 45, originalPrice: 110000, promoPrice: 90000, description: 'Pijat kids 6-8 tahun', isActive: true },
+  { id: 'addon-moksa', name: 'Sinar Moksa (Add-on)', category: 'ADD_ON', durationMinutes: 15, originalPrice: 15000, promoPrice: 10000, isAddon: true, description: 'Sinar moksa', isActive: true },
+  { id: 'addon-nebulizer', name: 'Nebulizer (Terapi Uap Add-on)', category: 'ADD_ON', durationMinutes: 20, originalPrice: 50000, promoPrice: 35000, isAddon: true, description: 'Nebulizer add-on', isActive: true },
+  { id: 'addon-nebulizer-obat', name: 'Nebulizer + Obat (Terapi Uap Lengkap)', category: 'ADD_ON', durationMinutes: 20, originalPrice: 85000, promoPrice: 65000, isAddon: true, description: 'Nebulizer lengkap', isActive: true },
+  { id: 'baby-newborn-treatment', name: 'Newborn Treatment', category: 'BABY', durationMinutes: 120, originalPrice: 700000, promoPrice: 500000, description: 'Newborn treatment', isActive: true },
+];
+
 export function parseTreatmentsFromDetail(
   detail: string | null | undefined,
-  catalog: ClinicServiceItem[] = []
+  catalog: ClinicServiceItem[] = [],
+  initialPurchaseValue?: number | null
 ): SelectedTreatmentItem[] {
   if (!detail) return [];
+  const effectiveCatalog = catalog && catalog.length > 0 ? catalog : DEFAULT_CLINIC_SERVICES_FALLBACK;
   const cleanSummary = detail
     .replace(/\[\s*Total\s+.*?\]/gi, '')
     .trim();
@@ -98,28 +126,44 @@ export function parseTreatmentsFromDetail(
     const durationMatch = p.match(/\[\s*(\d+)\s*m.*?\s*\]/i);
     const durationMinutes = durationMatch ? parseInt(durationMatch[1], 10) : 60;
     
-    const cleanName = p
-      .replace(/\(.*?\)/g, '')
-      .replace(/\[.*?\]/g, '')
-      .trim();
+    // Bersihkan tag durasi kurung siku [..] dan nama anak opsional (Anak #1 / Nama), tapi pertahankan nama medis (Rileksasi/Terapi)
+    let cleanName = p.replace(/\[.*?\]/g, '').trim();
+    cleanName = cleanName.replace(/\(\s*(?:Anak\s*#?\d+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\)$/i, '').trim();
 
     if (!cleanName) continue;
 
-    const matchedService = catalog.find(
-      (s) => s.name.toLowerCase() === cleanName.toLowerCase() ||
-             cleanName.toLowerCase().includes(s.name.toLowerCase()) ||
-             s.name.toLowerCase().includes(cleanName.toLowerCase())
-    );
+    const normTarget = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    const price = matchedService ? (matchedService.promoPrice || matchedService.originalPrice || 0) : 0;
+    // Cari di katalog yang diberikan atau default fallback
+    let matchedService = effectiveCatalog.find((s) => {
+      const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
+    });
+
+    if (!matchedService) {
+      matchedService = DEFAULT_CLINIC_SERVICES_FALLBACK.find((s) => {
+        const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
+      });
+    }
+
+    let price = matchedService ? (matchedService.promoPrice || matchedService.originalPrice || 0) : 0;
+    
+    // Jika hanya 1 treatment dan ada initialPurchaseValue dari DB (> 0), prioritaskan purchase_value asli!
+    if (parts.length === 1 && typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0) {
+      price = initialPurchaseValue;
+    } else if (price === 0 && typeof initialPurchaseValue === 'number' && initialPurchaseValue > 0 && i === 0) {
+      price = initialPurchaseValue;
+    }
+
     const category = matchedService ? matchedService.category : 'BABY';
-    const isAddon = matchedService ? (matchedService.isAddon || isAddonService(matchedService)) : false;
+    const isAddon = matchedService ? (matchedService.isAddon || isAddonService(matchedService)) : isAddonService({ name: cleanName });
 
     items.push({
       instanceId: `edit-treatment-${i + 1}-${Math.random().toString(36).substring(2, 7)}`,
       serviceId: matchedService?.id || `custom-${i + 1}`,
       name: matchedService?.name || cleanName,
-      category: category || 'BABY',
+      category: (category as any) || 'BABY',
       durationMinutes: durationMinutes || matchedService?.durationMinutes || 60,
       price: price || 0,
       isAddon: isAddon,
@@ -191,7 +235,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
   const [searchingCustomer, setSearchingCustomer] = useState(false);
 
   // Service Catalog
-  const [services, setServices] = useState<ClinicServiceItem[]>([]);
+  const [services, setServices] = useState<ClinicServiceItem[]>(DEFAULT_CLINIC_SERVICES_FALLBACK);
   const [loadingServices, setLoadingServices] = useState(false);
   const [serviceSearch, setServiceSearch] = useState('');
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
@@ -332,23 +376,43 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     }
   );
 
-  // Load clinic services catalog
+  // Load clinic services catalog with auto-repair
   useEffect(() => {
     async function loadCatalog() {
       try {
         setLoadingServices(true);
         const res = await apiRequest('/api/admin/services');
         const list = Array.isArray(res) ? res : res?.data || [];
-        setServices(list.filter((s: ClinicServiceItem) => s.isActive !== false));
+        const activeList = list.filter((s: ClinicServiceItem) => s.isActive !== false);
+        const finalList = activeList.length > 0 ? activeList : DEFAULT_CLINIC_SERVICES_FALLBACK;
+        setServices(finalList);
+
+        // Auto-repair any selected treatments that currently have price === 0
+        setSelectedTreatments((prev) => {
+          if (!prev || prev.length === 0) return prev;
+          let changed = false;
+          const next = prev.map((t) => {
+            if (!t.price || t.price === 0) {
+              const normTarget = t.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const matched = finalList.find((s: ClinicServiceItem) => {
+                const normS = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return normS === normTarget || normTarget.includes(normS) || normS.includes(normTarget);
+              });
+              if (matched) {
+                changed = true;
+                return {
+                  ...t,
+                  price: matched.promoPrice || matched.originalPrice || 0,
+                  serviceId: t.serviceId.startsWith('custom-') ? matched.id : t.serviceId,
+                };
+              }
+            }
+            return t;
+          });
+          return changed ? next : prev;
+        });
       } catch {
-        setServices([
-          { id: '1', name: 'Pijat Bayi Sehat & Ceria', category: 'BABY', durationMinutes: 45, originalPrice: 75000, promoPrice: 65000, description: 'Pijat relaksasi bayi', isActive: true },
-          { id: '2', name: 'Baby Hydrotherapy & Spa', category: 'BABY', durationMinutes: 60, originalPrice: 120000, promoPrice: 99000, description: 'Berenang & stimulasi sensorik', isActive: true },
-          { id: '3', name: 'Pijat Laktasi & Breast Care', category: 'MOMS', durationMinutes: 60, originalPrice: 135000, promoPrice: 110000, description: 'Melancarkan produksi ASI', isActive: true },
-          { id: '4', name: 'Postpartum Massage (Pijat Nifas)', category: 'MOMS', durationMinutes: 90, originalPrice: 185000, promoPrice: 150000, description: 'Pemulihan pasca melahirkan', isActive: true },
-          { id: '5', name: 'Moksa Hangat Perut Bayi (Add-on)', category: 'BABY', durationMinutes: 15, originalPrice: 35000, promoPrice: 25000, description: 'Terapi hangat redakan kembung', isActive: true },
-          { id: '6', name: 'Paket Bundling Bunda & Buah Hati', category: 'BOTH', durationMinutes: 90, originalPrice: 220000, promoPrice: 185000, description: 'Treatment komplit mom & baby', isActive: true },
-        ]);
+        setServices(DEFAULT_CLINIC_SERVICES_FALLBACK);
       } finally {
         setLoadingServices(false);
       }
@@ -477,7 +541,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       // Treatments pre-fill
       if (res.treatment_detail) {
         try {
-          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services);
+          const parsed = parseTreatmentsFromDetail(res.treatment_detail, services, res.purchase_value);
           if (parsed.length > 0) {
             setSelectedTreatments(parsed);
           }
@@ -669,6 +733,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       }
       return next;
     });
+  };
+
+  const handleUpdateTreatmentPrice = (instanceId: string, newPrice: number) => {
+    setSelectedTreatments((prev) =>
+      prev.map((t) => (t.instanceId === instanceId ? { ...t, price: Math.max(0, isNaN(newPrice) ? 0 : newPrice) } : t))
+    );
   };
 
   // Duration & Buffer Calculation: +20 min per MAIN treatment (Addon like moksa = 0 buffer)
@@ -1083,7 +1153,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[99999] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-contain animate-fadeIn h-[100dvh] w-[100dvw]"
       onClick={onClose}
       style={{ touchAction: 'pan-y' }}
     >
@@ -1447,56 +1517,72 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                     return (
                       <div
                         key={t.instanceId || idx}
-                        className="p-2.5 bg-white border border-[#e9edef] rounded-xl text-xs shadow-2xs space-y-1.5"
+                        className="p-2.5 bg-white border border-[#e9edef] rounded-xl text-xs shadow-2xs space-y-2"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px]">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-start space-x-2 min-w-0">
+                            <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5 sm:mt-0">
                               #{idx + 1}
                             </span>
-                            <div>
-                              <span className="font-bold text-[#111b21]">{t.name}</span>
-                              <span className="text-[#667781] ml-2 text-[11px]">({t.durationMinutes} mnt)</span>
-                              <span className={`ml-1.5 px-1.5 py-0.2 rounded text-[9px] font-bold ${
-                                isAddon
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-[#e8f5f2] text-[#008069]'
-                              }`}>
-                                {isAddon ? 'Add-on (0m buffer)' : 'Layanan Utama (+20m buffer)'}
-                              </span>
-                              <span className="text-[#008069] ml-2 text-[11px] font-bold">
-                                Rp {t.price ? t.price.toLocaleString('id-ID') : '0'}
-                              </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span className="font-bold text-[#111b21]">{t.name}</span>
+                                <span className="text-[#667781] text-[11px]">({t.durationMinutes} mnt)</span>
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                                  isAddon
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-[#e8f5f2] text-[#008069]'
+                                }`}>
+                                  {isAddon ? 'Add-on (0m buffer)' : 'Layanan Utama (+20m buffer)'}
+                                </span>
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-1">
-                            {/* Duplicate Button for second child */}
-                            {babies.length > 1 && (
+                          <div className="flex items-center justify-between sm:justify-end space-x-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[#f0f2f5]">
+                            {/* Inline Editable Price Input */}
+                            <div className="flex items-center space-x-1 bg-[#f8fafc] border border-[#d1d7db] hover:border-[#008069] focus-within:border-[#008069] focus-within:ring-1 focus-within:ring-[#008069] rounded-lg px-2 py-0.5 shadow-2xs transition">
+                              <span className="text-[10px] font-bold text-[#667781]">Rp</span>
+                              <input
+                                type="number"
+                                value={t.price === 0 ? '' : t.price}
+                                onChange={(e) => handleUpdateTreatmentPrice(t.instanceId, e.target.value === '' ? 0 : Number(e.target.value))}
+                                placeholder="0"
+                                step={5000}
+                                min={0}
+                                className="w-20 bg-transparent text-xs font-extrabold text-[#008069] focus:outline-none text-right font-mono"
+                                title="Ubah tarif harga treatment ini jika ada harga khusus"
+                              />
+                            </div>
+
+                            <div className="flex items-center space-x-1">
+                              {/* Duplicate Button for second child */}
+                              {babies.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateTreatment(t)}
+                                  className="p-1 rounded-md text-[#008069] hover:bg-[#e8f5f2] transition flex items-center space-x-1 cursor-pointer text-[10px] font-bold border border-[#c2e7e0]"
+                                  title="Duplikat treatment ini untuk anak lainnya"
+                                >
+                                  <Copy size={11} />
+                                  <span className="hidden sm:inline">+ Duplikat Anak</span>
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => handleDuplicateTreatment(t)}
-                                className="p-1 rounded-md text-[#008069] hover:bg-[#e8f5f2] transition flex items-center space-x-1 cursor-pointer text-[10px] font-bold border border-[#c2e7e0]"
-                                title="Duplikat treatment ini untuk anak lainnya"
+                                onClick={() => handleRemoveTreatment(t.instanceId)}
+                                className="text-[#8696a0] hover:text-rose-600 p-1.5 rounded-md hover:bg-rose-50 cursor-pointer transition"
+                                title="Hapus treatment"
                               >
-                                <Copy size={11} />
-                                <span>+ Duplikat Anak</span>
+                                <Trash2 size={14} />
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTreatment(t.instanceId)}
-                              className="text-[#8696a0] hover:text-rose-600 p-1 rounded-md cursor-pointer"
-                              title="Hapus treatment"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            </div>
                           </div>
                         </div>
 
                         {/* Child Assignment Dropdown (If customer has children) */}
                         {babies.length > 0 && t.category !== 'MOMS' && (
-                          <div className="flex items-center space-x-2 pt-1 border-t border-[#f0f2f5] text-[11px]">
+                          <div className="flex items-center space-x-2 pt-1.5 border-t border-[#f0f2f5] text-[11px] flex-wrap sm:flex-nowrap gap-1">
                             <span className="text-[#667781] font-semibold flex items-center space-x-1 shrink-0">
                               <Baby size={11} className="text-[#008069]" />
                               <span>Ditujukan untuk:</span>
@@ -1504,7 +1590,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                             <select
                               value={t.assignedChildIndex ?? 0}
                               onChange={(e) => handleUpdateTreatmentChild(t.instanceId, Number(e.target.value))}
-                              className="px-2 py-0.5 bg-[#f0f2f5] border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer"
+                              className="flex-1 min-w-0 max-w-full sm:max-w-xs px-2 py-1 bg-[#f0f2f5] border border-[#d1d7db] rounded-lg text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer truncate"
                             >
                               {babies.map((b, bIdx) => (
                                 <option key={bIdx} value={bIdx}>

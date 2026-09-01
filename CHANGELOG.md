@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix & Enhancement — Audit & Perbaikan Komprehensif Bug Price Rp 0, Race Condition Modal Edit Reservasi, Dropdown Anak Terpotong di Mobile & Dynamic Fallback Harga (`CreateReservationModal.tsx`, `financial-analytics.service.ts`, `staff-reservation.service.ts`) (2026-09-01)
+
+- **Latar Belakang & Masalah**:
+  - Pada modal *Edit Data Reservasi*, ketika membuka reservasi pasien (contoh: Bunda Soniah dengan layanan *Pijat Bayi Ceria*), kartu treatment terpilih menampilkan `Rp 0`.
+  - Di perangkat mobile/iPhone, teks pada dropdown penugasan anak (`Ditujukan untuk: Anak #1: Muhammad nizar...`) terpotong ke kanan melebihi batas kartu.
+  - Jika reservasi disimpan dalam kondisi tersebut, nilai `purchase_value` di database tertimpa menjadi 0.
+- **Akar Masalah Teknis**:
+  1. **Race Condition & Kunci Ref Modal**: State `services` awalnya kosong (`[]`) saat modal dibuka karena data baru di-fetch via async API. `useEffect` pre-fill langsung mengeksekusi `parseTreatmentsFromDetail(..., [])` sehingga harga menjadi 0. Pengunci ref `initializedEditIdRef.current` kemudian memblokir eksekusi ulang ketika data katalog selesai di-load.
+  2. **Nilai Database Diabaikan**: Nilai `purchase_value` asli dari DB tidak dioper ke parser sebagai fallback.
+  3. **Regex Stripper Agresif**: `replace(/\(.*?\)/g, '')` memotong nama medis dalam kurung seperti `(Rileksasi)`, menggagalkan pencarian eksak ke katalog.
+  4. **Ketiadaan Input Edit Harga**: Admin tidak memiliki opsi untuk mengubah/menyesuaikan nominal harga per treatment pada kartu item terpilih.
+- **Implementasi Teknis**:
+  1. **Fallback Sinkron Instan & Auto-Repair (`CreateReservationModal.tsx`)**:
+     - Menginisialisasi state `services` dengan `DEFAULT_CLINIC_SERVICES_FALLBACK` (0ms delay) sehingga parser selalu memiliki data harga treatment bahkan sebelum API selesai di-fetch.
+     - Menambahkan mekanisme auto-repair pada `loadCatalog()`: saat katalog dari API selesai dimuat, setiap treatment terpilih dengan harga `0` otomatis diperbarui harganya dari katalog.
+     - Mengoper `res.purchase_value` asli dari database ke `parseTreatmentsFromDetail` sebagai prioritas pertama saat membuka modal edit.
+  2. **Inline Editable Price Input**:
+     - Menambahkan input nominal harga langsung (`Rp [ 60.000 ]`) pada setiap baris kartu treatment terpilih lengkap dengan handler `handleUpdateTreatmentPrice`, memungkinkan admin menyesuaikan harga kustom/promo kapan saja.
+  3. **Perbaikan Tampilan Mobile**:
+     - Menambahkan kelas `flex-1 min-w-0 max-w-full sm:max-w-xs truncate` pada dropdown anak agar teks nama panjang tidak memotong kartu di layar HP.
+     - Memperkuat backdrop modal dengan `bg-black/75 backdrop-blur-sm z-[99999]` agar konten di belakangnya terisolasi sempurna.
+  4. **Safety Net Backend (`financial-analytics.service.ts`, `staff-reservation.service.ts`)**:
+     - Menambahkan dynamic price resolution (`resolveTreatmentValue`) pada perhitungan omset dan rute terapis sehingga database record lama dengan `purchase_value` kosong/0 otomatis diselesaikan dengan harga katalog standar dan tidak pernah menampilkan Rp 0.
+
 #### Feature — Dashboard Transaksi, Reservasi & Histori Pendapatan Bulanan (`FinancialAnalytics.tsx`, `financial-analytics.service.ts`, `analytics.subroute.ts`) (2026-09-01)
 
 - **Latar Belakang & Kebutuhan Bisnis**:
