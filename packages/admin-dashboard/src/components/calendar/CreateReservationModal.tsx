@@ -1018,6 +1018,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           body: JSON.stringify({
             customerId,
             treatmentName: primaryTreatment?.name || treatmentSummary,
+            treatmentCategory: computedCategory,
             totalSessions: multiSessionTotal,
             purchaseValue: totalPaymentAmount,
             assignedStaffId: assignedStaffId || undefined,

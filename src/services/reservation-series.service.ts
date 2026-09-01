@@ -1,9 +1,11 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { customerService } from './customer.service';
 
 export interface CreateSeriesParams {
   customerId: string;
   treatmentName: string;
+  treatmentCategory?: string;
   totalSessions: number;
   purchaseValue?: number;
   assignedStaffId?: string;
@@ -20,6 +22,8 @@ export interface SeriesWithReservations {
   customerId: string;
   treatmentName: string;
   totalSessions: number;
+  completedSessions: number;
+  pendingSessions: number;
   purchaseValue: number | null;
   status: string;
   assignedStaffId: string | null;
@@ -36,12 +40,46 @@ export interface SeriesWithReservations {
 
 class ReservationSeriesService {
   /**
+   * Helper: Resolve treatment category dynamically from catalog or keywords
+   */
+  private async resolveCategory(treatmentName: string, explicitCategory?: string): Promise<'BABY' | 'MOMS' | 'BOTH'> {
+    if (explicitCategory) {
+      const upper = explicitCategory.toUpperCase();
+      if (upper === 'MOMS' || upper === 'POSTPARTUM' || upper === 'PREGNANCY') return 'MOMS';
+      if (upper === 'BOTH' || upper === 'BUNDLE') return 'BOTH';
+      return 'BABY';
+    }
+
+    try {
+      const { treatmentCatalogService } = await import('./treatment-catalog.service');
+      const all = (treatmentCatalogService as any).getAllServices?.() || [];
+      const found = all.find((s: any) => s.name?.toLowerCase() === treatmentName.toLowerCase() || treatmentName.toLowerCase().includes(s.name?.toLowerCase()));
+      if (found?.category) {
+        const cat = found.category.toUpperCase();
+        if (cat === 'MOMS' || cat === 'POSTPARTUM' || cat === 'PREGNANCY') return 'MOMS';
+        if (cat === 'BOTH' || cat === 'BUNDLE') return 'BOTH';
+        return 'BABY';
+      }
+    } catch {}
+
+    const nameLower = (treatmentName || '').toLowerCase();
+    if (nameLower.includes('moms') || nameLower.includes('ibu') || nameLower.includes('hamil') || nameLower.includes('nifas') || nameLower.includes('postpartum') || nameLower.includes('laktasi')) {
+      return 'MOMS';
+    }
+    if (nameLower.includes('combo') || nameLower.includes('both') || (nameLower.includes('ibu') && nameLower.includes('anak'))) {
+      return 'BOTH';
+    }
+    return 'BABY';
+  }
+
+  /**
    * Create a reservation series with N auto-generated reservations.
    */
   async createSeries(params: CreateSeriesParams, tenantId: string = DEFAULT_TENANT_ID): Promise<SeriesWithReservations> {
     const {
       customerId,
       treatmentName,
+      treatmentCategory,
       totalSessions,
       purchaseValue,
       assignedStaffId,
@@ -53,6 +91,9 @@ class ReservationSeriesService {
       throw new Error(`sessions array length (${sessions.length}) tidak sama dengan totalSessions (${totalSessions})`);
     }
 
+    const resolvedCategory = await this.resolveCategory(treatmentName, treatmentCategory);
+    const sanitizedStaffId = assignedStaffId?.trim() ? assignedStaffId.trim() : null;
+
     // Create series + all reservations in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const series = await tx.reservationSeries.create({
@@ -62,7 +103,7 @@ class ReservationSeriesService {
           treatment_name: treatmentName,
           total_sessions: totalSessions,
           purchase_value: purchaseValue ?? null,
-          assigned_staff_id: assignedStaffId ?? null,
+          assigned_staff_id: sanitizedStaffId,
           notes: notes ?? null,
           status: 'active',
         },
@@ -71,15 +112,16 @@ class ReservationSeriesService {
       const reservations = await Promise.all(
         sessions.map(async (s) => {
           const bookingDate = typeof s.bookingDate === 'string' ? new Date(s.bookingDate) : s.bookingDate;
+          const sessionStaffId = s.assignedStaffId?.trim() ? s.assignedStaffId.trim() : sanitizedStaffId;
           return tx.reservation.create({
             data: {
               tenant_id: tenantId,
               customer_id: customerId,
-              treatment_category: 'BABY',
+              treatment_category: resolvedCategory,
               treatment_detail: `${treatmentName} [Sesi ${s.sessionNumber}/${totalSessions}]`,
               booking_date: bookingDate,
               status: 'pending',
-              assigned_staff_id: s.assignedStaffId ?? assignedStaffId ?? null,
+              assigned_staff_id: sessionStaffId,
               purchase_value: purchaseValue ? Math.round(purchaseValue / totalSessions) : null,
               series_id: series.id,
               session_number: s.sessionNumber,
@@ -95,6 +137,8 @@ class ReservationSeriesService {
         customerId: series.customer_id,
         treatmentName: series.treatment_name,
         totalSessions: series.total_sessions,
+        completedSessions: 0,
+        pendingSessions: reservations.length,
         purchaseValue: series.purchase_value,
         status: series.status,
         assignedStaffId: series.assigned_staff_id,
@@ -110,6 +154,27 @@ class ReservationSeriesService {
       };
     });
 
+    // Sync customer LTV cache after series reservations are created
+    try {
+      await customerService.recalculateCustomerLtv(customerId, tenantId);
+    } catch (err: any) {
+      console.warn('[RESERVATION SERIES] recalculateCustomerLtv on create failed:', err.message);
+    }
+
+    // Best-effort background Google Calendar sync (createEvent per session)
+    try {
+      const { googleCalendarService } = await import('./google-calendar.service');
+      const { prisma: gCalPrisma } = await import('../db/client');
+      for (const r of result.reservations) {
+        if (r.bookingDate) {
+          const reservation = await gCalPrisma.reservation.findUnique({ where: { id: r.id } }).catch(() => null);
+          const customer = reservation ? await gCalPrisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
+          const name = customer?.name || 'Bunda';
+          if (reservation) (googleCalendarService as any).createEvent?.(reservation, name).catch(() => {});
+        }
+      }
+    } catch {}
+
     return result;
   }
 
@@ -117,7 +182,7 @@ class ReservationSeriesService {
    * Get a single series with all its reservations.
    */
   async getSeries(seriesId: string, tenantId: string = DEFAULT_TENANT_ID) {
-    return prisma.reservationSeries.findFirst({
+    const series = await prisma.reservationSeries.findFirst({
       where: { id: seriesId, tenant_id: tenantId },
       include: {
         reservations: { orderBy: { session_number: 'asc' } },
@@ -125,19 +190,39 @@ class ReservationSeriesService {
         assigned_staff: { select: { id: true, name: true } },
       },
     });
+    if (!series) return null;
+
+    const completedSessions = series.reservations.filter((r) => r.status === 'completed').length;
+    const pendingSessions = series.reservations.filter((r) => r.status === 'pending' || r.status === 'confirmed').length;
+
+    return {
+      ...series,
+      completed_sessions: completedSessions,
+      pending_sessions: pendingSessions,
+    };
   }
 
   /**
    * Get all active series for a customer.
    */
   async getCustomerSeries(customerId: string, tenantId: string = DEFAULT_TENANT_ID) {
-    return prisma.reservationSeries.findMany({
+    const list = await prisma.reservationSeries.findMany({
       where: { customer_id: customerId, tenant_id: tenantId, status: { notIn: ['cancelled'] } },
       include: {
         reservations: { orderBy: { session_number: 'asc' } },
         assigned_staff: { select: { id: true, name: true } },
       },
       orderBy: { created_at: 'desc' },
+    });
+
+    return list.map((series) => {
+      const completedSessions = series.reservations.filter((r) => r.status === 'completed').length;
+      const pendingSessions = series.reservations.filter((r) => r.status === 'pending' || r.status === 'confirmed').length;
+      return {
+        ...series,
+        completed_sessions: completedSessions,
+        pending_sessions: pendingSessions,
+      };
     });
   }
 
@@ -146,7 +231,7 @@ class ReservationSeriesService {
    */
   async updateSession(
     reservationId: string,
-    data: { bookingDate?: Date | string; assignedStaffId?: string; status?: string },
+    data: { bookingDate?: Date | string; assignedStaffId?: string | null; status?: string },
     tenantId: string = DEFAULT_TENANT_ID
   ) {
     const updateData: any = {};
@@ -154,16 +239,26 @@ class ReservationSeriesService {
       updateData.booking_date = typeof data.bookingDate === 'string' ? new Date(data.bookingDate) : data.bookingDate;
     }
     if (data.assignedStaffId !== undefined) {
-      updateData.assigned_staff_id = data.assignedStaffId;
+      updateData.assigned_staff_id = data.assignedStaffId?.trim() ? data.assignedStaffId.trim() : null;
     }
     if (data.status !== undefined) {
       updateData.status = data.status;
     }
 
-    return prisma.reservation.update({
+    const updated = await prisma.reservation.update({
       where: { id: reservationId, tenant_id: tenantId },
       data: updateData,
     });
+
+    if (data.status !== undefined && updated.customer_id) {
+      try {
+        await customerService.recalculateCustomerLtv(updated.customer_id, tenantId);
+      } catch (err: any) {
+        console.warn('[RESERVATION SERIES] recalculateCustomerLtv on updateSession failed:', err.message);
+      }
+    }
+
+    return updated;
   }
 
   /**
@@ -251,6 +346,13 @@ class ReservationSeriesService {
       ),
     ]);
 
+    // Sync LTV cache after cancelling series
+    try {
+      await customerService.recalculateCustomerLtv(series.customer_id, tenantId);
+    } catch (err: any) {
+      console.warn('[RESERVATION SERIES] recalculateCustomerLtv on cancel failed:', err.message);
+    }
+
     return { cancelledCount: cancellable.length };
   }
 
@@ -275,3 +377,4 @@ class ReservationSeriesService {
 }
 
 export const reservationSeriesService = new ReservationSeriesService();
+

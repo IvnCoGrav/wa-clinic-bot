@@ -11,10 +11,15 @@ import { memoryReservations } from './stores';
 import { responseCacheService } from '../../services/response-cache.service';
 
 export async function reservationAdminRoutes(fastify: FastifyInstance) {
-  // Invalidate cache saat ada create/update/delete reservasi
+  // Invalidate cache saat ada create/update/delete reservasi (termasuk series)
   fastify.addHook('onResponse', async (request) => {
     const method = request.method;
-    if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && request.url.includes('/reservations')) {
+    if (
+      ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) &&
+      (request.url.includes('/reservations') ||
+        request.url.includes('/reservation-series') ||
+        request.url.includes('/reservation/'))
+    ) {
       responseCacheService.invalidatePrefix('reservations:');
     }
   });
@@ -2080,6 +2085,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         Body: {
           customerId: string;
           treatmentName: string;
+          treatmentCategory?: string;
           totalSessions: number;
           purchaseValue?: number;
           assignedStaffId?: string;
@@ -2093,7 +2099,8 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const { customerId, treatmentName, totalSessions, purchaseValue, assignedStaffId, notes, sessions } = request.body || {};
+      const { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions } =
+        request.body || {};
 
       if (!customerId || !treatmentName || !totalSessions || !sessions?.length) {
         return reply.status(400).send({ success: false, error: 'customerId, treatmentName, totalSessions, dan sessions wajib diisi.' });
@@ -2102,7 +2109,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       try {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const series = await reservationSeriesService.createSeries(
-          { customerId, treatmentName, totalSessions, purchaseValue, assignedStaffId, notes, sessions },
+          { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, assignedStaffId, notes, sessions },
           DEFAULT_TENANT_ID
         );
 
@@ -2111,7 +2118,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION_SERIES',
           targetId: series.id,
-          payload: { customerId, treatmentName, totalSessions, purchaseValue, sessionCount: sessions.length },
+          payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, sessionCount: sessions.length },
           ipAddress: request.ip,
         });
 
