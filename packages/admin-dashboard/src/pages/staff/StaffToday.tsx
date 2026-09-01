@@ -1363,9 +1363,52 @@ export const StaffToday: React.FC = () => {
     }
   };
 
+  /**
+   * Ekstraksi total durasi treatment murni (dalam menit) tanpa buffer perjalanan
+   */
+  const extractTreatmentMinutes = (treatmentDetail: string | null): number => {
+    if (!treatmentDetail) return 60;
+    const sanitized = treatmentDetail
+      .replace(/\[\s*total.*?buffer.*?\]/gi, '')
+      .replace(/\[\s*total\s*bufer.*?\]/gi, '')
+      .replace(/\[\s*total\s*\d+m\s*\+\s*buffer.*?\]/gi, '')
+      .replace(/\[\s*buffer.*?\]/gi, '')
+      .replace(/\[\s*bufer.*?\]/gi, '')
+      .replace(/\[\s*total\s*=\s*\d+.*?\]/gi, '')
+      .replace(/\(\+?\d+m\s*buffer\)/gi, '')
+      .replace(/\(\+?\d+m\s*bufer\)/gi, '')
+      .replace(/\+\s*buffer\s*\d+m/gi, '')
+      .replace(/\+\s*bufer\s*\d+m/gi, '')
+      .replace(/\b\d+m\s*buffer\b/gi, '')
+      .replace(/\b\d+m\s*bufer\b/gi, '')
+      .replace(/\btotal\s*bufer\s*=\s*\d+m?\b/gi, '')
+      .replace(/\btotal\s*buffer\s*=\s*\d+m?\b/gi, '')
+      .trim();
+
+    if (!sanitized) return 60;
+    const rawItems = sanitized.split(/\r?\n|,|;|\+|&/).map((s) => s.trim()).filter(Boolean);
+    let totalMins = 0;
+    for (const item of rawItems) {
+      const itemLower = item.toLowerCase();
+      if (itemLower.includes('buffer') || itemLower.includes('bufer') || itemLower.includes('total scheduled')) continue;
+      const minMatch = item.match(/(\d+)\s*(?:menit|mins?|m\b)/i);
+      const hourMatch = item.match(/(\d+(?:\.\d+)?)\s*(?:jam|hours?|h\b)/i);
+      if (minMatch) {
+        totalMins += parseInt(minMatch[1], 10);
+      } else if (hourMatch) {
+        totalMins += Math.round(parseFloat(hourMatch[1]) * 60);
+      }
+    }
+    return totalMins > 0 ? totalMins : 60;
+  };
+
   const isPastStaffTask = (t: StaffTask) => {
     if (!t.bookingDate) return false;
-    return Date.now() >= new Date(t.bookingDate).getTime();
+    const startTime = new Date(t.bookingDate).getTime();
+    if (isNaN(startTime)) return false;
+    const durationMinutes = extractTreatmentMinutes(t.treatmentDetail);
+    const endTime = startTime + durationMinutes * 60 * 1000;
+    return Date.now() >= endTime;
   };
 
   const activeTodayTasks = tasks.filter((t) => t.status.toLowerCase() !== 'completed' && !isPastStaffTask(t));

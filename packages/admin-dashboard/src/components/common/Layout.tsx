@@ -38,6 +38,7 @@ import {
   Sparkles,
   ChevronLeft,
   Send,
+  TrendingUp,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
@@ -194,6 +195,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       items: [
         { name: 'Overview', path: '/admin/overview', icon: LayoutDashboard },
         { name: 'Live Chat Monitor', path: '/admin/live-chat', icon: MessageSquare, badge: unreadLiveChatCount > 0 ? unreadLiveChatCount : undefined },
+        { name: 'Transaksi & Pendapatan', path: '/admin/financial-analytics', icon: TrendingUp },
         { name: 'Reservations & Calendar', path: '/admin/reservations', icon: CalendarRange },
         { name: 'Treatment Hari Ini', path: '/admin/today-treatments', icon: Sparkles },
         { name: 'Customer Database', path: '/admin/customers', icon: Users },
