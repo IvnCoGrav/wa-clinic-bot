@@ -119,6 +119,14 @@ export class ReservationLifecycleService {
       console.warn('[RESERVATION LIFECYCLE] followUp.onReservationCreated failed:', err.message);
     }
 
+    // Phase 4: Sync ltv_cache on new reservation
+    try {
+      const { customerService } = await import('./customer.service');
+      await customerService.recalculateCustomerLtv(customerId, tenantId);
+    } catch (err: any) {
+      console.warn('[RESERVATION LIFECYCLE] recalculateCustomerLtv failed:', err.message);
+    }
+
     // 2. Persist child/baby entities (best-effort)
     try {
       const { childService } = await import('./child.service');

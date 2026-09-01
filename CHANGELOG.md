@@ -2,7 +2,52 @@
 
 Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/2.0.0.html).
+
+#### Fix & Enhancement — Customer Database: Skeleton Ringan + Retry Manual + Timeout 10s Fix (`CustomerDatabase.tsx`, `customer.service.ts`, `customers.subroute.ts`, `schema.prisma`, `docker-compose.yml`) (2026-09-01)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  1. Buka Database Customer → loading lama → toast "Gagal memuat database customer: Koneksi internet lambat (Timeout 10s)" meskipun data hanya 500 baris.
+  2. Tidak ada UI skeleton atau retry manual — user hanya melihat spinner kosong lalu error toast yang hilang.
+  3. LTV sorting (`sortBy=ltv`) tidak akurat — fetch 500 rows lalu sort JS, bukan top-N by LTV sesungguhnya.
+
+- **Akar Masalah (5 faktor konkuren):**
+  1. N+1 `resolveTreatmentValue` per-row — 500 rows × unique texts = 500 sequential `await`.
+  2. 6 query paralel per request (findMany + count + 4 stats) memblok response.
+  3. `pool_timeout=10` sama dengan FE timeout 10s → race condition.
+  4. Search `ILIKE %q%` pada 6 field termasuk yang tidak ter-index.
+  5. Hanya spinner, tidak ada skeleton atau retry banner.
+
+- **Solusi & Implementasi (7 fase):**
+  1. **Skeleton Ringan (Phase 1):** Ganti full-page `<Loader>` dengan skeleton `animate-pulse` saat data kosong. Saat refresh dengan data ada → overlay transparan, tidak kehilangan data lama.
+  2. **Search Debounce 300ms (Phase 1):** Mencegah pengetikan cepat memicu rentetan request `ILIKE` konkuren.
+  3. **Retry Manual Banner (Phase 2):** State `loadError` + tombol "Coba Lagi" persisten, `useEffect([retryCount])` trigger reload.
+  4. **Timeout 20s khusus customers (Phase 2):** `apiRequest({ timeoutMs: 20000 })` hanya untuk endpoint customers, global tetap 10s.
+  5. **Batch resolve N+1 (Phase 1.5):** Kumpulkan semua unique texts, `Promise.all` sekali, lalu lookup dari Map — bukan per-row await.
+  6. **Stats endpoint terpisah (Phase 3):** `GET /api/admin/customers/stats` cached 60s, frontend fetch terpisah via `useEffect([])`.
+  7. **Observability logging (Phase 3.5):** Structured JSON log per request: `elapsed`, `findManyMs`, `resolveMs`, warning jika >500ms.
+  8. **Search guard (Phase 4):** Query <4 huruf hanya scan `name/phone/trackingCode` (3 field), ≥4 huruf scan 6 field.
+  9. **LTV materialization (Phase 4):** Kolom `ltv_cache` di DB, `orderBy: { ltv_cache }` native PostgreSQL, hook `recalculateCustomerLtv` saat reservasi create/update/cancel, backfill SQL idempotent.
+  10. **Pool timeout 15s (Phase 5.5):** `pool_timeout=10→15` agar FE 20s tidak race dengan pool.
+  11. **Composite indexes (Phase 4):** `tenant_id+is_sandbox_test`, `tenant_id+is_mql`, `tenant_id+is_sandbox_test+created_at`, `ltv_cache`.
+
+- **File yang Dipengaruhi:**
+  - `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx` — skeleton, retry banner, debounce, stats fetch terpisah
+  - `packages/admin-dashboard/src/services/api.ts` — tidak diubah (timeoutMs di-pass dari caller)
+  - `src/services/customer.service.ts` — batch resolve, observability, `getCustomerStats()`, `recalculateCustomerLtv()`, `backfillAllLtvCache()`, search guard, `ltv_cache` sort
+  - `src/routes/admin/customers.subroute.ts` — `GET /api/admin/customers/stats` endpoint baru, cache invalidation granularity
+  - `src/routes/admin/reservations.subroute.ts` — hook `recalculateCustomerLtv` pada PATCH edit & status change
+  - `src/services/reservation-lifecycle.service.ts` — hook `recalculateCustomerLtv` saat reservasi baru
+  - `prisma/schema.prisma` — kolom `ltv_cache`, 4 composite indexes baru
+  - `prisma/migrations/20260901000000_add_ltv_cache_and_indexes/migration.sql` — DDL + backfill
+  - `docker-compose.yml` — `pool_timeout=10→15`
+
+- **Verifikasi:**
+  - Backend typecheck: PASS (0 error)
+  - Frontend typecheck: PASS (0 error)
+  - Frontend build: PASS (42.49s)
+  - Backend build: PASS
+  - Vitest suite: **197/198 files passed, 1542/1543 tests passed** (1 pre-existing timeout di `migration.test.ts` — Google Calendar, tidak terkait)
 
 #### Fix & Enhancement — Custom Treatment: Hapus Auto-Detect Addon & Tambah Input Harga (`CreateReservationModal.tsx`) (2026-08-31)
 
