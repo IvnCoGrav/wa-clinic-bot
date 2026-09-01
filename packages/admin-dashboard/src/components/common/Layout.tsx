@@ -717,7 +717,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <div className={`flex-1 md:pl-64 flex flex-col ${isLiveChat ? 'h-screen max-h-screen overflow-hidden min-h-0' : 'min-h-screen'}`}>
         
         {/* Top Header */}
-        <header className="border-b border-[#e9edef] px-4 sm:px-6 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-xs shrink-0 pt-[env(safe-area-inset-top,0px)] min-h-[calc(4rem+env(safe-area-inset-top,0px))] md:pt-0 md:min-h-[4rem] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]">
+        <header className="border-b border-[#e9edef] px-3 sm:px-5 flex items-center justify-between bg-white/95 backdrop-blur-sm sticky top-0 z-40 shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] h-12 md:h-13 min-h-[3rem] md:min-h-[3.25rem] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
           <div className="flex items-center space-x-3">
             <h1 className="text-sm font-bold md:text-base text-[#111b21] truncate max-w-[200px] sm:max-w-none">
               {BRAND.panelName}
@@ -741,33 +741,33 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {wahaStatus === 'WORKING' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                className="no-touch-min rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
               >
-                <CheckCircle size={14} />
+                <CheckCircle size={13} />
                 <span className="text-[11px] font-bold">Online</span>
               </button>
             ) : wahaStatus === 'SCAN_QR_CODE' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                className="no-touch-min rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
               >
-                <QrCode size={14} />
+                <QrCode size={13} />
                 <span className="text-[11px] font-bold">Scan QR</span>
               </button>
             ) : wahaStatus === 'FAILED' ? (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                className="no-touch-min rounded-full bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
               >
-                <AlertCircle size={14} />
+                <AlertCircle size={13} />
                 <span className="text-[11px] font-bold">Offline</span>
               </button>
             ) : (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+                className="no-touch-min rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
               >
-                <Loader size={14} className="animate-spin" />
+                <Loader size={13} className="animate-spin" />
                 <span className="text-[11px] font-bold">Memeriksa</span>
               </button>
             )}
@@ -794,13 +794,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   }
                 }}
                 title={soundActive ? 'Suara & Push Notifikasi: Aktif (Klik untuk Mute)' : 'Suara & Push Notifikasi: Mati (Klik untuk Aktifkan)'}
-                className={`p-1.5 sm:p-2 rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs ${
+                className={`no-touch-min w-7 h-7 sm:w-8 sm:h-8 rounded-full border transition flex items-center justify-center cursor-pointer shadow-2xs aspect-square ${
                   soundActive
                     ? 'bg-emerald-50 border-emerald-200 text-[#008069] hover:bg-emerald-100'
                     : 'bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200'
                 }`}
               >
-                {soundActive ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                {soundActive ? <Volume2 size={14} /> : <VolumeX size={14} />}
               </button>
             )}
 
@@ -809,9 +809,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               onClick={openMobileMenu} 
               aria-label="Buka Menu"
               title="Buka Menu Navigasi"
-              className="md:hidden p-2 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-1"
+              className="no-touch-min md:hidden w-8 h-8 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
             >
-              <Menu size={20} />
+              <Menu size={18} />
             </button>
 
             {/* Interactive Status Popover for Mobile & Desktop Touch */}
@@ -921,7 +921,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         <main
           className={`flex-1 ${
             isLiveChat
-              ? 'p-0.5 sm:p-1.5 md:p-2 overflow-hidden flex flex-col min-h-0'
+              ? 'p-0 overflow-hidden flex flex-col min-h-0'
               : 'p-4 sm:p-5 md:p-7 space-y-6'
           } bg-[#f0f2f5]`}
         >
