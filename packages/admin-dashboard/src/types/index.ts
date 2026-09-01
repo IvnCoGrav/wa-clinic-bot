@@ -59,6 +59,9 @@ export interface Reservation {
     name: string;
     phone?: string;
   } | null;
+  series_id?: string | null;
+  session_number?: number | null;
+  total_sessions?: number | null;
   created_at: string;
 }
 
