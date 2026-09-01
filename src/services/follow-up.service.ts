@@ -424,14 +424,18 @@ export class FollowUpService {
 
       const now = new Date();
 
-      // 2. Hitung waktu Reminder H-1 Malam (19:00 WIB)
-      const reminderDate = new Date(bDate);
-      reminderDate.setDate(reminderDate.getDate() - 1);
-      reminderDate.setHours(19, 0, 0, 0);
+      // 2. Hitung tanggal booking dalam zona waktu WIB (UTC+7)
+      const bDateWib = new Date(bDate.getTime() + 7 * 60 * 60 * 1000);
+      const year = bDateWib.getUTCFullYear();
+      const month = bDateWib.getUTCMonth();
+      const day = bDateWib.getUTCDate();
+
+      // Reminder H-1 Malam pukul 19:00 WIB (= 12:00 UTC pada hari H-1)
+      const reminderDate = new Date(Date.UTC(year, month, day - 1, 12, 0, 0, 0));
 
       let effectiveReminderDate: Date | null = reminderDate;
       if (reminderDate <= now) {
-        // Jika booking dibuat mendadak (misal hari H pagi atau H-1 malam > 19:00),
+        // Jika booking dibuat mendadak (misal hari H pagi atau H-1 malam > 19:00 WIB),
         // jadwalkan segera jika booking_date masih di depan
         if (bDate.getTime() > now.getTime() + 15 * 60 * 1000) {
           effectiveReminderDate = new Date(now.getTime() + 2 * 60 * 1000);
@@ -440,10 +444,8 @@ export class FollowUpService {
         }
       }
 
-      // 3. Hitung waktu Review H+1 Pagi (08:00 WIB)
-      const reviewDate = new Date(bDate);
-      reviewDate.setDate(reviewDate.getDate() + 1);
-      reviewDate.setHours(8, 0, 0, 0);
+      // 3. Hitung waktu Review H+1 Pagi pukul 08:00 WIB (= 01:00 UTC pada hari H+1)
+      const reviewDate = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
 
       const isBaby = treatmentCategory === 'BABY' || treatmentCategory === 'BOTH';
       const reviewType = isBaby ? 'REVIEW_H1_BABY' : 'REVIEW_H1_MOMS';
@@ -549,13 +551,16 @@ export class FollowUpService {
       const bDate = new Date(newBookingDate);
       if (isNaN(bDate.getTime())) return;
 
-      const reminderDate = new Date(bDate);
-      reminderDate.setDate(reminderDate.getDate() - 1);
-      reminderDate.setHours(19, 0, 0, 0);
+      const bDateWib = new Date(bDate.getTime() + 7 * 60 * 60 * 1000);
+      const year = bDateWib.getUTCFullYear();
+      const month = bDateWib.getUTCMonth();
+      const day = bDateWib.getUTCDate();
 
-      const reviewDate = new Date(bDate);
-      reviewDate.setDate(reviewDate.getDate() + 1);
-      reviewDate.setHours(8, 0, 0, 0);
+      // Reminder H-1 Malam pukul 19:00 WIB (= 12:00 UTC pada hari H-1)
+      const reminderDate = new Date(Date.UTC(year, month, day - 1, 12, 0, 0, 0));
+
+      // Review H+1 Pagi pukul 08:00 WIB (= 01:00 UTC pada hari H+1)
+      const reviewDate = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
 
       // Update REMINDER_H1
       await prisma.followUp?.updateMany?.({

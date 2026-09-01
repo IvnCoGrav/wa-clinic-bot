@@ -543,10 +543,13 @@ export class DecisionMatrix {
 
           if (isPureLocationMessage) {
             // Zero hardcode: ambil treatment aktif dari state/riwayat, tanpa menebak paket
-            const candidateTreatmentName =
+            // Jika belum ada treatment spesifik (null) atau hanya alias generik "pijat bayi", biarkan null untuk CTA netral
+            const rawCandidate =
               updatedSlate.selectedTreatmentName ||
               (context as any)?.lastDiscussedTreatment ||
               undefined;
+            const isGenericAlias = rawCandidate ? /^(?:pijat bayi|massage bayi|pijat baby|pijat biasa|massage biasa|pijat standar|pijat reguler|pijat rutin)$/i.test(rawCandidate.trim()) : false;
+            const candidateTreatmentName = isGenericAlias ? undefined : rawCandidate;
             const preferredDate = extraction.preferredDateText || updatedSlate.preferredDate || undefined;
 
             return {

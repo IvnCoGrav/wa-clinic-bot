@@ -163,7 +163,7 @@ export class SlateStore {
         { key: 'sembelit', name: 'Pijat Bayi Kolik & Sembelit' },
         { key: 'tumbuh ceria', name: 'Pijat Bayi Tumbuh Ceria' },
         { key: 'bayi ceria', name: 'Pijat Bayi Ceria' },
-        { key: 'pijat bayi', name: 'Pijat Bayi Ceria' },
+        { key: 'pijat bayi', name: 'pijat bayi' },
         { key: 'pijat hamil', name: 'Pijat Relaksasi Ibu Hamil' },
         { key: 'pijat nifas', name: 'Pijat Relaksasi Ibu Nifas' },
       ];
