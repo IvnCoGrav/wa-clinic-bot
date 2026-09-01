@@ -189,8 +189,8 @@ textarea,
     font-size: 16px !important;
   }
 
-  /* Standard touch target baseline for action buttons & interactive icons */
-  button:not(.no-touch-min):not(table button):not(.inline-chip) {
+  /* Standard touch target baseline for action buttons & interactive icons (exempting micro buttons & badges) */
+  button:not(.no-touch-min):not(table button):not(.inline-chip):not(.aspect-square):not([class*="w-3"]):not([class*="w-4"]):not([class*="w-5"]):not([class*="w-6"]):not([class*="h-3"]):not([class*="h-4"]):not([class*="h-5"]):not([class*="h-6"]) {
     min-height: 36px;
   }
 }

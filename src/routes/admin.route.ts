@@ -293,7 +293,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
         } else if (filename.endsWith('.woff')) {
           reply.type('font/woff');
         }
-        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        if (process.env.NODE_ENV === 'production') {
+          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        } else {
+          reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+          reply.header('Pragma', 'no-cache');
+          reply.header('Expires', '0');
+        }
         return reply.send(content);
       } catch (err) {
         return reply.status(404).send({ error: 'Not Found' });
