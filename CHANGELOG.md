@@ -4,6 +4,30 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Dashboard Transaksi, Reservasi & Histori Pendapatan Bulanan (`FinancialAnalytics.tsx`, `financial-analytics.service.ts`, `analytics.subroute.ts`) (2026-09-01)
+
+- **Latar Belakang & Kebutuhan Bisnis**:
+  - Manajemen klinik membutuhkan dashboard terpadu untuk melacak omset bulanan, histori pendapatan harian (Day 1 s/d Day 31), performa terapis, komposisi kategori layanan, metode pembayaran, dan buku besar transaksi dengan fitur ekspor Excel/CSV 1-klik untuk pembukuan akuntansi.
+- **Implementasi Teknis**:
+  1. **Backend Aggregation Service Layer (`financial-analytics.service.ts`)**:
+     - Membangun service layer agregasi PostgreSQL terindeks yang mengkalkulasi rentang waktu WIB (`startOfMonth` s/d `endOfMonth`).
+     - Menyediakan metrik KPI: Total Omset (Lunas vs Tagih di Tempat), Total Reservasi, Average Order Value (AOV), Rasio Repeat Order, dan Akumulasi Ongkir.
+     - Menyusun array histori harian (`dailyTrend`) tanggal 1 s/d akhir bulan, breakdown kategori layanan, metode pembayaran (Transfer, QRIS, Cash), leaderboard omset terapis, dan top layanan terlaris.
+     - Generator spreadsheet CSV berstandar RFC 4180 (`generateMonthlyTransactionsCsv`).
+     - Cache respons instan 30 detik (`responseCacheService`).
+  2. **API Endpoints (`analytics.subroute.ts`)**:
+     - `GET /api/admin/financial-analytics?year=YYYY&month=M` — Mengambil data analitik teragregasi.
+     - `GET /api/admin/financial-analytics/export?year=YYYY&month=M` — Download rekap transaksi CSV langsung.
+  3. **Frontend Dashboard & Visualisasi Interaktif (`FinancialAnalytics.tsx`)**:
+     - Top bar dengan Month & Year Picker dinamis (Bulan Ini, Bulan Lalu, atau Pilih Bulan/Tahun).
+     - 4 Top KPI Cards (Omset, Reservasi, AOV, Repeat Rate).
+     - Grafik Bar & Area harian Recharts dengan tooltip informatif dalam format Rupiah.
+     - Donut chart kategori layanan, bar chart metode bayar, dan kartu leaderboard terapis.
+     - Tabel buku besar transaksi lengkap dengan pencarian live, filter status pelunasan, modal detail transaksi, dan tombol ekspor spreadsheet.
+  4. **Navigasi & Integrasi Overview (`Layout.tsx`, `App.tsx`, `Overview.tsx`)**:
+     - Mendaftarkan rute `/admin/financial-analytics` dan menu sidebar **"Transaksi & Pendapatan"** di bawah *Operasional & Jadwal*.
+     - Menghubungkan kartu ringkasan omset dan reservasi di *Overview* agar langsung membuka halaman analitik detail.
+
 #### Feature & UX Enhancement — Auto-Move Jadwal Lewat Jam ke Tab Selesai & Default View "Akan Datang" (`TodayTreatments.tsx`, `StaffToday.tsx`) (2026-09-01)
 
 - **Latar Belakang & Kebutuhan Bisnis**:
@@ -11,8 +35,9 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   - Ketika jam jadwal treatment hari ini sudah terlewati (misal jadwal jam 10:00 dan waktu saat ini jam 11:00), tugas tersebut diharapkan otomatis berpindah ke kelompok **Selesai / Sudah Lewat**, tanpa perlu menunggu status diubah manual menjadi lunas/selesai oleh admin.
 - **Implementasi Teknis**:
   1. **Klasifikasi Waktu Otomatis (`isTaskPastTime`)**:
-     - Ditambahkan helper `isTaskPastTime` yang membandingkan timestamp `bookingDate` dengan `Date.now()`.
-     - Tugas diklasifikasikan sebagai `isCompleted` jika status DB adalah `completed` **ATAU** jam kunjungannya sudah lewat.
+     - Ditambahkan perhitungan waktu selesai treatment murni: `Waktu Selesai = Jam Mulai Booking + Durasi Layanan (tanpa buffer perjalanan)`.
+     - Sebagai contoh: Jika reservasi dijadwalkan pukul 10:00 dengan durasi 60 menit, jadwal tetap berada di tab *Akan Datang / Berjalan* dari jam 10:00 hingga 11:00, dan tepat pada pukul 11:00 otomatis berpindah ke kelompok *Selesai*.
+     - Tugas diklasifikasikan sebagai `isCompleted` jika status DB adalah `completed` **ATAU** waktu selesai treatment telah terlewati.
   2. **Default Filter "Akan Datang" (`TodayTreatments.tsx`)**:
      - Mengubah filter default dari `ALL` menjadi `UPCOMING` ("Akan Datang") sehingga saat membuka halaman, hanya jadwal yang belum lewat yang tampil.
      - Menyediakan tombol filter jelas: `Akan Datang`, `Selesai`, `OTW`, dan `Semua`.

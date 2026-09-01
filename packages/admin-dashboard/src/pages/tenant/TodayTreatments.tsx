@@ -397,10 +397,15 @@ export const TodayTreatments: React.FC = () => {
     }
   };
 
-  // Helper untuk menentukan apakah waktu treatment sudah lewat jamnya
+  // Helper untuk menentukan apakah waktu treatment sudah selesai (Jam Booking + Total Durasi Layanan Murni, tanpa buffer)
   const isTaskPastTime = (t: TreatmentTask) => {
     if (!t.bookingDate) return false;
-    return Date.now() >= new Date(t.bookingDate).getTime();
+    const startTime = new Date(t.bookingDate).getTime();
+    if (isNaN(startTime)) return false;
+    const parsed = parseNumberedTreatments(t.treatmentDetail);
+    const durationMinutes = parsed.totalMinutes > 0 ? parsed.totalMinutes : 60;
+    const endTime = startTime + durationMinutes * 60 * 1000;
+    return Date.now() >= endTime;
   };
 
   const isTaskCompletedOrPast = (t: TreatmentTask) => {
