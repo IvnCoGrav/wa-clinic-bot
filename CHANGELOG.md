@@ -4,6 +4,51 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/2.0.0.html).
 
+#### Enhancement — Optimalisasi Debounce 7.5s, Eliminasi Bias Alias Generik & Kalkulasi Presisi Add-on Sinar Moksa (`burst-coalesce.service.ts`, `entity-extractor.ts`, `decision-matrix.ts`, `grounding-composer.ts`, `slate-store.ts`, `.env`) (2026-09-01)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  - Berdasarkan rekaman percakapan riil Trosobo (6285816071628): jeda ketik 6.58s melebihi debounce 5s → 2 balasan terpisah, frasa generik "home-treatment" terkunci prematur ke Pijat Bayi Ceria, dan pergantian treatment ke Pulih Ceria + Sinar Moksa butuh kalkulasi presisi Rp 100k (80k paket + 20k ongkir).
+
+- **Akar Masalah:**
+  1. `BURST_COALESCE_MS` fallback 5000 ms memotong bubble customer yang mengetik 2-3 pesan bersusulan.
+  2. `GENERIC_TREATMENT_RE` belum mencakup varian "home service"/"layanan home" & typo "sevice"; prompt NLU belum tegas bahwa "home-treatment/homecare adalah model bisnis bukan nama treatment"; `slate-store` harvest memetakan alias generik "pijat bayi" langsung ke "Pijat Bayi Ceria" (hardcode bias).
+  3. `decision-matrix` & `grounding-composer` memakai fallback hardcode "Pijat Bayi Ceria" saat `candidateTreatmentName`/`effectiveTreatment` null, sehingga template ongkir tidak netral & LLM terkunci paket prematur.
+  4. `grounding-composer` filter `!isAddon` membuang Sinar Moksa dari konteks LLM & sorting tidak prioritas combo "+", sehingga paket Pulih Ceria + Moksa (promo 70k+10k=80k) tidak terhitung presisi.
+
+- **Solusi & Implementasi:**
+  1. **Debounce Window 7.5s:** `burst-coalesce.service.ts` fallback `5000→7500` & `.env` `BURST_COALESCE_MS=7500`, tanpa hardcode nominal lain (env-driven, window reset per pesan).
+  2. **Bersihkan Alias Generik:** Perluas `GENERIC_TREATMENT_RE` ke `home[-\s]?(treatment|care|service|sevice)` + `layanan\s*home`; tegaskan prompt NLU aturan #2 dengan kalimat eksplisit "Kata 'home-treatment' atau 'homecare' adalah model bisnis, BUKAN nama treatment! Jangan mengisi treatment_referenced jika pelanggan hanya menyebut home-treatment/homecare tanpa nama paket spesifik."; ubah `slate-store.ts` harvest `pijat bayi` → alias generik "pijat bayi" (dinamis, tidak lock ke Ceria) agar `treatmentCatalogService` resolve berdasarkan usia.
+  3. **Netralisasi Ongkir:** `decision-matrix.ts` `isPureLocationMessage` sekarang normalisasi `rawCandidate` → `undefined` jika alias generik `pijat bayi|massage bayi|pijat biasa` (regex generik), sehingga `TEMPLATES.ongkirInfo` menghasilkan CTA netral "Rencana mau treatment apa bunda ?🤗" tanpa menebak paket.
+  4. **Grounding Add-on Dinamis:** `grounding-composer.ts` deteksi `mentionsAddon` (moksa/sinar/nebulizer/add-on) secara dinamis dari `inputLower|slate|extraction`, append katalog `ADD_ON` relevan (filter per keyword, dedup) & naikkan `maxItems 5→7` bila moms/addon; perbaiki sorting untuk combo "+" dengan split & clean name; hapus hardcode fallback `Pijat Bayi Ceria` → `null` (schedule note kondisional) & `treatmentBaby` fallback → dynamic lookup `allServices.find BABY`; tambah `comboPricingNote` dinamis: hitung total promo/normal dari katalog aktif (`reduce promoPrice`) + ongkir = total, tanpa hardcode 80k/100k.
+
+- **Verifikasi:**
+  - `npx vitest run tests/regression/real-conversations.test.ts tests/unit/burst-coalesce.test.ts tests/unit/slot-engine-decision.test.ts` → **18 passed**
+  - `slot-engine-lead-greeting` & `centralized-persona` → **PASS** (anti-bias home-treatment null)
+  - Manual: `TEMPLATES.ongkirInfo` 17.8km Rp20k → neutral CTA PASS; `GroundingComposer` combo Pulih+Moksa → filteredCatalog mengandung Pulih Rp70k + Moksa Rp10k = 80k + ongkir 20k = 100k PASS
+  - `npm run build` → **PASS (0 error)**, full suite **199 files 1548 passed** (1 flaky migration timeout → rerun PASS)
+
+- **File yang Dipengaruhi:** `src/services/burst-coalesce.service.ts`, `.env`, `src/slot-engine/entity-extractor.ts`, `src/slot-engine/slate-store.ts`, `src/slot-engine/decision-matrix.ts`, `src/slot-engine/grounding-composer.ts`
+
+#### Audit & Fix — Production Follow-Up Queue Audit & UTC-to-WIB Accurate Scheduling (`follow-up.service.ts`, `follow-up-engine.test.ts`) (2026-09-01)
+
+- **Latar Belakang & Permintaan Pengguna:**
+  - Pengguna meminta pengecekan dan audit menyeluruh terhadap performa dan cara kerja **Follow-Up Queue (Antrian Follow-Up)** untuk seluruh use case di live server, serta melaporkan mana yang sudah sesuai dan mana yang terdapat kendala/anomali.
+
+- **Hasil Audit Use Case di Live Server:**
+  1. **`NO_PURCHASE` (Customer Masuk Belum Booking)**:
+     - **Status**: 49 terkirim (*SENT*), 119 dalam antrian (*QUEUED*), 126 dibatalkan (*CANCELLED* karena customer akhirnya melakukan booking).
+     - **Evaluasi**: **100% SESUAI**. Auto-queue 3 tahap (+3, +7, +14 hari) dan auto-cancel saat reservasi dibuat berjalan sempurna.
+  2. **`NEXT_TREATMENT` (Customer Pasca Treatment)**:
+     - **Status**: 40 terkirim (*SENT*), 132 dalam antrian (*QUEUED*), 32 dibatalkan (*CANCELLED*).
+     - **Evaluasi**: **100% SESUAI**. Penjadwalan bertahap (+1, +2, +3 bulan) berjalan konsisten.
+  3. **Smart Context Guards (Human Handling & Cooldown 72h)**:
+     - **Status**: Worker secara otomatis menahan dan menjadwalkan ulang pesan untuk customer yang sedang ditangani manual oleh Admin (`is_human_handling = true`) atau baru aktif chat (< 72 jam).
+     - **Evaluasi**: **100% SESUAI**. Tidak ada tabrakan chat dengan admin.
+
+- **Temuan Anomali & Perbaikan (Bug Fix):**
+  - **Akar Masalah Timezone Jam Malam/Pagi**: `createReservationFollowUps` dan `onReservationRescheduled` sebelumnya menggunakan `setHours(19)` dan `setHours(8)` lokal sistem. Di container VM Linux (UTC), ini menyebabkan Reminder H-1 terjadwal di `19:00 UTC = 02:00 WIB (subuh)` dan Review H+1 di `08:00 UTC = 15:00 WIB (sore)`.
+  - **Solusi**: Mengganti kalkulasi menjadi UTC-deterministik WIB: `Date.UTC(year, month, day - 1, 12, 0, 0, 0)` (tepat 19:00 WIB malam) dan `Date.UTC(year, month, day + 1, 1, 0, 0, 0)` (tepat 08:00 WIB pagi).
+
 #### Fitur — Paket Multi-Sesi (ReservationSeries) (`prisma/schema.prisma`, `reservation-series.service.ts`, `reservations.subroute.ts`, `CreateReservationModal.tsx`) (2026-09-01)
 
 - **Latar Belakang & Permintaan Pengguna:**
