@@ -61,7 +61,7 @@ export class BurstCoalesceService {
   }
 
   private getWindowMs(): number {
-    const parsed = parseInt(process.env.BURST_COALESCE_MS || '5000', 10);
+    const parsed = parseInt(process.env.BURST_COALESCE_MS || '7500', 10);
     return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
   }
 

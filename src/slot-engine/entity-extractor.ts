@@ -22,7 +22,7 @@ const RawLlmExtractionSchema = z.object({
   confidence_score: z.number().default(0.9),
 });
 
-const GENERIC_TREATMENT_RE = /^(?:layanan\s+)?(?:home[-\s]?treatment|home[-\s]?care|homecare|care|treatment|perawatan|pijat|spa|layanan|paket|promo|info\s+treatment|layanan\s+kami)$/i;
+const GENERIC_TREATMENT_RE = /^(?:layanan\s+)?(?:home[-\s]?(?:treatment|care|service|sevice)|homecare|home\s*service|home\s*sevice|layanan\s*home|care|treatment|perawatan|pijat|spa|layanan|paket|promo|info\s+treatment|layanan\s+kami)$/i;
 const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|sana|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo|mana|mn|mna|dimana|dmana|mana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|mn\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk))$/i;
 const NON_SYMPTOM_TOKENS = new Set([
   'sehat', 'selalu', 'info', 'konsultasi', 'tanya', 'tertarik', 'booking', 'reservasi', 'bisa',
@@ -332,7 +332,7 @@ DAFTAR INTENTS YANG DIDUKUNG:
 
 ATURAN EKSTRAKSI (SANGAT KETAT):
 1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah pada PESAN CUSTOMER TERBARU. Jika customer memberikan alamat lengkap (contoh "Platuk tauladan 19a , sidotopo wetan , kenjeran"), masukkan nama kelurahan/desa/kecamatan ("Sidotopo Wetan, Kenjeran") ke "location_text", dan detail nomor/jalan/gang ("Platuk tauladan 19a") ke "street_detail". DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain. DILARANG mengekstrak kata generik "rumah", "ke rumah", "klinik" sebagai location_text.
-2. DILARANG KERAS mengekstrak istilah umum model bisnis ("home-treatment", "homecare", "home care", "layanan home", "perawatan", "treatment", "spa", "promo") sebagai "treatment_referenced". Field "treatment_referenced" HANYA boleh diisi jika customer menyebut nama perawatan spesifik katalog (contoh: "Pijat Bayi Ceria", "Pijat Pulih", "Pijat Laktasi", "Sinar Moksa", "Pijat Gemoy").
+ 2. DILARANG KERAS mengekstrak istilah umum model bisnis ("home-treatment", "homecare", "home care", "layanan home", "home service", "perawatan", "treatment", "spa", "promo") sebagai "treatment_referenced". Kata 'home-treatment' atau 'homecare' adalah model bisnis, BUKAN nama treatment! Jangan mengisi treatment_referenced jika pelanggan hanya menyebut home-treatment/homecare tanpa nama paket spesifik. Field "treatment_referenced" HANYA boleh diisi jika customer menyebut nama perawatan spesifik katalog (contoh: "Pijat Bayi Ceria", "Pijat Pulih", "Pijat Laktasi", "Sinar Moksa", "Pijat Gemoy").
 3. Jangan mengekstrak kata sapaan/basa-basi ("sehat selalu", "mau info", "konsultasi") sebagai "symptoms".
 4. Jangan mengekstrak kata ganti diri ("Saya", "Aku", "Bunda") sebagai "customer_name".
 5. Jika customer menyebut nama perumahan/gang (misal: "Darmo permai selatan gang 17") setelah kelurahan diketahui, masukkan ke "street_detail".
