@@ -40,6 +40,7 @@ const StaffToday = lazy(() => import('./pages/staff/StaffToday').then(m => ({ de
 const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m => ({ default: m.StaffSchedule })));
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
 const TelegramIntegration = lazy(() => import('./pages/tenant/TelegramIntegration').then(m => ({ default: m.TelegramIntegration })));
+const QuickReplies = lazy(() => import('./pages/tenant/QuickReplies').then(m => ({ default: m.QuickReplies })));
 
 /** Redirect awal berbasis role: terapis → portal staff, lainnya → overview admin. Mendukung resolusi URL legacy berbasis hash. */
 const IndexRedirect: React.FC = () => {
@@ -282,6 +283,15 @@ export const App: React.FC = () => {
                 </Layout>
               </ProtectedRoute>
             } />
+            <Route path="/admin/quick-replies" element={
+              <ProtectedRoute>
+                <Layout>
+                  <QuickReplies />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/quick-reply" element={<Navigate to="/admin/quick-replies" replace />} />
+            <Route path="/admin/balasan-cepat" element={<Navigate to="/admin/quick-replies" replace />} />
             <Route path="/admin/ai-evaluations" element={
               <ProtectedRoute>
                 <Layout>

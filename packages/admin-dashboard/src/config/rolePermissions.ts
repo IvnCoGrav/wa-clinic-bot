@@ -129,6 +129,13 @@ export const ALL_MODULES: ModuleDefinition[] = [
     category: 'CRM & KOMUNIKASI',
     description: 'Integrasi Telegram untuk briefing jadwal harian bidan/terapis dan laporan operasional klinik',
   },
+  {
+    id: 'quick-replies',
+    path: '/admin/quick-replies',
+    name: 'Balasan Cepat (Quick Chat)',
+    category: 'CRM & KOMUNIKASI',
+    description: 'Template balasan instan /shortcut dengan variabel dinamis untuk Live Chat',
+  },
 
   // 4. Marketing & Ads
   {
@@ -264,6 +271,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
       '/admin/services',
       '/admin/follow-ups',
       '/admin/follow-up-templates',
+      '/admin/quick-replies',
       '/admin/knowledge-base',
       '/admin/telegram',
     ],
@@ -287,6 +295,7 @@ export const DEFAULT_ROLE_CONFIGS: Record<string, RoleConfig> = {
       '/admin/delivery',
       '/admin/follow-ups',
       '/admin/follow-up-templates',
+      '/admin/quick-replies',
       '/admin/knowledge-base',
       '/admin/telegram',
       '/admin/live-chat',

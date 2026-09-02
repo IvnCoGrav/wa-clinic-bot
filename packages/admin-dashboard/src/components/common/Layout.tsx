@@ -39,6 +39,7 @@ import {
   ChevronLeft,
   Send,
   TrendingUp,
+  Zap,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
@@ -204,6 +205,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         { name: 'Customer Service & CTA', path: '/admin/customer-service', icon: Headphones },
         { name: 'Follow-Up Queue', path: '/admin/follow-ups', icon: Clock },
         { name: 'Follow-Up Templates', path: '/admin/follow-up-templates', icon: MessageSquareText },
+        { name: 'Balasan Cepat', path: '/admin/quick-replies', icon: Zap },
       ],
     },
     {

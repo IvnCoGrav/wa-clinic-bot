@@ -116,8 +116,14 @@ export class GeocodingService {
 
         const lower = locationText.toLowerCase();
         let queryText = locationText;
+        // Lapis 3: Territory-biased — bias ke Surabaya/Sidoarjo unless eksplisit kota luar
+        const hasExplicitOutsideCity = /\b(jakarta|bandung|yogyakarta|yogya|semarang|malang|bojonegoro|kediri|mojokerto|pasuruan|probolinggo|jember|banyuwangi|madura|bangkalan|sampang|pamekasan|sumenep|tulungagung|blitar|madiun|nganjuk|jombang|lamongan|tuban|gresik\s*luar|gresik kota luar)\b/i.test(lower);
         if (!lower.includes('surabaya') && !lower.includes('sidoarjo') && !lower.includes('gresik') && !lower.includes('jawa timur')) {
-          queryText = `${locationText}, Jawa Timur, Indonesia`;
+          if (!hasExplicitOutsideCity) {
+            queryText = `${locationText}, Surabaya, Jawa Timur, Indonesia`;
+          } else {
+            queryText = `${locationText}, Jawa Timur, Indonesia`;
+          }
         }
 
         const response = await this.geocodeBreaker.execute({
@@ -162,7 +168,7 @@ export class GeocodingService {
         // Presisi jika kelurahan/desa berhasil terdeteksi
         const isPrecise = Boolean(kelurahan);
 
-        return {
+        const googleResult: ResolvedLocation = {
           isPrecise,
           kelurahan,
           kecamatan,
@@ -172,6 +178,67 @@ export class GeocodingService {
           formattedAddress: topResult.formatted_address,
           zipcode,
         };
+
+        // Lapis 4: Second-pass verification — jika hasil Google jauh (OOC) tapi query tidak menyebut kota luar eksplisit,
+        // coba verifikasi ulang dengan bias eksplisit Surabaya/Sidoarjo
+        if (googleResult.lat != null && googleResult.lng != null) {
+          try {
+            const { calculateHaversineDistance } = await import('../../utils/haversine');
+            const { clinicConfig } = await import('../../config/clinic');
+            const distKm = calculateHaversineDistance(
+              { lat: clinicConfig.lat, lng: clinicConfig.lng },
+              { lat: googleResult.lat, lng: googleResult.lng }
+            ) * 1.6; // haversine estimate
+            const isOOC = distKm > 30;
+            const hasExplicitOutsideCityForSecondPass = /\b(jakarta|bandung|yogyakarta|yogya|semarang|malang|bojonegoro|kediri|mojokerto|pasuruan|probolinggo|jember|banyuwangi|madura|bangkalan|sampang|pamekasan|sumenep|tulungagung|blitar|madiun|nganjuk|jombang|lamongan|tuban)\b/i.test(lower);
+            if (isOOC && !hasExplicitOutsideCityForSecondPass && lower.trim().split(/\s+/).length <= 3) {
+              // Coba second-pass dengan bias eksplisit Surabaya
+              console.log(`[GEOCODING SECOND-PASS] Google result OOC (${distKm.toFixed(1)}km, ${googleResult.kelurahan || '-'} -> ${googleResult.kota || '-'}) untuk "${locationText}" — coba verifikasi Surabaya/Sidoarjo`);
+              const retryQueries = [
+                `${locationText}, Kota Surabaya, Jawa Timur, Indonesia`,
+                `${locationText}, Kabupaten Sidoarjo, Jawa Timur, Indonesia`,
+              ];
+              for (const retryQuery of retryQueries) {
+                try {
+                  const retryResponse = await this.geocodeBreaker.execute({
+                    params: {
+                      address: retryQuery,
+                      key: this.apiKey,
+                      components: { country: 'ID' },
+                    },
+                  });
+                  if (retryResponse && 'isPrecise' in retryResponse) continue;
+                  if (!retryResponse.data.results || retryResponse.data.results.length === 0) continue;
+                  const retryTop = retryResponse.data.results[0];
+                  const retryLat = retryTop.geometry.location.lat;
+                  const retryLng = retryTop.geometry.location.lng;
+                  const retryDistKm = calculateHaversineDistance(
+                    { lat: clinicConfig.lat, lng: clinicConfig.lng },
+                    { lat: retryLat, lng: retryLng }
+                  ) * 1.6;
+                  if (retryDistKm <= 30) {
+                    const retryKelurahan = this.extractComponent(retryTop.address_components, ['administrative_area_level_4', 'sublocality_level_1', 'neighborhood']);
+                    const retryKecamatan = this.extractComponent(retryTop.address_components, ['administrative_area_level_3', 'sublocality']);
+                    const retryKota = this.extractComponent(retryTop.address_components, ['administrative_area_level_2', 'locality']);
+                    console.log(`[GEOCODING SECOND-PASS HIT] "${retryQuery}" → ${retryKelurahan || '-'}, ${retryKecamatan || '-'}, ${retryKota || '-'} (${retryDistKm.toFixed(1)}km) — override OOC`);
+                    return {
+                      isPrecise: Boolean(retryKelurahan),
+                      kelurahan: retryKelurahan,
+                      kecamatan: retryKecamatan,
+                      kota: retryKota,
+                      lat: retryLat,
+                      lng: retryLng,
+                      formattedAddress: retryTop.formatted_address,
+                      zipcode: this.extractComponent(retryTop.address_components, ['postal_code']),
+                    };
+                  }
+                } catch (_) {}
+              }
+            }
+          } catch (_) {}
+        }
+
+        return googleResult;
       } catch (error) {
         console.error('Error in Google Maps geocodeText, falling back to local database:', error);
         return this.mockGeocodeText(locationText);
@@ -580,6 +647,50 @@ export class GeocodingService {
       if (fs.existsSync(filePath)) {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
         
+        // --- PRIORITAS: PREFIX COLLOQUIAL INDEX (Lapis 1) ---
+        // Customer bilang "Manukan" → match Manukan Kulon/Wetan via prefix index
+        {
+          const singleWord = (cleanText || lower).trim().toLowerCase();
+          // Hanya untuk input 1 kata (atau 1 kata + kota seperti "Manukan surabaya")
+          const wordsOnly = singleWord.replace(/\b(surabaya|sidoarjo|gresik|sby|sda|jawa timur|jawa|timur|kota|kabupaten)\b/gi, '').trim().replace(/\s+/g, ' ');
+          const isSinglePrefixCandidate = wordsOnly && !wordsOnly.includes(' ') && wordsOnly.length >= 3;
+          if (isSinglePrefixCandidate) {
+            try {
+              const { resolvePrefixMatches } = await import('../../utils/gazetteer');
+              const prefixKelurahanList = resolvePrefixMatches(wordsOnly);
+              if (prefixKelurahanList && prefixKelurahanList.length > 0) {
+                const prefixEntries = data.filter((d: any) => prefixKelurahanList.includes(d.Kelurahan_Desa));
+                if (prefixEntries.length === 1) {
+                  const match = prefixEntries[0];
+                  const coords = match.Koordinat.split(',');
+                  const lat = parseFloat(coords[0].trim());
+                  const lng = parseFloat(coords[1].trim());
+                  console.log(`[GEOCODING PREFIX HIT] "${singleWord}" → ${match.Kelurahan_Desa}, ${match.Kecamatan} via prefix index`);
+                  return {
+                    isPrecise: true,
+                    kelurahan: match.Kelurahan_Desa,
+                    kecamatan: match.Kecamatan,
+                    kota: match.Kabupaten_Kota,
+                    lat,
+                    lng,
+                    formattedAddress: `${match.Kelurahan_Desa}, ${match.Kecamatan}, ${match.Kabupaten_Kota}`,
+                    zipcode: match.Kode_Pos,
+                    matchedSpan: wordsOnly,
+                  };
+                } else if (prefixEntries.length > 1) {
+                  // Ambigu: "Manukan" → Manukan Kulon + Manukan Wetan → kembalikan sebagai ambiguity untuk disambiguasi di DecisionMatrix
+                  console.log(`[GEOCODING PREFIX AMBIGUOUS] "${singleWord}" → ${prefixEntries.length} kelurahan: ${prefixKelurahanList.join(', ')}`);
+                  return {
+                    isPrecise: false,
+                    ambiguityResults: prefixEntries,
+                    matchedSpan: wordsOnly,
+                  };
+                }
+              }
+            } catch (_) {}
+          }
+        }
+
         // --- PRIORITAS: N-GRAM GAZEETTEER MATCH ---
         const bestMatch = this.findBestGazetteerMatch(cleanText || lower, data);
         if (bestMatch) {
