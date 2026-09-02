@@ -30,7 +30,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-
+  const url = new URL(event.request.url);
+  // Bypass API dan SSE langsung ke network stack browser
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
