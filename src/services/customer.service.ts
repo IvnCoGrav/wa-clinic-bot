@@ -255,21 +255,27 @@ export class CustomerService {
 
       return updated;
     } catch (error) {
-      // Memory fallback update
+      // Memory fallback update — hormati GPS pin priority (isNativePin true = override)
       for (const [phone, cust] of memoryCustomers.entries()) {
         if (cust.id === customerId && cust.tenant_id === tenantId) {
+          const preserveGps = cust.share_location_sent && !data.isNativePin && cust.lat != null && cust.lng != null;
+          const effLat = preserveGps ? cust.lat : (data.lat !== undefined ? (CustomerService.toNumberOrNull(data.lat) ?? cust.lat) : cust.lat);
+          const effLng = preserveGps ? cust.lng : (data.lng !== undefined ? (CustomerService.toNumberOrNull(data.lng) ?? cust.lng) : cust.lng);
+          const effDist = preserveGps ? cust.distance_km : (data.distanceKm !== undefined ? data.distanceKm : cust.distance_km);
+          const effOngkir = preserveGps ? cust.ongkir : (data.ongkir !== undefined ? data.ongkir : cust.ongkir);
           Object.assign(cust, {
             kelurahan: data.kelurahan ?? cust.kelurahan,
             kecamatan: data.kecamatan ?? cust.kecamatan,
             kota: data.kota ?? cust.kota,
-            lat: CustomerService.toNumberOrNull(data.lat) ?? cust.lat,
-            lng: CustomerService.toNumberOrNull(data.lng) ?? cust.lng,
-            distance_km: data.distanceKm ?? cust.distance_km,
-            ongkir: data.ongkir ?? cust.ongkir,
+            lat: effLat,
+            lng: effLng,
+            distance_km: effDist,
+            ongkir: effOngkir,
             is_out_of_coverage: data.isOutOfCoverage ?? cust.is_out_of_coverage,
             zipcode: data.zipcode !== undefined ? data.zipcode : cust.zipcode,
             updated_at: new Date(),
           });
+          if (data.isNativePin) cust.share_location_sent = true;
           return cust;
         }
       }
