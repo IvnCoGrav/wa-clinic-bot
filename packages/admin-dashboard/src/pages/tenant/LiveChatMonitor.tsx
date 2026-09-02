@@ -548,6 +548,14 @@ function clearConversationDraft(convId: string) {
     if (hasReplyText !== isNotEmpty) {
       setHasReplyText(isNotEmpty);
     }
+    // Slash command detection for Quick Reply
+    const slash = detectSlashToken(text);
+    if (slash !== null) {
+      setQuickReplyFilter(slash);
+      setQuickReplyActiveIdx(0);
+    } else {
+      if (quickReplyFilter !== null) setQuickReplyFilter(null);
+    }
     if (!selectedIdRef.current) return;
     saveConversationDraft(selectedIdRef.current, text);
 
@@ -732,6 +740,78 @@ function clearConversationDraft(convId: string) {
   });
   const [emojiCategory, setEmojiCategory] = useState<'favorites' | 'smileys' | 'gestures' | 'clinic' | 'symbols'>('favorites');
 
+  // ⚡ Quick Chat / Balasan Cepat (/shortcut) state
+  const [quickReplies, setQuickReplies] = useState<Array<{ id: string; shortcut: string; title: string; content: string; category: string | null }>>([]);
+  const [quickReplyFilter, setQuickReplyFilter] = useState<string | null>(null);
+  const [quickReplyActiveIdx, setQuickReplyActiveIdx] = useState(0);
+  const composerWrapperRef = useRef<HTMLDivElement | null>(null);
+
+  const filteredQuickReplies = useMemo(() => {
+    if (quickReplyFilter === null) return [];
+    const q = quickReplyFilter.toLowerCase();
+    if (!q) return quickReplies.slice(0, 8);
+    return quickReplies.filter((qr) => qr.shortcut.toLowerCase().includes(q) || qr.title.toLowerCase().includes(q)).slice(0, 8);
+  }, [quickReplies, quickReplyFilter]);
+
+  const showQuickReplyPopover = quickReplyFilter !== null && filteredQuickReplies.length > 0;
+
+  useEffect(() => {
+    apiRequest('/api/admin/quick-replies')
+      .then((res: any) => {
+        if (res?.success && Array.isArray(res.data)) setQuickReplies(res.data);
+        else if (Array.isArray(res)) setQuickReplies(res);
+      })
+      .catch(() => {});
+  }, []);
+
+  const interpolateQuickReplyContent = useCallback((content: string): string => {
+    const name = selectedChat?.customerName || 'Bunda';
+    const phone = selectedChat?.customerPhone || '-';
+    let clinicName = 'Kala Moms and Baby Spa';
+    try {
+      const rawBrand = (import.meta as any)?.env?.VITE_CLINIC_NAME;
+      if (rawBrand) clinicName = rawBrand;
+    } catch {}
+    const adminName = (user as any)?.name || (user as any)?.email || 'Admin';
+    return content
+      .replace(/\{name\}/g, name)
+      .replace(/\{phone\}/g, phone)
+      .replace(/\{clinic_name\}/g, clinicName)
+      .replace(/\{admin_name\}/g, adminName);
+  }, [selectedChat?.customerName, selectedChat?.customerPhone, user]);
+
+  const applyQuickReply = useCallback((qr: { content: string }) => {
+    const interpolated = interpolateQuickReplyContent(qr.content);
+    if (chatInputRef.current) {
+      chatInputRef.current.innerText = interpolated;
+    }
+    replyTextRef.current = interpolated;
+    setHasReplyText(true);
+    if (selectedIdRef.current) {
+      try {
+        const key = `liveChat:draft:${selectedIdRef.current}`;
+        localStorage.setItem(key, JSON.stringify({ text: interpolated, timestamp: Date.now() }));
+      } catch {}
+    }
+    setQuickReplyFilter(null);
+    setQuickReplyActiveIdx(0);
+    setTimeout(() => chatInputRef.current?.focus(), 50);
+  }, [interpolateQuickReplyContent]);
+
+  const detectSlashToken = useCallback((text: string): string | null => {
+    if (!text) return null;
+    // Detect last token that starts with /
+    const tokens = text.split(/\s+/);
+    const lastToken = tokens[tokens.length - 1] || '';
+    // Also detect slash at start or after newline
+    const match = text.match(/(?:^|\s)\/([a-z0-9_-]*)$/i);
+    if (match) return match[1].toLowerCase();
+    if (lastToken.startsWith('/') && /^\/[a-z0-9_-]*$/i.test(lastToken)) {
+      return lastToken.slice(1).toLowerCase();
+    }
+    return null;
+  }, []);
+
   // Periksa status background sync saat pertama kali buka halaman
   const checkBackgroundSyncStatus = async () => {
     try {
@@ -797,7 +877,7 @@ function clearConversationDraft(convId: string) {
     }
   };
 
-  // Close label popover, tools menu, and emoji picker on outside click
+  // Close label popover, tools menu, emoji picker, and quick-reply popover on outside click
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
       if (labelPopoverRef.current && !labelPopoverRef.current.contains(e.target as Node)) {
@@ -809,12 +889,15 @@ function clearConversationDraft(convId: string) {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
         setEmojiPickerOpen(false);
       }
+      if (composerWrapperRef.current && !composerWrapperRef.current.contains(e.target as Node)) {
+        if (quickReplyFilter !== null) setQuickReplyFilter(null);
+      }
     };
     document.addEventListener('mousedown', handleDocumentClick);
     return () => {
       document.removeEventListener('mousedown', handleDocumentClick);
     };
-  }, []);
+  }, [quickReplyFilter]);
 
   const insertEmoji = (emoji: string) => {
     if (!chatInputRef.current) return;
@@ -3945,7 +4028,37 @@ function clearConversationDraft(convId: string) {
                     </div>
                   )}
 
-                  <div className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 border border-[#e9edef] w-full ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'}`}>
+                  {/* ⚡ Quick Reply Floating Autocomplete Popover */}
+                  {showQuickReplyPopover && (
+                    <div className="mb-1.5 bg-white border border-[#e9edef] rounded-2xl shadow-xl overflow-hidden z-30 max-h-72 flex flex-col animate-fadeIn">
+                      <div className="px-3 py-1.5 bg-[#f8fafc] border-b border-[#e9edef] flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-[#008069] flex items-center gap-1"><Zap size={12} /> Balasan Cepat</span>
+                        <span className="text-[10px] text-[#8696a0]">{filteredQuickReplies.length} template</span>
+                      </div>
+                      <div className="overflow-y-auto flex-1 divide-y divide-[#f0f2f5]">
+                        {filteredQuickReplies.map((qr, idx) => (
+                          <button
+                            key={qr.id}
+                            type="button"
+                            onClick={() => applyQuickReply(qr)}
+                            onMouseEnter={() => setQuickReplyActiveIdx(idx)}
+                            className={`w-full text-left px-3 py-2 flex items-start gap-2.5 transition ${idx === quickReplyActiveIdx ? 'bg-[#e8f5f2] border-l-4 border-[#008069]' : 'hover:bg-[#f8fafc] border-l-4 border-transparent'}`}
+                          >
+                            <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-[11px] font-mono font-bold border ${idx === quickReplyActiveIdx ? 'bg-[#008069] text-white border-[#008069]' : 'bg-[#f0f2f5] text-[#008069] border-[#c2e7e0]'}`}>/{qr.shortcut}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12px] font-bold text-[#111b21] truncate flex items-center gap-1.5">{qr.title} {qr.category && <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#f0f2f5] text-[#54656f] border border-[#e9edef] font-semibold">{qr.category}</span>}</p>
+                              <p className="text-[11px] text-[#667781] line-clamp-1 truncate">{qr.content.slice(0, 80).replace(/\n/g, ' ')}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="px-2.5 py-1 bg-[#fffbeb] border-t border-amber-100 text-[10px] text-amber-700 flex items-center gap-1.5">
+                        <span>↑↓ navigasi</span><span className="opacity-40">•</span><span>Enter/Tab pilih</span><span className="opacity-40">•</span><span>Esc tutup</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 border border-[#e9edef] w-full ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'}`}>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -4075,6 +4188,27 @@ function clearConversationDraft(convId: string) {
                             </div>
                           </button>
 
+                          {/* Option: ⚡ Balasan Cepat */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              setQuickReplyFilter('');
+                              setQuickReplyActiveIdx(0);
+                              setTimeout(() => chatInputRef.current?.focus(), 50);
+                            }}
+                            disabled={!quickReplies.length}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <Zap size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">⚡ Balasan Cepat</p>
+                              <p className="text-[10px] text-[#667781] truncate">Pilih template /shortcut instan</p>
+                            </div>
+                          </button>
+
                           {/* Option 4: Image Attachment */}
                           <button
                             type="button"
@@ -4191,6 +4325,29 @@ function clearConversationDraft(convId: string) {
                         handleInputChange(e.currentTarget.innerText || '');
                       }}
                       onKeyDown={(e) => {
+                        if (showQuickReplyPopover) {
+                          if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            setQuickReplyActiveIdx((prev) => (prev + 1) % filteredQuickReplies.length);
+                            return;
+                          }
+                          if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            setQuickReplyActiveIdx((prev) => (prev - 1 + filteredQuickReplies.length) % filteredQuickReplies.length);
+                            return;
+                          }
+                          if (e.key === 'Enter' || e.key === 'Tab') {
+                            e.preventDefault();
+                            const target = filteredQuickReplies[quickReplyActiveIdx];
+                            if (target) applyQuickReply(target);
+                            return;
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setQuickReplyFilter(null);
+                            return;
+                          }
+                        }
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                           e.preventDefault();
                           handleSendReply();
