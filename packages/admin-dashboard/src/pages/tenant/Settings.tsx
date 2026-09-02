@@ -271,7 +271,7 @@ export const Settings: React.FC = () => {
           , // media
           , // purchaseModeration
         ] = await Promise.all([
-          apiRequest('/api/admin/settings'),
+          apiRequest('/api/admin/settings', { forceFresh: true, useCache: false } as any),
           apiRequest('/api/admin/delivery-tiers'),
           loadWhatsAppProvider(),
           loadQr(),
