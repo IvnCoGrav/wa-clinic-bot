@@ -253,13 +253,35 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
       // Date range filter (Calendar view)
       if (startDateParam && endDateParam) {
-        const start = new Date(startDateParam);
-        const end = new Date(endDateParam);
+        let start = new Date(startDateParam);
+        let end = new Date(endDateParam);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(startDateParam)) {
+          start = new Date(`${startDateParam}T00:00:00`);
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(endDateParam)) {
+          end = new Date(`${endDateParam}T23:59:59.999`);
+        }
         if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
           where.booking_date = {
             gte: start,
             lte: end,
           };
+        }
+      } else if (startDateParam) {
+        let start = new Date(startDateParam);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(startDateParam)) {
+          start = new Date(`${startDateParam}T00:00:00`);
+        }
+        if (!isNaN(start.getTime())) {
+          where.booking_date = { gte: start };
+        }
+      } else if (endDateParam) {
+        let end = new Date(endDateParam);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(endDateParam)) {
+          end = new Date(`${endDateParam}T23:59:59.999`);
+        }
+        if (!isNaN(end.getTime())) {
+          where.booking_date = { lte: end };
         }
       }
 

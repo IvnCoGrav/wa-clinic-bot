@@ -1101,6 +1101,7 @@ export class StaffReservationService {
       const targetLat = lat ?? customer.lat;
       const targetLng = lng ?? customer.lng;
 
+      let newOngkir: number | null = null;
       if (targetLat != null && targetLng != null) {
         // Validasi range koordinat Indonesia
         if (targetLat < -12 || targetLat > 7 || targetLng < 94 || targetLng > 142) {
@@ -1108,7 +1109,14 @@ export class StaffReservationService {
         }
 
         const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-        distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
+        const { deliveryService } = await import('./delivery.service');
+        const deliveryResult = await deliveryService.calculateDelivery(
+          { lat: targetLat, lng: targetLng },
+          clinicCoords,
+          tenantId
+        );
+        distanceKm = deliveryResult.distanceKm;
+        newOngkir = deliveryResult.promoPrice;
 
         // Skema kroscek 1: Tolak jika jarak dari klinik melenceng > 45 km (di luar area Surabaya-Sidoarjo-Gresik)
         const MAX_ALLOWED_DISTANCE_KM = 45;
@@ -1185,6 +1193,18 @@ export class StaffReservationService {
       }
 
       const currentPrefs = (customer.preferences as any) || {};
+      const existingHistory: any[] = Array.isArray(currentPrefs.location_history) ? currentPrefs.location_history : [];
+      const newHistoryEntry = (targetLat != null && targetLng != null && distanceKm != null)
+        ? {
+            source: 'FIELD_STAFF_GPS',
+            lat: targetLat,
+            lng: targetLng,
+            staffName: staffName || 'Staff',
+            distanceKm: typeof distanceKm === 'number' ? Number(distanceKm.toFixed(2)) : null,
+            ongkir: newOngkir,
+            updatedAt: new Date().toISOString(),
+          }
+        : null;
       const updatedPrefs = {
         ...currentPrefs,
         ...(housePhotoUrl ? { house_photo_url: housePhotoUrl } : {}),
@@ -1200,6 +1220,7 @@ export class StaffReservationService {
         location_updated_at: new Date().toISOString(),
         location_updated_by_staff_id: staffId,
         location_updated_by_staff_name: staffName,
+        ...(newHistoryEntry ? { location_history: [...existingHistory.slice(-9), newHistoryEntry] } : {}),
       };
 
       const updatedCustomer = await prisma.customer.update({
@@ -1208,6 +1229,7 @@ export class StaffReservationService {
           ...(shouldUpdatePrimaryCoords && lat != null ? { lat } : {}),
           ...(shouldUpdatePrimaryCoords && lng != null ? { lng } : {}),
           ...(shouldUpdatePrimaryCoords && distanceKm != null ? { distance_km: distanceKm } : {}),
+          ...(shouldUpdatePrimaryCoords && newOngkir != null ? { ongkir: newOngkir } : {}),
           preferences: updatedPrefs,
         },
       });

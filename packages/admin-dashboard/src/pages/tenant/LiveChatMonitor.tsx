@@ -3962,24 +3962,6 @@ function clearConversationDraft(convId: string) {
                       {/* Tools Popover Menu */}
                       {toolsMenuOpen && (
                         <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 animate-fadeIn space-y-1">
-                          {/* Option 0: Cek Jadwal Harian */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              setShowDailyScheduleModal(true);
-                            }}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <Calendar size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">Cek Jadwal Harian</p>
-                              <p className="text-[10px] text-[#667781] truncate">Lihat kalender & slot kosong</p>
-                            </div>
-                          </button>
-
                           {/* Option 1: AI Copilot Draft */}
                           <button
                             type="button"
@@ -3999,6 +3981,24 @@ function clearConversationDraft(convId: string) {
                                 <span className="text-[9px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">AI</span>
                               </p>
                               <p className="text-[10px] text-[#667781] truncate">Saran balasan otomatis bidan</p>
+                            </div>
+                          </button>
+
+                          {/* Option 0: Cek Jadwal Harian */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              setShowDailyScheduleModal(true);
+                            }}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <Calendar size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">Cek Jadwal Harian</p>
+                              <p className="text-[10px] text-[#667781] truncate">Lihat kalender & slot kosong</p>
                             </div>
                           </button>
 
@@ -4632,6 +4632,10 @@ function clearConversationDraft(convId: string) {
           isOpen={showDailyScheduleModal}
           onClose={() => setShowDailyScheduleModal(false)}
           onSelectSlot={handleSlotHold}
+          onSelectReservation={(res) => {
+            setShowDailyScheduleModal(false);
+            setSelectedReservation(res);
+          }}
           onInsertToChat={handleInsertInvoiceToChat}
         />
       )}

@@ -616,6 +616,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
 
         let distanceKm = customer.distance_km;
+        let newOngkir: number | null = null;
         const targetLat = lat !== undefined ? lat : customer.lat;
         const targetLng = lng !== undefined ? lng : customer.lng;
 
@@ -626,9 +627,15 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           }
 
           const { clinicConfig } = await import('../../config/clinic');
-          const { calculateHaversineDistance } = await import('../../utils/haversine');
           const clinicCoords = { lat: clinicConfig.lat, lng: clinicConfig.lng };
-          distanceKm = calculateHaversineDistance(clinicCoords, { lat: targetLat, lng: targetLng });
+          const { deliveryService } = await import('../../services/delivery.service');
+          const deliveryResult = await deliveryService.calculateDelivery(
+            { lat: targetLat, lng: targetLng },
+            clinicCoords,
+            DEFAULT_TENANT_ID
+          );
+          distanceKm = deliveryResult.distanceKm;
+          newOngkir = deliveryResult.promoPrice;
 
           // Skema kroscek 1: Tolak jika jarak dari klinik melenceng > 45 km (di luar area jangkauan)
           const MAX_ALLOWED_DISTANCE_KM = 45;
@@ -700,6 +707,18 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
         }
 
         const currentPrefs = (customer.preferences as any) || {};
+        const existingHistory: any[] = Array.isArray(currentPrefs.location_history) ? currentPrefs.location_history : [];
+        const newHistoryEntry = (targetLat != null && targetLng != null && distanceKm != null)
+          ? {
+              source: 'ADMIN_GPS',
+              lat: targetLat,
+              lng: targetLng,
+              staffName: (request as any).adminIdentity || 'Admin CS',
+              distanceKm: typeof distanceKm === 'number' ? Number(distanceKm.toFixed(2)) : null,
+              ongkir: newOngkir,
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
         const updatedPrefs = {
           ...currentPrefs,
           house_photo_url: housePhotoUrl,
@@ -714,6 +733,7 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
             : {}),
           location_updated_at: new Date().toISOString(),
           location_updated_by_staff_name: (request as any).adminIdentity || 'Admin CS',
+          ...(newHistoryEntry ? { location_history: [...existingHistory.slice(-9), newHistoryEntry] } : {}),
         };
 
         let updatedCustomer: any = null;
