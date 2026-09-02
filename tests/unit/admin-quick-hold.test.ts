@@ -129,33 +129,37 @@ describe('Admin Quick Booking / Slot Hold (POST /api/admin/reservation/quick-hol
     expect(body.error).toContain('bookingDate wajib diisi');
   });
 
-  it('4. PATCH /api/admin/reservation/:id/release-hold → mengubah status menjadi cancelled', async () => {
-    const mockCancelledRes = {
-      id: 'res-hold-1',
-      tenant_id: DEFAULT_TENANT_ID,
-      customer_id: 'cust-1',
-      status: 'cancelled',
-      updated_at: new Date(),
-    };
-
-    vi.mocked(prisma.reservation.update).mockResolvedValueOnce(mockCancelledRes as any);
-    const auditSpy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
-
+  it('4. PATCH /api/admin/reservation/:id/release-hold → menghapus permanen hold (deleted:true)', async () => {
     const app = buildApp();
+    // Buat hold via fallback in-memory (DB offline)
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation/quick-hold',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: 'cust-hold-1',
+        bookingDate: new Date('2026-09-03T10:00:00.000Z').toISOString(),
+      },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = JSON.parse(createRes.body);
+    const holdId = created.data.id;
+    const auditSpy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined as any);
+
     const res = await app.inject({
       method: 'PATCH',
-      url: '/api/admin/reservation/res-hold-1/release-hold',
+      url: `/api/admin/reservation/${holdId}/release-hold`,
       headers: { 'x-api-key': ADMIN_KEY },
     });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
-    expect(body.data.status).toBe('cancelled');
+    expect(body.deleted).toBe(true);
     expect(auditSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'RELEASE_HOLD_RESERVATION',
-        targetId: 'res-hold-1',
+        action: 'DELETE_HOLD_RESERVATION',
+        targetId: holdId,
       })
     );
   });
