@@ -532,8 +532,10 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const heartbeat = setInterval(() => {
       if (closed) return;
       try {
-        reply.raw.write(': ping\n\n');
-      } catch (err) {}
+        reply.raw.write('event: ping\ndata: {}\n\n');
+      } catch (err) {
+        cleanup();
+      }
     }, 10000);
     if ((heartbeat as any).unref) (heartbeat as any).unref();
 

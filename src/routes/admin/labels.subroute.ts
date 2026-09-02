@@ -410,7 +410,8 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         }
         const resolvedLabelId = targetLabel.id;
 
-        if (action === 'remove') {
+        const isRemove = action === 'remove' || action === 'unassign' || action === 'delete';
+        if (isRemove) {
           await prisma.customerLabel.deleteMany({
             where: { customer_id: resolvedCustomerId, label_id: resolvedLabelId },
           });
@@ -433,7 +434,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         // Auto-sync customer boolean flags (is_hold_labeled, is_admin_labeled)
         try {
           const normName = targetLabel.name.toLowerCase();
-          const isAssigned = action !== 'remove';
+          const isAssigned = !isRemove;
           const flagUpdates: Record<string, boolean> = {};
           if (normName === 'hold') {
             flagUpdates.is_hold_labeled = isAssigned;
@@ -469,8 +470,9 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
             memoryCustomerLabels.add(`${customerId}:${lid}`);
           }
         } else if (labelId) {
+          const isRemoveMem = action === 'remove' || action === 'unassign' || action === 'delete';
           const key = `${customerId}:${labelId}`;
-          if (action === 'remove') {
+          if (isRemoveMem) {
             memoryCustomerLabels.delete(key);
           } else {
             memoryCustomerLabels.add(key);
@@ -479,7 +481,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
           const memLbl = memoryLabels.get(labelId);
           if (memLbl) {
             const normName = memLbl.name.toLowerCase();
-            const isAssigned = action !== 'remove';
+            const isAssigned = !isRemoveMem;
             const { customerService } = await import('../../services/customer.service');
             for (const cust of customerService.getMemoryCustomers().values()) {
               if (cust?.id === customerId || cust?.phone === customerId) {

@@ -3093,8 +3093,16 @@ function clearConversationDraft(convId: string) {
                         "{preview || 'Tidak ada pesan'}"
                       </p>
 
-                      {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) */}
-                      <div className="flex justify-between items-center text-[10px] text-[#667781] pt-1.5 border-t border-[#e9edef]">
+                      {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) — background ikut status */}
+                      <div className={`flex justify-between items-center text-[10px] pt-1.5 border-t -mx-2 -mb-2 px-2 py-1.5 rounded-b-xl mt-1.5 ${
+                        (chat as any).hasActiveHold
+                          ? 'bg-amber-50/90 border-amber-200/70 text-amber-900'
+                          : (chat as any).hasUpcomingBooking
+                            ? 'bg-emerald-50/90 border-emerald-200/70 text-emerald-900'
+                            : (chat as any).hasPendingBooking
+                              ? 'bg-sky-50/90 border-sky-200/70 text-sky-900'
+                              : 'bg-[#f8fafc]/60 border-[#e9edef] text-[#667781]'
+                      }`}>
                         <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
 
                           {/* Medis Badge */}
