@@ -4,6 +4,7 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
 import { connectLiveChatSse } from '../../services/liveChatSse';
+import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import {
   MessageSquare,
   AlertTriangle,
@@ -4353,10 +4354,21 @@ function clearConversationDraft(convId: string) {
                               title="Klik untuk lihat detail reservasi"
                             >
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold text-[#111b21] group-hover:text-[#008069] truncate">{r.treatment_detail || r.raw_text || 'Layanan Homecare'}</p>
-                                <p className="text-[11px] text-[#667781]">
-                                  {r.booking_date ? new Date(r.booking_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date(r.created_at).toLocaleDateString('id-ID')}
+                                <p className="font-bold text-[#111b21] group-hover:text-[#008069] truncate">
+                                  {getCleanTreatmentName(r.treatment_detail || r.raw_text)}
                                 </p>
+                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  <p className="text-[11px] text-[#667781]">
+                                    {r.booking_date
+                                      ? new Date(r.booking_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                                      : new Date(r.created_at).toLocaleDateString('id-ID')}
+                                  </p>
+                                  {r.purchase_value ? (
+                                    <span className="text-[11px] font-bold text-[#008069] font-mono">
+                                      • Rp {r.purchase_value.toLocaleString('id-ID')}
+                                    </span>
+                                  ) : null}
+                                </div>
                                 <p className="text-[10px] text-[#008069] font-semibold flex items-center space-x-1 mt-0.5">
                                   <User size={10} />
                                   <span>Bidan: {r.assigned_staff?.name || r.assigned_staff_name || 'Belum ditugaskan'}</span>
