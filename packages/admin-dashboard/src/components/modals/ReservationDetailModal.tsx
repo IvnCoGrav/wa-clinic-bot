@@ -102,6 +102,40 @@ const formatBookingDate = (dateStr: string | null | undefined, detail?: string |
   }
 };
 
+const getCleanTreatmentName = (detail: string | null | undefined): string => {
+  if (!detail) return 'Layanan Perawatan';
+  const sesiMatch = detail.match(/\[Sesi[^\]]*\]/i);
+  const sesiTag = sesiMatch ? ` ${sesiMatch[0]}` : '';
+  let main = detail.split('[Total')[0].trim();
+  main = main.replace(/\[Sesi[^\]]*\]/gi, '').trim();
+  // pisah Baby | Moms dengan '|' atau ' + '
+  const parts = main.split(/\s*(?:\+|\|)\s*/);
+  const cleaned = parts.map((p) => {
+    p = p.replace(/^(Baby|Kids|MOMS|BOTH|BUNDLE):\s*/i, '');
+    // hapus semua kurung: (Bayi: sean, Usia: 5 bln), (Kehamilan: -), (Bayi: Gasendra Dama)
+    p = p.replace(/\([^)]*\)/g, '').trim();
+    p = p.replace(/\[[^\]]*\]/g, '').trim();
+    p = p.replace(/\bUsia:\s*[^,)]+/gi, '').trim();
+    p = p.replace(/\bKehamilan:\s*[^,)]+/gi, '').trim();
+    p = p.replace(/\s{2,}/g, ' ').trim();
+    p = p.replace(/^[.,|+\-\s]+|[.,|+\-\s]+$/g, '').trim();
+    if (!p) return '';
+    // Title case ringan: pijat bayi ceria -> Pijat Bayi Ceria
+    return p.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').replace(/\bPijat\b/gi, 'Pijat').replace(/\bOksitosin\b/gi, 'Oksitosin');
+  }).filter(Boolean);
+  const base = cleaned.join(' + ') || 'Layanan Perawatan';
+  return (base + sesiTag).trim();
+};
+
+const getTotalDurationLabel = (detail: string | null | undefined): string | null => {
+  if (!detail) return null;
+  const m = detail.match(/\[Total[^\]]*=\s*([^\]]+)\]/i) || detail.match(/\[Total\s+([^\]]+)\]/i);
+  if (m) return `Total ${m[1].trim()}`;
+  const dur = extractDurationMinutes(detail);
+  if (dur) return `Total ${dur} menit`;
+  return null;
+};
+
 export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   reservation,
   staffList,
@@ -621,8 +655,20 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                       {reservation.treatment_category}
                     </span>
                     <p className="text-xs font-semibold text-[#111b21]">
-                      {reservation.treatment_detail || 'Layanan Perawatan'}
+                      {getCleanTreatmentName(reservation.treatment_detail)}
                     </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {getTotalDurationLabel(reservation.treatment_detail) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f0f2f5] border border-[#e9edef] text-[10px] font-bold text-[#54656f]">
+                          {getTotalDurationLabel(reservation.treatment_detail)}
+                        </span>
+                      )}
+                      {reservation.purchase_value ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-700">
+                          Rp {reservation.purchase_value.toLocaleString('id-ID')}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <span className="text-[11px] text-[#667781] font-bold block uppercase pt-1">Atur Jam Jadwal</span>
