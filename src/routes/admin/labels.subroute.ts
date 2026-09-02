@@ -326,7 +326,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Body: { labelId?: string; action?: 'add' | 'remove'; labelIds?: string[] };
+        Body: { labelId?: string; action?: 'add' | 'remove' | 'unassign' | 'delete'; labelIds?: string[] };
       }>,
       reply: FastifyReply
     ) => {
