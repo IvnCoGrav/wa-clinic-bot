@@ -498,6 +498,15 @@ export function extractScheduleFromMessages(
     }
   }
 
+  // STAGE 2 FIX: Deteksi pesan Shareloc GPS asli ([LOCATION: Lat ..., Lng ...]) di thread
+  // Jika ada, tandai isExtracted dan pastikan jarak/ongkir tidak fallback ke default 3.0 bila profile sudah punya koordinat
+  const hasSharelocInThread = /\[LOCATION[:\s]*Lat/i.test(fullChatText);
+  if (hasSharelocInThread) {
+    isExtracted = true;
+    // Jika customer profile sudah punya distanceKm dari webhook enrichSync, akan dipakai di fallback DB di bawah
+    // Jangan timpa extractedDistanceKm/ongkir yang sudah ter-parse dari "Ongkir Xkm = Y" — biarkan prioritas chat tetap
+  }
+
   // =========================================================================
   // TAHAP 2: FALLBACK & INTEGRASI DATABASE PRIORITAS
   // =========================================================================
