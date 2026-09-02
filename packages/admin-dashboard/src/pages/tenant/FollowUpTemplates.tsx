@@ -78,6 +78,26 @@ const TYPE_CONFIG: Record<string, { label: string; category: string; description
     category: 'NEXT_TREATMENT',
     description: 'Reminder treatment berkala bulan ke-3 untuk evaluasi kebugaran berkala.',
   },
+  MILESTONE_3M: {
+    label: 'Milestone 3 Bulan — Tummy Time',
+    category: 'MILESTONE',
+    description: 'Edukasi stimulasi tummy time & pijat bayi usia 3 bulan.',
+  },
+  MILESTONE_6M: {
+    label: 'Milestone 6 Bulan — Duduk & Merangkak',
+    category: 'MILESTONE',
+    description: 'Edukasi milestone duduk & merangkak usia 6 bulan.',
+  },
+  MILESTONE_9M: {
+    label: 'Milestone 9 Bulan — Berdiri',
+    category: 'MILESTONE',
+    description: 'Edukasi milestone berdiri & merambat usia 9 bulan.',
+  },
+  MILESTONE_12M: {
+    label: 'Milestone 12 Bulan — Berjalan',
+    category: 'MILESTONE',
+    description: 'Edukasi milestone berjalan & MPASI usia 12 bulan.',
+  },
 };
 
 const CATEGORIES = [
@@ -86,6 +106,7 @@ const CATEGORIES = [
   { id: 'REVIEW', label: 'Review H+1', icon: HeartHandshake },
   { id: 'NO_PURCHASE', label: 'Belum Reservasi', icon: CalendarHeart },
   { id: 'NEXT_TREATMENT', label: 'Treatment Rutin', icon: UserCheck },
+  { id: 'MILESTONE', label: 'Milestone Usia Bayi', icon: Sparkles },
 ];
 
 const AVAILABLE_PLACEHOLDERS = [
