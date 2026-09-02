@@ -65,6 +65,8 @@ import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
+import { MobileSlotCheckerSheet } from '../../components/calendar/MobileSlotCheckerSheet';
+import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
@@ -353,6 +355,11 @@ export const LiveChatMonitor: React.FC = () => {
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
   const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
+  const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
+  const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
+  const [showSlotChecker, setShowSlotChecker] = useState(false);
+  const [slotCheckerDate, setSlotCheckerDate] = useState<string | null>(null);
+  const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceModalData, setInvoiceModalData] = useState<ExtractedScheduleData | null>(null);
@@ -2217,7 +2224,15 @@ function clearConversationDraft(convId: string) {
         if (res?.data) setCustomerDetailData(res.data);
       } catch {}
     }
+    setQuickHoldInitialDate(null);
+    setQuickHoldInitialTime(null);
     setShowQuickHoldModal(true);
+  };
+
+  const handleSlotHold = async (date: string, time: string) => {
+    setQuickHoldInitialDate(date ? new Date(`${date}T00:00:00`) : null);
+    setQuickHoldInitialTime(time);
+    await handleOpenQuickHold();
   };
 
   const activeHoldReservation = useMemo(() => {
@@ -3950,6 +3965,24 @@ function clearConversationDraft(convId: string) {
                       {/* Tools Popover Menu */}
                       {toolsMenuOpen && (
                         <div className="absolute bottom-full left-0 mb-2 w-56 bg-white border border-[#e9edef] rounded-2xl shadow-xl p-1.5 z-30 animate-fadeIn space-y-1">
+                          {/* Option 0: Cek Jadwal Harian */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              setShowDailyScheduleModal(true);
+                            }}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-[#e8f5f2] hover:text-[#008069] transition text-left group"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-[#e8f5f2] text-[#008069] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <Calendar size={15} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">Cek Jadwal Harian</p>
+                              <p className="text-[10px] text-[#667781] truncate">Lihat kalender & slot kosong</p>
+                            </div>
+                          </button>
+
                           {/* Option 1: AI Copilot Draft */}
                           <button
                             type="button"
@@ -4513,8 +4546,10 @@ function clearConversationDraft(convId: string) {
       {showQuickHoldModal && (
         <QuickHoldModal
           isOpen={showQuickHoldModal}
-          onClose={() => setShowQuickHoldModal(false)}
+          onClose={() => { setShowQuickHoldModal(false); setQuickHoldInitialDate(null); setQuickHoldInitialTime(null); }}
           staffList={reservationStaffList}
+          initialDate={quickHoldInitialDate}
+          initialTime={quickHoldInitialTime}
           initialCustomer={customerDetailData || (selectedChat?.customerId ? {
             id: selectedChat.customerId,
             name: selectedChat.customerName,
@@ -4591,6 +4626,27 @@ function clearConversationDraft(convId: string) {
               handleGenerateAndInsertInvoice(updatedRes);
             }
           }}
+        />
+      )}
+
+      {/* Mobile Slot Checker Bottom Sheet (legacy) */}
+      {showSlotChecker && (
+        <MobileSlotCheckerSheet
+          isOpen={showSlotChecker}
+          onClose={() => setShowSlotChecker(false)}
+          initialDate={slotCheckerDate}
+          onInsertToChat={handleInsertInvoiceToChat}
+          onHoldSlot={handleSlotHold}
+        />
+      )}
+
+      {/* Daily Schedule Modal (Tools + → Cek Jadwal Harian) */}
+      {showDailyScheduleModal && (
+        <DailyScheduleModal
+          isOpen={showDailyScheduleModal}
+          onClose={() => setShowDailyScheduleModal(false)}
+          onSelectSlot={handleSlotHold}
+          onInsertToChat={handleInsertInvoiceToChat}
         />
       )}
 

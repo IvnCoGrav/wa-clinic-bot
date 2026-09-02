@@ -43,6 +43,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('10:00');
   const [notes, setNotes] = useState('');
+  const [slotStatusMap, setSlotStatusMap] = useState<Record<string, 'full' | 'available' | 'hold'>>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -81,6 +82,19 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
     const dd = String(target.getDate()).padStart(2, '0');
     setBookingDate(`${yyyy}-${mm}-${dd}`);
   };
+
+  useEffect(() => {
+    if (!isOpen || !bookingDate) return;
+    apiRequest<{ success: boolean; slots: Array<{ time: string; status: 'full' | 'available' | 'hold' }> }>(`/api/admin/reservations/daily-slots?date=${bookingDate}`)
+      .then((res: any) => {
+        if (res?.slots) {
+          const map: Record<string, string> = {};
+          res.slots.forEach((s: any) => (map[s.time] = s.status));
+          setSlotStatusMap(map as any);
+        }
+      })
+      .catch(() => {});
+  }, [isOpen, bookingDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,8 +245,13 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
               <div className="flex flex-wrap gap-1.5">
                 {COMMON_SLOTS.map((slot) => {
                   const isSelected = bookingTime === slot;
+                  const s = (slotStatusMap as any)[slot] as string | undefined;
+                  const dot = s === 'full' ? 'bg-rose-500' : s === 'hold' ? 'bg-amber-500' : s === 'available' ? 'bg-emerald-500' : 'bg-gray-300';
                   return (
-                    <button key={slot} type="button" onClick={() => setBookingTime(slot)} className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition ${isSelected ? 'bg-[#008069] text-white shadow-xs' : 'bg-white text-[#54656f] border border-[#d1d7db] hover:border-[#008069] hover:bg-[#e8f5f2]'}`}>{slot}</button>
+                    <button key={slot} type="button" onClick={() => setBookingTime(slot)} className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition flex items-center gap-1 ${isSelected ? 'bg-[#008069] text-white shadow-xs' : 'bg-white text-[#54656f] border border-[#d1d7db] hover:border-[#008069] hover:bg-[#e8f5f2]'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                      {slot}
+                    </button>
                   );
                 })}
               </div>
