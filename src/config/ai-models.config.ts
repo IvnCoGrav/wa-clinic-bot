@@ -216,7 +216,7 @@ export class AiModelConfigService {
   static async saveConfigsToDb(tenantId: string): Promise<boolean> {
     try {
       const { prisma } = await import('../db/client');
-      await prisma.tenantAiConfig.deleteMany({ where: { tenant_id: tenantId } });
+      await prisma.tenantAiConfig.deleteMany({ where: { tenant_id: tenantId, task: { not: 'GLOBAL_BOT_ENABLED' } } });
       const entries = Array.from(getOrCreateTenantRegistry(tenantId).entries())
         .filter(([task]) => task !== 'MEDICAL_CHECK') // locked
         .map(([task, cfg]) => ({

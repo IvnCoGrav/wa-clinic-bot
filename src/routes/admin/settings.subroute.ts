@@ -616,7 +616,7 @@ export async function settingsAdminRoutes(fastify: FastifyInstance) {
 
       const { AiModelConfigService } = await import('../../config/ai-models.config');
       const oldVal = AiModelConfigService.isBotActive(DEFAULT_TENANT_ID);
-      AiModelConfigService.setBotActive(DEFAULT_TENANT_ID, globalBotActive);
+      await AiModelConfigService.setBotActive(DEFAULT_TENANT_ID, globalBotActive);
 
       // Jika bot di-ON-kan kembali, otomatis release percakapan yang sempat di-escalate karena 'Global bot disabled'
       if (globalBotActive) {
