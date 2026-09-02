@@ -172,6 +172,13 @@ async function main() {
 
     console.log(`  -> ORS/Google/Haversine result: distance=${result.distanceKm}km (raw haversine ${haversineRaw} -> est ${haversineEst}), ongkir=${result.ongkir} (normal ${result.normalPrice}), isEstimated=${result.isEstimated}, likelyPrevHaversine=${likelyPrevHaversine} delta=${deltaVsHaversine}`);
 
+    // Flag anomali: jarak baru >30km (OOC) tapi jarak lama <30km dengan delta >20km -> skip manual review (contoh Manukan Kalitidu Bojonegoro)
+    if (c.distance_km != null && result.distanceKm > 30 && c.distance_km < 30 && Math.abs(result.distanceKm - c.distance_km) > 20) {
+      console.log(`  -> SKIP ANOMALI: jarak baru ${result.distanceKm}km OOC tapi lama ${c.distance_km}km — delta >20km, perlu review manual, tidak auto-update`);
+      skippedNoCoords++;
+      continue;
+    }
+
     // Untuk Grup B, hanya update jika beda tier (ongkir) atau delta >0.5km
     if (!isGrupA && c.distance_km != null) {
       const ongkirSame = c.ongkir === result.ongkir;
@@ -218,10 +225,10 @@ async function main() {
       }
     }
 
-    // Throttle untuk ORS 40 req/min -> ~1.5s per 10 batch
+    // Throttle untuk ORS 40 req/min -> 3s per 10 batch (hindari Rate Limit)
     if ((i + 1) % 10 === 0 && i < targets.length - 1) {
-      console.log(`  ... throttling 1500ms after 10 requests ...`);
-      await new Promise(r => setTimeout(r, 1500));
+      console.log(`  ... throttling 3000ms after 10 requests (hindari ORS 40/min) ...`);
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 
