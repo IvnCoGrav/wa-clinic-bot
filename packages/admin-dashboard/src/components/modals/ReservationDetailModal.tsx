@@ -33,6 +33,7 @@ import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormat
 import { Reservation } from '../../types';
 import { CreateReservationModal } from '../calendar/CreateReservationModal';
 import { extractDurationMinutes } from '../../utils/durationCalculator';
+import { getCleanTreatmentName, getTotalDurationLabel } from '../../utils/treatmentFormatter';
 
 interface StaffOption {
   id: string;
@@ -102,39 +103,7 @@ const formatBookingDate = (dateStr: string | null | undefined, detail?: string |
   }
 };
 
-const getCleanTreatmentName = (detail: string | null | undefined): string => {
-  if (!detail) return 'Layanan Perawatan';
-  const sesiMatch = detail.match(/\[Sesi[^\]]*\]/i);
-  const sesiTag = sesiMatch ? ` ${sesiMatch[0]}` : '';
-  let main = detail.split('[Total')[0].trim();
-  main = main.replace(/\[Sesi[^\]]*\]/gi, '').trim();
-  // pisah Baby | Moms dengan '|' atau ' + '
-  const parts = main.split(/\s*(?:\+|\|)\s*/);
-  const cleaned = parts.map((p) => {
-    p = p.replace(/^(Baby|Kids|MOMS|BOTH|BUNDLE):\s*/i, '');
-    // hapus semua kurung: (Bayi: sean, Usia: 5 bln), (Kehamilan: -), (Bayi: Gasendra Dama)
-    p = p.replace(/\([^)]*\)/g, '').trim();
-    p = p.replace(/\[[^\]]*\]/g, '').trim();
-    p = p.replace(/\bUsia:\s*[^,)]+/gi, '').trim();
-    p = p.replace(/\bKehamilan:\s*[^,)]+/gi, '').trim();
-    p = p.replace(/\s{2,}/g, ' ').trim();
-    p = p.replace(/^[.,|+\-\s]+|[.,|+\-\s]+$/g, '').trim();
-    if (!p) return '';
-    // Title case ringan: pijat bayi ceria -> Pijat Bayi Ceria
-    return p.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').replace(/\bPijat\b/gi, 'Pijat').replace(/\bOksitosin\b/gi, 'Oksitosin');
-  }).filter(Boolean);
-  const base = cleaned.join(' + ') || 'Layanan Perawatan';
-  return (base + sesiTag).trim();
-};
 
-const getTotalDurationLabel = (detail: string | null | undefined): string | null => {
-  if (!detail) return null;
-  const m = detail.match(/\[Total[^\]]*=\s*([^\]]+)\]/i) || detail.match(/\[Total\s+([^\]]+)\]/i);
-  if (m) return `Total ${m[1].trim()}`;
-  const dur = extractDurationMinutes(detail);
-  if (dur) return `Total ${dur} menit`;
-  return null;
-};
 
 export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
   reservation,

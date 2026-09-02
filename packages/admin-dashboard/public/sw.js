@@ -1,5 +1,5 @@
 // Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support & Offline Caching
-const CACHE_NAME = 'kala-admin-v9';
+const CACHE_NAME = 'kala-admin-v10';
 const PRECACHE_ASSETS = [
   '/admin/',
   '/admin/manifest.json',
