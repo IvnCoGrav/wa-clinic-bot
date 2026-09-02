@@ -632,11 +632,6 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                           {getTotalDurationLabel(reservation.treatment_detail)}
                         </span>
                       )}
-                      {reservation.purchase_value ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-700">
-                          Rp {reservation.purchase_value.toLocaleString('id-ID')}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
 
