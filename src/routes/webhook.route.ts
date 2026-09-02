@@ -733,7 +733,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               const { isReservationFormMessage: _isFormStale } = await import('../utils/reservation-text-parser');
               isStaleForm = _isFormStale(rawBodyForStale);
             } catch {}
-            if (isStaleForm) {
+            if (hasRealLocation) {
+              console.log(`[STALE GUARD BYPASS] GPS Shareloc dari ${phone} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur GPS sync prioritas.`);
+            } else if (isStaleForm) {
               console.log(`[STALE GUARD BYPASS] Reservation form dari ${phone} terdeteksi meski age ${ageSeconds}s (> ${maxAgeSeconds}s) — lanjut ke jalur capture (Siska #777).`);
             } else if (isInboundImage) {
               // Image stale tetap simpan dengan media, jangan hilangkan gambar
@@ -1046,6 +1048,20 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
             }
           } catch (e: any) { console.warn('[HUMAN GRACE AUTO-CAPTURE ERROR]', e.message); }
+          // PRIORITAS GPS PIN: Sinkron instan koordinat asli WA (is_native_pin=true) sebelum early-return
+          try {
+            if (incomingMessage.type === 'location' || (incomingMessage.location && incomingMessage.location.latitude != null)) {
+              const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+            } else {
+              const rawLocText = incomingMessage.text?.body || '';
+              const hasMapsLink = rawLocText && /maps\.app\.goo\.gl|goo\.gl\/maps|google\.com\/maps/i.test(rawLocText);
+              if (hasMapsLink) {
+                const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+                await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+              }
+            }
+          } catch (e: any) { console.warn('[HUMAN GRACE GPS SYNC ERROR]', e.message); }
           // Log pesan ke DB Audit Trail
           await messageService.logMessage({
             tenantId: DEFAULT_TENANT_ID,
@@ -1099,6 +1115,20 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
             }
           } catch (e: any) { console.warn('[HUMAN HOLD-DISABLED AUTO-CAPTURE ERROR]', e.message); }
+          // PRIORITAS GPS PIN: Sinkron instan sebelum early-return (HOLD_DISABLED path)
+          try {
+            if (incomingMessage.type === 'location' || (incomingMessage.location && incomingMessage.location.latitude != null)) {
+              const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+            } else {
+              const rawLocText2 = incomingMessage.text?.body || '';
+              const hasMapsLink2 = rawLocText2 && /maps\.app\.goo\.gl|goo\.gl\/maps|google\.com\/maps/i.test(rawLocText2);
+              if (hasMapsLink2) {
+                const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
+                await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+              }
+            }
+          } catch (e: any) { console.warn('[HUMAN HOLD-DISABLED GPS SYNC ERROR]', e.message); }
           await messageService.logMessage({
             tenantId: DEFAULT_TENANT_ID,
             conversationId: conversation.id,
@@ -1186,10 +1216,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             }
           } catch (e: any) { console.warn('[HUMAN EXPLICIT AUTO-CAPTURE ERROR]', e.message); }
 
-          // Passive Background Location & Distance Enrichment (GPS Pin, Google Maps Link, Alamat Teks, Form Reservasi)
+          // Passive Background Location & Distance Enrichment (GPS Pin prioritas sinkron)
           try {
             const { humanBackgroundEnrichmentService } = await import('../services/human-background-enrichment.service');
-            humanBackgroundEnrichmentService.enrichAsync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+            const isGpsPin = incomingMessage.type === 'location' || (incomingMessage.location && incomingMessage.location.latitude != null);
+            if (isGpsPin) {
+              await humanBackgroundEnrichmentService.enrichSync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+            } else {
+              humanBackgroundEnrichmentService.enrichAsync({ customer, conversation, incomingMessage, history: [] } as any, DEFAULT_TENANT_ID);
+            }
           } catch (enrichErr: any) {
             console.warn('[HUMAN ENRICH HOOK ERROR]', enrichErr?.message || enrichErr);
           }

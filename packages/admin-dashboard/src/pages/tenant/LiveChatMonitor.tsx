@@ -2461,7 +2461,34 @@ function clearConversationDraft(convId: string) {
     }
 
     // Ekstraksi pintar jadwal & rincian dari obrolan chat
-    const extracted = extractScheduleFromMessages(messages, custData, currentServices);
+    let extracted = extractScheduleFromMessages(messages, custData, currentServices);
+
+    // STAGE 2 FIX: Jika ada pesan shareloc terbaru di thread, pakai jarak/ongkir profil terkini (sudah di-sync webhook GPS pin)
+    try {
+      const locMsg = [...messages].reverse().find((m: any) => {
+        const c = String(m.content || '');
+        return c.includes('[LOCATION') || (m.payload_raw?.location?.latitude != null) || (m as any).location?.latitude != null;
+      });
+      if (locMsg) {
+        // Ambil jarak/ongkir terkini dari profil customer yang sudah di-sync via enrichSync (is_native_pin=true)
+        const freshDistance = Number(custData?.distance_km ?? custData?.distanceKm ?? (selectedChat as any)?.distanceKm ?? (selectedChat as any)?.distance_km ?? extracted.distanceKm);
+        const freshOngkir = Number(custData?.ongkir ?? (selectedChat as any)?.ongkir ?? extracted.ongkir);
+        if (!isNaN(freshDistance) && freshDistance > 0) extracted.distanceKm = freshDistance;
+        if (!isNaN(freshOngkir) && freshOngkir >= 0) extracted.ongkir = freshOngkir;
+        // Jika message mengandung koordinat eksplisit, simpan sebagai alamat shareloc raw untuk verifikasi
+        const locContent = String((locMsg as any).content || '');
+        const latMatch = locContent.match(/Lat\s*([-\d.]+)/i);
+        const lngMatch = locContent.match(/Lng\s*([-\d.]+)/i);
+        if (latMatch && lngMatch) {
+          const lat = parseFloat(latMatch[1]);
+          const lng = parseFloat(lngMatch[1]);
+          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            // Koordinat shareloc asli — pastikan tidak tertimpa centroid alamat teks
+            // (distance/ongkir sudah di-override di atas)
+          }
+        }
+      }
+    } catch {}
     setInvoiceModalData(extracted);
     setShowInvoiceModal(true);
   };
