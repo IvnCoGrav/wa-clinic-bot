@@ -161,8 +161,9 @@ export interface DeliveryCalculationResult {
  * Service untuk kalkulasi ongkos kirim (ongkir) dan status jangkauan lokasi customer.
  * 
  * SUMBER DISTANCE:
- * 1. Utama    : OpenRouteService (ORS) Directions API (profile: cycling-electric)
- * 2. Fallback  : Formula Haversine manual dengan Circuity Multiplier (1.50x)
+ * 1. Utama    : OpenRouteService (ORS) Directions API (profile: driving-car, avoid_features: tollways)
+ * 2. Fallback 1: Google Maps Distance Matrix API (mode: driving, avoid: tolls)
+ * 3. Fallback 2: Formula Haversine manual dengan Circuity Multiplier (1.60x)
  * 
  * SUMBER TIER (SaaS-ready):
  * 1. Database `delivery_tiers` per tenant
@@ -191,7 +192,7 @@ export class DeliveryService {
     let distanceKm: number;
     let isEstimated = false;
 
-    // 1. Lapis 1: Coba hit OpenRouteService (ORS) Directions API (Mode Rute Motor / Sepeda Listrik)
+    // 1. Lapis 1: Coba hit OpenRouteService (ORS) Directions API (Mode Rute Mobil Hindari Tol / Motor)
     const orsResult = await this.orsClient.calculateRoute(
       clinicCoords.lat,
       clinicCoords.lng,

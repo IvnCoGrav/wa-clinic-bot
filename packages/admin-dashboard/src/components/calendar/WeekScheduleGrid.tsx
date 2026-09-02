@@ -501,7 +501,10 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                     const startTimeStr = bDate
                       .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                       .replace('.', ':');
-                    const categoryStyles = getCategoryStyles(res.treatment_category);
+                    const isHold = res.status === 'hold';
+                    const categoryStyles = isHold
+                      ? 'bg-amber-50/95 border-2 border-dashed border-amber-500 text-amber-950 hover:bg-amber-100/90'
+                      : getCategoryStyles(res.treatment_category);
 
                     const rawName = res.customer?.name || 'Pasien';
                     const cleanName = rawName
@@ -509,7 +512,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                       .trim();
                     const firstName = cleanName.split(/\s+/)[0] || cleanName;
 
-                    const cleanDetail = cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
+                    const cleanDetail = isHold ? '⏳ Ditawarkan (HOLD)' : cleanTreatmentDetailForDisplay(res.treatment_detail, res.treatment_category);
 
                     const evWidth =
                       pos.totalCols > 1
@@ -541,7 +544,7 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                           /* COMPACT VIEW LOD (<65px) */
                           <div className="flex items-center justify-between gap-1 h-full">
                             <span className="font-extrabold text-[10.5px] text-[#111b21] truncate leading-tight">
-                              {firstName}
+                              {isHold ? `[HOLD] ${firstName}` : firstName}
                             </span>
                             <span className="font-mono text-[9px] font-bold text-[#54656f] shrink-0">
                               {startTimeStr} ({pos.duration}m)
@@ -562,7 +565,12 @@ export const WeekScheduleGrid: React.FC<WeekScheduleGridProps> = ({
                                     Sesi {res.session_number}/{res.total_sessions}
                                   </span>
                                 )}
-                                {res.status === 'confirmed' ? (
+                                {res.status === 'hold' ? (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-extrabold bg-amber-500 text-white shadow-2xs">
+                                    <Clock size={9} className="mr-0.5" />
+                                    HOLD
+                                  </span>
+                                ) : res.status === 'confirmed' ? (
                                   <span className="inline-flex items-center px-1 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-bold bg-emerald-600/10 text-emerald-800">
                                     <CheckCircle2 size={9} className="mr-0.5 text-emerald-600" />
                                     Lunas

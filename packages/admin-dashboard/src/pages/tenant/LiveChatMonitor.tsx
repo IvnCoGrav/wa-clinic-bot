@@ -63,6 +63,7 @@ import { CustomerAvatar } from '../../components/common/CustomerAvatar';
 import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
+import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
 import { extractScheduleFromMessages, ExtractedScheduleData, formatIndonesianDate, cleanBundaName } from '../../utils/chatScheduleExtractor';
@@ -225,6 +226,19 @@ interface LiveChatItem {
   isPinned?: boolean;
   pinnedAt?: string | null;
   isAwaitingReply?: boolean;
+  hasActiveHold?: boolean;
+  hasUpcomingBooking?: boolean;
+  hasPendingBooking?: boolean;
+  activeHoldReservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category?: string | null;
+    treatment_detail?: string | null;
+    assigned_staff_id?: string | null;
+    assigned_staff?: { id: string; name: string } | null;
+    notes?: string | null;
+    customer_id?: string | null;
+  } | null;
 }
 
 const DEFAULT_FAVORITE_EMOJIS = [
@@ -334,8 +348,10 @@ export const LiveChatMonitor: React.FC = () => {
   const [customerDetailData, setCustomerDetailData] = useState<any>(null);
   // Reservation detail dari riwayat (klik card reservasi)
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
+  const [holdToConfirmReservation, setHoldToConfirmReservation] = useState<any>(null);
   const [reservationStaffList, setReservationStaffList] = useState<any[]>([]);
   const [showQuickBookingModal, setShowQuickBookingModal] = useState(false);
+  const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [invoiceModalData, setInvoiceModalData] = useState<ExtractedScheduleData | null>(null);
@@ -1531,6 +1547,10 @@ function clearConversationDraft(convId: string) {
   };
 
   const handleSelect = (conversationId: string) => {
+    const targetChatPre = chatsRef.current.find((c) => c.conversationId === conversationId);
+    if (targetChatPre && customerDetailData && customerDetailData.id !== targetChatPre.customerId) {
+      setCustomerDetailData(null);
+    }
     setSelectedId(conversationId);
     setMobileView('chat');
     try {
@@ -2176,6 +2196,38 @@ function clearConversationDraft(convId: string) {
     }
     setShowQuickBookingModal(true);
   };
+
+  const handleOpenQuickHold = async () => {
+    if (!selectedChat) {
+      toast('Pilih percakapan customer terlebih dahulu.', 'info');
+      return;
+    }
+    if (reservationStaffList.length === 0) {
+      try {
+        const staffRes = await apiRequest('/api/admin/staff');
+        if (staffRes?.success && Array.isArray(staffRes.data)) setReservationStaffList(staffRes.data);
+        else if (Array.isArray(staffRes)) setReservationStaffList(staffRes);
+      } catch {}
+    }
+    // Pastikan customer detail terbaru termuat
+    if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
+      try {
+        const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
+        if (res?.data) setCustomerDetailData(res.data);
+      } catch {}
+    }
+    setShowQuickHoldModal(true);
+  };
+
+  const activeHoldReservation = useMemo(() => {
+    if (!selectedChat) return null;
+    const fromChat = (selectedChat as any).activeHoldReservation;
+    if (fromChat) return fromChat;
+    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
+      return customerDetailData.reservations?.find((r: any) => r.status === 'hold') || null;
+    }
+    return null;
+  }, [selectedChat, customerDetailData]);
 
   const handleInsertInvoiceToChat = (text: string) => {
     if (chatInputRef.current) {
@@ -2922,7 +2974,13 @@ function clearConversationDraft(convId: string) {
                           ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
                           : isMedical
                             ? 'border-rose-300 bg-rose-50/40 hover:bg-rose-50/70 active:bg-rose-100/50'
-                            : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc] active:bg-[#f0f2f5]'
+                            : (chat as any).hasActiveHold
+                              ? 'border-amber-400 bg-amber-50/75 hover:bg-amber-100/70 active:bg-amber-100 ring-1 ring-amber-400/40'
+                              : (chat as any).hasUpcomingBooking
+                                ? 'border-emerald-300 bg-emerald-50/65 hover:bg-emerald-100/60 active:bg-emerald-100 ring-1 ring-emerald-300/40'
+                                : (chat as any).hasPendingBooking
+                                  ? 'border-sky-300 bg-sky-50/70 hover:bg-sky-100/70 active:bg-sky-100 ring-1 ring-sky-300/40'
+                                  : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc] active:bg-[#f0f2f5]'
                       }`}
                     >
                       {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
@@ -2945,7 +3003,7 @@ function clearConversationDraft(convId: string) {
                               <span className="text-[10px] text-[#667781] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
                             </h4>
 
-                            {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) */}
+                            {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) + HOLD/Terjadwal Badge */}
                             <div className="flex flex-wrap items-center gap-1">
                               {(chat.customerLabels || []).map((lbl) => (
                                 <span
@@ -2957,6 +3015,21 @@ function clearConversationDraft(convId: string) {
                                   {lbl.name}
                                 </span>
                               ))}
+                              {(chat as any).hasActiveHold && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500 text-white shadow-2xs">
+                                  ⏳ HOLD
+                                </span>
+                              )}
+                              {!(chat as any).hasActiveHold && (chat as any).hasUpcomingBooking && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-700 text-white shadow-2xs">
+                                  📅 Terjadwal
+                                </span>
+                              )}
+                              {!(chat as any).hasActiveHold && !(chat as any).hasUpcomingBooking && (chat as any).hasPendingBooking && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-600 text-white shadow-2xs">
+                                  🕓 Pending
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -3284,6 +3357,69 @@ function clearConversationDraft(convId: string) {
                     </div>
                   </div>
                 </div>
+
+                {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line */}
+                {activeHoldReservation && (
+                  <div className="mx-1 mb-1 py-1 px-2 rounded-md bg-amber-50 border border-amber-300/70 flex items-center gap-2 text-[10px] leading-none text-amber-950 shadow-2xs shrink-0 animate-fadeIn min-h-[26px] overflow-hidden">
+                    <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+                      <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <span className="font-extrabold text-amber-900 shrink-0 tracking-wide text-[10px]">HOLD:</span>
+                      <span className="font-medium truncate text-amber-950 text-[10px] min-w-0">
+                        {activeHoldReservation.booking_date
+                          ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
+                              weekday: 'short',
+                              day: 'numeric',
+                              month: 'short',
+                            }) +
+                            ' ' +
+                            new Date(activeHoldReservation.booking_date).toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }) +
+                            ' WIB'
+                          : 'Slot belum ditentukan'}
+                        {activeHoldReservation.assigned_staff?.name ? ` • ${activeHoldReservation.assigned_staff.name}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHoldToConfirmReservation(activeHoldReservation);
+                        }}
+                        className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-[10px] leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                        title="Konfirmasi & Lengkapi Data"
+                      >
+                        Konfirmasi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await apiRequest(`/api/admin/reservation/${activeHoldReservation.id}/release-hold`, {
+                              method: 'PATCH',
+                            });
+                            toast('Slot hold berhasil dilepas.', 'success');
+                            await handleReservationUpdate();
+                            if (selectedChat) {
+                              setChats((prev) => {
+                                const updated = prev.map((c) => c.conversationId === selectedChat.conversationId ? { ...c, hasActiveHold: false, activeHoldReservation: null } : c);
+                                chatsRef.current = updated;
+                                return updated;
+                              });
+                            }
+                          } catch {
+                            toast('Gagal melepas slot hold.', 'error');
+                          }
+                        }}
+                        className="px-1.5 py-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 font-bold rounded text-[10px] leading-none transition cursor-pointer whitespace-nowrap shrink-0"
+                        title="Lepas"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
@@ -3827,7 +3963,26 @@ function clearConversationDraft(convId: string) {
                             </div>
                           </button>
 
-                          {/* Option 2: Quick Create Reservation */}
+                          {/* Option 2: Quick Hold / Tahan Slot Ditawarkan */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setToolsMenuOpen(false);
+                              handleOpenQuickHold();
+                            }}
+                            disabled={!selectedChat || sending}
+                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-amber-100/80 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                              <Zap size={15} className="fill-current" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-[12px] truncate">Tahan Slot (Hold)</p>
+                              <p className="text-[10px] text-[#667781] truncate">Kunci tgl & jam negosiasi</p>
+                            </div>
+                          </button>
+
+                          {/* Option 3: Quick Create Reservation */}
                           <button
                             type="button"
                             onClick={() => {
@@ -4329,6 +4484,91 @@ function clearConversationDraft(convId: string) {
             await handleReservationUpdate();
             if (newRes) {
               handleGenerateAndInsertInvoice(newRes);
+            }
+          }}
+        />
+      )}
+
+      {/* Quick Hold Modal dari Live Chat (Kunci Slot Kilat 3 Detik) */}
+      {showQuickHoldModal && (
+        <QuickHoldModal
+          isOpen={showQuickHoldModal}
+          onClose={() => setShowQuickHoldModal(false)}
+          staffList={reservationStaffList}
+          initialCustomer={customerDetailData || (selectedChat?.customerId ? {
+            id: selectedChat.customerId,
+            name: selectedChat.customerName,
+            phone: selectedChat.customerPhone,
+            kelurahan: (selectedChat as any).kelurahan,
+            kecamatan: (selectedChat as any).kecamatan,
+            kota: (selectedChat as any).kota,
+            distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km,
+          } : null)}
+          onSuccess={async (newHold) => {
+            setShowQuickHoldModal(false);
+            await handleReservationUpdate();
+            // Instant 0ms: patch chats list so activeHoldReservation langsung muncul tanpa tunggu fetch
+            if (newHold && selectedChat) {
+              const holdObj = {
+                id: newHold.id,
+                booking_date: newHold.booking_date,
+                treatment_category: newHold.treatment_category,
+                treatment_detail: newHold.treatment_detail,
+                assigned_staff_id: newHold.assigned_staff_id,
+                assigned_staff: newHold.assigned_staff || null,
+                notes: newHold.notes || null,
+                customer_id: newHold.customer_id || selectedChat.customerId,
+                status: 'hold',
+              };
+              setChats((prev) => {
+                const updated = prev.map((c) => c.conversationId === selectedChat.conversationId ? { ...c, hasActiveHold: true, activeHoldReservation: holdObj } : c);
+                chatsRef.current = updated;
+                return updated;
+              });
+              // sync detail juga agar fallback konsisten
+              setCustomerDetailData((prev: any) => prev ? { ...prev, reservations: [...(prev.reservations || []), holdObj] } : prev);
+            } else {
+              loadChats(true);
+            }
+          }}
+          onInsertToChat={handleInsertInvoiceToChat}
+        />
+      )}
+
+      {holdToConfirmReservation && (
+        <CreateReservationModal
+          isOpen={!!holdToConfirmReservation}
+          mode="edit"
+          initialReservation={holdToConfirmReservation}
+          initialCustomer={customerDetailData || {
+            id: selectedChat?.customerId,
+            name: selectedChat?.customerName,
+            phone: selectedChat?.customerPhone,
+            kelurahan: (selectedChat as any)?.kelurahan,
+            kecamatan: (selectedChat as any)?.kecamatan,
+            kota: (selectedChat as any)?.kota,
+            distance_km: (selectedChat as any)?.distanceKm ?? (selectedChat as any)?.distance_km,
+          }}
+          staffList={reservationStaffList}
+          onClose={() => setHoldToConfirmReservation(null)}
+          onSuccess={async (updatedRes) => {
+            setHoldToConfirmReservation(null);
+            toast('Reservasi berhasil dikonfirmasi & dilengkapi!', 'success');
+            await handleReservationUpdate();
+            // patch chats: hold hilang, jadi Terjadwal/Pending sesuai status baru
+            if (updatedRes && selectedChat) {
+              const isConfirmed = updatedRes.status === 'confirmed';
+              const isPending = updatedRes.status === 'pending';
+              setChats((prev) => {
+                const updated = prev.map((c) => c.conversationId === selectedChat.conversationId ? { ...c, hasActiveHold: false, activeHoldReservation: null, hasUpcomingBooking: isConfirmed ? true : c.hasUpcomingBooking, hasPendingBooking: isPending ? true : c.hasPendingBooking } : c);
+                chatsRef.current = updated;
+                return updated;
+              });
+            } else {
+              loadChats(true);
+            }
+            if (updatedRes) {
+              handleGenerateAndInsertInvoice(updatedRes);
             }
           }}
         />
