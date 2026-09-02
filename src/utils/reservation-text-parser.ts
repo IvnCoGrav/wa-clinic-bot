@@ -362,25 +362,21 @@ export function parseReservationText(rawText: string): ParseResult {
 
   const hasBabyTreatment = (!!babyTreatment && !isPlaceholderText(babyTreatment)) || (!!babyName && !isPlaceholderText(babyName)) || babyNameLines.some(b => !isPlaceholderText(b));
   const hasMomsTreatment = (!!momsTreatment && !isPlaceholderText(momsTreatment)) || (!!momsPregnancyAge && !isPlaceholderText(momsPregnancyAge));
-  const treatmentDetailParts: string[] = [];
-
-  if (hasBabyTreatment) {
-    const effBabyTreatment = babyTreatment || 'Treatment / Pijat Bayi';
-    const validBabies = babies.filter(b => b.name && !isPlaceholderText(b.name));
-    const babyParts = validBabies.length > 0
-      ? validBabies.map((b) => `Bayi: ${b.name || '-'}, Usia: ${b.age || '-'}`).join(' | ')
-      : `Bayi: ${babyName && !isPlaceholderText(babyName) ? babyName : '-'}, Usia: ${babyAge && !isPlaceholderText(babyAge) ? babyAge : '-'}`;
-    treatmentDetailParts.push(`Baby: ${effBabyTreatment} (${babyParts})`);
+  // Bersih: hanya nama treatment digabung dengan ' + ' (tanpa Bayi/Usia/Kehamilan — sudah di relasi Child/babies)
+  const cleanParts: string[] = [];
+  if (hasBabyTreatment && babyTreatment && !isPlaceholderText(babyTreatment)) {
+    cleanParts.push(babyTreatment.trim());
   }
-  if (hasMomsTreatment) {
-    const effMomsTreatment = momsTreatment || 'Treatment Moms';
-    treatmentDetailParts.push(`Moms: ${effMomsTreatment} (Kehamilan: ${momsPregnancyAge && !isPlaceholderText(momsPregnancyAge) ? momsPregnancyAge : '-'})`);
+  if (hasMomsTreatment && momsTreatment && !isPlaceholderText(momsTreatment)) {
+    cleanParts.push(momsTreatment.trim());
   }
-  if (treatmentDetailParts.length === 0) {
-    treatmentDetailParts.push(`Treatment: ${babyTreatment || momsTreatment || 'Treatment Homecare'}`);
+  // Fallback jika treatment kosong tapi ada baby/moms context → pakai generic
+  if (cleanParts.length === 0) {
+    if (babyTreatment && !isPlaceholderText(babyTreatment)) cleanParts.push(babyTreatment.trim());
+    else if (momsTreatment && !isPlaceholderText(momsTreatment)) cleanParts.push(momsTreatment.trim());
+    else cleanParts.push('Layanan Homecare');
   }
-
-  const treatmentDetail = treatmentDetailParts.join(' | ');
+  const treatmentDetail = cleanParts.join(' + ');
 
   // Tentukan Treatment Category
   let treatmentCategory: TreatmentCategory = TreatmentCategory.BABY;
@@ -774,7 +770,7 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     kec: '',
     kota: '',
     treatmentCategory: TreatmentCategory.BABY,
-    treatmentDetail: `Baby: ${treatmentDetail} (Bayi: ${babyName || name}, Usia: ${babyAge || '-'})`,
+    treatmentDetail: treatmentDetail,
     bookingDate,
     rawText,
     babies,
