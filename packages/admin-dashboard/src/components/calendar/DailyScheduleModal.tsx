@@ -16,6 +16,7 @@ interface SlotInfo {
   time: string;
   status: 'full' | 'available' | 'hold';
   availableCount: number;
+  availableStaff?: Array<{ id: string; name: string }>;
   bookings: SlotBooking[];
 }
 interface DailySlotsResponse {
@@ -107,15 +108,21 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
   };
   const handleCopy = (time: string) => {
     if (onInsertToChat) {
-      const dateLabel = formatDateLabel(selectedDate);
-      onInsertToChat(`Untuk ${dateLabel}, slot jam ${time} masih ready ya Bun 😊`);
+      const d = new Date(`${selectedDate}T00:00:00`);
+      const isTomorrow = selectedDate === tomorrowISO;
+      const isToday = selectedDate === todayISO;
+      const prefix = isToday ? 'hari ini' : isTomorrow ? 'besok' : '';
+      const dayName = d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' });
+      const timeFmt = time.replace(':', '.');
+      const text = `Untuk ${prefix ? `${prefix} ` : ''}${dayName}, slot jam ${timeFmt} masih ready ya Bun 😊 Mau kami amankan di jam ini?`;
+      onInsertToChat(text);
     }
     onClose();
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl border border-[#e9edef] w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl rounded-b-none sm:rounded-b-3xl shadow-2xl border border-[#e9edef] w-full max-w-lg max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden self-end sm:self-center" onClick={(e) => e.stopPropagation()}>
         <div className="px-4 py-3 border-b border-[#e9edef] flex items-center justify-between shrink-0">
           <h3 className="font-extrabold text-[#111b21] text-sm flex items-center gap-2">
             <Calendar size={16} className="text-[#008069]" /> JADWAL KALENDER HARIAN
@@ -183,9 +190,18 @@ export const DailyScheduleModal: React.FC<Props> = ({ isOpen, onClose, initialDa
                           </span>
                         </li>
                       ))}
+                      {(slot as any).availableStaff?.length > 0 &&
+                        (slot as any).availableStaff.map((s: any, i: number) => (
+                          <li key={`av-${i}`} className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>Bidan {s.name} ➔ SIAP / KOSONG</span>
+                          </li>
+                        ))}
                     </ul>
                   ) : (
-                    <p className="text-[11px] text-emerald-700">Semua Bidan Siap / Kosong</p>
+                    <p className="text-[11px] text-emerald-700">
+                      {(slot as any).availableStaff?.length ? `Semua Bidan Siap (${(slot as any).availableStaff.map((s: any) => s.name).join(', ')})` : 'Semua Bidan Siap / Kosong'}
+                    </p>
                   )}
                   {slot.status !== 'full' && (
                     <div className="grid grid-cols-2 gap-1.5 pt-1">

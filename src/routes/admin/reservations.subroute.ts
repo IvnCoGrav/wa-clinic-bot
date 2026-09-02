@@ -75,15 +75,16 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
       const y = targetDate.getFullYear();
       const m = targetDate.getMonth();
       const d = targetDate.getDate();
-      const dayStart = new Date(y, m, d, 0, 0, 0, 0);
-      const dayEnd = new Date(y, m, d, 23, 59, 59, 999);
+      // WIB 00:00 - 23:59 -> UTC 17:00 previous day - 16:59
+      const dayStart = new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - 7 * 60 * 60 * 1000);
+      const dayEnd = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - 7 * 60 * 60 * 1000);
 
-      const SLOTS = ['09:00', '10:30', '13:00', '14:30', '16:00'];
+      const SLOTS = ['09:00', '10:00', '10:30', '11:00', '13:00', '14:00', '14:30', '15:00', '16:00'];
       const slotMins = SLOTS.map((t) => {
         const [h, mm] = t.split(':').map(Number);
         return h * 60 + mm;
       });
-      const slotWindow = [90, 90, 90, 90, 120]; // menit per slot
+      const slotWindow = [60, 30, 30, 90, 60, 30, 30, 60, 90]; // menit per slot, sinkron QuickHoldModal
 
       try {
         const staffList = await prisma.staff.findMany({
@@ -111,10 +112,12 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const startMin = slotMins[idx];
           const endMin = startMin + slotWindow[idx];
           const bookings: any[] = [];
+          const bookedStaffIds = new Set<string>();
           for (const r of reservations) {
             if (!r.booking_date) continue;
             const rd = new Date(r.booking_date);
-            const rMin = rd.getHours() * 60 + rd.getMinutes();
+            const wibHour = (rd.getUTCHours() + 7) % 24;
+            const rMin = wibHour * 60 + rd.getUTCMinutes();
             if (rMin >= startMin && rMin < endMin) {
               bookings.push({
                 staffName: r.assigned_staff?.name || 'Tanpa Bidan',
@@ -124,6 +127,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
                 status: r.status,
                 treatment: r.treatment_detail || r.raw_text || '',
               });
+              if (r.assigned_staff?.id) bookedStaffIds.add(r.assigned_staff.id);
             }
           }
           const availableCount = Math.max(0, totalTherapists - bookings.length);
@@ -131,7 +135,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           if (availableCount === 0) status = 'full';
           else if (bookings.some((b) => b.status === 'hold')) status = 'hold';
           else status = 'available';
-          return { time, status, availableCount, bookings };
+          const availableStaff = effectiveStaff
+            .filter((s: any) => !bookedStaffIds.has(s.id))
+            .map((s: any) => ({ id: s.id, name: s.name }));
+          return { time, status, availableCount, availableStaff, bookings };
         });
 
         return reply.status(200).send({
@@ -145,7 +152,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           success: true,
           date: `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
           totalTherapists: 2,
-          slots: SLOTS.map((t) => ({ time: t, status: 'available' as const, availableCount: 2, bookings: [] })),
+          slots: SLOTS.map((t) => ({ time: t, status: 'available' as const, availableCount: 2, availableStaff: [], bookings: [] })),
           note: 'Fallback',
         });
       }
@@ -735,6 +742,22 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/reservation/:id/release-hold',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      // Memory fallback first (untuk test offline & hold yang dibuat via fallback)
+      const mem = memoryReservations.get(id);
+      if (mem) {
+        memoryReservations.delete(id);
+        try {
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'DELETE_HOLD_RESERVATION',
+            targetId: id,
+            payload: { previousStatus: 'hold', deleted: true },
+            ipAddress: request.ip,
+          });
+        } catch {}
+        return reply.status(200).send({ success: true, data: mem, deleted: true });
+      }
       try {
         const reservation = await prisma.reservation.findUnique({ where: { id } });
         if (!reservation) {
@@ -751,10 +774,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         });
         return reply.status(200).send({ success: true, data: reservation, deleted: true });
       } catch (err: any) {
-        const mem = memoryReservations.get(id);
-        if (mem) {
+        const mem2 = memoryReservations.get(id);
+        if (mem2) {
           memoryReservations.delete(id);
-          return reply.status(200).send({ success: true, data: mem, deleted: true });
+          return reply.status(200).send({ success: true, data: mem2, deleted: true });
         }
         return reply.status(500).send({ success: false, error: err.message });
       }

@@ -56,12 +56,16 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
       setCustomerName('');
       setCustomerPhone('');
     }
-    const today = new Date();
-    const d = initialDate ? new Date(initialDate) : today;
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    setBookingDate(`${yyyy}-${mm}-${dd}`);
+    if (typeof initialDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
+      setBookingDate(initialDate);
+    } else {
+      const today = new Date();
+      const d = initialDate ? new Date(initialDate as any) : today;
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      setBookingDate(`${yyyy}-${mm}-${dd}`);
+    }
     if (initialTime) {
       setBookingTime(initialTime);
     } else if (initialDate && typeof initialDate === 'object' && (initialDate as Date).getHours) {
