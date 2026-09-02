@@ -65,7 +65,6 @@ import { CustomerEditForm } from '../../components/modals/CustomerEditForm';
 import { ReservationDetailModal } from '../../components/modals/ReservationDetailModal';
 import { CreateReservationModal } from '../../components/calendar/CreateReservationModal';
 import { QuickHoldModal } from '../../components/calendar/QuickHoldModal';
-import { MobileSlotCheckerSheet } from '../../components/calendar/MobileSlotCheckerSheet';
 import { DailyScheduleModal } from '../../components/calendar/DailyScheduleModal';
 import { InvoiceGeneratorModal } from '../../components/modals/InvoiceGeneratorModal';
 import { generateReservationInvoiceText } from '../../utils/paymentInvoiceFormatter';
@@ -357,8 +356,6 @@ export const LiveChatMonitor: React.FC = () => {
   const [showQuickHoldModal, setShowQuickHoldModal] = useState(false);
   const [quickHoldInitialDate, setQuickHoldInitialDate] = useState<Date | string | null>(null);
   const [quickHoldInitialTime, setQuickHoldInitialTime] = useState<string | null>(null);
-  const [showSlotChecker, setShowSlotChecker] = useState(false);
-  const [slotCheckerDate, setSlotCheckerDate] = useState<string | null>(null);
   const [showDailyScheduleModal, setShowDailyScheduleModal] = useState(false);
   // Invoice Generator Modal (Draft Preview)
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -2230,7 +2227,7 @@ function clearConversationDraft(convId: string) {
   };
 
   const handleSlotHold = async (date: string, time: string) => {
-    setQuickHoldInitialDate(date ? new Date(`${date}T00:00:00`) : null);
+    setQuickHoldInitialDate(date || null);
     setQuickHoldInitialTime(time);
     await handleOpenQuickHold();
   };
@@ -4626,17 +4623,6 @@ function clearConversationDraft(convId: string) {
               handleGenerateAndInsertInvoice(updatedRes);
             }
           }}
-        />
-      )}
-
-      {/* Mobile Slot Checker Bottom Sheet (legacy) */}
-      {showSlotChecker && (
-        <MobileSlotCheckerSheet
-          isOpen={showSlotChecker}
-          onClose={() => setShowSlotChecker(false)}
-          initialDate={slotCheckerDate}
-          onInsertToChat={handleInsertInvoiceToChat}
-          onHoldSlot={handleSlotHold}
         />
       )}
 
