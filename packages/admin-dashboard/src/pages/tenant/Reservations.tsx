@@ -139,6 +139,7 @@ export const Reservations: React.FC = () => {
     confirmed: number;
     completed: number;
     cancelled: number;
+    hold: number;
   }>({
     total: 0,
     upcoming: 0,
@@ -147,6 +148,7 @@ export const Reservations: React.FC = () => {
     confirmed: 0,
     completed: 0,
     cancelled: 0,
+    hold: 0,
   });
 
   // Create Modal State
@@ -615,6 +617,8 @@ export const Reservations: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'hold':
+        return <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold shadow-2xs">⏳ Hold</span>;
       case 'confirmed':
         return <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold">Confirmed</span>;
       case 'completed':
@@ -1111,6 +1115,7 @@ export const Reservations: React.FC = () => {
               <option value="all">Semua Status ({stats.total})</option>
               <option value="upcoming">📅 Aktif &amp; Mendatang ({stats.upcoming})</option>
               <option value="overdue">⚠️ Perlu Verifikasi ({stats.overdue})</option>
+              <option value="hold">⏳ Hold / Ditawarkan ({stats.hold})</option>
               <option value="pending">Pending ({stats.pending})</option>
               <option value="confirmed">Confirmed / Lunas ({stats.confirmed})</option>
               <option value="completed">Completed / Selesai ({stats.completed})</option>
@@ -1139,6 +1144,7 @@ export const Reservations: React.FC = () => {
                 { key: 'all', label: 'Semua', count: stats.total },
                 { key: 'upcoming', label: '📅 Aktif & Mendatang', count: stats.upcoming },
                 { key: 'overdue', label: '⚠️ Perlu Verifikasi', count: stats.overdue, isAlert: true },
+                { key: 'hold', label: '⏳ Hold (Ditawarkan)', count: stats.hold },
                 { key: 'pending', label: 'Pending', count: stats.pending },
                 { key: 'confirmed', label: 'Confirmed (Lunas)', count: stats.confirmed },
                 { key: 'completed', label: 'Completed (Selesai)', count: stats.completed },

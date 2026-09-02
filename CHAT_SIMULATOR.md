@@ -14,7 +14,7 @@ Project ini adalah **Engine Automation Chatbot WhatsApp (Fase 1)** untuk bisnis 
 - **Database & ORM**: PostgreSQL + Prisma ORM (dengan Full-Text Search `'simple'` dictionary)
 - **WhatsApp Integration**: WAHA (WhatsApp HTTP API Self-Hosted)
 - **Geocoding**: Google Maps Geocoding API (Text & Reverse Geocoding)
-- **Distance/Routing**: OpenRouteService Directions API (`cycling-electric` profile, dengan Haversine fallback)
+- **Distance/Routing**: OpenRouteService Directions API (`driving-car` profile dengan avoid tollways, Google Maps Matrix, Haversine fallback)
 - **LLM Engine**: OpenAI / MiniMax API (Custom Base URL: `https://ai.sumopod.com/v1`, Model: `MiniMax-M2.7-highspeed`)
 - **Testing Suite**: Vitest (Unit & Integration Tests)
 - **Deployment Target**: Docker Containerized (`Dockerfile` + `.env`)

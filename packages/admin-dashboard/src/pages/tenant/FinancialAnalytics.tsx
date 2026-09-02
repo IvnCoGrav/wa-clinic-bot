@@ -43,6 +43,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
+import { stripBufferMetadata, cleanTreatmentName } from '../../utils/treatmentStringParser';
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -316,35 +317,30 @@ export const FinancialAnalytics: React.FC = () => {
             </button>
           </div>
 
-          {/* Month & Year Select Dropdowns */}
+          {/* Month & Year Combined Dropdown */}
           <div className="flex items-center space-x-1.5 bg-white border border-[#d1d7db] rounded-xl px-2 py-1 shadow-xs">
             <Calendar size={14} className="text-[#008069] ml-1 shrink-0" />
             <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
+              value={`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-').map(Number);
+                setSelectedYear(y);
+                setSelectedMonth(m);
+              }}
               className="bg-transparent text-xs font-bold text-[#111b21] focus:outline-none cursor-pointer py-1"
             >
-              <option value={1}>Januari</option>
-              <option value={2}>Februari</option>
-              <option value={3}>Maret</option>
-              <option value={4}>April</option>
-              <option value={5}>Mei</option>
-              <option value={6}>Juni</option>
-              <option value={7}>Juli</option>
-              <option value={8}>Agustus</option>
-              <option value={9}>September</option>
-              <option value={10}>Oktober</option>
-              <option value={11}>November</option>
-              <option value={12}>Desember</option>
-            </select>
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-              className="bg-transparent text-xs font-bold text-[#111b21] focus:outline-none cursor-pointer py-1"
-            >
-              <option value={2025}>2025</option>
-              <option value={2026}>2026</option>
-              <option value={2027}>2027</option>
+              {Array.from({ length: 24 }, (_, i) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - 11 + i);
+                const y = d.getFullYear();
+                const m = d.getMonth() + 1;
+                const label = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                return (
+                  <option key={`${y}-${m}`} value={`${y}-${String(m).padStart(2, '0')}`}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -639,7 +635,7 @@ export const FinancialAnalytics: React.FC = () => {
                     <span className="h-5 w-5 rounded-full bg-[#e8f5f2] text-[#008069] flex items-center justify-center font-bold text-[10px] shrink-0">
                       {idx + 1}
                     </span>
-                    <span className="font-semibold text-[#111b21] truncate">{s.serviceName}</span>
+                    <span className="font-semibold text-[#111b21] truncate">{cleanTreatmentName(stripBufferMetadata(s.serviceName))}</span>
                   </div>
                   <span className="font-bold text-[#008069] shrink-0 font-mono text-[11px]">
                     {s.count}x ({formatCompactRupiah(s.estimatedRevenue)})
@@ -806,8 +802,11 @@ export const FinancialAnalytics: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3 px-4 max-w-xs">
-                      <div className="font-semibold text-[#111b21] truncate" title={tx.treatmentDetail}>
-                        {tx.treatmentDetail}
+                      <div className="font-semibold text-[#111b21] truncate" title={stripBufferMetadata(tx.treatmentDetail)}>
+                        {(() => {
+                          const clean = stripBufferMetadata(tx.treatmentDetail);
+                          return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
+                        })()}
                       </div>
                       <div className="text-[10px] text-[#54656f]">
                         Kategori: {tx.category}
@@ -901,7 +900,10 @@ export const FinancialAnalytics: React.FC = () => {
 
               <div className="p-3 bg-[#f8fafc] rounded-xl border border-[#e9edef] space-y-1">
                 <span className="text-[10px] text-[#54656f] uppercase font-bold">Menu Treatment</span>
-                <p className="font-semibold text-[#111b21]">{selectedTx.treatmentDetail}</p>
+                <p className="font-semibold text-[#111b21]">{(() => {
+                  const clean = stripBufferMetadata(selectedTx.treatmentDetail);
+                  return clean.split(/\s*\+\s*/).map((s) => cleanTreatmentName(s)).join(' + ') || clean;
+                })()}</p>
                 <p className="text-[11px] text-[#8696a0]">Kategori: {selectedTx.category}</p>
               </div>
 

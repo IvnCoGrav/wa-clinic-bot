@@ -40,6 +40,19 @@ export interface LiveChatConversationItem {
   isPinned: boolean;
   pinnedAt: Date | null;
   isAwaitingReply: boolean;
+  hasActiveHold?: boolean;
+  hasUpcomingBooking?: boolean;
+  hasPendingBooking?: boolean;
+  activeHoldReservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category?: string | null;
+    treatment_detail?: string | null;
+    assigned_staff_id?: string | null;
+    assigned_staff?: { id: string; name: string } | null;
+    notes?: string | null;
+    customer_id?: string | null;
+  } | null;
 }
 
 /** Deteksi sumber traffic dari baris ad_clicks. */
@@ -859,6 +872,47 @@ export class LiveChatService {
       }
     }
 
+    const reservations: any[] = c.customer?.reservations || [];
+    const isHoldValid = (r: any) => r.status === 'hold';
+    const hasActiveHold = reservations.some((r: any) => isHoldValid(r));
+    let hasUpcomingBooking = false;
+    try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      hasUpcomingBooking = reservations.some((r: any) => {
+        if (r.status !== 'confirmed') return false;
+        if (!r.booking_date) return false;
+        const d = new Date(r.booking_date);
+        if (isNaN(d.getTime())) return false;
+        return d >= startOfToday;
+      });
+    } catch (_) {
+      hasUpcomingBooking = false;
+    }
+    let hasPendingBooking = false;
+    try {
+      hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
+    } catch (_) {
+      hasPendingBooking = false;
+    }
+    const activeHold = reservations.find((r: any) => isHoldValid(r)) || null;
+    const activeHoldReservation = activeHold
+      ? {
+          id: activeHold.id,
+          booking_date: activeHold.booking_date
+            ? typeof activeHold.booking_date === 'string'
+              ? activeHold.booking_date
+              : (activeHold.booking_date as Date).toISOString()
+            : null,
+          treatment_category: activeHold.treatment_category || 'BABY',
+          treatment_detail: activeHold.treatment_detail || null,
+          assigned_staff_id: activeHold.assigned_staff_id || null,
+          assigned_staff: activeHold.assigned_staff ? { id: activeHold.assigned_staff.id, name: activeHold.assigned_staff.name } : null,
+          notes: activeHold.notes || null,
+          customer_id: activeHold.customer_id || c.customer_id,
+        }
+      : null;
+
     return {
       conversationId: c.id,
       customerId: c.customer_id,
@@ -890,6 +944,10 @@ export class LiveChatService {
       isPinned: !!c.is_pinned,
       pinnedAt: c.pinned_at || null,
       isAwaitingReply,
+      hasActiveHold,
+      hasUpcomingBooking,
+      hasPendingBooking,
+      activeHoldReservation,
     };
   }
 

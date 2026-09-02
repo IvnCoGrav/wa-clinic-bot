@@ -307,6 +307,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
               fileName: file.name,
               fileBase64: base64Data,
             }),
+            timeoutMs: 300000,
           });
 
           if (!uploadRes.success || !uploadRes.data?.fileName) {
@@ -324,6 +325,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
           }>('/api/admin/backup/restore', {
             method: 'POST',
             body: JSON.stringify({ fileName: uploadRes.data.fileName }),
+            timeoutMs: 300000,
           });
 
           if (restoreRes.success) {
@@ -363,6 +365,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
       }>('/api/admin/backup/create', {
         method: 'POST',
         body: JSON.stringify({ uploadToDrive: false }),
+        timeoutMs: 300000,
       });
 
       if (res.success && res.data?.fileName) {
@@ -390,6 +393,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
       }>('/api/admin/backup/create', {
         method: 'POST',
         body: JSON.stringify({ uploadToDrive: true }),
+        timeoutMs: 300000,
       });
 
       if (res.success) {
@@ -425,6 +429,7 @@ export const GoogleIntegrationPanel: React.FC = () => {
       }>('/api/admin/backup/restore', {
         method: 'POST',
         body: JSON.stringify({ fileName }),
+        timeoutMs: 300000,
       });
 
       if (res.success) {
