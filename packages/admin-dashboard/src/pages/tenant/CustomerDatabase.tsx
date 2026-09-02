@@ -43,6 +43,28 @@ import {
   Pause,
 } from 'lucide-react';
 
+const getCleanTreatmentName = (detail: string | null | undefined): string => {
+  if (!detail) return 'Layanan Perawatan';
+  const sesiMatch = detail.match(/\[Sesi[^\]]*\]/i);
+  const sesiTag = sesiMatch ? ` ${sesiMatch[0]}` : '';
+  let main = detail.split('[Total')[0].trim();
+  main = main.replace(/\[Sesi[^\]]*\]/gi, '').trim();
+  const parts = main.split(/\s*(?:\+|\|)\s*/);
+  const cleaned = parts.map((p) => {
+    p = p.replace(/^(Baby|Kids|MOMS|BOTH|BUNDLE):\s*/i, '');
+    p = p.replace(/\([^)]*\)/g, '').trim();
+    p = p.replace(/\[[^\]]*\]/g, '').trim();
+    p = p.replace(/\bUsia:\s*[^,)]+/gi, '').trim();
+    p = p.replace(/\bKehamilan:\s*[^,)]+/gi, '').trim();
+    p = p.replace(/\s{2,}/g, ' ').trim();
+    p = p.replace(/^[.,|+\-\s]+|[.,|+\-\s]+$/g, '').trim();
+    if (!p) return '';
+    return p.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ').replace(/\bPijat\b/gi, 'Pijat').replace(/\bOksitosin\b/gi, 'Oksitosin');
+  }).filter(Boolean);
+  const base = cleaned.join(' + ') || 'Layanan Perawatan';
+  return (base + sesiTag).trim();
+};
+
 interface CustomerItem {
   id: string;
   phone: string;
@@ -1341,6 +1363,7 @@ export const CustomerDatabase: React.FC = () => {
                               <th className="py-2 px-3">Tanggal</th>
                               <th className="py-2 px-3">Kategori</th>
                               <th className="py-2 px-3">Treatment</th>
+                              <th className="py-2 px-3 text-right">Nominal</th>
                               <th className="py-2 px-3">Terapis</th>
                               <th className="py-2 px-3 text-right">Status</th>
                             </tr>
@@ -1367,8 +1390,11 @@ export const CustomerDatabase: React.FC = () => {
                                     {res.treatment_category}
                                   </span>
                                 </td>
-                                <td className="py-2.5 px-3 text-[#54656f] max-w-[180px] truncate" title={res.treatment_detail}>
-                                  {res.treatment_detail || res.raw_text}
+                                <td className="py-2.5 px-3 text-[#111b21] max-w-[180px] truncate font-medium" title={res.treatment_detail}>
+                                  {getCleanTreatmentName(res.treatment_detail || res.raw_text)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right text-[11px] font-bold text-emerald-700 whitespace-nowrap">
+                                  {res.purchase_value ? `Rp ${Number(res.purchase_value).toLocaleString('id-ID')}` : <span className="text-[#8696a0] font-normal">-</span>}
                                 </td>
                                 <td className="py-2.5 px-3 text-[#54656f] text-[11px] group-hover:text-[#008069]">
                                   {res.assigned_staff?.name || <span className="text-[#8696a0] italic">-</span>}

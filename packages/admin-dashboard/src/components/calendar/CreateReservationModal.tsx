@@ -1039,19 +1039,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       fullBookingIso = new Date(`${bookingDate}T${bookingTime}:00`).toISOString();
     }
 
-    // Serialize multi-treatments string with child names if specified
-    const treatmentSummary = selectedTreatments
-      .map((t) => {
-        let targetLabel = '';
-        if (t.assignedChildIndex !== undefined && t.assignedChildIndex >= 0 && babies[t.assignedChildIndex]?.name) {
-          targetLabel = ` (${babies[t.assignedChildIndex].name})`;
-        } else if (t.assignedChildIndex !== undefined && t.assignedChildIndex >= 0 && babies.length > 1) {
-          targetLabel = ` (Anak #${t.assignedChildIndex + 1})`;
-        }
-        return `${t.name}${targetLabel} [${t.durationMinutes}m${isAddonService(t) ? ' Addon' : ''}]`;
-      })
-      .join(' + ');
-    const finalTreatmentDetail = `${treatmentSummary} [Total ${pureDurationMinutes}m + Buffer ${totalBufferMinutes}m = ${totalScheduledDurationMinutes}m]`;
+    // Serialize clean treatment string — hanya nama layanan + label total waktu (tanpa nama bayi/usia)
+    const treatmentSummary = selectedTreatments.map((t) => t.name).join(' + ');
+    const finalTreatmentDetail = `${treatmentSummary} [Total ${totalScheduledDurationMinutes}m]`;
 
     // Overall category: if both mom & baby exist
     const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
