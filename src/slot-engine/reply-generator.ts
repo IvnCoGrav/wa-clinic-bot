@@ -129,14 +129,15 @@ export class ReplyGenerator {
       });
 
       const responseData = callResult.data;
-      const rawReply =
-        responseData?.choices?.[0]?.message?.content?.trim() ||
-        responseData?.choices?.[0]?.message?.reasoning_content?.trim() ||
-        '';
-      if (!rawReply || rawReply.trim().length === 0) {
-        throw new Error('Empty response content from LLM choices');
+      // Larangan Mutlak: reasoning_content HANYA untuk logging, DILARANG sebagai fallback teks WhatsApp
+      const rawReply = responseData?.choices?.[0]?.message?.content?.trim() || '';
+      if (!rawReply || rawReply.trim().length < 5) {
+        throw new Error('Empty or too short response content from LLM choices (anti-truncation guard, len <5)');
       }
       let finalReply = sanitizeFinalReply(rawReply, { historyCount, customerInput: context?.customerInput });
+      if (!finalReply || finalReply.trim().length < 5) {
+        throw new Error('Sanitized reply too short or empty after anti-monologue guard (len <5) — reject to prevent truncated/monologue leak');
+      }
 
       // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
       // pastikan balasan wajib diawali perkenalan resmi Bidan Yusi jika LLM belum menyertakannya.

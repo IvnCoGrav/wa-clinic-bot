@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Eliminasi Kebocoran AI Reasoning, Anti-Truncation & Persona Bapak (`reply-generator.ts`, `language-sanitizer.ts`, `persona-composer.ts`, `burst-coalesce.service.ts`, `entity-extractor.ts`) (2026-09-01)
+
+- **Latar Belakang & Insiden Live 6285959212132 (Muhammad Naufal Ghifari):** Monolog internal AI bocor ke WA (`reasoning_content` fallback), respon terpotong `S` (<5 char) terkirim, sapaan kaku `Bunda` ke customer pria suami.
+- **Solusi:**
+  1. `reply-generator.ts:133` hapus fallback `reasoning_content`, ambil HANYA `content`; validasi `<5` char → throw untuk silent escalation ke CS (anti-truncation). Sanitizer empty → throw.
+  2. `language-sanitizer.ts` tambah `stripAiReasoningAndMonologue()` hapus `<think>...</think>`, `[THINKING]...[/THINKING]` & pola `Kita perlu menyusun...`, `Konteks/Analisis/Aturan:`, `Lihat contoh di prompt/Dalam peran sebagai`. Jika bersih `<5` → return `''` ditolak. Integrasi di `UnifiedResponseSanitizer.sanitize()` early-return & final guard `<5`.
+  3. `persona-composer.ts` rule 1 fleksibel: umum `Bunda`, namun jika laki-laki/suami/ayah (`saya Naufal`, `pesan untuk istri`) sapa `Bapak`/`Bapak [Nama]`; tambah rule 17 ANTI-MONOLOG mutlak.
+  4. Debounce `7500ms` (`burst-coalesce.service.ts:64` fallback `7500`) & alias generik `GENERIC_TREATMENT_RE` sudah perluas `home[-\s]?(treatment|care|service|sevice)` + prompt tegas model bisnis bukan treatment (verifikasi tetap).
+
+- **Verifikasi:** `npx vitest run tests/regression/real-conversations.test.ts tests/unit/slot-engine-generator.test.ts tests/unit/burst-coalesce.test.ts` → **18 passed**; manual strip `<think>` → `Halo Bunda!`, monolog → `''` PASS, `S` → `''` PASS, persona `Bapak` PASS; `npm run build` PASS.
+
 #### Fix & Enhancement — Audit & Perbaikan Komprehensif Bug Price Rp 0, Race Condition Modal Edit Reservasi, Dropdown Anak Terpotong di Mobile & Dynamic Fallback Harga (`CreateReservationModal.tsx`, `financial-analytics.service.ts`, `staff-reservation.service.ts`) (2026-09-01)
 
 - **Latar Belakang & Masalah**:

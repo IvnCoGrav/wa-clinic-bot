@@ -33,6 +33,37 @@ export function containsForeignScripts(text: string): boolean {
 }
 
 /**
+ * Guardrail Anti-Monolog & Anti-AI Leakage
+ * Menghapus reasoning CoT yang bocor ke customer.
+ */
+export function stripAiReasoningAndMonologue(text: string): string {
+  if (!text) return '';
+  let cleaned = text;
+  // Hapus blok <think>...</think> dan [THINKING]...[/THINKING] (global, multiline)
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replace(/\[THINKING\][\s\S]*?\[\/THINKING\]/gi, '');
+  // Hapus pola monolog internal di awal baris/kalimat
+  const monologueLinePatterns = [
+    /^(?:Kita|Saya|Mari\s+kita)\s+perlu\s+(?:menyusun|merespons|menjawab|memperhatikan|mempertimbangkan|membuat|mengirim)\b.*$/gim,
+    /^(?:Konteks|Analisis|Instruksi|Aturan|Perhatikan\s+aturan):.*$/gim,
+    /^(?:Lihat\s+contoh\s+di\s+prompt|Dalam\s+peran\s+sebagai|Etika\s+roleplay)\b.*$/gim,
+  ];
+  for (const re of monologueLinePatterns) {
+    cleaned = cleaned.replace(re, '');
+  }
+  // Hapus frasa monolog yang terselip di tengah kalimat (tanpa anchor ^)
+  cleaned = cleaned.replace(/Kita\s+perlu\s+menyusun\s+balasan\s+dari\s+Bidan\s+Yusi[^.!?\n]*[.!?\n]*/gi, '');
+  cleaned = cleaned.replace(/Lihat\s+contoh\s+di\s+prompt[^.!?\n]*[.!?\n]*/gi, '');
+  cleaned = cleaned.replace(/Dalam\s+peran\s+sebagai\s+Bidan[^.!?\n]*[.!?\n]*/gi, '');
+  cleaned = cleaned.trim().replace(/\n{3,}/g, '\n\n');
+  // Jika setelah dibersihkan kosong atau <5 char (mis. "S"), kembalikan kosong agar ditolak
+  if (!cleaned || cleaned.trim().length < 5) {
+    return '';
+  }
+  return cleaned;
+}
+
+/**
  * Membersihkan frasa bocor dari RAG Knowledge Base atau typo tokenization
  * seperti "Bun.etails info di sini", "details info", "info di sini", dll.
  */
@@ -328,6 +359,13 @@ export class UnifiedResponseSanitizer {
   public static sanitize(text: string, options?: UnifiedSanitizerOptions): string {
     if (!text) return '';
 
+    // 0. Guardrail Anti-Monolog & Anti-AI Leakage (blok <think>, monolog internal)
+    const monologueStripped = stripAiReasoningAndMonologue(text);
+    if (!monologueStripped || monologueStripped.trim().length < 5) {
+      return '';
+    }
+    text = monologueStripped;
+
     const isFollowUp = !options?.preserveGreeting && Boolean(options?.isFollowUp || (options?.historyCount ?? 0) > 0);
 
     let cleaned = text;
@@ -376,6 +414,11 @@ export class UnifiedResponseSanitizer {
 
     // 8. Pemisah Paragraf / Baris Baru setelah Emoticon (Anti-Wall of Text)
     cleaned = formatParagraphsAfterEmoji(cleaned);
+
+    // 9. Anti-truncation guard: jika <5 char (mis. "S") tolak
+    if (!cleaned || cleaned.trim().length < 5) {
+      return '';
+    }
 
     return cleaned;
   }
