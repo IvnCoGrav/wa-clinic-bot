@@ -178,6 +178,15 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
           ipAddress: request.ip,
         });
 
+        try {
+          const { getLiveChatHub } = await import('../../services/live-chat-hub.service');
+          await getLiveChatHub().publish({
+            type: 'bot.cutoff_changed' as any,
+            tenantId,
+            payload: { wahaOutboundCutoff: newState, event: 'BOT_CUTOFF_CHANGED' },
+          });
+        } catch {}
+
         return reply.status(200).send({
           success: true,
           wahaOutboundCutoff: newState,

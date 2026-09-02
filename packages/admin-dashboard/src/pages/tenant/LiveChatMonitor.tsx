@@ -419,15 +419,21 @@ export const LiveChatMonitor: React.FC = () => {
     }, 1500);
   };
 
-  // 🛑 Global Bot Cut-Off (Emergency Kill-Switch)
-  const [globalBotCutoff, setGlobalBotCutoff] = useState(false);
+  // 🛑 Global Bot Cut-Off (Emergency Kill-Switch) — instant hydration dari cache biar tidak flicker
+  const [globalBotCutoff, setGlobalBotCutoff] = useState(() => {
+    try {
+      return localStorage.getItem('wa_bot_cutoff_state') === 'true';
+    } catch { return false; }
+  });
   const [togglingBotCutoff, setTogglingBotCutoff] = useState(false);
 
   const loadBotCutoffStatus = async () => {
     try {
       const data = await apiRequest('/api/admin/whatsapp-provider');
-      if (data && typeof data.wahaOutboundCutoff === 'boolean') {
-        setGlobalBotCutoff(data.wahaOutboundCutoff);
+      const cutoff = (data as any)?.data?.wahaOutboundCutoff ?? (data as any)?.wahaOutboundCutoff;
+      if (typeof cutoff === 'boolean') {
+        setGlobalBotCutoff(cutoff);
+        try { localStorage.setItem('wa_bot_cutoff_state', String(cutoff)); } catch {}
       }
     } catch (_) {}
   };
@@ -456,7 +462,9 @@ export const LiveChatMonitor: React.FC = () => {
         body: JSON.stringify({ cutOff: nextCutOff }),
       });
       if (res && res.success) {
-        setGlobalBotCutoff(Boolean(res.wahaOutboundCutoff));
+        const newCutoff = Boolean((res as any)?.wahaOutboundCutoff ?? (res as any)?.data?.wahaOutboundCutoff ?? nextCutOff);
+        setGlobalBotCutoff(newCutoff);
+        try { localStorage.setItem('wa_bot_cutoff_state', String(newCutoff)); } catch {}
         toast(
           nextCutOff
             ? 'Bot Global DINONAKTIFKAN (Kill-Switch AKTIF). Seluruh pesan keluar sistem dimatikan.'
@@ -1622,6 +1630,14 @@ function clearConversationDraft(convId: string) {
         sseConnectedRef.current = connected;
       },
       onEvent: (type, payload) => {
+        if (type === 'bot.cutoff_changed' || type === 'BOT_CUTOFF_CHANGED') {
+          const cutoff = (payload as any)?.wahaOutboundCutoff;
+          if (typeof cutoff === 'boolean') {
+            setGlobalBotCutoff(cutoff);
+            try { localStorage.setItem('wa_bot_cutoff_state', String(cutoff)); } catch {}
+          }
+          return;
+        }
         if (type === 'conversation.updated' && payload?.allRead) {
           startTransition(() => setChats((prev) =>
             prev.map((c) => ({

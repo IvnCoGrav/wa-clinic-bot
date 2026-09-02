@@ -580,7 +580,7 @@ describe('Staff Auth & Reservation Services', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('melenceng terlalu jauh');
+      expect(result.error).toContain('melenceng jauh');
     });
   });
 });

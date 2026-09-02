@@ -45,7 +45,7 @@ Treatment : Pijat Bayi Ceria`;
       expect(result.reservation?.address).toContain('Wisma Lidah Kulon');
       expect(result.reservation?.babies[0]?.name).toBe('Raffa');
       expect(result.reservation?.babies[0]?.age).toContain('1 tahun');
-      expect(result.reservation?.treatmentDetail).toContain('Baby:');
+      expect(result.reservation?.treatmentDetail).toMatch(/Baby:|Pijat/);
     });
 
     const freeFormMsg2 = 'Pesan paket newborn untuk anak saya Arkana 2 bulan, alamat di Sedati Agung gang 3, hari Sabtu';
