@@ -192,9 +192,10 @@ Treatment : Pijat Bayi`;
       { name: 'Rara', age: '6 bulan' },
       { name: 'Riri', age: '2 tahun' },
     ]);
-    // treatmentDetail memuat kedua bayi
-    expect(res.reservation!.treatmentDetail).toContain('Rara');
-    expect(res.reservation!.treatmentDetail).toContain('Riri');
+    // treatmentDetail bersih hanya nama treatment (tanpa Bayi/Usia — sudah di relasi babies)
+    expect(res.reservation!.treatmentDetail).toBe('Pijat Bayi');
+    expect(res.reservation!.treatmentDetail).not.toContain('Rara');
+    expect(res.reservation!.treatmentDetail).not.toContain('Riri');
   });
 
   it('dua bayi blok berulang (Nama Bayi / Usia diulang)', () => {
@@ -325,8 +326,9 @@ Treatment :`;
     expect(res.reservation!.kec).toBe('Tandes');
     expect(res.reservation!.kota).toBe('Surabaya');
     expect(res.reservation!.treatmentCategory).toBe(TreatmentCategory.BABY);
-    expect(res.reservation!.treatmentDetail).toContain('Paket bundling cukur rambut dan pijat ceria');
-    expect(res.reservation!.treatmentDetail).toContain('Kian Alvino Yafie');
+    expect(res.reservation!.treatmentDetail).toBe('Paket bundling cukur rambut dan pijat ceria');
+    expect(res.reservation!.treatmentDetail).not.toContain('Kian Alvino Yafie');
+    expect(res.reservation!.babies[0].name).toBe('Kian Alvino Yafie');
   });
 
   it('8. should successfully parse reservation with 2-digit year, time range, and payment block (Bunda Siska case)', () => {
