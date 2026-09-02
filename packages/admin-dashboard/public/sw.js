@@ -1,5 +1,5 @@
 // Service Worker for Kala Clinic Admin PWA with Web Push VAPID Support & Offline Caching
-const CACHE_NAME = 'kala-admin-v8';
+const CACHE_NAME = 'kala-admin-v9';
 const PRECACHE_ASSETS = [
   '/admin/',
   '/admin/manifest.json',
@@ -31,10 +31,35 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  // Bypass API dan SSE langsung ke network stack browser
+
+  // 1. Bypass API dan SSE langsung ke network stack browser tanpa pencegatan SW
   if (url.pathname.startsWith('/api/')) {
     return;
   }
+
+  // 2. Cache-First Strategy untuk Vite Hashed Assets (/admin/assets/*)
+  // File JS/CSS/Font dengan content-hash bersifat immutable sehingga aman disajikan instan (0ms) dari disk cache
+  if (url.pathname.startsWith('/admin/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone).catch(() => {});
+            });
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // 3. Network-First dengan Stale Fallback untuk navigasi SPA & static files lainnya
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

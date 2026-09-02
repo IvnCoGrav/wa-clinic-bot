@@ -1147,6 +1147,15 @@ export class FollowUpService {
 
       let messageText: string;
 
+      // Rolling variant: hash customer_id + scheduled_at agar setiap customer dapat varian berbeda secara alami
+      const getRollingVariant = (cid: string, scheduledAt?: Date | string): number => {
+        const str = `${cid}-${scheduledAt ? new Date(scheduledAt).toISOString().slice(0, 10) : ''}`;
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
+        return (Math.abs(hash) % 3) + 1;
+      };
+      const rollingVariant = getRollingVariant(fu.customer_id || fu.customer?.id || '', fu.scheduled_at);
+
       // 1. Prioritaskan teks kustom spesifik yang diedit admin untuk customer ini
       if (fu.custom_text && fu.custom_text.trim()) {
         messageText = fu.custom_text
@@ -1161,10 +1170,10 @@ export class FollowUpService {
           .replace(/\n{3,}/g, '\n\n')     // Maksimal 2 newline berurutan (paragraf)
           .trim();
       } else {
-        // 2. Cek apakah ada template custom di DB untuk type+variant ini
+        // 2. Cek apakah ada template custom di DB untuk type+rollingVariant (rotasi dinamis)
         try {
           const custom = await prisma.followUpTemplate.findFirst({
-            where: { tenant_id: tenantId, type: templateType, variant: fu.stage, is_active: true },
+            where: { tenant_id: tenantId, type: templateType, variant: rollingVariant, is_active: true },
           });
           if (custom) {
             // Replacing placeholders in custom template with smart context
@@ -1184,7 +1193,7 @@ export class FollowUpService {
               name: cleanName,
               babyName,
               time: timeStr,
-              index: fu.stage - 1,
+              index: rollingVariant - 1,
             });
             messageText = text;
           }
@@ -1194,7 +1203,7 @@ export class FollowUpService {
             name: cleanName,
             babyName,
             time: timeStr,
-            index: fu.stage - 1,
+            index: rollingVariant - 1,
           });
           messageText = text;
         }
@@ -1282,7 +1291,14 @@ export class FollowUpService {
   ): Promise<boolean> {
     try {
       const gateway = await resolveGatewayForTenant(tenantId);
-      const variant = Math.min(3, Math.max(1, fu.stage || 1));
+      // Rolling variant untuk WABA agar tidak selalu stage=variant
+      const getRollingVariant = (cid: string, scheduledAt?: Date | string): number => {
+        const str = `${cid}-${scheduledAt ? new Date(scheduledAt).toISOString().slice(0, 10) : ''}`;
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
+        return (Math.abs(hash) % 3) + 1;
+      };
+      const variant = fu.variant ? Math.min(3, Math.max(1, fu.variant)) : getRollingVariant(fu.customer_id || fu.customer?.id || '', fu.scheduled_at);
       const mapping = await wabaTemplateService.getTemplateMapping(tenantId, templateType, variant);
 
       // 1. Template status: hanya APPROVED + is_active yang layak dikirim
