@@ -846,6 +846,21 @@ model CustomRole {
   @@map("custom_roles")
 }
 
+model QuickReply {
+  id         String   @id @default(uuid())
+  tenant_id  String   @default("default-tenant")
+  shortcut   String
+  title      String
+  content    String   @db.Text
+  category   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([tenant_id, shortcut])
+  @@index([tenant_id])
+  @@map("quick_replies")
+}
+
 
 
 

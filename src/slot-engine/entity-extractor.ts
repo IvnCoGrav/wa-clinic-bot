@@ -6,7 +6,7 @@ import { getLlmEndpointConfig } from '../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../config/ai-models.config';
 import { extractJsonContent } from '../utils/json-extract';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { getGazetteerAreas, escapeRegex } from '../utils/gazetteer';
+import { getGazetteerAreas, escapeRegex, resolvePrefixMatches } from '../utils/gazetteer';
 
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
@@ -147,27 +147,50 @@ export class EntityExtractor {
 
     if (!result.locationText && !hasStreetDetailKeywords) {
       const gazetteer = getGazetteerAreas();
-      if (cleanedLocationCandidate && gazetteer.has(cleanedLocationCandidate)) {
-        result.locationText = gazetteer.get(cleanedLocationCandidate)!;
-        result.intents = result.intents || [];
-        if (!result.intents.includes('provide_location')) {
-          result.intents.push('provide_location');
+      // Lapis 1+2: Prefix colloquial & preserve city context — "Manukan surabaya" → match "Manukan" prefix, keep city
+      const wordsOnlyForPrefix = cleanedLocationCandidate.replace(/\b(surabaya|sidoarjo|gresik|sby|sda|jawa timur|kota|kabupaten)\b/gi, '').trim().replace(/\s+/g, ' ');
+      const isSinglePrefixCandidate = wordsOnlyForPrefix && !wordsOnlyForPrefix.includes(' ') && wordsOnlyForPrefix.length >= 3;
+      let prefixMatched = false;
+      if (isSinglePrefixCandidate) {
+        const prefixList = resolvePrefixMatches(wordsOnlyForPrefix);
+        if (prefixList && prefixList.length > 0) {
+          const hasCity = /\b(surabaya|sidoarjo|gresik)\b/i.test(cleanedLocationCandidate);
+          if (hasCity) {
+            result.locationText = cleanedLocationCandidate;
+          } else {
+            result.locationText = prefixList[0];
+            if (prefixList.length > 1) result.locationText = wordsOnlyForPrefix;
+          }
+          result.intents = result.intents || [];
+          if (!result.intents.includes('provide_location')) {
+            result.intents.push('provide_location');
+          }
+          prefixMatched = true;
         }
-      } else {
-        for (const [areaLower, areaOrig] of gazetteer.entries()) {
-          if (
-            cleanedLocationCandidate.startsWith(areaLower + ' ') ||
-            cleanedLocationCandidate.endsWith(' ' + areaLower) ||
-            normalizedLower.includes(`di ${areaLower}`) ||
-            normalizedLower.includes(`ke ${areaLower}`) ||
-            normalizedLower.includes(`daerah ${areaLower}`)
-          ) {
-            result.locationText = areaOrig;
-            result.intents = result.intents || [];
-            if (!result.intents.includes('provide_location')) {
-              result.intents.push('provide_location');
+      }
+      if (!prefixMatched) {
+        if (cleanedLocationCandidate && gazetteer.has(cleanedLocationCandidate)) {
+          result.locationText = gazetteer.get(cleanedLocationCandidate)!;
+          result.intents = result.intents || [];
+          if (!result.intents.includes('provide_location')) {
+            result.intents.push('provide_location');
+          }
+        } else {
+          for (const [areaLower, areaOrig] of gazetteer.entries()) {
+            if (
+              cleanedLocationCandidate.startsWith(areaLower + ' ') ||
+              cleanedLocationCandidate.endsWith(' ' + areaLower) ||
+              normalizedLower.includes(`di ${areaLower}`) ||
+              normalizedLower.includes(`ke ${areaLower}`) ||
+              normalizedLower.includes(`daerah ${areaLower}`)
+            ) {
+              result.locationText = areaOrig;
+              result.intents = result.intents || [];
+              if (!result.intents.includes('provide_location')) {
+                result.intents.push('provide_location');
+              }
+              break;
             }
-            break;
           }
         }
       }

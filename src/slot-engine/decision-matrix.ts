@@ -399,13 +399,20 @@ export class DecisionMatrix {
         const { geocodingService } = await import('../integrations/google-maps/geocoding');
         const { deliveryService } = await import('../services/delivery.service');
 
-        // Strategi Pencarian Bertingkat:
-        // 1. Composite query: streetDetail + locationText
+        // Strategi Pencarian Bertingkat (Lapis 2: preserve city context):
+        // 1. Composite query: streetDetail + locationText (+ city from rawText if missing)
         // 2. Full raw incoming text
         // 3. locationText saja
-        const compositeQuery = extraction.streetDetail
+        let compositeQuery = extraction.streetDetail
           ? `${extraction.streetDetail} ${extraction.locationText || ''}`.trim()
           : (extraction.locationText || rawText);
+        // Lapis 2: jika locationText tidak mengandung kota tapi rawText mengandung, pertahankan konteks kota
+        const hasCityInComposite = /\b(surabaya|sidoarjo|gresik)\b/i.test(compositeQuery);
+        const hasCityInRaw = /\b(surabaya|sidoarjo|gresik)\b/i.test(rawText);
+        if (!hasCityInComposite && hasCityInRaw) {
+          const cityMatch = rawText.match(/\b(surabaya|sidoarjo|gresik)\b/i);
+          if (cityMatch) compositeQuery = `${compositeQuery} ${cityMatch[0]}`.trim();
+        }
 
         let resolved = await geocodingService.geocodeText(compositeQuery);
         if (!resolved.isPrecise && rawText) {
@@ -507,13 +514,65 @@ export class DecisionMatrix {
         }
 
         if (resolved.isPrecise && resolved.lat && resolved.lng) {
-          const delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
+          let delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
+
+          // Lapis 4: Second-pass verification sebelum vonis OOC
+          if (delivery.isOutOfCoverage) {
+            const hasExplicitOutsideCity = /\b(jakarta|bandung|yogyakarta|yogya|semarang|malang|bojonegoro|kediri|mojokerto|pasuruan|probolinggo|jember|banyuwangi|madura|bangkalan|sampang|pamekasan|sumenep|tulungagung|blitar|madiun|nganjuk|jombang|lamongan|tuban)\b/i.test(rawText.toLowerCase());
+            const isShortQuery = (extraction.locationText || '').trim().split(/\s+/).length <= 2;
+            if (!hasExplicitOutsideCity && isShortQuery) {
+              console.log(`[DECISION MATRIX SECOND-PASS] OOC ${delivery.distanceKm}km untuk "${extraction.locationText}" (resolved: ${resolved.kelurahan}, ${resolved.kota}) — coba verifikasi Surabaya/Sidoarjo`);
+              const retryQueries = [
+                `${extraction.locationText}, Kota Surabaya, Jawa Timur`,
+                `${extraction.locationText}, Kabupaten Sidoarjo, Jawa Timur`,
+              ];
+              for (const retryQuery of retryQueries) {
+                try {
+                  const { geocodingService: retryGeocoding } = await import('../integrations/google-maps/geocoding');
+                  const retryResolved = await retryGeocoding.geocodeText(retryQuery);
+                  if (retryResolved.isPrecise && retryResolved.lat && retryResolved.lng) {
+                    const retryDelivery = await deliveryService.calculateDelivery({ lat: retryResolved.lat, lng: retryResolved.lng });
+                    if (!retryDelivery.isOutOfCoverage) {
+                      console.log(`[DECISION MATRIX SECOND-PASS HIT] "${retryQuery}" → ${retryResolved.kelurahan}, ${retryResolved.kota} (${retryDelivery.distanceKm}km) — batalkan OOC`);
+                      // Override resolved & delivery dengan hasil second-pass
+                      resolved = retryResolved;
+                      delivery = retryDelivery;
+                      break;
+                    }
+                  }
+                } catch (_) {}
+              }
+            }
+            // Jika masih OOC setelah second-pass, baru vonis OOC
+            if (delivery.isOutOfCoverage) {
+              updatedSlate.kelurahan = resolved.kelurahan || resolved.kecamatan || extraction.locationText || 'Surabaya';
+              updatedSlate.kecamatan = resolved.kecamatan || null;
+              updatedSlate.kota = resolved.kota || null;
+              updatedSlate.lat = resolved.lat ?? null;
+              updatedSlate.lng = resolved.lng ?? null;
+              updatedSlate.distanceKm = Number(delivery.distanceKm.toFixed(2));
+              updatedSlate.ongkirFee = delivery.normalPrice;
+              updatedSlate.ongkirPromoFee = delivery.promoPrice;
+              updatedSlate.isLocationConfirmed = false;
+              updatedSlate.isOutOfCoverage = true;
+              updatedSlate.projectedState = SlateStore.computeProjectedState(updatedSlate);
+              return {
+                action: 'REJECT_OUT_OF_COVERAGE',
+                reason: `Jarak lokasi (${updatedSlate.distanceKm} km) melebihi batas jangkauan layanan (maks 30 km).`,
+                updatedSlate,
+                shouldSendPricelistImage: false,
+                deterministicTemplateReply: formatPolicyReply(TEMPLATES.outOfCoverage({
+                  distanceKm: updatedSlate.distanceKm || 30,
+                })),
+              };
+            }
+          }
 
           updatedSlate.kelurahan = resolved.kelurahan || resolved.kecamatan || extraction.locationText || 'Surabaya';
           updatedSlate.kecamatan = resolved.kecamatan || null;
           updatedSlate.kota = resolved.kota || null;
-          updatedSlate.lat = resolved.lat;
-          updatedSlate.lng = resolved.lng;
+          updatedSlate.lat = resolved.lat ?? null;
+          updatedSlate.lng = resolved.lng ?? null;
           updatedSlate.distanceKm = Number(delivery.distanceKm.toFixed(2));
           updatedSlate.ongkirFee = delivery.normalPrice;
           updatedSlate.ongkirPromoFee = delivery.promoPrice;
