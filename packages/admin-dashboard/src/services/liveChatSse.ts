@@ -11,18 +11,37 @@ let watchdogTimer: any = null;
 let graceCloseTimer: any = null;
 let isConnected = false;
 let networkListenersAttached = false;
+let reconnectAttempts = 0;
+let reconnectBackoffTimer: any = null;
 const subscribers = new Set<LiveChatSseOptions>();
 
 function resetWatchdog() {
   if (watchdogTimer) clearTimeout(watchdogTimer);
-  // Backend mengirim ping setiap 15 detik. Jika 18 detik tanpa event/ping,
-  // berarti koneksi mobile UDP/TCP hang/stalled, lakukan reconnect instan.
+  // Backend ping 10 detik, watchdog 35 detik = toleransi 3x missed ping sebelum reconnect
   watchdogTimer = setTimeout(() => {
     if (subscribers.size > 0) {
-      console.warn('[LIVE CHAT SSE] Watchdog timeout (18s silent), reconnecting...');
-      reconnectShared();
+      console.warn('[LIVE CHAT SSE] Watchdog timeout (35s silent), reconnecting...');
+      scheduleReconnect();
     }
-  }, 18000);
+  }, 35000);
+}
+
+function scheduleReconnect() {
+  if (reconnectBackoffTimer) clearTimeout(reconnectBackoffTimer);
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 15000);
+  console.warn(`[LIVE CHAT SSE] Reconnect backoff attempt ${reconnectAttempts + 1} in ${delay}ms`);
+  reconnectBackoffTimer = setTimeout(() => {
+    reconnectAttempts++;
+    reconnectShared();
+  }, delay);
+}
+
+function resetBackoff() {
+  reconnectAttempts = 0;
+  if (reconnectBackoffTimer) {
+    clearTimeout(reconnectBackoffTimer);
+    reconnectBackoffTimer = null;
+  }
 }
 
 function notifyStatus(status: boolean) {
@@ -92,13 +111,14 @@ function openShared() {
     sharedEs = new EventSource('/api/admin/live-chat/events');
 
     sharedEs.onopen = () => {
+      resetBackoff();
       notifyStatus(true);
       resetWatchdog();
     };
 
     sharedEs.onerror = () => {
       notifyStatus(false);
-      // EventSource akan auto-reconnect, watchdog akan menangani jika koneksi hang
+      scheduleReconnect();
     };
 
     const handleEvent = (type: string, e: Event) => {
