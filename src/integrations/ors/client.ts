@@ -24,6 +24,7 @@ export class OrsClient implements IOrsClient {
   private baseUrl: string;
   private profile: string;
   private apiKey: string;
+  private avoidFeatures: string[];
 
   constructor() {
     let rawBaseUrl = process.env.ORS_BASE_URL || 'https://api.heigit.org/openrouteservice';
@@ -31,8 +32,16 @@ export class OrsClient implements IOrsClient {
       rawBaseUrl = rawBaseUrl.replace('api.openrouteservice.org', 'api.heigit.org/openrouteservice');
     }
     this.baseUrl = rawBaseUrl.replace(/\/$/, '');
-    this.profile = process.env.ORS_PROFILE || 'cycling-electric';
+    this.profile = process.env.ORS_PROFILE || 'driving-car';
     this.apiKey = process.env.ORS_API_KEY || '';
+
+    // Hindari jalan tol (tollways) khusus operasional rute non-tol / motor
+    const rawAvoid = process.env.ORS_AVOID_FEATURES;
+    if (rawAvoid !== undefined) {
+      this.avoidFeatures = rawAvoid ? rawAvoid.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    } else {
+      this.avoidFeatures = this.profile.startsWith('driving') ? ['tollways'] : [];
+    }
   }
 
   private get timeoutMs(): number {
@@ -64,12 +73,18 @@ export class OrsClient implements IOrsClient {
       const url = `${this.baseUrl}/v2/directions/${this.profile}`;
 
       // CRITICAL: Format [longitude, latitude] sesuai spesifikasi ORS
-      const payload = {
+      const payload: Record<string, any> = {
         coordinates: [
           [fromLng, fromLat],
           [toLng, toLat],
         ],
       };
+
+      if (this.avoidFeatures.length > 0) {
+        payload.options = {
+          avoid_features: this.avoidFeatures,
+        };
+      }
 
       const response = await axios.post(url, payload, {
         headers: {

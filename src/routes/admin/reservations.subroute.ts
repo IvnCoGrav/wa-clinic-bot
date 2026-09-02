@@ -205,7 +205,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             prisma.reservation.count({ where }),
           ]);
         } else {
-          const [fetchedRows, fetchedTotal, totalCount, upcomingCount, overdueCount, pendingCount, confirmedCount, completedCount, cancelledCount] =
+          const [fetchedRows, fetchedTotal, totalCount, upcomingCount, overdueCount, pendingCount, confirmedCount, completedCount, cancelledCount, holdCount] =
             await Promise.all([
               prisma.reservation.findMany({
                 where,
@@ -247,6 +247,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
               prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'confirmed' } }),
               prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'completed' } }),
               prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'cancelled' } }),
+              prisma.reservation.count({ where: { ...tenantBaseWhere, status: 'hold' } }),
             ]);
 
           rows = fetchedRows;
@@ -259,6 +260,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             confirmed: confirmedCount,
             completed: completedCount,
             cancelled: cancelledCount,
+            hold: holdCount,
           };
           responseCacheService.set(cacheKeyStats, stats, 15);
         }
@@ -512,6 +514,150 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           data: mockReservation,
           note: 'Fallback in-memory mode (DB offline)',
         });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/reservation/quick-hold
+   * Quick Booking / Slot Hold (Tahan Slot Ditawarkan ke Customer)
+   */
+  fastify.post(
+    '/api/admin/reservation/quick-hold',
+    async (
+      request: FastifyRequest<{
+        Body: {
+          customerId?: string;
+          customerPhone?: string;
+          customerName?: string;
+          bookingDate: string; // ISO datetime
+          assignedStaffId?: string;
+          notes?: string;
+          treatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE';
+          treatmentDetail?: string;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      const {
+        customerId: reqCustomerId,
+        customerPhone,
+        customerName,
+        bookingDate,
+        assignedStaffId,
+        notes,
+        treatmentCategory = 'BABY',
+        treatmentDetail = '[HOLD] Slot Ditawarkan',
+      } = request.body || {};
+
+      if (!bookingDate) {
+        return reply.status(400).send({ success: false, error: 'bookingDate wajib diisi.' });
+      }
+
+      const parsedDate = new Date(bookingDate);
+      if (isNaN(parsedDate.getTime())) {
+        return reply.status(400).send({ success: false, error: 'Format bookingDate tidak valid.' });
+      }
+
+      let customerId = reqCustomerId;
+      if (!customerId && customerPhone) {
+        const cleanPhone = customerPhone.replace(/\D/g, '');
+        const targetPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+        const cust = await customerService.getOrCreateCustomer(targetPhone, customerName, DEFAULT_TENANT_ID);
+        customerId = cust.id;
+      } else if (customerId && customerName) {
+        await customerService.updateCustomerName(customerId, customerName, DEFAULT_TENANT_ID).catch(() => {});
+      }
+
+      if (!customerId) {
+        return reply.status(400).send({ success: false, error: 'customerId atau customerPhone wajib diisi.' });
+      }
+
+      const dbCategory: 'BABY' | 'MOMS' | 'BOTH' =
+        treatmentCategory === 'KIDS' ? 'BABY' :
+        treatmentCategory === 'BUNDLE' ? 'BOTH' :
+        (treatmentCategory as 'BABY' | 'MOMS' | 'BOTH');
+
+      const rawNotes = notes ? `\nCatatan Hold: ${notes}` : '';
+      const rawText = `[Admin Quick Hold] Ditawarkan: ${parsedDate.toLocaleString('id-ID')}${rawNotes}`;
+
+      try {
+        const reservation = await prisma.reservation.create({
+          data: {
+            tenant_id: DEFAULT_TENANT_ID,
+            customer_id: customerId,
+            treatment_category: dbCategory,
+            treatment_detail: treatmentDetail,
+            booking_date: parsedDate,
+            assigned_staff_id: assignedStaffId || null,
+            raw_text: rawText,
+            status: 'hold',
+          },
+          include: {
+            customer: { include: { children: true } },
+            assigned_staff: { select: { id: true, name: true, phone: true } },
+          },
+        });
+
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'CREATE_QUICK_HOLD_RESERVATION',
+          targetId: reservation.id,
+          payload: { customerId, bookingDate: parsedDate, assignedStaffId, status: 'hold' },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(201).send({ success: true, data: reservation });
+      } catch (error: any) {
+        const mockReservation = {
+          id: `res_hold_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          tenant_id: DEFAULT_TENANT_ID,
+          customer_id: customerId,
+          treatment_category: dbCategory,
+          treatment_detail: treatmentDetail,
+          booking_date: parsedDate,
+          assigned_staff_id: assignedStaffId || null,
+          raw_text: rawText,
+          status: 'hold',
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        memoryReservations.set(mockReservation.id, mockReservation);
+        return reply.status(201).send({ success: true, data: mockReservation, note: 'Fallback in-memory mode' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/reservation/:id/release-hold
+   * Membatalkan / melepas slot hold
+   */
+  fastify.patch(
+    '/api/admin/reservation/:id/release-hold',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      try {
+        const reservation = await prisma.reservation.update({
+          where: { id },
+          data: { status: 'cancelled' },
+        });
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          action: 'RELEASE_HOLD_RESERVATION',
+          targetId: id,
+          payload: { previousStatus: 'hold', newStatus: 'cancelled' },
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, data: reservation });
+      } catch (err: any) {
+        const mem = memoryReservations.get(id);
+        if (mem) {
+          mem.status = 'cancelled';
+          return reply.status(200).send({ success: true, data: mem });
+        }
+        return reply.status(500).send({ success: false, error: err.message });
       }
     }
   );

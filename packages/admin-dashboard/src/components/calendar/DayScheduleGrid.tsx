@@ -335,6 +335,11 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                   ? `calc(${(pos.colIndex * 100) / pos.totalCols}% + 4px)`
                   : '6px';
 
+              const isHold = res.status === 'hold';
+              const effectiveCardStyle = isHold
+                ? 'bg-amber-50/95 border-2 border-dashed border-amber-500 text-amber-950 hover:bg-amber-100/90'
+                : theme.card;
+
               return (
                 <div
                   key={res.id}
@@ -349,23 +354,29 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     left: evLeft,
                     width: evWidth,
                   }}
-                  className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${theme.card}`}
+                  className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${effectiveCardStyle}`}
                 >
                   {zoomLevel === 'compact' ? (
                     /* COMPACT DAY LOD (<65px) */
                     <div className="flex items-center justify-between gap-2 h-full">
                       <div className="flex items-center space-x-2 truncate">
                         <span className="font-bold text-xs text-[#111b21] truncate">
-                          {displayName}
+                          {isHold ? `[HOLD] ${displayName}` : displayName}
                         </span>
                         <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
                           {startTimeStr} ({pos.duration}m)
                         </span>
                       </div>
                       <div className="flex items-center space-x-1 shrink-0">
-                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${theme.badge}`}>
-                          {res.treatment_category}
-                        </span>
+                        {isHold ? (
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-white">
+                            HOLD
+                          </span>
+                        ) : (
+                          <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase ${theme.badge}`}>
+                            {res.treatment_category}
+                          </span>
+                        )}
                         <span className="text-[10px] font-semibold text-[#54656f] hidden sm:inline">
                           {res.assigned_staff?.name?.split(' ')[0] || 'Unassigned'}
                         </span>
@@ -379,9 +390,15 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           <span className="font-bold text-sm text-[#111b21] truncate">
                             {displayName}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
-                            {res.treatment_category}
-                          </span>
+                          {isHold ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
+                              HOLD
+                            </span>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${theme.badge}`}>
+                              {res.treatment_category}
+                            </span>
+                          )}
                           {res.session_number != null && res.total_sessions != null && (
                             <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 text-blue-800">
                               Sesi {res.session_number}/{res.total_sessions}
@@ -394,7 +411,12 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                           <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 font-mono">
                             {pos.duration}m
                           </span>
-                          {res.status === 'confirmed' ? (
+                          {res.status === 'hold' ? (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-white shadow-2xs">
+                              <Clock size={10} className="mr-0.5" />
+                              HOLD
+                            </span>
+                          ) : res.status === 'confirmed' ? (
                             <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
                               <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
                               Lunas

@@ -168,8 +168,11 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   const endTimeStr = endDate
                     .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
                     .replace('.', ':');
-                  const catColor = getCategoryColor(res.treatment_category);
-                  const nameDisplay = res.customer?.name || 'Bunda';
+                  const isHold = res.status === 'hold';
+                  const catColor = isHold
+                    ? 'bg-amber-100 text-amber-900 border-dashed border-amber-400 font-bold'
+                    : getCategoryColor(res.treatment_category);
+                  const nameDisplay = isHold ? `[HOLD] ${res.customer?.name || 'Pasien'}` : (res.customer?.name || 'Bunda');
 
                   return (
                     <div

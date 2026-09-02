@@ -153,8 +153,9 @@ ${ongkirGuard}`;
 
         const askLocationText = `Kalau boleh tahu, rumah Bunda di daerah atau kelurahan mana yaa agar bisa sekalian kami bantu cekkan ketersediaan jadwal Bidan & ongkirnya? 😊`;
         return `PANDUAN PENUTUP (TANYA LOKASI RUMAH):
-1. Jawab pertanyaan seputar layanan/usia/keluhan Bunda terlebih dahulu dengan ramah.
+1. Jawab pertanyaan seputar layanan/usia/keluhan Bunda terlebih dahulu dengan ramah (jika ada). Jika customer hanya menyapa umum, sambut secara ramah tanpa menebak nama treatment spesifik.
 2. Tanyakan alamat/daerah di kalimat penutup dengan santun: "${askLocationText}"
+⚠️ DILARANG menyebut, menebak, atau mencontohkan nama treatment spesifik (seperti "Pijat Bayi Ceria", dll.) jika customer tidak menanyakannya!
 ⚠️ DILARANG menyebutkan kata pengantar jadwal jika Bunda belum menyebutkan hari/waktu kunjungan!
 ⚠️ DILARANG menggunakan kata "Ada yang ingin dikonsultasikan?".
 ⚠️ DILARANG menanyakan ulang apakah Bunda jadi mengambil paket/treatment jika di pesan sebelumnya Bunda sudah menanyakan paket tersebut!`;
