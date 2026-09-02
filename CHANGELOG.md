@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Toggle Matikan AI Bot Live Chat Persisten & Sinkron SSE (`LiveChatMonitor.tsx`, `liveChatSse.ts`, `waba.subroute.ts`, `live-chat-hub.service.ts`) (2026-09-01)
+
+- **Latar Belakang:** Toggle "Matikan AI Bot" (cut-off) di Live Chat selalu balik ON saat pindah halaman/refresh karena `loadBotCutoffStatus` salah baca `data.wahaOutboundCutoff` (payload ada di `data.data.wahaOutboundCutoff`), plus tidak ada cache & SSE sync antar-tab.
+- **Solusi:**
+  1. `LiveChatMonitor.tsx:426` fix ekstraksi `data?.data?.wahaOutboundCutoff ?? data?.wahaOutboundCutoff` + persist `localStorage wa_bot_cutoff_state`; hydrate `useState` dari cache (zero-flicker); `handleToggle` juga set cache & fallback `res.data?.wahaOutboundCutoff`.
+  2. `live-chat-hub.service.ts:7` tambah event `bot.cutoff_changed`; `waba.subroute.ts:183` publish `BOT_CUTOFF_CHANGED` via `liveChatHub` saat PATCH cutoff; `liveChatSse.ts:142` listen `bot.cutoff_changed`; `LiveChatMonitor.tsx:1632` handler SSE update `setGlobalBotCutoff` + cache.
+- **Verifikasi:** `npx vitest run tests/unit tests/integration/whatsapp-provider-qr.test.ts` → **PASS**; `npm run build` backend & `packages/admin-dashboard` **PASS**.
+
 #### Fix — Eliminasi Kebocoran AI Reasoning, Anti-Truncation & Persona Bapak (`reply-generator.ts`, `language-sanitizer.ts`, `persona-composer.ts`, `burst-coalesce.service.ts`, `entity-extractor.ts`) (2026-09-01)
 
 - **Latar Belakang & Insiden Live 6285959212132 (Muhammad Naufal Ghifari):** Monolog internal AI bocor ke WA (`reasoning_content` fallback), respon terpotong `S` (<5 char) terkirim, sapaan kaku `Bunda` ke customer pria suami.
