@@ -510,7 +510,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
 
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
+      'Cache-Control': 'no-cache, no-transform, no-store',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
@@ -534,7 +534,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       try {
         reply.raw.write(': ping\n\n');
       } catch (err) {}
-    }, 15000);
+    }, 10000);
     if ((heartbeat as any).unref) (heartbeat as any).unref();
 
     const cleanup = () => {
