@@ -631,31 +631,32 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * PATCH /api/admin/reservation/:id/release-hold
-   * Membatalkan / melepas slot hold
+   * Melepas slot hold -> HAPUS permanen (bukan cancel, agar tidak menumpuk tulisan cancel di DB)
    */
   fastify.patch(
     '/api/admin/reservation/:id/release-hold',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       try {
-        const reservation = await prisma.reservation.update({
-          where: { id },
-          data: { status: 'cancelled' },
-        });
+        const reservation = await prisma.reservation.findUnique({ where: { id } });
+        if (!reservation) {
+          return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+        }
+        await prisma.reservation.delete({ where: { id } });
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
-          action: 'RELEASE_HOLD_RESERVATION',
+          action: 'DELETE_HOLD_RESERVATION',
           targetId: id,
-          payload: { previousStatus: 'hold', newStatus: 'cancelled' },
+          payload: { previousStatus: 'hold', deleted: true },
           ipAddress: request.ip,
         });
-        return reply.status(200).send({ success: true, data: reservation });
+        return reply.status(200).send({ success: true, data: reservation, deleted: true });
       } catch (err: any) {
         const mem = memoryReservations.get(id);
         if (mem) {
-          mem.status = 'cancelled';
-          return reply.status(200).send({ success: true, data: mem });
+          memoryReservations.delete(id);
+          return reply.status(200).send({ success: true, data: mem, deleted: true });
         }
         return reply.status(500).send({ success: false, error: err.message });
       }
