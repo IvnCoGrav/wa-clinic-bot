@@ -286,7 +286,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                   style={{ height: `${hourHeight}px` }}
                   className={`p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] text-[#8696a0]' : 'bg-[#f0f0f0] text-[#a0a0a0] italic'}`}
                 >
-                  <span>{formatHourLabel(hour)}{!isOp && <span className="ml-1 text-[9px]">• Tutup</span>}</span>
+                  <span>{formatHourLabel(hour)}</span>
                 </div>
               );
             })}
@@ -311,7 +311,6 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
                     <span>{isOp ? '+ Tambah Jadwal' : 'Non-ops'}</span>
                   </button>
-                  {!isOp && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#a0a0a0] pointer-events-none">TUTUP</span>}
                 </div>
               );
             })}
