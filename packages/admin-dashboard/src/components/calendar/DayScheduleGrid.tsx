@@ -10,6 +10,7 @@ interface DayScheduleGridProps {
   reservations: Reservation[];
   onSelectReservation: (res: Reservation) => void;
   onQuickAdd: (target: QuickSlotTarget) => void;
+  hideHeader?: boolean;
 }
 
 import { extractDurationMinutes, cleanTreatmentDetailForDisplay } from '../../utils/durationCalculator';
@@ -21,6 +22,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   reservations,
   onSelectReservation,
   onQuickAdd,
+  hideHeader = false,
 }) => {
   const zoomState = useCalendarZoom();
   const { hourHeight, zoomLevel, containerRef } = zoomState;
@@ -230,31 +232,33 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   processCluster(currentCluster);
 
   return (
-    <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden flex flex-col relative group/calendar">
+    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white rounded-2xl border border-[#e9edef] shadow-xs'} overflow-hidden flex flex-col relative group/calendar`}>
       {/* Day Header Banner with Integrated Zoom Controls */}
-      <div className="p-3.5 sm:p-4 border-b border-[#e9edef] bg-[#fafafa] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
-        <div>
-          <h3 className="font-extrabold text-base sm:text-lg text-[#111b21]">
-            {dayDateFormatted}
-          </h3>
-          <p className="text-xs text-[#667781] mt-0.5">
-            Agenda jadwal kunjungan &amp; perawatan harian
-          </p>
-        </div>
+      {!hideHeader && (
+        <div className="p-3.5 sm:p-4 border-b border-[#e9edef] bg-[#fafafa] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+          <div>
+            <h3 className="font-extrabold text-base sm:text-lg text-[#111b21]">
+              {dayDateFormatted}
+            </h3>
+            <p className="text-xs text-[#667781] mt-0.5">
+              Agenda jadwal kunjungan &amp; perawatan harian
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-          {/* Zoom Controls Bar */}
-          <CalendarZoomControls zoomState={zoomState} variant="inline" />
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {/* Zoom Controls Bar */}
+            <CalendarZoomControls zoomState={zoomState} variant="inline" />
 
-          <button
-            onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
-            className="px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
-          >
-            <Plus size={14} />
-            <span>+ Tambah di Tanggal Ini</span>
-          </button>
+            <button
+              onClick={() => onQuickAdd({ date: selectedDate, hour: 9 })}
+              className="px-3.5 py-1.5 rounded-xl bg-[#008069] hover:bg-[#00a884] text-white text-xs font-semibold flex items-center space-x-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>+ Tambah di Tanggal Ini</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Hourly Timeline with Continuous Multi-Hour Column Canvas */}
       <div
@@ -265,7 +269,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="max-h-[720px] overflow-y-auto select-none cursor-grab active:cursor-grabbing"
+        className={`${hideHeader ? 'flex-1 min-h-0' : 'max-h-[720px]'} overflow-y-auto select-none cursor-grab active:cursor-grabbing`}
         style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
       >
         <div
@@ -273,37 +277,44 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
           style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
         >
           {/* Hour Label Column (Sticky left) */}
-          <div className="sticky left-0 z-20 bg-[#fafafa] divide-y divide-[#e9edef] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
-            {HOURS.map((hour) => (
-              <div
-                key={hour}
-                style={{ height: `${hourHeight}px` }}
-                className="p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold text-[#8696a0] select-none flex items-start justify-end"
-              >
-                <span>{formatHourLabel(hour)}</span>
-              </div>
-            ))}
+          <div className="sticky left-0 z-20 divide-y divide-[#e9edef] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+            {HOURS.map((hour) => {
+              const isOp = hour >= 8 && hour <= 17 && hour !== 12;
+              return (
+                <div
+                  key={hour}
+                  style={{ height: `${hourHeight}px` }}
+                  className={`p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] text-[#8696a0]' : 'bg-[#f0f0f0] text-[#a0a0a0] italic'}`}
+                >
+                  <span>{formatHourLabel(hour)}{!isOp && <span className="ml-1 text-[9px]">• Tutup</span>}</span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Continuous Day Column */}
           <div className="relative divide-y divide-[#e9edef]">
             {/* Background Hourly Slot Grids & Hover Add Buttons */}
-            {HOURS.map((hour) => (
-              <div
-                key={hour}
-                style={{ height: `${hourHeight}px` }}
-                className="relative group/slot hover:bg-gray-50/40 transition-colors"
-              >
-                <button
-                  onClick={() => onQuickAdd({ date: selectedDate, hour })}
-                  className="w-full h-full absolute inset-0 z-0 border border-transparent hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 text-transparent hover:text-[#008069] text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer"
-                  title={`Tambah Jadwal pada jam ${formatHourLabel(hour)}`}
+            {HOURS.map((hour) => {
+              const isOp = hour >= 8 && hour <= 17 && hour !== 12;
+              return (
+                <div
+                  key={hour}
+                  style={{ height: `${hourHeight}px` }}
+                  className={`relative group/slot transition-colors ${isOp ? 'hover:bg-[#e8f5f2]/30 bg-white' : 'bg-[#f5f5f5] bg-[repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5_8px,#ebebeb_8px,#ebebeb_9px)]'}`}
                 >
-                  <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
-                  <span>+ Tambah Jadwal</span>
-                </button>
-              </div>
-            ))}
+                  <button
+                    onClick={() => onQuickAdd({ date: selectedDate, hour })}
+                    className={`w-full h-full absolute inset-0 z-0 border border-transparent text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer ${isOp ? 'hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 hover:text-[#008069]' : 'hover:border-dashed hover:border-[#a0a0a0] hover:bg-[#e0e0e0]/50 hover:text-[#666] text-[#a0a0a0]'}`}
+                    title={isOp ? `Tambah Jadwal pada jam ${formatHourLabel(hour)}` : `Jam non-operasional ${formatHourLabel(hour)}`}
+                  >
+                    <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
+                    <span>{isOp ? '+ Tambah Jadwal' : 'Non-ops'}</span>
+                  </button>
+                  {!isOp && <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#a0a0a0] pointer-events-none">TUTUP</span>}
+                </div>
+              );
+            })}
 
             {/* Absolute Continuous Event Blocks Spanning Multi-Hours */}
             {positionedEvents.map((pos) => {

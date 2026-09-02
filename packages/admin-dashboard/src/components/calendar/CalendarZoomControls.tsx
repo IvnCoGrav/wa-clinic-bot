@@ -101,14 +101,14 @@ export const CalendarZoomControls: React.FC<CalendarZoomControlsProps> = ({
                 key={p.id}
                 type="button"
                 onClick={() => setPreset(p.id)}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
                   isActive
                     ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
                     : 'text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21]'
                 }`}
                 title={`Mode ${p.label}`}
               >
-                <span>{p.label}</span>
+                {p.icon}
               </button>
             );
           })}
