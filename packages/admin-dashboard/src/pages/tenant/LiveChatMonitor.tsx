@@ -2261,14 +2261,39 @@ function clearConversationDraft(convId: string) {
     }
   };
 
-  const handleReservationUpdate = async () => {
-    // refresh customer detail setelah update reservasi
+  const handleReservationUpdate = async (deletedReservationId?: string) => {
     const cid = customerDetailData?.id || selectedChat?.customerId;
     if (cid) {
       try {
         const res = await apiRequest(`/api/admin/customers/${cid}`);
-        if (res?.data) setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, reservations: res.data.reservations || prev?.reservations }));
+        const reservations = res?.data?.reservations || [];
+        const hasUpcomingBooking = reservations.some((r: any) => r.status === 'confirmed');
+        const hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
+        const activeHold = reservations.find((r: any) => r.status === 'hold') || null;
+        const hasActiveHold = Boolean(activeHold);
+        setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, reservations }));
+        if (selectedChat) {
+          setChats((prev) => {
+            const updated = prev.map((c) => {
+              if (c.conversationId !== selectedChat?.conversationId) return c;
+              return {
+                ...c,
+                hasUpcomingBooking,
+                hasPendingBooking,
+                hasActiveHold,
+                activeHoldReservation: activeHold ? { ...activeHold } : null,
+                purchaseCount: reservations.length,
+              };
+            });
+            chatsRef.current = updated;
+            return updated;
+          });
+        }
       } catch {}
+    }
+    if (deletedReservationId) {
+      setSelectedReservation(null);
+      return;
     }
     if (selectedReservation?.id) {
       try {
@@ -2333,11 +2358,13 @@ function clearConversationDraft(convId: string) {
 
   const activeHoldReservation = useMemo(() => {
     if (!selectedChat) return null;
-    const fromChat = (selectedChat as any).activeHoldReservation;
-    if (fromChat) return fromChat;
+    // Jika customerDetailData sudah dimuat untuk customer ini, gunakan sebagai Single Source of Truth
     if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
       return customerDetailData.reservations?.find((r: any) => r.status === 'hold') || null;
     }
+    // Fallback awal (0ms) sebelum customer detail selesai di-fetch
+    const fromChat = (selectedChat as any).activeHoldReservation;
+    if (fromChat) return fromChat;
     return null;
   }, [selectedChat, customerDetailData]);
 
@@ -4697,7 +4724,9 @@ function clearConversationDraft(convId: string) {
           onStatusChange={async (id, s) => { await apiRequest(`/api/admin/reservation/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: s }) }); await handleReservationUpdate(); }}
           onSetDate={async (id, d) => { await apiRequest(`/api/admin/reservation/${id}/set-date`, { method: 'PATCH', body: JSON.stringify({ bookingDate: new Date(d).toISOString() }) }); await handleReservationUpdate(); }}
           onAssignStaff={async (id, sid) => { await apiRequest(`/api/admin/reservation/${id}/assign-staff`, { method: 'PATCH', body: JSON.stringify({ assigned_staff_id: sid }) }); await handleReservationUpdate(); }}
-          onDelete={async (id) => { await apiRequest(`/api/admin/reservation/${id}`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(); }}
+          onDelete={async (id) => { await apiRequest(`/api/admin/reservation/${id}`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
+          onCancel={async (id) => { await apiRequest(`/api/admin/reservation/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) }); setSelectedReservation(null); await handleReservationUpdate(); }}
+          onDeletePermanent={async (id) => { await apiRequest(`/api/admin/reservation/${id}?hard=true`, { method: 'DELETE' }); setSelectedReservation(null); await handleReservationUpdate(id); }}
           onProofUpload={async (file) => {
             const toB64 = (f: File) => new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error('read fail')); r.readAsDataURL(f); });
             const b64 = await toB64(file);
@@ -4717,17 +4746,21 @@ function clearConversationDraft(convId: string) {
           isOpen={showQuickBookingModal}
           onClose={() => setShowQuickBookingModal(false)}
           staffList={reservationStaffList}
-          initialCustomer={customerDetailData || (selectedChat?.customerId ? {
-            id: selectedChat.customerId,
-            name: selectedChat.customerName,
-            phone: selectedChat.customerPhone,
-            kelurahan: (selectedChat as any).kelurahan || null,
-            kecamatan: (selectedChat as any).kecamatan || null,
-            kota: (selectedChat as any).kota || null,
-            children: (selectedChat as any).children || [],
-            ongkir: (selectedChat as any).ongkir ?? 0,
-            distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
-          } : null)}
+          initialCustomer={
+            (customerDetailData && customerDetailData.id === selectedChat?.customerId)
+              ? customerDetailData
+              : (selectedChat?.customerId ? {
+                  id: selectedChat.customerId,
+                  name: selectedChat.customerName,
+                  phone: selectedChat.customerPhone,
+                  kelurahan: (selectedChat as any).kelurahan || null,
+                  kecamatan: (selectedChat as any).kecamatan || null,
+                  kota: (selectedChat as any).kota || null,
+                  children: (selectedChat as any).children || [],
+                  ongkir: (selectedChat as any).ongkir ?? 0,
+                  distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km ?? null,
+                } : null)
+          }
           initialCustomerId={selectedChat?.customerId}
           onSuccess={async (newRes) => {
             setShowQuickBookingModal(false);
@@ -4747,15 +4780,19 @@ function clearConversationDraft(convId: string) {
           staffList={reservationStaffList}
           initialDate={quickHoldInitialDate}
           initialTime={quickHoldInitialTime}
-          initialCustomer={customerDetailData || (selectedChat?.customerId ? {
-            id: selectedChat.customerId,
-            name: selectedChat.customerName,
-            phone: selectedChat.customerPhone,
-            kelurahan: (selectedChat as any).kelurahan,
-            kecamatan: (selectedChat as any).kecamatan,
-            kota: (selectedChat as any).kota,
-            distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km,
-          } : null)}
+          initialCustomer={
+            (customerDetailData && customerDetailData.id === selectedChat?.customerId)
+              ? customerDetailData
+              : (selectedChat?.customerId ? {
+                  id: selectedChat.customerId,
+                  name: selectedChat.customerName,
+                  phone: selectedChat.customerPhone,
+                  kelurahan: (selectedChat as any).kelurahan,
+                  kecamatan: (selectedChat as any).kecamatan,
+                  kota: (selectedChat as any).kota,
+                  distance_km: (selectedChat as any).distanceKm ?? (selectedChat as any).distance_km,
+                } : null)
+          }
           onSuccess={async (newHold) => {
             setShowQuickHoldModal(false);
             await handleReservationUpdate();
@@ -4792,15 +4829,19 @@ function clearConversationDraft(convId: string) {
           isOpen={!!holdToConfirmReservation}
           mode="edit"
           initialReservation={holdToConfirmReservation}
-          initialCustomer={customerDetailData || {
-            id: selectedChat?.customerId,
-            name: selectedChat?.customerName,
-            phone: selectedChat?.customerPhone,
-            kelurahan: (selectedChat as any)?.kelurahan,
-            kecamatan: (selectedChat as any)?.kecamatan,
-            kota: (selectedChat as any)?.kota,
-            distance_km: (selectedChat as any)?.distanceKm ?? (selectedChat as any)?.distance_km,
-          }}
+          initialCustomer={
+            (customerDetailData && customerDetailData.id === selectedChat?.customerId)
+              ? customerDetailData
+              : (selectedChat?.customerId ? {
+                  id: selectedChat.customerId,
+                  name: selectedChat.customerName,
+                  phone: selectedChat.customerPhone,
+                  kelurahan: (selectedChat as any)?.kelurahan,
+                  kecamatan: (selectedChat as any)?.kecamatan,
+                  kota: (selectedChat as any)?.kota,
+                  distance_km: (selectedChat as any)?.distanceKm ?? (selectedChat as any)?.distance_km,
+                } : null)
+          }
           staffList={reservationStaffList}
           onClose={() => setHoldToConfirmReservation(null)}
           onSuccess={async (updatedRes) => {
