@@ -1250,6 +1250,10 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           throw new Error('Reservation not found');
         }
 
+        const isBecomingConfirmed = status === 'confirmed' && existing.status !== 'confirmed';
+        const isBecomingCancelled = status === 'cancelled' && existing.status !== 'cancelled';
+        const staffChanged = assignedStaffId !== undefined && assignedStaffId !== existing.assigned_staff_id;
+
         const updateData: any = {};
         if (treatmentCategory !== undefined) updateData.treatment_category = treatmentCategory;
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
@@ -1289,6 +1293,80 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             assigned_staff: true,
           },
         });
+
+        // ── Side-effects: transisi status confirmed/cancelled & penugasan staff ──
+        if (isBecomingConfirmed) {
+          const targetBookingDate = parsedBookingDate || existing.booking_date;
+          if (targetBookingDate) {
+            try {
+              const { followUpService } = await import('../../services/follow-up.service');
+              await followUpService.createReservationFollowUps({
+                reservationId: id,
+                customerId: existing.customer_id,
+                bookingDate: targetBookingDate,
+                treatmentCategory: updated.treatment_category,
+                tenantId: DEFAULT_TENANT_ID,
+              });
+            } catch (fuErr: any) {
+              console.warn('[Admin API] Failed to schedule follow-ups on becoming confirmed:', fuErr.message);
+            }
+          }
+          if (!updated.google_calendar_event_id && (parsedBookingDate || existing.booking_date)) {
+            try {
+              const cName = customerName || existing.customer?.name || 'Bunda';
+              const calEventId = await googleCalendarService.createEvent(updated, cName);
+              if (calEventId) {
+                await prisma.reservation.update({ where: { id }, data: { google_calendar_event_id: calEventId } });
+                (updated as any).google_calendar_event_id = calEventId;
+              }
+            } catch (gcErr: any) {
+              console.error('[Admin API] Google Calendar Event create on edit failed:', gcErr.message);
+            }
+          }
+          // CAPI Purchase
+          if (existing.customer) {
+            try {
+              const value = await resolveTreatmentValue(updated.treatment_detail || updated.raw_text || '');
+              await capiService.sendCapiEvent({
+                eventName: 'Purchase',
+                customer: existing.customer as any,
+                value: value || updated.purchase_value || 60000,
+                currency: 'IDR',
+                tenantId: DEFAULT_TENANT_ID,
+                customData: { source: 'ADMIN_EDIT_CONFIRM' },
+              });
+              await prisma.reservation.update({ where: { id }, data: { purchase_event_sent_at: new Date() } }).catch(() => {});
+            } catch (capiErr: any) {
+              console.warn('[Admin API] CAPI Purchase on edit failed:', capiErr.message);
+            }
+          }
+        }
+        if (isBecomingCancelled) {
+          try {
+            const { followUpService } = await import('../../services/follow-up.service');
+            await followUpService.onReservationCancelled(id, DEFAULT_TENANT_ID);
+          } catch (fuErr: any) {
+            console.warn('[Admin API] Failed to cancel follow-ups on becoming cancelled:', fuErr.message);
+          }
+          if (updated.google_calendar_event_id) {
+            try {
+              await googleCalendarService.deleteEvent(updated.google_calendar_event_id);
+              await prisma.reservation.update({ where: { id }, data: { google_calendar_event_id: null } }).catch(() => {});
+            } catch (gcErr: any) {
+              console.warn('[Admin API] Google Calendar delete on cancel failed:', gcErr.message);
+            }
+          }
+        }
+        if (staffChanged && assignedStaffId) {
+          try {
+            const { staffNotificationService } = await import('../../services/staff-notification.service');
+            staffNotificationService.sendReservationAssignmentNotification(id, assignedStaffId).catch((err: any) => {
+              console.error('[Admin API] Failed to send Telegram notification to new staff on edit:', err.message);
+            });
+          } catch (err: any) {
+            console.warn('[Admin API] staffNotification import failed:', err.message);
+          }
+        }
 
         // Sync customer details if provided
         if (existing.customer_id && (customerName || customerPhone || address || kecamatan || kota || kelurahan || landmark)) {
