@@ -46,37 +46,6 @@ export class GroundingComposer {
       });
     }
 
-    // Jika customer menyebut add-on (moksa/sinar/nebulizer) secara eksplisit, sertakan katalog Add-on secara dinamis
-    const mentionsAddon =
-      /\b(moksa|moxa|sinar|nebulizer|nebuliser|add[-\s]?on)\b/i.test(inputLower) ||
-      (slate.selectedTreatmentName || '').toLowerCase().includes('moksa') ||
-      (slate.selectedTreatmentName || '').toLowerCase().includes('sinar') ||
-      (slate.selectedTreatmentName || '').toLowerCase().includes('nebulizer') ||
-      (extraction.treatmentReferenced || '').toLowerCase().includes('moksa') ||
-      (extraction.treatmentReferenced || '').toLowerCase().includes('sinar') ||
-      (extraction.treatmentReferenced || '').toLowerCase().includes('nebulizer');
-    if (mentionsAddon) {
-      const addonPool = allServices.filter((s) => s.isAddon && s.isActive);
-      // Filter dinamis berdasarkan keyword yang disebut, tanpa hardcode nama paket spesifik
-      const hasMoksa = /\b(moksa|moxa|sinar)\b/i.test(inputLower) || (slate.selectedTreatmentName || '').toLowerCase().includes('moksa') || (extraction.treatmentReferenced || '').toLowerCase().includes('moksa') || (slate.selectedTreatmentName || '').toLowerCase().includes('sinar') || (extraction.treatmentReferenced || '').toLowerCase().includes('sinar');
-      const hasNebul = /\b(nebulizer|nebuliser)\b/i.test(inputLower) || (slate.selectedTreatmentName || '').toLowerCase().includes('nebulizer') || (extraction.treatmentReferenced || '').toLowerCase().includes('nebulizer');
-      let relevantAddons = addonPool;
-      if (hasMoksa && !hasNebul) {
-        relevantAddons = addonPool.filter((s) => s.name.toLowerCase().includes('moksa') || s.name.toLowerCase().includes('moxa') || s.name.toLowerCase().includes('sinar'));
-        if (relevantAddons.length === 0) relevantAddons = addonPool;
-      } else if (hasNebul && !hasMoksa) {
-        relevantAddons = addonPool.filter((s) => s.name.toLowerCase().includes('nebulizer'));
-        if (relevantAddons.length === 0) relevantAddons = addonPool;
-      }
-      const combinedAddon = [...filteredServices, ...relevantAddons];
-      const seenAddon = new Set<string>();
-      filteredServices = combinedAddon.filter((s) => {
-        if (seenAddon.has(s.id)) return false;
-        seenAddon.add(s.id);
-        return true;
-      });
-    }
-
     // Prioritaskan treatment yang sudah dipilih — hanya jika kompatibel dengan usia baru (cegah stale Kids untuk Baby 16 bulan)
     let effectiveSelectedTreatment: string | null = slate.selectedTreatmentName || extraction.treatmentReferenced || null;
     if (effectiveSelectedTreatment && slate.childAgeMonths !== null) {
@@ -96,15 +65,9 @@ export class GroundingComposer {
       }
     }
     if (effectiveSelectedTreatment) {
-      const effLower = effectiveSelectedTreatment.toLowerCase();
-      const effParts = effLower.split('+').map((p) => p.trim()).filter(Boolean);
       filteredServices.sort((a, b) => {
-        const aName = a.name.toLowerCase();
-        const bName = b.name.toLowerCase();
-        const aClean = aName.replace(/\s*\([^)]*\)/g, '').trim();
-        const bClean = bName.replace(/\s*\([^)]*\)/g, '').trim();
-        const aMatch = effParts.some((part) => aName.includes(part) || aClean.includes(part) || part.includes(aClean)) || aName.includes(effLower) || effLower.includes(aClean);
-        const bMatch = effParts.some((part) => bName.includes(part) || bClean.includes(part) || part.includes(bClean)) || bName.includes(effLower) || effLower.includes(bClean);
+        const aMatch = a.name.toLowerCase().includes(effectiveSelectedTreatment!.toLowerCase());
+        const bMatch = b.name.toLowerCase().includes(effectiveSelectedTreatment!.toLowerCase());
         if (aMatch && !bMatch) return -1;
         if (!aMatch && bMatch) return 1;
         return 0;
@@ -124,7 +87,7 @@ export class GroundingComposer {
       // Jika TANPA keluhan yang cocok di DB, biarkan urutan katalog default (relaksasi di atas)
     }
 
-    const maxItems = mentionsMoms || mentionsAddon ? 7 : 5;
+    const maxItems = mentionsMoms ? 6 : 5;
     const filteredCatalog = filteredServices.slice(0, maxItems).map((s) => ({
       name: s.name,
       category: s.category,
@@ -192,40 +155,6 @@ export class GroundingComposer {
       (allSymptoms.length > 0 ? 'Pijat Bayi Pulih Ceria' : null);
     const effectiveDate = extraction.preferredDateText || slate.preferredDate;
 
-    // Info kombinasi dinamis: jika treatment mengandung "+" (mis. "Pulih Ceria + Sinar Moksa"), hitung total promo/ normal dari katalog secara dinamis tanpa hardcode nominal
-    let comboPricingNote: string | null = null;
-    if (effectiveTreatment && effectiveTreatment.includes('+')) {
-      const parts = effectiveTreatment.split('+').map((p) => p.trim()).filter(Boolean);
-      if (parts.length >= 2) {
-        const matched = parts
-          .map((part) => {
-            const lowerPart = part.toLowerCase();
-            return allServices.find((s) => {
-              const nameLower = s.name.toLowerCase();
-              const cleanName = nameLower.replace(/\s*\([^)]*\)/g, '').trim();
-              return nameLower.includes(lowerPart) || cleanName.includes(lowerPart) || lowerPart.includes(cleanName);
-            });
-          })
-          .filter((s): s is typeof allServices[number] => !!s);
-        if (matched.length >= 2) {
-          const totalPromo = matched.reduce((sum, s) => sum + (s.promoPrice || 0), 0);
-          const totalNormal = matched.reduce((sum, s) => sum + (s.originalPrice || 0), 0);
-          const breakdown = matched.map((s) => `${s.name} Rp ${s.promoPrice.toLocaleString('id-ID')}`).join(' + ');
-          const ongkirNote = slate.ongkirPromoFee !== null ? ` + Ongkir Rp ${(slate.ongkirPromoFee || 0).toLocaleString('id-ID')} = Rp ${(totalPromo + (slate.ongkirPromoFee || 0)).toLocaleString('id-ID')} total` : '';
-          comboPricingNote = `Info Kombinasi Dinamis: Paket "${effectiveTreatment}" total promo Rp ${totalPromo.toLocaleString('id-ID')} (normal Rp ${totalNormal.toLocaleString('id-ID')}), rincian: ${breakdown}${ongkirNote}. Hitung presisi dari katalog aktif, jangan tebak nominal.`;
-        }
-      }
-    } else if (effectiveTreatment && /pulih.*moksa|moksa.*pulih|pulih.*sinar|sinar.*pulih/i.test(effectiveTreatment)) {
-      const pulih = allServices.find((s) => s.name.toLowerCase().includes('pulih ceria') && s.isActive);
-      const moksa = allServices.find((s) => (s.name.toLowerCase().includes('moksa') || s.name.toLowerCase().includes('sinar')) && s.isAddon && s.isActive);
-      if (pulih && moksa) {
-        const totalPromo = (pulih.promoPrice || 0) + (moksa.promoPrice || 0);
-        const totalNormal = (pulih.originalPrice || 0) + (moksa.originalPrice || 0);
-        const ongkirNote = slate.ongkirPromoFee !== null ? ` + Ongkir Rp ${(slate.ongkirPromoFee || 0).toLocaleString('id-ID')} = Rp ${(totalPromo + (slate.ongkirPromoFee || 0)).toLocaleString('id-ID')} total` : '';
-        comboPricingNote = `Info Kombinasi Dinamis: Paket "${pulih.name} + ${moksa.name}" total promo Rp ${totalPromo.toLocaleString('id-ID')} (normal Rp ${totalNormal.toLocaleString('id-ID')}), rincian: ${pulih.name} Rp ${pulih.promoPrice.toLocaleString('id-ID')} + ${moksa.name} Rp ${moksa.promoPrice.toLocaleString('id-ID')}${ongkirNote}.`;
-      }
-    }
-
     // 5b. STATUS DATA TERKONFIRMASI (ANTI-AMNESIA GROUND TRUTH LOCK)
     const confirmedDataItems: string[] = [];
     if (effectiveTreatment) {
@@ -248,24 +177,16 @@ export class GroundingComposer {
 
     if (effectiveDate || extraction.intents.includes('ask_schedule')) {
       const targetDate = effectiveDate || 'jadwal yang ditanyakan';
-      const targetTreatmentName = effectiveTreatment || null;
+      const targetTreatmentName = effectiveTreatment || 'Pijat Bayi Ceria';
       const locationNote = slate.isLocationConfirmed && slate.kelurahan
-        ? targetTreatmentName
-          ? `Lokasi Bunda sudah terkonfirmasi di ${slate.kelurahan}. Informasikan jarak dan estimasi ongkir promo ke ${slate.kelurahan}, lalu konfirmasi jadwal ${targetDate} untuk *${targetTreatmentName}* dan bantu proses reservasinya. DILARANG KERAS menanyakan lagi "di hari apa" atau menanyakan alamat rumah!`
-          : `Lokasi Bunda sudah terkonfirmasi di ${slate.kelurahan}. Informasikan jarak dan estimasi ongkir promo ke ${slate.kelurahan}, lalu konfirmasi jadwal ${targetDate} dan bantu proses reservasinya. DILARANG KERAS menanyakan alamat rumah!`
+        ? `Lokasi Bunda sudah terkonfirmasi di ${slate.kelurahan}. Informasikan jarak dan estimasi ongkir promo ke ${slate.kelurahan}, lalu konfirmasi jadwal ${targetDate} untuk *${targetTreatmentName}* dan bantu proses reservasinya. DILARANG KERAS menanyakan lagi "di hari apa" atau menanyakan alamat rumah!`
         : `Sampaikan dengan ramah bahwa ketersediaan jadwal Bidan sedang kami bantu cekkan, dan tanyakan daerah/kelurahan rumah Bunda agar bisa sekalian kami cek jarak dan ongkirnya.`;
-      const scheduleNote = targetTreatmentName
-        ? `Preferensi Jadwal Customer: Bunda menanyakan ketersediaan jadwal untuk ${targetDate} (Treatment: *${targetTreatmentName}*). ${locationNote}`
-        : `Preferensi Jadwal Customer: Bunda menanyakan ketersediaan jadwal untuk ${targetDate}. ${locationNote}`;
+      const scheduleNote = `Preferensi Jadwal Customer: Bunda menanyakan ketersediaan jadwal untuk ${targetDate} (Treatment: *${targetTreatmentName}*). ${locationNote}`;
       customerPreferencesText = customerPreferencesText ? `${customerPreferencesText}\n${scheduleNote}` : scheduleNote;
     }
 
     if (lockedHeader) {
       customerPreferencesText = customerPreferencesText ? `${lockedHeader}\n\n${customerPreferencesText}` : lockedHeader;
-    }
-
-    if (comboPricingNote) {
-      customerPreferencesText = customerPreferencesText ? `${customerPreferencesText}\n${comboPricingNote}` : comboPricingNote;
     }
 
     // 6. SLOT YANG MASIH KURANG (HANYA tanyakan 1 hal berikutnya)
@@ -293,14 +214,7 @@ export class GroundingComposer {
 
       if (effectiveTreatment) {
         if (mentionsMoms) {
-          const isPijatRef = effectiveTreatment.toLowerCase().includes('pijat');
-          if (isPijatRef) {
-            treatmentBaby = effectiveTreatment;
-          } else {
-            // Dynamic fallback: ambil layanan BABY pertama yang aktif tanpa hardcode nama paket
-            const fallbackBaby = allServices.find((s) => s.category === 'BABY' && s.isActive)?.name || effectiveTreatment;
-            treatmentBaby = fallbackBaby;
-          }
+          treatmentBaby = effectiveTreatment.includes('Pijat') ? effectiveTreatment : 'Pijat Bayi Ceria';
           treatmentMoms = 'Bundling Pijat Laktasi + Oksitosin';
         } else {
           treatmentBaby = effectiveTreatment;
