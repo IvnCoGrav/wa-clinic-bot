@@ -946,9 +946,17 @@ export class TreatmentCatalogService {
       if (!s.isActive) continue;
       const cleanName = s.name.toLowerCase().replace(/\s*\([^)]*\)/g, '').trim();
       const fullName = s.name.toLowerCase();
+      const parenMatch = s.name.match(/\(([^)]+)\)/);
+      const parenAlias = parenMatch ? parenMatch[1].toLowerCase().trim() : '';
       const nameParts = cleanName.split(/\s+/);
 
-      if (q.includes(cleanName) || fullName.includes(q.trim()) || (q.length >= 4 && cleanName.includes(q.trim()))) {
+      if (
+        q.includes(cleanName) ||
+        fullName.includes(q.trim()) ||
+        (q.length >= 4 && cleanName.includes(q.trim())) ||
+        (parenAlias.length >= 4 && (q.includes(parenAlias) || parenAlias.includes(q.trim()))) ||
+        (q.includes('newborn') && cleanName.includes('selapan'))
+      ) {
         exactMatches.push(s);
       } else if (nameParts.length >= 2) {
         const twoWordPhrase = `${nameParts[0]} ${nameParts[1]}`;

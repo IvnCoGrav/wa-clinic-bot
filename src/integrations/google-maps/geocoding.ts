@@ -126,6 +126,43 @@ export class GeocodingService {
           }
         }
 
+        // =========================================================================
+        // GAZETTEER PRE-VALIDATION GATE
+        // Mencegah blind geocoding ke Google Maps ketika input tidak memiliki
+        // kemiripan kata sama sekali dengan basis data wilayah riil (kelurahan/kecamatan).
+        // Jika input sepenuhnya generik/tanya (misal "dmn ya", "lokasi dimana") tanpa
+        // nama wilayah konkret, batalkan ke-Google dan kembalikan isPrecise: false
+        // agar DecisionMatrix tidak memicu kalkulasi ongkir salah.
+        // =========================================================================
+        try {
+          const filePathForGate = getSubdistrictsFilePath();
+          const dataForGate = fs.existsSync(filePathForGate)
+            ? JSON.parse(fs.readFileSync(filePathForGate, 'utf-8'))
+            : [];
+
+          const lowerNorm = locationText.toLowerCase().replace(/\s+/g, '');
+          const hasGazetteerMatch = dataForGate.some((entry: any) => {
+            const kelLower = entry.Kelurahan_Desa.toLowerCase().replace(/\s+/g, '');
+            const kecLower = entry.Kecamatan.toLowerCase().replace(/\s+/g, '');
+            // Cek kecocokan eksak nama kelurahan
+            if (kelLower === lowerNorm) return true;
+            // Cek kecocokan eksak nama kecamatan
+            if (kecLower === lowerNorm) return true;
+            // Cek kecocokan n-gram singkat (minimal 3 huruf) untuk typo/alias
+            if (kelLower.length >= 3 && lowerNorm.includes(kelLower)) return true;
+            if (kecLower.length >= 3 && lowerNorm.includes(kecLower)) return true;
+            return false;
+          });
+
+          const isStreetOrLandmark = /\b(jalan|jl|jln|gang|gg|no|nomor|rt|rw|perum|perumahan|komplek|ruko|apart|apartemen|villa|residence|cluster|masjid|rs|spbu|pasar|stasiun|terminal|mall|plaza)\b/i.test(locationText);
+          if (!hasGazetteerMatch && !isStreetOrLandmark && locationText.trim().split(/\s+/).length <= 4) {
+            console.log(`[GEOCODING GATE] Input "${locationText}" lacks gazetteer match → bypass Google Maps`);
+            return { isPrecise: false };
+          }
+        } catch (_) {
+          // Jika gagal baca file gazetteer, lanjutkan ke Google Maps (fallback)
+        }
+
         const response = await this.geocodeBreaker.execute({
           params: {
             address: queryText,

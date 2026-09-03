@@ -381,11 +381,9 @@ export class UnifiedResponseSanitizer {
     // 3. Pronouns ("saya" -> "kami") & Slang ("Bund" -> "Bunda")
     cleaned = sanitizePronounsAndSlang(cleaned);
 
-    // 4. Repetitive Greetings & Typo & Anti-Affirmation Schedule Guard & Single Question Guard
+    // 4. Repetitive Greetings & Single Question Guard (destructive schedule/price sanitizers dipangkas — ResponseValidator yang jaga)
     cleaned = sanitizeRepetitiveGreetings(cleaned);
-    cleaned = sanitizeScheduleAffirmations(cleaned);
     cleaned = sanitizeDoubleQuestions(cleaned);
-    cleaned = sanitizeUnsolicitedPriceAndDuration(cleaned, options?.customerInput);
     cleaned = sanitizeEmDash(cleaned);
     cleaned = sanitizeStrayBackslashes(cleaned);
 

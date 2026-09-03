@@ -227,20 +227,8 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     }
   }
 
-  // 1b. Fast-Track ⚡: Single-Pass 1-Call FAQ & General Knowledge Inquiry
-  const { isFastFaq1CallEnabled } = await import('../config/feature-flags');
-  const { FastFaqDetector } = await import('./fast-faq-detector');
-    if (isFastFaq1CallEnabled(tenantId) && FastFaqDetector.isPotentialFastFaq(incomingText, initialSlate)) {
-    const { FastFaqGenerator } = await import('./fast-faq-generator');
-    const fastResult = await FastFaqGenerator.process(ctx, initialSlate);
-    if (fastResult) {
-      await SlateStore.persistSlate(fastResult.updatedSlate);
-      const fr = fastResult.handlerResult as any;
-      recordTurnTelemetry(fastResult.updatedSlate, null, { action: fr.nextState === ConversationState.HUMAN_HANDLING ? 'SILENT_HUMAN_ACTIVE' : 'GENERATE_AI_RESPONSE', deterministicTemplateReply: fr.replyText } as any, null, fr.replyText || null, (fr as any).modelName);
-      return fastResult.handlerResult;
-    }
-    console.log(`[SLOT ENGINE] Fast-Track FAQ fell through to 2-Call Deep Engine for customer ${customer.phone}`);
-  }
+  // 1b. [UNIFIED PIPELINE] Fast-Track dihapus — semua pesan masuk melalui Single Unified Pipeline (EntityExtractor -> Slate -> DecisionMatrix -> ReplyGenerator)
+  // FastFaqGenerator tetap ada sebagai modul terpisah untuk observasi, tapi tidak lagi menjadi jalur paralel yang menyebabkan amnesia Slate.
 
   // 2. Ekstrak seluruh entitas & intensi dalam Single-Pass LLM
   const extraction = await EntityExtractor.extract(incomingText, {
@@ -411,12 +399,9 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     customerInput: incomingText,
     tenantId,
   });
-  // Sync last_discussed_treatment secara dinamis dari katalog aktif (tanpa hardcode) untuk kontinuitas turn berikutnya
-  if (!decision.updatedSlate.selectedTreatmentName && grounding.filteredCatalog.length > 0) {
-    const topCandidate = grounding.filteredCatalog[0] as any;
-    if (topCandidate?.name) {
-      decision.updatedSlate.selectedTreatmentName = topCandidate.name;
-    }
+  // Sinkronisasi last_discussed_treatment HANYA jika pelanggan eksplisit memilih treatment (tanpa auto-fill index 0)
+  if (!decision.updatedSlate.selectedTreatmentName && extraction.treatmentReferenced) {
+    decision.updatedSlate.selectedTreatmentName = extraction.treatmentReferenced;
   }
   const replyText = await ReplyGenerator.generate(decision.updatedSlate, extraction, grounding, {
     history,

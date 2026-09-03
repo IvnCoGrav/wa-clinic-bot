@@ -2,6 +2,7 @@ import { CustomerSlate, ExtractedEntities, DecisionResult } from './types';
 import { SlateStore } from './slate-store';
 import { TEMPLATES } from '../config/persona';
 import { ConversationState } from '@prisma/client';
+import { treatmentCatalogService } from '../services/treatment-catalog.service';
 
 export class DecisionMatrix {
   /**
@@ -108,6 +109,27 @@ export class DecisionMatrix {
       (extraction.intents.includes('ask_unlisted_service') ||
         /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText));
 
+    // Catalog Guard: if the query actually matches an active catalog service, redirect to AI (not escalate)
+    if (isUnlistedServiceQuery) {
+      const activeServices = treatmentCatalogService.getAllServices(true);
+      const matchesCatalog = activeServices.some((svc) => {
+        const nameLower = svc.name.toLowerCase();
+        // Exact name match or multi-word name match (all words must appear)
+        if (rawText.includes(nameLower)) return true;
+        const words = nameLower.split(/\s+/).filter((w) => w.length >= 4);
+        return words.length >= 2 && words.every((w) => rawText.includes(w));
+      });
+      if (matchesCatalog) {
+        // Customer is asking about a real catalog service — let AI answer with FAQ/catalog context
+        return {
+          action: 'GENERATE_AI_RESPONSE',
+          reason: 'Customer menyebut layanan yang terdaftar di katalog aktif -> AI menjawab dengan FAQ/katalog.',
+          updatedSlate,
+          shouldSendPricelistImage: false,
+        };
+      }
+    }
+
     if (isUnlistedServiceQuery) {
       updatedSlate.isHumanHandling = true;
       updatedSlate.humanHandlingReason = 'unlisted_service';
@@ -181,10 +203,11 @@ export class DecisionMatrix {
       };
     }
 
-    // C. Kebijakan Kualifikasi Terapis (Bidan Resmi STR)
+    // C. Kebijakan Kualifikasi Terapis (Bidan Resmi STR) — fast-exit, degradasi anggun jika ada keluhan/jadwal
     if (
       /\b(terapisnya\s+bidan|apakah\s+bidan\s*(resmi|asli)?|bidannya\s+(resmi|asli|punya\s+str)|punya\s+str|kualifikasi\s+terapis|lulusan\s+kebidanan|tersertifikasi)\b/i.test(rawText) &&
-      (rawText.includes('terapis') || rawText.includes('str') || rawText.includes('resmi') || rawText.includes('asli') || rawText.includes('lulusan') || rawText.includes('sertifik'))
+      (rawText.includes('terapis') || rawText.includes('str') || rawText.includes('resmi') || rawText.includes('asli') || rawText.includes('lulusan') || rawText.includes('sertifik')) &&
+      extraction.symptoms.length === 0 && !extraction.treatmentReferenced && !extraction.preferredDateText && !extraction.intents.includes('ask_schedule') && !extraction.intents.includes('consult_symptom')
     ) {
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
@@ -192,6 +215,20 @@ export class DecisionMatrix {
         updatedSlate,
         shouldSendPricelistImage: false,
         deterministicTemplateReply: formatPolicyReply(TEMPLATES.therapistQualificationPolicy()),
+      };
+    }
+
+    // C2. Rekening bank resmi — fast-exit, degradasi anggun jika ada konsultasi/jadwal
+    if (
+      /\b(rekening|no\.?\s*rekening|transfer\s*(ke|bank)?|bca|mandiri|bri|bank\s*bca|bank\s*mandiri)\b/i.test(rawText) &&
+      extraction.symptoms.length === 0 && !extraction.treatmentReferenced && !extraction.preferredDateText && !extraction.intents.includes('ask_schedule') && !extraction.intents.includes('consult_symptom')
+    ) {
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Rekening query pure operational -> fast-exit deterministik (0ms, 0 token).',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: formatPolicyReply(`Untuk pembayaran bisa via Transfer Bank BCA, Mandiri, BRI, QRIS Universal, atau Cash setelah treatment selesai ya Bunda 😊\nRekening resmi BCA a.n Kala Moms and Baby Spa akan diinfokan Admin saat konfirmasi jadwal ya Bunda.`),
       };
     }
 
@@ -216,15 +253,18 @@ export class DecisionMatrix {
     // E. Pertanyaan Alamat / Homebase Klinik
     const isClinicOriginQuery =
       extraction.intents.includes('ask_clinic_origin') ||
-      /\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana)\b/i.test(rawText) ||
-      /\b((?:alamat|lokasi|posisi)\s*(?:nya)?\s+(?:sby|surabaya|sidoarjo|dimana|di\s*mana|mana)|(?:lokasi|alamat|posisi)\s+klinik(?:nya)?(?:\s+ada)?\s+(?:dimana|di\s*mana|mana)|klinik(?:nya)?\s+(?:dimana|di\s*mana|mana|ada\s+dimana|ada\s+di\s*mana)|dari\s+mana)\b/i.test(rawText);
+      /\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana|dmn)\b/i.test(rawText) ||
+      /\b((?:alamat|lokasi|posisi)\s*(?:nya)?\s+(?:sby|surabaya|sidoarjo|dimana|di\s*mana|mana|dmn)|(?:lokasi|alamat|posisi)\s+klinik(?:nya)?(?:\s+ada)?\s+(?:dimana|di\s*mana|mana|dmn)|klinik(?:nya)?\s+(?:dimana|di\s*mana|mana|dmn|ada\s+dimana|ada\s+di\s*mana)|dari\s+mana)\b/i.test(rawText) ||
+      /\b(?:untuk\s+)?(?:lokasi|alamat|klinik|posisi)\s*(?:nya)?\s*(?:di\s*mana|dimana|dmn|dmana|kmn|mana)\b/i.test(rawText);
 
     const isGenericCityLocationOnly =
       !extraction.locationText ||
       /^(?:sby|surabaya|sidoarjo|sda|gresik)(?:\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))?$/i.test((extraction.locationText || '').trim()) ||
       ['sby', 'surabaya', 'sidoarjo', 'sda'].includes((extraction.locationText || '').toLowerCase().trim());
 
-    if (isClinicOriginQuery && isGenericCityLocationOnly && extraction.symptoms.length === 0) {
+    if (isClinicOriginQuery && (isGenericCityLocationOnly || !updatedSlate.isLocationConfirmed) && extraction.symptoms.length === 0 && !extraction.treatmentReferenced && !extraction.preferredDateText && !extraction.intents.includes('ask_schedule') && !extraction.intents.includes('consult_symptom')) {
+      updatedSlate.kelurahan = null;
+      updatedSlate.isLocationConfirmed = false;
       return {
         action: 'RESOLVE_LOCATION_AND_DELIVERY',
         reason: 'Customer bertanya lokasi/asal klinik -> Kirim kebijakan homecare & tanyakan alamat rumah Bunda.',
@@ -326,9 +366,97 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
-    // PRIORITY 5: RESOLUSI LOKASI BARU & KALKULASI ONGKIR DETERMINISTIK
-    // Dipicu jika ada locationText/streetDetail baru DAN (lokasi belum terkonfirmasi ATAU ada pergantian lokasi eksplisit)
+    // PRIORITY 2F: ACKNOWLEDGMENT / PASIVE RESPONSE GUARD
+    // Mencegah bot mengulang 100% kalimat giliran sebelumnya saat customer
+    // mengirim konfirmasi pasif ("iya", "baik", "oke", "siap") atau alasan konteks.
+    // Jika asisten sudah membahas topik ini, lanjutkan ke langkah berikutnya.
     // =========================================================================
+    const passiveAckPatterns = [
+      /^(iya|ya|boleh|oke|ok|siap|baik|lah|yuk)$/i,
+      /^\s*$/,
+    ];
+    const isPassiveAcknowledgment = passiveAckPatterns.some((re) => re.test(rawText.trim()));
+    
+    const lastAssistantMsg = (context?.history?.slice().reverse() || []).find((m: any) => m.role === 'assistant');
+    const lastAssistantHadOngkir = lastAssistantMsg && lastAssistantMsg.content && lastAssistantMsg.content.includes('ongkir');
+    const lastAssistantHadSchedule = lastAssistantMsg && lastAssistantMsg.content && lastAssistantMsg.content.includes('jadwal');
+
+    if (isPassiveAcknowledgment && lastAssistantHadOngkir) {
+      // Customer menjawab "iya"/"baik" setelah bot kirim ongkir -> lanjut ke pemilihan treatment/reservasi
+      // BUKAN mengirim ulang ongkir
+      if (updatedSlate.isLocationConfirmed && updatedSlate.selectedTreatmentName) {
+        return {
+          action: 'RESOLVE_LOCATION_AND_DELIVERY',
+          reason: 'Customer merespons pasif setelah ongkir terkirim -> Tawarkan format reservasi.',
+          updatedSlate,
+          shouldSendPricelistImage: false,
+          deterministicTemplateReply: `Baik Bunda, kami catat yaa 😊 Mau sekalian kami bantu siapkan format reservasinya? 🤗`,
+        };
+      }
+      if (updatedSlate.isLocationConfirmed && !updatedSlate.selectedTreatmentName && updatedSlate.childAgeMonths) {
+        // Sudah punya usia & lokasi, tapi belum treatment -> ajukan treatment
+        return {
+          action: 'RESOLVE_LOCATION_AND_DELIVERY',
+          reason: 'Customer merespons pasif setelah ongkir terkirim -> Ajukan treatment ringkas.',
+          updatedSlate,
+          shouldSendPricelistImage: false,
+          deterministicTemplateReply: `Terima kasih Bunda, kita sudah punya alamat & usia si kecil. Rencana mau treatment apa untuk si kecil? 🤗`,
+        };
+      }
+      // Default: belum ada data lengkap -> serahkan ke AI ringkas
+      return {
+        action: 'GENERATE_AI_RESPONSE',
+        reason: 'Customer merespons pasif -> AI balasan ringkas tanpa repetisi.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+      };
+    }
+
+    if (isPassiveAcknowledgment && lastAssistantHadSchedule) {
+      // Customer menjawab "iya"/"oke" setelah bot tanya jadwal -> lanjut ke booking
+      if (updatedSlate.isLocationConfirmed && Boolean(updatedSlate.selectedTreatmentName) && Boolean(updatedSlate.preferredDate)) {
+        return {
+          action: 'RESOLVE_LOCATION_AND_DELIVERY',
+          reason: 'Customer merespons pasif setelah jadwal tanya -> Siapkan reservasi.',
+          updatedSlate,
+          shouldSendPricelistImage: false,
+          deterministicTemplateReply: `Baik Bunda, sudah catat jadwal Bunda. Mau sekalian buat reservasi? 🤗`,
+        };
+      }
+      return {
+        action: 'GENERATE_AI_RESPONSE',
+        reason: 'Customer merespons pasif setelah jadwal -> AI balasan ringkas.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 2G: KLARIFIKASI BIAYA TRANSPORT (TO-THE-POINT)
+    // Jika pelanggan bertanya "free transport?", "kena ongkir berapa?", "include transport?"
+    // dan lokasi sudah terkonfirmasi: jawab langsung, TIDAK mengirim ulang template jarak.
+    // =========================================================================
+    const transportClarificationPatterns = [
+      /\b(free transport|transport\s*free|ongkir\s*free|include transport|masuk\s*transport)\b/i,
+      /\b(kena ongkir|biaya ongkir|harga ongkir|berapa ongkir)\b/i,
+      /\b(include transport|masuk\s*transport|transport\s*apa|transport\s*include)\b/i,
+    ];
+    const isTransportClarification = transportClarificationPatterns.some((re) => re.test(rawText));
+
+    if (isTransportClarification && updatedSlate.isLocationConfirmed && !updatedSlate.isOutOfCoverage) {
+      const ongkirInfo = `${updatedSlate.kelurahan} ± ${updatedSlate.distanceKm} km, ongkir promo Rp ${updatedSlate.ongkirPromoFee?.toLocaleString('id-ID')}`;
+      return {
+        action: 'GENERATE_AI_RESPONSE',
+        reason: 'Customer klarifikasi biaya transport -> AI balasan singkat tanpa mengirim ulang template ongkir.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: `Untuk biaya treatment belum termasuk transport ya Bunda. Tambahan ongkir ke lokasi ${ongkirInfo} 😊`,
+      };
+    }
+
+    // =========================================================================
+    // PRIORITY 5: RESOLUSI LOKASI BARU & KALKULASI ONGKIR DETERMINISTIK
+    // (existing code continues...)
     const isExplicitLocationChange = /\b(ganti|pindah|salah|ubah|bukan\s+di|yang\s+bener)\b/i.test(rawText);
 
     // Deteksi apakah customer sedang mengirimkan teks lokasi/alamat pada pesan ini
@@ -390,9 +518,42 @@ export class DecisionMatrix {
       };
     }
 
+    // =========================================================================
+    // PRIORITY 2H: PERCEPTEM ALAMAT BERTINGKAT (Progressive Address Refinement)
+    // Jika pelanggan menyebutkan nama perumahan, gedung, atau jalan dalam penyempatan alamat
+    // dan titik tersebut masih berada dalam zona/kelurahan yang sama, bot TIDAK MENGULANG
+    // paragraf ongkir dan jarak. Cukup konfirmasi penyimpanan detail alamat.
+    // =========================================================================
+    const addressRefinementPatterns = [
+      /\b(apart|apartment|gedung|building|blok|no\s*\d+|unit\s*\d+)\b/i,
+      /\b(jalan|jl|jln|gang|gg|jalan\s+\w+|st\.?|street)\b/i,
+      /\b(keputih|kebun|sari|palem|permata|mas[^a-z])|d\.?complex|residence|villa|perumahan\b/i,
+    ];
+    const isAddressRefinement =
+      addressRefinementPatterns.some((re) => re.test(rawText)) &&
+      !isExplicitLocationChange &&
+      Boolean(extraction.locationText) &&
+      isSameLocation &&
+      updatedSlate.isLocationConfirmed &&
+      !updatedSlate.isOutOfCoverage;
+
+    if (isAddressRefinement) {
+      // Jika customer menyebut detail alamat baru tapi masih di zona yang sama:
+      // Bot TIDAK mengirim ulang paragraf ongkir. Cukup konfirmasi penyimpanan.
+      return {
+        action: 'RESOLVE_LOCATION_AND_DELIVERY',
+        reason: 'Customer menyempalikan detail alamat (perumahan/gedung) di zona yang sama -> Konfirmasi penyimpanan tanpa ulang ongkir.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: `Baik Bunda, detail alamat di ${extraction.locationText || updatedSlate.kelurahan} sudah kami catat yaa 😊\n\nRencana mau treatment apa bunda ?🤗`,
+      };
+    }
+
     const shouldResolveLocation =
       hasLocationInCurrentMessage &&
-      (!updatedSlate.isLocationConfirmed || updatedSlate.isOutOfCoverage || isExplicitLocationChange || isDifferentLocation);
+      (!updatedSlate.isLocationConfirmed || updatedSlate.isOutOfCoverage || isExplicitLocationChange || isDifferentLocation) &&
+      // Idempotency Guard: if location is already confirmed and no explicit change signal, block re-entry
+      !(updatedSlate.isLocationConfirmed && !isExplicitLocationChange && !updatedSlate.isOutOfCoverage);
 
     if (shouldResolveLocation) {
       try {
@@ -490,6 +651,24 @@ export class DecisionMatrix {
         const isGenericCityOrQuadrant =
           /^(?:sidoarjo|surabaya|sda|sby|gresik)(?:\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))?$/i.test(locLower) ||
           ['sidoarjo', 'surabaya', 'sda', 'sby', 'gresik'].includes(locLower);
+
+        // Jika lokasi eksplisit menyebut kota luar jangkauan (misal Tuban, Lamongan, Malang, dll), langsung vonis OOC
+        const hasExplicitOutsideCityCheck = /\b(jakarta|bandung|yogyakarta|yogya|semarang|malang|bojonegoro|kediri|mojokerto|pasuruan|probolinggo|jember|banyuwangi|madura|bangkalan|sampang|pamekasan|sumenep|tulungagung|blitar|madiun|nganjuk|jombang|lamongan|tuban)\b/i.test(locLower);
+        if (hasExplicitOutsideCityCheck) {
+          updatedSlate.kelurahan = extraction.locationText || 'Luar Kota';
+          updatedSlate.isLocationConfirmed = false;
+          updatedSlate.isOutOfCoverage = true;
+          updatedSlate.projectedState = SlateStore.computeProjectedState(updatedSlate);
+          return {
+            action: 'REJECT_OUT_OF_COVERAGE',
+            reason: `Lokasi yang diinput (${extraction.locationText}) merupakan wilayah luar jangkauan (>30 km).`,
+            updatedSlate,
+            shouldSendPricelistImage: false,
+            deterministicTemplateReply: formatPolicyReply(TEMPLATES.outOfCoverage({
+              distanceKm: 50,
+            })),
+          };
+        }
 
         if ((isGenericCityOrQuadrant || !resolved.isPrecise) && !extraction.streetDetail && !resolved.kelurahan) {
           const areaDisplay = extraction.locationText || compositeQuery || 'area tersebut';

@@ -150,17 +150,12 @@ export class SlateStore {
       }
     }
 
-    // 3. Treatment yang pernah dibahas di history (HANYA DARI PESAN CUSTOMER)
+    // 3. Treatment yang pernah dibahas di history (HANYA DARI PESAN CUSTOMER — gejala dipisah ke symptoms)
     if (!slate.selectedTreatmentName) {
       const treatmentKeywords = [
         { key: 'oksitosin', name: 'Pijat Oksitosin' },
         { key: 'laktasi', name: 'Pijat Laktasi' },
         { key: 'pulih ceria', name: 'Pijat Bayi Pulih Ceria' },
-        { key: 'batuk', name: 'Pijat Bayi Pulih Ceria' },
-        { key: 'pilek', name: 'Pijat Bayi Pulih Ceria' },
-        { key: 'grok', name: 'Pijat Bayi Pulih Ceria' },
-        { key: 'kolik', name: 'Pijat Bayi Kolik & Sembelit' },
-        { key: 'sembelit', name: 'Pijat Bayi Kolik & Sembelit' },
         { key: 'tumbuh ceria', name: 'Pijat Bayi Tumbuh Ceria' },
         { key: 'bayi ceria', name: 'Pijat Bayi Ceria' },
         { key: 'pijat bayi', name: 'pijat bayi' },

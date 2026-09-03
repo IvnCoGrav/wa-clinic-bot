@@ -1071,6 +1071,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
+          if (process.env.SHADOW_PIPELINE_ENABLED === 'true') {
+            try {
+              const shadowHistoryH = await messageService.getRecentMessages(conversation.id, 4, DEFAULT_TENANT_ID).catch(() => []);
+              const shHistH = (shadowHistoryH || []).map((m: any) => ({ role: m.direction === 'INBOUND' ? 'user' : 'assistant', content: m.content || '' }));
+              import('../slot-engine/shadow-engine').then(m => m.ShadowEngine.runShadowTurn({ customer, conversation, incomingMessage, history: shHistH, tenantId: DEFAULT_TENANT_ID } as any).catch(()=>{})).catch(()=>{});
+            } catch {}
+          }
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
 
@@ -1137,6 +1144,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
+          if (process.env.SHADOW_PIPELINE_ENABLED === 'true') {
+            try {
+              const shHist2 = await messageService.getRecentMessages(conversation.id, 4, DEFAULT_TENANT_ID).catch(() => []);
+              const shH2 = (shHist2 || []).map((m: any) => ({ role: m.direction === 'INBOUND' ? 'user' : 'assistant', content: m.content || '' }));
+              import('../slot-engine/shadow-engine').then(m => m.ShadowEngine.runShadowTurn({ customer, conversation, incomingMessage, history: shH2, tenantId: DEFAULT_TENANT_ID } as any).catch(()=>{})).catch(()=>{});
+            } catch {}
+          }
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
         }
 
@@ -1238,6 +1252,13 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             waMessageId: waMessageId,
             payloadRaw: mergeMediaIntoPayload(payload),
           });
+          if (process.env.SHADOW_PIPELINE_ENABLED === 'true') {
+            try {
+              const shHist3 = await messageService.getRecentMessages(conversation.id, 4, DEFAULT_TENANT_ID).catch(() => []);
+              const shH3 = (shHist3 || []).map((m: any) => ({ role: m.direction === 'INBOUND' ? 'user' : 'assistant', content: m.content || '' }));
+              import('../slot-engine/shadow-engine').then(m => m.ShadowEngine.runShadowTurn({ customer, conversation, incomingMessage, history: shH3, tenantId: DEFAULT_TENANT_ID } as any).catch(()=>{})).catch(()=>{});
+            } catch {}
+          }
 
           // Kembalikan 200 OK tanpa memanggil state machine atau LLM!
           return reply.status(200).send({ status: 'HUMAN_HANDLING_ACTIVE_SILENT' });
@@ -1285,6 +1306,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           phone: customer.phone,
           incomingMessage,
         });
+      }
+
+      // Shadow pipeline — zero-risk rollout (background, tidak kirim WA, tidak blokir balasan aktif)
+      if (process.env.SHADOW_PIPELINE_ENABLED === 'true') {
+        try {
+          const recentShadowHistory = await messageService.getRecentMessages(conversation.id, 4, DEFAULT_TENANT_ID).catch(() => []);
+          const shadowHistory = (recentShadowHistory || []).map((m: any) => ({
+            role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
+            content: m.content || '',
+          }));
+          const shadowCtx: any = {
+            customer, conversation, incomingMessage,
+            history: shadowHistory,
+            tenantId: DEFAULT_TENANT_ID,
+          };
+          import('../slot-engine/shadow-engine').then(m => m.ShadowEngine.runShadowTurn(shadowCtx).catch(()=>{})).catch(()=>{});
+        } catch {}
       }
 
       return reply.status(200).send({ status: 'EVENT_PROCESSED' });

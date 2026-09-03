@@ -90,6 +90,11 @@ export class FaqCacheService {
     return `faq:${tenantId}:${hash}`;
   }
 
+  public shouldBypassCache(userQuery: string): boolean {
+    const lower = userQuery.toLowerCase();
+    return /\b(harga|tarif|biaya|promo|pricelist|ongkir|ongkos|jarak\s*km|km\s*ongkir|jadwal|slot|jam\s*\d|besok|lusa|keluhan|batuk|pilek|grok|kolik|kembung|demam|nyeri)\b/i.test(lower);
+  }
+
   public async get(key: string): Promise<string | null> {
     if (this.redisEnabled && this.redisClient) {
       try {
@@ -165,6 +170,14 @@ export class FaqCacheService {
         console.warn(`[FAQ CACHE] Gagal invalidate Redis keys untuk tenant ${tenantId}:`, err.message);
       }
     }
+  }
+
+  public async onCatalogUpdate(tenantId: string): Promise<void> {
+    await this.invalidateAll(tenantId);
+  }
+
+  public async onSettingsUpdate(tenantId: string): Promise<void> {
+    await this.invalidateAll(tenantId);
   }
 
   /**
