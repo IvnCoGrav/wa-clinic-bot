@@ -253,16 +253,8 @@ export class DecisionMatrix {
       extraction.symptoms.length > 0 ||
       /\b(berapa|brp|harga|tarif|biaya|ongkir|pricelist|usia|umur|\d+\s*(?:bln|bulan|thn|tahun)|jadwal|slot|kapan|jam\s*\d+|besok|lusa)\b/i.test(rawText);
 
-    // Modular & Robust Lead Greeting Opener Matcher
-    const HONORIFICS = '(?:kak+|ka(?:k)?|sis(?:t)?|min|mimin|admin|bun(?:da|d)?|bu(?:nda)?|ibu|bidan|bu\\s+bidan|mbak+|mba|dok(?:ter)?|gan|om|tante|say(?:ang)?)';
-    const PARTICLES = '(?:dong|ya(?:a)?|deh|sih|nih|yuk|tolong|mohon|kah|gak|nggak|ta)';
-    const GREETINGS = '(?:halo|hola|hai|hi|hei|hey|p+|tes|test|ping|assalamu\\x27?alaikum|assalamualaikum|ass|askum|samlikum|(?:selamat|selmat|slmt|met)\\s+(?:pagi|siang|sore|malam|subuh)|pagi|siang|sore|malam|subuh|permisi|punten|spada)';
-    const INQUIRY_ACTIONS = '(?:mau\\s+tanya(?:-?tanya)?|tanya|boleh\\s+tanya|bisa\\s+konsultasi|mau\\s+konsultasi|minta\\s+info|info(?:\\s+lengkap)?|mau\\s+info|tertarik|saya\\s+tertarik|bisa|apakah\\s+bisa|bisa\\s+homecare|melayani\\s+homecare|ada\\s+homecare|bisa\\s+dipanggil|bisa\\s+panggil|homecare|home\\s*treatment|home\\s*service)';
-    const TAIL_ELEMENT = `(?:\\s+(?:${HONORIFICS}|${PARTICLES}))*`;
-
     const isPureLeadOpener =
-      new RegExp(`^(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}(?:\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT})*[!.\\s?~-]*$`, 'i').test(cleanText) ||
-      new RegExp(`^${HONORIFICS}${TAIL_ELEMENT}\\s+(?:${GREETINGS}|${INQUIRY_ACTIONS})${TAIL_ELEMENT}[!.\\s?~-]*$`, 'i').test(cleanText) ||
+      /^(?:halo|hola|hi|hei|p|assalamu'?alaikum|assalamualaikum|(?:selamat|selmat|slmt|met)\s+(?:pagi|siang|sore|malam)|pagi|siang|sore|malam|permisi|bisa|bisa\s+kah|bisa\s+gak|bisa\s+ya|apakah\s+bisa|bisa\s+homecare|mau\s+tanya|info|info\s+lengkap|tertarik|min|bunda|admin)[!.\s?]*$/i.test(cleanText) ||
       /\b(tertarik\s+dengan\s+layanan|layanan\s+homecare|home\s*treatment|home\s*service|info\s+lengkap|mau\s+tanya\s+layanan|tanya\s+layanan|mau\s+reservasi|mau\s+booking|bisa\s+reservasi|bisa\s+booking|cara\s+reservasi|cara\s+booking|bagaimana\s+caranya|gimana\s+caranya|alur\s+reservasi|alur\s+booking|mau\s+pesan|cara\s+pesan|info\s+reservasi)\b/i.test(rawText);
 
     const isLeadGreeting =
@@ -399,20 +391,13 @@ export class DecisionMatrix {
         const { geocodingService } = await import('../integrations/google-maps/geocoding');
         const { deliveryService } = await import('../services/delivery.service');
 
-        // Strategi Pencarian Bertingkat (Lapis 2: preserve city context):
-        // 1. Composite query: streetDetail + locationText (+ city from rawText if missing)
+        // Strategi Pencarian Bertingkat:
+        // 1. Composite query: streetDetail + locationText
         // 2. Full raw incoming text
         // 3. locationText saja
-        let compositeQuery = extraction.streetDetail
+        const compositeQuery = extraction.streetDetail
           ? `${extraction.streetDetail} ${extraction.locationText || ''}`.trim()
           : (extraction.locationText || rawText);
-        // Lapis 2: jika locationText tidak mengandung kota tapi rawText mengandung, pertahankan konteks kota
-        const hasCityInComposite = /\b(surabaya|sidoarjo|gresik)\b/i.test(compositeQuery);
-        const hasCityInRaw = /\b(surabaya|sidoarjo|gresik)\b/i.test(rawText);
-        if (!hasCityInComposite && hasCityInRaw) {
-          const cityMatch = rawText.match(/\b(surabaya|sidoarjo|gresik)\b/i);
-          if (cityMatch) compositeQuery = `${compositeQuery} ${cityMatch[0]}`.trim();
-        }
 
         let resolved = await geocodingService.geocodeText(compositeQuery);
         if (!resolved.isPrecise && rawText) {
@@ -514,65 +499,13 @@ export class DecisionMatrix {
         }
 
         if (resolved.isPrecise && resolved.lat && resolved.lng) {
-          let delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
-
-          // Lapis 4: Second-pass verification sebelum vonis OOC
-          if (delivery.isOutOfCoverage) {
-            const hasExplicitOutsideCity = /\b(jakarta|bandung|yogyakarta|yogya|semarang|malang|bojonegoro|kediri|mojokerto|pasuruan|probolinggo|jember|banyuwangi|madura|bangkalan|sampang|pamekasan|sumenep|tulungagung|blitar|madiun|nganjuk|jombang|lamongan|tuban)\b/i.test(rawText.toLowerCase());
-            const isShortQuery = (extraction.locationText || '').trim().split(/\s+/).length <= 2;
-            if (!hasExplicitOutsideCity && isShortQuery) {
-              console.log(`[DECISION MATRIX SECOND-PASS] OOC ${delivery.distanceKm}km untuk "${extraction.locationText}" (resolved: ${resolved.kelurahan}, ${resolved.kota}) — coba verifikasi Surabaya/Sidoarjo`);
-              const retryQueries = [
-                `${extraction.locationText}, Kota Surabaya, Jawa Timur`,
-                `${extraction.locationText}, Kabupaten Sidoarjo, Jawa Timur`,
-              ];
-              for (const retryQuery of retryQueries) {
-                try {
-                  const { geocodingService: retryGeocoding } = await import('../integrations/google-maps/geocoding');
-                  const retryResolved = await retryGeocoding.geocodeText(retryQuery);
-                  if (retryResolved.isPrecise && retryResolved.lat && retryResolved.lng) {
-                    const retryDelivery = await deliveryService.calculateDelivery({ lat: retryResolved.lat, lng: retryResolved.lng });
-                    if (!retryDelivery.isOutOfCoverage) {
-                      console.log(`[DECISION MATRIX SECOND-PASS HIT] "${retryQuery}" → ${retryResolved.kelurahan}, ${retryResolved.kota} (${retryDelivery.distanceKm}km) — batalkan OOC`);
-                      // Override resolved & delivery dengan hasil second-pass
-                      resolved = retryResolved;
-                      delivery = retryDelivery;
-                      break;
-                    }
-                  }
-                } catch (_) {}
-              }
-            }
-            // Jika masih OOC setelah second-pass, baru vonis OOC
-            if (delivery.isOutOfCoverage) {
-              updatedSlate.kelurahan = resolved.kelurahan || resolved.kecamatan || extraction.locationText || 'Surabaya';
-              updatedSlate.kecamatan = resolved.kecamatan || null;
-              updatedSlate.kota = resolved.kota || null;
-              updatedSlate.lat = resolved.lat ?? null;
-              updatedSlate.lng = resolved.lng ?? null;
-              updatedSlate.distanceKm = Number(delivery.distanceKm.toFixed(2));
-              updatedSlate.ongkirFee = delivery.normalPrice;
-              updatedSlate.ongkirPromoFee = delivery.promoPrice;
-              updatedSlate.isLocationConfirmed = false;
-              updatedSlate.isOutOfCoverage = true;
-              updatedSlate.projectedState = SlateStore.computeProjectedState(updatedSlate);
-              return {
-                action: 'REJECT_OUT_OF_COVERAGE',
-                reason: `Jarak lokasi (${updatedSlate.distanceKm} km) melebihi batas jangkauan layanan (maks 30 km).`,
-                updatedSlate,
-                shouldSendPricelistImage: false,
-                deterministicTemplateReply: formatPolicyReply(TEMPLATES.outOfCoverage({
-                  distanceKm: updatedSlate.distanceKm || 30,
-                })),
-              };
-            }
-          }
+          const delivery = await deliveryService.calculateDelivery({ lat: resolved.lat, lng: resolved.lng });
 
           updatedSlate.kelurahan = resolved.kelurahan || resolved.kecamatan || extraction.locationText || 'Surabaya';
           updatedSlate.kecamatan = resolved.kecamatan || null;
           updatedSlate.kota = resolved.kota || null;
-          updatedSlate.lat = resolved.lat ?? null;
-          updatedSlate.lng = resolved.lng ?? null;
+          updatedSlate.lat = resolved.lat;
+          updatedSlate.lng = resolved.lng;
           updatedSlate.distanceKm = Number(delivery.distanceKm.toFixed(2));
           updatedSlate.ongkirFee = delivery.normalPrice;
           updatedSlate.ongkirPromoFee = delivery.promoPrice;
@@ -610,13 +543,10 @@ export class DecisionMatrix {
 
           if (isPureLocationMessage) {
             // Zero hardcode: ambil treatment aktif dari state/riwayat, tanpa menebak paket
-            // Jika belum ada treatment spesifik (null) atau hanya alias generik "pijat bayi", biarkan null untuk CTA netral
-            const rawCandidate =
+            const candidateTreatmentName =
               updatedSlate.selectedTreatmentName ||
               (context as any)?.lastDiscussedTreatment ||
               undefined;
-            const isGenericAlias = rawCandidate ? /^(?:pijat bayi|massage bayi|pijat baby|pijat biasa|massage biasa|pijat standar|pijat reguler|pijat rutin)$/i.test(rawCandidate.trim()) : false;
-            const candidateTreatmentName = isGenericAlias ? undefined : rawCandidate;
             const preferredDate = extraction.preferredDateText || updatedSlate.preferredDate || undefined;
 
             return {
