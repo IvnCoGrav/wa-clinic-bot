@@ -35,6 +35,7 @@ import { googleIntegrationAdminRoutes } from './admin/google-integration.subrout
 import { backupAdminRoutes } from './admin/backup.subroute';
 import { analyticsAdminRoutes } from './admin/analytics.subroute';
 import { quickRepliesAdminRoutes } from './admin/quick-replies.subroute';
+import { aiHealthAdminRoutes } from './admin/ai-health.subroute';
 
 let cachedIndexHtml: string | null = null;
 let cachedManifest: Buffer | null = null;
@@ -195,6 +196,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(backupAdminRoutes);
   fastify.register(analyticsAdminRoutes);
   fastify.register(quickRepliesAdminRoutes);
+  fastify.register(aiHealthAdminRoutes);
 
   // Serve admin HTML files & SPA assets
   const fs = await import('fs/promises');
