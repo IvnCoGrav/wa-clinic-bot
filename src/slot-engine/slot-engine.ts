@@ -8,6 +8,8 @@ import { ReplyGenerator } from './reply-generator';
 import { conversationService } from '../services/conversation.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
+import { telemetryService } from '../services/telemetry.service';
+import { CustomerSlate, ExtractedEntities } from './types';
 
 /**
  * Core Orchestrator: Context-Grounded Slot-Filling Engine.
@@ -17,6 +19,50 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   const { customer, conversation, incomingMessage, history } = ctx;
   const tenantId = ctx.tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
   const incomingText = incomingMessage?.text?.body || '';
+  const telemetryStart = Date.now();
+
+  const recordTurnTelemetry = (updatedSlate: CustomerSlate, extraction: ExtractedEntities | null, decision: any, rawReply: string | null | undefined, sanitizedReply: string | null | undefined, modelName?: string) => {
+    try {
+      const latencyMs = Date.now() - telemetryStart;
+      const isSilentDropRaw = decision.action.includes('HUMAN') && !sanitizedReply && !decision.deterministicTemplateReply;
+      const isMedical = extraction?.isMedicalEmergency || updatedSlate.humanHandlingReason === 'medical_concern';
+      const isSilentDrop = isSilentDropRaw && !isMedical;
+      const mutilation = telemetryService.getLastMutilation(customer.phone);
+      const mutilationRatio = mutilation ? mutilation.ratio : telemetryService.calculateMutilationRatio(rawReply || null, sanitizedReply || null);
+      const nluErrorCode = telemetryService.getLastNluError(customer.phone);
+      const isJsonTruncated = nluErrorCode === 'JSON_TRUNCATED';
+      let isUnjustifiedRsqr = false;
+      try {
+        const closerInstruction = decision.deterministicTemplateReply || sanitizedReply || '';
+        isUnjustifiedRsqr = telemetryService.checkUnjustifiedRsqr(updatedSlate.isLocationConfirmed, closerInstruction);
+        if (!isUnjustifiedRsqr && sanitizedReply) {
+          isUnjustifiedRsqr = telemetryService.checkUnjustifiedRsqr(updatedSlate.isLocationConfirmed, sanitizedReply);
+        }
+      } catch {}
+      telemetryService.recordTurn({
+        conversationId: conversation.id,
+        customerPhone: customer.phone,
+        tenantId,
+        timestamp: Date.now(),
+        rawLlmReply: rawReply || null,
+        sanitizedReply: sanitizedReply || null,
+        mutilationRatio,
+        isSilentDrop,
+        isUnjustifiedRsqr,
+        nluErrorCode,
+        isJsonTruncated,
+        latencyMs,
+        modelName: modelName || telemetryService.getLastModel(customer.phone) || undefined,
+      } as any);
+      telemetryService.clearLastMutilation(customer.phone);
+      telemetryService.setLastNluError(customer.phone, null);
+      telemetryService.clearLastModel(customer.phone);
+      import('../services/alert-daemon.service').then(m => m.alertDaemonService.evaluate({
+        conversationId: conversation.id, customerPhone: customer.phone, tenantId, timestamp: Date.now(),
+        rawLlmReply: rawReply || null, sanitizedReply: sanitizedReply || null, mutilationRatio, isSilentDrop, isUnjustifiedRsqr, nluErrorCode, isJsonTruncated, latencyMs, modelName,
+      } as any).catch(()=>{})).catch(()=>{});
+    } catch {}
+  };
 
   console.log(`[SLOT ENGINE] Processing message from customer ${customer.phone} ("${incomingText}")`);
 
@@ -38,6 +84,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       );
       conversation.is_human_handling = true;
       conversation.current_state = ConversationState.HUMAN_HANDLING;
+      recordTurnTelemetry(initialSlate, null, { action: 'SILENT_HUMAN_ACTIVE', deterministicTemplateReply: null } as any, null, null);
       return {
         nextState: ConversationState.HUMAN_HANDLING,
         shouldSendReply: false,
@@ -142,6 +189,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       const { TEMPLATES } = await import('../config/persona');
       const shareNote = customer.share_location_sent ? '' : `\n\n${TEMPLATES.askShareLocation()}`;
       const replyText = `Baik Bunda, data reservasi sudah kami terima ya bund. Kami cek dulu ya bund. 😊${shareNote}`;
+      recordTurnTelemetry(initialSlate, null, { action: 'SEND_RESERVATION_FORM', deterministicTemplateReply: replyText } as any, null, replyText);
 
       return {
         nextState: ConversationState.HUMAN_HANDLING,
@@ -164,9 +212,11 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       if (hasFormHeaderOrColonFields) {
         const missing = parseResult.missingFields || [];
         const missingStr = missing.join(', ');
+        const incompleteReply = `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`;
+        recordTurnTelemetry(initialSlate, null, { action: 'SEND_RESERVATION_FORM', deterministicTemplateReply: incompleteReply } as any, null, incompleteReply);
         return {
           nextState: ConversationState.RESERVATION_SENT,
-          replyText: `Mohon maaf Bunda, mohon diisi bagian ${missingStr} pada list reservasi ya bund. Terima kasih! 😊`,
+          replyText: incompleteReply,
           shouldSendReply: true,
           aiReasoning: 'Customer submitted incomplete reservation form -> Prompted to fill missing fields.',
         };
@@ -180,11 +230,13 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
   // 1b. Fast-Track ⚡: Single-Pass 1-Call FAQ & General Knowledge Inquiry
   const { isFastFaq1CallEnabled } = await import('../config/feature-flags');
   const { FastFaqDetector } = await import('./fast-faq-detector');
-  if (isFastFaq1CallEnabled(tenantId) && FastFaqDetector.isPotentialFastFaq(incomingText, initialSlate)) {
+    if (isFastFaq1CallEnabled(tenantId) && FastFaqDetector.isPotentialFastFaq(incomingText, initialSlate)) {
     const { FastFaqGenerator } = await import('./fast-faq-generator');
     const fastResult = await FastFaqGenerator.process(ctx, initialSlate);
     if (fastResult) {
       await SlateStore.persistSlate(fastResult.updatedSlate);
+      const fr = fastResult.handlerResult as any;
+      recordTurnTelemetry(fastResult.updatedSlate, null, { action: fr.nextState === ConversationState.HUMAN_HANDLING ? 'SILENT_HUMAN_ACTIVE' : 'GENERATE_AI_RESPONSE', deterministicTemplateReply: fr.replyText } as any, null, fr.replyText || null, (fr as any).modelName);
       return fastResult.handlerResult;
     }
     console.log(`[SLOT ENGINE] Fast-Track FAQ fell through to 2-Call Deep Engine for customer ${customer.phone}`);
@@ -228,6 +280,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       } catch {}
     }
 
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, null, null);
     return {
       nextState: ConversationState.HUMAN_HANDLING,
       shouldSendReply: false,
@@ -246,6 +299,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       tenantId,
       'customer_complaint'
     );
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, null, null);
     return {
       nextState: ConversationState.HUMAN_HANDLING,
       shouldSendReply: false,
@@ -264,6 +318,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       tenantId,
       'unlisted_service'
     );
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, null, null);
     return {
       nextState: ConversationState.HUMAN_HANDLING,
       shouldSendReply: false,
@@ -292,6 +347,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       historyCount: botRepliesCount,
       preserveGreeting: true,
     });
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, decision.deterministicTemplateReply, sanitizedReply);
     return {
       nextState: ConversationState.HUMAN_HANDLING,
       replyText: sanitizedReply,
@@ -310,6 +366,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       historyCount: botRepliesCount,
       preserveGreeting: true,
     });
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, decision.deterministicTemplateReply, sanitizedReply);
     return {
       nextState: ConversationState.COMPLETED,
       replyText: sanitizedReply,
@@ -320,6 +377,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
 
   // 5. Handle Kasus 2: Percakapan Sedang Diambil Alih CS
   if (decision.action === 'SILENT_HUMAN_ACTIVE') {
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, null, null);
     return {
       nextState: ConversationState.HUMAN_HANDLING,
       shouldSendReply: false,
@@ -337,6 +395,7 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       historyCount: botRepliesCount,
       preserveGreeting: true,
     });
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, decision.deterministicTemplateReply, sanitizedReply);
     return {
       nextState: decision.updatedSlate.projectedState,
       replyText: sanitizedReply,
@@ -365,6 +424,13 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
     customerInput: incomingText,
     tenantId,
   });
+  // Telemetri untuk AI response (raw vs sanitized sudah dicatat di ReplyGenerator)
+  {
+    const m = telemetryService.getLastMutilation(customer.phone);
+    const rawForTelemetry = m?.raw || null;
+    const modelForTelemetry = telemetryService.getLastModel(customer.phone) || undefined;
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, rawForTelemetry, replyText, modelForTelemetry);
+  }
 
   // Jika balasan LLM menyertakan format reservasi, tandai form telah terkirim
   if (
@@ -417,6 +483,25 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       } catch {}
     }
 
+    // Telemetri untuk outage (NLU failure / LLM outage)
+    try {
+      const nluErr = telemetryService.getLastNluError(customer.phone) || 'LLM_ERROR';
+      telemetryService.recordTurn({
+        conversationId: conversation.id,
+        customerPhone: customer.phone,
+        tenantId,
+        timestamp: Date.now(),
+        rawLlmReply: null,
+        sanitizedReply: null,
+        mutilationRatio: 0,
+        isSilentDrop: true,
+        isUnjustifiedRsqr: false,
+        nluErrorCode: nluErr,
+        isJsonTruncated: nluErr === 'JSON_TRUNCATED',
+        latencyMs: Date.now() - telemetryStart,
+        modelName: telemetryService.getLastModel(customer.phone) || undefined,
+      } as any);
+    } catch {}
     // Bot DIAM (shouldSendReply: false) - Jangan pernah mengirim pesan mengarang / regex rusak ke customer!
     return {
       nextState: ConversationState.HUMAN_HANDLING,

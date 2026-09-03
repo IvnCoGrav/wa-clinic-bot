@@ -8,6 +8,7 @@ import { UnifiedResponseSanitizer } from '../utils/language-sanitizer';
 import { ConversationStateSummarizer } from './conversation-summarizer';
 import { FewShotExemplarBank } from './few-shot-exemplars';
 import { AdaptiveModelSelector } from './adaptive-model-selector';
+import { telemetryService } from '../services/telemetry.service';
 
 /**
  * Sanitizer Format Deterministik terpusat (alias ke UnifiedResponseSanitizer).
@@ -138,6 +139,12 @@ export class ReplyGenerator {
       if (!finalReply || finalReply.trim().length < 5) {
         throw new Error('Sanitized reply too short or empty after anti-monologue guard (len <5) — reject to prevent truncated/monologue leak');
       }
+      // Telemetri: hitung mutilation ratio untuk observer
+      try {
+        const ratio = telemetryService.calculateMutilationRatio(rawReply, finalReply);
+        telemetryService.setLastMutilation(context?.customerPhone || 'unknown', ratio, rawReply, finalReply);
+        telemetryService.setLastModel(context?.customerPhone || 'unknown', callResult.model || modelSelection.modelName || 'unknown');
+      } catch {}
 
       // Jaminan Kepatuhan Greeting Turn-0: Jika ini pesan pertama (historyCount === 0),
       // pastikan balasan wajib diawali perkenalan resmi Bidan Yusi jika LLM belum menyertakannya.
@@ -153,6 +160,10 @@ export class ReplyGenerator {
         const greetingHeader = TEMPLATES.firstContactGreetingHeader({ isIslamic });
         const cleanBody = stripDuplicateTurn0Greeting(finalReply);
         finalReply = `${greetingHeader}\n\n${cleanBody}`;
+        try {
+          const ratio2 = telemetryService.calculateMutilationRatio(rawReply, finalReply);
+          telemetryService.setLastMutilation(context?.customerPhone || 'unknown', ratio2, rawReply, finalReply);
+        } catch {}
       }
 
       try {
