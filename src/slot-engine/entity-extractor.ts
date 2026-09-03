@@ -7,6 +7,7 @@ import { AiModelConfigService } from '../config/ai-models.config';
 import { extractJsonContent } from '../utils/json-extract';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getGazetteerAreas, escapeRegex, resolvePrefixMatches } from '../utils/gazetteer';
+import { telemetryService } from '../services/telemetry.service';
 
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
@@ -330,6 +331,7 @@ export class EntityExtractor {
     const startedAt = Date.now();
 
     if (!endpoint.apiKey) {
+      telemetryService.setLastNluError(context?.customerPhone || 'unknown', null);
       return baseline;
     }
 
@@ -429,11 +431,20 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
       const responseData = callResult.data;
       const rawContent = responseData?.choices?.[0]?.message?.content || '{}';
       const extractedStr = extractJsonContent(rawContent) || '{}';
+      const isJsonTruncated = rawContent.length > 300 && (!extractedStr.trim().endsWith('}') || extractedStr.length < rawContent.length * 0.5);
+      if (isJsonTruncated) {
+        telemetryService.setLastNluError(context?.customerPhone || 'unknown', 'JSON_TRUNCATED');
+      }
       let parsedObj: any = {};
       try {
         parsedObj = JSON.parse(extractedStr);
-      } catch {}
+      } catch {
+        telemetryService.setLastNluError(context?.customerPhone || 'unknown', 'JSON_TRUNCATED');
+      }
       const validated = RawLlmExtractionSchema.safeParse(parsedObj);
+      if (!validated.success) {
+        telemetryService.setLastNluError(context?.customerPhone || 'unknown', 'JSON_TRUNCATED');
+      }
 
       if (validated.success) {
         const d = validated.data;
@@ -456,6 +467,7 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
         };
 
         const result = this.sanitizeExtractedEntities(rawResult);
+        telemetryService.setLastNluError(context?.customerPhone || 'unknown', null);
 
         try {
           const { auditLlmCall } = await import('../utils/llm-audit-buffer');
@@ -500,6 +512,12 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
       }
     } catch (err: any) {
       console.error('[ENTITY EXTRACTOR ERROR] All LLM models in fallback chain failed:', err.message);
+      const msg = err?.message || '';
+      let code: string | null = 'LLM_ERROR';
+      if (msg.includes('400') || msg.toLowerCase().includes('bad request')) code = 'HTTP_400';
+      else if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) code = 'HTTP_401';
+      else if (msg.toLowerCase().includes('truncated') || msg.toLowerCase().includes('json')) code = 'JSON_TRUNCATED';
+      telemetryService.setLastNluError(context?.customerPhone || 'unknown', code);
       try {
         const { auditLlmCall } = await import('../utils/llm-audit-buffer');
         auditLlmCall({
