@@ -61,8 +61,10 @@ export const HIGH_SEVERITY_MEDICAL_KEYWORDS: string[] = [  // Qualitative & Quan
 ];
 
 // MEDIUM Severity Symptoms & General Medical Concerns (Escalates to Bidan Consultation)
+// Catatan Fase 3: kolik, kembung parah, ruam, nyeri pinggang, batuk pilek DIKELUARKAN dari medium
+// karena merupakan keluhan komplementer yang diarahkan ke Pijat Bayi Pulih Ceria / Kolik, bukan silent drop.
 export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
-  // Navel & Skin Concerns
+  // Navel & Skin Concerns (ruam non-parah tetap, ruam parah dikeluarkan karena sering false positive)
   'tali pusat',
   'pusar berbau',
   'pusar berdarah',
@@ -70,17 +72,14 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'ruam tali pusat',
   'bintik-bintik merah',
   'bintik merah',
-  'ruam',
-  'ruam parah',
   'merah-merah',
   'kulit mengelupas',
   'eksim',
   'bisul',
   'bentol-bentol',
 
-  // Pregnancy / Musculoskeletal Concerns (mis. pinggang hamil menjalar)
+  // Pregnancy / Musculoskeletal Concerns (nyeri pinggang dikeluarkan — komplementer)
   'pinggang sakit',
-  'nyeri pinggang',
   'sakit menjalar',
   'kontraksi',
 
@@ -92,14 +91,12 @@ export const MEDIUM_SEVERITY_MEDICAL_KEYWORDS: string[] = [
   'payudara bengkak keras',
   'mastitis',
 
-  // Infant Gastrointestinal & General Health
+  // Infant Gastrointestinal & General Health (kolik/kembung parah dikeluarkan)
   'diare',
   'mencret',
   'bab berdarah',
   'bab berbusa',
   'muntah',
-  'kembung parah',
-  'kolik',
   'bayi menangis tanpa henti',
   'kuning',
   'bayi kuning',

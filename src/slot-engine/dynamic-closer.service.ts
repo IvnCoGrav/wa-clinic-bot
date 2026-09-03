@@ -14,14 +14,11 @@ export class DynamicCloserService {
       return 'LOCATION';
     }
 
-    // Prioritas 2: Cek apakah treatment atau keluhan/gejala sudah ada
-    const hasTreatmentOrSymptom = Boolean(
-      slate.selectedTreatmentName ||
-      (slate.symptoms && slate.symptoms.length > 0)
-    );
+    // Prioritas 2: Cek apakah treatment sudah dipilih (gejala saja tidak cukup — pisahkan gejala vs treatment)
+    const hasTreatment = Boolean(slate.selectedTreatmentName);
 
-    // Jika belum ada keluhan / treatment yang dipilih -> pandu pemilihan treatment
-    if (!hasTreatmentOrSymptom) {
+    // Jika belum ada treatment yang dipilih (meski sudah ada gejala batuk pilek) -> pandu pemilihan treatment
+    if (!hasTreatment) {
       return 'TREATMENT';
     }
 
@@ -173,10 +170,13 @@ ${ongkirGuard}`;
 ${ongkirGuard}`;
         }
 
+        const treatmentPromptText = targetTreatment !== 'perawatannya'
+          ? ` (rekomendasikan ${targetTreatment} yang sesuai keluhan si kecil)`
+          : '';
         return `PANDUAN KONSULTASI & PENUTUP (TANYA PILIHAN TREATMENT):
 1. Jawab pertanyaan seputar layanan/keluhan Bunda terlebih dahulu dengan ramah.
 2. Jika Bunda baru menyebutkan lokasi, sampaikan estimasi ongkir promo dengan jelas (jika belum disampaikan).
-3. Di kalimat penutup, tanyakan secara hangat mau ambil paket apa atau treatment apa yang ingin diambil (contoh: "Rencana mau treatment apa bunda ?🤗" atau "Bunda tertarik mau ambil paket apa untuk si kecil? 😊").
+3. Di kalimat penutup, tanyakan secara hangat mau ambil paket apa atau treatment apa yang ingin diambil${treatmentPromptText} (contoh: "Rencana mau treatment apa bunda ?🤗" atau "Bunda tertarik mau ambil paket apa untuk si kecil? 😊").
 4. DILARANG langsung menanyakan hari/jadwal sebelum Bunda memilih treatment atau keluhan dibahas!
 ⚠️ ATURAN ANTI-REPETISI: DILARANG mengulang kalimat penutup yang sama persis jika sudah pernah ditanyakan di riwayat chat! Variasikan pertanyaan penutup secara natural.
 ${ongkirGuard}`;

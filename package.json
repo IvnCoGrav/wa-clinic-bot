@@ -10,6 +10,8 @@
     "chat": "tsx src/cli/chat-simulator.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:golden": "vitest run tests/golden-corpus",
+    "test:real-replay": "tsx scripts/replay-real-customer-cases.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

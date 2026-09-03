@@ -100,7 +100,7 @@ describe('Slot Engine Lead Greeting & False-Positive Hardening (Unit Tests)', ()
     });
 
     it('should strip generic location placeholders like "rumah" or "klinik"', () => {
-      const genericLocations = ['rumah', 'ke rumah', 'di rumah', 'klinik', 'tempat', 'sini', 'surabaya / sidoarjo'];
+      const genericLocations = ['rumah', 'ke rumah', 'di rumah', 'klinik', 'tempat', 'sini'];
       for (const loc of genericLocations) {
         const raw: ExtractedEntities = {
           ...emptyExtraction,

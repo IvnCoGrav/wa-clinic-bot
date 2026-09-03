@@ -8,16 +8,16 @@ import { BOT_PERSONA_PROMPT } from '../../src/config/persona';
 
 describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', () => {
   describe('1. UnifiedResponseSanitizer & sanitizeScheduleAffirmations', () => {
-    it('Customer asks "Hari sabtu bu bidan bisa?" -> strips "Tentu bisa" and normalizes "Bun" -> "Bunda"', () => {
+    it('Customer asks "Hari sabtu bu bidan bisa?" -> sanitizer no longer strips "Tentu bisa" (ResponseValidator handles it)', () => {
       const llmOutput =
         'Tentu bisa, kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bun 😊 Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?';
 
       const cleaned = UnifiedResponseSanitizer.sanitize(llmOutput, { historyCount: 1 });
 
-      expect(cleaned).not.toContain('Tentu bisa');
-      expect(cleaned).not.toContain('Bun ');
-      expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bunda 😊');
-      expect(cleaned).toContain('Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?');
+      // Sanitizer destructive dipangkas di Fase 4.5 — "Tentu bisa" tetap, Validator yang jaga
+      expect(cleaned.toLowerCase()).toContain('tentu bisa');
+      expect(cleaned).toContain('Bunda');
+      expect(cleaned.toLowerCase()).toContain('kami bantu cekkan ketersediaan jadwal');
     });
 
     it('should sanitize "Tentu bisa Bunda, untuk ketersediaan jadwal hari Sabtu..." -> "Untuk ketersediaan jadwal hari Sabtu..."', () => {
@@ -483,7 +483,7 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
       expect(decision.deterministicTemplateReply).not.toContain('Kencana');
     });
 
-    it('Customer only asks symptom/treatment availability "Untuk pijat flu ada kah kak ??" -> strips unprompted price and duration', async () => {
+    it('Customer only asks symptom/treatment availability "Untuk pijat flu ada kah kak ??" -> sanitizer preserves price/duration (Validator now guards)', async () => {
       const { UnifiedResponseSanitizer } = await import('../../src/utils/language-sanitizer');
       const rawLlmReply =
         'Ada ya, Bunda! 😊 Untuk pijat flu, kami punya layanan *Pijat Bayi Pulih Ceria (Terapi Bapil)* dengan tarif promo Rp 70.000 durasi sekitar 40 menit. Pijat ini menggunakan double aromaterapi dan titik pijat akupresur khusus yang bantu meredakan flu pada si kecil.';
@@ -494,9 +494,9 @@ describe('Anti-Affirmation Schedule Guard (Jangan Mengafirmasi Jadwal "Bisa")', 
       });
 
       expect(sanitized).toContain('Pijat Bayi Pulih Ceria');
-      expect(sanitized).not.toContain('Rp 70.000');
-      expect(sanitized).not.toContain('40 menit');
-      expect(sanitized).not.toContain('tarif promo');
+      // Fase 4.5: sanitizer destructive dipangkas — harga/durasi tetap, Validator yang jaga halusinasi
+      expect(sanitized).toContain('Rp 70.000');
+      expect(sanitized).toContain('40 menit');
     });
 
     it('Customer explicitly asks for price & duration "pijat flu berapa harganya dan berapa menit?" -> preserves price and duration', async () => {

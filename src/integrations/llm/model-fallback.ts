@@ -102,8 +102,7 @@ export async function callChatCompletionsWithFallback(
       }
     );
     const content = resp.data?.choices?.[0]?.message?.content?.trim() || '';
-    const reasoning = resp.data?.choices?.[0]?.message?.reasoning_content || '';
-    if (!content && !reasoning) throw new Error('Empty response content from LLM');
+    if (!content || content.length < 5) throw new Error('Empty or too short response content from LLM');
     if (content && call.isContentValid && !call.isContentValid(content)) {
       throw new Error('Invalid response content from LLM (validator rejected)');
     }

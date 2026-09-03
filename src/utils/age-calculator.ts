@@ -28,6 +28,9 @@ export function parseAgeTextToMonths(ageText: string): number | null {
     return null;
   }
 
+  // Bayi baru lahir
+  if (/\b(newborn|baru\s+lahir|nb)\b/i.test(lower)) return 0;
+
   let years = 0;
   let months = 0;
 
@@ -37,8 +40,25 @@ export function parseAgeTextToMonths(ageText: string): number | null {
   const monthMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:bulan|bln|bl\b)\b/);
   if (monthMatch) months = parseFloat(monthMatch[1].replace(',', '.')) || 0;
 
-  if (years === 0 && months === 0) return null;
-  return Math.round(years * 12 + months);
+  if (years !== 0 || months !== 0) {
+    return Math.round(years * 12 + months);
+  }
+
+  // Hari -> bulan
+  const dayMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:hari|hr)\b/);
+  if (dayMatch) {
+    const days = parseFloat(dayMatch[1].replace(',', '.')) || 0;
+    return Math.round((days / 30.44) * 10) / 10;
+  }
+
+  // Minggu -> bulan
+  const weekMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:minggu|mgg|mg)\b/);
+  if (weekMatch) {
+    const weeks = parseFloat(weekMatch[1].replace(',', '.')) || 0;
+    return Math.round(((weeks * 7) / 30.44) * 10) / 10;
+  }
+
+  return null;
 }
 
 /**

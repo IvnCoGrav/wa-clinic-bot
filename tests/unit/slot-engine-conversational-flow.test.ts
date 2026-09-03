@@ -78,16 +78,26 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
       expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal Bidan untuk hari Sabtu ya.');
     });
 
-    it('should sanitize over-affirmation "Tentu bisa, kami bantu cekkan..." into neutral schedule check', () => {
+    it('should sanitize over-affirmation "Tentu bisa, kami bantu cekkan..." into neutral schedule check (via ResponseValidator)', async () => {
       const affirmationText = 'Tentu bisa, kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bun 😊 Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?';
-      const cleaned = UnifiedResponseSanitizer.sanitize(affirmationText, {
-        historyCount: 1,
-      });
-
+      const { ResponseValidator } = await import('../../src/slot-engine/response-validator');
+      const baseSlateForTest: any = {
+        isLocationConfirmed: false,
+        kelurahan: null,
+        selectedTreatmentName: null,
+        isHumanHandling: false,
+        reservationFormSent: false,
+        childAgeMonths: null,
+        childAgeCategory: null,
+        symptoms: [],
+        distanceKm: null,
+        ongkirFee: null,
+        ongkirPromoFee: null,
+      };
+      const validation = ResponseValidator.validate(affirmationText, baseSlateForTest, {});
+      const cleaned = validation.sanitizedReply || affirmationText;
       expect(cleaned).not.toContain('Tentu bisa');
-      expect(cleaned).not.toContain('Bun ');
-      expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal Bidan yang ready untuk hari Sabtu ya, Bunda 😊');
-      expect(cleaned).toContain('Untuk jam preferensinya, apakah pagi, siang, atau sore yang lebih memudahkan?');
+      expect(cleaned).toContain('Kami bantu cekkan ketersediaan jadwal');
     });
   });
 

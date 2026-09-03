@@ -530,8 +530,8 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
           error: { message: err?.message },
         });
       } catch {}
-      // Jangan tebak-tebak dengan regex rapuh saat LLM outage. Lempar error untuk Silent Human Escalation!
-      throw err;
+      console.warn(`[ENTITY EXTRACTOR] LLM failed for ${context?.customerPhone || 'unknown'}, falling back to deterministic baseline`);
+      return baseline;
     }
 
     return baseline;

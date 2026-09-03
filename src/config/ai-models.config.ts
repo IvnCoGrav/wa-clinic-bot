@@ -26,6 +26,12 @@ export interface AiTaskModelConfig {
 // Basis default (env-driven) untuk tiap tenant — di-clone ke per-tenant registry saat dipakai.
 export function sanitizeModelForProvider(model: string, baseUrl?: string): string {
   if (!model) return 'gpt-4o-mini';
+  const url = (baseUrl || process.env.OPENAI_BASE_URL || '').toLowerCase();
+  if (!model.startsWith('gpt-') && !model.startsWith('o1') && !model.startsWith('o3')) {
+    if (url.includes('api.openai.com') || url.includes('sumopod.com')) {
+      return 'gpt-4o-mini';
+    }
+  }
   return model;
 }
 
@@ -107,10 +113,10 @@ const defaultTaskModelRegistry: Map<AiTaskType, AiTaskModelConfig> = new Map([
     'INTENT_CLASSIFICATION',
     {
       task: 'INTENT_CLASSIFICATION',
-      provider: process.env.AI_PROVIDER_NLU || defaultProvider,
-      modelName: defaultNluModel,
-      description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer.',
-      maxTokens: 1024,
+      provider: 'OpenAI',
+      modelName: 'gpt-4o-mini',
+      description: 'Digunakan untuk klasifikasi terstruktur intent & entitas NLU customer. (TERKUNCI: dilarang fallback ke MiniMax/DeepSeek untuk menjaga P50 1.8s)',
+      maxTokens: 500,
       temperature: 0.1,
       confidenceThreshold: parseFloat(process.env.NLU_CONFIDENCE_THRESHOLD || '0.60'),
     },

@@ -87,16 +87,17 @@ describe('Unified Single-Pass Semantic Extractor (Part 3)', () => {
       expect(result.intents).toContain('ask_price');
     });
 
-    it('should throw error when LLM throws (escalates to human handling)', async () => {
+    it('should return deterministic baseline when LLM throws (graceful degradation)', async () => {
       vi.spyOn(modelFallback, 'callChatCompletionsWithFallback').mockRejectedValueOnce(
         new Error('Network timeout')
       );
 
-      await expect(
-        EntityExtractor.extract('Anak saya usia 5 bulan batuk', {
-          customerPhone: '6288235780925',
-        })
-      ).rejects.toThrow('Network timeout');
+      const result = await EntityExtractor.extract('Anak saya usia 5 bulan batuk', {
+        customerPhone: '6288235780925',
+      });
+
+      expect(result.intents).toContain('consult_symptom');
+      expect(result.childAgeMonths).toBe(5);
     });
   });
 });
