@@ -527,13 +527,13 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       setStatus(res.status === 'confirmed' ? 'confirmed' : 'pending');
       setNotes(res.notes || '');
 
-      // Children / babies pre-fill
-      const rawBabies = cust?.children || res.children || [];
+      // Children / babies pre-fill — fallback ke baby_details untuk reservasi lama
+      const rawBabies = cust?.children || res.children || (res as any).baby_details || [];
       if (Array.isArray(rawBabies) && rawBabies.length > 0) {
         setBabies(
           rawBabies.map((b: any) => ({
             name: b.name || '',
-            ageText: b.raw_age_text || b.ageText || b.current_age || '',
+            ageText: b.ageText || b.age || b.raw_age_text || b.current_age || '',
           }))
         );
       }
@@ -1057,10 +1057,10 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             customerId,
             treatmentCategory: computedCategory,
             treatmentDetail: finalTreatmentDetail,
-            bookingDate: fullBookingIso,
-            assignedStaffId: assignedStaffId || undefined,
+            bookingDate: fullBookingIso || null,
+            assignedStaffId: assignedStaffId ? assignedStaffId : null,
             status,
-            notes: notes.trim() || undefined,
+            notes: notes.trim() ? notes.trim() : null,
             babies: babies.filter((b) => b.name.trim().length > 0),
             purchaseValue: totalPaymentAmount,
           }),
