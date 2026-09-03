@@ -583,4 +583,29 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Rencana Tindak Lanjut:**
   Bila klinik siap mengaktifkan kembali reminder & review otomatis, hapus postponement guard di `processDueFollowUps` dan kembalikan default status pembuatan menjadi `QUEUED`.
 
+---
+
+## 21. [Geocoding] Resolusi Nama Jalan Lokal Tanpa Indikator Jalan ("Jl." / "Gang") Memerlukan Klarifikasi Kelurahan
+
+- **Status:** mitigated / open tech-debt.
+- **Ditemukan:** 2026-09-03, saat backtest 30 percakapan riil pelanggan database.
+- **Gejala:** Pelanggan yang menyebut nama jalan lokal tanpa awalan penanda jalan (contoh: *"Di bronggalan"*, *"Klampis jaya"*) tidak terdaftar di kamus kelurahan/kecamatan `surabaya_sidoarjo_subdistricts.json`. Gazetteer Pre-Validation Gate mengarahkan bot meminta klarifikasi kelurahan: *"Boleh diinfokan detail kelurahan atau desa di Bronggalan Bunda agar kami bantu cekkan ongkir presisinya? 😊"*.
+- **Mitigasi Saat Ini:**
+  - `isStreetOrLandmark` mengizinkan pencarian Google Maps jika ada kata penanda (*"jl"*, *"jalan"*, *"gang"*, *"perumahan"*, *"no"*).
+  - Jika nama jalan berdiri sendiri tanpa kata penanda dan bukan kelurahan, bot secara sopan dan aman meminta kelurahan spesifik, menghindari kesalahan tebak ongkir.
+- **Rencana Tindak Lanjut:**
+  - Tambahkan kamus alias koridor/jalan arteri utama Surabaya & Sidoarjo ke dalam `landmarks.ts` / `gazetteer.ts` agar nama jalan populer seperti Bronggalan, Klampis, Kertajaya langsung terpetakan ke kelurahan induknya tanpa perlu tanya ulang.
+
+---
+
+## 22. [Vitest Test Isolation] Race Condition State Mock pada Multi-File Integration Test Suite
+
+- **Status:** open (test runner isolation tech-debt).
+- **Ditemukan:** 2026-09-03.
+- **Gejala:** Ketika seluruh vitest suite (207 file test, 1.700+ tes) dijalankan paralel via `npm test`, sebanyak 4-5 integration test (`bot-toggle-messaging-schema.test.ts`, `control_center_ui.test.ts`, `queue-stale-state.test.ts`) mengalami transient assertion failure karena berbagi in-memory mock store (Prisma/Redis fallback) yang ter-reset di tengah jalan oleh test runner lain. Tes-tes ini lulus 100% jika dijalankan secara terisolasi (`npx vitest run tests/integration/...`).
+- **Rencana Tindak Lanjut:**
+  - Pisahkan runner unit test (`npm run test:unit`) dan integration test (`npm run test:integration`).
+  - Tambahkan konfigurasi `--no-file-parallelism` atau `--isolate` khusus untuk folder `tests/integration/` di `vitest.config.ts`.
+
+
 

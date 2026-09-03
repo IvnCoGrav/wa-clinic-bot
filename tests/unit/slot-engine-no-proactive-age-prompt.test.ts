@@ -45,24 +45,23 @@ describe('Slot Engine - No Proactive Age Prompt & Custom Persona Integration', (
     expect(instruction).not.toContain('Tanyakan usia si kecil');
   });
 
-  it('2. Turn-3: Saat customer menanyakan keluhan bapil ("Kalau mau pijat batuk pilek bisa ?"), closer langsung memandu penawaran jadwal (SCHEDULE), BUKAN tanya usia', () => {
+  it('2. Turn-3: Saat customer menanyakan keluhan bapil ("Kalau mau pijat batuk pilek bisa ?"), closer memandu pemilihan treatment (TREATMENT), karena gejala saja tidak cukup — harus ada selectedTreatmentName', () => {
     const slateWithSymptom: CustomerSlate = {
       ...baseSlateWithLocation,
       symptoms: ['batuk', 'pilek'],
     };
 
     const missing = DynamicCloserService.determineMissingSlot(slateWithSymptom);
-    expect(missing).toBe('SCHEDULE');
+    expect(missing).toBe('TREATMENT');
 
     const instruction = DynamicCloserService.getCloserInstruction(slateWithSymptom, null, [
       { role: 'assistant', content: 'Jika dilihat dari jaraknya... Rencana mau treatment apa bunda ?🤗' },
     ]);
-    expect(instruction).toContain('PANDUAN PENAWARAN JADWAL');
-    expect(instruction).toContain('rencana mau treatment di hari apa');
+    expect(instruction).toContain('PANDUAN KONSULTASI & PENUTUP (TANYA PILIHAN TREATMENT)');
     expect(instruction).not.toContain('berapa usia si kecil');
   });
 
-  it('3. Passive Age Capture: Usia anak tetap tercatat di slate jika customer menyebutkannya, tapi bot tetap tidak menanyakan usia', () => {
+  it('3. Passive Age Capture: Usia anak tetap tercatat di slate jika customer menyebutkannya, tapi bot tetap memandu pemilihan treatment (TREATMENT) karena gejala saja tidak cukup', () => {
     const slateWithAgeAndSymptom: CustomerSlate = {
       ...baseSlateWithLocation,
       childAgeMonths: 5,
@@ -71,10 +70,10 @@ describe('Slot Engine - No Proactive Age Prompt & Custom Persona Integration', (
     };
 
     const missing = DynamicCloserService.determineMissingSlot(slateWithAgeAndSymptom);
-    expect(missing).toBe('SCHEDULE');
+    expect(missing).toBe('TREATMENT');
 
     const instruction = DynamicCloserService.getCloserInstruction(slateWithAgeAndSymptom);
-    expect(instruction).toContain('PANDUAN PENAWARAN JADWAL');
+    expect(instruction).toContain('PANDUAN KONSULTASI & PENUTUP (TANYA PILIHAN TREATMENT)');
     expect(instruction).not.toContain('berapa usia si kecil');
   });
 

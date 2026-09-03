@@ -176,8 +176,9 @@ describe('Hybrid Fast-Track FAQ Engine (Phase 1-4)', () => {
 
   describe('3. End-to-End Orchestrator processSlotEngine with Fast-Track', () => {
     it('should process pure FAQ in Fast-Track 1-Call without invoking 2-Call extractor/generator', async () => {
+      // Unified pipeline: Fast-Track dihapus, semua via 2-Call. Mock NLU + ReplyGenerator untuk FAQ
       const { callChatCompletionsWithFallback } = await import('../../src/integrations/llm/model-fallback');
-      // Mock Fast-Track response
+      // Mock NLU (slot-extractor) -> ask_faq
       (callChatCompletionsWithFallback as any).mockResolvedValueOnce({
         data: {
           choices: [
@@ -185,14 +186,35 @@ describe('Hybrid Fast-Track FAQ Engine (Phase 1-4)', () => {
               message: {
                 content: JSON.stringify({
                   intents: ['ask_faq'],
-                  reply_text: 'Halo Bunda! Kami melayani setiap hari ya Bun dari Senin sampai Minggu termasuk hari libur 😊',
-                  needs_deeper_processing: false,
+                  location_text: null,
+                  street_detail: null,
+                  child_age_months: null,
+                  symptoms: [],
+                  treatment_referenced: null,
+                  preferred_date_text: null,
+                  preferred_time_text: null,
+                  customer_name: null,
+                  is_medical_emergency: false,
+                  confidence_score: 0.95,
                 }),
               },
             },
           ],
         },
-        model: 'MiniMax-M2.7-highspeed',
+        model: 'gpt-4o-mini',
+      });
+      // Mock ReplyGenerator -> FAQ operational hours
+      (callChatCompletionsWithFallback as any).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'Halo Bunda! Kami melayani setiap hari ya Bun dari Senin sampai Minggu termasuk hari libur 😊',
+              },
+            },
+          ],
+        },
+        model: 'gpt-4o-mini',
       });
 
       const mockCtx: any = {
@@ -206,8 +228,8 @@ describe('Hybrid Fast-Track FAQ Engine (Phase 1-4)', () => {
 
       expect(result.shouldSendReply).toBe(true);
       expect(result.replyText).toContain('Senin sampai Minggu');
-      // Only 1 LLM call occurred!
-      expect(callChatCompletionsWithFallback).toHaveBeenCalledTimes(1);
+      // Unified pipeline: 2 LLM calls (NLU + Generator)
+      expect(callChatCompletionsWithFallback).toHaveBeenCalledTimes(2);
     });
 
     it('should bypass Fast-Track and use 2-Call Deep Engine when FAST_FAQ_1CALL_ENABLED is false', async () => {

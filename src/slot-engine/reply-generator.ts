@@ -9,6 +9,7 @@ import { ConversationStateSummarizer } from './conversation-summarizer';
 import { FewShotExemplarBank } from './few-shot-exemplars';
 import { AdaptiveModelSelector } from './adaptive-model-selector';
 import { telemetryService } from '../services/telemetry.service';
+import { ResponseValidator } from './response-validator';
 
 /**
  * Sanitizer Format Deterministik terpusat (alias ke UnifiedResponseSanitizer).
@@ -164,6 +165,24 @@ export class ReplyGenerator {
           const ratio2 = telemetryService.calculateMutilationRatio(rawReply, finalReply);
           telemetryService.setLastMutilation(context?.customerPhone || 'unknown', ratio2, rawReply, finalReply);
         } catch {}
+      }
+
+      // ResponseValidator: jaring pengaman anti-halusinasi (produksi) — setelah semua sanitasi
+      {
+        const hasDeliveryFacts = !!grounding.deliveryFacts;
+        const isOngkirAlreadySent = (context?.history as any)?.some((h: any) => h.role === 'assistant' && (h.content.includes('ongkir') || h.content.includes('jarak'))) || false;
+        const validation = ResponseValidator.validate(finalReply, slate, { isOngkirAlreadySent, hasDeliveryFacts, mandatoryDirective: null });
+        if (!validation.isValid) {
+          console.warn(`[RESPONSE VALIDATOR] Violations: ${validation.violations.join(', ')}`);
+          if (validation.fallbackReply) finalReply = validation.fallbackReply;
+          else if (validation.sanitizedReply) finalReply = validation.sanitizedReply;
+          try {
+            const ratioV = telemetryService.calculateMutilationRatio(rawReply, finalReply);
+            telemetryService.setLastMutilation(context?.customerPhone || 'unknown', ratioV, rawReply, finalReply);
+          } catch {}
+        } else if (validation.sanitizedReply && validation.sanitizedReply !== finalReply) {
+          finalReply = validation.sanitizedReply;
+        }
       }
 
       try {
