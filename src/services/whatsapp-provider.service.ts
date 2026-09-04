@@ -203,7 +203,18 @@ export class WhatsappProviderService {
     const secret = process.env.WAHA_WEBHOOK_SECRET || '';
     const webhook: any = {
       url: webhookUrl,
-      events: ['session.status', 'message', 'label.chat.added', 'label.chat.deleted'],
+      events: [
+        'session.status',
+        'message',
+        'message.any',
+        'message.reaction',
+        'message.reaction.added',
+        'message.reaction.deleted',
+        'message.ack',
+        'message.revoked',
+        'label.chat.added',
+        'label.chat.deleted',
+      ],
       retries: {
         policy: 'constant',
         delaySeconds: 2,
@@ -264,6 +275,27 @@ export class WhatsappProviderService {
 
     // 3. Mulai session → memunculkan QR baru untuk scan ulang.
     return this.startSessionForTenant(tenantId);
+  }
+
+  /**
+   * Sinkronkan webhook WAHA yang sedang berjalan agar segera menerima event reaksi
+   * tanpa harus hapus/scan QR ulang. PUT /api/sessions/:session dengan events terbaru.
+   */
+  public async syncSessionWebhooks(tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const sessionId = await this.resolveSessionId(tenantId);
+    try {
+      const current = await wahaClient.getSession(sessionId);
+      if (!current) return false;
+      const desired = this.buildDefaultSessionConfig();
+      // Pertahankan config non-webhook (noweb/store) dari session lama bila ada
+      const mergedConfig = { ...(current.config || {}), ...desired, webhooks: desired.webhooks };
+      await wahaClient.updateSessionConfig(sessionId, mergedConfig);
+      console.log(`[WhatsAppProvider] Webhook events disinkronkan untuk session ${sessionId} (reaction.* terdaftar)`);
+      return true;
+    } catch (err: any) {
+      console.warn(`[WhatsAppProvider] Gagal sync webhooks untuk ${sessionId}:`, err.message);
+      return false;
+    }
   }
 
   /**
