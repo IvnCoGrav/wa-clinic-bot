@@ -129,7 +129,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   ? 'bg-emerald-50/30 dark:bg-emerald-950/30 ring-1 ring-[#008069] dark:ring-[#00a884]'
                   : item.isCurrentMonth
                   ? 'bg-white dark:bg-[#111b21] hover:bg-[#fafafa] dark:hover:bg-[#1c272e]'
-                  : 'bg-gray-50/60 dark:bg-[#0c1317]/60 text-gray-400 dark:text-[#667781]'
+                  : 'bg-gray-50/60 dark:bg-black/60 text-gray-400 dark:text-[#667781]'
               }`}
             >
               {/* Date number header */}

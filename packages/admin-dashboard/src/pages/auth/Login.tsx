@@ -33,7 +33,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#f0f2f5] dark:bg-[#0c1317] flex flex-col justify-center items-center p-4 relative">
+    <div className="min-h-[100dvh] bg-[#f0f2f5] dark:bg-black flex flex-col justify-center items-center p-4 relative">
       {/* Main card */}
       <div className="w-full max-w-md bg-white dark:bg-[#202c33] rounded-2xl p-8 border border-[#e9edef] dark:border-[#2a3942] relative z-10 shadow-sm">
         {/* Brand Header */}

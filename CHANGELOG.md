@@ -4,6 +4,35 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Auto Mark-As-Read & Sinkronisasi Real-Time Saat Admin Balas via WhatsApp HP (`webhook.route.ts`, `live-chat.service.ts`, `LiveChatMonitor.tsx`) (2026-09-04)
+
+- **Latar Belakang:** Badge unread di dashboard Live Chat tidak hilang ketika admin membalas pasien langsung dari WhatsApp HP / WhatsApp Web eksternal — harus refresh manual.
+- **Stage 1 — Backend:** `webhook.route.ts:401` blok `fromMe && !isBotAutoReply` kini memanggil `messageService.markConversationMessagesAsRead` + `conversationService.setManualUnread(false)` dan `hub.publish({type:'conversation.updated', unreadCount:0, isManualUnread:false})`; `live-chat.service.ts:483` `sendAdminReply` juga sync mark-as-read agar dashboard & WA HP paritas (DB `read_at` terisi, reload tetap 0).
+- **Stage 2 — Frontend:** `LiveChatMonitor.tsx:1891` SSE `message.created` hitung `isAdminOutbound = OUTBOUND && ADMIN`, lalu `nextUnread = (isCurrentOpen || isAdminOutbound) ? 0 : ...` dan `isAwaitingReply=false` bila admin outbound; handler `conversation.updated` sudah sync `unreadCount` dari payload broadcast. VOIP bubble balasan WA HP langsung muncul + badge kiri hilang tanpa reload.
+- **Verifikasi:** `packages/admin-dashboard build` ✓ 11.48s, `npm test` ✓ 209 files / 1724 passed.
+
+#### Fix — Perbaikan Menyeluruh 12 Bug Live Chat Monitor (`LiveChatMonitor.tsx`, `livechat.subroute.ts`, `conversation.service.ts`, `live-chat.service.ts`) (2026-09-04)
+
+- **Latar Belakang:** Audit menemukan 12 bug pada `LiveChatMonitor.tsx` (navigasi reload jebak chat, URL stale, duplikasi foto hilang 20s, badge unread tidak muncul di HP, thread stale saat resume, pencarian bertabrakan, memory leak gambar, voice note jadi broken image, desync mark-all-read, nama stale, typing nyangkut, filter label tidak efisien).
+- **Stage 1 — Navigasi & Lifecycle (Bug 1,2,4,5):** `handleBackToList` kini hentikan typing, reset `selectedIdRef`/`sessionStorage`, bersihkan `?conversationId` via `replaceState`+`setSearchParams` (reload tetap di list); `handleSelect` sinkron URL `?conversationId=` via `pushState` + `setSearchParams` + batalkan typing percakapan lama; mount init tidak lagi paksa `chat` saat `savedView==='list'` di mobile; badge unread dihitung dengan `isChatVisuallyActive = isDesktopRef||mobileViewRef==='chat'` (via refs agar SSE closure tidak stale); `visibilitychange` me-refresh `loadChats` + `loadThread(selectedId)` aktif.
+- **Stage 2 — Pesan & State Sync (Bug 3,8,10,11):** Dedup di `loadThread` & SSE diketatkan ke `id`/`wa_message_id` sama atau teks identik <2000ms atau `media URL` identik <2000ms (dua foto berbeda URL tidak pernah dianggap duplikat); `mark-all-read` sinkronkan `chatsRef.current`; `handleSaveCustomerDetail` patch `chatsRef` nama/telepon (match `conversationId` atau `customerId`); `handleSelect` bersihkan `typingTimerRef`/`typingStartTimerRef` sebelumnya.
+- **Stage 3 — Search, Memori, Audio, Label (Bug 6,7,9,12):** Pisahkan `inChatSearchQuery`/`inChatSearchOpen` dari `searchQuery` daftar (toolbar kaca pembesar di header chat, banner `effectiveInChatQuery` pakai `inChatSearchQuery`); `selectImage` revoke `URL.createObjectURL` via `handleRemoveSelectedImage` + revoke preview lama saat ganti + revoke saat kirim (`handleSendReply`) + cleanup unmount; `VoiceNotePlayer` untuk `audio/*` / `.ogg/.mp3/.m4a/...` (`Play`/`Pause` + progress + durasi), fallback `MediaImage` untuk gambar, kartu dokumen `FileText`+`Download` untuk `application/*`; label filter forward `&label=` ke `GET /api/admin/live-chat/conversations` (subroute + service `listConversations` filter `escalation_reason`/`is_human_handling`, memory fallback ikut filter, empty state + tombol `Reset Filter Label`).
+- **Stage 4 — Verifikasi:** `packages/admin-dashboard npm run build` ✓ (11.72s, `LiveChatMonitor-Dv0yh2cV.js`), `npm test` ✓ (209 passed, 1724 passed). Root `npm run build` gagal pre-existing `duration_minutes` di `reservations.subroute.ts` (bukan regresi patch ini). `dist/` sudah di-rebuild.
+
+#### Changed — Badge footer Live Chat jadi icon-only (`LiveChatMonitor.tsx`) (2026-09-04)
+
+- **Latar Belakang:** Badge MQL, Meta, Medis, Legacy, CS, dan Bot di footer kartu percakapan memakan ruang horizontal — tulisan dihapus, ikon dipertahankan.
+- **Perubahan:** Keenam badge kini icon-only (`AlertTriangle`, `Zap`, `Facebook`, `User`, `Bot`); Legacy yang sebelumnya tanpa ikon diberi ikon `Archive`. Atribut `title` (tooltip) dipertahankan agar arti tiap badge tetap terbaca saat hover.
+- **Tambahan:** Badge MQL dan Legacy disembunyikan bila customer sudah pernah order (`purchaseCount > 0`) — status lead/migrasi tidak lagi relevan untuk repeat customer.
+- **Verifikasi:** `npm run build` dashboard ✓.
+
+#### Changed — Dark Mode Canvas Pure Black `#000000` (`index.css`, `Layout.tsx`, `Login.tsx`, `ThemeContext.tsx`) (2026-09-04)
+
+- **Latar Belakang:** Warna dasar dark `#0c1317` (Onyx) diganti pure black `#000000` agar kontras maksimal dan hemat baterai layar AMOLED.
+- **Cakupan:** Token `wa.canvas.dark`, `html/body/#root`, remap `.dark .bg-[#f0f2f5]`, root `Layout` + `main`, root `Login`, `meta theme-color`, plus 3 file yang sudah punya varian dark lama (`MonthScheduleGrid.tsx`, `Debug.tsx`, `TodayTreatments.tsx`).
+- **Sengaja TIDAK diubah:** Surface kartu/sidebar `#202c33`, surface2 `#111b21`, dan wallpaper chat `#0b141a` — tetap sebagai lapisan kontras di atas kanvas hitam.
+- **Verifikasi:** `npm run build` dashboard ✓, 18 aturan `#000000` terkompilasi di CSS `dist/`.
+
 #### Feature — Alih Kelola Form Reservasi ke Admin + Back Gesture & Inquiry Guard (`decision-matrix.ts`, `grounding-composer.ts`, `dynamic-closer.service.ts`, `slate-store.ts`, `entity-extractor.ts`, `persona.ts`) (2026-09-04)
 
 - **Alih kelola form:** Saat booking-ready (lokasi + treatment + hari), bot TIDAK LAGI mengirim template formulir 10+ baris. Bot membalas singkat ala Bidan Yusi (`TEMPLATES.scheduleCheckHandoff`: "Baik Bunda, untuk ... kami cek jadwal dulu yaa bunda...") lalu handoff `HUMAN_HANDLING` (`booking_schedule_check`) — Admin menawarkan jam & mengirim form via dashboard. Permintaan form eksplisit ("minta format reservasi") ikut handoff. CAPI `InitiateCheckout` tetap ditembak. Injeksi `suggestedPreFilledForm` ke prompt LLM dimatikan; panduan closer SCHEDULE diperbarui.

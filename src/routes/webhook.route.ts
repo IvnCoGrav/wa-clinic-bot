@@ -399,7 +399,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
               }
 
               // JIKA BUKAN DUPLIKAT: Pesan ini berasal dari WhatsApp HP asli / bot echo
-              // 2. Jika bukan auto-reply bot, proses human handling takeover / timer
+              // 2. Jika bukan auto-reply bot, proses human handling takeover / timer + auto mark-as-read
               if (!isBotAutoReply) {
                 if (conversation.is_human_handling) {
                   conversationService.resetHumanHandlingTimer(conversation.id, DEFAULT_TENANT_ID)
@@ -419,6 +419,24 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                     }
                   } catch (_) {}
                 }
+                // Stage 1: auto mark-as-read & broadcast — balasan admin WA HP menandakan sudah dibaca
+                try {
+                  await messageService.markConversationMessagesAsRead(conversation.id, DEFAULT_TENANT_ID);
+                  await conversationService.setManualUnread(conversation.id, DEFAULT_TENANT_ID, false);
+                  const { getLiveChatHub } = await import('../services/live-chat-hub.service');
+                  const hub = getLiveChatHub();
+                  await hub.publish({
+                    type: 'conversation.updated',
+                    tenantId: DEFAULT_TENANT_ID,
+                    payload: {
+                      conversationId: conversation.id,
+                      unreadCount: 0,
+                      isManualUnread: false,
+                      isHumanHandling: true,
+                      lastHandledBy: 'human',
+                    },
+                  });
+                } catch (_) {}
               }
 
               // 3. Self Learning Capture (hanya jika diaktifkan, ada teks, & bukan auto-reply)
