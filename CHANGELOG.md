@@ -4,6 +4,17 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Dual Theme Light/Dark Mode Admin Dashboard (`ThemeContext`, `ThemeToggle`, `AppearancePanel`, `Layout`, `index.css`) (2026-09-03)
+
+- **Latar Belakang & Tujuan:** Admin membutuhkan Tema Hitam (Dark Mode ala WhatsApp Web: canvas `#0c1317`, surface `#202c33`, brand `#00a884`) yang nyaman di mata untuk monitoring malam hari, plus Tema Putih standar medis — dengan switch instan tanpa login ulang.
+- **Implementasi Teknis (5 stage sesuai rencana):**
+  1. **Fondasi (`tailwind.config.js`, `index.css`, `contexts/ThemeContext.tsx`, `App.tsx`, `index.html`):** `darkMode: 'class'` + token palet `wa.*`; `ThemeProvider` kelola preferensi `light|dark|system` (default `system` ikut OS live via `matchMedia`), simpan `localStorage wa_clinic_theme`, toggle class `.dark` di `<html>`; skrip anti-flicker inline di `index.html`; token HSL `.dark` + blok remap global (kanvas, teks, border, badge semantik, form, scrollbar gelap, Recharts, wallpaper `#0b141a`, bubble `#005c4b`).
+  2. **Shell (`Layout.tsx`, `ThemeToggle.tsx`, `ToggleSwitch.tsx`, `UiFeedback.tsx`, `Pagination.tsx`):** Sidebar/Header gelap `#202c33`, menu aktif emerald, tombol switcher ☀️/🌙 animasi rotasi di header (desktop & mobile), popover status + banner notifikasi adaptif.
+  3. **Operasional (`LiveChatMonitor.tsx` via remap, `Overview.tsx`, `FinancialAnalytics.tsx`):** Wallpaper gelap WhatsApp, bubble masuk `#202c33`/keluar `#005c4b`, composer gelap; chart grid + tooltip theme-aware via `useTheme` (tanpa `window.confirm`/`alert` — tetap `useUiFeedback`).
+  4. **Pengaturan & CRM (`Settings.tsx` + `components/settings/AppearancePanel.tsx`, `Login.tsx`):** Kartu "Tampilan & Tema" 3 opsi (Terang/Gelap/Otomatis) di kategori App & Operasional; halaman CRM/katalog/reservasi/modal readable via remap global (catat limitasi di `docs/KNOWN_ISSUES.md` #23).
+  5. **Verifikasi:** `npm run build` dashboard ✓ (tsc + Vite 10.47s), `npm test` ✓ (207 file, 1698 passed), `dist/` sudah di-rebuild sehingga bot langsung serve hasil baru di `/admin/*`.
+- **Catatan SaaS:** Preferensi tema per-browser (localStorage), BUKAN data bisnis — sengaja tidak tenant-aware, tidak perlu Confirmation Gate.
+
 #### Fix — Sinkronisasi GPS Shareloc & Konsistensi Jarak/Ongkir (`webhook.route.ts`, `human-background-enrichment.service.ts`, `customer.service.ts`, `LiveChatMonitor.tsx`, `chatScheduleExtractor.ts`, `InvoiceGeneratorModal.tsx`) (2026-09-02)
 
 - **Latar Belakang:** Koordinat Pin Share Location WhatsApp asli harus jadi single source of truth yang meng-override geocoding teks biasa (`is_native_pin=true`). Kasus Bunda Gita (6282232833258 / 58bb55d3-6508-4db6-b240-2eb853ce8046) mengirim shareloc `-7.4691395,112.7103424` saat `HUMAN_HANDLING` aktif, namun profil sebelumnya tersimpan centroid kelurahan sehingga jarak/ongkir tidak konsisten antara invoice form, profil customer, dan pesan konfirmasi.

@@ -23,9 +23,16 @@ import {
   Bar
 } from 'recharts';
 import { emitBootPhase } from '../../lib/bootProgress';
+import { useTheme } from '../../contexts/ThemeContext';
 import { APP_VERSION, BUILD_DATE, BUILD_TIME } from '../../config/version';
 
 export const Overview: React.FC = () => {
+  const { resolved } = useTheme();
+  const isDark = resolved === 'dark';
+  const gridStroke = isDark ? '#2a3942' : '#e9edef';
+  const tooltipStyle = isDark
+    ? { background: '#202c33', border: '1px solid #374248', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', color: '#e9edef' }
+    : { background: '#ffffff', border: '1px solid #e9edef', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', color: '#111b21' };
   const cachedHealth = getCachedApiResponse('/api/admin/health');
   const cachedResCount = getCachedApiResponse('/api/admin/reservations/count');
 
@@ -216,10 +223,10 @@ export const Overview: React.FC = () => {
                     <stop offset="95%" stopColor="#0284c7" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e9edef" />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="name" stroke="#8696a0" fontSize={11} />
                 <YAxis stroke="#8696a0" fontSize={11} />
-                <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e9edef', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', color: '#111b21' }} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Area type="monotone" dataKey="chats" name="Chat Masuk" stroke="#008069" strokeWidth={2.5} fillOpacity={1} fill="url(#colorChats)" />
                 <Area type="monotone" dataKey="reservations" name="Reservasi" stroke="#0284c7" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRes)" />
               </AreaChart>
