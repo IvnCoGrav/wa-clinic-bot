@@ -345,8 +345,9 @@ describe('Integration Test Suite: Seluruh Rules & Kebijakan Kala Spa', () => {
     } as any);
 
     expect(result.shouldSendReply).toBe(true);
-    expect(result.nextState).toBe(ConversationState.RESERVATION_SENT);
-    expect(result.replyText).toContain('list untuk reservasi');
-    expect(result.replyText).toContain('Pradah Kalikendal');
+    expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
+    expect(result.isHumanHandling).toBe(true);
+    expect(result.replyText).toContain('kami cek jadwal dulu yaa bunda');
+    expect(result.replyText).not.toContain('list untuk reservasi');
   });
 });

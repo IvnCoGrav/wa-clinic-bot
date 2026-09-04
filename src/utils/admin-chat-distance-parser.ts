@@ -5,6 +5,7 @@
  * dari pesan keluar (outbound chat) yang dikirim oleh Admin CS kepada customer.
  * 0 Token / 0 Biaya LLM.
  */
+import { getGazetteerAreas, escapeRegex } from './gazetteer';
 
 export interface ParsedAdminDistanceInfo {
   distanceKm: number | null;
@@ -159,4 +160,53 @@ export function parseAdminChatDistanceAndOngkir(text: string): ParsedAdminDistan
     isConfident: isConfident || (distanceKm !== null),
     rawMatchedSnippet: matchedSnippet || undefined,
   };
+}
+
+/**
+ * Fragmen tanya — kandidat lokasi yang mengandung ini ditolak (bukan rekomendasi lokasi).
+ */
+const ADMIN_LOC_QUESTION_FRAG_RE = /[?]|(?:dimana|di\s*mana|dmana|mana|mna|tanya|berapa|kapan|gimana|bagaimana|apakah)\b/i;
+
+/**
+ * Ekstraksi nama lokasi yang disebutkan Admin CS dalam pesan outbound.
+ * Dipakai background-enrichment sebagai Prioritas 1 (geocode langsung lokasi
+ * rekomendasi Admin, tanpa menebak dari riwayat pesan lama).
+ *
+ * Contoh: "Lebih dekat yang Wiguna Selatan Bunda, Jika dilihat dari jaraknya
+ * kurang lebih 6.8 km..." → "Wiguna Selatan".
+ *
+ * Mengembalikan null jika tidak ada lokasi spesifik yang terdeteksi.
+ */
+export function parseAdminChatLocation(text: string): string | null {
+  if (!text || typeof text !== 'string') return null;
+  const clean = text.trim();
+  if (clean.length < 10) return null;
+
+  // Pola 1: rekomendasi eksplisit "lebih dekat yang <lokasi> <sapaan/konjungsi>..."
+  const m1 = clean.match(
+    /lebih\s+dekat\s+(?:yang|yg)\s+([A-Za-z0-9][A-Za-z0-9\s.'-]{1,40}?)\s+(?:bunda|bund|kak|kakak|bu|mba|mbak|mas|pak|ya|yha|jika|jikalau|kalau|kalo|karena|karna|jaraknya|dilihat|diliat|kurang|sekitar|sekitaran|sekitarnya)\b/i
+  );
+  if (m1 && m1[1]) {
+    const loc = m1[1].trim().replace(/[.,;]+$/, '');
+    if (loc.length >= 3 && !ADMIN_LOC_QUESTION_FRAG_RE.test(loc)) {
+      return loc;
+    }
+  }
+
+  // Pola 2: entitas wilayah gazetteer/landmark yang disebut Admin (cocok terpanjang dulu).
+  // Lewati jika pesan Admin sendiri berupa pertanyaan (bukan rekomendasi lokasi).
+  if (/\?/.test(clean) && /(?:dimana|di\s*mana|\bmana\b|\bmna\b|tanya)\b/i.test(clean)) return null;
+  try {
+    const gazetteer = getGazetteerAreas();
+    const lower = clean.toLowerCase();
+    const areas = Array.from(gazetteer.entries()).sort((a, b) => b[0].length - a[0].length);
+    for (const [areaLower, areaOrig] of areas) {
+      if (areaLower.length < 4) continue;
+      if (new RegExp(`\\b${escapeRegex(areaLower)}\\b`).test(lower)) {
+        return areaOrig;
+      }
+    }
+  } catch (_) {}
+
+  return null;
 }

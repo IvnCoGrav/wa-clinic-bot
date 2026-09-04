@@ -69,7 +69,8 @@ describe('Need-Time NLU & Non-Destructive Message Revocation Suite', () => {
       // With effectiveDate='bulan depan' + select_treatment, hasExplicitBookingIntent is true
       // but isBookingReady depends on isLocationConfirmed which is true in baseSlate
       expect(grounding.isBookingReady).toBe(true);
-      expect(grounding.suggestedPreFilledForm).toBeTruthy();
+      // Alih kelola: form dikirim Admin, bukan disuntik ke LLM
+      expect(grounding.suggestedPreFilledForm).toBeNull();
     });
 
     it('should NOT trigger isBookingReady when customer has need_time intent but has explicit date + treatment', async () => {
@@ -94,7 +95,8 @@ describe('Need-Time NLU & Non-Destructive Message Revocation Suite', () => {
 
       // With effectiveDate='besok jam 10' + select_treatment, booking is ready
       expect(grounding.isBookingReady).toBe(true);
-      expect(grounding.suggestedPreFilledForm).toBeTruthy();
+      // Alih kelola: form dikirim Admin, bukan disuntik ke LLM
+      expect(grounding.suggestedPreFilledForm).toBeNull();
     });
 
     it('should trigger isBookingReady when date is concrete ("besok pagi")', async () => {
@@ -123,7 +125,8 @@ describe('Need-Time NLU & Non-Destructive Message Revocation Suite', () => {
       });
 
       expect(grounding.isBookingReady).toBe(true);
-      expect(grounding.suggestedPreFilledForm).toBeTruthy();
+      // Alih kelola: form dikirim Admin, bukan disuntik ke LLM
+      expect(grounding.suggestedPreFilledForm).toBeNull();
     });
   });
 

@@ -455,6 +455,131 @@ export class DecisionMatrix {
     }
 
     // =========================================================================
+    // PRIORITY 4.9: KOMPARASI DUA LOKASI (Location Comparison)
+    // Jika customer membandingkan 2 lokasi ("lebih dekat mana A atau B?")
+    // Bot menghitung ongkir & jarak kedua lokasi secara deterministik,
+    // lalu memberikan rekomendasi mana yang lebih dekat tanpa mengunci salah satu lokasi.
+    // =========================================================================
+    const isCompareLocations =
+      extraction.intents.includes('compare_locations') ||
+      (Array.isArray(extraction.comparisonLocations) && extraction.comparisonLocations.length >= 2);
+
+    if (isCompareLocations) {
+      if (!Array.isArray(extraction.comparisonLocations) || extraction.comparisonLocations.length < 2) {
+        return {
+          action: 'RESOLVE_LOCATION_COMPARISON',
+          reason: 'Customer menanyakan perbandingan lokasi tanpa menyebutkan dua titik spesifik -> Tanya opsi lokasi.',
+          updatedSlate,
+          shouldSendPricelistImage: false,
+          deterministicTemplateReply: `Boleh diinfokan kedua opsi lokasi atau kelurahan yang ingin dibandingkan Bunda? Nanti kami bantu hitungkan mana yang lebih dekat dari homebase kami di Waru 😊`,
+        };
+      }
+
+      try {
+        const { geocodingService } = await import('../integrations/google-maps/geocoding');
+        const { deliveryService } = await import('../services/delivery.service');
+
+        const [locNameA, locNameB] = extraction.comparisonLocations;
+
+        // Geocode kedua lokasi (dengan fallback konteks kota bila diperlukan)
+        let [resA, resB] = await Promise.all([
+          geocodingService.geocodeText(locNameA),
+          geocodingService.geocodeText(locNameB),
+        ]);
+
+        if (!resA.isPrecise && !resA.lat && !(resA as any).ambiguityResults && !/\b(surabaya|sidoarjo|gresik)\b/i.test(locNameA)) {
+          const retryA = await geocodingService.geocodeText(`${locNameA}, Surabaya`);
+          if (retryA.isPrecise || retryA.lat || (retryA as any).ambiguityResults) resA = retryA;
+        }
+
+        if (!resB.isPrecise && !resB.lat && !(resB as any).ambiguityResults && !/\b(surabaya|sidoarjo|gresik)\b/i.test(locNameB)) {
+          const retryB = await geocodingService.geocodeText(`${locNameB}, Surabaya`);
+          if (retryB.isPrecise || retryB.lat || (retryB as any).ambiguityResults) resB = retryB;
+        }
+
+        const extractCoords = (res: any, queryName: string): { lat: number; lng: number } | null => {
+          if (res?.lat && res?.lng) {
+            return { lat: res.lat, lng: res.lng };
+          }
+          if (res?.ambiguityResults && Array.isArray(res.ambiguityResults) && res.ambiguityResults.length > 0) {
+            const qLower = queryName.toLowerCase().trim();
+            // Cari kelurahan yang namanya sama dengan query, atau ambil centroid item pertama
+            const match =
+              res.ambiguityResults.find(
+                (item: any) => (item.Kelurahan_Desa || '').toLowerCase().trim() === qLower
+              ) || res.ambiguityResults[0];
+
+            if (match?.Koordinat) {
+              const parts = match.Koordinat.split(',').map((p: string) => parseFloat(p.trim()));
+              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                return { lat: parts[0], lng: parts[1] };
+              }
+            }
+          }
+          return null;
+        };
+
+        const coordsA = extractCoords(resA, locNameA);
+        const coordsB = extractCoords(resB, locNameB);
+
+        const formatDisplayName = (raw: string) =>
+          raw
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+
+        if (coordsA && coordsB) {
+          const [delA, delB] = await Promise.all([
+            deliveryService.calculateDelivery(coordsA),
+            deliveryService.calculateDelivery(coordsB),
+          ]);
+
+          const distA = delA.distanceKm;
+          const distB = delB.distanceKm;
+
+          const itemA = {
+            name: formatDisplayName(locNameA),
+            distanceKm: distA,
+            promoPrice: delA.promoPrice,
+            normalPrice: delA.normalPrice,
+          };
+
+          const itemB = {
+            name: formatDisplayName(locNameB),
+            distanceKm: distB,
+            promoPrice: delB.promoPrice,
+            normalPrice: delB.normalPrice,
+          };
+
+          const closer = distA <= distB ? itemA : itemB;
+          const further = distA <= distB ? itemB : itemA;
+
+          // JANGAN kunci salah satu lokasi karena customer belum memutuskan
+          updatedSlate.isLocationConfirmed = false;
+
+          return {
+            action: 'RESOLVE_LOCATION_COMPARISON',
+            reason: `Customer membandingkan 2 lokasi: "${locNameA}" (${distA.toFixed(1)} km) vs "${locNameB}" (${distB.toFixed(1)} km) -> Rekomendasi lokasi lebih dekat.`,
+            updatedSlate,
+            shouldSendPricelistImage: false,
+            deterministicTemplateReply: TEMPLATES.locationComparison({ closer, further }),
+          };
+        } else {
+          // Salah satu atau kedua lokasi belum dapat ditentukan koordinatnya
+          return {
+            action: 'RESOLVE_LOCATION_COMPARISON',
+            reason: `Customer membandingkan lokasi "${locNameA}" vs "${locNameB}", namun salah satu/kedua lokasi belum terdeteksi spesifik.`,
+            updatedSlate,
+            shouldSendPricelistImage: false,
+            deterministicTemplateReply: `Untuk membantu mengecek mana yang lebih dekat antara *${formatDisplayName(locNameA)}* atau *${formatDisplayName(locNameB)}*, boleh diinfokan detail kelurahan atau kecamatannya ya Bunda? Biar kami bantu cekkan ongkir presisinya 😊🙏`,
+          };
+        }
+      } catch (err) {
+        console.error('[DECISION_MATRIX] Error resolving location comparison:', err);
+      }
+    }
+
+    // =========================================================================
     // PRIORITY 5: RESOLUSI LOKASI BARU & KALKULASI ONGKIR DETERMINISTIK
     // (existing code continues...)
     const isExplicitLocationChange = /\b(ganti|pindah|salah|ubah|bukan\s+di|yang\s+bener)\b/i.test(rawText);
@@ -550,10 +675,12 @@ export class DecisionMatrix {
     }
 
     const shouldResolveLocation =
+      !isCompareLocations &&
       hasLocationInCurrentMessage &&
       (!updatedSlate.isLocationConfirmed || updatedSlate.isOutOfCoverage || isExplicitLocationChange || isDifferentLocation) &&
-      // Idempotency Guard: if location is already confirmed and no explicit change signal, block re-entry
-      !(updatedSlate.isLocationConfirmed && !isExplicitLocationChange && !updatedSlate.isOutOfCoverage);
+      // Idempotency Guard (fixed): HANYA blokir jika lokasi SUDAH terkonfirmasi DAN lokasinya SAMA
+      // dan BUKAN ganti eksplisit. Lokasi BARU yang berbeda (isDifferentLocation) tetap lolos resolve.
+      !(updatedSlate.isLocationConfirmed && isSameLocation && !isExplicitLocationChange && !updatedSlate.isOutOfCoverage);
 
     if (shouldResolveLocation) {
       try {
@@ -576,7 +703,7 @@ export class DecisionMatrix {
         }
 
         let resolved = await geocodingService.geocodeText(compositeQuery);
-        if (!resolved.isPrecise && rawText) {
+        if (!resolved.isPrecise && rawText && !rawText.includes('\n') && !/\b(atau|atw|or|vs|banding)\b/i.test(rawText)) {
           const rawResolved = await geocodingService.geocodeText(rawText);
           if (rawResolved.isPrecise) {
             resolved = rawResolved;
@@ -846,10 +973,18 @@ export class DecisionMatrix {
     // PRIORITY 7: PERCAKAPAN RESERVASI & BOOKING READY
     // Alirkan ke ReplyGenerator (LLM 2) untuk menyusun jawaban empatik & smart form
     // =========================================================================
+    // Pertanyaan klinis (gejala/pasca-vaksin/darurat) BUKAN sinyal booking — bot harus
+    // menjawab dulu, kecuali customer eksplisit minta booking.
+    const hasClinicalQuestionIntent =
+      extraction.intents.includes('consult_symptom') ||
+      extraction.intents.includes('ask_unlisted_service') ||
+      extraction.intents.includes('medical_emergency');
+    const hasExplicitBookingSignal = extraction.intents.includes('request_booking');
     const isBookingReady =
       updatedSlate.isLocationConfirmed &&
       Boolean(updatedSlate.selectedTreatmentName) &&
-      (Boolean(updatedSlate.preferredDate) || extraction.intents.includes('request_booking') || extraction.intents.includes('ask_schedule'));
+      (Boolean(updatedSlate.preferredDate) || hasExplicitBookingSignal || extraction.intents.includes('ask_schedule')) &&
+      (hasExplicitBookingSignal || !hasClinicalQuestionIntent);
 
     if (isBookingReady && !updatedSlate.reservationFormSent) {
       try {
@@ -869,28 +1004,45 @@ export class DecisionMatrix {
       }
     }
 
-    // Jika customer SECARA EKSPLISIT meminta teks format saja (misal: "minta form booking", "kirim formatnya")
+    // Alih kelola form reservasi ke Admin: bot TIDAK LAGI mengirim template form panjang.
+    // Saat booking-ready (atau customer eksplisit minta format), bot membalas konfirmasi
+    // cek-jadwal singkat lalu handoff ke HUMAN_HANDLING — Admin yang menawarkan jam & form.
     const isExplicitFormOnlyRequest = /\b(minta|kirim|mana|minta\s+teks)\s+(format|form|list)\s*(reservasi|booking)?\b/i.test(rawText);
-    if (isExplicitFormOnlyRequest) {
-      const reservationForm = TEMPLATES.reservationFormRequest({
-        name: updatedSlate.name || undefined,
-        address: updatedSlate.streetDetail
-          ? `${updatedSlate.streetDetail}, ${updatedSlate.kelurahan}`
-          : updatedSlate.kelurahan || undefined,
-        kecamatan: updatedSlate.kecamatan || undefined,
-        kota: updatedSlate.kota || undefined,
-        phone: updatedSlate.phone || undefined,
-        bookingDate: updatedSlate.preferredDate || undefined,
-        treatmentBaby: updatedSlate.selectedTreatmentName || undefined,
-      });
-
-      updatedSlate.reservationFormSent = true;
+    // Inquiry Guard (anti-steamrolling): jika customer sedang bertanya (harga/klinik/layanan/
+    // fasilitas bertanda tanya) TANPA sinyal booking eksplisit, jawab dulu via LLM — jangan
+    // potong dengan handoff. Pertanyaan jadwal ("Hari minggu apa bisa?") BUKAN inkuiri.
+    const hasInquiryIntent =
+      extraction.intents.includes('ask_price') ||
+      extraction.intents.includes('ask_clinic_origin') ||
+      extraction.intents.includes('ask_unlisted_service');
+    const hasFacilityQuestionMark =
+      /\?/.test(rawText) && !hasExplicitBookingSignal && !extraction.intents.includes('ask_schedule');
+    const isPureInquiry = hasInquiryIntent || hasFacilityQuestionMark;
+    if (isBookingReady && !updatedSlate.reservationFormSent && isPureInquiry && !isExplicitFormOnlyRequest) {
       return {
-        action: 'SEND_RESERVATION_FORM',
-        reason: 'Customer secara eksplisit meminta format reservasi -> Mengirim format reservasi.',
+        action: 'GENERATE_AI_RESPONSE',
+        reason: 'Booking-ready tetapi customer sedang bertanya (inkuiri/fasilitas) -> jawab dulu via ReplyGenerator, tunda handoff.',
         updatedSlate,
         shouldSendPricelistImage: false,
-        deterministicTemplateReply: reservationForm,
+      };
+    }
+    if ((isBookingReady && !updatedSlate.reservationFormSent) || isExplicitFormOnlyRequest) {
+      const handoffReply = TEMPLATES.scheduleCheckHandoff({
+        treatment: updatedSlate.selectedTreatmentName || extraction.treatmentReferenced || undefined,
+        dayOrTime: updatedSlate.preferredDate || extraction.preferredDateText || undefined,
+      });
+
+      updatedSlate.isHumanHandling = true;
+      updatedSlate.humanHandlingReason = 'booking_schedule_check';
+      updatedSlate.projectedState = ConversationState.HUMAN_HANDLING;
+      return {
+        action: 'ESCALATE_HUMAN_SCHEDULE',
+        reason: isExplicitFormOnlyRequest
+          ? 'Customer meminta format reservasi -> konfirmasi cek jadwal singkat + handoff Admin (form dikirim Admin via dashboard).'
+          : 'Customer booking-ready (lokasi + treatment + hari) -> konfirmasi cek jadwal singkat + handoff Admin.',
+        updatedSlate,
+        shouldSendPricelistImage: false,
+        deterministicTemplateReply: handoffReply,
       };
     }
 

@@ -196,14 +196,12 @@ ${ongkirGuard}`;
         })();
 
         if (preFilledForm && !slate?.reservationFormSent) {
-          return `PANDUAN RESERVASI & PENUTUP:
+          return `PANDUAN RESERVASI & PENUTUP (ALIH KELOLA KE ADMIN):
 1. Jawab terlebih dahulu pertanyaan Bunda tentang treatment/keluhan dengan ramah dan solutif.
 2. Untuk ketersediaan jadwal di hari ${dateDisplay}, sampaikan dengan santun bahwa jadwal Bidan akan dicekkan terlebih dahulu (contoh: "Untuk ketersediaan jadwal di hari ${dateDisplay}, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 😊").
-3. Di bagian bawah balasan, sertakan format reservasi berikut agar Bunda bisa langsung mengisi/melengkapi data untuk dicekkan jadwalnya:
-${preFilledForm}
-(Pastikan format di atas tercantum rapi di bagian bawah balasan).
+3. DILARANG KERAS mencantumkan/menempel format formulir reservasi panjang dalam balasan! Koordinasi jam dan pengiriman form ditangani Admin manusia via dashboard.
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung sampaikan bahwa ketersediaan jadwal akan dibantu cekkan terlebih dahulu.
-⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer! Usia akan dilengkapi saat pengisian form reservasi.
+⚠️ DILARANG KERAS proaktif menanyakan usia atau umur si kecil jika tidak ditanyakan customer!
 ⚠️ DILARANG MENANYAKAN LAGI "hari apa" jika Bunda sudah menyebutkan hari/waktu (${dateDisplay})!
 ⚠️ DILARANG MENANYAKAN JAM (pagi/siang/sore), karena jam akan dikoordinasikan langsung oleh Admin CS.
 ⚠️ DILARANG mengonfirmasi bahwa slot/jam tersebut pasti tersedia secara sepihak!
@@ -215,7 +213,7 @@ ${ongkirGuard}`;
           return `PANDUAN PENAWARAN JADWAL (SCHEDULE):
 1. Jawab terlebih dahulu pertanyaan layanan/keluhan Bunda dengan ramah.
 2. Untuk ketersediaan jadwal di hari ${dateDisplay}, sampaikan bahwa jadwal Bidan akan dicekkan terlebih dahulu: "Untuk ketersediaan jadwal di hari ${dateDisplay}, akan kami bantu cekkan ketersediaan jadwal Bidan yang ready terlebih dahulu ya Bunda 😊".
-3. Ajak Bunda melengkapi data reservasi atau konfirmasi ketersediaan jadwal (contoh: "Mau kami bantu siapkan jadwal kunjungannya, Bunda? 😊").
+3. Tutup dengan ramah bahwa tim Admin akan membantu pengecekan jadwal dan menginformasikan jam yang tersedia — DILARANG meminta Bunda mengisi format reservasi.
 ⚠️ DILARANG MENANYAKAN JAM (pagi/siang/sore) karena koordinasi jam ditangani oleh Admin CS.
 ⚠️ DILARANG KERAS mengafirmasi dengan kata "Tentu bisa", "Bisa ya", "Bisa Bunda", atau "Pasti bisa"! Langsung jawab bahwa jadwal akan dibantu cekkan terlebih dahulu.
 ⚠️ DILARANG KERAS MENANYAKAN "DI HARI APA" LAGI KARENA BUNDA SUDAH MENYEBUTKAN HARI (${dateDisplay})!

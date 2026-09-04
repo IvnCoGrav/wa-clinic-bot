@@ -87,7 +87,7 @@ describe('Deterministic Decision Matrix & Grounding Package Composer (Part 4)', 
     expect(decision.deterministicTemplateReply).toContain('di luar jangkauan');
   });
 
-  it('Priority 5: should route booking-ready inquiries to AI response generation with smart pre-filled grounding', async () => {
+  it('Priority 7: booking-ready → ESCALATE_HUMAN_SCHEDULE dengan balasan cek-jadwal singkat (alih kelola ke Admin)', async () => {
     const readyBookingExtraction: ExtractedEntities = {
       ...emptyExtraction,
       treatmentReferenced: 'Pijat Bayi Pulih Ceria',
@@ -96,16 +96,21 @@ describe('Deterministic Decision Matrix & Grounding Package Composer (Part 4)', 
     };
 
     const decision = await DecisionMatrix.evaluate(baseSlate, readyBookingExtraction);
-    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
-    expect(decision.reason).toMatch(/reservasi|booking/i);
-    expect(decision.updatedSlate.selectedTreatmentName).toBe('Pijat Bayi Pulih Ceria');
+    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
+    expect(decision.deterministicTemplateReply).toContain('kami cek jadwal dulu yaa bunda, ditunggu sebentar ya bund');
+    expect(decision.deterministicTemplateReply).not.toContain('list untuk reservasi');
+    expect(decision.updatedSlate.isHumanHandling).toBe(true);
+    expect(decision.updatedSlate.humanHandlingReason).toBe('booking_schedule_check');
+    expect(decision.updatedSlate.projectedState).toBe(ConversationState.HUMAN_HANDLING);
 
-    // Test explicit form request
+    // Test explicit form request → tetap handoff singkat, bukan form panjang
     const explicitFormDecision = await DecisionMatrix.evaluate(baseSlate, readyBookingExtraction, {
       incomingText: 'minta format reservasi booking dong',
     });
-    expect(explicitFormDecision.action).toBe('SEND_RESERVATION_FORM');
-    expect(explicitFormDecision.deterministicTemplateReply).toContain('list untuk reservasi');
+    expect(explicitFormDecision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
+    expect(explicitFormDecision.deterministicTemplateReply).toContain('kami cek jadwal dulu yaa bunda');
+    expect(explicitFormDecision.deterministicTemplateReply).not.toContain('list untuk reservasi');
+    expect(explicitFormDecision.updatedSlate.isHumanHandling).toBe(true);
   });
 
   it('Priority 6: should route general inquiries to AI response generation', async () => {

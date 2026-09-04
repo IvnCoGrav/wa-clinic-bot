@@ -45,6 +45,18 @@ vi.mock('../../src/integrations/google-maps/geocoding', () => ({
   },
 }));
 
+vi.mock('../../src/services/message.service', () => ({
+  messageService: {
+    getRecentMessages: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+vi.mock('../../src/services/conversation.service', () => ({
+  conversationService: {
+    getOrCreateConversation: vi.fn().mockResolvedValue({ id: 'conv-1' }),
+  },
+}));
+
 describe('Human Background Enrichment Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,6 +128,63 @@ describe('Human Background Enrichment Service', () => {
       expect.objectContaining({
         distanceKm: 16,
         ongkir: 20000,
+      }),
+      'default-tenant'
+    );
+  });
+
+  it('Prioritas 1: lokasi yang disebut Admin ("Wiguna Selatan") langsung di-geocode', async () => {
+    const { geocodingService } = await import('../../src/integrations/google-maps/geocoding');
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: 'cust-4',
+      phone: '6282245776662',
+      kelurahan: null,
+      distance_km: null,
+      ongkir: null,
+    } as any);
+
+    const adminChat = 'Lebih dekat yang Wiguna Selatan Bunda, Jika dilihat dari jaraknya kurang lebih 6.8 km dari klinik ya bunda.';
+    const res = await humanBackgroundEnrichmentService.enrichFromAdminOutbound(adminChat, 'cust-4', 'default-tenant');
+
+    expect(res.enriched).toBe(true);
+    // Geocode dipanggil langsung dengan lokasi rekomendasi Admin (bukan tebak riwayat)
+    expect(geocodingService.geocodeText).toHaveBeenCalledWith('Wiguna Selatan');
+    expect(customerService.updateCustomerLocation).toHaveBeenCalledWith(
+      'cust-4',
+      expect.objectContaining({
+        kelurahan: 'Kebraon',
+        distanceKm: 6.8,
+      }),
+      'default-tenant'
+    );
+  });
+
+  it('Prioritas 2: pesan inbound pertanyaan ("lokasinya dimana...") dilewati, tidak di-geocode', async () => {
+    const { geocodingService } = await import('../../src/integrations/google-maps/geocoding');
+    const { messageService } = await import('../../src/services/message.service');
+    vi.mocked(customerService.getCustomerById).mockResolvedValue({
+      id: 'cust-5',
+      phone: '6289900112233',
+      kelurahan: null,
+      distance_km: null,
+      ongkir: null,
+    } as any);
+    vi.mocked(messageService.getRecentMessages).mockResolvedValue([
+      { direction: 'INBOUND', content: 'Siang kak mau tanya ini lokasinya dimana yg di sby' },
+    ] as any);
+
+    // Chat Admin tanpa sebutan lokasi (hanya jarak) → fallback riwayat, pertanyaan di-skip
+    const adminChat = 'Jika dilihat dari jaraknya kurang lebih 6.8 km dari klinik ya bunda.';
+    const res = await humanBackgroundEnrichmentService.enrichFromAdminOutbound(adminChat, 'cust-5', 'default-tenant');
+
+    expect(res.enriched).toBe(true);
+    expect(res.reason).toBe('admin_chat_captured');
+    // Tidak ada geocode dari fragmen tanya; hanya update jarak/ongkir
+    expect(geocodingService.geocodeText).not.toHaveBeenCalled();
+    expect(customerService.updateCustomerLocation).toHaveBeenCalledWith(
+      'cust-5',
+      expect.objectContaining({
+        distanceKm: 6.8,
       }),
       'default-tenant'
     );

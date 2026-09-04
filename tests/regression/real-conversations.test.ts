@@ -131,7 +131,7 @@ describe('Real Customer WhatsApp Conversation Regression Test Suite', () => {
     expect(grounding.customerPreferencesText).toContain('Pijat Bayi Ceria');
   });
 
-  it('Skenario 3: Konsultasi Newborn 26 hari batuk pilek grok-grok -> Switch ke Pulih Ceria & Generate Pre-filled Form', async () => {
+  it('Skenario 3: Konsultasi Newborn 26 hari batuk pilek grok-grok -> Switch ke Pulih Ceria, dijawab bot TANPA form (alih kelola Admin)', async () => {
     const slateReady: CustomerSlate = {
       ...baseSlate,
       kelurahan: 'Berbek',
@@ -169,20 +169,20 @@ describe('Real Customer WhatsApp Conversation Regression Test Suite', () => {
       incomingText: queryText,
     });
 
+    // Konsultasi klinis (consult_symptom tanpa request_booking) dijawab bot, bukan handoff
     expect(decision.action).toBe('GENERATE_AI_RESPONSE');
     expect(decision.updatedSlate.selectedTreatmentName).toBe('Pijat Bayi Pulih Ceria');
     expect(decision.updatedSlate.symptoms).toContain('batuk');
     expect(decision.updatedSlate.symptoms).toContain('grok-grok');
+    expect(decision.updatedSlate.isHumanHandling).toBe(false);
 
     const grounding = await GroundingComposer.compose(decision.updatedSlate, extraction, {
       customerInput: queryText,
     });
 
     expect(grounding.isBookingReady).toBe(true);
-    expect(grounding.suggestedPreFilledForm).not.toBeNull();
-    expect(grounding.suggestedPreFilledForm).toContain('Berbek');
-    expect(grounding.suggestedPreFilledForm).toContain('Pijat Bayi Pulih Ceria');
-    expect(grounding.suggestedPreFilledForm).toContain('hari ini');
+    // Alih kelola ke Admin: form TIDAK disuntik ke prompt LLM
+    expect(grounding.suggestedPreFilledForm).toBeNull();
   });
 
   it('Skenario 4: Pesan Pertama ("Halo Bu Bidan, Saya mau Reservasi Home Sevice. Bagaimana Caranya ?") HARUS membalas template greeting resmi Kala Spa (0 Token) & tidak mengunci treatment sembarangan', async () => {

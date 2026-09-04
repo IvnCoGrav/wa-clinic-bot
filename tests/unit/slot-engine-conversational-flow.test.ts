@@ -124,7 +124,7 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
       expect(closerInstruction).toContain('rencana mau treatment di hari apa');
     });
 
-    it('Turn 3 Booking Intent: should attach prefilled form when customer confirms day/schedule', async () => {
+    it('Turn 3 Booking Intent: alih kelola ke Admin — TANPA form, closer arahkan cek jadwal', async () => {
       const bookingExtraction: ExtractedEntities = {
         ...emptyExtraction,
         intents: ['select_treatment', 'request_booking'],
@@ -137,15 +137,17 @@ describe('Conversational Consultation Flow & Form Attachment Hardening', () => {
       });
 
       expect(grounding.isBookingReady).toBe(true);
-      expect(grounding.suggestedPreFilledForm).not.toBeNull();
-      expect(grounding.suggestedPreFilledForm).toContain('Tambakoso');
-      expect(grounding.suggestedPreFilledForm).toContain('Waru');
-      expect(grounding.suggestedPreFilledForm).toContain('Pijat Bayi Ceria');
-      expect(grounding.suggestedPreFilledForm).toContain('hari Sabtu besok');
+      // Alih kelola: form TIDAK disuntik ke prompt LLM
+      expect(grounding.suggestedPreFilledForm).toBeNull();
 
-      const closerInstruction = DynamicCloserService.getCloserInstruction(baseSlate, grounding.suggestedPreFilledForm);
-      expect(closerInstruction).toContain('PANDUAN RESERVASI & PENUTUP');
-      expect(closerInstruction).toContain('sertakan format reservasi berikut');
+      const closerInstruction = DynamicCloserService.getCloserInstruction(
+        baseSlate,
+        grounding.suggestedPreFilledForm,
+        [],
+        'Boleh sus mau ambil Pijat Bayi Ceria untuk hari Sabtu besok'
+      );
+      expect(closerInstruction).not.toContain('sertakan format reservasi berikut');
+      expect(closerInstruction).toContain('bantu cekkan');
     });
   });
 

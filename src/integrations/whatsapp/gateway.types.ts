@@ -18,6 +18,19 @@ export interface TemplateComponent {
   parameters: TemplateParam[];
 }
 
+export interface InteractiveButton {
+  id: string;
+  title: string; // Maksimal 20 karakter sesuai standar Meta Cloud API
+}
+
+export interface SendInteractiveButtonsOptions {
+  bodyText: string;
+  buttons: InteractiveButton[];
+  headerText?: string;
+  footerText?: string;
+  replyToMessageId?: string;
+}
+
 export interface WhatsAppGateway {
   readonly providerType: WhatsAppProvider;
   readonly supportsRevoke: boolean;
@@ -37,6 +50,11 @@ export interface WhatsAppGateway {
 
   sendReactionMessage?(to: string, messageId: string, emoji: string): Promise<SendResult>;
 
+  sendInteractiveButtons?(
+    to: string,
+    options: SendInteractiveButtonsOptions
+  ): Promise<SendResult>;
+
   sendTypingIndicator(to: string, incomingMessageId?: string, durationMs?: number): Promise<void>;
 
   markAsRead(chatId: string, messageId?: string): Promise<void>;
@@ -52,8 +70,9 @@ export interface NormalizedInboundMessage {
   messageId: string;
   fromNumber: string;
   timestamp: number;
-  type: 'text' | 'location' | 'image' | 'reaction' | 'unknown';
+  type: 'text' | 'location' | 'image' | 'reaction' | 'interactive_button' | 'unknown';
   text?: string;
+  buttonPayload?: { id: string; title: string };
   location?: { latitude: number; longitude: number; name?: string; address?: string };
   mediaUrl?: string;
   mediaId?: string;
