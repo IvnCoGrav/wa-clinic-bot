@@ -388,7 +388,7 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     promoPrice: number;
     isRecommendation?: boolean;
   }) => {
-    const fmt = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
+    const fmt = (n: number) => `*Rp ${n.toLocaleString('id-ID')}*`;
     const cleanName = params.name.replace(/\s*\([^)]*\)\s*$/, '').trim();
     const dur = params.durationMinutes ? `Durasinya ${params.durationMinutes} menit, dan ` : '';
 

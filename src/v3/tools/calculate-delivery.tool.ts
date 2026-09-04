@@ -2,6 +2,7 @@ import { geocodingService } from '../../integrations/google-maps/geocoding';
 import { deliveryService } from '../../services/delivery.service';
 import { clinicConfig } from '../../config/clinic';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { TEMPLATES } from '../../config/persona';
 
 export interface CalculateDeliveryInput {
   locationText: string;
@@ -20,6 +21,7 @@ export interface CalculateDeliveryOutput {
   ongkirNormal?: number;
   ongkirPromo?: number;
   isOutOfCoverage: boolean;
+  suggestedTemplateReply?: string;
   message: string;
 }
 
@@ -148,6 +150,15 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     const ongkirPromo = deliveryResult.ongkir;
     const isOutOfCoverage = deliveryResult.isOutOfCoverage || distanceKm > 30 || isExplicitOutsideCity;
 
+    const suggestedTemplateReply = isOutOfCoverage
+      ? TEMPLATES.outOfCoverage({ distanceKm, maxCoverageKm: 30 })
+      : TEMPLATES.ongkirInfo({
+          distanceKm,
+          normalPrice: ongkirNormal,
+          promoPrice: ongkirPromo,
+          freeTierKm: 5,
+        });
+
     return {
       success: true,
       isPrecise: resolved.isPrecise || Boolean(resolved.kelurahan),
@@ -159,9 +170,10 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       ongkirNormal,
       ongkirPromo,
       isOutOfCoverage,
+      suggestedTemplateReply,
       message: isOutOfCoverage
-        ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks 30 km).`
-        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo menjadi Rp ${ongkirPromo.toLocaleString('id-ID')}.`
+        ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks 30 km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
+        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.\n\nWAJIB GUNAKAN FORMAT BALASAN RESMI BIDAN YUSI BERIKUT:\n"${suggestedTemplateReply}"`
     };
   } catch (error: any) {
     console.error('[V3 TOOL DELIVERY ERROR]', error);

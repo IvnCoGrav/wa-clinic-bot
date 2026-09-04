@@ -25,7 +25,14 @@ export class OutputSanitizer {
       text = text.replace(pattern, '').trim();
     }
 
-    // 4. Normalisasi spasi dan baris baru berlebih
+    // 4. Aturan Enter Setelah Emot: Hapus titik setelah emot & sisipkan \n\n jika diikuti kalimat baru
+    text = text.replace(/([\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+)\s*\./gu, '$1');
+    text = text.replace(/(?<!^)(?<!\n)([\p{Extended_Pictographic}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]+)\s+([A-Z*#0-9])/gu, '$1\n\n$2');
+
+    // 5. Pastikan semua format nominal harga dibungkus bintang tunggal (*Rp 10.000*)
+    text = text.replace(/(?<!\*)\b(Rp\s*\d{1,3}(?:\.\d{3})*(?:,\d+)?)\b(?!\*)/g, '*$1*');
+
+    // 6. Normalisasi spasi dan baris baru berlebih
     text = text.replace(/\n{3,}/g, '\n\n').trim();
 
     return text;
