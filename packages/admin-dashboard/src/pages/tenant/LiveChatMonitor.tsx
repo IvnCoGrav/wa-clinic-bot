@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { connectLiveChatSse } from '../../services/liveChatSse';
 import { getCleanTreatmentName } from '../../utils/treatmentFormatter';
 import {
@@ -312,6 +313,7 @@ const EMOJI_CATEGORIES = [
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
+  const { resolved: currentTheme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [chats, setChats] = useState<LiveChatItem[]>([]);
@@ -331,6 +333,9 @@ export const LiveChatMonitor: React.FC = () => {
   const replyTextRef = useRef('');
   const [hasReplyText, setHasReplyText] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  // Memicu render ulang daftar chat (debounced) agar preview draf typing ikut segar saat mengetik
+  const [draftTick, setDraftTick] = useState(0);
+  const draftListTimerRef = useRef<any>(null);
 
   const handleSelectReply = (msg: ChatMessage) => {
     if (msg.is_revoked || (msg as any).isRevoked) return;
@@ -396,7 +401,6 @@ export const LiveChatMonitor: React.FC = () => {
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
-  const detailTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   // Press-and-Hold Tooltip for filter icons on mobile (tanpa getaran haptik)
   const [iconTooltip, setIconTooltip] = useState<string | null>(null);
@@ -558,6 +562,11 @@ function clearConversationDraft(convId: string) {
     }
     if (!selectedIdRef.current) return;
     saveConversationDraft(selectedIdRef.current, text);
+    // Segarkan preview draf di daftar chat (debounce agar tidak render tiap keystroke)
+    if (draftListTimerRef.current) clearTimeout(draftListTimerRef.current);
+    draftListTimerRef.current = setTimeout(() => {
+      setDraftTick((t) => t + 1);
+    }, 700);
 
     if (isNotEmpty) {
       // Debounce 500ms sebelum kirim startTyping — hindari goyang akibat SSE balik tiap karakter
@@ -632,57 +641,15 @@ function clearConversationDraft(convId: string) {
     }
   };
 
-  const handleDetailTouchStart = (e: React.TouchEvent) => {
-    if (mobileView !== 'chat' || e.touches.length !== 1) return;
-    const target = e.target as HTMLElement | null;
-    if (target && (
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT' ||
-      target.tagName === 'BUTTON' ||
-      target.closest('button') ||
-      target.closest('input') ||
-      target.closest('textarea')
-    )) {
-      detailTouchStartRef.current = null;
-      return;
-    }
-    const touch = e.touches[0];
-    // Zona tepi kiri (<= 45px dari tepi kiri layar)
-    if (touch && touch.clientX <= 45) {
-      detailTouchStartRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now(),
-      };
-    }
-  };
-
-  const handleDetailTouchMove = (e: React.TouchEvent) => {
-    if (!detailTouchStartRef.current || e.touches.length === 0) return;
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - detailTouchStartRef.current.x;
-    const deltaY = touch.clientY - detailTouchStartRef.current.y;
-    // Cegah browser native history swipe back yang menyebabkan reload halaman
-    if (deltaX > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      if (e.cancelable) e.preventDefault();
-    }
-  };
-
-  const handleDetailTouchEnd = (e: React.TouchEvent) => {
-    if (!detailTouchStartRef.current || e.changedTouches.length === 0) return;
-    const start = detailTouchStartRef.current;
-    detailTouchStartRef.current = null;
-
-    const end = e.changedTouches[0];
-    if (!end) return;
-    const deltaX = end.clientX - start.x;
-    const deltaY = end.clientY - start.y;
-
-    // Usapan tegas dari tepi kiri ke kanan (deltaX > 40px) -> Kembali ke list seketika tanpa reload!
-    if (deltaX > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      handleBackToList();
-    }
+  // ⬅️ Sentralisasi Gestur Usapan Tepi Layar:
+  // Seluruh tracking sentuhan tepi kiri dipusatkan di Layout.tsx via event 'app-swipe-back'
+  // untuk mengeliminasi konflik dual-listener dan double-trigger.
+  const pushModalHistory = (modalName: string) => {
+    try {
+      if (typeof window !== 'undefined' && window.history.state?.view !== 'live-chat-modal') {
+        window.history.pushState({ view: 'live-chat-modal', modal: modalName }, '');
+      }
+    } catch (_) {}
   };
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [syncNextOffset, setSyncNextOffset] = useState<number | null>(null);
@@ -1033,6 +1000,7 @@ function clearConversationDraft(convId: string) {
 
     return () => {
       saveCurrentDraft();
+      if (draftListTimerRef.current) clearTimeout(draftListTimerRef.current);
       window.removeEventListener('beforeunload', saveCurrentDraft);
       window.removeEventListener('pagehide', saveCurrentDraft);
     };
@@ -1397,6 +1365,19 @@ function clearConversationDraft(convId: string) {
   // ⬅️ Listener untuk Edge Swipe-Back Navigation dari Layout (Kembali dari Chat ke List di Mobile)
   useEffect(() => {
     const handleAppSwipeBack = (e: Event) => {
+      // Prioritas 1: Tutup modal/popup/menu jika sedang terbuka di mobile
+      if (contextMenu) { setContextMenu(null); e.preventDefault(); return; }
+      if (labelPopoverOpen) { setLabelPopoverOpen(false); e.preventDefault(); return; }
+      if (toolsMenuOpen) { setToolsMenuOpen(false); e.preventDefault(); return; }
+      if (emojiPickerOpen) { setEmojiPickerOpen(false); e.preventDefault(); return; }
+      if (customerDetailModalOpen) { setCustomerDetailModalOpen(false); e.preventDefault(); return; }
+      if (customerDetailEditMode) { setCustomerDetailEditMode(false); e.preventDefault(); return; }
+      if (showQuickBookingModal) { setShowQuickBookingModal(false); e.preventDefault(); return; }
+      if (showInvoiceModal) { setShowInvoiceModal(false); e.preventDefault(); return; }
+      if (showSyncInfoModal) { setShowSyncInfoModal(false); e.preventDefault(); return; }
+      if (selectedReservation) { setSelectedReservation(null); e.preventDefault(); return; }
+
+      // Prioritas 2: Jika di tampilan chat mobile, kembali ke list
       if (mobileView === 'chat') {
         e.preventDefault();
         handleBackToList();
@@ -1404,7 +1385,19 @@ function clearConversationDraft(convId: string) {
     };
     window.addEventListener('app-swipe-back', handleAppSwipeBack);
     return () => window.removeEventListener('app-swipe-back', handleAppSwipeBack);
-  }, [mobileView]);
+  }, [
+    mobileView,
+    contextMenu,
+    labelPopoverOpen,
+    toolsMenuOpen,
+    emojiPickerOpen,
+    customerDetailModalOpen,
+    customerDetailEditMode,
+    showQuickBookingModal,
+    showInvoiceModal,
+    showSyncInfoModal,
+    selectedReservation,
+  ]);
 
   // 📱 Listener untuk Default Android Back button & popstate history navigation
   useEffect(() => {
@@ -1451,8 +1444,12 @@ function clearConversationDraft(convId: string) {
         return;
       }
 
-      // Jika state yang baru di-pop masih berada di live-chat-detail (misal setelah drawer sidebar tertutup)
-      if (e.state?.view === 'live-chat-detail' || (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail')) {
+      // Jika state yang baru di-pop adalah live-chat-modal atau masih berada di live-chat-detail
+      if (
+        e.state?.view === 'live-chat-modal' ||
+        e.state?.view === 'live-chat-detail' ||
+        (typeof window !== 'undefined' && (window.history.state?.view === 'live-chat-detail' || window.history.state?.view === 'live-chat-modal'))
+      ) {
         return;
       }
 
@@ -2196,6 +2193,7 @@ function clearConversationDraft(convId: string) {
 
   const handleOpenCustomerDetail = async (chat: LiveChatItem) => {
     setCustomerDetailModalOpen(true);
+    pushModalHistory('customer-detail');
     setCustomerDetailLoading(true);
     // Instant preliminary data so modal never opens empty
     const initialLabels = (chat.customerLabels || []).map((l) => ({ label: l }));
@@ -2324,6 +2322,7 @@ function clearConversationDraft(convId: string) {
       } catch {}
     }
     setShowQuickBookingModal(true);
+    pushModalHistory('quick-booking');
   };
 
   const handleOpenQuickHold = async () => {
@@ -2439,6 +2438,7 @@ function clearConversationDraft(convId: string) {
 
     setInvoiceModalData(mappedData);
     setShowInvoiceModal(true);
+    pushModalHistory('invoice');
   };
 
   const handleGenerateActiveReservationInvoice = async () => {
@@ -2518,6 +2518,7 @@ function clearConversationDraft(convId: string) {
     } catch {}
     setInvoiceModalData(extracted);
     setShowInvoiceModal(true);
+    pushModalHistory('invoice');
   };
 
   const handleSendReply = async () => {
@@ -2732,7 +2733,7 @@ function clearConversationDraft(convId: string) {
   };
 
   return (
-    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5">
+    <div data-no-swipe-menu="true" className="h-full flex flex-col min-h-0 space-y-0 lg:space-y-1.5 p-0 lg:p-1.5 lg:pb-0">
       {/* Top Header (Desktop / Large screen only - on mobile it scrolls with the list) */}
       <div className="hidden lg:flex justify-between items-center bg-white border border-[#e9edef] rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 shadow-xs shrink-0">
         <div className="flex items-center space-x-2">
@@ -2741,8 +2742,8 @@ function clearConversationDraft(convId: string) {
             <span>Live Chat Monitor</span>
           </h1>
           {/* Total Conversations Badge directly next to Title */}
-          <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]" title="Total percakapan aktif">
-            {filteredChats.length}
+          <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]" title="Total percakapan aktif yang dimuat">
+            {filteredChats.length} total
           </span>
           {/* Real-time Status Icon Indicator */}
           <div
@@ -2865,8 +2866,8 @@ function clearConversationDraft(convId: string) {
                     <MessageSquare className="text-[#008069]" size={16} />
                     <span>Live Chat</span>
                   </h1>
-                  <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]">
-                    {filteredChats.length}
+                  <span className="px-2 py-0.5 rounded-full bg-[#e8f5f2] text-[#008069] text-xs font-bold font-mono border border-[#c2e7e0]" title="Total percakapan aktif yang dimuat">
+                    {filteredChats.length} total
                   </span>
                   <div className="flex items-center space-x-1 px-1.5 py-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-full text-[10px] font-semibold text-[#54656f]">
                     <span className={`h-1.5 w-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
@@ -3063,6 +3064,12 @@ function clearConversationDraft(convId: string) {
                   const preview = chat.lastMessages && chat.lastMessages.length > 0
                     ? chat.lastMessages[chat.lastMessages.length - 1]?.content
                     : null;
+                  // Draf typing tersimpan sementara (24 jam): untuk chat yang sedang dibuka
+                  // pakai teks live composer, untuk lainnya baca dari penyimpanan. draftTick
+                  // memastikan nilai ini segar setiap render ulang terjadwal.
+                  void draftTick;
+                  const liveDraft = chat.conversationId === selectedId ? (replyTextRef.current || '') : '';
+                  const draftText = (liveDraft || loadConversationDraft(chat.conversationId) || '').trim();
 
                   return (
                     <div
@@ -3135,18 +3142,26 @@ function clearConversationDraft(convId: string) {
                         userSelect: 'none',
                         WebkitTouchCallout: 'none',
                       }}
-                      className={`bg-white rounded-xl p-2 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1.5 shadow-2xs relative select-none touch-manipulation ${
+                      className={`bg-white dark:bg-[#111b21] rounded-xl px-2 pt-1.5 border transition-all duration-150 active:scale-[0.985] cursor-pointer text-left flex flex-col justify-between space-y-1 shadow-2xs relative select-none touch-manipulation ${
                         isSelected
-                          ? 'border-[#008069] bg-[#e8f5f2] ring-1 ring-[#008069]'
-                          : isMedical
-                            ? 'border-rose-300 bg-rose-50/40 hover:bg-rose-50/70 active:bg-rose-100/50'
-                            : (chat as any).hasActiveHold
-                              ? 'border-amber-400 bg-amber-50/75 hover:bg-amber-100/70 active:bg-amber-100 ring-1 ring-amber-400/40'
-                              : (chat as any).hasUpcomingBooking
-                                ? 'border-emerald-300 bg-emerald-50/65 hover:bg-emerald-100/60 active:bg-emerald-100 ring-1 ring-emerald-300/40'
+                          ? `border-[#008069] dark:border-[#00a884] bg-[#e8f5f2]/80 dark:bg-[#00a884]/15 ${
+                              (chat as any).hasActiveHold
+                                ? 'border-l-4 border-l-amber-500'
                                 : (chat as any).hasPendingBooking
-                                  ? 'border-sky-300 bg-sky-50/70 hover:bg-sky-100/70 active:bg-sky-100 ring-1 ring-sky-300/40'
-                                  : 'border-[#e9edef] hover:border-[#c2e7e0] hover:bg-[#f8fafc] active:bg-[#f0f2f5]'
+                                  ? 'border-l-4 border-l-sky-500'
+                                  : (chat as any).hasUpcomingBooking
+                                    ? 'border-l-4 border-l-emerald-500'
+                                    : ''
+                            }`
+                          : isMedical
+                            ? 'border-rose-300 dark:border-rose-700/60 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50/70 dark:hover:bg-rose-950/30 active:bg-rose-100/50'
+                            : (chat as any).hasActiveHold
+                              ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-amber-500 bg-amber-100/90 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 active:bg-amber-200/70'
+                              : (chat as any).hasUpcomingBooking
+                                ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-emerald-500 bg-emerald-50/65 dark:bg-emerald-950/30 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 active:bg-emerald-100'
+                                : (chat as any).hasPendingBooking
+                                  ? 'border-[#e9edef] dark:border-[#2a3942] border-l-4 border-l-sky-500 bg-sky-100/90 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-900/40 active:bg-sky-200/70'
+                                  : 'border-[#e9edef] dark:border-[#2a3942] hover:border-[#c2e7e0] dark:hover:border-[#00a884]/50 hover:bg-[#f8fafc] dark:hover:bg-[#202c33] active:bg-[#f0f2f5] dark:active:bg-[#222e35]'
                       }`}
                     >
                       {/* Top Row: Avatar, Name, Group 1 Labels (Under Name), & Release/Bot Icon + Badges */}
@@ -3159,14 +3174,14 @@ function clearConversationDraft(convId: string) {
                             size="sm"
                           />
                           <div className="space-y-0.5 min-w-0">
-                            <h4 className="font-bold text-[#111b21] text-xs flex items-center space-x-1.5 truncate">
+                            <h4 className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs flex items-center space-x-1.5 truncate">
                               {chat.isPinned && (
                                 <span title="Percakapan Disematkan (Pin)" className="inline-flex shrink-0">
                                   <Pin size={11} className="text-[#008069] fill-current" />
                                 </span>
                               )}
                               <span className="truncate">{chatName}</span>
-                              <span className="text-[10px] text-[#667781] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
+                              <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-normal flex-shrink-0">({chat.customerPhone || 'Unknown'})</span>
                             </h4>
 
                             {/* GRUP 1: Label Kustom Pelanggan (CRM Tags di bawah nama & nomor) + HOLD/Terjadwal Badge */}
@@ -3182,17 +3197,17 @@ function clearConversationDraft(convId: string) {
                                 </span>
                               ))}
                               {(chat as any).hasActiveHold && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-500 text-white shadow-2xs">
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-xs tracking-wide">
                                   ⏳ HOLD
                                 </span>
                               )}
                               {!(chat as any).hasActiveHold && (chat as any).hasUpcomingBooking && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-700 text-white shadow-2xs">
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
                                   📅 Terjadwal
                                 </span>
                               )}
                               {!(chat as any).hasActiveHold && !(chat as any).hasUpcomingBooking && (chat as any).hasPendingBooking && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-600 text-white shadow-2xs">
+                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
                                   🕓 Pending
                                 </span>
                               )}
@@ -3213,7 +3228,7 @@ function clearConversationDraft(convId: string) {
                               className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center shadow-2xs disabled:opacity-50 ${
                                 isMedical
                                   ? 'bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300'
-                                  : 'bg-[#e8f5f2] hover:bg-[#c2e7e0] text-[#008069] border border-[#c2e7e0]'
+                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-500/40'
                               }`}
                             >
                               {releasingId === chat.conversationId ? (
@@ -3254,27 +3269,37 @@ function clearConversationDraft(convId: string) {
                         </div>
                       </div>
 
-                      {/* Chat Preview */}
-                      <p className="text-xs text-[#54656f] line-clamp-1 italic leading-relaxed">
-                        "{preview || 'Tidak ada pesan'}"
-                      </p>
+                      {/* Chat Preview — draf typing didahulukan bila ada */}
+                      {draftText ? (
+                        <p
+                          className="text-xs text-[#008069] dark:text-[#00a884] line-clamp-1 leading-snug font-medium flex items-center gap-1"
+                          title={`Draf belum terkirim: ${draftText}`}
+                        >
+                          <PenLine size={11} className="shrink-0" />
+                          <span className="truncate">Draft: {draftText}</span>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-[#54656f] dark:text-[#aebac1] line-clamp-1 italic leading-snug">
+                          "{preview || 'Tidak ada pesan'}"
+                        </p>
+                      )}
 
                       {/* GRUP 2: Metrik, Order, Traffic, Medis, & Jam (Di Footer Bar) — background ikut status */}
-                      <div className={`flex justify-between items-center text-[10px] pt-1.5 border-t -mx-2 -mb-2 px-2 py-1.5 rounded-b-xl mt-1.5 ${
+                      <div className={`flex justify-between items-center text-[10px] border-t -mx-2 px-2.5 py-1.5 rounded-b-[11px] mt-1.5 ${
                         (chat as any).hasActiveHold
-                          ? 'bg-amber-50/90 border-amber-200/70 text-amber-900'
+                          ? 'bg-amber-100/90 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-500/40 text-amber-950 dark:text-amber-200'
                           : (chat as any).hasUpcomingBooking
-                            ? 'bg-emerald-50/90 border-emerald-200/70 text-emerald-900'
+                            ? 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-200/70 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200'
                             : (chat as any).hasPendingBooking
-                              ? 'bg-sky-50/90 border-sky-200/70 text-sky-900'
-                              : 'bg-[#f8fafc]/60 border-[#e9edef] text-[#667781]'
+                              ? 'bg-sky-100/90 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-500/40 text-sky-950 dark:text-sky-200'
+                              : 'bg-[#f8fafc]/60 dark:bg-black/35 border-[#e9edef] dark:border-[#2a3942] text-[#667781] dark:text-[#aebac1]'
                       }`}>
-                        <span className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        <span className="flex items-center flex-wrap gap-1.5">
 
                           {/* Medis Badge */}
                           {isMedical && (
                             <span
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40"
                               title="Medical Concern / Emergency — Butuh respon medis"
                             >
                               <AlertTriangle size={8} className="mr-0.5" />
@@ -3286,7 +3311,7 @@ function clearConversationDraft(convId: string) {
                           {chat.isMql && (
                             <span
                               title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
                             >
                               <Zap size={8} className="mr-0.5" />
                               MQL
@@ -3303,8 +3328,8 @@ function clearConversationDraft(convId: string) {
                               }
                               className={`inline-flex items-center space-x-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${
                                 chat.purchaseCount === 1
-                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                  : 'bg-amber-100 text-amber-800 border-amber-200'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40'
+                                  : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-500/40'
                               }`}
                             >
                               <ShoppingBag size={8} className="mr-0.5" />
@@ -3316,7 +3341,7 @@ function clearConversationDraft(convId: string) {
                           {chat.trafficSource === 'meta' && (
                             <span
                               title="Traffic Iklan Meta"
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-500/40"
                             >
                               <Facebook size={8} className="mr-0.5" />
                               Meta
@@ -3327,7 +3352,7 @@ function clearConversationDraft(convId: string) {
                           {chat.trafficSource === 'legacy' && (
                             <span
                               title="Pasien Legacy (Data hasil migrasi arsip riwayat WhatsApp lama)"
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40"
                             >
                               Legacy
                             </span>
@@ -3336,7 +3361,7 @@ function clearConversationDraft(convId: string) {
                           {/* Sandbox Badge */}
                           {chat.isSandboxTest && (
                             <span
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-800 border border-purple-200"
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40"
                               title="Chat simulasi / sandbox"
                             >
                               Sandbox
@@ -3344,14 +3369,28 @@ function clearConversationDraft(convId: string) {
                           )}
                         </span>
 
-                        {/* Timestamp & Current State */}
-                        <span className="flex items-center space-x-1.5">
+                        {/* Timestamp & Status Alur (chip CS / Bot) */}
+                        <span className="flex items-center gap-1.5">
                           {chat.lastMessageAt && (
-                            <span className="text-[#667781] font-sans text-[10px]">
+                            <span className="text-[#667781] dark:text-[#aebac1] font-sans text-[10px]">
                               {formatLastChat(chat.lastMessageAt)}
                             </span>
                           )}
-                          <span className="font-mono text-[9px] font-bold uppercase text-[#8696a0]">{chat.currentState}</span>
+                          {chat.currentState === 'HUMAN_HANDLING' ? (
+                            <span
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40"
+                              title="Ditangani CS (manual)"
+                            >
+                              <User size={10} /> CS
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
+                              title={`Alur: ${chat.currentState}`}
+                            >
+                              <Bot size={10} /> Bot
+                            </span>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -3377,14 +3416,10 @@ function clearConversationDraft(convId: string) {
           {/* Section 2: Right Panel - Live Chat Messages */}
           <div
             data-chat-detail="true"
-            onTouchStart={handleDetailTouchStart}
-            onTouchMove={handleDetailTouchMove}
-            onTouchEnd={handleDetailTouchEnd}
-            onTouchCancel={() => { detailTouchStartRef.current = null; }}
             className={`${mobileView === 'list' ? 'hidden lg:flex' : 'flex animate-mobile-chat-enter lg:animate-none'} flex-1 min-w-0 h-full min-h-0 flex-col`}
           >
             {selectedChat ? (
-              <div className="bg-white border-0 lg:border border-[#e9edef] rounded-none lg:rounded-2xl p-1 sm:p-2 md:p-2.5 h-full flex flex-col justify-between shadow-none lg:shadow-xs overflow-hidden min-h-0">
+              <div className="bg-white border-0 lg:border border-[#e9edef] rounded-none lg:rounded-2xl p-1 sm:p-2 md:p-2.5 pb-0 sm:pb-0 md:pb-0 h-full flex flex-col justify-between shadow-none lg:shadow-xs overflow-hidden min-h-0">
                 {/* Header Info: Clickable Card to view full customer detail modal */}
                 <div className="border-b border-[#e9edef] pb-1 sm:pb-1.5 space-y-1 shrink-0">
                   {selectedChat.isSandboxTest && (
@@ -3512,7 +3547,7 @@ function clearConversationDraft(convId: string) {
                           onClick={() => handleRelease(selectedChat)}
                           disabled={releasingId === selectedChat.conversationId}
                           title="Kembalikan percakapan ke Bot AI"
-                          className="px-3 py-1.5 bg-[#008069] hover:bg-[#00a884] text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
                         >
                           <Bot size={14} />
                           <span className="hidden sm:inline">Kembalikan ke Bot</span>
@@ -3532,13 +3567,17 @@ function clearConversationDraft(convId: string) {
                   </div>
                 </div>
 
-                {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line */}
+                {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line (ultra-compact saat banner cut-off merah ikut tampil) */}
                 {activeHoldReservation && (
-                  <div className="mx-1 mb-1 py-1 px-2 rounded-md bg-amber-50 border border-amber-300/70 flex items-center gap-2 text-[10px] leading-none text-amber-950 shadow-2xs shrink-0 animate-fadeIn min-h-[26px] overflow-hidden">
+                  <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
+                    globalBotCutoff
+                      ? 'py-0.5 min-h-[22px] bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-500/40 text-amber-950 dark:text-amber-100'
+                      : 'py-1 min-h-[26px] bg-amber-50 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-500/50 text-amber-950 dark:text-amber-100'
+                  }`}>
                     <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
                       <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                      <span className="font-extrabold text-amber-900 shrink-0 tracking-wide text-[10px]">HOLD:</span>
-                      <span className="font-medium truncate text-amber-950 text-[10px] min-w-0">
+                      <span className="font-extrabold text-amber-900 dark:text-amber-300 shrink-0 tracking-wide text-[10px]">HOLD:</span>
+                      <span className="font-medium truncate text-amber-950 dark:text-amber-100 text-[10px] min-w-0">
                         {activeHoldReservation.booking_date
                           ? new Date(activeHoldReservation.booking_date).toLocaleDateString('id-ID', {
                               weekday: 'short',
@@ -3553,6 +3592,7 @@ function clearConversationDraft(convId: string) {
                             ' WIB'
                           : 'Slot belum ditentukan'}
                         {activeHoldReservation.assigned_staff?.name ? ` • ${activeHoldReservation.assigned_staff.name}` : ''}
+                        {Number(activeHoldReservation.duration_minutes) > 0 ? ` • ${activeHoldReservation.duration_minutes} mnt` : ''}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -3561,7 +3601,7 @@ function clearConversationDraft(convId: string) {
                         onClick={() => {
                           setHoldToConfirmReservation(activeHoldReservation);
                         }}
-                        className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-[10px] leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0"
+                        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${globalBotCutoff ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
                         title="Konfirmasi & Lengkapi Data"
                       >
                         Konfirmasi
@@ -3601,7 +3641,9 @@ function clearConversationDraft(convId: string) {
                   ref={chatContainerRef} 
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
-                    backgroundImage: `radial-gradient(#d1d7db 0.75px, transparent 0.75px)`,
+                    backgroundImage: currentTheme === 'dark'
+                      ? 'radial-gradient(rgba(255, 255, 255, 0.04) 0.75px, transparent 0.75px)'
+                      : 'radial-gradient(#d1d7db 0.75px, transparent 0.75px)',
                     backgroundSize: '16px 16px',
                     overscrollBehavior: 'contain',
                   }}
@@ -4033,7 +4075,7 @@ function clearConversationDraft(convId: string) {
                 </div>
 
                 {/* Reply Composer */}
-                <div className="chat-composer-container border-t border-[#e9edef] pt-1 sm:pt-1.5 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] shrink-0 bg-white">
+                <div className="chat-composer-container pt-0.5 shrink-0 bg-transparent pb-0 border-t-0">
                   {selectedChat.isSandboxTest ? (
                     <div className="flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 text-xs font-semibold">
                       <FlaskConical size={13} />
@@ -4043,7 +4085,7 @@ function clearConversationDraft(convId: string) {
                   <>
                   {/* Active Quoted Message Banner (WhatsApp-Style Replying Bar) */}
                   {replyingTo && (
-                    <div className="flex items-center justify-between bg-white px-3 py-2 border-l-4 border-[#008069] rounded-t-xl mb-1 shadow-xs border border-b-0 border-[#e9edef] animate-fadeIn">
+                    <div className="flex items-center justify-between bg-white px-3 py-2 border-l-4 border-[#008069] rounded-t-xl mb-0 shadow-xs border border-b-0 border-[#e9edef] animate-fadeIn">
                       <div className="flex-1 min-w-0 pr-2">
                         <div className="flex items-center space-x-1.5">
                           <Reply size={12} className="text-[#008069] shrink-0" />
@@ -4112,7 +4154,7 @@ function clearConversationDraft(convId: string) {
                     </div>
                   )}
 
-                  <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 border border-[#e9edef] w-full ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'}`}>
+                  <div ref={composerWrapperRef} className={`flex items-end space-x-1.5 sm:space-x-2 bg-[#f0f2f5] p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-[#e9edef] w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -4239,27 +4281,6 @@ function clearConversationDraft(convId: string) {
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-[12px] truncate">Generate Invoice / Payment</p>
                               <p className="text-[10px] text-[#667781] truncate">Isi format rincian ke chat</p>
-                            </div>
-                          </button>
-
-                          {/* Option: ⚡ Balasan Cepat */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setToolsMenuOpen(false);
-                              setQuickReplyFilter('');
-                              setQuickReplyActiveIdx(0);
-                              setTimeout(() => chatInputRef.current?.focus(), 50);
-                            }}
-                            disabled={!quickReplies.length}
-                            className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#111b21] hover:bg-amber-50/80 hover:text-amber-700 transition text-left group disabled:opacity-50"
-                          >
-                            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                              <Zap size={15} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[12px] truncate">⚡ Balasan Cepat</p>
-                              <p className="text-[10px] text-[#667781] truncate">Pilih template /shortcut instan</p>
                             </div>
                           </button>
 
@@ -4439,7 +4460,7 @@ function clearConversationDraft(convId: string) {
 
       {/* Customer Detail Modal */}
       {customerDetailModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+        <div data-modal-active="true" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             {/* Modal Header */}
             <div className="flex justify-between items-center px-5 py-4 border-b border-[#e9edef] bg-[#f8fafc]">
@@ -4461,6 +4482,7 @@ function clearConversationDraft(convId: string) {
               </div>
               <button
                 type="button"
+                data-modal-close="true"
                 onClick={() => setCustomerDetailModalOpen(false)}
                 className="p-2 rounded-xl text-[#8696a0] hover:text-[#111b21] hover:bg-[#e9edef] transition text-sm font-bold"
               >

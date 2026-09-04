@@ -44,6 +44,7 @@ export interface Reservation {
   treatment_category: 'BABY' | 'MOMS' | 'BOTH';
   treatment_detail: string;
   booking_date: string | null;
+  duration_minutes?: number | null;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'hold';
   raw_text: string;
   purchase_event_sent_at?: string | null;

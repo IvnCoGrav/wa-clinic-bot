@@ -166,15 +166,15 @@ export const TelegramIntegration: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#e9edef] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#e9edef] dark:border-[#2a3942] pb-5">
         <div>
           <div className="flex items-center space-x-2">
             <div className="p-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200">
               <Send size={22} />
             </div>
-            <h1 className="text-2xl font-bold text-[#111b21]">Koneksi & Notifikasi Telegram</h1>
+            <h1 className="text-2xl font-bold text-[#111b21] dark:text-[#e9edef]">Koneksi & Notifikasi Telegram</h1>
           </div>
-          <p className="text-sm text-[#54656f] mt-1">
+          <p className="text-sm text-[#54656f] dark:text-[#aebac1] mt-1">
             Pusat kendali integrasi Telegram untuk briefing jadwal harian tim Bidan/Terapis dan laporan operasional klinik.
           </p>
         </div>
@@ -202,13 +202,13 @@ export const TelegramIntegration: React.FC = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center space-x-2 border-b border-[#e9edef]">
+      <div className="flex items-center space-x-2 border-b border-[#e9edef] dark:border-[#2a3942]">
         <button
           onClick={() => setActiveTab('STAFF_DISPATCH')}
           className={`flex items-center space-x-2 px-4 py-3 text-xs font-semibold border-b-2 transition-all ${
             activeTab === 'STAFF_DISPATCH'
               ? 'border-[#008069] text-[#008069]'
-              : 'border-transparent text-[#54656f] hover:text-[#111b21]'
+              : 'border-transparent text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
           }`}
         >
           <Users size={16} />
@@ -223,7 +223,7 @@ export const TelegramIntegration: React.FC = () => {
           className={`flex items-center space-x-2 px-4 py-3 text-xs font-semibold border-b-2 transition-all ${
             activeTab === 'CLINIC_REPORTS'
               ? 'border-[#008069] text-[#008069]'
-              : 'border-transparent text-[#54656f] hover:text-[#111b21]'
+              : 'border-transparent text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
           }`}
         >
           <Building2 size={16} />
@@ -236,33 +236,33 @@ export const TelegramIntegration: React.FC = () => {
         <div className="space-y-6">
           {/* Summary Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs">
-              <div className="text-xs font-medium text-[#54656f]">Total Staff Terdaftar</div>
-              <div className="text-2xl font-bold text-[#111b21] mt-1">{stats.total}</div>
+            <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+              <div className="text-xs font-medium text-[#54656f] dark:text-[#aebac1]">Total Staff Terdaftar</div>
+              <div className="text-2xl font-bold text-[#111b21] dark:text-[#e9edef] mt-1">{stats.total}</div>
               <div className="text-[11px] text-[#8696a0] mt-1">Bidan, Terapis, dan Petugas Lapangan</div>
             </div>
 
-            <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200/80 shadow-xs">
+            <div className="bg-emerald-50/60 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-200/80 dark:border-emerald-800/40 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-emerald-800">Telegram Terhubung</span>
+                <span className="text-xs font-medium text-emerald-800 dark:text-emerald-200">Telegram Terhubung</span>
                 <CheckCircle2 size={16} className="text-emerald-600" />
               </div>
-              <div className="text-2xl font-bold text-emerald-900 mt-1">{stats.connected}</div>
-              <div className="text-[11px] text-emerald-700 mt-1">Siap menerima notifikasi penugasan & briefing pagi</div>
+              <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-200 mt-1">{stats.connected}</div>
+              <div className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-1">Siap menerima notifikasi penugasan & briefing pagi</div>
             </div>
 
-            <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 shadow-xs">
+            <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200/80 dark:border-amber-800/40 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-amber-800">Belum Terhubung</span>
+                <span className="text-xs font-medium text-amber-800 dark:text-amber-200">Belum Terhubung</span>
                 <AlertCircle size={16} className="text-amber-600" />
               </div>
-              <div className="text-2xl font-bold text-amber-900 mt-1">{stats.unconnected}</div>
-              <div className="text-[11px] text-amber-700 mt-1">Salin link pairing & kirim via WhatsApp ke Bidan</div>
+              <div className="text-2xl font-bold text-amber-900 dark:text-amber-200 mt-1">{stats.unconnected}</div>
+              <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">Salin link pairing & kirim via WhatsApp ke Bidan</div>
             </div>
           </div>
 
           {/* Info Banner */}
-          <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-xs text-sky-900 flex items-start space-x-3">
+          <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-2xl p-4 text-xs text-sky-900 dark:text-sky-200 flex items-start space-x-3">
             <Radio size={18} className="text-sky-600 shrink-0 mt-0.5" />
             <div>
               <div className="font-semibold text-sky-950">Cara Menghubungkan Telegram Bidan:</div>
@@ -275,9 +275,9 @@ export const TelegramIntegration: React.FC = () => {
           </div>
 
           {/* Staff Table & Search Filter */}
-          <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden">
+          <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs overflow-hidden">
             {/* Table Toolbar */}
-            <div className="p-4 border-b border-[#e9edef] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#fcfdfd]">
+            <div className="p-4 border-b border-[#e9edef] dark:border-[#2a3942] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#fcfdfd] dark:bg-[#1c272e]">
               <div className="relative flex-1 max-w-md">
                 <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8696a0]" />
                 <input
@@ -309,7 +309,7 @@ export const TelegramIntegration: React.FC = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-[#f0f2f5] text-[#54656f] font-semibold border-b border-[#e9edef]">
+                    <tr className="bg-[#f0f2f5] dark:bg-[#1c272e] text-[#54656f] dark:text-[#8696a0] font-semibold border-b border-[#e9edef] dark:border-[#2a3942]">
                       <th className="px-5 py-3.5">Nama Staff</th>
                       <th className="px-5 py-3.5">Nomor HP</th>
                       <th className="px-5 py-3.5">Peran (Role)</th>
@@ -317,7 +317,7 @@ export const TelegramIntegration: React.FC = () => {
                       <th className="px-5 py-3.5 text-right">Tindakan Admin</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#e9edef]">
+                  <tbody className="divide-y divide-[#e9edef] dark:divide-[#2a3942]">
                     {filteredStaff.map((staff) => {
                       const isConnected = Boolean(staff.telegram_chat_id);
                       const isCopied = copiedId === staff.id;
@@ -325,7 +325,7 @@ export const TelegramIntegration: React.FC = () => {
                       const isBriefingThis = actionLoadingId === `briefing-${staff.id}`;
 
                       return (
-                        <tr key={staff.id} className="hover:bg-[#fcfdfd] transition-colors">
+                        <tr key={staff.id} className="hover:bg-[#fcfdfd] dark:hover:bg-[#202c33] transition-colors">
                           {/* Name & Active Status */}
                           <td className="px-5 py-3.5">
                             <div className="flex items-center space-x-2.5">
@@ -335,18 +335,18 @@ export const TelegramIntegration: React.FC = () => {
                                 }`}
                                 title={staff.active ? 'Akun aktif' : 'Akun nonaktif'}
                               />
-                              <span className="font-semibold text-[#111b21]">{staff.name}</span>
+                              <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">{staff.name}</span>
                             </div>
                           </td>
 
                           {/* Phone */}
-                          <td className="px-5 py-3.5 font-mono text-[#54656f]">
+                          <td className="px-5 py-3.5 font-mono text-[#54656f] dark:text-[#aebac1]">
                             {staff.phone}
                           </td>
 
                           {/* Role */}
                           <td className="px-5 py-3.5">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f2f5] text-[#54656f] border border-[#d1d7db]">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248]">
                               {staff.role}
                             </span>
                           </td>
@@ -376,7 +376,7 @@ export const TelegramIntegration: React.FC = () => {
                                 className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-all ${
                                   isCopied
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                    : 'bg-white hover:bg-[#f0f2f5] text-[#111b21] border-[#d1d7db] shadow-2xs'
+                                    : 'bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] border-[#d1d7db] dark:border-[#374248] shadow-2xs'
                                 }`}
                                 title="Salin link aktivasi Telegram untuk Bidan"
                               >
@@ -398,7 +398,7 @@ export const TelegramIntegration: React.FC = () => {
                                 <button
                                   onClick={() => handleTestBriefing(staff)}
                                   disabled={isBriefingThis}
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[11px] font-semibold transition-all"
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30 text-[11px] font-semibold transition-all"
                                   title="Test kirim briefing jadwal hari ini ke Telegram Bidan"
                                 >
                                   {isBriefingThis ? (

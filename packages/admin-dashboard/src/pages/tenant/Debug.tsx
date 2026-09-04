@@ -696,13 +696,13 @@ interface GroupedCustomerLlmLogs {
 const getFlowBadge = (flowType: string) => {
   switch (flowType) {
     case 'SLOT_EXTRACTOR':
-      return { label: '1. Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 text-violet-800 border-violet-200' };
+      return { label: '1. Slot Extractor', short: 'SLOT EXT', icon: '🎰', cls: 'bg-violet-50 dark:bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-500/40' };
     case 'SLOT_GENERATOR':
-      return { label: '2. Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200' };
+      return { label: '2. Slot Generator', short: 'SLOT GEN', icon: '🎯', cls: 'bg-fuchsia-50 dark:bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-500/40' };
     case 'SLOT_FAST_FAQ':
-      return { label: 'Fast-Track FAQ (1-Call)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 text-amber-900 border-amber-300' };
+      return { label: 'Fast-Track FAQ (1-Call)', short: 'FAST FAQ', icon: '⚡', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-500/40' };
     default:
-      return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 text-slate-800 border-slate-200' };
+      return { label: flowType, short: flowType, icon: '⚡', cls: 'bg-slate-50 dark:bg-[#2a3942] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-[#374248]' };
   }
 };
 
@@ -906,21 +906,21 @@ function LlmLogsSection() {
   return (
     <div className="space-y-4">
       {/* Top Header with Live Indicator & Action Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-extrabold text-[#111b21] flex items-center gap-2">
+            <h3 className="text-base font-extrabold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
               <span>🧠 Dedicated LLM Execution Tracing</span>
             </h3>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              autoSync ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'
+              autoSync ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40' : 'bg-slate-100 dark:bg-[#2a3942] text-slate-600 dark:text-[#aebac1]'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${autoSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
               {autoSync ? 'Auto-Sync 6s' : 'Jeda'}
             </span>
           </div>
-          <p className="text-xs text-[#667781] mt-0.5">
-            Observability slot-engine: <span className="font-semibold text-[#111b21]">Slot Extractor ➔ Slot Generator / Fast FAQ</span>.
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
+            Observability slot-engine: <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">Slot Extractor ➔ Slot Generator / Fast FAQ</span>.
           </p>
         </div>
 
@@ -929,19 +929,19 @@ function LlmLogsSection() {
             onClick={() => setAutoSync(!autoSync)}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition shadow-xs ${
               autoSync
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
+              : 'bg-white dark:bg-transparent text-slate-700 dark:text-[#aebac1] border-slate-200 dark:border-[#374248] hover:bg-slate-50 dark:hover:bg-[#2a3942]'
             }`}
             title={autoSync ? 'Jeda Sinkronisasi Otomatis' : 'Aktifkan Sinkronisasi Otomatis'}
           >
-            {autoSync ? <Pause size={13} className="text-emerald-700" /> : <Play size={13} className="text-slate-600" />}
+            {autoSync ? <Pause size={13} className="text-emerald-700 dark:text-emerald-300" /> : <Play size={13} className="text-slate-600 dark:text-[#aebac1]" />}
             <span>{autoSync ? 'Pause' : 'Play'}</span>
           </button>
 
           <button
             onClick={() => loadLogs(false)}
             disabled={loading}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-xs font-bold text-[#111b21] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#111b21] dark:text-[#e9edef] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
             title="Refresh Manual"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : 'text-slate-600'} />
@@ -951,7 +951,7 @@ function LlmLogsSection() {
           <button
             onClick={handleExportJson}
             disabled={groupedData.length === 0}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-xs font-bold text-[#111b21] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-xs font-bold text-[#111b21] dark:text-[#e9edef] transition shadow-xs flex items-center gap-1.5 disabled:opacity-50"
             title="Export Debug Data as JSON"
           >
             <Download size={13} className="text-slate-600" />
@@ -961,7 +961,7 @@ function LlmLogsSection() {
           <button
             onClick={handleClearBuffer}
             disabled={groupedData.length === 0}
-            className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
+            className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/40 text-xs font-bold text-rose-700 dark:text-rose-300 transition shadow-xs flex items-center gap-1.5 disabled:opacity-40"
             title="Hapus / Reset Buffer LLM Logs"
           >
             <Trash2 size={13} />
@@ -972,49 +972,49 @@ function LlmLogsSection() {
 
       {/* Aggregate Stats Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-500/15 border border-teal-200 dark:border-teal-500/40 flex items-center justify-center text-teal-700 dark:text-teal-300">
             <Phone size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Pasien Aktif</p>
-            <p className="text-base font-extrabold text-slate-900">{totalCustomers}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Pasien Aktif</p>
+            <p className="text-base font-extrabold text-slate-900 dark:text-[#e9edef]">{totalCustomers}</p>
           </div>
         </div>
 
-        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200 dark:border-sky-500/40 flex items-center justify-center text-sky-700 dark:text-sky-300">
             <MessageSquare size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Bubble Diproses</p>
-            <p className="text-base font-extrabold text-slate-900">{totalBubbles}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Bubble Diproses</p>
+            <p className="text-base font-extrabold text-slate-900 dark:text-[#e9edef]">{totalBubbles}</p>
           </div>
         </div>
 
-        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/40 flex items-center justify-center text-purple-700 dark:text-purple-300">
             <BrainCircuit size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Total AI Steps</p>
-            <p className="text-base font-extrabold text-purple-900">{totalAiSteps}</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Total AI Steps</p>
+            <p className="text-base font-extrabold text-purple-900 dark:text-purple-300">{totalAiSteps}</p>
           </div>
         </div>
 
-        <div className="bg-white border border-[#e9edef] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300">
             <Zap size={15} />
           </div>
           <div>
-            <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Slot Engine</p>
-            <p className="text-base font-extrabold text-emerald-900">Extractor → Generator</p>
+            <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-[#8696a0] tracking-wider">Slot Engine</p>
+            <p className="text-base font-extrabold text-emerald-900 dark:text-emerald-300">Extractor → Generator</p>
           </div>
         </div>
       </div>
 
       {/* Filter Controls & Search */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-white p-3 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-white dark:bg-[#111b21] p-3 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
         {/* Flow Filters */}
         <div className="flex flex-wrap items-center gap-1.5">
           {[
@@ -1028,8 +1028,8 @@ function LlmLogsSection() {
               onClick={() => setFlowFilter(f.id)}
               className={`px-2.5 py-1 rounded-xl text-xs font-bold transition shadow-2xs ${
                 flowFilter === f.id
-                  ? 'bg-[#008069] text-white border border-[#008069]'
-                  : 'bg-white text-[#54656f] border border-[#d1d7db] hover:bg-[#f0f2f5]'
+                ? 'bg-[#008069] text-white border border-[#008069]'
+                : 'bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] border border-[#d1d7db] dark:border-[#374248] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]'
               }`}
             >
               {f.label}
@@ -1061,11 +1061,11 @@ function LlmLogsSection() {
           />
 
           {/* View Switcher */}
-          <div className="flex bg-[#e9edef] p-0.5 rounded-xl text-xs font-bold shrink-0">
+          <div className="flex bg-[#e9edef] dark:bg-[#2a3942] p-0.5 rounded-xl text-xs font-bold shrink-0">
             <button
               onClick={() => setViewMode('grouped')}
               className={`px-2.5 py-1 rounded-lg transition ${
-                viewMode === 'grouped' ? 'bg-white text-[#008069] shadow-xs' : 'text-[#667781]'
+                viewMode === 'grouped' ? 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] shadow-xs' : 'text-[#667781] dark:text-[#aebac1]'
               }`}
             >
               Pohon 3-Level
@@ -1073,7 +1073,7 @@ function LlmLogsSection() {
             <button
               onClick={() => setViewMode('flat')}
               className={`px-2.5 py-1 rounded-lg transition ${
-                viewMode === 'flat' ? 'bg-white text-[#008069] shadow-xs' : 'text-[#667781]'
+                viewMode === 'flat' ? 'bg-white dark:bg-[#202c33] text-[#008069] dark:text-[#00a884] shadow-xs' : 'text-[#667781] dark:text-[#aebac1]'
               }`}
             >
               Flat Feed
@@ -1088,7 +1088,7 @@ function LlmLogsSection() {
                 const anyOpen = Object.keys(expandedPhones).length > 0;
                 toggleAllAccordions(!anyOpen);
               }}
-              className="px-2 py-1.5 rounded-xl bg-white border border-[#d1d7db] hover:bg-slate-50 text-[11px] font-semibold text-slate-700 transition"
+              className="px-2 py-1.5 rounded-xl bg-white dark:bg-transparent border border-[#d1d7db] dark:border-[#374248] hover:bg-slate-50 dark:hover:bg-[#2a3942] text-[11px] font-semibold text-slate-700 dark:text-[#aebac1] transition"
               title="Buka / Tutup Semua Accordion"
             >
               {Object.keys(expandedPhones).length > 0 ? 'Tutup Semua' : 'Buka Semua'}
@@ -1101,7 +1101,7 @@ function LlmLogsSection() {
       {viewMode === 'grouped' && (
         <div className="space-y-3">
           {filteredGrouped.length === 0 ? (
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
               {searchQuery ? 'Tidak ada riwayat chat/LLM yang cocok dengan pencarian.' : 'Belum ada eksekusi LLM yang tercatat di buffer.'}
             </div>
           ) : (
@@ -1111,12 +1111,12 @@ function LlmLogsSection() {
               return (
                 <div
                   key={cust.customerPhone}
-                  className="bg-white border border-[#e9edef] hover:border-[#b4ded5] rounded-2xl shadow-xs transition overflow-hidden text-left"
+                  className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] hover:border-[#b4ded5] dark:hover:border-[#00a884]/40 rounded-2xl shadow-xs transition overflow-hidden text-left"
                 >
                   {/* LEVEL 1: CUSTOMER HEADER */}
                   <div
                     onClick={() => togglePhone(cust.customerPhone)}
-                    className="p-4 bg-[#f8fafc] hover:bg-[#f0f4f7] cursor-pointer flex items-center justify-between gap-3 border-b border-[#e9edef] select-none"
+                    className="p-4 bg-[#f8fafc] dark:bg-[#1c272e] hover:bg-[#f0f4f7] dark:hover:bg-[#2a3942] cursor-pointer flex items-center justify-between gap-3 border-b border-[#e9edef] dark:border-[#2a3942] select-none"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-[#e8f5f2] border border-[#008069]/30 flex items-center justify-center text-[#008069] font-bold text-xs shadow-2xs">
@@ -1124,10 +1124,10 @@ function LlmLogsSection() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-extrabold text-sm text-[#111b21]">
+                          <span className="font-extrabold text-sm text-[#111b21] dark:text-[#e9edef]">
                             {cust.customerName || 'Pasien'}
                           </span>
-                          <span className="font-mono text-xs text-[#008069] bg-white px-2 py-0.5 rounded-md border border-[#b4ded5] font-semibold">
+                          <span className="font-mono text-xs text-[#008069] dark:text-[#00a884] bg-white dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-[#b4ded5] dark:border-[#00a884]/30 font-semibold">
                             {formatPhoneDisplay(cust.customerPhone)}
                           </span>
                         </div>
@@ -1142,16 +1142,16 @@ function LlmLogsSection() {
                     </div>
 
                     <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-bold text-[#008069] bg-[#e8f5f2] px-3 py-1 rounded-full border border-[#008069]/20 hidden sm:inline-block">
+                      <span className="text-xs font-bold text-[#008069] dark:text-[#00a884] bg-[#e8f5f2] dark:bg-[#00a884]/15 px-3 py-1 rounded-full border border-[#008069]/20 dark:border-[#00a884]/30 hidden sm:inline-block">
                         {cust.totalBubbles} Percakapan
                       </span>
-                      {isPhoneExpanded ? <ChevronDown size={18} className="text-[#667781]" /> : <ChevronRight size={18} className="text-[#667781]" />}
+                      {isPhoneExpanded ? <ChevronDown size={18} className="text-[#667781] dark:text-[#aebac1]" /> : <ChevronRight size={18} className="text-[#667781] dark:text-[#aebac1]" />}
                     </div>
                   </div>
 
                   {/* LEVEL 2: CHAT BUBBLES WITH PIPELINE STEPPERS */}
                   {isPhoneExpanded && (
-                    <div className="p-4 space-y-3.5 bg-[#fdfefe]">
+                    <div className="p-4 space-y-3.5 bg-[#fdfefe] dark:bg-[#0c1317]">
                       {cust.bubbles.map((bubble, bIdx) => {
                         const isBubbleExpanded = !!expandedBubbles[bubble.correlationId];
                         const totalBubbleDuration = bubble.aiCalls.reduce((acc, c) => acc + (c.durationMs || 0), 0);
@@ -1160,12 +1160,12 @@ function LlmLogsSection() {
                         return (
                           <div
                             key={bubble.correlationId}
-                            className="border border-[#e2e8f0] rounded-2xl bg-white shadow-xs overflow-hidden transition"
+                            className="border border-[#e2e8f0] dark:border-[#374248] rounded-2xl bg-white dark:bg-[#141e24] shadow-xs overflow-hidden transition"
                           >
                             {/* BUBBLE HEADER WITH PIPELINE PREVIEW */}
                             <div
                               onClick={() => toggleBubble(bubble.correlationId)}
-                              className="p-3.5 bg-white hover:bg-slate-50 cursor-pointer flex flex-col gap-2.5 border-b border-slate-100 select-none"
+                              className="p-3.5 bg-white dark:bg-[#141e24] hover:bg-slate-50 dark:hover:bg-[#1c272e] cursor-pointer flex flex-col gap-2.5 border-b border-slate-100 dark:border-[#2a3942] select-none"
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-start gap-2.5">
@@ -1174,11 +1174,11 @@ function LlmLogsSection() {
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-xs font-extrabold text-slate-900">
+                                      <span className="text-xs font-extrabold text-slate-900 dark:text-[#e9edef]">
                                         Bubble #{bIdx + 1}: &ldquo;{bubble.customerInput}&rdquo;
                                       </span>
                                     </div>
-                                    <span className="text-[10px] font-mono text-slate-500 mt-0.5 block">
+                                    <span className="text-[10px] font-mono text-slate-500 dark:text-[#8696a0] mt-0.5 block">
                                       Waktu Masuk: {fmtTime(bubble.timestamp)}
                                     </span>
                                   </div>
@@ -1186,16 +1186,16 @@ function LlmLogsSection() {
 
                                 <div className="flex items-center gap-2 shrink-0">
                                   {totalBubbleDuration > 0 && (
-                                    <span className="text-[10px] font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                    <span className="text-[10px] font-mono font-semibold text-slate-600 dark:text-[#aebac1] bg-slate-100 dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-slate-200 dark:border-[#374248]">
                                       ⏱️ Total {totalBubbleDuration}ms
                                     </span>
                                   )}
-                                  {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+                                  {isBubbleExpanded ? <ChevronDown size={16} className="text-slate-400 dark:text-[#8696a0]" /> : <ChevronRight size={16} className="text-slate-400 dark:text-[#8696a0]" />}
                                 </div>
                               </div>
 
                               {/* PIPELINE STEPPER VISUALIZATION */}
-                              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100/80">
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100/80 dark:border-[#2a3942]">
                                 {bubble.aiCalls.map((step, sIdx) => {
                                   const badge = getFlowBadge(step.flowType);
                                   const isSuccess = step.status === 'SUCCESS';
@@ -1211,7 +1211,7 @@ function LlmLogsSection() {
                                         }`} />
                                       </div>
                                       {sIdx < bubble.aiCalls.length - 1 && (
-                                        <ArrowRight size={11} className="text-slate-300 shrink-0" />
+                                        <ArrowRight size={11} className="text-slate-300 dark:text-[#4a5a65] shrink-0" />
                                       )}
                                     </React.Fragment>
                                   );
@@ -1223,7 +1223,7 @@ function LlmLogsSection() {
 
                             {/* LEVEL 3: INDIVIDUAL AI CALLS (TAILORED DETAIL CARDS) */}
                             {isBubbleExpanded && (
-                              <div className="p-4 bg-slate-50/60 space-y-3.5">
+                              <div className="p-4 bg-slate-50/60 dark:bg-black/30 space-y-3.5">
                                 {bubble.aiCalls.map((call, cIdx) => {
                                   const badge = getFlowBadge(call.flowType);
                                   const displayReasoning = call.rawReasoning || call.reasoning || 'Tidak ada reasoning teks terpisah.';
@@ -1233,10 +1233,10 @@ function LlmLogsSection() {
                                   return (
                                     <div
                                       key={call.id || cIdx}
-                                      className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3"
+                                      className="bg-white dark:bg-[#111b21] border border-slate-200 dark:border-[#374248] rounded-xl p-4 shadow-xs space-y-3"
                                     >
                                       {/* AI Step Header Bar */}
-                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-[#2a3942] pb-2.5">
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${badge.cls} flex items-center gap-1`}>
                                             <span>{badge.icon}</span>
@@ -1244,19 +1244,19 @@ function LlmLogsSection() {
                                           </span>
 
                                           {call.modelUsed && (
-                                            <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-semibold">
+                                            <span className="text-[10px] font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-500/40 font-semibold">
                                               {call.modelUsed}
                                             </span>
                                           )}
 
                                           {call.durationMs !== undefined && (
-                                            <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                            <span className="text-[10px] font-mono text-slate-600 dark:text-[#aebac1] bg-slate-100 dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-transparent dark:border-[#374248]">
                                               ⏱️ {call.durationMs}ms
                                             </span>
                                           )}
 
                                           {call.confidenceScore !== undefined && (
-                                            <span className="text-[10px] font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-md border border-cyan-200 font-bold">
+                                            <span className="text-[10px] font-mono text-cyan-800 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-500/15 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-500/40 font-bold">
                                               Confidence: {Math.round(call.confidenceScore * 100)}%
                                             </span>
                                           )}
@@ -1266,10 +1266,10 @@ function LlmLogsSection() {
                                           <span
                                             className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                                               call.status === 'SUCCESS'
-                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                : call.status === 'FALLBACK'
-                                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                              ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
+                                              : call.status === 'FALLBACK'
+                                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
+                                              : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40'
                                             }`}
                                           >
                                             {call.status}
@@ -1278,7 +1278,7 @@ function LlmLogsSection() {
                                           <button
                                             type="button"
                                             onClick={() => copyText(call.id, JSON.stringify(call, null, 2))}
-                                            className="text-[10px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 bg-slate-50 hover:bg-slate-100 px-2 py-0.5 rounded border border-slate-200"
+                                            className="text-[10px] font-semibold text-slate-600 dark:text-[#aebac1] hover:text-slate-900 dark:hover:text-[#e9edef] flex items-center gap-1 bg-slate-50 dark:bg-[#2a3942] hover:bg-slate-100 dark:hover:bg-[#374248] px-2 py-0.5 rounded border border-slate-200 dark:border-[#374248]"
                                             title="Salin JSON Langkah Ini"
                                           >
                                             {copiedId === call.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
@@ -1291,37 +1291,37 @@ function LlmLogsSection() {
                                       {(call.flowType === 'SLOT_EXTRACTOR' || call.flowType === 'SLOT_GENERATOR' || call.flowType === 'SLOT_FAST_FAQ') && (
                                         <div className="space-y-2.5 text-xs">
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                            <div className="bg-violet-50/70 border border-violet-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-violet-800 uppercase tracking-wider block">
+                                            <div className="bg-violet-50/70 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/40 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-violet-800 dark:text-violet-300 uppercase tracking-wider block">
                                                 🎰 Input Pasien / Slot State
                                               </span>
-                                              <p className="text-violet-950 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                              <p className="text-violet-950 dark:text-violet-200 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                             </div>
-                                            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                                            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
                                                 🎯 Output Keputusan Slot / Balasan
                                               </span>
-                                              <p className="text-emerald-950 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                              <p className="text-emerald-950 dark:text-emerald-200 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
                                             </div>
                                           </div>
 
                                           {/* Reasoning Ringkas */}
                                           {call.reasoning && (
-                                            <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block">
+                                            <div className="bg-purple-50/80 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-purple-900 dark:text-purple-300 uppercase tracking-wider block">
                                                 🧠 AI Reasoning & Context Analysis
                                               </span>
-                                              <p className="text-purple-950 font-medium text-xs whitespace-pre-wrap">{call.reasoning}</p>
+                                              <p className="text-purple-950 dark:text-purple-200 font-medium text-xs whitespace-pre-wrap">{call.reasoning}</p>
                                             </div>
                                           )}
 
                                           {/* Ground Truth / Fakta DB */}
                                           {call.groundTruthUsed && Object.keys(call.groundTruthUsed).length > 0 && (
-                                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
-                                              <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                                            <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
+                                              <span className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider block">
                                                 📊 Ground Truth / Fakta DB Terinjeksi
                                               </span>
-                                              <pre className="text-slate-800 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-36">
+                                              <pre className="text-slate-800 dark:text-[#d1d7db] font-mono text-[10px] whitespace-pre-wrap overflow-x-auto max-h-36">
                                                 {typeof call.groundTruthUsed === 'string'
                                                   ? call.groundTruthUsed
                                                   : JSON.stringify(call.groundTruthUsed, null, 2)}
@@ -1359,21 +1359,21 @@ function LlmLogsSection() {
                                         call.flowType !== 'SLOT_FAST_FAQ' && (
                                           <div className="space-y-2.5 text-xs">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
-                                                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                                              <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
+                                                <span className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider block">
                                                   📥 Input
                                                 </span>
-                                                <p className="text-slate-900 font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
+                                                <p className="text-slate-900 dark:text-[#e9edef] font-medium whitespace-pre-wrap">{call.customerInput || '-'}</p>
                                               </div>
-                                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
-                                                <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+                                              <div className="bg-slate-50 dark:bg-[#1c272e] border border-slate-200 dark:border-[#374248] rounded-xl p-3 space-y-1">
+                                                <span className="text-[10px] font-bold text-slate-700 dark:text-[#aebac1] uppercase tracking-wider block">
                                                   📤 Output
                                                 </span>
-                                                <p className="text-slate-900 font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
+                                                <p className="text-slate-900 dark:text-[#e9edef] font-medium whitespace-pre-wrap">{call.finalReply || '-'}</p>
                                               </div>
                                             </div>
                                             {call.reasoning && (
-                                              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-purple-950 font-mono text-[11px] whitespace-pre-wrap">
+                                              <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3 text-purple-950 dark:text-purple-200 font-mono text-[11px] whitespace-pre-wrap">
                                                 {call.reasoning}
                                               </div>
                                             )}
@@ -1400,7 +1400,7 @@ function LlmLogsSection() {
       {viewMode === 'flat' && (
         <div className="space-y-3">
           {flatLogs.length === 0 ? (
-            <div className="bg-white border border-[#e9edef] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
+            <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl p-10 text-center text-xs text-[#8696a0] shadow-xs">
               Belum ada log LLM flat tercatat.
             </div>
           ) : (
@@ -1409,23 +1409,23 @@ function LlmLogsSection() {
               const displayReasoning = log.rawReasoning || log.reasoning || '-';
 
               return (
-                <div key={log.id} className="bg-white border border-[#e9edef] hover:border-slate-300 rounded-2xl p-4 shadow-xs space-y-3 text-left transition">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] pb-2">
+                <div key={log.id} className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] hover:border-slate-300 dark:hover:border-[#374248] rounded-2xl p-4 shadow-xs space-y-3 text-left transition">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#f0f2f5] dark:border-[#2a3942] pb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badge.cls} flex items-center gap-1`}>
                         <span>{badge.icon}</span>
                         <span>{badge.label}</span>
                       </span>
-                      <span className="text-xs font-bold text-[#111b21]">
+                      <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef]">
                         {log.customerName || formatPhoneDisplay(log.customerPhone)}
                       </span>
                       {log.modelUsed && (
-                        <span className="text-[10px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-semibold">
+                        <span className="text-[10px] font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/15 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-500/40 font-semibold">
                           {log.modelUsed}
                         </span>
                       )}
                       {log.durationMs !== undefined && (
-                        <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] font-mono text-slate-600 dark:text-[#aebac1] bg-slate-100 dark:bg-[#2a3942] px-2 py-0.5 rounded-md border border-transparent dark:border-[#374248]">
                           ⏱️ {log.durationMs}ms
                         </span>
                       )}
@@ -1436,10 +1436,10 @@ function LlmLogsSection() {
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           log.status === 'SUCCESS'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : log.status === 'FALLBACK'
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
+                          : log.status === 'FALLBACK'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
+                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40'
                         }`}
                       >
                         {log.status}
@@ -1448,30 +1448,30 @@ function LlmLogsSection() {
                   </div>
 
                   {log.customerInput && (
-                    <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3">
-                      <span className="text-[10px] font-bold text-sky-800 uppercase block mb-1">Input / Prompt</span>
-                      <p className="text-sky-950 text-xs font-medium whitespace-pre-wrap">{log.customerInput}</p>
+                    <div className="bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/40 rounded-xl p-3">
+                      <span className="text-[10px] font-bold text-sky-800 dark:text-sky-300 uppercase block mb-1">Input / Prompt</span>
+                      <p className="text-sky-950 dark:text-sky-200 text-xs font-medium whitespace-pre-wrap">{log.customerInput}</p>
                     </div>
                   )}
 
-                  <div className="bg-purple-50/60 border border-purple-200 rounded-xl p-3">
+                  <div className="bg-purple-50/60 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/40 rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-bold text-purple-800 uppercase block">Reasoning &amp; CoT</span>
+                      <span className="text-[10px] font-bold text-purple-800 dark:text-purple-300 uppercase block">Reasoning &amp; CoT</span>
                       <button
                         type="button"
                         onClick={() => copyText(log.id, displayReasoning)}
-                        className="text-[10px] font-semibold text-purple-700 flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-purple-200"
+                        className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1 bg-white dark:bg-transparent px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-500/40"
                       >
                         {copiedId === log.id ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
                         <span>Salin</span>
                       </button>
                     </div>
-                    <pre className="text-purple-950 font-mono text-[11px] whitespace-pre-wrap overflow-x-auto max-h-48">{displayReasoning}</pre>
+                    <pre className="text-purple-950 dark:text-purple-200 font-mono text-[11px] whitespace-pre-wrap overflow-x-auto max-h-48">{displayReasoning}</pre>
                   </div>
 
-                  <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">Output Akhir</span>
-                    <p className="text-emerald-950 font-medium text-xs whitespace-pre-wrap">{log.finalReply || '-'}</p>
+                  <div className="bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-3">
+                    <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase block mb-1">Output Akhir</span>
+                    <p className="text-emerald-950 dark:text-emerald-200 font-medium text-xs whitespace-pre-wrap">{log.finalReply || '-'}</p>
                   </div>
                 </div>
               );

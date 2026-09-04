@@ -77,19 +77,19 @@ const statusBadge = (s: string | null | undefined) => {
   switch (s) {
     case 'approved':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
+        <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold whitespace-nowrap" title="Event terkirim ke Meta CAPI">
           🟢 Terkirim
         </span>
       );
     case 'ignored_outlier':
       return (
-        <span className="px-2.5 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
+        <span className="px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-rose-800 dark:text-rose-300 text-xs font-bold whitespace-nowrap" title="Event diabaikan sebagai outlier, tidak dikirim ke Meta">
           🔴 Outlier
         </span>
       );
     default:
       return (
-        <span className="px-2.5 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 text-xs font-bold whitespace-nowrap" title="Menunggu keputusan admin">
           🟡 Pending Review
         </span>
       );
@@ -98,11 +98,11 @@ const statusBadge = (s: string | null | undefined) => {
 
 const attributionBadge = (isPaid: boolean) =>
   isPaid ? (
-    <span className="px-2 py-0.5 rounded bg-purple-100 border border-purple-200 text-purple-800 text-[10px] font-bold whitespace-nowrap" title="Pelanggan datang dari iklan (ad_click terpasang)">
+    <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/40 text-purple-800 dark:text-purple-300 text-[10px] font-bold whitespace-nowrap" title="Pelanggan datang dari iklan (ad_click terpasang)">
       PAID
     </span>
   ) : (
-    <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
+    <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#2a3942] border border-slate-200 dark:border-[#374248] text-slate-700 dark:text-[#aebac1] text-[10px] font-bold whitespace-nowrap" title="Tidak ada jejak iklan (organik / direct)">
       ORGANIC
     </span>
   );
@@ -565,19 +565,19 @@ export const MetaCapiQueue: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
         <div>
-          <h2 className="text-xl font-bold text-[#111b21] flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-2">
             <Target className="text-[#008069]" size={24} />
             <span>Meta CAPI Queue</span>
           </h2>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Review &amp; kirim event Purchase dan Lead ke Meta CAPI sebelum kedaluwarsa (7 hari).
           </p>
         </div>
         <button
           onClick={loadQueue}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-xs font-semibold text-[#111b21] transition shadow-xs self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-transparent hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-semibold text-[#111b21] dark:text-[#e9edef] transition shadow-xs self-start sm:self-auto"
         >
           <RefreshCw size={13} className={loading ? 'animate-spin text-[#008069]' : ''} />
           <span>Reload</span>
@@ -586,37 +586,37 @@ export const MetaCapiQueue: React.FC = () => {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="bg-white p-4 rounded-2xl border border-[#e9edef] shadow-xs">
-          <div className="text-[11px] text-[#667781] font-bold uppercase tracking-wider">Total Event</div>
-          <div className="text-2xl font-extrabold text-[#111b21] mt-1">{counts.total}</div>
+        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
+          <div className="text-[11px] text-[#667781] dark:text-[#8696a0] font-bold uppercase tracking-wider">Total Event</div>
+          <div className="text-2xl font-extrabold text-[#111b21] dark:text-[#e9edef] mt-1">{counts.total}</div>
         </div>
-        <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
-          <div className="text-[11px] text-amber-800 font-bold uppercase tracking-wider">Pending Review</div>
-          <div className="text-2xl font-extrabold text-amber-700 mt-1">{counts.pending}</div>
+        <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200 dark:border-amber-800/40 shadow-xs">
+          <div className="text-[11px] text-amber-800 dark:text-amber-200 font-bold uppercase tracking-wider">Pending Review</div>
+          <div className="text-2xl font-extrabold text-amber-700 dark:text-amber-300 mt-1">{counts.pending}</div>
         </div>
-        <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
-          <div className="text-[11px] text-emerald-800 font-bold uppercase tracking-wider">Terkirim</div>
-          <div className="text-2xl font-extrabold text-[#008069] mt-1">{counts.approved}</div>
+        <div className="bg-emerald-50/60 dark:bg-emerald-950/30 p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
+          <div className="text-[11px] text-emerald-800 dark:text-emerald-200 font-bold uppercase tracking-wider">Terkirim</div>
+          <div className="text-2xl font-extrabold text-[#008069] dark:text-[#00a884] mt-1">{counts.approved}</div>
         </div>
-        <div className="bg-rose-50/60 p-4 rounded-2xl border border-rose-200 shadow-xs">
-          <div className="text-[11px] text-rose-800 font-bold uppercase tracking-wider">Outlier</div>
-          <div className="text-2xl font-extrabold text-rose-600 mt-1">{counts.outlier}</div>
+        <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-200 dark:border-rose-800/40 shadow-xs">
+          <div className="text-[11px] text-rose-800 dark:text-rose-200 font-bold uppercase tracking-wider">Outlier</div>
+          <div className="text-2xl font-extrabold text-rose-600 dark:text-rose-300 mt-1">{counts.outlier}</div>
         </div>
-        <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-200 shadow-xs">
-          <div className="text-[11px] text-purple-800 font-bold uppercase tracking-wider">Risiko Drop</div>
-          <div className="text-2xl font-extrabold text-purple-700 mt-1">{counts.risk}</div>
+        <div className="bg-purple-50/60 dark:bg-purple-500/10 p-4 rounded-2xl border border-purple-200 dark:border-purple-500/30 shadow-xs">
+          <div className="text-[11px] text-purple-800 dark:text-purple-300 font-bold uppercase tracking-wider">Risiko Drop</div>
+          <div className="text-2xl font-extrabold text-purple-700 dark:text-purple-300 mt-1">{counts.risk}</div>
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="flex space-x-1.5 p-1 bg-white border border-[#e9edef] rounded-xl w-fit shadow-xs">
+        <div className="flex space-x-1.5 p-1 bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl w-fit shadow-xs">
           <button
             onClick={() => setMode('pending')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
               mode === 'pending'
                 ? 'bg-amber-500 text-white'
-                : 'text-[#667781] hover:text-[#111b21]'
+                : 'text-[#667781] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
             }`}
           >
             Pending Review ({counts.pending})
@@ -626,7 +626,7 @@ export const MetaCapiQueue: React.FC = () => {
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
               mode === 'all'
                 ? 'bg-[#008069] text-white'
-                : 'text-[#667781] hover:text-[#111b21]'
+                : 'text-[#667781] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
             }`}
           >
             Semua Event
@@ -643,13 +643,13 @@ export const MetaCapiQueue: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari nama, phone, treatment, UTM..."
-              className="w-full bg-white border border-[#d1d7db] rounded-xl pl-9 pr-3 py-2 text-xs text-[#111b21] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl pl-9 pr-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none focus:border-[#008069] shadow-xs"
             />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-white border border-[#d1d7db] rounded-xl px-3 py-2 text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+            className="bg-white dark:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl px-3 py-2 text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
           >
             <option value="all">Semua Status</option>
             <option value="pending">Pending Review</option>
@@ -660,7 +660,7 @@ export const MetaCapiQueue: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-[#e9edef] overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden shadow-xs">
         {loading && items.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-[#667781] text-xs">
             <RefreshCw size={18} className="animate-spin mr-2 text-[#008069]" />
@@ -678,7 +678,7 @@ export const MetaCapiQueue: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-[#e9edef] text-[11px] uppercase font-bold text-[#667781] bg-[#f8fafc]">
+                <tr className="border-b border-[#e9edef] dark:border-[#2a3942] text-[11px] uppercase font-bold text-[#667781] dark:text-[#8696a0] bg-[#f8fafc] dark:bg-[#1c272e]">
                   <th className="py-3 px-4">Pelanggan</th>
                   <th className="py-3 px-4">Treatment</th>
                   <th className="py-3 px-4">Event &amp; Nilai</th>
@@ -695,15 +695,15 @@ export const MetaCapiQueue: React.FC = () => {
                   const isPurchase = (item.eventType || 'Purchase') === 'Purchase';
 
                   return (
-                    <tr key={item.id} className="border-b border-[#e9edef] hover:bg-[#f8fafc] transition-colors">
+                    <tr key={item.id} className="border-b border-[#e9edef] dark:border-[#2a3942] hover:bg-[#f8fafc] dark:hover:bg-[#202c33] transition-colors">
                       {/* 1. Pelanggan & Jarak */}
                       <td className="py-3.5 px-4 align-top">
                         <div className="flex items-center space-x-2">
                           <div className="min-w-0">
-                            <div className="font-bold text-[#111b21] text-xs truncate max-w-[170px]">
+                            <div className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs truncate max-w-[170px]">
                               {item.customer.name}
                             </div>
-                            <div className="text-xs text-[#667781] font-mono">{item.customer.phone}</div>
+                            <div className="text-xs text-[#667781] dark:text-[#aebac1] font-mono">{item.customer.phone}</div>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -726,7 +726,7 @@ export const MetaCapiQueue: React.FC = () => {
                       <td className="py-3.5 px-4 align-top">
                         <div className="space-y-1">
                           {cleanTreatments.map((t, idx) => (
-                            <div key={idx} className="text-xs font-semibold text-[#111b21] flex items-start space-x-1.5">
+                            <div key={idx} className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-start space-x-1.5">
                               <span className="text-[#008069] font-bold shrink-0">{idx + 1}.</span>
                               <span className="leading-snug">{t}</span>
                             </div>
@@ -739,8 +739,8 @@ export const MetaCapiQueue: React.FC = () => {
                         <div
                           className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-extrabold border ${
                             isPurchase
-                              ? 'bg-blue-50 border-blue-200 text-blue-800'
-                              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-300'
+                              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
                           }`}
                         >
                           <Sparkles size={11} className={isPurchase ? 'text-blue-600' : 'text-emerald-600'} />
@@ -755,7 +755,7 @@ export const MetaCapiQueue: React.FC = () => {
 
                       {/* 4. UTM */}
                       <td className="py-3.5 px-4 align-top">
-                        <div className="text-xs text-[#111b21] max-w-[150px] truncate">{utmText(item.utm)}</div>
+                        <div className="text-xs text-[#111b21] dark:text-[#e9edef] max-w-[150px] truncate">{utmText(item.utm)}</div>
                         {item.attribution.isPaid && !utmText(item.utm).includes('—') && (
                           <div className="text-[10px] text-[#8696a0] mt-0.5 truncate max-w-[150px]">
                             {item.attribution.landingUrl || '—'}
@@ -765,7 +765,7 @@ export const MetaCapiQueue: React.FC = () => {
 
                       {/* 5. Waktu Transaksi */}
                       <td className="py-3.5 px-4 align-top">
-                        <div className="text-xs text-[#111b21] font-medium">{formatDateTime(item.purchase_occurred_at)}</div>
+                        <div className="text-xs text-[#111b21] dark:text-[#e9edef] font-medium">{formatDateTime(item.purchase_occurred_at)}</div>
                         <div className="text-[10px] text-[#8696a0] mt-0.5">
                           {item.ageHours < 1 ? 'baru saja' : item.ageHours < 24 ? `${item.ageHours} jam lalu` : `${item.daysOld} hari lalu`}
                         </div>
@@ -790,8 +790,8 @@ export const MetaCapiQueue: React.FC = () => {
                           onClick={() => openJsonModal(item)}
                           className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition shadow-xs ${
                             customPayloads[item.id]
-                              ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
-                              : 'bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21]'
+                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-950/50'
+                              : 'bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef]'
                           }`}
                           title={customPayloads[item.id] ? 'Lihat/Edit Payload JSON (Telah Disesuaikan)' : 'Lihat Payload JSON Meta CAPI'}
                         >
@@ -814,7 +814,7 @@ export const MetaCapiQueue: React.FC = () => {
                             </button>
                             <button
                               onClick={() => handleReject(item)}
-                              className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white hover:bg-rose-50 border border-[#d1d7db] hover:border-rose-200 text-[#54656f] hover:text-rose-600 text-xs font-semibold transition shadow-xs whitespace-nowrap"
+                              className="flex items-center justify-center space-x-1 px-3 py-1 rounded-lg bg-white dark:bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-[#d1d7db] dark:border-[#374248] hover:border-rose-200 dark:hover:border-rose-800/40 text-[#54656f] dark:text-[#aebac1] hover:text-rose-600 dark:hover:text-rose-300 text-xs font-semibold transition shadow-xs whitespace-nowrap"
                               title="Tandai sebagai outlier — event TIDAK dikirim ke Meta"
                             >
                               <X size={12} />
@@ -845,16 +845,16 @@ export const MetaCapiQueue: React.FC = () => {
 
         return (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-[#e9edef] overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-white dark:bg-[#111b21] w-full max-w-3xl rounded-2xl shadow-2xl border border-[#e9edef] dark:border-[#2a3942] overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e9edef] bg-[#f8fafc]">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e]">
                 <div className="flex items-center space-x-2.5">
                   <div className={`p-2 rounded-xl border ${isEditingJson ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#e8f5f2] text-[#008069] border-[#c2e7e0]'}`}>
                     {isEditingJson ? <Pencil size={18} /> : <Code2 size={18} />}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-[#111b21]">
+                      <h3 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef]">
                         {isEditingJson ? 'Edit Meta CAPI Payload' : 'Meta Graph API CAPI Payload'}
                       </h3>
                       {isCustom && !isEditingJson && (
@@ -863,8 +863,8 @@ export const MetaCapiQueue: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#667781]">
-                      Event: <span className="font-bold text-[#008069]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold">{selectedJsonItem.customer.name}</span>
+                    <p className="text-[11px] text-[#667781] dark:text-[#aebac1]">
+                      Event: <span className="font-bold text-[#008069] dark:text-[#00a884]">{selectedJsonItem.eventType || 'Purchase'}</span> • Pasien: <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{selectedJsonItem.customer.name}</span>
                     </p>
                   </div>
                 </div>
@@ -874,7 +874,7 @@ export const MetaCapiQueue: React.FC = () => {
                   {!isEditingJson ? (
                     <button
                       onClick={handleStartEditJson}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold transition shadow-xs cursor-pointer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800/40 text-xs font-bold transition shadow-xs cursor-pointer"
                       title="Edit payload JSON secara manual"
                     >
                       <Pencil size={13} />
@@ -884,7 +884,7 @@ export const MetaCapiQueue: React.FC = () => {
                     <>
                       <button
                         onClick={handleFormatJson}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
                         title="Format & rapikan JSON"
                       >
                         <Sparkles size={12} className="text-blue-500" />
@@ -892,7 +892,7 @@ export const MetaCapiQueue: React.FC = () => {
                       </button>
                       <button
                         onClick={handleResetJson}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
                         title="Reset ke nilai default otomatis"
                       >
                         <RotateCcw size={12} className="text-rose-500" />
@@ -904,7 +904,7 @@ export const MetaCapiQueue: React.FC = () => {
                           setJsonParseError(null);
                           setJsonDraft(JSON.stringify(currentPayload, null, 2));
                         }}
-                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-[#d1d7db] text-[#54656f] text-xs font-semibold transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-transparent hover:bg-slate-100 dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] text-xs font-semibold transition cursor-pointer"
                       >
                         <span>Batal</span>
                       </button>
@@ -968,8 +968,8 @@ export const MetaCapiQueue: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9edef] bg-white">
-                <span className="text-[11px] text-[#667781] max-w-sm">
+              <div className="flex items-center justify-between px-5 py-3.5 border-t border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#111b21]">
+                <span className="text-[11px] text-[#667781] dark:text-[#aebac1] max-w-sm">
                   {isEditingJson
                     ? 'Simpan perubahan atau langsung klik Approve untuk mengirim payload custom ini ke Meta.'
                     : isCustom
@@ -979,7 +979,7 @@ export const MetaCapiQueue: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => handleCopyJson(isEditingJson ? jsonDraft : currentPayload)}
-                    className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] text-xs font-bold transition shadow-xs cursor-pointer"
+                    className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef] text-xs font-bold transition shadow-xs cursor-pointer"
                   >
                     {copiedJson ? <Check size={14} className="text-[#008069]" /> : <Copy size={14} />}
                     <span>{copiedJson ? 'Tersalin!' : 'Copy JSON'}</span>
@@ -1001,7 +1001,7 @@ export const MetaCapiQueue: React.FC = () => {
                       setSelectedJsonItem(null);
                       setIsEditingJson(false);
                     }}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#111b21] text-xs font-semibold rounded-xl transition shadow-xs cursor-pointer"
+                    className="px-4 py-2 bg-slate-100 dark:bg-[#2a3942] hover:bg-slate-200 dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef] text-xs font-semibold rounded-xl transition shadow-xs cursor-pointer"
                   >
                     Tutup
                   </button>
