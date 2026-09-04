@@ -172,18 +172,47 @@ export const Reservations: React.FC = () => {
     }
   }, [selectedRes]);
 
-  // Escape key handler for active modals
+  // Modal Back Navigation: Keyboard Escape, app-swipe-back & popstate listener for mobile back gestures
   useEffect(() => {
+    const hasOpenModal = Boolean(housePhotoModal || proofModal || editLocationModal || activeHistoryCustomer || showCreateModal);
+    if (!hasOpenModal) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (housePhotoModal) setHousePhotoModal(null);
-        else if (proofModal) setProofModal(null);
-        else if (editLocationModal) setEditLocationModal(null);
+        dismissActiveModal();
       }
     };
+
+    const handleSwipeBack = (e: Event) => {
+      e.preventDefault();
+      dismissActiveModal();
+    };
+
+    const handlePopState = () => {
+      dismissActiveModal();
+    };
+
+    const dismissActiveModal = () => {
+      if (housePhotoModal) setHousePhotoModal(null);
+      else if (proofModal) setProofModal(null);
+      else if (editLocationModal) setEditLocationModal(null);
+      else if (activeHistoryCustomer) setActiveHistoryCustomer(null);
+      else if (showCreateModal) {
+        setShowCreateModal(false);
+        setQuickSlotTarget(null);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [housePhotoModal, proofModal, editLocationModal]);
+    window.addEventListener('app-swipe-back', handleSwipeBack);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('app-swipe-back', handleSwipeBack);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [housePhotoModal, proofModal, editLocationModal, activeHistoryCustomer, showCreateModal]);
 
   useEffect(() => {
     async function loadStaff() {
@@ -923,34 +952,34 @@ export const Reservations: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Top Header Bar */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white dark:bg-[#111b21] p-3.5 sm:p-4 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
         {/* Title & Month Navigation */}
         <div className="flex flex-wrap items-center gap-3">
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-lg sm:text-xl font-black tracking-tight text-[#111b21] capitalize">
+              <h2 className="text-lg sm:text-xl font-black tracking-tight text-[#111b21] dark:text-[#e9edef] capitalize">
                 {headerDateTitle}
               </h2>
 
               {/* Date Navigation group placed right next to Month text */}
               {viewMode !== 'table' && (
-                <div className="flex items-center space-x-1 bg-[#f0f2f5] p-0.5 rounded-lg border border-[#e9edef]">
+                <div className="flex items-center space-x-1 bg-[#f0f2f5] dark:bg-[#1c272e] p-0.5 rounded-lg border border-[#e9edef] dark:border-[#2a3942]">
                   <button
                     onClick={handlePrevDate}
-                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors cursor-pointer"
+                    className="p-1 rounded-md bg-white dark:bg-[#202c33] hover:bg-gray-100 dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] shadow-2xs transition-colors cursor-pointer"
                     title="Sebelumnya"
                   >
                     <ChevronLeft size={14} />
                   </button>
                   <button
                     onClick={handleToday}
-                    className="px-2 py-0.5 rounded-md bg-white hover:bg-gray-100 text-[11px] font-bold text-[#111b21] shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                    className="px-2 py-0.5 rounded-md bg-white dark:bg-[#202c33] hover:bg-gray-100 dark:hover:bg-[#2a3942] text-[11px] font-bold text-[#111b21] dark:text-[#e9edef] shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                   >
                     {viewMode === 'week' ? 'Minggu Ini' : viewMode === 'month' ? 'Bulan Ini' : 'Hari Ini'}
                   </button>
                   <button
                     onClick={handleNextDate}
-                    className="p-1 rounded-md bg-white hover:bg-gray-100 text-[#111b21] shadow-2xs transition-colors cursor-pointer"
+                    className="p-1 rounded-md bg-white dark:bg-[#202c33] hover:bg-gray-100 dark:hover:bg-[#2a3942] text-[#111b21] dark:text-[#e9edef] shadow-2xs transition-colors cursor-pointer"
                     title="Berikutnya"
                   >
                     <ChevronRight size={14} />
@@ -962,7 +991,7 @@ export const Reservations: React.FC = () => {
                       value={selectedDate.toISOString().split('T')[0]}
                       onChange={(e) => {
                         if (e.target.value) {
-                          const [y, m, d] = e.target.value.split('-').map(Number);
+                           const [y, m, d] = e.target.value.split('-').map(Number);
                           const newD = new Date(y, m - 1, d);
                           setSelectedDate(newD);
                         }
@@ -972,7 +1001,7 @@ export const Reservations: React.FC = () => {
                     />
                     <button
                       type="button"
-                      className="p-1 rounded-md bg-white hover:bg-[#e8f5f2] text-[#54656f] hover:text-[#008069] shadow-2xs transition-colors cursor-pointer"
+                      className="p-1 rounded-md bg-white dark:bg-[#202c33] hover:bg-[#e8f5f2] dark:hover:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#008069] dark:hover:text-[#00a884] shadow-2xs transition-colors cursor-pointer"
                       title="Pilih Tanggal Spesifik"
                     >
                       <CalendarIcon size={13} />
@@ -981,7 +1010,7 @@ export const Reservations: React.FC = () => {
                 </div>
               )}
             </div>
-            <p className="text-[11px] text-[#667781] mt-0.5">
+            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
               Jadwal Reservasi
             </p>
           </div>
@@ -1004,7 +1033,7 @@ export const Reservations: React.FC = () => {
                   }
                 });
               }}
-              className="w-full px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+              className="w-full px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
             >
               <option value="table">List</option>
               <option value="day">Hari</option>
@@ -1014,7 +1043,7 @@ export const Reservations: React.FC = () => {
           </div>
 
           {/* Desktop View Switcher Tabs */}
-          <div className="hidden sm:flex space-x-1 p-1 bg-[#f0f2f5] rounded-xl shadow-inner text-xs">
+          <div className="hidden sm:flex space-x-1 p-1 bg-[#f0f2f5] dark:bg-[#1c272e] rounded-xl shadow-inner text-xs border border-transparent dark:border-[#2a3942]">
             <button
               onClick={() => {
                 setViewMode('table');
@@ -1022,8 +1051,8 @@ export const Reservations: React.FC = () => {
               }}
               className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-white text-[#111b21] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
               }`}
             >
               <ListFilter size={13} />
@@ -1036,8 +1065,8 @@ export const Reservations: React.FC = () => {
               }}
               className={`flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'day'
-                  ? 'bg-white text-[#111b21] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
               }`}
             >
               <LayoutGrid size={13} />
@@ -1050,8 +1079,8 @@ export const Reservations: React.FC = () => {
               }}
               className={`hidden sm:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'week'
-                  ? 'bg-white text-[#111b21] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
               }`}
             >
               <Columns size={13} />
@@ -1064,8 +1093,8 @@ export const Reservations: React.FC = () => {
               }}
               className={`hidden md:flex items-center space-x-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer ${
                 viewMode === 'month'
-                  ? 'bg-white text-[#111b21] shadow-xs'
-                  : 'text-[#54656f] hover:text-[#111b21]'
+                  ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                  : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
               }`}
             >
               <CalendarDays size={13} />
@@ -1090,10 +1119,10 @@ export const Reservations: React.FC = () => {
                 setLoading(true);
                 loadReservations();
               }}
-              className="p-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] rounded-xl text-[#111b21] transition-colors shadow-xs"
+              className="p-2 bg-white dark:bg-[#202c33] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-[#111b21] dark:text-[#e9edef] transition-colors shadow-xs"
               title="Reload Data"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781]'} />
+              <RefreshCw size={14} className={loading ? 'animate-spin text-[#008069]' : 'text-[#667781] dark:text-[#8696a0]'} />
             </button>
           </div>
         </div>
@@ -1110,7 +1139,7 @@ export const Reservations: React.FC = () => {
               onChange={(e) =>
                 setFilterState((prev) => ({ ...prev, status: e.target.value as any }))
               }
-              className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs truncate"
+              className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs truncate"
             >
               <option value="all">Semua Status ({stats.total})</option>
               <option value="upcoming">📅 Aktif &amp; Mendatang ({stats.upcoming})</option>
@@ -1125,7 +1154,7 @@ export const Reservations: React.FC = () => {
             <select
               value={filterState.staffId}
               onChange={(e) => setFilterState((prev) => ({ ...prev, staffId: e.target.value }))}
-              className="flex-1 px-3 py-2 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs truncate"
+              className="flex-1 px-3 py-2 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs truncate"
             >
               <option value="all">👥 Semua Terapis</option>
               <option value="unassigned">⚠️ Belum Ada Terapis</option>
@@ -1139,7 +1168,7 @@ export const Reservations: React.FC = () => {
 
           {/* Desktop Status Tabs & Staff Dropdown */}
           <div className="hidden sm:flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] rounded-2xl">
+            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[#f0f2f5] dark:bg-[#1c272e] rounded-2xl border border-transparent dark:border-[#2a3942]">
               {[
                 { key: 'all', label: 'Semua', count: stats.total },
                 { key: 'upcoming', label: '📅 Aktif & Mendatang', count: stats.upcoming },
@@ -1153,12 +1182,12 @@ export const Reservations: React.FC = () => {
                 <button
                   key={tab.key}
                   onClick={() => setFilterState((prev) => ({ ...prev, status: tab.key as any }))}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
                     filterState.status === tab.key
                       ? tab.isAlert
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs'
-                        : 'bg-white text-[#111b21] shadow-xs'
-                      : 'text-[#54656f] hover:text-[#111b21]'
+                        ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/50 shadow-xs'
+                        : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs'
+                      : 'text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef]'
                   }`}
                 >
                   <span>{tab.label}</span>
@@ -1166,11 +1195,11 @@ export const Reservations: React.FC = () => {
                     className={`px-1.5 py-0.5 rounded-full text-[10px] ${
                       filterState.status === tab.key
                         ? tab.isAlert
-                          ? 'bg-amber-200 text-amber-900 font-bold'
-                          : 'bg-[#e8f5f2] text-[#008069]'
+                          ? 'bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 font-bold'
+                          : 'bg-[#e8f5f2] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884]'
                         : tab.isAlert && tab.count > 0
-                        ? 'bg-amber-200 text-amber-800 font-bold animate-pulse'
-                        : 'bg-[#e9edef] text-[#667781]'
+                        ? 'bg-amber-200 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-bold animate-pulse'
+                        : 'bg-[#e9edef] dark:bg-[#2a3942] text-[#667781] dark:text-[#8696a0]'
                     }`}
                   >
                     {tab.count}
@@ -1184,7 +1213,7 @@ export const Reservations: React.FC = () => {
               <select
                 value={filterState.staffId}
                 onChange={(e) => setFilterState((prev) => ({ ...prev, staffId: e.target.value }))}
-                className="px-3 py-1.5 bg-white border border-[#d1d7db] rounded-xl text-xs font-bold text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                className="px-3 py-1.5 bg-white dark:bg-[#202c33] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs font-bold text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
               >
                 <option value="all">👥 Semua Terapis</option>
                 <option value="unassigned">⚠️ Belum Ada Terapis</option>
@@ -1689,6 +1718,7 @@ export const Reservations: React.FC = () => {
       {editLocationModal &&
         createPortal(
           <div
+            data-modal-active="true"
             className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn h-[100dvh] w-[100dvw]"
             onClick={() => setEditLocationModal(null)}
           >
@@ -1958,6 +1988,7 @@ export const Reservations: React.FC = () => {
       {activeHistoryCustomer &&
         createPortal(
           <div
+            data-modal-active="true"
             className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
             onClick={() => setActiveHistoryCustomer(null)}
           >

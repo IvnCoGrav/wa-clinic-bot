@@ -370,11 +370,11 @@ export const ClinicServices: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center space-x-2">
+          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center space-x-2">
             <Activity className="text-[#008069]" size={22} />
             <span>Katalog Layanan & Treatment</span>
           </h1>
-          <p className="text-xs text-[#667781] mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
             Kelola data paket treatment, paket hemat bundle, layanan tambahan add-on, durasi, harga promo, dan kriteria usia untuk rekomendasi WhatsApp AI.
           </p>
         </div>
@@ -389,49 +389,49 @@ export const ClinicServices: React.FC = () => {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white p-3.5 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3">
+        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
           <div className="p-2.5 bg-emerald-50 text-[#008069] rounded-xl">
             <Activity size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] uppercase font-bold">Total Layanan</div>
-            <div className="text-base font-bold text-[#111b21]">{services.length} Item</div>
+            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Total Layanan</div>
+            <div className="text-base font-bold text-[#111b21] dark:text-[#e9edef]">{services.length} Item</div>
           </div>
         </div>
 
-        <div className="bg-white p-3.5 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3">
+        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
           <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl">
             <Package size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] uppercase font-bold">Paket Bundle</div>
+            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Paket Bundle</div>
             <div className="text-base font-bold text-indigo-700">{counts.bundle} Paket</div>
           </div>
         </div>
 
-        <div className="bg-white p-3.5 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3">
+        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
           <div className="p-2.5 bg-rose-50 text-rose-700 rounded-xl">
             <PlusCircle size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] uppercase font-bold">Layanan Add-on</div>
+            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Layanan Add-on</div>
             <div className="text-base font-bold text-rose-700">{counts.addon} Item</div>
           </div>
         </div>
 
-        <div className="bg-white p-3.5 rounded-2xl border border-[#e9edef] shadow-xs flex items-center space-x-3">
+        <div className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] p-3.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs flex items-center space-x-3">
           <div className="p-2.5 bg-sky-50 text-sky-700 rounded-xl">
             <Layers size={18} />
           </div>
           <div>
-            <div className="text-[10px] text-[#667781] uppercase font-bold">Layanan Mandiri</div>
+            <div className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold">Layanan Mandiri</div>
             <div className="text-base font-bold text-sky-700">{counts.baby + counts.kids + counts.moms} Item</div>
           </div>
         </div>
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-2.5 rounded-2xl border border-[#e9edef] shadow-xs">
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white dark:bg-[#111b21] p-2.5 rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs">
         {/* Category Tabs */}
         <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0">
           <button
@@ -439,7 +439,7 @@ export const ClinicServices: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'ALL'
                 ? 'bg-[#008069] text-white shadow-xs'
-                : 'text-[#54656f] hover:bg-[#f0f2f5]'
+                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
             }`}
           >
             Semua ({counts.all})
@@ -449,7 +449,7 @@ export const ClinicServices: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'BABY'
                 ? 'bg-sky-700 text-white shadow-xs'
-                : 'text-[#54656f] hover:bg-[#f0f2f5]'
+                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
             }`}
           >
             Baby ({counts.baby})
@@ -459,7 +459,7 @@ export const ClinicServices: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'KIDS'
                 ? 'bg-amber-700 text-white shadow-xs'
-                : 'text-[#54656f] hover:bg-[#f0f2f5]'
+                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
             }`}
           >
             Kids ({counts.kids})
@@ -469,7 +469,7 @@ export const ClinicServices: React.FC = () => {
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
               selectedTab === 'MOMS'
                 ? 'bg-purple-700 text-white shadow-xs'
-                : 'text-[#54656f] hover:bg-[#f0f2f5]'
+                : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5]'
             }`}
           >
             Moms ({counts.moms})
@@ -506,12 +506,12 @@ export const ClinicServices: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari layanan / kata kunci..."
-            className="w-full pl-8 pr-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] focus:bg-white transition"
+            className="w-full pl-8 pr-3 py-1.5 bg-[#f8fafc] border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] focus:bg-white transition"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#111b21]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef]"
             >
               <X size={12} />
             </button>
@@ -524,11 +524,11 @@ export const ClinicServices: React.FC = () => {
           <Loader className="animate-spin text-[#008069]" size={32} />
         </div>
       ) : (
-        <div className="bg-white border border-[#e9edef] rounded-2xl overflow-hidden shadow-xs">
+        <div className="bg-white dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-[#111b21]">
+            <table className="w-full text-left text-xs text-[#111b21] dark:text-[#e9edef]">
               <thead>
-                <tr className="border-b border-[#e9edef] bg-[#f8fafc] text-[#667781] font-bold uppercase text-[10px]">
+                <tr className="border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#1c272e] text-[#667781] dark:text-[#8696a0] font-bold uppercase text-[10px]">
                   <th className="px-4 py-3.5">Layanan / Detail Paket</th>
                   <th className="px-4 py-3.5">Tipe & Kategori</th>
                   <th className="px-4 py-3.5">Target Usia</th>
@@ -552,11 +552,11 @@ export const ClinicServices: React.FC = () => {
                   return (
                     <tr
                       key={srv.id}
-                      className={`hover:bg-[#f8fafc] transition-colors ${!srv.isActive ? 'opacity-50' : ''}`}
+                      className={`hover:bg-[#f8fafc] dark:hover:bg-[#202c33] transition-colors ${!srv.isActive ? 'opacity-50' : ''}`}
                     >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-[#111b21] text-xs">{srv.name}</span>
+                          <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-xs">{srv.name}</span>
                           {isBundle && (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-md text-[9px] font-bold uppercase">
                               Bundle
@@ -569,12 +569,12 @@ export const ClinicServices: React.FC = () => {
                           )}
                         </div>
                         <div className="text-[10px] text-[#8696a0] font-mono mt-0.5">ID: {srv.id}</div>
-                        <div className="text-[11px] text-[#54656f] mt-0.5 line-clamp-1">{srv.description}</div>
+                        <div className="text-[11px] text-[#54656f] dark:text-[#aebac1] mt-0.5 line-clamp-1">{srv.description}</div>
 
                         {/* Bundle Component Pills */}
                         {isBundle && bundleComponents.length > 0 && (
-                          <div className="mt-2 p-2 bg-indigo-50/70 border border-indigo-100 rounded-xl space-y-1">
-                            <div className="text-[10px] font-bold text-indigo-900 flex items-center space-x-1">
+                          <div className="mt-2 p-2 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/30 rounded-xl space-y-1">
+                            <div className="text-[10px] font-bold text-indigo-900 dark:text-indigo-300 flex items-center space-x-1">
                               <Package size={11} className="text-indigo-600" />
                               <span>Termasuk {bundleComponents.length} Layanan Eksisting:</span>
                             </div>
@@ -582,7 +582,7 @@ export const ClinicServices: React.FC = () => {
                               {bundleComponents.map((c) => (
                                 <span
                                   key={c.id}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white text-indigo-800 border border-indigo-200"
+                                  className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium bg-white dark:bg-transparent text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30"
                                 >
                                   {c.name} (Rp {Number(c.originalPrice || 0).toLocaleString('id-ID')})
                                 </span>
@@ -618,9 +618,9 @@ export const ClinicServices: React.FC = () => {
                         </span>
                       </td>
 
-                      <td className="px-4 py-3.5 text-xs text-[#54656f]">{srv.ageTier?.label || 'Semua Usia'}</td>
+                      <td className="px-4 py-3.5 text-xs text-[#54656f] dark:text-[#aebac1]">{srv.ageTier?.label || 'Semua Usia'}</td>
 
-                      <td className="px-4 py-3.5 text-xs text-[#54656f]">
+                      <td className="px-4 py-3.5 text-xs text-[#54656f] dark:text-[#aebac1]">
                         <div className="flex items-center space-x-1">
                           <Clock size={12} className="text-[#8696a0]" />
                           <span>{srv.durationMinutes || 0} mnt</span>
@@ -658,14 +658,14 @@ export const ClinicServices: React.FC = () => {
                         <div className="flex items-center justify-end space-x-1">
                           <button
                             onClick={() => openEditModal(srv)}
-                            className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] transition border border-[#d1d7db] shadow-xs"
+                            className="p-1.5 rounded-xl bg-white hover:bg-[#f0f2f5] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:text-[#e9edef] transition border border-[#d1d7db] dark:border-[#374248] shadow-xs"
                             title="Edit Layanan"
                           >
                             <Edit3 size={12} />
                           </button>
                           <button
                             onClick={() => handleDelete(srv.id)}
-                            className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition border border-[#d1d7db] shadow-xs"
+                            className="p-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 transition border border-[#d1d7db] dark:border-[#374248] shadow-xs"
                             title="Hapus Layanan"
                           >
                             <Trash2 size={12} />
@@ -677,7 +677,7 @@ export const ClinicServices: React.FC = () => {
                 })}
                 {filteredServices.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-xs text-[#667781]">
+                    <td colSpan={8} className="px-4 py-12 text-center text-xs text-[#667781] dark:text-[#8696a0]">
                       {searchQuery
                         ? 'Tidak ada layanan yang cocok dengan pencarian Anda.'
                         : 'Belum ada layanan pada kategori ini. Klik "Tambah Layanan" untuk mulai.'}
@@ -697,24 +697,24 @@ export const ClinicServices: React.FC = () => {
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-white border border-[#e9edef] rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150"
+            className="bg-white dark:bg-[#111b21] dark:text-[#e9edef] border border-[#e9edef] dark:border-[#2a3942] rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-xl animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[#e9edef] flex justify-between items-center bg-[#f8fafc]">
+            <div className="px-6 py-4 border-b border-[#e9edef] dark:border-[#2a3942] flex justify-between items-center bg-[#f8fafc] dark:bg-[#1c272e]">
               <div>
-                <h3 className="font-bold text-[#111b21] text-sm flex items-center space-x-2">
+                <h3 className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center space-x-2">
                   <Activity className="text-[#008069]" size={16} />
                   <span>{editingService ? `Edit Layanan: ${editingService.name}` : 'Tambah Layanan Baru'}</span>
                 </h3>
-                <p className="text-[11px] text-[#667781] mt-0.5">
+                <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-0.5">
                   Tentukan tipe layanan, komponen gabungan (bundle), durasi, dan harga khusus.
                 </p>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5]"
+                className="p-1.5 rounded-lg text-[#8696a0] hover:text-[#111b21] dark:text-[#e9edef] hover:bg-[#f0f2f5]"
               >
                 <X size={16} />
               </button>
@@ -725,15 +725,15 @@ export const ClinicServices: React.FC = () => {
               
               {/* Service Type Switcher */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-[#667781] uppercase font-bold block">Jenis / Sifat Layanan</label>
+                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Jenis / Sifat Layanan</label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => handleChangeServiceType('STANDARD')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'STANDARD'
-                        ? 'border-[#008069] bg-[#008069]/5 text-[#008069] font-bold shadow-xs'
-                        : 'border-[#d1d7db] bg-white text-[#54656f] hover:bg-[#f8fafc]'
+                        ? 'border-[#008069] bg-[#008069]/5 dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] font-bold shadow-xs'
+                        : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -748,8 +748,8 @@ export const ClinicServices: React.FC = () => {
                     onClick={() => handleChangeServiceType('BUNDLE')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'BUNDLE'
-                        ? 'border-indigo-600 bg-indigo-50 text-indigo-800 font-bold shadow-xs'
-                        : 'border-[#d1d7db] bg-white text-[#54656f] hover:bg-[#f8fafc]'
+                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 font-bold shadow-xs'
+                        : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -767,8 +767,8 @@ export const ClinicServices: React.FC = () => {
                     onClick={() => handleChangeServiceType('ADD_ON')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition ${
                       formServiceType === 'ADD_ON'
-                        ? 'border-rose-600 bg-rose-50 text-rose-800 font-bold shadow-xs'
-                        : 'border-[#d1d7db] bg-white text-[#54656f] hover:bg-[#f8fafc]'
+                        ? 'border-rose-600 bg-rose-50 dark:bg-rose-500/15 text-rose-800 dark:text-rose-300 font-bold shadow-xs'
+                        : 'border-[#d1d7db] dark:border-[#374248] bg-white dark:bg-transparent text-[#54656f] dark:text-[#aebac1] hover:bg-[#f8fafc] dark:hover:bg-[#202c33]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -785,10 +785,10 @@ export const ClinicServices: React.FC = () => {
 
               {/* BUNDLE COMPONENT PICKER */}
               {formServiceType === 'BUNDLE' && (
-                <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="text-xs font-bold text-indigo-950 flex items-center space-x-1.5">
+                      <div className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center space-x-1.5">
                         <Package size={14} className="text-indigo-600" />
                         <span>Pilih Layanan Penyusun Bundle (Minimal 2 Layanan)</span>
                       </div>
@@ -801,7 +801,7 @@ export const ClinicServices: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white p-2.5 rounded-xl border border-indigo-200">
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 bg-white dark:bg-[#111b21] p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-500/30">
                     {candidateBundleServices.map((cand) => {
                       const isSelected = formBundleItemIds.includes(cand.id);
                       return (
@@ -810,7 +810,7 @@ export const ClinicServices: React.FC = () => {
                           className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition text-xs ${
                             isSelected
                               ? 'bg-indigo-100/70 text-indigo-950 font-semibold border border-indigo-300'
-                              : 'hover:bg-gray-50 text-[#111b21]'
+                              : 'hover:bg-gray-50 text-[#111b21] dark:text-[#e9edef]'
                           }`}
                         >
                           <div className="flex items-center space-x-2.5">
@@ -822,7 +822,7 @@ export const ClinicServices: React.FC = () => {
                             />
                             <span>{cand.name}</span>
                           </div>
-                          <div className="text-[11px] text-[#667781] space-x-2">
+                          <div className="text-[11px] text-[#667781] dark:text-[#8696a0] space-x-2">
                             <span>{cand.durationMinutes} mnt</span>
                             <span className="font-semibold text-indigo-900">Rp {cand.originalPrice.toLocaleString('id-ID')}</span>
                           </div>
@@ -832,26 +832,26 @@ export const ClinicServices: React.FC = () => {
                   </div>
 
                   {/* Realtime Bundle Calculations */}
-                  <div className="p-2.5 bg-white rounded-xl border border-indigo-100 space-y-1.5">
-                    <div className="flex justify-between text-xs text-[#54656f]">
+                    <div className="p-2.5 bg-white dark:bg-[#111b21] rounded-xl border border-indigo-100 dark:border-indigo-500/30 space-y-1.5">
+                    <div className="flex justify-between text-xs text-[#54656f] dark:text-[#aebac1]">
                       <span>Total Durasi Penyusun:</span>
-                      <span className="font-bold text-[#111b21]">{bundleComponentDetails.totalDuration} Menit</span>
+                      <span className="font-bold text-[#111b21] dark:text-[#e9edef]">{bundleComponentDetails.totalDuration} Menit</span>
                     </div>
-                    <div className="flex justify-between text-xs text-[#54656f]">
+                    <div className="flex justify-between text-xs text-[#54656f] dark:text-[#aebac1]">
                       <span>Total Harga Normal Satuan:</span>
-                      <span className="font-bold text-[#111b21]">Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}</span>
+                      <span className="font-bold text-[#111b21] dark:text-[#e9edef]">Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}</span>
                     </div>
 
                     {formBundleItemIds.length >= 2 ? (
                       (Number(formPromoPrice) || 0) < bundleComponentDetails.totalOriginalPrice ? (
-                        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-[11px] font-semibold flex items-center space-x-1.5">
+                        <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-lg text-emerald-800 dark:text-emerald-200 text-[11px] font-semibold flex items-center space-x-1.5">
                           <Tag size={13} />
                           <span>
                             Paket Hemat! Customer berhemat Rp {(bundleComponentDetails.totalOriginalPrice - (Number(formPromoPrice) || 0)).toLocaleString('id-ID')} ({Math.round(((bundleComponentDetails.totalOriginalPrice - (Number(formPromoPrice) || 0)) / bundleComponentDetails.totalOriginalPrice) * 100)}% lebih murah).
                           </span>
                         </div>
                       ) : (
-                        <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px] font-semibold flex items-center space-x-1.5">
+                        <div className="p-2 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-lg text-rose-800 dark:text-rose-200 text-[11px] font-semibold flex items-center space-x-1.5">
                           <AlertCircle size={13} />
                           <span>
                             Harga Bundle (Rp {(Number(formPromoPrice) || 0).toLocaleString('id-ID')}) harus lebih murah dari total harga normal layanan (Rp {bundleComponentDetails.totalOriginalPrice.toLocaleString('id-ID')}).
@@ -870,7 +870,7 @@ export const ClinicServices: React.FC = () => {
 
               {/* ADD-ON GUIDANCE BANNER */}
               {formServiceType === 'ADD_ON' && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 text-xs flex items-start space-x-2">
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 rounded-2xl text-rose-900 dark:text-rose-200 text-xs flex items-start space-x-2">
                   <Info size={16} className="text-rose-600 shrink-0 mt-0.5" />
                   <div>
                     <div className="font-bold">Layanan Tambahan (Add-on)</div>
@@ -883,36 +883,36 @@ export const ClinicServices: React.FC = () => {
 
               {!editingService && (
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">ID Layanan (Unik)</label>
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">ID Layanan (Unik)</label>
                   <input
                     type="text"
                     value={formId}
                     onChange={(e) => setFormId(e.target.value)}
                     placeholder="Contoh: paket-bundling-ceria (kosongkan untuk generate otomatis)"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               )}
 
               <div className="space-y-1">
-                <label className="text-[10px] text-[#667781] uppercase font-bold block">Nama Layanan / Treatment</label>
+                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Nama Layanan / Treatment</label>
                 <input
                   type="text"
                   required
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Contoh: Paket Pijat Ceria + Sinar Moksa"
-                  className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Kategori</label>
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Kategori</label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as any)}
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   >
                     {formServiceType === 'BUNDLE' ? (
                       <option value="BUNDLE">BUNDLE (Paket Gabungan)</option>
@@ -936,56 +936,56 @@ export const ClinicServices: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Durasi Pengerjaan (Menit)</label>
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Durasi Pengerjaan (Menit)</label>
                   <input
                     type="number"
                     required
                     value={formDuration}
                     onChange={(e) => setFormDuration(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="40"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Min Usia (Bulan)</label>
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Min Usia (Bulan)</label>
                   <input
                     type="number"
                     required
                     value={formMinAge}
                     onChange={(e) => setFormMinAge(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Max Usia (Bulan)</label>
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Max Usia (Bulan)</label>
                   <input
                     type="number"
                     value={formMaxAge}
                     onChange={(e) => setFormMaxAge(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="Infinity"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">Label Usia (UI)</label>
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Label Usia (UI)</label>
                   <input
                     type="text"
                     required
                     value={formAgeLabel}
                     onChange={(e) => setFormAgeLabel(e.target.value)}
                     placeholder="0 - 24 Bulan"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">
                     {formServiceType === 'BUNDLE' ? 'Total Harga Normal Gabungan (Rp)' : 'Harga Normal (Rp)'}
                   </label>
                   <input
@@ -994,11 +994,11 @@ export const ClinicServices: React.FC = () => {
                     value={formOriginalPrice}
                     onChange={(e) => setFormOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-[#667781] uppercase font-bold block">
+                  <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">
                     {formServiceType === 'BUNDLE' ? 'Harga Paket Bundle Hemat (Rp)' : 'Harga Promo (Rp)'}
                   </label>
                   <input
@@ -1007,13 +1007,13 @@ export const ClinicServices: React.FC = () => {
                     value={formPromoPrice}
                     onChange={(e) => setFormPromoPrice(e.target.value === '' ? '' : Number(e.target.value))}
                     placeholder="0"
-                    className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs font-bold text-[#008069]"
+                    className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs font-bold text-[#008069]"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-[#667781] uppercase font-bold block">Jumlah Sesi Paket (Opsional)</label>
+                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Jumlah Sesi Paket (Opsional)</label>
                 <input
                   type="number"
                   min={1}
@@ -1021,28 +1021,28 @@ export const ClinicServices: React.FC = () => {
                   value={formTotalSessions}
                   onChange={(e) => setFormTotalSessions(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="Contoh: 14 (kosongkan jika bukan paket sesi)"
-                  className="w-full p-2 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] focus:outline-none focus:border-[#008069] shadow-xs"
                 />
                 <p className="text-[10px] text-[#8696a0]">Jika diisi, layanan ini akan menawarkan pembuatan paket multi-sesi otomatis saat reservasi.</p>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-[#667781] uppercase font-bold block">Deskripsi & Manfaat Treatment</label>
+                <label className="text-[10px] text-[#667781] dark:text-[#8696a0] uppercase font-bold block">Deskripsi & Manfaat Treatment</label>
                 <textarea
                   rows={3}
                   required
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   placeholder="Deskripsikan secara lengkap manfaat treatment ini..."
-                  className="w-full p-2.5 bg-white border border-[#d1d7db] rounded-xl text-xs text-[#111b21] leading-relaxed resize-none focus:outline-none focus:border-[#008069] shadow-xs"
+                  className="w-full p-2.5 bg-white border border-[#d1d7db] dark:border-[#374248] rounded-xl text-xs text-[#111b21] dark:text-[#e9edef] leading-relaxed resize-none focus:outline-none focus:border-[#008069] shadow-xs"
                 />
               </div>
 
               <div className="pt-2">
-                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#f8fafc] border border-[#e9edef] dark:border-[#2a3942]">
                   <div>
-                    <span className="text-xs font-bold text-[#111b21] block">Status Layanan</span>
-                    <span className="text-[11px] text-[#667781]">Tampilkan di katalog WhatsApp AI Bot & Kalender Reservasi</span>
+                    <span className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] block">Status Layanan</span>
+                    <span className="text-[11px] text-[#667781] dark:text-[#8696a0]">Tampilkan di katalog WhatsApp AI Bot & Kalender Reservasi</span>
                   </div>
                   <ToggleSwitch
                     checked={formIsActive}
@@ -1055,11 +1055,11 @@ export const ClinicServices: React.FC = () => {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef]">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-[#e9edef] dark:border-[#2a3942]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] text-[#111b21] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
+                  className="px-4 py-2 bg-white hover:bg-[#f0f2f5] border border-[#d1d7db] dark:border-[#374248] text-[#111b21] dark:text-[#e9edef] rounded-xl text-xs font-semibold transition flex items-center space-x-1 shadow-xs"
                 >
                   <X size={13} />
                   <span>Batal</span>

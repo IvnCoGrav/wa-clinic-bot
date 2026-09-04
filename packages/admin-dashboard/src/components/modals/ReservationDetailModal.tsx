@@ -314,15 +314,36 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
     }
   };
 
-  // Keyboard Escape listener
+  // Keyboard Escape, app-swipe-back & popstate listeners for mobile back gestures
   useEffect(() => {
+    try {
+      window.history.pushState({ modal: 'reservation-detail' }, '');
+    } catch (_) {}
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
     };
+
+    const handleSwipeBack = (e: Event) => {
+      e.preventDefault();
+      onClose();
+    };
+
+    const handlePopState = () => {
+      onClose();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('app-swipe-back', handleSwipeBack);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('app-swipe-back', handleSwipeBack);
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, [onClose]);
 
   if (isEditing) {
@@ -344,6 +365,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
 
   return createPortal(
     <div
+      data-modal-active="true"
       className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[9999] flex items-center justify-center p-3 sm:p-4 animate-fadeIn h-[100dvh] w-[100dvw]"
       onClick={onClose}
     >
@@ -352,6 +374,7 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <button
+          data-modal-close="true"
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 rounded-full text-[#8696a0] hover:text-[#111b21] hover:bg-[#f0f2f5] transition-colors cursor-pointer"
         >

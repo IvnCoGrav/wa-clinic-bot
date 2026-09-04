@@ -37,9 +37,11 @@ import {
   RefreshCw,
   Sparkles,
   ChevronLeft,
+  ChevronDown,
   Send,
   TrendingUp,
   Zap,
+  WifiOff,
 } from 'lucide-react';
 
 import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermissions';
@@ -490,7 +492,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         const backEvent = new CustomEvent('app-swipe-back', { cancelable: true });
         const notHandled = window.dispatchEvent(backEvent);
         if (notHandled) {
-          if (window.history.length > 1) {
+          // Prioritas proteksi data: jika ada modal aktif, tutup modal terlebih dahulu daripada unmount halaman
+          const activeModal = document.querySelector('[data-modal-active="true"]');
+          if (activeModal) {
+            const closeBtn = activeModal.querySelector<HTMLElement>('[data-modal-close="true"]') ||
+              activeModal.querySelector<HTMLElement>('button[aria-label*="Tutup"], button[aria-label*="tutup"], button[title*="Tutup"], button[title*="tutup"]');
+            if (closeBtn) {
+              closeBtn.click();
+            }
+          } else if (window.history.length > 1) {
             window.history.back();
           }
         }
@@ -530,7 +540,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div
       style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-[#0c1317] text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
+      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-[#0c1317] text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
@@ -718,6 +728,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       <span className="flex-1 truncate">{item.name}</span>
                       {!!item.badge && (
                         <span
+                          title={`${item.badge} percakapan butuh respons / unread`}
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             isActive ? 'bg-[#008069] dark:bg-[#00a884] text-white' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30'
                           }`}
@@ -816,13 +827,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 <AlertCircle size={13} />
                 <span className="text-[11px] font-bold">Offline</span>
               </button>
+            ) : wahaStatus === 'DISCONNECTED' ? (
+              <button
+                onClick={() => setShowStatusPopover(!showStatusPopover)}
+                title="Status Server WhatsApp: Terputus. Klik untuk membuka panel status"
+                className="no-touch-min rounded-full bg-rose-50 dark:bg-rose-500/20 border border-rose-200 dark:border-rose-500/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/30 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7 cursor-pointer"
+              >
+                <WifiOff size={13} />
+                <span className="text-[11px] font-bold">Terputus</span>
+                <ChevronDown size={11} className="opacity-50" />
+              </button>
             ) : (
               <button
                 onClick={() => setShowStatusPopover(!showStatusPopover)}
-                className="no-touch-min rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7"
+                title="Status Server WhatsApp: Sedang memeriksa koneksi server... Klik untuk membuka panel status"
+                className="no-touch-min rounded-full bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 transition flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold h-7 cursor-pointer"
               >
                 <Loader size={13} className="animate-spin" />
-                <span className="text-[11px] font-bold">Memeriksa</span>
+                <span className="text-[11px] font-bold">WA: Memeriksa...</span>
+                <ChevronDown size={11} className="opacity-50" />
               </button>
             )}
 

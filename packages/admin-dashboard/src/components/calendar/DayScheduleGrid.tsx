@@ -13,7 +13,7 @@ interface DayScheduleGridProps {
   hideHeader?: boolean;
 }
 
-import { extractDurationMinutes, cleanTreatmentDetailForDisplay } from '../../utils/durationCalculator';
+import { cleanTreatmentDetailForDisplay, resolveReservationDuration } from '../../utils/durationCalculator';
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6am - 9pm
 
@@ -96,29 +96,29 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
     switch (cat) {
       case 'MOMS':
         return {
-          card: 'bg-[#f3e8ff] border-l-4 border-[#9333ea] text-[#581c87]',
-          badge: 'bg-[#9333ea]/10 text-[#9333ea]',
+          card: 'bg-[#f3e8ff] dark:bg-[#251438] border-l-4 border-[#9333ea] dark:border-l-[#c084fc] text-[#581c87] dark:text-[#f3e8ff] border border-transparent dark:border-[#c084fc]/30',
+          badge: 'bg-[#9333ea]/10 dark:bg-[#9333ea]/25 text-[#9333ea] dark:text-[#c084fc]',
         };
       case 'BOTH':
         return {
-          card: 'bg-[#dcfce7] border-l-4 border-[#16a34a] text-[#14532d]',
-          badge: 'bg-[#16a34a]/10 text-[#16a34a]',
+          card: 'bg-[#dcfce7] dark:bg-[#0d2e1e] border-l-4 border-[#16a34a] dark:border-l-[#4ade80] text-[#14532d] dark:text-[#dcfce7] border border-transparent dark:border-[#4ade80]/30',
+          badge: 'bg-[#16a34a]/10 dark:bg-[#16a34a]/25 text-[#16a34a] dark:text-[#4ade80]',
         };
       case 'KIDS':
         return {
-          card: 'bg-[#ccfbf1] border-l-4 border-[#0d9488] text-[#115e59]',
-          badge: 'bg-[#0d9488]/10 text-[#0d9488]',
+          card: 'bg-[#ccfbf1] dark:bg-[#0b2b28] border-l-4 border-[#0d9488] dark:border-l-[#2dd4bf] text-[#115e59] dark:text-[#ccfbf1] border border-transparent dark:border-[#2dd4bf]/30',
+          badge: 'bg-[#0d9488]/10 dark:bg-[#0d9488]/25 text-[#0d9488] dark:text-[#2dd4bf]',
         };
       case 'BUNDLE':
         return {
-          card: 'bg-[#fef3c7] border-l-4 border-[#d97706] text-[#78350f]',
-          badge: 'bg-[#d97706]/10 text-[#d97706]',
+          card: 'bg-[#fef3c7] dark:bg-[#2e2009] border-l-4 border-[#d97706] dark:border-l-[#fbbf24] text-[#78350f] dark:text-[#fef3c7] border border-transparent dark:border-[#fbbf24]/30',
+          badge: 'bg-[#d97706]/10 dark:bg-[#d97706]/25 text-[#d97706] dark:text-[#fbbf24]',
         };
       case 'BABY':
       default:
         return {
-          card: 'bg-[#e0f2fe] border-l-4 border-[#0284c7] text-[#0c4a6e]',
-          badge: 'bg-[#0284c7]/10 text-[#0284c7]',
+          card: 'bg-[#e0f2fe] dark:bg-[#0c2438] border-l-4 border-[#0284c7] dark:border-l-[#38bdf8] text-[#0c4a6e] dark:text-[#e0f2fe] border border-transparent dark:border-[#38bdf8]/30',
+          badge: 'bg-[#0284c7]/10 dark:bg-[#0284c7]/25 text-[#0284c7] dark:text-[#38bdf8]',
         };
     }
   };
@@ -156,7 +156,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   const eventsWithTiming = dayReservations
     .map((r) => {
       const bDate = new Date(r.booking_date!);
-      const duration = extractDurationMinutes(r.treatment_detail);
+      const duration = resolveReservationDuration(r);
       const startMinutes = (bDate.getHours() - 6) * 60 + bDate.getMinutes();
       const endMinutes = startMinutes + duration;
       return { res: r, startMinutes, endMinutes, duration };
@@ -232,15 +232,15 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
   processCluster(currentCluster);
 
   return (
-    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white rounded-2xl border border-[#e9edef] shadow-xs'} overflow-hidden flex flex-col relative group/calendar`}>
+    <div className={`${hideHeader ? 'flex-1 min-h-0' : 'bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs'} overflow-hidden flex flex-col relative group/calendar`}>
       {/* Day Header Banner with Integrated Zoom Controls */}
       {!hideHeader && (
-        <div className="p-3.5 sm:p-4 border-b border-[#e9edef] bg-[#fafafa] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
+        <div className="p-3.5 sm:p-4 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#182229] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
           <div>
-            <h3 className="font-extrabold text-base sm:text-lg text-[#111b21]">
+            <h3 className="font-extrabold text-base sm:text-lg text-[#111b21] dark:text-[#e9edef]">
               {dayDateFormatted}
             </h3>
-            <p className="text-xs text-[#667781] mt-0.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696a0] mt-0.5">
               Agenda jadwal kunjungan &amp; perawatan harian
             </p>
           </div>
@@ -273,18 +273,18 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
         style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}
       >
         <div
-          className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] relative"
+          className="grid grid-cols-[70px_1fr] sm:grid-cols-[90px_1fr] divide-x divide-[#e9edef] dark:divide-[#2a3942] relative"
           style={{ height: `${HOURS.length * hourHeight}px`, minHeight: `${HOURS.length * hourHeight}px` }}
         >
           {/* Hour Label Column (Sticky left) */}
-          <div className="sticky left-0 z-20 divide-y divide-[#e9edef] border-r border-[#e9edef] shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+          <div className="sticky left-0 z-20 divide-y divide-[#e9edef] dark:divide-[#2a3942] border-r border-[#e9edef] dark:border-[#2a3942] shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.3)]">
             {HOURS.map((hour) => {
               const isOp = hour >= 8 && hour <= 17 && hour !== 12;
               return (
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className={`p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] text-[#8696a0]' : 'bg-[#f0f0f0] text-[#a0a0a0] italic'}`}
+                  className={`p-2 sm:p-3 text-right pr-3 sm:pr-4 text-xs font-semibold select-none flex items-start justify-end ${isOp ? 'bg-[#fafafa] dark:bg-[#182229] text-[#8696a0]' : 'bg-[#f0f0f0] dark:bg-[#111b21] text-[#a0a0a0] dark:text-[#54656f] italic'}`}
                 >
                   <span>{formatHourLabel(hour)}</span>
                 </div>
@@ -293,7 +293,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
           </div>
 
           {/* Continuous Day Column */}
-          <div className="relative divide-y divide-[#e9edef]">
+          <div className="relative divide-y divide-[#e9edef] dark:divide-[#2a3942]">
             {/* Background Hourly Slot Grids & Hover Add Buttons */}
             {HOURS.map((hour) => {
               const isOp = hour >= 8 && hour <= 17 && hour !== 12;
@@ -301,11 +301,19 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                 <div
                   key={hour}
                   style={{ height: `${hourHeight}px` }}
-                  className={`relative group/slot transition-colors ${isOp ? 'hover:bg-[#e8f5f2]/30 bg-white' : 'bg-[#f5f5f5] bg-[repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5_8px,#ebebeb_8px,#ebebeb_9px)]'}`}
+                  className={`relative group/slot transition-colors ${
+                    isOp
+                      ? 'hover:bg-[#e8f5f2]/30 dark:hover:bg-[#202c33]/40 bg-white dark:bg-[#111b21]'
+                      : 'bg-[#f5f5f5] dark:bg-[#141e24] bg-[repeating-linear-gradient(45deg,#f5f5f5,#f5f5f5_8px,#ebebeb_8px,#ebebeb_9px)] dark:bg-[repeating-linear-gradient(45deg,#141e24,#141e24_8px,#1c2830_8px,#1c2830_9px)]'
+                  }`}
                 >
                   <button
                     onClick={() => onQuickAdd({ date: selectedDate, hour })}
-                    className={`w-full h-full absolute inset-0 z-0 border border-transparent text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer ${isOp ? 'hover:border-dashed hover:border-[#008069] hover:bg-[#e8f5f2]/40 hover:text-[#008069]' : 'hover:border-dashed hover:border-[#a0a0a0] hover:bg-[#e0e0e0]/50 hover:text-[#666] text-[#a0a0a0]'}`}
+                    className={`w-full h-full absolute inset-0 z-0 border border-transparent text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all opacity-0 group-hover/slot:opacity-100 cursor-pointer ${
+                      isOp
+                        ? 'hover:border-dashed hover:border-[#008069] dark:hover:border-[#00a884] hover:bg-[#e8f5f2]/40 dark:hover:bg-[#00a884]/15 hover:text-[#008069] dark:hover:text-[#00a884]'
+                        : 'hover:border-dashed hover:border-[#a0a0a0] dark:hover:border-[#374248] hover:bg-[#e0e0e0]/50 dark:hover:bg-[#202c33]/50 hover:text-[#666] dark:hover:text-[#8696a0] text-[#a0a0a0] dark:text-[#54656f]'
+                    }`}
                     title={isOp ? `Tambah Jadwal pada jam ${formatHourLabel(hour)}` : `Jam non-operasional ${formatHourLabel(hour)}`}
                   >
                     <Plus size={14} className="transform scale-90 group-hover/slot:scale-110 transition-transform" />
@@ -347,7 +355,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
 
               const isHold = res.status === 'hold';
               const effectiveCardStyle = isHold
-                ? 'bg-amber-50/95 border-2 border-dashed border-amber-500 text-amber-950 hover:bg-amber-100/90'
+                ? 'bg-amber-50/95 dark:bg-[#33230a] border-2 border-dashed border-amber-500 dark:border-amber-400 text-amber-950 dark:text-amber-100 hover:bg-amber-100/90 dark:hover:bg-[#422e0c]'
                 : theme.card;
 
               return (
@@ -364,13 +372,13 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     left: evLeft,
                     width: evWidth,
                   }}
-                  className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 flex flex-col justify-between overflow-hidden ${effectiveCardStyle}`}
+                  className={`absolute z-10 p-2 sm:p-3 rounded-xl transition-all cursor-pointer shadow-md hover:shadow-lg hover:z-20 ring-1 ring-black/5 dark:ring-white/10 flex flex-col justify-between overflow-hidden ${effectiveCardStyle}`}
                 >
                   {zoomLevel === 'compact' ? (
                     /* COMPACT DAY LOD (<65px) */
                     <div className="flex items-center justify-between gap-2 h-full">
                       <div className="flex items-center space-x-2 truncate">
-                        <span className="font-bold text-xs text-[#111b21] truncate">
+                        <span className={`font-bold text-xs truncate ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
                           {isHold ? `[HOLD] ${displayName}` : displayName}
                         </span>
                         <span className="text-[10px] font-mono font-bold opacity-80 shrink-0">
@@ -379,7 +387,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                       </div>
                       <div className="flex items-center space-x-1 shrink-0">
                         {isHold ? (
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-white">
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-2xs">
                             HOLD
                           </span>
                         ) : (
@@ -387,7 +395,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                             {res.treatment_category}
                           </span>
                         )}
-                        <span className="text-[10px] font-semibold text-[#54656f] hidden sm:inline">
+                        <span className="text-[10px] font-semibold text-[#54656f] dark:text-[#aebac1] hidden sm:inline">
                           {res.assigned_staff?.name?.split(' ')[0] || 'Unassigned'}
                         </span>
                       </div>
@@ -397,11 +405,11 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                       <div className="space-y-1 min-w-0">
                         <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                          <span className="font-bold text-sm text-[#111b21] truncate">
+                          <span className={`font-bold text-sm truncate ${isHold ? 'text-amber-950 dark:text-amber-100' : 'text-[#111b21] dark:text-[#e9edef]'}`}>
                             {displayName}
                           </span>
                           {isHold ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-2xs">
                               HOLD
                             </span>
                           ) : (
@@ -410,7 +418,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                             </span>
                           )}
                           {res.session_number != null && res.total_sessions != null && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 text-blue-800">
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600/10 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300">
                               Sesi {res.session_number}/{res.total_sessions}
                             </span>
                           )}
@@ -418,7 +426,7 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                             <Clock size={12} />
                             <span>{timeRangeStr}</span>
                           </span>
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 font-mono">
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-black/5 dark:bg-white/10 font-mono">
                             {pos.duration}m
                           </span>
                           {res.status === 'hold' ? (
@@ -427,13 +435,13 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                               HOLD
                             </span>
                           ) : res.status === 'confirmed' ? (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 text-emerald-800">
-                              <CheckCircle2 size={10} className="mr-0.5 text-emerald-600" />
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-600/10 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500/30">
+                              <CheckCircle2 size={10} className="mr-0.5 text-emerald-600 dark:text-emerald-400" />
                               Lunas
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 text-amber-800">
-                              <AlertCircle size={10} className="mr-0.5 text-amber-600" />
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-600/10 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500/30">
+                              <AlertCircle size={10} className="mr-0.5 text-amber-600 dark:text-amber-400" />
                               Pending
                             </span>
                           )}
@@ -454,8 +462,8 @@ export const DayScheduleGrid: React.FC<DayScheduleGridProps> = ({
                       </div>
 
                       <div className="flex items-center space-x-3 self-end md:self-auto shrink-0">
-                        <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 px-2.5 py-1 rounded-lg border border-black/10">
-                          <User size={12} className="text-[#008069]" />
+                        <div className="flex items-center space-x-1 text-xs font-bold bg-white/80 dark:bg-[#111b21]/80 px-2.5 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[#111b21] dark:text-[#e9edef]">
+                          <User size={12} className="text-[#008069] dark:text-[#00a884]" />
                           <span>{res.assigned_staff?.name || 'Belum ada terapis'}</span>
                         </div>
                       </div>
