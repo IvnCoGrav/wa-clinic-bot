@@ -195,17 +195,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const emoji = typeof reactPayload.reaction === 'string'
           ? reactPayload.reaction
           : reactionObj?.text || reactionObj?.emoji || reactPayload.text || '';
+        // Prioritas 1: ID pesan target yang diberi reaksi — jangan tertukar dengan ID event reaksi itu sendiri
         const targetMsgId =
-          reactPayload.messageId ||
-          reactPayload.targetMessageId ||
           reactionObj?.messageId ||
           reactionObj?.id ||
+          reactPayload.messageId ||
+          reactPayload.targetMessageId ||
           reactPayload.id?._serialized ||
           reactPayload.id ||
           reactPayload.key?.id;
 
         const fromMe = !!reactPayload.fromMe || !!reactionObj?.fromMe;
-        const senderName = reactPayload._data?.notifyName || reactPayload.notifyName || (fromMe ? 'Admin' : undefined);
+        const senderName = reactPayload._data?.notifyName || reactPayload.notifyName || reactPayload.pushName || reactPayload._data?.pushName || (fromMe ? 'Admin' : undefined);
 
         if (targetMsgId) {
           console.log(`[MESSAGE REACTION WEBHOOK] targetMsgId=${targetMsgId}, emoji="${emoji}", fromMe=${fromMe}`);

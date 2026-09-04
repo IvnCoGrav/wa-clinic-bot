@@ -4,6 +4,14 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Penerimaan & Sinkronisasi Reaksi Emoji Customer WhatsApp ke Dashboard Live Chat (`whatsapp-provider.service.ts`, `waha/client.ts`, `webhook.route.ts`, `message.service.ts`, `LiveChatMonitor.tsx`) (2026-09-04)
+
+- **Akar Masalah:** WAHA tidak subscribe `message.reaction*`, payload `reaction.messageId` tertukar dengan ID event, dan `wa_message_id` panjang vs pendek tidak cocok di DB sehingga reaksi customer tidak muncul.
+- **Stage 1 — Registrasi Event WAHA:** `whatsapp-provider.service.ts:200` `buildDefaultSessionConfig` events ditambah `message.reaction`, `message.reaction.added`, `message.reaction.deleted`, `message.ack`, `message.revoked` (+ `message.any`); method baru `syncSessionWebhooks()` untuk `PUT /api/sessions/:session` tanpa scan QR ulang; `waha/client.ts:1248` `startSession` webhook events diperluas sama; tambah `updateSessionConfig()` helper.
+- **Stage 2 — Presisi Webhook & DB:** `webhook.route.ts:192` prioritas `reactionObj.messageId || reactionObj.id` sebelum `reactPayload.id`, tangkap `pushName` untuk `senderName`; `message.service.ts:854` `addOrUpdateReaction` toleransi `wa_message_id` panjang `false_...@c.us_3EB0` ↔ pendek `3EB0` via `extractShortMessageId` + `endsWith`, lookup memory juga dukung short/long, broadcast ganda `message:reaction` + `message.reaction` untuk kompatibilitas SSE.
+- **Stage 3 — Frontend:** `LiveChatMonitor.tsx:1949` SSE reaction `idsMatch` via short-suffix/endsWith (id & wa_message_id), pill `title` sudah `Anda` vs `senderName` (mis. “Bunda Rina: ❤️”), `groupedReactions` tampil real-time di sudut bubble.
+- **Verifikasi:** `packages/admin-dashboard build` ✓ 10.65s, `npm test` ✓ 209 files / 1724 passed.
+
 #### Fix — Auto Mark-As-Read & Sinkronisasi Real-Time Saat Admin Balas via WhatsApp HP (`webhook.route.ts`, `live-chat.service.ts`, `LiveChatMonitor.tsx`) (2026-09-04)
 
 - **Latar Belakang:** Badge unread di dashboard Live Chat tidak hilang ketika admin membalas pasien langsung dari WhatsApp HP / WhatsApp Web eksternal — harus refresh manual.

@@ -1948,12 +1948,19 @@ function clearConversationDraft(convId: string) {
           }
         } else if ((type === 'message:reaction' || type === 'message.reaction') && (payload?.messageId || payload?.waMessageId)) {
           const { messageId, waMessageId, conversationId, reactions } = payload;
+          const idsMatch = (a?: string | null, b?: string | null) => {
+            if (!a || !b) return false;
+            if (a === b) return true;
+            const shortA = String(a).split('_').pop() || a;
+            const shortB = String(b).split('_').pop() || b;
+            return shortA === shortB || String(a).endsWith(String(b)) || String(b).endsWith(String(a));
+          };
           if (!conversationId || selectedIdRef.current === conversationId) {
             setMessages((prev) =>
               prev.map((m) => {
                 if (
-                  (messageId && m.id === messageId) ||
-                  (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId))
+                  (messageId && (m.id === messageId || idsMatch(m.id, messageId) || idsMatch((m as any).wa_message_id, messageId))) ||
+                  (waMessageId && (m.wa_message_id === waMessageId || m.id === waMessageId || idsMatch((m as any).wa_message_id, waMessageId) || idsMatch(m.id, waMessageId)))
                 ) {
                   return {
                     ...m,
