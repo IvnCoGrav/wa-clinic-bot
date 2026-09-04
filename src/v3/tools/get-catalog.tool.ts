@@ -1,4 +1,5 @@
 import { treatmentCatalogService, ClinicServiceItem } from '../../services/treatment-catalog.service';
+import { TEMPLATES } from '../../config/persona';
 
 export interface GetCatalogInput {
   category?: 'BABY' | 'KIDS' | 'MOMS' | 'BOTH';
@@ -22,6 +23,7 @@ export interface GetCatalogOutput {
   success: boolean;
   treatments: CatalogTreatmentDetail[];
   recommendationReason?: string;
+  suggestedPriceReply?: string;
   message: string;
 }
 
@@ -128,14 +130,28 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
     }
 
     const summaryList = formattedTreatments.slice(0, 4).map(t => 
-      `• ${t.name}: Promo Rp ${t.promoPrice.toLocaleString('id-ID')} (Normal Rp ${t.originalPrice.toLocaleString('id-ID')}, ${t.durationMinutes} menit)`
+      `• *${t.name}*: Promo *Rp ${t.promoPrice.toLocaleString('id-ID')}* (Normal *Rp ${t.originalPrice.toLocaleString('id-ID')}*, ${t.durationMinutes} menit)`
     ).join('\n');
+
+    let suggestedPriceReply: string | undefined = undefined;
+    if (formattedTreatments.length === 1 || specificTreatmentName) {
+      const target = formattedTreatments[0];
+      if (target) {
+        suggestedPriceReply = TEMPLATES.priceInfo({
+          name: target.name,
+          durationMinutes: target.durationMinutes,
+          normalPrice: target.originalPrice,
+          promoPrice: target.promoPrice,
+        });
+      }
+    }
 
     return {
       success: true,
       treatments: formattedTreatments.slice(0, 5),
       recommendationReason,
-      message: `Ditemukan ${formattedTreatments.length} treatment yang sesuai:\n${summaryList}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}`
+      suggestedPriceReply,
+      message: `Ditemukan ${formattedTreatments.length} treatment yang sesuai:\n${summaryList}${recommendationReason ? `\n\nCatatan Rekomendasi: ${recommendationReason}` : ''}${suggestedPriceReply ? `\n\nFormat Penyampaian Harga Bidan Yusi yang Disarankan:\n"${suggestedPriceReply}"` : ''}`
     };
   } catch (error: any) {
     console.error('[V3 TOOL CATALOG ERROR]', error);
