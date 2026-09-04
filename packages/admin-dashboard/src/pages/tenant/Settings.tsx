@@ -9,6 +9,7 @@ import { AiRouterPanel } from '../../components/settings/AiRouterPanel';
 import { MetaCapiPanel } from '../../components/settings/MetaCapiPanel';
 import { MqlSettingsPanel } from '../../components/settings/MqlSettingsPanel';
 import { InstallAppPanel } from '../../components/settings/InstallAppPanel';
+import { AppearancePanel } from '../../components/settings/AppearancePanel';
 import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 import { GoogleIntegrationPanel } from '../../components/settings/GoogleIntegrationPanel';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
@@ -949,6 +950,9 @@ export const Settings: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left column: Install App + Branch picker */}
           <div className="space-y-6">
+            {/* Tampilan & Tema (Light / Dark / System) */}
+            <AppearancePanel />
+
             {/* Install App (PWA) */}
             <InstallAppPanel />
 

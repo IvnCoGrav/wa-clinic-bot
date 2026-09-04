@@ -607,5 +607,31 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - Pisahkan runner unit test (`npm run test:unit`) dan integration test (`npm run test:integration`).
   - Tambahkan konfigurasi `--no-file-parallelism` atau `--isolate` khusus untuk folder `tests/integration/` di `vitest.config.ts`.
 
+---
+
+## 23. [UI] Dark Mode: halaman non-flagship mengandalkan remap CSS global + preferensi per-browser
+
+- **Status:** open (tech debt ringan, by-design), **bukan bug** — hasil implementasi Dual Theme 2026-09-03.
+- **Ditemukan:** 2026-09-03, saat implementasi Tema Hitam & Putih Admin Dashboard.
+- **Konteks:** Varian `dark:` eksplisit hanya ditambahkan ke permukaan flagship
+  (`Layout`, `Login`, `Overview`/`FinancialAnalytics` charts, `AppearancePanel`,
+  `ThemeToggle`, `ToggleSwitch`, `UiFeedback`, `Pagination`). Seluruh ~50 halaman
+  lain (CRM, katalog, reservasi, modal) menjadi readable di dark mode lewat blok
+  remap `.dark` di `packages/admin-dashboard/src/index.css` yang memetakan
+  utilitas hardcoded light (`bg-white`, `bg-[#f0f2f5]`, `text-[#111b21]`,
+  `border-[#e9edef]`, badge pastel, `bg-[#efeae2]`→wallpaper `#0b141a`,
+  `bg-[#d9fdd3]`→bubble `#005c4b`) ke palet WhatsApp Dark.
+- **Limitasi yang diketahui:**
+  1. Warna hardcoded eksotis di luar kamus remap (mis. `bg-blue-100`/`border-blue-100`
+     di `CreateReservationModal.tsx:1784`) tetap tampil terang saat dark mode.
+  2. Recharts `Tooltip` default (Pie di `FinancialAnalytics.tsx:569`) memakai style
+     inline bawaan — sudah di-override via CSS `.recharts-default-tooltip`, tapi
+     warna label formatter tertentu bisa kurang kontras.
+  3. Preferensi tema disimpan di `localStorage` per-browser (`wa_clinic_theme`) —
+     tidak sinkron antar perangkat dan bukan data bisnis (sengaja tidak tenant-aware / DB).
+- **Rencana Tindak Lanjut:**
+  - Tambah entri remap `.dark` baru di `index.css` setiap kali warna eksotis ditemukan.
+  - Migrasi bertahap halaman prioritas ke varian `dark:` eksplisit saat halaman disentuh refactor lain.
+
 
 

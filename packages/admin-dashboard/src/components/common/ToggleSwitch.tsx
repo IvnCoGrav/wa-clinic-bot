@@ -61,9 +61,9 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
   }[variant];
 
   const activeBadge = {
-    emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    indigo: 'bg-indigo-100 text-indigo-800 border-indigo-300',
-    rose: 'bg-rose-100 text-rose-800 border-rose-300',
+    emerald: 'bg-emerald-100 dark:bg-[#00a884]/20 text-emerald-800 dark:text-[#4ae3b5] border-emerald-300 dark:border-[#00a884]/40',
+    indigo: 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-500/40',
+    rose: 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/40',
   }[variant];
 
   // Size styling maps
@@ -96,7 +96,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
       className={`inline-flex items-center gap-1 font-bold rounded-md border font-mono transition-colors uppercase select-none ${badgeTextSizes} ${
         checked
           ? activeBadge
-          : 'bg-slate-100 text-slate-600 border-slate-200'
+          : 'bg-slate-100 dark:bg-[#2a3942] text-slate-600 dark:text-[#8696a0] border-slate-200 dark:border-[#374248]'
       }`}
     >
       {loading ? (
@@ -133,7 +133,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
           {label && (
             <label
               htmlFor={id}
-              className={`text-xs font-bold text-[#111b21] select-none ${
+              className={`text-xs font-bold text-[#111b21] dark:text-[#e9edef] select-none ${
                 !disabled ? 'cursor-pointer' : ''
               }`}
             >
@@ -141,7 +141,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
             </label>
           )}
           {description && (
-            <p className="text-[11px] text-[#667781] leading-relaxed select-none">
+            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] leading-relaxed select-none">
               {description}
             </p>
           )}
@@ -156,7 +156,7 @@ export const ToggleSwitch: React.FC<ToggleSwitchProps> = ({
         disabled={disabled || loading}
         onKeyDown={handleKeyDown}
         className={`relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#008069]/30 focus:ring-offset-1 ${trackSizes} ${
-          checked ? activeBg : 'bg-[#cbd5e1]'
+          checked ? activeBg : 'bg-[#cbd5e1] dark:bg-[#374248]'
         } ${disabled || loading ? 'cursor-not-allowed opacity-70' : ''}`}
       >
         <span className="sr-only">{checked ? onLabel : offLabel}</span>

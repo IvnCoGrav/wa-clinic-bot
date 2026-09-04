@@ -46,6 +46,7 @@ import { ROLE_LABELS, hasAccess, getCustomRoles } from '../../config/rolePermiss
 import { emitBootPhase } from '../../lib/bootProgress';
 import { useLiveChatNotification } from '../../hooks/useLiveChatNotification';
 import { useUiFeedback } from './UiFeedback';
+import { ThemeToggle } from './ThemeToggle';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -529,7 +530,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div
       style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] text-[#111b21] flex flex-col md:flex-row relative overscroll-y-contain`}
+      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-[#0c1317] text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
@@ -580,25 +581,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {incomingToast && (
         <div
           onClick={() => openChatFromToast(incomingToast.conversationId)}
-          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-white border border-[#008069]/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-[#f8fafc] transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
+          className="fixed top-3 left-3 right-3 sm:left-auto sm:right-6 z-[9999] max-w-sm sm:max-w-md bg-white dark:bg-[#202c33] border border-[#008069]/40 dark:border-[#00a884]/40 rounded-2xl shadow-2xl p-3 flex items-start space-x-3 cursor-pointer hover:bg-[#f8fafc] dark:hover:bg-[#2a3942] transition-all transform animate-in slide-in-from-top-4 fade-in duration-200 select-none backdrop-blur-md mt-[env(safe-area-inset-top,0px)] ml-[env(safe-area-inset-left,0px)] mr-[env(safe-area-inset-right,0px)]"
         >
           <div className="h-10 w-10 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 font-bold shadow-xs">
             <MessageSquare size={20} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-extrabold text-[#111b21] truncate">
+              <p className="text-xs font-extrabold text-[#111b21] dark:text-[#e9edef] truncate">
                 {incomingToast.customerName}
               </p>
               <span className="text-[10px] text-[#667781] font-mono ml-2">
                 {incomingToast.createdAt}
               </span>
             </div>
-            <p className="text-xs text-[#54656f] line-clamp-2 mt-0.5 font-medium leading-relaxed">
+            <p className="text-xs text-[#54656f] dark:text-[#8696a0] line-clamp-2 mt-0.5 font-medium leading-relaxed">
               {incomingToast.content}
             </p>
             <div className="flex items-center space-x-2 mt-1.5">
-              <span className="text-[10px] font-bold text-[#008069] bg-[#e8f5f2] px-2 py-0.5 rounded-md">
+              <span className="text-[10px] font-bold text-[#008069] dark:text-[#00a884] bg-[#e8f5f2] dark:bg-[#00a884]/15 px-2 py-0.5 rounded-md">
                 💬 Ketuk untuk Balas
               </span>
             </div>
@@ -609,7 +610,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               dismissToast();
             }}
             aria-label="Tutup notifikasi"
-            className="text-[#8696a0] hover:text-[#111b21] p-1 rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer"
+            className="text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-lg hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition cursor-pointer"
           >
             <X size={16} />
           </button>
@@ -638,28 +639,28 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       />
 
       {/* Sidebar Navigation (Desktop: Left, Mobile: Slide from Right with total GPU masking when closed) */}
-      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white border-l md:border-l-0 md:border-r border-[#e9edef] flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
+      <aside className={`fixed inset-y-0 right-0 md:right-auto md:left-0 z-50 w-64 bg-white dark:bg-[#202c33] border-l md:border-l-0 md:border-r border-[#e9edef] dark:border-[#2a3942] flex flex-col transform pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
         mobileMenuOpen
           ? 'translate-x-0 opacity-100 visible pointer-events-auto'
           : 'translate-x-full opacity-0 invisible pointer-events-none md:opacity-100 md:visible md:pointer-events-auto md:translate-x-0'
       } transition-all duration-300 ease-out shadow-2xl md:shadow-xs`}>
         {/* Brand/Header */}
-        <div className="h-16 border-b border-[#e9edef] bg-white flex items-center justify-between px-5">
+        <div className="h-16 border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] flex items-center justify-between px-5">
           <div className="flex items-center space-x-2.5">
             <img
               src="/admin/apple-touch-icon.png"
               alt="Kala Logo"
-              className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] shrink-0"
+              className="h-8 w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] dark:border-[#2a3942] shrink-0"
             />
             <div className="flex flex-col">
-              <span className="font-extrabold text-sm tracking-wider text-[#111b21] uppercase">KALA SPA</span>
-              <span className="text-[10px] text-[#667781] font-medium leading-none">Management Bot</span>
+              <span className="font-extrabold text-sm tracking-wider text-[#111b21] dark:text-[#e9edef] uppercase">KALA SPA</span>
+              <span className="text-[10px] text-[#667781] dark:text-[#8696a0] font-medium leading-none">Management Bot</span>
             </div>
           </div>
           <button
             onClick={dismissMobileMenu}
             aria-label="Tutup menu"
-            className="md:hidden text-[#8696a0] hover:text-[#111b21] p-2 rounded-xl hover:bg-[#f0f2f5] transition"
+            className="md:hidden text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-2 rounded-xl hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] transition"
           >
             <X size={20} />
           </button>
@@ -696,7 +697,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
             return sortedNavGroups.map((group) => (
               <div key={group.title} className="space-y-1">
-                <div className="px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#8696a0]">
+                <div className="px-3 pt-1 pb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#8696a0] dark:text-[#8696a0]">
                   {group.title}
                 </div>
                 {group.items.map((item) => {
@@ -709,16 +710,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       onClick={handleNavClick}
                       className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-150 text-xs ${
                         isActive 
-                          ? 'bg-[#e8f5f2] border-l-4 border-[#008069] text-[#008069] font-bold shadow-xs'
-                          : 'text-[#54656f] hover:bg-[#f0f2f5] hover:text-[#111b21] font-medium'
+                          ? 'bg-[#e8f5f2] dark:bg-[#00a884]/15 border-l-4 border-[#008069] dark:border-[#00a884] text-[#008069] dark:text-[#00a884] font-bold shadow-xs'
+                          : 'text-[#54656f] dark:text-[#aebac1] hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942] hover:text-[#111b21] dark:hover:text-[#e9edef] font-medium'
                       }`}
                     >
-                      <Icon size={17} className={isActive ? 'text-[#008069]' : 'text-[#8696a0]'} />
+                      <Icon size={17} className={isActive ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#8696a0]'} />
                       <span className="flex-1 truncate">{item.name}</span>
                       {!!item.badge && (
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            isActive ? 'bg-[#008069] text-white' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                            isActive ? 'bg-[#008069] dark:bg-[#00a884] text-white' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30'
                           }`}
                         >
                           {item.badge}
@@ -733,21 +734,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </nav>
 
         {/* User profile / Logout */}
-        <div className="p-3.5 border-t border-[#e9edef] bg-[#f8fafc] space-y-2">
+        <div className="p-3.5 border-t border-[#e9edef] dark:border-[#2a3942] bg-[#f8fafc] dark:bg-[#111b21] space-y-2">
           <div className="flex items-center justify-between">
             <div className="truncate pr-2">
-              <p className="text-xs font-bold text-[#111b21] truncate">
+              <p className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] truncate">
                 {user?.name || user?.email || 'Admin'}
               </p>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0]">
+                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-[#e8f5f2] dark:bg-[#00a884]/15 text-[#008069] dark:text-[#00a884] border border-[#c2e7e0] dark:border-[#00a884]/30">
                   {ROLE_LABELS[currentRole as keyof typeof ROLE_LABELS] || currentRole}
                 </span>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2.5 rounded-xl bg-white hover:bg-rose-50 text-[#8696a0] hover:text-rose-600 border border-[#e9edef] transition-colors shadow-xs"
+              className="p-2.5 rounded-xl bg-white dark:bg-[#2a3942] hover:bg-rose-50 dark:hover:bg-rose-500/20 text-[#8696a0] hover:text-rose-600 dark:hover:text-rose-300 border border-[#e9edef] dark:border-[#374248] transition-colors shadow-xs"
               title="Logout"
               aria-label="Logout"
             >
@@ -764,15 +765,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       >
         
         {/* Top Header — iPhone safe-area: notch/Dynamic Island */}
-        <header className="border-b border-[#e9edef] bg-white sticky top-0 z-40 shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
+        <header className="border-b border-[#e9edef] dark:border-[#2a3942] bg-white dark:bg-[#202c33] sticky top-0 z-40 shadow-2xs shrink-0 pt-[env(safe-area-inset-top,0px)] pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))]">
           <div className="h-12 md:h-13 px-3 sm:px-5 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img
                 src="/admin/apple-touch-icon.png"
                 alt="Kala Logo"
-                className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] shrink-0"
+                className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg object-contain shadow-2xs border border-[#e9edef] dark:border-[#2a3942] shrink-0"
               />
-              <span className="font-extrabold text-xs sm:text-sm tracking-wide text-[#111b21]">
+              <span className="font-extrabold text-xs sm:text-sm tracking-wide text-[#111b21] dark:text-[#e9edef]">
                 KALA SPA
               </span>
             </div>
@@ -857,12 +858,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </button>
             )}
 
+            {/* Theme Switcher Toggle (☀️/🌙) — desktop & mobile */}
+            <ThemeToggle />
+
             {/* Mobile Hamburger Menu Button (Moved to Right Side) */}
             <button 
               onClick={openMobileMenu} 
               aria-label="Buka Menu"
               title="Buka Menu Navigasi"
-              className="no-touch-min md:hidden w-8 h-8 rounded-xl bg-[#f0f2f5] text-[#54656f] hover:text-[#111b21] hover:bg-[#e9edef] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
+              className="no-touch-min md:hidden w-8 h-8 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-[#e9edef] dark:hover:bg-[#374248] transition active:scale-90 touch-manipulation cursor-pointer shadow-2xs ml-0.5 flex items-center justify-center aspect-square"
             >
               <Menu size={18} />
             </button>
@@ -874,22 +878,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   className="fixed inset-0 z-40"
                   onClick={() => setShowStatusPopover(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#e9edef] p-4 text-xs z-50 space-y-3 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between border-b border-[#e9edef] pb-2">
-                    <span className="font-bold text-[#111b21] text-sm flex items-center gap-1.5">
-                      <Activity size={15} className="text-[#008069]" />
+                <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white dark:bg-[#202c33] rounded-2xl shadow-xl border border-[#e9edef] dark:border-[#2a3942] p-4 text-xs z-50 space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-[#e9edef] dark:border-[#2a3942] pb-2">
+                    <span className="font-bold text-[#111b21] dark:text-[#e9edef] text-sm flex items-center gap-1.5">
+                      <Activity size={15} className="text-[#008069] dark:text-[#00a884]" />
                       Status Sistem
                     </span>
                     <button
                       onClick={() => setShowStatusPopover(false)}
-                      className="text-[#8696a0] hover:text-[#111b21] p-1 rounded-lg hover:bg-[#f0f2f5]"
+                      className="text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-1 rounded-lg hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]"
                     >
                       <X size={14} />
                     </button>
                   </div>
 
                   <div className="space-y-2.5">
-                    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#f8fafc] border border-[#e9edef]">
+                    <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942]">
                       {wahaStatus === 'WORKING' ? (
                         <CheckCircle size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
                       ) : wahaStatus === 'SCAN_QR_CODE' ? (
@@ -898,8 +902,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                         <AlertCircle size={16} className="text-rose-600 mt-0.5 flex-shrink-0" />
                       )}
                       <div>
-                        <p className="font-bold text-[#111b21]">WhatsApp (WAHA)</p>
-                        <p className="text-[#667781] text-[11px] mt-0.5">
+                        <p className="font-bold text-[#111b21] dark:text-[#e9edef]">WhatsApp (WAHA)</p>
+                        <p className="text-[#667781] dark:text-[#8696a0] text-[11px] mt-0.5">
                           {wahaStatus === 'WORKING'
                             ? 'Sesi WAHA terhubung dan siap kirim/terima pesan pelanggan.'
                             : wahaStatus === 'SCAN_QR_CODE'
@@ -959,7 +963,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       to="/admin/settings"
                       replace={true}
                       onClick={() => setShowStatusPopover(false)}
-                      className="block text-center py-2 px-3 rounded-xl bg-[#f0f2f5] hover:bg-[#e9edef] text-[#111b21] font-semibold text-xs transition"
+                      className="block text-center py-2 px-3 rounded-xl bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#111b21] dark:text-[#e9edef] font-semibold text-xs transition"
                     >
                       Buka Operational Settings →
                     </Link>
@@ -977,7 +981,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             isLiveChat
               ? 'p-0 overflow-hidden flex flex-col min-h-0'
               : 'p-4 sm:p-5 md:p-7 space-y-6'
-          } bg-[#f0f2f5]`}
+          } bg-[#f0f2f5] dark:bg-[#0c1317]`}
         >
           {children}
         </main>

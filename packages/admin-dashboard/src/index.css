@@ -41,6 +41,38 @@
 
     --radius: 0.75rem;
   }
+
+  /* Token shadcn-style untuk dark mode (dipakai via hsl(var(--...))) */
+  .dark {
+    --background: 200 25% 7%;
+    --foreground: 165 15% 92%;
+
+    --muted: 200 25% 10%;
+    --muted-foreground: 200 10% 62%;
+
+    --popover: 200 25% 12%;
+    --popover-foreground: 165 15% 92%;
+
+    --border: 200 18% 18%;
+    --input: 200 18% 24%;
+
+    --card: 200 25% 12%;
+    --card-foreground: 165 15% 92%;
+
+    --primary: 164 100% 33%;
+    --primary-foreground: 200 25% 7%;
+
+    --secondary: 200 25% 15%;
+    --secondary-foreground: 164 100% 45%;
+
+    --accent: 200 25% 15%;
+    --accent-foreground: 164 100% 45%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --ring: 164 100% 33%;
+  }
 }
 
 html {
@@ -391,4 +423,192 @@ textarea,
     opacity: 1 !important;
   }
 }
+
+/* ========================================================================= */
+/* 🌙 DUAL THEME — WhatsApp Web Dark Mode (#0c1317 / #202c33 / #00a884)      */
+/* Aktif saat <html class="dark">. Dikelola ThemeContext (localStorage).    */
+/*                                                                         */
+/* Arsitektur:                                                             */
+/*  1. Halaman flagship memakai varian `dark:` eksplisit di TSX.            */
+/*  2. Blok ini me-remap utilitas hardcoded light (bg-white, bg-[#f0f2f5],  */
+/*     text-[#111b21], border-[#e9edef], ...) ke palet gelap — sehingga     */
+/*     seluruh 59 layar dashboard langsung readable tanpa churn per-file.   */
+/* ========================================================================= */
+
+.dark {
+  color-scheme: dark;
+}
+
+.dark html,
+html.dark {
+  background-color: #0c1317;
+  color: #e9edef;
+}
+
+.dark body {
+  background-color: #0c1317;
+  color: #e9edef;
+}
+
+.dark #root {
+  background-color: #0c1317;
+  color: #e9edef;
+}
+
+/* --- Kanvas & permukaan netral --- */
+.dark .bg-\[\#f0f2f5\] { background-color: #0c1317; }
+.dark .bg-\[\#f8fafc\] { background-color: #111b21; }
+.dark .bg-white { background-color: #202c33; }
+.dark .bg-slate-50 { background-color: #111b21; }
+.dark .bg-gray-50 { background-color: #111b21; }
+.dark .bg-gray-100 { background-color: #2a3942; }
+.dark .bg-slate-100 { background-color: #2a3942; }
+
+/* --- WhatsApp Live Chat otentik (wallpaper & bubble) --- */
+.dark .bg-\[\#efeae2\] { background-color: #0b141a; }
+.dark .bg-\[\#d9fdd3\] { background-color: #005c4b; color: #e9edef; }
+.dark .bg-\[\#d9fdd3\] .text-\[\#111b21\] { color: #e9edef; }
+
+/* --- Teks netral --- */
+.dark .text-\[\#111b21\] { color: #e9edef; }
+.dark .text-\[\#54656f\] { color: #aebac1; }
+.dark .text-\[\#667781\] { color: #8696a0; }
+.dark .text-slate-500 { color: #8696a0; }
+.dark .text-slate-600 { color: #aebac1; }
+.dark .text-gray-400 { color: #8696a0; }
+.dark .text-gray-500 { color: #8696a0; }
+.dark .text-gray-600 { color: #aebac1; }
+
+/* --- Border & divider --- */
+.dark .border-\[\#e9edef\] { border-color: #2a3942; }
+.dark .border-\[\#d1d7db\] { border-color: #374248; }
+.dark .border-gray-200 { border-color: #2a3942; }
+.dark .border-slate-200 { border-color: #2a3942; }
+.dark .divide-\[\#e9edef\] > * + * { border-color: #2a3942; }
+.dark .divide-gray-200 > * + * { border-color: #2a3942; }
+.dark .ring-\[\#e9edef\] { --tw-ring-color: #2a3942; }
+
+/* --- Hover state terang → hover gelap --- */
+.dark .hover\:bg-\[\#f0f2f5\]:hover { background-color: #2a3942; }
+.dark .hover\:bg-\[\#e9edef\]:hover { background-color: #374248; }
+.dark .hover\:bg-gray-100:hover { background-color: #2a3942; }
+.dark .hover\:bg-gray-200:hover { background-color: #374248; }
+.dark .hover\:bg-slate-100:hover { background-color: #2a3942; }
+.dark .hover\:text-\[\#111b21\]:hover { color: #e9edef; }
+
+/* --- Badge semantik pastel → versi gelap kontras tinggi --- */
+.dark .bg-emerald-50 { background-color: rgba(0, 168, 132, 0.14); }
+.dark .bg-emerald-100 { background-color: rgba(0, 168, 132, 0.22); }
+.dark .text-emerald-800, .dark .text-emerald-900 { color: #4ae3b5; }
+.dark .border-emerald-200 { border-color: rgba(0, 168, 132, 0.35); }
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12); }
+.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.2); }
+.dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: #fcd34d; }
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.35); }
+.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+.dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.2); }
+.dark .text-rose-700, .dark .text-rose-800 { color: #fda4af; }
+.dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.35); }
+.dark .bg-sky-50 { background-color: rgba(14, 165, 233, 0.12); }
+.dark .bg-sky-100 { background-color: rgba(14, 165, 233, 0.2); }
+.dark .text-sky-700, .dark .text-sky-800 { color: #7dd3fc; }
+.dark .border-sky-200 { border-color: rgba(14, 165, 233, 0.35); }
+.dark .bg-indigo-50 { background-color: rgba(99, 102, 241, 0.14); }
+.dark .text-indigo-700, .dark .text-indigo-800 { color: #a5b4fc; }
+.dark .border-indigo-200 { border-color: rgba(99, 102, 241, 0.35); }
+
+/* --- Aksen mint terang → versi gelap --- */
+.dark .bg-\[\#e8f5f2\] { background-color: rgba(0, 168, 132, 0.14); }
+.dark .text-\[\#008069\] { color: #00a884; }
+.dark .border-\[\#c2e7e0\] { border-color: rgba(0, 168, 132, 0.35); }
+
+/* --- Panel & kartu kaca --- */
+.dark .glass-panel {
+  background: #202c33;
+  border-color: #2a3942;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+}
+.dark .glass-card {
+  background: #202c33;
+  border-color: #2a3942;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+}
+.dark .glass-card:hover {
+  border-color: rgba(0, 168, 132, 0.45);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Form controls --- */
+.dark input[type="text"],
+.dark input[type="number"],
+.dark input[type="search"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="tel"],
+.dark input[type="url"],
+.dark input[type="date"],
+.dark input[type="time"],
+.dark input[type="datetime-local"],
+.dark textarea,
+.dark select {
+  background-color: #2a3942;
+  border-color: #374248;
+  color: #e9edef;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #8696a0;
+}
+.dark select option {
+  background-color: #202c33;
+  color: #e9edef;
+}
+
+/* --- Scrollbar gelap --- */
+.dark ::-webkit-scrollbar-track { background: transparent; }
+.dark ::-webkit-scrollbar-thumb { background: #374248; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #4a5a65; }
+.dark * { scrollbar-color: #374248 transparent; }
+
+/* --- Modal / backdrop kontras --- */
+.dark .modal-backdrop,
+.dark [data-modal-backdrop] {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+/* --- Shadow terang → redup --- */
+.dark .shadow-xs, .dark .shadow-sm, .dark .shadow-2xs { --tw-shadow-color: rgba(0, 0, 0, 0.5); }
+
+/* --- Recharts: grid, sumbu, tooltip --- */
+.dark .recharts-cartesian-grid line { stroke: #2a3942; }
+.dark .recharts-cartesian-axis-tick text { fill: #8696a0; }
+.dark .recharts-cartesian-axis-line { stroke: #374248; }
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #202c33 !important;
+  border-color: #374248 !important;
+  color: #e9edef !important;
+}
+.dark .recharts-legend-item-text { color: #aebac1 !important; }
+
+/* --- Tabel: header terang → gelap --- */
+.dark thead.bg-gray-50, .dark thead.bg-slate-50, .dark thead.bg-\[\#f8fafc\] { background-color: #111b21; }
+.dark tbody tr.hover\:bg-gray-50:hover { background-color: #2a3942; }
+
+/* --- Chat composer placeholder --- */
+.dark .chat-contenteditable:empty:before { color: #8696a0; }
+
+/* --- Transisi pergantian tema yang halus --- */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease !important;
+}
+
+/* --- Ikon switcher: rotasi halus --- */
+@keyframes themeIconRotate {
+  from { opacity: 0; transform: rotate(-90deg) scale(0.7); }
+  to { opacity: 1; transform: rotate(0deg) scale(1); }
+}
+.animate-theme-icon { animation: themeIconRotate 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 

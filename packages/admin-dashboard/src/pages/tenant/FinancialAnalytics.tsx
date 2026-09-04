@@ -44,6 +44,7 @@ import {
   Legend,
 } from 'recharts';
 import { stripBufferMetadata, cleanTreatmentName } from '../../utils/treatmentStringParser';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -155,6 +156,8 @@ function formatCompactRupiah(amount: number): string {
 
 export const FinancialAnalytics: React.FC = () => {
   const { toast } = useUiFeedback();
+  const { resolved } = useTheme();
+  const gridStroke = resolved === 'dark' ? '#2a3942' : '#f0f2f5';
 
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
@@ -493,7 +496,7 @@ export const FinancialAnalytics: React.FC = () => {
         <div className="h-72 w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data?.dailyTrend || []} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
               <XAxis
                 dataKey="day"
                 tickLine={false}
