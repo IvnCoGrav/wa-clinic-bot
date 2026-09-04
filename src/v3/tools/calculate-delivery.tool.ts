@@ -92,19 +92,19 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       }
     }
 
-    // Jika ambigu tetapi ada ambiguityResults dengan koordinat yang sama / satu cluster kecamatan
-    if ((!resolved.lat || !resolved.lng) && (resolved as any).ambiguityResults && (resolved as any).ambiguityResults.length > 0) {
-      const firstCand = (resolved as any).ambiguityResults[0];
-      if (firstCand.Koordinat) {
-        const parts = firstCand.Koordinat.split(',').map((p: string) => parseFloat(p.trim()));
-        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          resolved.lat = parts[0];
-          resolved.lng = parts[1];
-          resolved.kelurahan = resolved.kelurahan || firstCand.Kelurahan_Desa;
-          resolved.kecamatan = resolved.kecamatan || firstCand.Kecamatan;
-          resolved.kota = resolved.kota || firstCand.Kota;
-        }
-      }
+    // Jika ambigu (misal hanya menyebut nama Kecamatan seperti Candi, Rungkut, Waru, Tandes)
+    const ambiguityList = (resolved as any).ambiguityResults;
+    if (ambiguityList && ambiguityList.length > 1 && !streetDetail) {
+      const kecName = ambiguityList[0]?.Kecamatan || locationText;
+      const kotaName = ambiguityList[0]?.Kabupaten_Kota || resolved.kota || 'Surabaya/Sidoarjo';
+      return {
+        success: false,
+        isPrecise: false,
+        kecamatan: kecName,
+        kota: kotaName,
+        isOutOfCoverage: false,
+        message: `Area "${compositeQuery}" adalah nama kecamatan (${kecName}) yang masih luas dan membawahi ${ambiguityList.length} kelurahan/desa. Karena beda kelurahan bisa berbeda jarak dan tarif ongkir, mohon sampaikan dengan ramah bahwa area kecamatan tersebut masih luas, lalu tanyakan nama kelurahan, desa, atau perumahan spesifiknya Bunda (atau tawarkan opsi kirim share location agar titiknya presisi). DILARANG mengeluarkan nominal jarak km atau tarif ongkir!`
+      };
     }
 
     if (!resolved.lat || !resolved.lng) {
@@ -122,7 +122,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
-        message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya.`
+        message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya (atau tawarkan kirim share location). DILARANG mengeluarkan nominal km atau tarif ongkir!`
       };
     }
 
@@ -132,7 +132,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
-        message: `Lokasi "${compositeQuery}" masih terlalu umum. Mohon tanyakan nama kelurahan atau perumahan terdekatnya.`
+        message: `Lokasi "${compositeQuery}" masih terlalu umum (belum ada nama kelurahan/perumahan spesifik). Mohon tanyakan nama kelurahan atau perumahan terdekatnya (atau share location). DILARANG mengeluarkan nominal km atau tarif ongkir!`
       };
     }
 
