@@ -182,8 +182,12 @@ if (require.main === module) {
     }
 
     // Auto-sync WAHA webhook events (pastikan message.reaction terdaftar tanpa scan QR ulang)
-    import('./services/whatsapp-provider.service').then(({ whatsappProviderService }) => {
-      whatsappProviderService.syncSessionWebhooks(DEFAULT_TENANT_ID).catch(() => {});
+    import('./config/tenant').then(({ DEFAULT_TENANT_ID }) => {
+      import('./services/whatsapp-provider.service').then(({ whatsappProviderService }) => {
+        whatsappProviderService.syncSessionWebhooks(DEFAULT_TENANT_ID).catch((err: any) => {
+          console.warn('[WAHA SYNC] Gagal sinkronisasi webhook events:', err?.message || err);
+        });
+      });
     });
 
     // Start background WAHA status monitor

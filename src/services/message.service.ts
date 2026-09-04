@@ -35,6 +35,10 @@ function extractMediaFromPayload(payloadRaw: any): any {
 
 export function extractShortMessageId(waMessageId: string): string {
   if (!waMessageId) return '';
+  const parts = waMessageId.split('_');
+  if (parts.length >= 3 && (parts[0] === 'true' || parts[0] === 'false') && parts[1].includes('@')) {
+    return parts[2];
+  }
   const match = waMessageId.match(/(?:true|false)_[^@]+@[^_]+_([A-Za-z0-9_\-]+)$/);
   if (match) return match[1];
   return waMessageId;
