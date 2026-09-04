@@ -208,10 +208,9 @@ export class WhatsappProviderService {
         'message',
         'message.any',
         'message.reaction',
-        'message.reaction.added',
-        'message.reaction.deleted',
         'message.ack',
         'message.revoked',
+        'message.edited',
         'label.chat.added',
         'label.chat.deleted',
       ],
@@ -287,11 +286,11 @@ export class WhatsappProviderService {
       const current = await wahaClient.getSession(sessionId);
       if (!current) return false;
       const desired = this.buildDefaultSessionConfig();
-      // Pertahankan config non-webhook (noweb/store) dari session lama bila ada
+      // Kirim { config: mergedConfig } — schema WAHA PUT /api/sessions/:session mengharuskan wrapper config
       const mergedConfig = { ...(current.config || {}), ...desired, webhooks: desired.webhooks };
-      await wahaClient.updateSessionConfig(sessionId, mergedConfig);
-      console.log(`[WhatsAppProvider] Webhook events disinkronkan untuk session ${sessionId} (reaction.* terdaftar)`);
-      return true;
+      const ok = await wahaClient.updateSessionConfig(sessionId, mergedConfig);
+      if (ok) console.log(`[WhatsAppProvider] Webhook events disinkronkan untuk session ${sessionId} (reaction terdaftar)`);
+      return ok;
     } catch (err: any) {
       console.warn(`[WhatsAppProvider] Gagal sync webhooks untuk ${sessionId}:`, err.message);
       return false;
