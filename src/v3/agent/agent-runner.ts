@@ -7,6 +7,8 @@ import { getLlmEndpointConfig } from '../../integrations/llm/llm-gateway';
 import { AiModelConfigService } from '../../config/ai-models.config';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 
+import { prisma } from '../../db/client';
+
 export interface AgentRunnerInput {
   tenantId?: string;
   customerId: string;
@@ -60,12 +62,27 @@ export class V3AgentRunner {
     const baseUrl = endpointConfig.baseUrl;
     const apiKey = endpointConfig.apiKey;
 
-    // 3. Susun percakapan awal
-    const isFollowUp = history.length > 0;
+    // 3. Susun percakapan dengan auto-rehydrate dari DB jika history kosong
+    let conversationHistory = [...history];
+    if (conversationHistory.length === 0 && conversationId) {
+      try {
+        const recentDbMessages = await prisma.message.findMany({
+          where: { conversation_id: conversationId },
+          orderBy: { created_at: 'desc' },
+          take: 8,
+        });
+        conversationHistory = recentDbMessages.reverse().map((m) => ({
+          role: (m.direction === 'INBOUND' ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: m.content,
+        }));
+      } catch (e) {}
+    }
+
+    const isFollowUp = conversationHistory.length > 0;
     const systemPrompt = PersonaPromptBuilder.buildSystemPrompt(session, isFollowUp);
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
-      ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+      ...conversationHistory.slice(-6).map((h) => ({ role: h.role, content: h.content })),
       { role: 'user', content: incomingText },
     ];
 
@@ -203,6 +220,31 @@ export class V3AgentRunner {
       if (!OutputSanitizer.isValidReply(finalReply)) {
         console.warn(`[V3 AGENT WARNING] Reply rejected by sanitizer: "${finalReply}". Triggering silent fallback.`);
         finalReply = `Halo ${session.genderGreeting} 😊\n\nTerima kasih sudah menghubungi kami di Kala Moms & Baby Spa. Ada yang bisa Bidan Yusi bantu untuk perawatan Bunda atau si kecil hari ini? ✨`;
+      }
+
+      if (conversationId) {
+        try {
+          await prisma.message.create({
+            data: {
+              tenant_id: tenantId,
+              conversation_id: conversationId,
+              direction: 'INBOUND',
+              content: incomingText,
+              sender_type: 'CUSTOMER',
+            },
+          });
+          if (finalReply && !isEscalated) {
+            await prisma.message.create({
+              data: {
+                tenant_id: tenantId,
+                conversation_id: conversationId,
+                direction: 'OUTBOUND',
+                content: finalReply,
+                sender_type: 'BOT',
+              },
+            });
+          }
+        } catch (e) {}
       }
 
       return {
