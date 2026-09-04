@@ -123,11 +123,11 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         createPortal(
           <div
             style={{ zIndex: 99999 }}
-            className={`fixed top-4 left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-white border border-[#e9edef] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] sm:max-w-sm ${toastBorder(toastState.type)}`}
+            className={`fixed top-4 left-4 right-4 sm:left-auto sm:right-6 sm:top-6 px-4 py-3 rounded-xl bg-white dark:bg-[#202c33] border border-[#e9edef] dark:border-[#2a3942] text-xs font-semibold shadow-2xl flex items-center space-x-2.5 animate-fadeIn text-[#111b21] dark:text-[#e9edef] sm:max-w-sm ${toastBorder(toastState.type)}`}
           >
             {toastIcon(toastState.type)}
             <span className="flex-1 leading-snug">{toastState.text}</span>
-            <button onClick={() => setToastState(null)} className="ml-1 text-[#667781] hover:text-[#111b21] p-0.5 rounded-full hover:bg-[#f0f2f5]">
+            <button onClick={() => setToastState(null)} className="ml-1 text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] p-0.5 rounded-full hover:bg-[#f0f2f5] dark:hover:bg-[#2a3942]">
               <XCircle size={15} />
             </button>
           </div>,
@@ -143,10 +143,10 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             onClick={() => handleConfirmAnswer(false)}
           >
             <div
-              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] space-y-4 text-left relative"
+              className="bg-white dark:bg-[#202c33] rounded-3xl p-6 w-full max-w-md shadow-2xl border border-[#e9edef] dark:border-[#2a3942] space-y-4 text-left relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-base font-bold text-[#111b21] flex items-center space-x-2">
+              <h3 className="text-base font-bold text-[#111b21] dark:text-[#e9edef] flex items-center space-x-2">
                 {confirmState.danger ? (
                   <AlertTriangle className="text-rose-500 flex-shrink-0" size={20} />
                 ) : (
@@ -155,7 +155,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 <span>{confirmState.title}</span>
               </h3>
 
-              <p className="text-xs sm:text-sm text-[#54656f] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] p-3.5 rounded-xl border border-[#e9edef]">
+              <p className="text-xs sm:text-sm text-[#54656f] dark:text-[#aebac1] leading-relaxed whitespace-pre-wrap bg-[#f0f2f5] dark:bg-[#111b21] p-3.5 rounded-xl border border-[#e9edef] dark:border-[#2a3942]">
                 {confirmState.message}
               </p>
 
@@ -163,7 +163,7 @@ export const UiFeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 <button
                   type="button"
                   onClick={() => handleConfirmAnswer(false)}
-                  className="px-4 py-2.5 bg-[#f0f2f5] hover:bg-[#e9edef] text-[#54656f] hover:text-[#111b21] rounded-xl text-xs font-bold transition active:scale-95"
+                  className="px-4 py-2.5 bg-[#f0f2f5] dark:bg-[#2a3942] hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-[#e9edef] rounded-xl text-xs font-bold transition active:scale-95"
                 >
                   {confirmState.cancelText}
                 </button>

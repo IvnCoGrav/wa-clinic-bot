@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Layout } from './components/common/Layout';
 import { UiFeedbackProvider } from './components/common/UiFeedback';
@@ -93,6 +94,7 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
+      <ThemeProvider>
       <AuthProvider>
         <UiFeedbackProvider>
         <BootProgress />
@@ -364,6 +366,7 @@ export const App: React.FC = () => {
         </Suspense>
         </UiFeedbackProvider>
       </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 };

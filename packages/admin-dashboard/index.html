@@ -13,6 +13,15 @@
     <meta name="apple-mobile-web-app-title" content="Kala Admin" />
     <link rel="manifest" href="/admin/manifest.json" />
     <title>Kala Moms & Baby Spa — Admin Dashboard</title>
+    <!-- Anti-flicker tema: terapkan .dark sebelum React boot (baca localStorage yang sama dengan ThemeContext) -->
+    <script>
+      try {
+        var stored = localStorage.getItem('wa_clinic_theme');
+        var dark = stored === 'dark' || (stored !== 'light' && stored !== 'system' && false) ||
+          ((stored === null || stored === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      } catch (e) {}
+    </script>
     <!-- Google Fonts for sleek aesthetics -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
