@@ -42,7 +42,7 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
     confidenceScore: 0.95,
   };
 
-  it('1. Asking Schedule: Saat customer tanya "Klo hari ini apa masih ada slot?", matrix harus result GENERATE_AI_RESPONSE', async () => {
+  it('1. Asking Schedule: treatment sudah dipilih + tanya slot hari ini → handoff Admin (ESCALATE_HUMAN_SCHEDULE)', async () => {
     const extraction: ExtractedEntities = {
       ...emptyExtraction,
       intents: ['ask_schedule'],
@@ -53,11 +53,13 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
       incomingText: 'Klo hari ini apa masih ada slot?',
     });
 
-    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
-    expect(decision.updatedSlate.isHumanHandling).toBe(false);
+    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
+    expect(decision.updatedSlate.isHumanHandling).toBe(true);
+    expect(decision.updatedSlate.humanHandlingReason).toBe('booking_schedule_check');
+    expect(decision.deterministicTemplateReply).toContain('kami cek jadwal dulu yaa bunda');
   });
 
-  it('2. Asking Schedule Jam: Saat customer sebut "jam 10 bisa", matrix harus result GENERATE_AI_RESPONSE', async () => {
+  it('2. Asking Schedule Jam: treatment sudah dipilih + sebut "jam 10 bisa" → handoff Admin (ESCALATE_HUMAN_SCHEDULE)', async () => {
     const extraction: ExtractedEntities = {
       ...emptyExtraction,
       intents: ['ask_schedule'],
@@ -68,8 +70,9 @@ describe('Slot Engine - Human Handling & Escalation Flows Tests', () => {
       incomingText: 'jam 10 bisa',
     });
 
-    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
-    expect(decision.updatedSlate.isHumanHandling).toBe(false);
+    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
+    expect(decision.updatedSlate.isHumanHandling).toBe(true);
+    expect(decision.updatedSlate.humanHandlingReason).toBe('booking_schedule_check');
   });
 
   it('3. Permintaan CS Manusia: Saat customer minta "mau bicara sama admin", matrix harus eskalasi ke ESCALATE_HUMAN_AGENT_REQUEST', async () => {

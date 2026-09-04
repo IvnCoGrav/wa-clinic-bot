@@ -129,6 +129,142 @@ describe('Admin Quick Booking / Slot Hold (POST /api/admin/reservation/quick-hol
     expect(body.error).toContain('bookingDate wajib diisi');
   });
 
+  it('5. Quick hold dengan durationMinutes 120 → duration_minutes tersimpan (treatment >1 jam)', async () => {
+    const bookingDate = new Date('2026-09-05T03:00:00.000Z'); // 10:00 WIB
+    const mockReservation = {
+      id: 'res-hold-dur',
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-hold-1',
+      treatment_category: 'BABY',
+      treatment_detail: '[HOLD] Slot Ditawarkan (BABY) [120m]',
+      booking_date: bookingDate,
+      duration_minutes: 120,
+      status: 'hold',
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+
+    const createSpy = vi.mocked(prisma.reservation.create).mockResolvedValueOnce(mockReservation as any);
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation/quick-hold',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: 'cust-hold-1',
+        bookingDate: bookingDate.toISOString(),
+        durationMinutes: 120,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.duration_minutes).toBe(120);
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ duration_minutes: 120 }),
+      })
+    );
+  });
+
+  it('6. durationMinutes berlebih di-clamp ke 480 (9999 → 480)', async () => {
+    const bookingDate = new Date('2026-09-05T03:00:00.000Z');
+    const createSpy = vi.mocked(prisma.reservation.create).mockResolvedValueOnce({
+      id: 'res-hold-clamp',
+      status: 'hold',
+    } as any);
+    vi.spyOn(auditService, 'logAdminAction').mockResolvedValue(undefined);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/reservation/quick-hold',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        customerId: 'cust-hold-1',
+        bookingDate: bookingDate.toISOString(),
+        durationMinutes: 9999,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ duration_minutes: 480 }),
+      })
+    );
+  });
+
+  it('7. daily-slots: hold 120 mnt jam 10:00 ikut menutup slot 11:00 (overlap interval)', async () => {
+    const staff = [
+      { id: 'st-1', tenant_id: DEFAULT_TENANT_ID, name: 'Bidan A', role: 'THERAPIST', active: true },
+      { id: 'st-2', tenant_id: DEFAULT_TENANT_ID, name: 'Bidan B', role: 'THERAPIST', active: true },
+    ];
+    const holdBooking = {
+      booking_date: new Date('2026-09-10T03:00:00.000Z'), // 10:00 WIB
+      status: 'hold',
+      duration_minutes: 120,
+      assigned_staff: null,
+      customer: { name: 'Bunda Rina', kelurahan: null, kecamatan: null },
+      treatment_detail: '[HOLD] Slot Ditawarkan (BABY) [120m]',
+      raw_text: '',
+    };
+    vi.mocked((prisma as any).staff.findMany).mockResolvedValueOnce(staff as any);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([holdBooking] as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/reservations/daily-slots?date=2026-09-10',
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    const slot11 = (body.slots as any[]).find((s) => s.time === '11:00');
+    expect(slot11).toBeTruthy();
+    // Hold 10:00 + 120 mnt (s.d. 12:00) overlap jendela slot 11:00 [11:00–12:30)
+    expect(slot11.bookings.length).toBe(1);
+    expect(slot11.status).toBe('hold');
+  });
+
+  it('8. daily-slots: hold tanpa durasi (default 60 mnt) TIDAK menutup slot 11:00', async () => {
+    const staff = [
+      { id: 'st-1', tenant_id: DEFAULT_TENANT_ID, name: 'Bidan A', role: 'THERAPIST', active: true },
+      { id: 'st-2', tenant_id: DEFAULT_TENANT_ID, name: 'Bidan B', role: 'THERAPIST', active: true },
+    ];
+    const holdBooking = {
+      booking_date: new Date('2026-09-10T03:00:00.000Z'), // 10:00 WIB
+      status: 'hold',
+      duration_minutes: null,
+      assigned_staff: null,
+      customer: { name: 'Bunda Rina', kelurahan: null, kecamatan: null },
+      treatment_detail: '[HOLD] Slot Ditawarkan',
+      raw_text: '',
+    };
+    vi.mocked((prisma as any).staff.findMany).mockResolvedValueOnce(staff as any);
+    vi.mocked(prisma.reservation.findMany).mockResolvedValueOnce([holdBooking] as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/reservations/daily-slots?date=2026-09-10',
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    const slot11 = (body.slots as any[]).find((s) => s.time === '11:00');
+    expect(slot11).toBeTruthy();
+    // Hold 10:00 + 60 mnt berakhir tepat 11:00 → tidak overlap (batas eksklusif)
+    expect(slot11.bookings.length).toBe(0);
+    expect(slot11.status).toBe('available');
+  });
+
   it('4. PATCH /api/admin/reservation/:id/release-hold → menghapus permanen hold (deleted:true)', async () => {
     const app = buildApp();
     // Buat hold via fallback in-memory (DB offline)

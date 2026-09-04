@@ -10,6 +10,16 @@ import { parseReservationText, extractBabyDetails } from '../../utils/reservatio
 import { memoryReservations } from './stores';
 import { responseCacheService } from '../../services/response-cache.service';
 
+/**
+ * Sanitasi durasi reservasi (menit): bulatkan ke integer, clamp 15–480.
+ * Mengembalikan null bila tidak diisi / tidak valid (artinya pakai default 60 di logika slot).
+ */
+function sanitizeDurationMinutes(value: unknown): number | null {
+  const n = Number(value);
+  if (!isFinite(n) || n <= 0) return null;
+  return Math.min(480, Math.max(15, Math.round(n)));
+}
+
 export async function reservationAdminRoutes(fastify: FastifyInstance) {
   // Invalidate cache saat ada create/update/delete reservasi (termasuk series)
   fastify.addHook('onResponse', async (request) => {
@@ -118,7 +128,9 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             const rd = new Date(r.booking_date);
             const wibHour = (rd.getUTCHours() + 7) % 24;
             const rMin = wibHour * 60 + rd.getUTCMinutes();
-            if (rMin >= startMin && rMin < endMin) {
+            // Interval hunian [mulai, selesai): dukung treatment >1 jam via duration_minutes (default 60)
+            const rDur = Number((r as any).duration_minutes) > 0 ? Number((r as any).duration_minutes) : 60;
+            if (rMin < endMin && rMin + rDur > startMin) {
               bookings.push({
                 staffName: r.assigned_staff?.name || 'Tanpa Bidan',
                 staffId: r.assigned_staff?.id || null,
@@ -662,6 +674,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           notes?: string;
           treatmentCategory?: 'BABY' | 'MOMS' | 'BOTH' | 'KIDS' | 'BUNDLE';
           treatmentDetail?: string;
+          durationMinutes?: number;
         };
       }>,
       reply: FastifyReply
@@ -676,6 +689,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         treatmentCategory = 'BABY',
         treatmentDetail = '[HOLD] Slot Ditawarkan',
       } = request.body || {};
+      const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
 
       if (!bookingDate) {
         return reply.status(400).send({ success: false, error: 'bookingDate wajib diisi.' });
@@ -716,6 +730,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             treatment_category: dbCategory,
             treatment_detail: treatmentDetail,
             booking_date: parsedDate,
+            duration_minutes: durationMinutes,
             assigned_staff_id: assignedStaffId || null,
             raw_text: rawText,
             status: 'hold',
@@ -731,7 +746,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_QUICK_HOLD_RESERVATION',
           targetId: reservation.id,
-          payload: { customerId, bookingDate: parsedDate, assignedStaffId, status: 'hold' },
+          payload: { customerId, bookingDate: parsedDate, assignedStaffId, status: 'hold', durationMinutes },
           ipAddress: request.ip,
         });
 
@@ -744,6 +759,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           treatment_category: dbCategory,
           treatment_detail: treatmentDetail,
           booking_date: parsedDate,
+          duration_minutes: durationMinutes,
           assigned_staff_id: assignedStaffId || null,
           raw_text: rawText,
           status: 'hold',
@@ -823,11 +839,13 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           notes?: string;
           babies?: Array<{ name: string; ageText?: string }>;
           purchaseValue?: number;
+          durationMinutes?: number;
         };
       }>,
       reply: FastifyReply
     ) => {
       const { customerId, treatmentCategory, treatmentDetail, bookingDate, assignedStaffId, status, notes, babies, purchaseValue } = request.body || {};
+      const durationMinutes = sanitizeDurationMinutes((request.body as any)?.durationMinutes);
 
       if (!customerId || !treatmentCategory || !treatmentDetail) {
         return reply.status(400).send({ error: 'customerId, treatmentCategory, dan treatmentDetail wajib diisi.' });
@@ -871,6 +889,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
             treatment_category: dbCategory,
             treatment_detail: treatmentDetail,
             booking_date: parsedDate,
+            duration_minutes: durationMinutes,
             assigned_staff_id: assignedStaffId || null,
             purchase_value: finalPurchaseValue,
             raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
@@ -935,6 +954,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           treatment_category: dbCategory,
           treatment_detail: treatmentDetail,
           booking_date: parsedDate,
+          duration_minutes: durationMinutes,
           assigned_staff_id: assignedStaffId || null,
           raw_text: `[Admin Manual] ${treatmentCategory}: ${treatmentDetail}${rawNotes}`,
           status: reservationStatus,
@@ -1214,6 +1234,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           kelurahan?: string;
           landmark?: string;
           babies?: Array<{ name: string; ageText?: string; birthDate?: string }>;
+          durationMinutes?: number | null;
         };
       }>,
       reply: FastifyReply
@@ -1238,6 +1259,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         kelurahan,
         landmark,
         babies,
+        durationMinutes: reqDurationMinutes,
       } = body;
 
       try {
@@ -1262,6 +1284,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (notes !== undefined) updateData.notes = notes;
         if (rawText !== undefined) updateData.raw_text = rawText;
         if (paymentMethod !== undefined) updateData.payment_method = paymentMethod;
+        if (reqDurationMinutes !== undefined) {
+          if (reqDurationMinutes === null || (reqDurationMinutes as unknown) === '') {
+            updateData.duration_minutes = null;
+          } else {
+            const d = sanitizeDurationMinutes(reqDurationMinutes);
+            if (d !== null) updateData.duration_minutes = d;
+          }
+        }
 
         if (assignedStaffId !== undefined) {
           updateData.assigned_staff_id = assignedStaffId || null;

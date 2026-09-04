@@ -547,6 +547,29 @@ export const POPULAR_LANDMARKS: LandmarkEntry[] = [
     lat: -7.469825,
     lng: 112.695846,
   },
+  {
+    name: 'Perumahan Wiguna & Jl. Wiguna Selatan',
+    patterns: [
+      /\bwiguna\s*(selatan|timur|indah|asri|regency)?\b/i,
+      /\bperumahan\s*wiguna\b/i,
+    ],
+    kelurahan: 'Gunung Anyar Tambak',
+    kecamatan: 'Gunung Anyar',
+    kota: 'Kota Surabaya',
+    lat: -7.339397,
+    lng: 112.8033345,
+  },
+  {
+    name: 'Kawasan Jojoran & Jl. Jojoran Baru',
+    patterns: [
+      /\bjojoran(\s*baru)?(\s*1|\s*i)?\b/i,
+    ],
+    kelurahan: 'Mojo',
+    kecamatan: 'Gubeng',
+    kota: 'Kota Surabaya',
+    lat: -7.2769919,
+    lng: 112.76634,
+  },
 ];
 
 /**

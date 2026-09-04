@@ -45,6 +45,47 @@ describe('Unified Single-Pass Semantic Extractor (Part 3)', () => {
     });
   });
 
+  describe('preExtractDeterministic — Anti false-positive pertanyaan lokasi klinik', () => {
+    it('"Siang kak mau tanya ini lokasinya dimana yg di sby" → bukan locationText / provide_location', () => {
+      const r = EntityExtractor.preExtractDeterministic('Siang kak mau tanya ini lokasinya dimana yg di sby');
+      expect(r.locationText).toBeFalsy();
+      expect(r.intents || []).not.toContain('provide_location');
+      expect(r.intents || []).toContain('ask_clinic_origin');
+    });
+
+    it.each([
+      'lokasinya di mana ya kak?',
+      'kliniknya dimana?',
+      'alamatnya dimana kak',
+    ])('"%s" → bukan locationText / provide_location', (text) => {
+      const r = EntityExtractor.preExtractDeterministic(text);
+      expect(r.locationText).toBeFalsy();
+      expect(r.intents || []).not.toContain('provide_location');
+      expect(r.intents || []).toContain('ask_clinic_origin');
+    });
+
+    it.each([
+      ['Saya lokasinya di Wiguna Selatan', 'wiguna selatan'],
+      ['alamat di Rungkut Asri', 'rungkut asri'],
+    ])('alamat valid "%s" tetap terekstrak → "%s"', (text, expected) => {
+      const r = EntityExtractor.preExtractDeterministic(text);
+      expect(r.locationText).toBe(expected);
+      expect(r.intents || []).toContain('provide_location');
+    });
+
+    it('"di Berbek Waru" tetap terekstrak via gazetteer (kecamatan Waru)', () => {
+      const r = EntityExtractor.preExtractDeterministic('di Berbek Waru');
+      expect(r.locationText).toBe('Waru');
+      expect(r.intents || []).toContain('provide_location');
+    });
+
+    it('pesan multiline komparasi lokasi tidak dibajak deterministik (yields to LLM)', () => {
+      const r = EntityExtractor.preExtractDeterministic('Lebih dekat mana yaa\nWiguna selatan\nAtau jojoran baru 1');
+      // Tidak boleh salah membajak salah satu lokasi sebagai single confirmed location
+      expect(r.locationText).toBeUndefined();
+    });
+  });
+
   describe('extract (Stage 2 Unified LLM Extraction)', () => {
     it('should parse multi-intent compound message with mocked LLM response', async () => {
       vi.spyOn(modelFallback, 'callChatCompletionsWithFallback').mockResolvedValueOnce({
@@ -98,6 +139,44 @@ describe('Unified Single-Pass Semantic Extractor (Part 3)', () => {
 
       expect(result.intents).toContain('consult_symptom');
       expect(result.childAgeMonths).toBe(5);
+    });
+
+    it('should parse compare_locations intent and comparison_locations array', async () => {
+      vi.spyOn(modelFallback, 'callChatCompletionsWithFallback').mockResolvedValueOnce({
+        model: 'MiniMax-M2.7-highspeed',
+        baseUrl: 'https://api.sumopod.com',
+        data: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  intents: ['compare_locations'],
+                  location_text: null,
+                  comparison_locations: ['Wiguna selatan', 'jojoran baru 1'],
+                  street_detail: null,
+                  child_age_months: null,
+                  symptoms: [],
+                  treatment_referenced: null,
+                  preferred_date_text: null,
+                  preferred_time_text: null,
+                  customer_name: null,
+                  is_medical_emergency: false,
+                  confidence_score: 0.95,
+                }),
+              },
+            },
+          ],
+        },
+      } as any);
+
+      const result = await EntityExtractor.extract(
+        'Lebih dekat mana yaa\nWiguna selatan\nAtau jojoran baru 1',
+        { customerPhone: '6288235780925' }
+      );
+
+      expect(result.intents).toContain('compare_locations');
+      expect(result.comparisonLocations).toEqual(['Wiguna selatan', 'jojoran baru 1']);
+      expect(result.locationText).toBeNull();
     });
   });
 });

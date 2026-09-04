@@ -56,6 +56,14 @@ export function normalizeWabaPayload(
         } else if (msg.type === 'reaction' && msg.reaction) {
           type = 'reaction';
           text = msg.reaction.emoji;
+        } else if (msg.type === 'interactive' && (msg as any).interactive) {
+          const inter = (msg as any).interactive;
+          type = 'interactive_button';
+          if (inter.type === 'button_reply' && inter.button_reply) {
+            text = inter.button_reply.title || inter.button_reply.id;
+          } else if (inter.type === 'list_reply' && inter.list_reply) {
+            text = inter.list_reply.title || inter.list_reply.id;
+          }
         }
 
         results.push({

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseAdminChatDistanceAndOngkir,
+  parseAdminChatLocation,
   parseIndonesianCurrencyText,
 } from '../../src/utils/admin-chat-distance-parser';
 
@@ -41,5 +42,20 @@ describe('Admin Chat Distance & Ongkir Parser', () => {
     expect(parsed.distanceKm).toBeNull();
     expect(parsed.ongkir).toBeNull();
     expect(parsed.isConfident).toBe(false);
+  });
+
+  it('parseAdminChatLocation mendeteksi rekomendasi lokasi CS ("Lebih dekat yang Wiguna Selatan Bunda...")', () => {
+    const adminChat = 'Lebih dekat yang Wiguna Selatan Bunda, Jika dilihat dari jaraknya kurang lebih 6.8 km dari klinik ya bunda.';
+    expect(parseAdminChatLocation(adminChat)).toBe('Wiguna Selatan');
+  });
+
+  it('parseAdminChatLocation mendeteksi entitas gazetteer ("Bunda di Berbek Waru ya")', () => {
+    expect(parseAdminChatLocation('Bunda di Berbek Waru ya, jaraknya 5 km dari klinik')).toBe('Berbek');
+  });
+
+  it('parseAdminChatLocation mengembalikan null untuk chat umum & pertanyaan', () => {
+    expect(parseAdminChatLocation('Baik bunda, untuk jadwal besok jam 10 pagi bersama Bidan Yusi ya.')).toBeNull();
+    expect(parseAdminChatLocation('Kliniknya dimana ya kak?')).toBeNull();
+    expect(parseAdminChatLocation('')).toBeNull();
   });
 });

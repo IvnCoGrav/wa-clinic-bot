@@ -12,6 +12,7 @@ import { telemetryService } from '../services/telemetry.service';
 const RawLlmExtractionSchema = z.object({
   intents: z.array(z.string()).default([]),
   location_text: z.string().nullable().default(null),
+  comparison_locations: z.array(z.string()).nullable().default(null),
   street_detail: z.string().nullable().default(null),
   child_age_months: z.number().nullable().default(null),
   symptoms: z.array(z.string()).default([]),
@@ -21,10 +22,34 @@ const RawLlmExtractionSchema = z.object({
   customer_name: z.string().nullable().default(null),
   is_medical_emergency: z.boolean().default(false),
   confidence_score: z.number().default(0.9),
+  cleared_slots: z.array(z.enum(['treatment', 'preferred_date', 'location'])).nullable().default(null),
 });
 
 const GENERIC_TREATMENT_RE = /^(?:layanan\s+)?(?:home[-\s]?(?:treatment|care|service|sevice)|homecare|home\s*service|home\s*sevice|layanan\s*home|care|treatment|perawatan|pijat|spa|layanan|paket|promo|info\s+treatment|layanan\s+kami)$/i;
-const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|sana|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo|mana|mn|mna|dimana|dmana|mana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|mn\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk))$/i;
+const GENERIC_LOCATION_RE = /^(?:rumah|ke\s+rumah|di\s+rumah|rumah\s+saya|lokasi|alamat|klinik|tempat|sini|sana|daerah|posisi|surabaya|sidoarjo|surabaya\s*[\/-]\s*sidoarjo|mana|mn|mna|dimana|dmana|mana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|mn\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)|dimana\s+(?:yg|yang)\b|(?:lokasi|alamat|klinik|tempat)(?:nya)?\s*(?:di\s*)?dimana\b|di\s*mana\s+ya\b|dimana\s+(?:ya|kak|bund|bunda|min|mba|mbak|kk)\b)$/i;
+
+/**
+ * Frasa tanya lokasi klinik — BUKAN alamat rumah customer.
+ * Dipakai sebagai guard agar pertanyaan seperti "lokasinya dimana yg di sby"
+ * tidak diekstrak sebagai locationText / intent provide_location.
+ */
+const QUESTION_LEAD_RE = /^(?:dimana|di\s*mana|dmana|mana|mna|mn|apa|apakah|yg\s+mana|yang\s+mana|sebelah\s+mana)\b/i;
+const CLINIC_LOCATION_QUESTION_RE = /\b(?:tanya|mau\s+tanya|pengen\s+tanya|nanya|mau\s+nanya)\b.*?\b(?:lokasi|alamat|klinik|tempat)(?:nya|ku|mu)?\b/i;
+const LOCATION_QUESTION_PHRASE_RE = /\b(?:lokasi|alamat|klinik|tempat)(?:nya)?\s*(?:di\s*)?(?:mana|mn|mna|dmana|dimana)\b/i;
+
+/**
+ * True jika teks adalah pertanyaan tentang lokasi klinik (bukan pemberian alamat).
+ * Diekspor agar background-enrichment dapat melewati (skip) pesan bertipe tanya.
+ */
+export function isClinicLocationQuestion(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const lower = text.toLowerCase().trim();
+  if (!lower) return false;
+  if (QUESTION_LEAD_RE.test(lower)) return true;
+  if (CLINIC_LOCATION_QUESTION_RE.test(lower)) return true;
+  if (LOCATION_QUESTION_PHRASE_RE.test(lower)) return true;
+  return false;
+}
 const NON_SYMPTOM_TOKENS = new Set([
   'sehat', 'selalu', 'info', 'konsultasi', 'tanya', 'tertarik', 'booking', 'reservasi', 'bisa',
   'jadwal', 'promo', 'biaya', 'harga', 'ongkir', 'homecare', 'hometreatment', 'treatment',
@@ -55,6 +80,33 @@ export class EntityExtractor {
         cleaned.locationText = null;
         cleaned.intents = cleaned.intents.filter((i) => i !== 'provide_location');
       }
+    }
+
+    // 2a. Sanitasi clearedSlots (hanya nilai slot valid yang diteruskan ke SlateStore)
+    const ALLOWED_CLEARED = new Set(['treatment', 'preferred_date', 'location']);
+    if (cleaned.clearedSlots && Array.isArray(cleaned.clearedSlots)) {
+      const valid = cleaned.clearedSlots.filter((s): s is 'treatment' | 'preferred_date' | 'location' => ALLOWED_CLEARED.has(s));
+      cleaned.clearedSlots = valid.length > 0 ? Array.from(new Set(valid)) : null;
+    } else {
+      cleaned.clearedSlots = null;
+    }
+
+    // 2b. Sanitasi comparisonLocations
+    if (cleaned.comparisonLocations && cleaned.comparisonLocations.length > 0) {
+      cleaned.comparisonLocations = cleaned.comparisonLocations
+        .map((loc) => loc?.trim())
+        .filter((loc): loc is string => Boolean(loc && loc.length >= 2 && !GENERIC_LOCATION_RE.test(loc.toLowerCase())));
+      if (cleaned.comparisonLocations.length < 2) {
+        cleaned.comparisonLocations = null;
+        cleaned.intents = cleaned.intents.filter((i) => i !== 'compare_locations');
+      } else {
+        // Ketika komparasi lokasi aktif, customer belum memutuskan satu lokasi:
+        cleaned.locationText = null;
+        cleaned.streetDetail = null;
+        cleaned.intents = cleaned.intents.filter((i) => i !== 'provide_location');
+      }
+    } else {
+      cleaned.comparisonLocations = null;
     }
 
     // 3. Sanitasi symptoms (Tolak kata basa-basi/salam "sehat", "info")
@@ -105,12 +157,14 @@ export class EntityExtractor {
     }
 
     // 1b. Deteksi teks lokasi langsung (misal: "Saya lokasinya di alana tambak oso waru bisa...")
+    // Guard anti-question: kalimat tanya lokasi klinik ("lokasinya dimana yg di sby") BUKAN alamat.
+    const isQuestionContext = isClinicLocationQuestion(text);
     const locMatch = lower.match(
       /\b(?:lokasi(?:nya)?|alamat(?:nya)?|rumah(?:nya)?|daerah|posisi)\s+(?:saya\s+)?(?:di\s+|:\s*|\s+)?([a-z0-9\s,.-]+?)(?:\s+(?:bisa|mau|untuk|buat|apakah|ada|mohon)\b|$)/i
     );
-    if (locMatch && locMatch[1] && locMatch[1].trim().length >= 3) {
+    if (!isQuestionContext && locMatch && locMatch[1] && locMatch[1].trim().length >= 3) {
       const candidate = locMatch[1].trim();
-      if (!GENERIC_LOCATION_RE.test(candidate.toLowerCase())) {
+      if (!GENERIC_LOCATION_RE.test(candidate.toLowerCase()) && !QUESTION_LEAD_RE.test(candidate)) {
         result.locationText = candidate;
         result.intents = result.intents || [];
         if (!result.intents.includes('provide_location')) {
@@ -135,9 +189,10 @@ export class EntityExtractor {
     const hasStreetDetailKeywords = /\b(jalan|jl|jln|gang|gg|blok|no|nomor|rt|rw)\b/i.test(normalizedLower);
 
     // 1c. Deteksi Kuadran / Kawasan Wilayah Luas (misal: "SBY barat", "Surabaya Timur", "Sidoarjo Selatan", "Sidoarjo Kota")
+    // Guard anti-question: jangan petakan pertanyaan lokasi klinik ke wilayah.
     const quadrantPattern = /\b(?:di\s+|ke\s+|daerah\s+|area\s+)?((?:sby|surabaya|sidoarjo|sda|gresik)\s+(?:barat|timur|selatan|utara|pusat|kota|pinggiran))\b/i;
     const quadMatch = normalizedLower.match(quadrantPattern);
-    if (!result.locationText && quadMatch && quadMatch[1]) {
+    if (!isQuestionContext && !result.locationText && quadMatch && quadMatch[1]) {
       const quadName = quadMatch[1].trim();
       result.locationText = quadName;
       result.intents = result.intents || [];
@@ -146,7 +201,9 @@ export class EntityExtractor {
       }
     }
 
-    if (!result.locationText && !hasStreetDetailKeywords) {
+    const hasComparisonContext = /\b(atau|atw|or|vs|lebih\s+dekat|deketan\s+mana)\b/i.test(normalizedLower);
+
+    if (!isQuestionContext && !hasComparisonContext && !result.locationText && !hasStreetDetailKeywords) {
       const gazetteer = getGazetteerAreas();
       // Lapis 1+2: Prefix colloquial & preserve city context — "Manukan surabaya" → match "Manukan" prefix, keep city
       const wordsOnlyForPrefix = cleanedLocationCandidate.replace(/\b(surabaya|sidoarjo|gresik|sby|sda|jawa timur|kota|kabupaten)\b/gi, '').trim().replace(/\s+/g, ' ');
@@ -245,7 +302,7 @@ export class EntityExtractor {
     }
 
     // 5. Deteksi Pertanyaan Asal Klinik
-    if (/\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana)\b/i.test(lower) || /\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower)) {
+    if (/\b(?:ini\s+)?(?:daerah|asal|lokasi|posisi|base)\s*(?:mana|mn|mna|dmana|dimana)\b/i.test(lower) || /\b(dari\s+daerah\s+mana|asalnya\s+mana|klinik\s+mana|daerah\s+mana|lokasi\s+klinik)\b/i.test(lower) || /\b(?:lokasi|alamat|klinik|tempat)(?:nya)?\s*(?:di\s*)?(?:mana|mn|mna|dmana|dimana)\b/i.test(lower)) {
       result.intents = result.intents || [];
       if (!result.intents.includes('ask_clinic_origin')) {
         result.intents.push('ask_clinic_origin');
@@ -353,10 +410,11 @@ DAFTAR INTENTS YANG DIDUKUNG:
 - "negation": Penolakan/jawaban negatif (tidak, bukan, jangan).
 - "medical_emergency": Kondisi kritis fatal (kejang, biru, tidak sadar, perdarahan hebat).
 - "ask_unlisted_service": Menanyakan layanan/tindakan di luar katalog resmi klinik (seperti memandikan bayi harian, penitipan anak/baby sitting, tindik telinga, imunisasi, sunat, perawatan newborn mandiri).
+- "compare_locations": Menanyakan perbandingan jarak, ongkir, atau mana yang lebih dekat antara 2 atau lebih lokasi (contoh: "lebih dekat mana wiguna selatan atau jojoran baru 1", "antara rungkut sama kenjeran deket mana"). Masukkan nama-nama lokasi yang dibandingkan ke "comparison_locations" (array of string) dan biarkan "location_text" tetap null.
 - "chitchat": Sapaan atau basa-basi umum.
 
 ATURAN EKSTRAKSI (SANGAT KETAT):
-1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah pada PESAN CUSTOMER TERBARU. Jika customer memberikan alamat lengkap (contoh "Platuk tauladan 19a , sidotopo wetan , kenjeran"), masukkan nama kelurahan/desa/kecamatan ("Sidotopo Wetan, Kenjeran") ke "location_text", dan detail nomor/jalan/gang ("Platuk tauladan 19a") ke "street_detail". DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain. DILARANG mengekstrak kata generik "rumah", "ke rumah", "klinik" sebagai location_text.
+1. PENTING: "location_text" dan intent "provide_location" HANYA boleh diekstrak jika customer SECARA EKSPLISIT menyebutkan nama lokasi/daerah tempat tinggalnya pada PESAN CUSTOMER TERBARU. Jika customer menanyakan perbandingan 2 lokasi ("lebih dekat mana A atau B"), gunakan intent "compare_locations", masukkan kandidat ke "comparison_locations", dan jangan isi "location_text". Jika customer memberikan alamat lengkap (contoh "Platuk tauladan 19a , sidotopo wetan , kenjeran"), masukkan nama kelurahan/desa/kecamatan ("Sidotopo Wetan, Kenjeran") ke "location_text", dan detail nomor/jalan/gang ("Platuk tauladan 19a") ke "street_detail". DILARANG KERAS menyalin atau mengekstrak ulang lokasi dari RIWAYAT CHAT TERAKHIR jika pesan terbaru hanya bertanya hal lain. DILARANG mengekstrak kata generik "rumah", "ke rumah", "klinik" sebagai location_text.
  2. DILARANG KERAS mengekstrak istilah umum model bisnis ("home-treatment", "homecare", "home care", "layanan home", "home service", "perawatan", "treatment", "spa", "promo") sebagai "treatment_referenced". Kata 'home-treatment' atau 'homecare' adalah model bisnis, BUKAN nama treatment! Jangan mengisi treatment_referenced jika pelanggan hanya menyebut home-treatment/homecare tanpa nama paket spesifik. Field "treatment_referenced" HANYA boleh diisi jika customer menyebut nama perawatan spesifik katalog (contoh: "Pijat Bayi Ceria", "Pijat Pulih", "Pijat Laktasi", "Sinar Moksa", "Pijat Gemoy").
 3. Jangan mengekstrak kata sapaan/basa-basi ("sehat selalu", "mau info", "konsultasi") sebagai "symptoms".
 4. Jangan mengekstrak kata ganti diri ("Saya", "Aku", "Bunda") sebagai "customer_name".
@@ -376,25 +434,42 @@ Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan laya
 NAMUN jika customer bertanya apakah bayi yang baru divaksin/imunisasi boleh dipijat (contoh: "anak saya habis vaksin boleh pijat?", "anak saya baru imunisasi bcg polio boleh dipijat hari ini?"), ini adalah KONSULTASI KLINIS biasa (intent: "consult_symptom" atau "chitchat"), DILARANG menandainya sebagai "ask_unlisted_service"!
 15. PENYEBUTAN LOKASI SINGKAT / JAWABAN WILAYAH:
 Jika pesan customer menyebutkan nama daerah/kelurahan/kecamatan/kawasan di Surabaya atau Sidoarjo (contoh: "Berbek", "Berbek Bund", "di berbek", "rungkut", "jambangan", "ketintang", "tropodo", "sedati", "sukodono", "candi", "taman", "sidoarjo kota", "gayungan", "wonokromo", "gubeng", "wiyung", "pakal", "kenjeran"), ini adalah NAMA LOKASI/WILAYAH! WAJIB ekstrak sebagai "location_text" dan sertakan intent "provide_location". DILARANG menganggapnya sebagai chitchat biasa!
+16. PEMBATALAN / PENUNDAAN SLOT (CHANGE-OF-MIND / GESTUR BACK):
+Jika customer membatalkan atau menunda slot tertentu TANPA menyebut opsi pengganti, masukkan slot tersebut ke "cleared_slots" (boleh lebih dari satu):
+- "treatment": customer membatalkan pilihan layanan ("gak jadi baby massage dulu deh", "batalin paketnya dulu", "jangan yang itu").
+- "preferred_date": customer membatalkan/menunda hari atau jam ("jangan hari Minggu dulu ya", "gak jadi hari ini dulu", "jamnya cancel dulu").
+- "location": customer menolak lokasi sebelumnya ("lokasinya bukan di situ ya", "bukan alamat itu").
+PENTING: "cleared_slots" HANYA diisi jika TIDAK ada pengganti baru di pesan yang sama. Jika customer menyebut pengganti ("ganti ke hari Senin", "pindah ke Rungkut"), isi slot baru seperti biasa dan KOSONGKAN "cleared_slots" (isi null).
+JANGAN isi "cleared_slots" untuk pertanyaan biasa, keluhan gejala, atau basa-basi.
 
 CONTOH FEW-SHOT EKSTRAKSI (GUNAKAN SEBAGAI ACUAN POLA KONSISTEN):
 - Input: "Berbek Bund"
-  Output: {"intents":["provide_location"],"location_text":"Berbek","street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+  Output: {"intents":["provide_location"],"location_text":"Berbek","comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+- Input: "Lebih dekat mana yaa\nWiguna selatan\nAtau jojoran baru 1"
+  Output: {"intents":["compare_locations"],"location_text":null,"comparison_locations":["Wiguna Selatan","Jojoran Baru 1"],"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.98}
 - Input: "gak jadi bund di brebek aja"
-  Output: {"intents":["provide_location"],"location_text":"Berbek","street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+  Output: {"intents":["provide_location"],"location_text":"Berbek","comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
 - Input: "Pagi Bu bidan. Untuk home care pijat bayi hari ini tersedia kah?"
-  Output: {"intents":["ask_schedule","select_treatment"],"location_text":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":"Pijat Bayi Ceria","preferred_date_text":"hari ini","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+  Output: {"intents":["ask_schedule","select_treatment"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":"Pijat Bayi Ceria","preferred_date_text":"hari ini","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
 - Input: "kalo misal sudah boleh pijat, hari ini kan kebetulan anak saya habis vaksin bcg dan polio apakah berpengaruh kalo semisal saya ambil hari ini pijatnya?"
-  Output: {"intents":["consult_symptom","ask_schedule"],"location_text":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":"hari ini","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+  Output: {"intents":["consult_symptom","ask_schedule"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":"hari ini","preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
 - Input: "Usia adek 26hari Bu bidan, lg batuk pilek jd susah tidur karena hidung buntu sm nafasnya grok\". Jd baiknya ambil treatment yg mna Bu bidan?"
-  Output: {"intents":["provide_age","consult_symptom","select_treatment"],"location_text":null,"street_detail":null,"child_age_months":0.86,"symptoms":["batuk","pilek","susah tidur","hidung buntu","grok-grok"],"treatment_referenced":"Pijat Bayi Pulih Ceria","preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.98}
+  Output: {"intents":["provide_age","consult_symptom","select_treatment"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":0.86,"symptoms":["batuk","pilek","susah tidur","hidung buntu","grok-grok"],"treatment_referenced":"Pijat Bayi Pulih Ceria","preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.98}
 - Input: "banjar mukti residence, buduran, sidoarjo"
-  Output: {"intents":["provide_location","supplement_address"],"location_text":"Buduran","street_detail":"banjar mukti residence","child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95}
+  Output: {"intents":["provide_location","supplement_address"],"location_text":"Buduran","comparison_locations":null,"street_detail":"banjar mukti residence","child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
+- Input: "Mbak gak jadi baby massage dulu deh, mau nanya-nanya dulu"
+  Output: {"intents":["chitchat"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":["treatment"]}
+- Input: "Jangan dijadwalin hari Minggu dulu ya mbak, masih nunggu kabar suami"
+  Output: {"intents":["chitchat"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":["preferred_date"]}
+- Input: "Lokasinya bukan di situ ya mbak"
+  Output: {"intents":["chitchat"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":["location"]}
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {
-  "intents": ["provide_location", "consult_symptom", ...],
+  "intents": ["provide_location", "consult_symptom", "compare_locations", ...],
   "location_text": "Nama kelurahan/desa/kecamatan atau null",
+  "comparison_locations": ["Nama Lokasi 1", "Nama Lokasi 2"] atau null,
+  "cleared_slots": ["treatment" | "preferred_date" | "location"] atau null (slot yang dibatalkan customer TANPA pengganti),
   "street_detail": "Detail jalan/gang/nomor rumah atau null",
   "child_age_months": number atau null,
   "symptoms": ["grok-grok", "batuk"],
@@ -448,14 +523,26 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 
       if (validated.success) {
         const d = validated.data;
-        const finalIntents = Array.from(
+        const isComparison =
+          d.intents.includes('compare_locations') ||
+          (Array.isArray(d.comparison_locations) && d.comparison_locations.length >= 2);
+
+        let finalIntents = Array.from(
           new Set([...(deterministic.intents || []), ...d.intents])
         ) as ExtractedEntities['intents'];
 
+        if (isComparison) {
+          finalIntents = finalIntents.filter((i) => i !== 'provide_location');
+          if (!finalIntents.includes('compare_locations')) {
+            finalIntents.push('compare_locations');
+          }
+        }
+
         const rawResult: ExtractedEntities = {
           intents: finalIntents.length > 0 ? finalIntents : ['chitchat'],
-          locationText: d.location_text || deterministic.locationText || null,
-          streetDetail: d.street_detail || deterministic.streetDetail || null,
+          locationText: isComparison ? null : (d.location_text || deterministic.locationText || null),
+          comparisonLocations: d.comparison_locations || null,
+          streetDetail: isComparison ? null : (d.street_detail || deterministic.streetDetail || null),
           childAgeMonths: d.child_age_months ?? deterministic.childAgeMonths ?? null,
           symptoms: Array.from(new Set([...(deterministic.symptoms || []), ...d.symptoms])),
           treatmentReferenced: d.treatment_referenced || deterministic.treatmentReferenced || null,
@@ -464,6 +551,7 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
           customerName: d.customer_name || deterministic.customerName || null,
           isMedicalEmergency: d.is_medical_emergency || deterministic.isMedicalEmergency || false,
           confidenceScore: d.confidence_score || 0.9,
+          clearedSlots: Array.isArray(d.cleared_slots) && d.cleared_slots.length > 0 ? d.cleared_slots : null,
         };
 
         const result = this.sanitizeExtractedEntities(rawResult);

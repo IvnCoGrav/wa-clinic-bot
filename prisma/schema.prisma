@@ -261,6 +261,7 @@ model Reservation {
   treatment_category       TreatmentCategory
   treatment_detail         String?
   booking_date             DateTime?
+  duration_minutes         Int?
   raw_text                 String?
   status                   String            @default("pending")
   google_calendar_event_id String?

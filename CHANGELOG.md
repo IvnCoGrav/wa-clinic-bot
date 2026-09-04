@@ -4,6 +4,51 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Alih Kelola Form Reservasi ke Admin + Back Gesture & Inquiry Guard (`decision-matrix.ts`, `grounding-composer.ts`, `dynamic-closer.service.ts`, `slate-store.ts`, `entity-extractor.ts`, `persona.ts`) (2026-09-04)
+
+- **Alih kelola form:** Saat booking-ready (lokasi + treatment + hari), bot TIDAK LAGI mengirim template formulir 10+ baris. Bot membalas singkat ala Bidan Yusi (`TEMPLATES.scheduleCheckHandoff`: "Baik Bunda, untuk ... kami cek jadwal dulu yaa bunda...") lalu handoff `HUMAN_HANDLING` (`booking_schedule_check`) — Admin menawarkan jam & mengirim form via dashboard. Permintaan form eksplisit ("minta format reservasi") ikut handoff. CAPI `InitiateCheckout` tetap ditembak. Injeksi `suggestedPreFilledForm` ke prompt LLM dimatikan; panduan closer SCHEDULE diperbarui.
+- **Back gesture non-regex:** NLU menghasilkan `clearedSlots` (`treatment`/`preferred_date`/`location`) untuk pembatalan tanpa pengganti ("gak jadi paket itu", "jangan hari Minggu dulu"); `SlateStore` mengeksekusi deterministik + hitung ulang `projectedState`.
+- **Guard:** Perbaikan bug idempotency guard lokasi (lokasi baru yang berbeda tidak lagi diblokir); Inquiry Guard menunda handoff bila customer sedang bertanya (harga/fasilitas), dengan pengecualian pertanyaan jadwal & sinyal booking eksplisit; pertanyaan klinis bukan sinyal booking.
+- **Verifikasi:** `tsc` exit 0; full suite 1719 passed (5 flake integrasi paralel yang sudah dikenal).
+
+#### UI — Polish Live Chat Monitor & Dark Mode Menyeluruh Admin Dashboard (2026-09-04)
+
+- Live Chat: tombol "Kembalikan ke Bot" indigo (AI), chip CS/Bot di footer kartu, draft typing tampil di daftar chat, selected = single border hijau, anti white-out search, kartu lebih ramping + footer full-bleed, warna HOLD/Pending light mode diperkuat.
+- Dark mode eksplisit (`dark:*`) di CreateReservationModal, ClinicServices, TelegramIntegration, Debug LLM Logs, MetaCapiQueue, TodayTreatments; remap global `.dark` diperluas (input focus, badge WhatsApp, hover anti-silau, pastel blue/purple/red, kartu kalender, divider).
+- Verifikasi: build dashboard ✓, `tsc` exit 0.
+
+#### Feature — Durasi HOLD & Reservasi >1 Jam (`QuickHoldModal.tsx`, `reservations.subroute.ts`, `daily-slots`, kalender) (2026-09-04)
+
+- Kolom baru `duration_minutes` di `Reservation` (migrasi `20260904000000_add_reservation_duration_minutes`, nullable — data lama = 60 menit). Pilihan durasi 30–180 mnt + custom di QuickHoldModal (dengan hint jam selesai); `CreateReservationModal` mengirim total durasi otomatis.
+- `daily-slots` memakai overlap interval sehingga slot berikutnya ikut tertutup; grid Day/Week/Month memakai `resolveReservationDuration()` (kolom DB prioritas, fallback parsing teks); banner HOLD tampil "• 120 mnt".
+- Verifikasi: 15/15 test quick-hold/create lolos, build dashboard ✓.
+
+#### Fix & Feature — Penanganan Komparasi Lokasi & Ongkir Deterministik Tanpa Tambal Sulam Regex (`entity-extractor.ts`, `decision-matrix.ts`, `persona.ts`, `landmarks.ts`, `geocoding.ts`) (2026-09-04)
+
+- **Latar Belakang & Masalah:** Pada sesi simulasi (ID: 571506), customer bertanya perbandingan lokasi:
+  ```text
+  Lebih dekat mana yaa
+  Wiguna selatan
+  Atau jojoran baru 1
+  ```
+  Bot sebelumnya salah merespons dengan mengabaikan pertanyaan komparasi, mengunci sepihak single lokasi, dan salah menghitung jarak menjadi 14.1 km (yang sebenarnya adalah jarak ke Jojoran Baru 1 dari Waru, bukan Wiguna Selatan yang hanya 8.1 km).
+- **Akar Masalah:**
+  1. *Ekstraksi deterministik membajak pesan multiline*: Blok regex `1d` di `preExtractDeterministic` memotong baris dan langsung mengunci baris kedua (`Wiguna selatan`) sebagai lokasi tunggal, melewati NLU LLM.
+  2. *Gazetteer Gate terlalu agresif*: Aturan `length <= 4` memblokir "Wiguna Selatan", memicu fallback berbahaya `geocodeText(rawText)` yang secara arbitrer mengekstrak `Jojoran Baru 1` dari pesan utuh.
+  3. *Belum ada Intent Semantik & Handling Komparasi*: Slot Engine belum memiliki schema/state untuk menangani komparasi 2 titik lokasi.
+- **Implementasi Solusi (Sesuai Prinsip Zero-Regex Patch & AGENTS.md Roadmap):**
+  1. **Schema & NLU Semantik (`src/slot-engine/types.ts`, `src/slot-engine/entity-extractor.ts`):** Tambah intent `'compare_locations'` dan field `comparison_locations: string[]` pada schema LLM Zod. Hapus blok regex `1d` multiline rapuh (60 baris) agar ekstraksi komparasi diserahkan secara cerdas ke LLM NLU. Prompt dilengkapi definisi dan exemplar few-shot.
+  2. **Isolasi Penuh Komparasi vs Single Location (`entity-extractor.ts`):** Saat `isComparison` aktif (LLM mendeteksi perbandingan 2 lokasi), `locationText` dan `streetDetail` dipastikan `null`, dan intent `provide_location` dibersihkan dari `finalIntents` maupun `sanitizeExtractedEntities` agar tidak terpolusi oleh fallback baseline deterministik (mencegah bug kasus Wonokromo vs Wedoro di mana Wedoro terdeteksi di ujung kalimat). `preExtractDeterministic` diberi guard konteks komparasi (`hasComparisonContext`).
+  3. **Data Dictionary & Resolusi Multi-Tingkat / Ambigu (`landmarks.ts`, `decision-matrix.ts`):** Tambah koordinat presisi Perumahan Wiguna & Jl. Wiguna Selatan (-7.339397, 112.8033345) serta Kawasan Jojoran & Jl. Jojoran Baru (-7.2769919, 112.76634). Pada Priority 4.9, tambahkan `extractCoords` yang mampu mengekstrak centroid representatif dari hasil ambiguitas nama kecamatan (seperti Wonokromo, Rungkut, dll.), sehingga komparasi level kecamatan vs kelurahan tetap dapat dibandingkan secara akurat.
+  4. **Priority 4.9 Komparasi Deterministik & Guard Priority 5 (`decision-matrix.ts`, `persona.ts`):** Hitung jarak & ongkir via `deliveryService` untuk kedua titik, tentukan yang lebih dekat, balaskan `TEMPLATES.locationComparison`, dan pastikan `isLocationConfirmed = false`. Pasang guard `!isCompareLocations` di Priority 5 sehingga pesan komparasi mustahil memicu template single ongkir.
+- **Verifikasi:**
+  - Unit tests: `tests/unit/slot-engine-location-comparison.test.ts` (3 passed: Wiguna vs Jojoran, urutan terbalik, Wonokromo vs Wedoro) & `tests/unit/slot-engine-extractor.test.ts` (15 passed).
+  - Integrasi: 42 unit tests pass (`geocoding.test.ts`, `slot-engine-decision.test.ts`).
+  - TypeScript build: `npm run build` PASS (exit code 0).
+  - Simulasi live:
+    - `Wiguna Selatan` (8.1 km, Rp 10.000) vs `Jojoran Baru 1` (14.1 km, Rp 15.000) -> Rekomendasi Wiguna Selatan.
+    - `Wonokromo` (10.0 km, Rp 10.000) vs `Wedoro` (0.3 km, Gratis ongkir) -> Rekomendasi Wedoro (0.3 km, Gratis ongkir).
+
 #### Feature — Dual Theme Light/Dark Mode Admin Dashboard (`ThemeContext`, `ThemeToggle`, `AppearancePanel`, `Layout`, `index.css`) (2026-09-03)
 
 - **Latar Belakang & Tujuan:** Admin membutuhkan Tema Hitam (Dark Mode ala WhatsApp Web: canvas `#0c1317`, surface `#202c33`, brand `#00a884`) yang nyaman di mata untuk monitoring malam hari, plus Tema Putih standar medis — dengan switch instan tanpa login ulang.

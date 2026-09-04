@@ -65,9 +65,16 @@ export interface ExtractedEntities {
     | 'complaint'
     | 'human_agent'
     | 'ask_unlisted_service'
+    | 'compare_locations'
     | 'chitchat'
   >;
   locationText: string | null;
+  comparisonLocations?: string[] | null;
+  /**
+   * Slot yang dibatalkan customer secara semantik (change-of-mind) tanpa pengganti,
+   * misal "gak jadi paket itu" → ['treatment']. Dieksekusi deterministik oleh SlateStore.
+   */
+  clearedSlots?: Array<'treatment' | 'preferred_date' | 'location'> | null;
   streetDetail: string | null;
   childAgeMonths: number | null;
   symptoms: string[];
@@ -94,6 +101,7 @@ export type EngineActionType =
   | 'REJECT_OUT_OF_COVERAGE'
   | 'SEND_RESERVATION_FORM'
   | 'RESOLVE_LOCATION_AND_DELIVERY'
+  | 'RESOLVE_LOCATION_COMPARISON'
   | 'GENERATE_AI_RESPONSE';
 
 /**

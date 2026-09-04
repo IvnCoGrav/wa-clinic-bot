@@ -99,7 +99,8 @@ describe('4-Turn Edge Case: NLU Catalog Grounding + Location Idempotency', () =>
 
     // Should NOT re-enter ongkir flow — location already confirmed, no explicit change
     expect(decision.action).not.toBe('RESOLVE_LOCATION_AND_DELIVERY');
-    // Should proceed to booking/schedule since treatment + date are set
-    expect(decision.action).toBe('GENERATE_AI_RESPONSE');
+    // Booking-ready (treatment + tanggal + lokasi) → alih kelola ke Admin (handoff cek jadwal)
+    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
+    expect(decision.deterministicTemplateReply).toContain('kami cek jadwal dulu yaa bunda');
   });
 });
