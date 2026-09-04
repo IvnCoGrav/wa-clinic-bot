@@ -465,14 +465,17 @@ html.dark {
 .dark .bg-slate-100 { background-color: #2a3942; }
 
 /* --- WhatsApp Live Chat otentik (wallpaper & bubble) --- */
-.dark .bg-\[\#efeae2\] { background-color: #0b141a; }
+.dark .bg-\[\#efeae2\] {
+  background-color: #0b141a !important;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 0.75px, transparent 0.75px) !important;
+}
 .dark .bg-\[\#d9fdd3\] { background-color: #005c4b; color: #e9edef; }
 .dark .bg-\[\#d9fdd3\] .text-\[\#111b21\] { color: #e9edef; }
 
 /* --- Teks netral --- */
 .dark .text-\[\#111b21\] { color: #e9edef; }
 .dark .text-\[\#54656f\] { color: #aebac1; }
-.dark .text-\[\#667781\] { color: #8696a0; }
+.dark .text-\[\#667781\] { color: #aebac1; }
 .dark .text-slate-500 { color: #8696a0; }
 .dark .text-slate-600 { color: #aebac1; }
 .dark .text-gray-400 { color: #8696a0; }
@@ -521,6 +524,115 @@ html.dark {
 .dark .bg-\[\#e8f5f2\] { background-color: rgba(0, 168, 132, 0.14); }
 .dark .text-\[\#008069\] { color: #00a884; }
 .dark .border-\[\#c2e7e0\] { border-color: rgba(0, 168, 132, 0.35); }
+
+/* --- Anti white-out: input focus (LiveChatMonitor / ClinicServices / ChatMigration search) --- */
+.dark .focus\:bg-white:focus { background-color: #2a3942 !important; color: #e9edef !important; }
+.dark .focus\:border-\[\#008069\]:focus { border-color: #00a884; }
+
+/* --- Teks netral & teks gelap kontras rendah → terang (form anak CustomerEditForm, dll) --- */
+.dark .text-slate-700 { color: #d1d7db; }
+.dark .text-slate-800 { color: #d1d7db; }
+.dark .text-slate-900 { color: #e9edef; }
+.dark .text-gray-700 { color: #d1d7db; }
+.dark .text-gray-800 { color: #d1d7db; }
+.dark .text-gray-900 { color: #e9edef; }
+.dark .text-\[\#374151\] { color: #d1d7db; }
+.dark .text-\[\#4b5563\] { color: #aebac1; }
+.dark .text-\[\#64748b\] { color: #8696a0; }
+.dark .text-\[\#666\] { color: #8696a0; }
+.dark .text-amber-950 { color: #fef3c7; }
+.dark .text-amber-900 { color: #fcd34d; }
+.dark .text-sky-900 { color: #bae6fd; }
+.dark .text-emerald-900 { color: #a7f3d0; }
+.dark .bg-\[\#f8fafc\]\/60 { background-color: rgba(0, 0, 0, 0.25); }
+.dark .bg-amber-50\/95 { background-color: rgba(245, 158, 11, 0.2); }
+.dark .bg-amber-50\/90 { background-color: rgba(245, 158, 11, 0.18); }
+.dark .bg-sky-50\/90 { background-color: rgba(14, 165, 233, 0.18); }
+.dark .bg-emerald-50\/90 { background-color: rgba(16, 185, 129, 0.18); }
+.dark .bg-amber-50\/75 { background-color: rgba(245, 158, 11, 0.14); }
+.dark .bg-sky-50\/70 { background-color: rgba(14, 165, 233, 0.14); }
+.dark .bg-emerald-50\/65 { background-color: rgba(16, 185, 129, 0.14); }
+.dark .border-amber-400 { border-color: rgba(245, 158, 11, 0.5); }
+.dark .border-amber-500 { border-color: rgba(245, 158, 11, 0.65); }
+
+/* --- Badge WhatsApp bg-[#d9fdd3] text-[#008069] → teks putih di atas hijau botol tua --- */
+.dark .bg-\[\#d9fdd3\].text-\[\#008069\],
+.dark .bg-\[\#d9fdd3\] .text-\[\#008069\],
+.dark .bg-\[\#d9fdd3\]\/70 .text-\[\#008069\] { color: #e9edef; }
+.dark .bg-\[\#d9fdd3\]\/70 { background-color: rgba(0, 92, 75, 0.7); }
+
+/* --- Eliminasi silau hover ("flashing white") → hover gelap --- */
+.dark .hover\:bg-\[\#f8fafc\]:hover { background-color: #2a3942; }
+.dark .hover\:bg-\[\#f5f6f6\]:hover { background-color: #2a3942; }
+.dark .hover\:bg-\[\#f0f4f7\]:hover { background-color: #2a3942; }
+.dark .hover\:bg-\[\#fafafa\]:hover { background-color: #2a3942; }
+.dark .hover\:bg-slate-50:hover { background-color: #2a3942; }
+.dark .hover\:bg-gray-50:hover { background-color: #2a3942; }
+.dark .hover\:bg-\[\#c2e7e0\]:hover { background-color: rgba(0, 168, 132, 0.28); }
+.dark .hover\:bg-\[\#d0ece7\]:hover { background-color: rgba(0, 168, 132, 0.28); }
+.dark .hover\:bg-\[\#cbf7c3\]:hover { background-color: #007a63; }
+.dark .hover\:border-\[\#c2e7e0\]:hover { border-color: rgba(0, 168, 132, 0.45); }
+
+/* --- Inverted tab/pill & sticky background (StaffToday, Reservations) --- */
+.dark .bg-\[\#e9edef\] { background-color: #2a3942; }
+.dark .bg-\[\#fafafa\] { background-color: #111b21; }
+.dark .bg-\[\#fcfcfc\] { background-color: #111b21; }
+.dark .bg-\[\#f5f5f5\] { background-color: #111b21; }
+
+/* --- Palet semantik tambahan: blue (paket multi-sesi CreateReservationModal) --- */
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.12); }
+.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2); }
+.dark .border-blue-100 { border-color: rgba(59, 130, 246, 0.35); }
+.dark .border-blue-200 { border-color: rgba(59, 130, 246, 0.45); }
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { color: #93c5fd; }
+
+/* --- Palet semantik tambahan: purple (badge FAQ, LiveChat, Overview) --- */
+.dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.12); }
+.dark .bg-purple-100 { background-color: rgba(168, 85, 247, 0.2); }
+.dark .border-purple-100 { border-color: rgba(168, 85, 247, 0.35); }
+.dark .border-purple-200 { border-color: rgba(168, 85, 247, 0.35); }
+.dark .border-purple-300 { border-color: rgba(168, 85, 247, 0.45); }
+.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900, .dark .text-purple-950 { color: #c4b5fd; }
+
+/* --- Palet semantik tambahan: red --- */
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12); }
+.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2); }
+.dark .border-red-100 { border-color: rgba(239, 68, 68, 0.35); }
+.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.45); }
+.dark .text-red-600, .dark .text-red-700, .dark .text-red-800 { color: #fca5a5; }
+
+/* --- Kartu jadwal kalender pastel daylight → dark solid kontras (DayScheduleGrid & WeekScheduleGrid) --- */
+.dark .bg-\[\#e0f2fe\] { background-color: #0c2438; }
+.dark .bg-\[\#f3e8ff\] { background-color: #251438; }
+.dark .bg-\[\#fef3c7\] { background-color: #2e2009; }
+.dark .bg-\[\#dcfce7\] { background-color: #0d2e1e; }
+.dark .bg-\[\#ccfbf1\] { background-color: #0b2b28; }
+.dark .text-\[\#0c4a6e\] { color: #7dd3fc; }
+.dark .text-\[\#581c87\] { color: #c4b5fd; }
+.dark .text-\[\#78350f\] { color: #fcd34d; }
+.dark .text-\[\#14532d\] { color: #4ae3b5; }
+.dark .text-\[\#166534\] { color: #4ae3b5; }
+.dark .text-\[\#115e59\] { color: #5eead4; }
+.dark .border-\[\#9333ea\] { border-color: rgba(168, 85, 247, 0.7); }
+.dark .border-\[\#16a34a\] { border-color: rgba(0, 168, 132, 0.7); }
+.dark .border-\[\#d97706\] { border-color: rgba(245, 158, 11, 0.7); }
+.dark .border-\[\#0284c7\] { border-color: rgba(14, 165, 233, 0.7); }
+.dark .border-\[\#0d9488\] { border-color: rgba(20, 184, 166, 0.7); }
+.dark .border-\[\#86efac\] { border-color: rgba(0, 168, 132, 0.45); }
+.dark .hover\:bg-\[\#ebd5ff\]:hover { background-color: #351d4f; }
+.dark .hover\:bg-\[\#bbf7d0\]:hover { background-color: #123d29; }
+.dark .hover\:bg-\[\#fde68a\]:hover { background-color: #3d2c0d; }
+.dark .hover\:bg-\[\#bae6fd\]:hover { background-color: #12334e; }
+.dark .hover\:bg-\[\#dcfce7\]:hover { background-color: #123d29; }
+.dark .hover\:bg-\[\#99f6e4\]:hover { background-color: #0f3d38; }
+
+/* --- Garis divider kartu --- */
+.dark .border-\[\#f0f2f5\] { border-color: #2a3942; }
+.dark .divide-\[\#f0f2f5\] > * + * { border-color: #2a3942; }
+.dark .border-\[\#cbd5e1\] { border-color: #374248; }
+.dark .border-slate-300 { border-color: #374248; }
+.dark .border-gray-300 { border-color: #374248; }
+.dark .border-\[\#e2ddd5\] { border-color: #374248; }
 
 /* --- Panel & kartu kaca --- */
 .dark .glass-panel {

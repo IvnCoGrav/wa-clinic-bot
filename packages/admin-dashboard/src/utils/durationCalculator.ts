@@ -89,6 +89,17 @@ export function extractDurationMinutes(detail?: string | null): number {
 }
 
 /**
+ * Durasi efektif sebuah reservasi: utamakan kolom `duration_minutes` dari DB
+ * (diisi saat Quick Hold / Buat Reservasi Manual), fallback ke parsing teks
+ * `treatment_detail` agar data lama tetap tampil benar.
+ */
+export function resolveReservationDuration(res: { duration_minutes?: number | null; treatment_detail?: string | null }): number {
+  const stored = Number((res as any)?.duration_minutes);
+  if (isFinite(stored) && stored > 0) return Math.min(480, Math.round(stored));
+  return extractDurationMinutes(res?.treatment_detail);
+}
+
+/**
  * Membersihkan rincian treatment agar tag summary durasi/buffer internal
  * tidak mengotori nama layanan pada kartu kalender.
  */

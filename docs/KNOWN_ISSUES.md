@@ -629,6 +629,19 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
      warna label formatter tertentu bisa kurang kontras.
   3. Preferensi tema disimpan di `localStorage` per-browser (`wa_clinic_theme`) —
      tidak sinkron antar perangkat dan bukan data bisnis (sengaja tidak tenant-aware / DB).
+- **Pembaruan 2026-09-04:** kamus remap CSS global di `packages/admin-dashboard/src/index.css`
+  telah diperluas mencakup input focus anti white-out (`focus:bg-white`→`#2a3942`),
+  teks netral gelap (`text-slate-700/800/900`, `text-gray-700/800/900`,
+  `text-[#374151]`/`text-[#4b5563]`/`text-[#64748b]`/`text-[#666]`), badge WhatsApp
+  (`bg-[#d9fdd3] text-[#008069]`→teks `#e9edef` di atas `rgba(0,92,75,0.7)`),
+  hover anti-silau (`hover:bg-[#f8fafc]`/`[#f5f6f6]`/`[#f0f4f7]`/`[#fafafa]`/
+  `slate-50`/`gray-50`→`#2a3942`; `[#c2e7e0]`/`[#d0ece7]`→mint transparan),
+  inverted tab/pill (`bg-[#e9edef]`→`#2a3942`) & sticky (`bg-[#fafafa]`/
+  `[#fcfcfc]`/`[#f5f5f5]`→`#111b21`), palet pastel semantik (blue, purple, red),
+  kartu kalender pastel (`bg-[#e0f2fe]`/`[#f3e8ff]`/`[#fef3c7]`/`[#dcfce7]` beserta
+  teks & border terkait → versi dark-transparan), dan divider kartu
+  (`border-[#f0f2f5]`, `divide-[#f0f2f5]`, `border-[#cbd5e1]`/`slate-300`/`gray-300`/
+  `[#e2ddd5]`→`#2a3942`/`#374248`).
 - **Rencana Tindak Lanjut:**
   - Tambah entri remap `.dark` baru di `index.css` setiap kali warna eksotis ditemukan.
   - Migrasi bertahap halaman prioritas ke varian `dark:` eksplisit saat halaman disentuh refactor lain.

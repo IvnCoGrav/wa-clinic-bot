@@ -1,7 +1,7 @@
 import React from 'react';
 import { Reservation } from '../../types';
 import { QuickSlotTarget } from './types';
-import { extractDurationMinutes } from '../../utils/durationCalculator';
+import { resolveReservationDuration } from '../../utils/durationCalculator';
 
 interface MonthScheduleGridProps {
   selectedDate: Date;
@@ -85,27 +85,27 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
   const getCategoryColor = (cat: string) => {
     switch (cat) {
       case 'MOMS':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
+        return 'bg-purple-100 dark:bg-[#251438] text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-800/60';
       case 'BOTH':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+        return 'bg-emerald-100 dark:bg-[#0d2e1e] text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800/60';
       case 'KIDS':
-        return 'bg-teal-100 text-teal-800 border-teal-200';
+        return 'bg-teal-100 dark:bg-[#0b2b28] text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800/60';
       case 'BUNDLE':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
+        return 'bg-amber-100 dark:bg-[#2e2009] text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-800/60';
       case 'BABY':
       default:
-        return 'bg-sky-100 text-sky-800 border-sky-200';
+        return 'bg-sky-100 dark:bg-[#0c2438] text-sky-800 dark:text-sky-200 border-sky-200 dark:border-sky-800/60';
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#e9edef] shadow-xs overflow-hidden">
+    <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-[#e9edef] dark:border-[#2a3942] shadow-xs overflow-hidden">
       {/* Weekday Header */}
-      <div className="grid grid-cols-7 border-b border-[#e9edef] bg-[#fafafa]">
+      <div className="grid grid-cols-7 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#fafafa] dark:bg-[#111b21]">
         {dayLabels.map((day, idx) => (
           <div
             key={idx}
-            className="p-2 sm:p-3 text-center text-[11px] font-bold text-[#667781] uppercase tracking-wider border-r border-[#e9edef] last:border-r-0"
+            className="p-2 sm:p-3 text-center text-[11px] font-bold text-[#667781] dark:text-[#8696a0] uppercase tracking-wider border-r border-[#e9edef] dark:border-[#2a3942] last:border-r-0"
           >
             <span className="hidden sm:inline">{day}</span>
             <span className="inline sm:hidden">{day.slice(0, 3)}</span>
@@ -114,7 +114,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
       </div>
 
       {/* Days Grid */}
-      <div className="grid grid-cols-7 divide-x divide-y divide-[#e9edef]">
+      <div className="grid grid-cols-7 divide-x divide-y divide-[#e9edef] dark:divide-[#2a3942]">
         {allCalendarDays.map((item, idx) => {
           const events = getEventsForDay(item.date);
           const isSelected = isSameDay(item.date, selectedDate);
@@ -126,10 +126,10 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
               onClick={() => onSelectDate(item.date)}
               className={`min-h-[105px] sm:min-h-[125px] p-1.5 sm:p-2 relative flex flex-col justify-start gap-1 transition-colors cursor-pointer select-none group ${
                 isSelected
-                  ? 'bg-emerald-50/30 ring-1 ring-[#008069]'
+                  ? 'bg-emerald-50/30 dark:bg-emerald-950/30 ring-1 ring-[#008069] dark:ring-[#00a884]'
                   : item.isCurrentMonth
-                  ? 'bg-white hover:bg-[#fafafa]'
-                  : 'bg-gray-50/60 text-gray-400'
+                  ? 'bg-white dark:bg-[#111b21] hover:bg-[#fafafa] dark:hover:bg-[#1c272e]'
+                  : 'bg-gray-50/60 dark:bg-[#0c1317]/60 text-gray-400 dark:text-[#667781]'
               }`}
             >
               {/* Date number header */}
@@ -139,17 +139,17 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                     currentDay
                       ? 'bg-[#008069] text-white'
                       : isSelected
-                      ? 'bg-[#111b21] text-white'
+                      ? 'bg-[#111b21] dark:bg-[#e9edef] text-white dark:text-[#111b21]'
                       : item.isCurrentMonth
-                      ? 'text-[#111b21]'
-                      : 'text-gray-400'
+                      ? 'text-[#111b21] dark:text-[#e9edef]'
+                      : 'text-gray-400 dark:text-[#667781]'
                   }`}
                 >
                   {item.date.getDate()}
                 </span>
                 {events.length > 0 && (
                   <span className={`text-[10px] font-bold font-mono ${
-                    currentDay ? 'text-[#008069]' : isSelected ? 'text-[#111b21]' : 'text-[#667781]'
+                    currentDay ? 'text-[#008069] dark:text-[#00a884]' : isSelected ? 'text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]'
                   }`}>
                     {events.length}
                   </span>
@@ -160,7 +160,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
               <div className="space-y-1 w-full overflow-hidden flex-1">
                 {events.slice(0, 3).map((res) => {
                   const bDate = new Date(res.booking_date!);
-                  const duration = extractDurationMinutes(res.treatment_detail);
+                  const duration = resolveReservationDuration(res);
                   const endDate = new Date(bDate.getTime() + duration * 60000);
                   const startTimeStr = bDate
                     .toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -170,7 +170,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                     .replace('.', ':');
                   const isHold = res.status === 'hold';
                   const catColor = isHold
-                    ? 'bg-amber-100 text-amber-900 border-dashed border-amber-400 font-bold'
+                    ? 'bg-amber-100 dark:bg-[#2e2009] text-amber-900 dark:text-amber-200 border-dashed border-amber-400 dark:border-amber-500/60 font-bold'
                     : getCategoryColor(res.treatment_category);
                   const nameDisplay = isHold ? `[HOLD] ${res.customer?.name || 'Pasien'}` : (res.customer?.name || 'Bunda');
 
@@ -187,7 +187,7 @@ export const MonthScheduleGrid: React.FC<MonthScheduleGridProps> = ({
                   );
                 })}
                 {events.length > 3 && (
-                  <div className="w-full text-center text-[9px] text-[#008069] font-bold pt-0.5 truncate">
+                  <div className="w-full text-center text-[9px] text-[#008069] dark:text-[#00a884] font-bold pt-0.5 truncate">
                     +{events.length - 3} lainnya
                   </div>
                 )}
