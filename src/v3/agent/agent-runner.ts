@@ -200,7 +200,7 @@ export class V3AgentRunner {
         const secondPayload: any = {
           model: selectedModel,
           messages,
-          temperature: 0.5,
+          temperature: 0.3,
         };
 
         const secondResponse = await axios.post(`${baseUrl}/chat/completions`, secondPayload, {
