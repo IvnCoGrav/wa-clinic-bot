@@ -1253,7 +1253,7 @@ export class WahaClient implements IWahaClient {
           webhooks: [
             {
               url: webhookUrl,
-              events: ['message', 'message.any', 'session.status', 'label.chat.added', 'label.chat.deleted'],
+              events: ['message', 'message.any', 'message.reaction', 'message.reaction.added', 'message.reaction.deleted', 'message.ack', 'message.revoked', 'session.status', 'label.chat.added', 'label.chat.deleted'],
               customHeaders: [{ name: 'x-webhook-secret', value: secret }]
             }
           ]
@@ -1323,6 +1323,17 @@ export class WahaClient implements IWahaClient {
       return response.data || null;
     } catch (err) {
       return null;
+    }
+  }
+
+  public async updateSessionConfig(session: string, config: any): Promise<boolean> {
+    if (this.shouldMock) return true;
+    try {
+      await axios.put(`${this.baseUrl}/api/sessions/${session}`, { config }, { headers: this.headers, timeout: this.timeoutMs });
+      return true;
+    } catch (err: any) {
+      console.warn(`[WAHA API ERROR] updateSessionConfig failed for ${session}:`, err?.response?.data || err.message);
+      return false;
     }
   }
 

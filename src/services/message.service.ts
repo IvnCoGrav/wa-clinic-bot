@@ -850,14 +850,18 @@ export class MessageService {
 
     const actorKey = reaction.fromMe ? 'ME' : (reaction.actorId || reaction.senderName || 'CUSTOMER');
 
+    const shortId = extractShortMessageId(messageId);
+    const orConds: any[] = [
+      { id: messageId, tenant_id: tenantId },
+      { wa_message_id: messageId, tenant_id: tenantId },
+    ];
+    if (shortId && shortId !== messageId) {
+      orConds.push({ wa_message_id: shortId, tenant_id: tenantId });
+      orConds.push({ wa_message_id: { endsWith: `_${shortId}` }, tenant_id: tenantId });
+    }
     try {
       let msg = await prisma.message.findFirst({
-        where: {
-          OR: [
-            { id: messageId, tenant_id: tenantId },
-            { wa_message_id: messageId, tenant_id: tenantId },
-          ],
-        },
+        where: { OR: orConds },
       });
 
       if (msg) {
@@ -895,9 +899,13 @@ export class MessageService {
       console.warn('DB addOrUpdateReaction error (using memory fallback):', (error as Error).message);
     }
 
-    // Memory store fallback sync
+    // Memory store fallback sync — dukung short/long WA ID
     const inMem = memoryMessages.find(
-      (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
+      (m) =>
+        (m.id === messageId ||
+          m.wa_message_id === messageId ||
+          (shortId && (m.wa_message_id === shortId || (m.wa_message_id && String(m.wa_message_id).endsWith(`_${shortId}`))))) &&
+        m.tenant_id === tenantId
     );
     if (inMem) {
       conversationId = inMem.conversation_id;
@@ -920,19 +928,13 @@ export class MessageService {
       inMem.payload_raw = { ...currentPayload, reactions };
     }
 
-    // Broadcast update via LiveChatHub
+    // Broadcast update via LiveChatHub — ganda untuk kompatibilitas listener SSE (colon + dot)
     try {
       const hub = getLiveChatHub();
       if (hub && conversationId) {
-        await hub.publish({
-          type: 'message:reaction' as any,
-          tenantId,
-          payload: {
-            conversationId,
-            messageId: targetMessageId,
-            reactions,
-          },
-        });
+        const payload = { conversationId, messageId: targetMessageId, waMessageId: messageId, reactions };
+        await hub.publish({ type: 'message:reaction' as any, tenantId, payload } as any);
+        await hub.publish({ type: 'message.reaction' as any, tenantId, payload } as any);
       }
     } catch (hubErr: any) {
       console.warn('[HUB] Failed to publish message:reaction event:', hubErr.message);
