@@ -4,6 +4,11 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Fix — Perbaikan Permanen Sinkronisasi Reaksi Emoji Customer WhatsApp (`whatsapp-provider.service.ts`, `waha/client.ts`, `app.ts`, `message.service.ts`) (2026-09-04)
+
+- **Stage 1 — Schema WAHA & Auto-Sync:** Bersihkan events WAHA ke schema valid: hapus `message.reaction.added/deleted` (ditolak validator), pertahankan `message.reaction`, tambah `message.edited`; `buildDefaultSessionConfig` + `waha/client.ts:startSession` kini `['session.status','message','message.any','message.reaction','message.ack','message.revoked','message.edited','label.chat.added','label.chat.deleted']`; `syncSessionWebhooks()` kirim `{config: mergedConfig}` dan log `reaction terdaftar`; `app.ts:183` panggil `syncSessionWebhooks(DEFAULT_TENANT_ID)` otomatis setiap boot/restart.
+- **Stage 2 — Pencocokan ID Dua Arah:** `message.service.ts:853` `cleanId=extractShortMessageId(messageId)` + `orConds` dukung `wa_message_id=messageId`, `cleanId`, dan `endsWith _cleanId` (long↔short dua arah); fallback memory juga pakai `cleanId` yang sama; memastikan `false_628...@c.us_3EB0` vs `3EB0` cocok. Verifikasi build ✓, test ✓.
+
 #### Fix — Penerimaan & Sinkronisasi Reaksi Emoji Customer WhatsApp ke Dashboard Live Chat (`whatsapp-provider.service.ts`, `waha/client.ts`, `webhook.route.ts`, `message.service.ts`, `LiveChatMonitor.tsx`) (2026-09-04)
 
 - **Akar Masalah:** WAHA tidak subscribe `message.reaction*`, payload `reaction.messageId` tertukar dengan ID event, dan `wa_message_id` panjang vs pendek tidak cocok di DB sehingga reaksi customer tidak muncul.

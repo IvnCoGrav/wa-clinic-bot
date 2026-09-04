@@ -1253,7 +1253,7 @@ export class WahaClient implements IWahaClient {
           webhooks: [
             {
               url: webhookUrl,
-              events: ['message', 'message.any', 'message.reaction', 'message.reaction.added', 'message.reaction.deleted', 'message.ack', 'message.revoked', 'session.status', 'label.chat.added', 'label.chat.deleted'],
+              events: ['message', 'message.any', 'message.reaction', 'message.ack', 'message.revoked', 'message.edited', 'session.status', 'label.chat.added', 'label.chat.deleted'],
               customHeaders: [{ name: 'x-webhook-secret', value: secret }]
             }
           ]
