@@ -225,6 +225,65 @@ Treatment : `;
     expect(decision.action).toBe('RESOLVE_LOCATION_AND_DELIVERY');
   });
 
+  it('6. Booking-ready ala Bidan Yusi (lokasi + treatment + hari Minggu) → handoff Admin + balasan cek-jadwal singkat', async () => {
+    const readySlate: CustomerSlate = {
+      customerId: 'cust_jojoran_1',
+      phone: '6281234567890',
+      name: 'Bunda Jojoran',
+      tenantId: 'default-tenant',
+      conversationId: 'conv_jojoran_1',
+      kelurahan: 'Jojoran Baru',
+      kecamatan: 'Sukolilo',
+      kota: 'Kota Surabaya',
+      lat: -7.28,
+      lng: 112.79,
+      streetDetail: null,
+      distanceKm: 6.8,
+      ongkirFee: 15000,
+      ongkirPromoFee: 15000,
+      isLocationConfirmed: true,
+      isOutOfCoverage: false,
+      childAgeMonths: 3,
+      childAgeCategory: 'BABY',
+      symptoms: [],
+      medicalConcerns: [],
+      selectedTreatmentName: 'Pijat Bayi Ceria',
+      preferredDate: 'Minggu',
+      preferredTime: null,
+      pricelistSent: true,
+      isHumanHandling: false,
+      humanHandlingReason: null,
+      lastInteractionAt: new Date(),
+      projectedState: ConversationState.AWAITING_TREATMENT,
+    };
+
+    const extraction: ExtractedEntities = {
+      intents: ['select_treatment', 'ask_schedule'],
+      locationText: null,
+      streetDetail: null,
+      childAgeMonths: null,
+      symptoms: [],
+      treatmentReferenced: 'baby massage saja',
+      preferredDateText: 'Minggu',
+      preferredTimeText: null,
+      customerName: null,
+      isMedicalEmergency: false,
+      confidenceScore: 0.9,
+    };
+
+    const decision = await DecisionMatrix.evaluate(readySlate, extraction, {
+      incomingText: 'baby massage saja, Hari minggu apa bisa ?',
+      tenantId: 'default-tenant',
+    });
+
+    expect(decision.action).toBe('ESCALATE_HUMAN_SCHEDULE');
+    expect(decision.deterministicTemplateReply).toContain('kami cek jadwal dulu yaa bunda, ditunggu sebentar ya bund');
+    expect(decision.deterministicTemplateReply).not.toContain('list untuk reservasi');
+    expect(decision.updatedSlate.isHumanHandling).toBe(true);
+    expect(decision.updatedSlate.humanHandlingReason).toBe('booking_schedule_check');
+    expect(decision.updatedSlate.projectedState).toBe(ConversationState.HUMAN_HANDLING);
+  });
+
   it('5. Persona & Dynamic Closer Guard: Aturan penegasan jadwal tidak boleh halusinasi', () => {
     const personaRules = PersonaComposer.getPersonaRules();
     expect(personaRules).toContain('ATURAN PENJADWALAN & KETERSEDIAAN SLOT');

@@ -339,9 +339,27 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
     return `Jika dilihat dari jaraknya kurang lebih ${params.distanceKm.toFixed(1)} km. Dari pricelist kami di jarak ini ada tambahan ongkir Rp ${params.normalPrice.toLocaleString("id-ID")} tetapi karna bulan ini ada promo, kami bisa kasih bunda ongkir menjadi Rp ${params.promoPrice.toLocaleString("id-ID")} saja bunda. Jadi bisa ya bunda ☺️\n\n${ctaQuestion}`;
   },
 
-  scheduleCheckHandoff: (params?: { dayOrTime?: string }) => {
-    if (params?.dayOrTime && params.dayOrTime.trim()) {
-      return `Baik Bunda, untuk ketersediaan jadwal ${params.dayOrTime.trim()} akan kami bantu cekkan ketersediaan jadwal Bidan yang ready ya Bunda 🙏🏻😊`;
+  locationComparison: (params: {
+    closer: { name: string; distanceKm: number; promoPrice: number; normalPrice: number };
+    further: { name: string; distanceKm: number; promoPrice: number; normalPrice: number };
+  }) => {
+    const closerPromoStr =
+      params.closer.promoPrice === 0
+        ? 'Gratis ongkir'
+        : `ongkir promo Rp ${params.closer.promoPrice.toLocaleString('id-ID')}`;
+    const furtherPromoStr =
+      params.further.promoPrice === 0
+        ? 'Gratis ongkir'
+        : `ongkir promo Rp ${params.further.promoPrice.toLocaleString('id-ID')}`;
+
+    return `Lebih dekat yang *${params.closer.name}* ya Bunda 😊\n\nBerikut rincian estimasi jarak dari homebase kami di Waru:\n📍 *${params.closer.name}*: ±${params.closer.distanceKm.toFixed(1)} km (${closerPromoStr})\n📍 *${params.further.name}*: ±${params.further.distanceKm.toFixed(1)} km (${furtherPromoStr})\n\nKira-kira rencana mau kami bantu jadwalkan homecare di alamat yang mana ya Bunda? 🤗`;
+  },
+
+  scheduleCheckHandoff: (params?: { dayOrTime?: string; treatment?: string }) => {
+    const dayStr = params?.dayOrTime ? ` di ${params.dayOrTime.trim()}` : '';
+    const treatStr = params?.treatment ? ` untuk ${params.treatment.trim()}` : '';
+    if (treatStr || dayStr) {
+      return `Baik Bunda,${treatStr}${dayStr} kami cek jadwal dulu yaa bunda, ditunggu sebentar ya bund 🙏🏻😊\n\nJika nanti Bunda ingin mengubah hari atau pilihan perawatannya, sampaikan saja kapan pun yaa Bunda 🤗`;
     }
     return `kami cek jadwal dulu ya bunda 🙏🏻😊`;
   },

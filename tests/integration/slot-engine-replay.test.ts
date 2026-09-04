@@ -317,10 +317,10 @@ describe('Multi-Turn Conversation Replay Test Suite (Part 6)', () => {
       } as any);
 
       expect(result.shouldSendReply).toBe(true);
-      expect(result.nextState).toBe(ConversationState.RESERVATION_SENT);
-      expect(result.replyText).toContain('list untuk reservasi');
-      expect(result.replyText).toContain('Bunda Fitra');
-      expect(result.replyText).toContain('Kureksari');
+      expect(result.nextState).toBe(ConversationState.HUMAN_HANDLING);
+      expect(result.isHumanHandling).toBe(true);
+      expect(result.replyText).toContain('kami cek jadwal dulu yaa bunda');
+      expect(result.replyText).not.toContain('list untuk reservasi');
     });
   });
 });

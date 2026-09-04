@@ -285,42 +285,10 @@ export class GroundingComposer {
       hasExplicitBookingIntent
     );
 
-    let suggestedPreFilledForm: string | null = null;
-    if (isBookingReady) {
-      const { TEMPLATES } = await import('../config/persona');
-      let treatmentBaby: string | undefined = undefined;
-      let treatmentMoms: string | undefined = undefined;
-
-      if (effectiveTreatment) {
-        if (mentionsMoms) {
-          const isPijatRef = effectiveTreatment.toLowerCase().includes('pijat');
-          if (isPijatRef) {
-            treatmentBaby = effectiveTreatment;
-          } else {
-            // Dynamic fallback: ambil layanan BABY pertama yang aktif tanpa hardcode nama paket
-            const fallbackBaby = allServices.find((s) => s.category === 'BABY' && s.isActive)?.name || effectiveTreatment;
-            treatmentBaby = fallbackBaby;
-          }
-          treatmentMoms = 'Bundling Pijat Laktasi + Oksitosin';
-        } else {
-          treatmentBaby = effectiveTreatment;
-        }
-      }
-
-      suggestedPreFilledForm = TEMPLATES.reservationFormRequest({
-        name: slate.name || undefined,
-        address: slate.streetDetail
-          ? `${slate.streetDetail}, ${slate.kelurahan}`
-          : slate.kelurahan || undefined,
-        kecamatan: slate.kecamatan || undefined,
-        kota: slate.kota || undefined,
-        phone: slate.phone || undefined,
-        bookingDate: effectiveDate || undefined,
-        treatmentBaby,
-        treatmentMoms,
-        babyAge: slate.childAgeMonths !== null ? `${slate.childAgeMonths} bulan` : undefined,
-      });
-    }
+    // Alih kelola form ke Admin: JANGAN suntik template form reservasi ke prompt LLM
+    // saat booking-ready — form dikirim Admin manusia via dashboard setelah cek jadwal.
+    // (suggestedPreFilledForm sengaja selalu null; LLM Call 2 tidak boleh menempel form panjang.)
+    const suggestedPreFilledForm: string | null = null;
 
     const durationSummaryText = treatmentCatalogService.getServiceDurationSummary();
     const operationalFactsText = '• Homebase & Layanan: Homecare Waru Sidoarjo (Surabaya & Sidoarjo maks 30 km)\n• Hari & Jam Operasional: Buka Setiap Hari (Senin - Minggu 08.00 - 17.00 WIB)\n• Tenaga Medis: Bidan Profesional Lulusan Kebidanan & Bersertifikat STR Aktif\n• Pembayaran: Transfer Bank (BCA, Mandiri, BRI), QRIS Universal, Cash di Tempat';

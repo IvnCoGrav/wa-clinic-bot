@@ -1,7 +1,7 @@
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { StateHandlerContext } from '../state-machine/types';
 import { extractGoogleMapsUrls, resolveGoogleMapsUrl } from '../utils/google-maps-url-resolver';
-import { parseAdminChatDistanceAndOngkir } from '../utils/admin-chat-distance-parser';
+import { parseAdminChatDistanceAndOngkir, parseAdminChatLocation } from '../utils/admin-chat-distance-parser';
 
 const FILLER_RE = /^(oke\s+makasih|makasih|terima\s+kasih|matur\s+nuwun|thanks|thank\s+you|sip|ok|oke|siap|baik|iya|ya|boleh|nanti\s+ya|sebentar\s+cek\s+dulu|tanya\s+suami|wait|tunggu\s+sebentar)[.!]?$/i;
 
@@ -60,29 +60,45 @@ export class HumanBackgroundEnrichmentService {
         } catch (_) {}
       }
 
-      // Jika customer belum memiliki kelurahan, telusuri histori chat inbound untuk mencari nama wilayah/kelurahan yang disebutkan
+      // Jika customer belum memiliki kelurahan, selesaikan lokasi dengan prioritas:
+      // P1 — lokasi yang disebut Admin di pesan outbound ini (geocode langsung, tanpa tebak riwayat).
+      // P2 — riwayat inbound, dengan pesan pertanyaan dilewati (skip) + validasi kandidat.
       let resolvedLoc: any = null;
       if (!customer.kelurahan) {
         try {
-          const { messageService } = await import('./message.service');
-          const { conversationService } = await import('./conversation.service');
-          const conv = await conversationService.getOrCreateConversation(customerId, tenantId);
-          if (conv) {
-            const msgs = await messageService.getRecentMessages(conv.id, 10, tenantId);
-            const { EntityExtractor } = await import('../slot-engine/entity-extractor');
-            const { geocodingService } = await import('../integrations/google-maps/geocoding');
-            
-            for (let i = msgs.length - 1; i >= 0; i--) {
-              const m = msgs[i];
-              if (m.direction === 'INBOUND' && m.content) {
-                // 1. Coba deteksi deterministik dulu (0 API call, 0ms)
-                const det = EntityExtractor.preExtractDeterministic(m.content);
-                const locCandidate = det.locationText;
-                if (locCandidate) {
-                  const geo = await geocodingService.geocodeText(locCandidate);
-                  if (geo.isPrecise && geo.lat != null && geo.lng != null) {
-                    resolvedLoc = geo;
-                    break;
+          const { geocodingService } = await import('../integrations/google-maps/geocoding');
+          const { EntityExtractor, isClinicLocationQuestion } = await import('../slot-engine/entity-extractor');
+
+          const adminLoc = parseAdminChatLocation(text);
+          if (adminLoc) {
+            const geo = await geocodingService.geocodeText(adminLoc);
+            if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+              resolvedLoc = geo;
+            }
+          }
+
+          if (!resolvedLoc) {
+            const { messageService } = await import('./message.service');
+            const { conversationService } = await import('./conversation.service');
+            const conv = await conversationService.getOrCreateConversation(customerId, tenantId);
+            if (conv) {
+              const msgs = await messageService.getRecentMessages(conv.id, 10, tenantId);
+
+              for (let i = msgs.length - 1; i >= 0; i--) {
+                const m = msgs[i];
+                if (m.direction === 'INBOUND' && m.content) {
+                  // Lewati pesan bertipe pertanyaan ("dimana", "tanya", "?") — bukan alamat.
+                  if (isClinicLocationQuestion(m.content)) continue;
+                  // 1. Coba deteksi deterministik dulu (0 API call, 0ms)
+                  const det = EntityExtractor.preExtractDeterministic(m.content);
+                  const locCandidate = det.locationText;
+                  // 2. Validasi kandidat: tolak fragmen tanya yang lolos
+                  if (locCandidate && !isClinicLocationQuestion(locCandidate)) {
+                    const geo = await geocodingService.geocodeText(locCandidate);
+                    if (geo.isPrecise && geo.lat != null && geo.lng != null) {
+                      resolvedLoc = geo;
+                      break;
+                    }
                   }
                 }
               }

@@ -197,6 +197,29 @@ export class SlateStore {
       updated.name = extraction.customerName;
     }
 
+    // 1b. Eksekusi Semantic Slot Clearing (change-of-mind TANPA pengganti, dari NLU).
+    // Dijalankan SEBELUM assignment baru agar opsi pengganti se-turn (jika ada) tetap menang.
+    if (extraction.clearedSlots && Array.isArray(extraction.clearedSlots)) {
+      if (extraction.clearedSlots.includes('treatment')) {
+        updated.selectedTreatmentName = null;
+      }
+      if (extraction.clearedSlots.includes('preferred_date')) {
+        updated.preferredDate = null;
+        updated.preferredTime = null;
+      }
+      if (extraction.clearedSlots.includes('location')) {
+        updated.kelurahan = null;
+        updated.kecamatan = null;
+        updated.kota = null;
+        updated.lat = null;
+        updated.lng = null;
+        updated.distanceKm = null;
+        updated.ongkirFee = null;
+        updated.ongkirPromoFee = null;
+        updated.isLocationConfirmed = false;
+      }
+    }
+
     // 2. Update Usia Anak & Kategori + Rekonsiliasi Treatment yang tidak kompatibel
     const prevCategory = updated.childAgeCategory;
     const prevAge = updated.childAgeMonths;
