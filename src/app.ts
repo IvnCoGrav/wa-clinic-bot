@@ -181,6 +181,11 @@ if (require.main === module) {
       console.warn('[INIT TENANT DATA] Failed to sync tenant data:', (initErr as Error).message);
     }
 
+    // Auto-sync WAHA webhook events (pastikan message.reaction terdaftar tanpa scan QR ulang)
+    import('./services/whatsapp-provider.service').then(({ whatsappProviderService }) => {
+      whatsappProviderService.syncSessionWebhooks(DEFAULT_TENANT_ID).catch(() => {});
+    });
+
     // Start background WAHA status monitor
     import('./services/waha-monitor.service').then(({ WahaMonitorService }) => {
       WahaMonitorService.getInstance().start();

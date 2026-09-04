@@ -850,14 +850,16 @@ export class MessageService {
 
     const actorKey = reaction.fromMe ? 'ME' : (reaction.actorId || reaction.senderName || 'CUSTOMER');
 
-    const shortId = extractShortMessageId(messageId);
+    const cleanId = extractShortMessageId(messageId);
     const orConds: any[] = [
       { id: messageId, tenant_id: tenantId },
       { wa_message_id: messageId, tenant_id: tenantId },
     ];
-    if (shortId && shortId !== messageId) {
-      orConds.push({ wa_message_id: shortId, tenant_id: tenantId });
-      orConds.push({ wa_message_id: { endsWith: `_${shortId}` }, tenant_id: tenantId });
+    if (cleanId) {
+      if (cleanId !== messageId) {
+        orConds.push({ wa_message_id: cleanId, tenant_id: tenantId });
+      }
+      orConds.push({ wa_message_id: { endsWith: `_${cleanId}` }, tenant_id: tenantId });
     }
     try {
       let msg = await prisma.message.findFirst({
@@ -899,12 +901,12 @@ export class MessageService {
       console.warn('DB addOrUpdateReaction error (using memory fallback):', (error as Error).message);
     }
 
-    // Memory store fallback sync — dukung short/long WA ID
+    // Memory store fallback sync — dukung short/long WA ID (pakai cleanId konsisten dengan DB)
     const inMem = memoryMessages.find(
       (m) =>
         (m.id === messageId ||
           m.wa_message_id === messageId ||
-          (shortId && (m.wa_message_id === shortId || (m.wa_message_id && String(m.wa_message_id).endsWith(`_${shortId}`))))) &&
+          (cleanId && (m.wa_message_id === cleanId || (m.wa_message_id && String(m.wa_message_id).endsWith(`_${cleanId}`))))) &&
         m.tenant_id === tenantId
     );
     if (inMem) {
