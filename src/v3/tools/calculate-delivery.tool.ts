@@ -47,6 +47,8 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
 
 const OUTSIDE_CITIES_RE = /\b(malang|jakarta|bandung|semarang|yogyakarta|jogja|bali|denpasar|kediri|blitar|madiun|probolinggo|pasuruan|jember|banyuwangi|bojonegoro|tuban|lamongan|ngawi|magetan|ponorogo|pacitan|trenggalek|tulungagung|lumajang|bondowoso|situbondo)\b/i;
 
+const BROAD_REGION_RE = /^(?:rumah\s+d\s+|rumah\s+di\s+|di\s+|daerah\s+|wilayah\s+)?(?:surabaya\s+(?:barat|timur|selatan|utara|pusat)|surabaya|sidoarjo|gresik)$/i;
+
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
   const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID } = input;
   
@@ -59,15 +61,27 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     };
   }
 
-  // Fast check: Jika customer secara sadar menyebut kota di luar jangkauan (misal Malang, Jakarta)
+  const compositeQuery = streetDetail
+    ? `${streetDetail} ${locationText}`.trim()
+    : locationText.trim();
+
+  // 1. Cek Wilayah Terlalu Luas (Surabaya Barat, Surabaya Timur, Sidoarjo, dll.)
+  // Jika customer hanya menyebut nama wilayah/arah mata angin tanpa nama kelurahan/perumahan,
+  // DILARANG menghitung jarak atau mengeluarkan nominal ongkir karena tidak presisi.
+  if (BROAD_REGION_RE.test(compositeQuery.trim()) || BROAD_REGION_RE.test(locationText.trim())) {
+    return {
+      success: false,
+      isPrecise: false,
+      isOutOfCoverage: false,
+      message: `Area "${locationText}" masih terlalu luas untuk menghitung jarak dan tarif ongkir pasti. Mohon sampaikan dengan ramah bahwa area ${locationText} cukup luas, lalu tanyakan nama kelurahan, perumahan, atau patokan terdekatnya agar bisa kami bantu cekkan jarak pasti dan ketersediaan Bidan.`
+    };
+  }
+
+  // 2. Fast check: Jika customer secara sadar menyebut kota di luar jangkauan (misal Malang, Jakarta)
   const isExplicitOutsideCity = OUTSIDE_CITIES_RE.test(locationText);
 
   try {
-    const compositeQuery = streetDetail
-      ? `${streetDetail} ${locationText}`.trim()
-      : locationText.trim();
-
-    // 1. Geocode via local gazetteer & Google Maps (dengan bias Surabaya/Sidoarjo)
+    // Geocode via local gazetteer & Google Maps (dengan bias Surabaya/Sidoarjo)
     let resolved = await geocodingService.geocodeText(compositeQuery);
     
     // Second-pass jika belum presisi dan ada teks asli
@@ -108,11 +122,21 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
         success: false,
         isPrecise: false,
         isOutOfCoverage: false,
-        message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon tanyakan kelurahan atau patokan terdekat.`
+        message: `Lokasi "${compositeQuery}" belum dapat ditemukan secara presisi. Mohon sampaikan dengan ramah dan tanyakan nama kelurahan, perumahan, atau patokan terdekatnya.`
       };
     }
 
-    // 2. Hitung jarak dan ongkir
+    // Jika geocoding mengembalikan isPrecise false dan tidak ada kelurahan spesifik
+    if (!resolved.isPrecise && !resolved.kelurahan && !streetDetail) {
+      return {
+        success: false,
+        isPrecise: false,
+        isOutOfCoverage: false,
+        message: `Lokasi "${compositeQuery}" masih terlalu umum. Mohon tanyakan nama kelurahan atau perumahan terdekatnya.`
+      };
+    }
+
+    // 3. Hitung jarak dan ongkir
     const deliveryResult = await deliveryService.calculateDelivery(
       { lat: resolved.lat, lng: resolved.lng },
       { lat: clinicConfig.lat, lng: clinicConfig.lng },
