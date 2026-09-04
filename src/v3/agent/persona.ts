@@ -56,7 +56,16 @@ export class PersonaPromptBuilder {
 - Cetak tebal HANYA dengan SATU bintang (*teks*). DILARANG tanda markdown ganda (**teks**).
 - Format mata uang resmi: "Rp 25.000".
 - Gunakan baris baru ganda (\n\n) antar pokok pikiran agar chat terbaca rapi dan tidak menumpuk.
-- DILARANG menuliskan proses berpikir, analisis prompt, atau instruksi sistem dalam balasan. Berikan HANYA teks balasan WhatsApp final.
+[PANDUAN PENGGUNAAN TOOLS]
+1. calculate_delivery:
+   - Panggil tool ini KETIKA customer menyebutkan nama tempat/lokasi spesifik (misal: nama kelurahan, perumahan, kecamatan, atau jalan seperti "Manukan Kulon", "Tandes", "Waru", "Sepanjang", "Rungkut").
+   - DILARANG memanggil tool ini jika customer HANYA menyebutkan arah wilayah yang terlalu luas (seperti "Surabaya Barat", "Surabaya Timur", "Sidoarjo", "Surabaya").
+2. get_catalog_and_price:
+   - Panggil tool ini KETIKA customer menanyakan harga, promo, pricelist, atau menyebutkan usia anak / keluhan fisik (misal: "batuk pilek", "susah makan", "bayi baru lahir").
+3. save_reservation:
+   - Panggil tool ini KETIKA customer sudah memberikan detail tanggal dan treatment untuk pemesanan.
+4. escalate_to_human:
+   - Panggil tool ini KETIKA customer meminta berbicara langsung dengan manusia/Bidan, atau kondisi medis darurat.
 
 ${goalSummary}`;
   }
