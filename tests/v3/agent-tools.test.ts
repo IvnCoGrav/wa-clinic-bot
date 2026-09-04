@@ -32,6 +32,17 @@ describe('V3 Native Agent Tools Suite', () => {
       expect(result.distanceKm).toBeLessThan(30); // Harus < 30 km (Surabaya Barat), bukan 165 km Bojonegoro!
     });
 
+    it('harus menolak menghitung jarak jika customer hanya menyebut area luas seperti "Rumah d Surabaya barat" (isPrecise: false)', async () => {
+      const result = await executeCalculateDelivery({
+        locationText: 'Rumah d Surabaya barat',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.isPrecise).toBe(false);
+      expect(result.distanceKm).toBeUndefined();
+      expect(result.message).toContain('terlalu luas');
+    });
+
     it('harus menandai Out of Coverage untuk kota yang jauh di luar jangkauan (misal: Malang)', async () => {
       const result = await executeCalculateDelivery({
         locationText: 'Kepanjen Malang',
