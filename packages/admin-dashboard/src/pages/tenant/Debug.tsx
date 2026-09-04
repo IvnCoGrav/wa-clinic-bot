@@ -1151,7 +1151,7 @@ function LlmLogsSection() {
 
                   {/* LEVEL 2: CHAT BUBBLES WITH PIPELINE STEPPERS */}
                   {isPhoneExpanded && (
-                    <div className="p-4 space-y-3.5 bg-[#fdfefe] dark:bg-[#0c1317]">
+                    <div className="p-4 space-y-3.5 bg-[#fdfefe] dark:bg-black">
                       {cust.bubbles.map((bubble, bIdx) => {
                         const isBubbleExpanded = !!expandedBubbles[bubble.correlationId];
                         const totalBubbleDuration = bubble.aiCalls.reduce((acc, c) => acc + (c.durationMs || 0), 0);

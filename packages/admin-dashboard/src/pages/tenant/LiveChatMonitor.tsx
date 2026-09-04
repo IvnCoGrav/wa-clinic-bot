@@ -54,10 +54,12 @@ import {
   Ban,
   Reply,
   CalendarPlus,
+  Archive,
   Receipt,
   Smile,
   ShieldAlert,
   ShieldCheck,
+  Download,
 } from 'lucide-react';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import { MediaImage, ChatMediaData } from '../../components/common/MediaImage';
@@ -310,6 +312,59 @@ const EMOJI_CATEGORIES = [
   },
 ] as const;
 
+// 3.3: Voice Note audio player (WhatsApp PTT) — jangan lempar ke <MediaImage>
+const VoiceNotePlayer: React.FC<{ src: string }> = ({ src }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const fmt = (s: number) => {
+    if (!isFinite(s) || isNaN(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+  };
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onTime = () => setCurrent(a.currentTime);
+    const onMeta = () => setDuration(a.duration);
+    const onEnd = () => setPlaying(false);
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('loadedmetadata', onMeta);
+    a.addEventListener('ended', onEnd);
+    return () => {
+      a.removeEventListener('timeupdate', onTime);
+      a.removeEventListener('loadedmetadata', onMeta);
+      a.removeEventListener('ended', onEnd);
+    };
+  }, [src]);
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); } else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+  };
+  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    if (audioRef.current) audioRef.current.currentTime = v;
+    setCurrent(v);
+  };
+  return (
+    <div className="flex items-center gap-2.5 py-1 min-w-[180px] max-w-[260px]">
+      <button type="button" onClick={toggle} className="w-8 h-8 rounded-full bg-[#008069] text-white flex items-center justify-center shrink-0 shadow-xs active:scale-95 transition">
+        {playing ? <span className="w-2.5 h-2.5 bg-white rounded-sm" /> : <Play size={14} className="ml-0.5 fill-white" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <input type="range" min={0} max={duration || 100} value={current} onChange={seek} className="w-full accent-[#008069] h-1" />
+        <div className="flex justify-between text-[10px] font-mono text-[#667781] mt-0.5">
+          <span>{fmt(current)}</span><span>{fmt(duration)}</span>
+        </div>
+      </div>
+      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+    </div>
+  );
+};
+
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
@@ -384,17 +439,18 @@ export const LiveChatMonitor: React.FC = () => {
   const searchDebounceTimerRef = useRef<any>(null);
   const loadChatsAbortControllerRef = useRef<AbortController | null>(null);
 
-  // In-Chat Search & Target Message Highlighting — unified dengan global searchQuery
+  // In-Chat Search & Target Message Highlighting — terpisah dari pencarian daftar (3.1)
+  const [inChatSearchQuery, setInChatSearchQuery] = useState('');
+  const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
   const [matchingMessageIds, setMatchingMessageIds] = useState<string[]>([]);
   const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
   const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
 
-  // Derived: searchQuery digunakan sebagai in-chat search jika ada percakapan aktif
   const effectiveInChatQuery = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = inChatSearchQuery.trim().toLowerCase();
     if (!selectedId || !q || q.length < 2) return '';
     return q;
-  }, [searchQuery, selectedId]);
+  }, [inChatSearchQuery, selectedId]);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chat: LiveChatItem } | null>(null);
@@ -590,17 +646,35 @@ function clearConversationDraft(convId: string) {
   const isChatHistoryPushedRef = useRef(false);
 
   const handleBackToList = () => {
+    // 1.1: hentikan typing, bersihkan state & URL agar reload tidak jebak di chat
+    if (isTypingActiveRef.current) {
+      try { notifyTyping(false); } catch {}
+    }
+    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+    if (typingStartTimerRef.current) { clearTimeout(typingStartTimerRef.current); typingStartTimerRef.current = null; }
+    isTypingActiveRef.current = false;
+    setSelectedId(null);
+    selectedIdRef.current = null;
+    try {
+      sessionStorage.removeItem('liveChat:selectedId');
+      sessionStorage.setItem('liveChat:mobileView', 'list');
+    } catch {}
+    // bersihkan query ?conversationId tanpa reload
+    try {
+      window.history.replaceState({}, '', '/admin/live-chat');
+      setSearchParams({}, { replace: true });
+    } catch {}
     if (isChatHistoryPushedRef.current || (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail')) {
       isChatHistoryPushedRef.current = false;
-      if (window.history.state?.view === 'live-chat-detail') {
+      if (typeof window !== 'undefined' && window.history.state?.view === 'live-chat-detail') {
         window.history.back();
+        // fallback: pastikan list view setelah popstate tidak tertahan
+        setTimeout(() => setMobileView('list'), 60);
       } else {
         setMobileView('list');
-        try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
       }
     } else {
       setMobileView('list');
-      try { sessionStorage.setItem('liveChat:mobileView', 'list'); } catch {}
     }
   };
 
@@ -1133,7 +1207,8 @@ function clearConversationDraft(convId: string) {
     try {
       const offset = reset ? 0 : chatsRef.current.length;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}${searchParam}`, {
+      const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}${searchParam}${labelParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
       });
@@ -1209,21 +1284,24 @@ function clearConversationDraft(convId: string) {
       }
       const list: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
       
-      // Client-side deduplication filter (mencegah double render bubble pesan/gambar identik)
-      const isImageOrPricelist = (c?: string, m?: any) => 
-        !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)/i.test((c || '').trim()) || (c || '').startsWith('Pricelist') || !!m;
-
+      // Client-side deduplication — hanya duplikat nyata: id/wa_message_id sama, atau teks identik <2s, atau media URL sama <2s. Dua foto berbeda tidak pernah dianggap duplikat.
       const deduped: ChatMessage[] = [];
       for (const m of list) {
         const hasDuplicate = deduped.some((existing) => {
           if (existing.id === m.id) return true;
-          if (
-            existing.direction === m.direction &&
-            Math.abs(new Date(existing.created_at).getTime() - new Date(m.created_at).getTime()) < 20000
-          ) {
-            if (existing.content && m.content && existing.content === m.content) return true;
-            if (isImageOrPricelist(existing.content, existing.media) && isImageOrPricelist(m.content, m.media)) {
-              return true;
+          const eWa = (existing as any).wa_message_id || (existing as any).waMessageId;
+          const mWa = (m as any).wa_message_id || (m as any).waMessageId;
+          if (eWa && mWa && eWa === mWa) return true;
+          // teks identik persis + direction sama + selisih <2s (bukan 20s)
+          if (existing.direction === m.direction && existing.content && m.content && existing.content === m.content) {
+            if (Math.abs(new Date(existing.created_at).getTime() - new Date(m.created_at).getTime()) < 2000) return true;
+          }
+          // media URL spesifik sama → duplikat (bukan semua gambar dianggap sama)
+          if (existing.media && m.media && existing.direction === m.direction) {
+            const eUrl = (existing.media as any).url || (existing.media as any).hdUrl || (existing.media as any).thumbUrl;
+            const mUrl = (m.media as any).url || (m.media as any).hdUrl || (m.media as any).thumbUrl;
+            if (eUrl && mUrl && eUrl === mUrl) {
+              if (Math.abs(new Date(existing.created_at).getTime() - new Date(m.created_at).getTime()) < 2000) return true;
             }
           }
           return false;
@@ -1250,22 +1328,32 @@ function clearConversationDraft(convId: string) {
 
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  // Refs mirror agar SSE closure (mount sekali) melihat nilai terbaru mobileView/isDesktop untuk unread badge
+  const mobileViewRef = useRef<'list' | 'chat'>('list');
+  const isDesktopRef = useRef<boolean>(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  useEffect(() => { mobileViewRef.current = mobileView; }, [mobileView]);
+  useEffect(() => { isDesktopRef.current = isDesktop; }, [isDesktop]);
 
   useEffect(() => {
     try {
       const urlConvId = searchParams.get('conversationId') || searchParams.get('id');
       const savedView = sessionStorage.getItem('liveChat:mobileView');
       const savedId = sessionStorage.getItem('liveChat:selectedId');
-      const effectiveId = urlConvId || savedId;
-      if (effectiveId) {
-        setSelectedId(effectiveId);
-        if (urlConvId || savedView === 'chat' || window.innerWidth < 1024) {
-          setMobileView('chat');
-        } else if (savedView) {
-          setMobileView(savedView as any);
+      if (urlConvId) {
+        setSelectedId(urlConvId);
+        selectedIdRef.current = urlConvId;
+        setMobileView('chat');
+      } else if (savedView === 'chat' && savedId) {
+        setSelectedId(savedId);
+        selectedIdRef.current = savedId;
+        setMobileView('chat');
+      } else {
+        setMobileView('list');
+        if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+          setSelectedId(null);
+          selectedIdRef.current = null;
+          sessionStorage.removeItem('liveChat:selectedId');
         }
-      } else if (savedView) {
-        setMobileView(savedView as any);
       }
     } catch {}
   }, [searchParams]);
@@ -1521,7 +1609,8 @@ function clearConversationDraft(convId: string) {
   };
 
   const handleClearInChatSearch = () => {
-    setSearchQuery('');
+    setInChatSearchQuery('');
+    setInChatSearchOpen(false);
     setMatchingMessageIds([]);
     setCurrentMatchIndex(-1);
     setHighlightedMsgId(null);
@@ -1626,13 +1715,13 @@ function clearConversationDraft(convId: string) {
     if (!confirmed) return;
     try {
       await apiRequest('/api/admin/live-chat/mark-all-read', { method: 'POST' });
-      setChats((prev) =>
-        prev.map((c) => ({
-          ...c,
-          unreadCount: 0,
-          isManualUnread: false,
-        }))
-      );
+      const updatedChats = chatsRef.current.map((c) => ({
+        ...c,
+        unreadCount: 0,
+        isManualUnread: false,
+      }));
+      setChats(updatedChats);
+      chatsRef.current = updatedChats;
       toast('Semua percakapan berhasil ditandai telah dibaca!', 'success');
     } catch (err: any) {
       toast(`Gagal menandai semua dibaca: ${err.message}`, 'error');
@@ -1640,19 +1729,28 @@ function clearConversationDraft(convId: string) {
   };
 
   const handleSelect = (conversationId: string) => {
+    // 2.4/1.2: batalkan typing di percakapan lama sebelum pindah
+    if (selectedIdRef.current && selectedIdRef.current !== conversationId && isTypingActiveRef.current) {
+      try { notifyTyping(false); } catch {}
+    }
+    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+    if (typingStartTimerRef.current) { clearTimeout(typingStartTimerRef.current); typingStartTimerRef.current = null; }
+    isTypingActiveRef.current = false;
     const targetChatPre = chatsRef.current.find((c) => c.conversationId === conversationId);
     if (targetChatPre && customerDetailData && customerDetailData.id !== targetChatPre.customerId) {
       setCustomerDetailData(null);
     }
     setSelectedId(conversationId);
+    selectedIdRef.current = conversationId;
     setMobileView('chat');
     try {
       sessionStorage.setItem('liveChat:selectedId', conversationId);
       sessionStorage.setItem('liveChat:mobileView', 'chat');
-      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-        window.history.pushState({ view: 'live-chat-detail', conversationId }, '');
-        isChatHistoryPushedRef.current = true;
-      }
+      const newUrl = `/admin/live-chat?conversationId=${encodeURIComponent(conversationId)}`;
+      window.history.pushState({ view: 'live-chat-detail', conversationId }, '', newUrl);
+      // sinkron ke react-router agar searchParams tidak stale
+      setSearchParams({ conversationId }, { replace: false });
+      isChatHistoryPushedRef.current = true;
     } catch {}
 
     // Auto mark-as-read jika masih ada unread atau isManualUnread
@@ -1747,16 +1845,13 @@ function clearConversationDraft(convId: string) {
           // Append ke thread yang sedang dibuka / replace optimistic message
           if (selectedIdRef.current === conversationId) {
             setMessages((prev) => {
-              const isImageOrPricelist = (c?: string, m?: any) =>
-                !c || /^\[(IMAGE|GAMBAR|Image|MEDIA)/i.test((c || '').trim()) || (c || '').startsWith('Pricelist') || !!m;
-              
-              // Cek apakah ada optimistic message (temp_) yang cocok
+              const mediaUrlOf = (x: ChatMessage) => (x.media as any)?.url || (x.media as any)?.hdUrl || (x.media as any)?.thumbUrl || null;
+              // Cek apakah ada optimistic message (temp_) yang cocok — cocokkan via content identik atau media URL sama
               const tempIndex = prev.findIndex(
                 (m) =>
                   m.id.startsWith('temp_') &&
                   m.direction === msg.direction &&
-                  (m.content === msg.content ||
-                    (isImageOrPricelist(m.content, m.media) && isImageOrPricelist(msg.content, msg.media)))
+                  (m.content === msg.content || (mediaUrlOf(m) && mediaUrlOf(msg) && mediaUrlOf(m) === mediaUrlOf(msg)))
               );
               if (tempIndex !== -1) {
                 const next = [...prev];
@@ -1768,14 +1863,21 @@ function clearConversationDraft(convId: string) {
                 return next;
               }
 
-              const isDuplicate = prev.some(
-                (m) =>
-                  m.id === msg.id ||
-                  (m.direction === msg.direction &&
-                    (m.content === msg.content ||
-                      (isImageOrPricelist(m.content, m.media) && isImageOrPricelist(msg.content, msg.media))) &&
-                    Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 20000)
-              );
+              const isDuplicate = prev.some((m) => {
+                if (m.id === msg.id) return true;
+                const eWa = (m as any).wa_message_id || (m as any).waMessageId;
+                const nWa = (msg as any).wa_message_id || (msg as any).waMessageId;
+                if (eWa && nWa && eWa === nWa) return true;
+                if (m.direction === msg.direction && m.content && msg.content && m.content === msg.content) {
+                  if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
+                }
+                const eUrl = mediaUrlOf(m);
+                const nUrl = mediaUrlOf(msg);
+                if (eUrl && nUrl && eUrl === nUrl && m.direction === msg.direction) {
+                  if (Math.abs(new Date(m.created_at).getTime() - new Date(msg.created_at).getTime()) < 2000) return true;
+                }
+                return false;
+              });
               if (isDuplicate) return prev;
               return [...prev, msg];
             });
@@ -1787,8 +1889,10 @@ function clearConversationDraft(convId: string) {
           const existing = current.find((c) => c.conversationId === conversationId);
           if (existing) {
             const isMsgInbound = msg.direction === 'INBOUND';
-            const isCurrentOpen = selectedIdRef.current === conversationId;
-            const nextUnread = isCurrentOpen ? 0 : (existing.unreadCount || 0) + (isMsgInbound ? 1 : 0);
+            const isAdminOutbound = msg.direction === 'OUTBOUND' && (msg.sender_type === 'ADMIN' || (msg as any).senderType === 'ADMIN');
+            const isChatVisuallyActive = isDesktopRef.current || mobileViewRef.current === 'chat';
+            const isCurrentOpen = selectedIdRef.current === conversationId && isChatVisuallyActive;
+            const nextUnread = (isCurrentOpen || isAdminOutbound) ? 0 : (existing.unreadCount || 0) + (isMsgInbound ? 1 : 0);
 
             const updated = current.map((c) =>
               c.conversationId !== conversationId
@@ -1798,8 +1902,8 @@ function clearConversationDraft(convId: string) {
                     lastMessageAt: msgTime,
                     lastMessages: [...(c.lastMessages || []), msg].slice(-3),
                     unreadCount: nextUnread,
-                    isAwaitingReply: isCurrentOpen && isMsgInbound,
-                    isManualUnread: false,
+                    isAwaitingReply: isAdminOutbound ? false : (isCurrentOpen && isMsgInbound),
+                    isManualUnread: isAdminOutbound ? false : false,
                   }
             );
             const sorted = sortChats(updated);
@@ -1910,6 +2014,9 @@ function clearConversationDraft(convId: string) {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         loadChats(true);
+        if (selectedIdRef.current) {
+          loadThread(selectedIdRef.current);
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -2235,6 +2342,18 @@ function clearConversationDraft(convId: string) {
     const res = await apiRequest(`/api/admin/customers/${customerId}`);
     if (res?.data) {
       setCustomerDetailData({ ...res.data, labels: customerDetailData?.labels || [] });
+      // 2.3: sinkronkan nama/telepon ke daftar tanpa tunggu refresh penuh
+      const updatedName = (res.data.name ?? res.data.customerName ?? data.name) as string | undefined;
+      const updatedPhone = (res.data.phone ?? res.data.customerPhone ?? data.phone) as string | undefined;
+      if (updatedName || updatedPhone) {
+        const final = chatsRef.current.map((c) =>
+          c.customerId === customerId || c.conversationId === selectedIdRef.current
+            ? { ...c, customerName: updatedName ?? c.customerName, customerPhone: updatedPhone ?? c.customerPhone }
+            : c
+        );
+        setChats(final);
+        chatsRef.current = final;
+      }
     }
     setCustomerDetailEditMode(false);
   };
@@ -2573,6 +2692,9 @@ function clearConversationDraft(convId: string) {
 
     // 3. Instan kosongkan form input, pratinjau gambar, dan reply state
     resetChatInput();
+    if (image?.preview) {
+      try { URL.revokeObjectURL(image.preview); } catch {}
+    }
     setSelectedImage(null);
     setReplyingTo(null);
     setTimeout(() => scrollToBottom(true), 50);
@@ -2637,10 +2759,30 @@ function clearConversationDraft(convId: string) {
       toast('Gambar maksimal 8 MB.', 'error');
       return;
     }
+    // 3.2: revoke URL lama sebelum ganti agar tidak bocor memori
+    if (selectedImage?.preview) {
+      try { URL.revokeObjectURL(selectedImage.preview); } catch {}
+    }
     const preview = URL.createObjectURL(file);
     setSelectedImage({ file, preview });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const handleRemoveSelectedImage = () => {
+    if (selectedImage?.preview) {
+      try { URL.revokeObjectURL(selectedImage.preview); } catch {}
+    }
+    setSelectedImage(null);
+  };
+
+  // 3.2: cleanup saat unmount atau saat preview berganti
+  useEffect(() => {
+    return () => {
+      if (selectedImage?.preview) {
+        try { URL.revokeObjectURL(selectedImage.preview); } catch {}
+      }
+    };
+  }, [selectedImage?.preview]);
 
   const fileToDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -2951,7 +3093,12 @@ function clearConversationDraft(convId: string) {
                     {(isDesktop || mobileView === 'list') && (
                       <select
                         value={labelFilter}
-                        onChange={(e) => setLabelFilter(e.target.value as typeof labelFilter)}
+                        onChange={(e) => {
+                          const v = e.target.value as typeof labelFilter;
+                          setLabelFilter(v);
+                          // 3.4: forward ke server agar paginasi konsisten
+                          setTimeout(() => loadChats(true, searchQuery, true), 0);
+                        }}
                         className="w-full px-2 py-1 bg-white border border-[#d1d7db] rounded-lg text-[11px] font-semibold text-[#111b21] focus:outline-none focus:border-[#008069] cursor-pointer shadow-2xs truncate"
                       >
                         <option value="all">Semua Label</option>
@@ -3045,13 +3192,22 @@ function clearConversationDraft(convId: string) {
                     <>
                       <CheckCircle className="mx-auto text-[#008069] mb-2" size={24} />
                       <p className="font-bold text-[#111b21]">
-                        {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan'}
+                        {chats.length === 0 ? 'Belum ada percakapan' : 'Tidak ada percakapan untuk filter ini'}
                       </p>
                       <p className="text-[#667781] text-[10px] mt-0.5">
                         {chats.length === 0
                           ? 'Percakapan baru akan muncul secara real-time.'
-                          : 'Ganti filter sumber atau label untuk melihat lainnya.'}
+                          : 'Coba ubah label atau kata kunci, atau reset filter di bawah.'}
                       </p>
+                      {labelFilter !== 'all' && (
+                        <button
+                          type="button"
+                          onClick={() => { setLabelFilter('all'); setTimeout(() => loadChats(true, searchQuery, true), 0); }}
+                          className="mt-2.5 px-2.5 py-1 rounded-lg bg-[#008069] hover:bg-[#00a884] text-white text-[11px] font-semibold transition cursor-pointer shadow-xs"
+                        >
+                          Reset Filter Label
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -3296,25 +3452,23 @@ function clearConversationDraft(convId: string) {
                       }`}>
                         <span className="flex items-center flex-wrap gap-1.5">
 
-                          {/* Medis Badge */}
+                          {/* Medis Badge (icon-only) */}
                           {isMedical && (
                             <span
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/40"
                               title="Medical Concern / Emergency — Butuh respon medis"
                             >
-                              <AlertTriangle size={8} className="mr-0.5" />
-                              Medis
+                              <AlertTriangle size={8} />
                             </span>
                           )}
 
-                          {/* MQL Badge */}
-                          {chat.isMql && (
+                          {/* MQL Badge (icon-only, disembunyikan bila order sudah terjadi) */}
+                          {chat.isMql && !(chat.purchaseCount && chat.purchaseCount > 0) && (
                             <span
                               title={`MQL (${chat.mqlBubbleCount ?? 0} Bubble)`}
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
                             >
-                              <Zap size={8} className="mr-0.5" />
-                              MQL
+                              <Zap size={8} />
                             </span>
                           )}
 
@@ -3337,24 +3491,23 @@ function clearConversationDraft(convId: string) {
                             </span>
                           )}
 
-                          {/* Traffic Source Meta Badge */}
+                          {/* Traffic Source Meta Badge (icon-only) */}
                           {chat.trafficSource === 'meta' && (
                             <span
                               title="Traffic Iklan Meta"
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-500/40"
                             >
-                              <Facebook size={8} className="mr-0.5" />
-                              Meta
+                              <Facebook size={8} />
                             </span>
                           )}
 
-                          {/* Traffic Source Legacy Badge (Tunggal di footer) */}
-                          {chat.trafficSource === 'legacy' && (
+                          {/* Traffic Source Legacy Badge (icon-only, disembunyikan bila order sudah terjadi) */}
+                          {chat.trafficSource === 'legacy' && !(chat.purchaseCount && chat.purchaseCount > 0) && (
                             <span
                               title="Pasien Legacy (Data hasil migrasi arsip riwayat WhatsApp lama)"
-                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40"
+                              className="inline-flex items-center p-1 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40"
                             >
-                              Legacy
+                              <Archive size={8} />
                             </span>
                           )}
 
@@ -3378,17 +3531,17 @@ function clearConversationDraft(convId: string) {
                           )}
                           {chat.currentState === 'HUMAN_HANDLING' ? (
                             <span
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40"
+                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40"
                               title="Ditangani CS (manual)"
                             >
-                              <User size={10} /> CS
+                              <User size={10} />
                             </span>
                           ) : (
                             <span
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
+                              className="inline-flex items-center p-1 rounded-full text-[9px] font-bold bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40"
                               title={`Alur: ${chat.currentState}`}
                             >
-                              <Bot size={10} /> Bot
+                              <Bot size={10} />
                             </span>
                           )}
                         </span>
@@ -3540,8 +3693,16 @@ function clearConversationDraft(convId: string) {
                     </div>
                   </div>
 
-                    {/* Header actions: Bot Release/Takeover */}
+                    {/* Header actions: In-chat search + Bot Release/Takeover */}
                     <div className="shrink-0 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setInChatSearchOpen((v) => !v)}
+                        title={inChatSearchOpen ? 'Tutup pencarian dalam chat' : 'Cari dalam chat'}
+                        className={`p-1.5 rounded-xl border transition shadow-2xs ${inChatSearchOpen ? 'bg-[#008069] text-white border-[#008069]' : 'bg-white dark:bg-[#2a3942] border-[#d1d7db] dark:border-[#374248] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] hover:bg-[#f0f2f5] dark:hover:bg-[#374248]'}`}
+                      >
+                        <Search size={14} />
+                      </button>
                       {selectedChat.isHumanHandling ? (
                         <button
                           onClick={() => handleRelease(selectedChat)}
@@ -3635,6 +3796,26 @@ function clearConversationDraft(convId: string) {
                   </div>
                 )}
 
+                {/* In-chat search toolbar (terpisah dari pencarian daftar kiri) */}
+                {inChatSearchOpen && (
+                  <div className="mx-1 mb-1 p-1.5 bg-[#f8fafc] dark:bg-[#111b21] border border-[#e9edef] dark:border-[#2a3942] rounded-xl flex items-center gap-1.5 animate-fadeIn shrink-0">
+                    <Search size={14} className="text-[#8696a0] shrink-0 ml-1" />
+                    <input
+                      type="text"
+                      value={inChatSearchQuery}
+                      onChange={(e) => setInChatSearchQuery(e.target.value)}
+                      placeholder="Cari dalam percakapan ini… (min. 2 huruf)"
+                      className="flex-1 bg-transparent text-xs text-[#111b21] dark:text-[#e9edef] placeholder-[#8696a0] focus:outline-none min-w-0"
+                      autoFocus
+                    />
+                    {inChatSearchQuery && (
+                      <button type="button" onClick={handleClearInChatSearch} className="p-1 rounded-lg hover:bg-[#e9edef] dark:hover:bg-[#374248] text-[#8696a0]">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Chat Bubbles Container with WhatsApp Wallpaper */}
                 <div 
                   key={selectedChat?.conversationId || 'empty'}
@@ -3648,12 +3829,12 @@ function clearConversationDraft(convId: string) {
                     overscrollBehavior: 'contain',
                   }}
                 >
-                  {/* Floating In-Chat Search Navigation Bar — unified dengan searchQuery global */}
+                  {/* Floating In-Chat Search Navigation Bar — terpisah dari pencarian daftar */}
                   {effectiveInChatQuery && messages.length > 0 && matchingMessageIds.length > 0 && (
                     <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-amber-50/95 backdrop-blur-md border border-amber-300 shadow-md rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-amber-900 animate-fadeIn select-none">
                       <Search size={13} className="text-amber-600 shrink-0" />
                       <span className="truncate">
-                        Hasil pencarian: <span className="font-semibold text-amber-950">"{searchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
+                        Hasil pencarian: <span className="font-semibold text-amber-950">"{inChatSearchQuery}"</span> ({currentMatchIndex + 1} dari {matchingMessageIds.length})
                       </span>
                       <div className="flex items-center gap-0.5 border-l border-amber-200 pl-1.5 shrink-0">
                         <button
@@ -3688,7 +3869,7 @@ function clearConversationDraft(convId: string) {
                     <div className="sticky top-1 z-30 mx-auto w-fit max-w-[94%] bg-slate-50/95 backdrop-blur-md border border-slate-300 shadow-sm rounded-full px-3 py-1 flex items-center gap-2 text-xs text-slate-600 animate-fadeIn select-none">
                       <Info size={13} className="text-slate-500 shrink-0" />
                       <span className="truncate">
-                        Tidak ada bubble pesan berisi <span className="font-semibold">"{searchQuery}"</span> di percakapan ini
+                        Tidak ada bubble pesan berisi <span className="font-semibold">"{inChatSearchQuery}"</span> di percakapan ini
                       </span>
                       <button
                         type="button"
@@ -3908,16 +4089,45 @@ function clearConversationDraft(convId: string) {
                                 </div>
                               )}
 
-                              {!isRevoked && msg.media && (
-                                <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
-                                  <MediaImage
-                                    src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
-                                    downloadSrc={msg.media.hdUrl || msg.media.url}
-                                    thumbUrl={msg.media.thumbUrl}
-                                    caption={msg.media.caption || undefined}
-                                  />
-                                </div>
-                              )}
+                              {!isRevoked && msg.media && (() => {
+                                const mt = ((msg.media as any)?.mimeType || '') as string;
+                                const url = (msg.media.url || msg.media.hdUrl || msg.media.thumbUrl || '') as string;
+                                const isAudio = mt.startsWith('audio/') || /\.(ogg|opus|mp3|m4a|wav|aac)$/i.test(url) || /^\[(AUDIO|VOICE|PTT)/i.test((msg.content || '').trim());
+                                const isDoc = mt.startsWith('application/') || mt.startsWith('text/') || /\.(pdf|docx?|xlsx?|pptx?|zip|rar)$/i.test(url);
+                                if (isAudio && url) {
+                                  return (
+                                    <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
+                                      <VoiceNotePlayer src={url} />
+                                    </div>
+                                  );
+                                }
+                                if (isDoc && url) {
+                                  const fileName = (msg.media as any)?.fileName || (msg.media as any)?.caption || url.split('/').pop() || 'Dokumen';
+                                  return (
+                                    <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
+                                      <a href={url} target="_blank" rel="noopener noreferrer" download className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#f0f2f5] border border-[#d1d7db] hover:bg-[#e8f5f2] transition text-left max-w-[260px]">
+                                        <span className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0"><FileText size={16} /></span>
+                                        <span className="flex-1 min-w-0">
+                                          <span className="block text-xs font-bold text-[#111b21] truncate">{String(fileName).slice(0, 48)}</span>
+                                          <span className="block text-[10px] text-[#667781]">Ketuk untuk unduh</span>
+                                        </span>
+                                        <Download size={14} className="text-[#8696a0] shrink-0" />
+                                      </a>
+                                      {msg.media.caption && <span className="block mt-1 text-[11px] text-slate-700 break-words">{msg.media.caption}</span>}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className={hasMediaOnly ? 'mb-0.5' : 'mb-1.5'}>
+                                    <MediaImage
+                                      src={msg.media.url || msg.media.hdUrl || msg.media.thumbUrl}
+                                      downloadSrc={msg.media.hdUrl || msg.media.url}
+                                      thumbUrl={msg.media.thumbUrl}
+                                      caption={msg.media.caption || undefined}
+                                    />
+                                  </div>
+                                );
+                              })()}
                               {isRevoked ? (
                                 <p className="font-sans whitespace-pre-wrap italic text-[#667781] flex items-center space-x-1.5 py-0.5">
                                   <Ban size={12} className="text-[#8696a0] shrink-0" />
@@ -4116,7 +4326,7 @@ function clearConversationDraft(convId: string) {
                         className="w-20 h-20 object-cover rounded-lg border border-[#e9edef]"
                       />
                       <button
-                        onClick={() => setSelectedImage(null)}
+                        onClick={handleRemoveSelectedImage}
                         className="absolute -top-1.5 -right-1.5 p-0.5 bg-rose-500 text-white rounded-full hover:bg-rose-600 transition"
                       >
                         <X size={12} />

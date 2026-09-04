@@ -10,7 +10,7 @@ export default {
       colors: {
         // Token tema dual-mode WhatsApp Clinic (light = default, dark via .dark / dark: variant)
         wa: {
-          canvas: { light: '#f0f2f5', dark: '#0c1317' },
+          canvas: { light: '#f0f2f5', dark: '#000000' },
           surface: { light: '#ffffff', dark: '#202c33' },
           surface2: { light: '#f8fafc', dark: '#111b21' },
           border: { light: '#e9edef', dark: '#2a3942' },

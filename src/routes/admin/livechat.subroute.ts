@@ -53,7 +53,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/live-chat/conversations',
     async (
       request: FastifyRequest<{
-        Querystring: { limit?: string; offset?: string; mode?: string; search?: string };
+        Querystring: { limit?: string; offset?: string; mode?: string; search?: string; label?: string };
       }>,
       reply
     ) => {
@@ -64,9 +64,10 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         const mode: 'all' | 'real' | 'sandbox' =
           modeRaw === 'real' || modeRaw === 'sandbox' ? modeRaw : 'all';
         const search = request.query.search?.trim();
+        const label = request.query.label?.trim();
 
-        // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik)
-        const cacheKey = !search ? `livechat:list:${DEFAULT_TENANT_ID}:${mode}:${limit}:${offset}` : null;
+        // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik & tanpa filter label)
+        const cacheKey = !search && !label ? `livechat:list:${DEFAULT_TENANT_ID}:${mode}:${limit}:${offset}` : null;
         if (cacheKey) {
           const cached = responseCacheService.get(cacheKey);
           if (cached) {
@@ -77,7 +78,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode, search);
+        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode, search, label as any);
         const payload = { success: true, count: items.length, hasMore, mode, data: items };
         if (cacheKey) {
           responseCacheService.set(cacheKey, payload, 5); // 5s TTL
