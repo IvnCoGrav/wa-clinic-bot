@@ -90,9 +90,10 @@ export class LiveChatService {
     take = 50,
     offset = 0,
     mode: 'all' | 'real' | 'sandbox' = 'all',
-    search?: string
+    search?: string,
+    label?: string
   ): Promise<{ items: LiveChatConversationItem[]; hasMore: boolean }> {
-    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search);
+    const conversations = await conversationService.listConversations(tenantId, take, offset, mode, search, label as any);
     if (conversations.length === 0) {
       return { items: [], hasMore: false };
     }
@@ -478,6 +479,12 @@ export class LiveChatService {
       senderName: adminName || 'Admin',
       payloadRaw: Object.keys(payloadRaw).length > 0 ? payloadRaw : undefined,
     });
+
+    // Sync unread: balasan admin dashboard juga langsung tandai sudah dibaca (paritas dengan WA HP)
+    try {
+      await messageService.markConversationMessagesAsRead(conversationId, tenantId);
+      await conversationService.setManualUnread(conversationId, tenantId, false);
+    } catch (_) {}
 
     // Background enrichment jika pesan admin mengandung jarak / ongkir / info lokasi
     try {

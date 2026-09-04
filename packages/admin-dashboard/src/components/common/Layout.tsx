@@ -540,7 +540,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   return (
     <div
       style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
-      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-[#0c1317] text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
+      className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-[#f0f2f5] dark:bg-black text-[#111b21] dark:text-[#e9edef] flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* 🔄 Mobile Pull-to-Refresh Floating Indicator */}
       {(pullDistance > 0 || isPullRefreshing) && (
@@ -1004,7 +1004,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             isLiveChat
               ? 'p-0 overflow-hidden flex flex-col min-h-0'
               : 'p-4 sm:p-5 md:p-7 space-y-6'
-          } bg-[#f0f2f5] dark:bg-[#0c1317]`}
+          } bg-[#f0f2f5] dark:bg-black`}
         >
           {children}
         </main>

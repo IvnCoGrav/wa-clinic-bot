@@ -2342,7 +2342,7 @@ export const TodayTreatments: React.FC = () => {
               </div>
 
               {/* Quick Replies Templates Bar */}
-              <div className="p-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f0f2f5] dark:bg-[#0c1317] flex items-center gap-1.5 overflow-x-auto shrink-0">
+              <div className="p-2 border-b border-[#e9edef] dark:border-[#2a3942] bg-[#f0f2f5] dark:bg-black flex items-center gap-1.5 overflow-x-auto shrink-0">
                 <button
                   type="button"
                   onClick={() => setReplyText(`Halo Bunda ${chatModalTask.customerName || ''}, saya dari Kala Moms & Baby Spa. Mau konfirmasi jadwal treatment ya Bun 🙏`)}

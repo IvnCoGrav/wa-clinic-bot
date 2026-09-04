@@ -161,7 +161,8 @@ export class ConversationService {
     take = 50,
     offset = 0,
     mode: 'all' | 'real' | 'sandbox' = 'all',
-    search?: string
+    search?: string,
+    label?: string
   ): Promise<any[]> {
     try {
       const where: any = {
@@ -179,6 +180,11 @@ export class ConversationService {
           { customer: { phone: { contains: cleanDigits.length > 2 ? cleanDigits : query } } },
           { messages: { some: { content: { contains: query, mode: 'insensitive' } } } },
         ];
+      }
+      if (label && label !== 'all') {
+        if (label === 'medical_concern') where.escalation_reason = 'medical_concern';
+        else if (label === 'unresolved_faq') where.escalation_reason = 'unresolved_faq';
+        else if (label === 'human_request') where.is_human_handling = true;
       }
       const convs = await prisma.conversation.findMany({
         where,
@@ -206,12 +212,17 @@ export class ConversationService {
             const cust = await customerService.getCustomerById(c.customer_id, tenantId);
             if (cust && !!cust.is_sandbox_test === (mode === 'sandbox')) filtered.push(c);
           } catch (e) {
-            // Customer tak ditemukan di memory store → ikutkan saja agar tidak kehilangan data (fail-open)
             if (mode === 'real') filtered.push(c);
           }
         }
       }
-      return filtered.slice(offset, offset + take);
+      let working: any[] = filtered;
+      if (label && label !== 'all') {
+        if (label === 'medical_concern') working = working.filter((c: any) => c.escalation_reason === 'medical_concern');
+        else if (label === 'unresolved_faq') working = working.filter((c: any) => c.escalation_reason === 'unresolved_faq');
+        else if (label === 'human_request') working = working.filter((c: any) => !!c.is_human_handling);
+      }
+      return working.slice(offset, offset + take);
     }
   }
 

@@ -425,7 +425,7 @@ textarea,
 }
 
 /* ========================================================================= */
-/* 🌙 DUAL THEME — WhatsApp Web Dark Mode (#0c1317 / #202c33 / #00a884)      */
+/* 🌙 DUAL THEME — Pure Black Dark Mode (#000000 / #202c33 / #00a884)          */
 /* Aktif saat <html class="dark">. Dikelola ThemeContext (localStorage).    */
 /*                                                                         */
 /* Arsitektur:                                                             */
@@ -441,22 +441,22 @@ textarea,
 
 .dark html,
 html.dark {
-  background-color: #0c1317;
+  background-color: #000000;
   color: #e9edef;
 }
 
 .dark body {
-  background-color: #0c1317;
+  background-color: #000000;
   color: #e9edef;
 }
 
 .dark #root {
-  background-color: #0c1317;
+  background-color: #000000;
   color: #e9edef;
 }
 
 /* --- Kanvas & permukaan netral --- */
-.dark .bg-\[\#f0f2f5\] { background-color: #0c1317; }
+.dark .bg-\[\#f0f2f5\] { background-color: #000000; }
 .dark .bg-\[\#f8fafc\] { background-color: #111b21; }
 .dark .bg-white { background-color: #202c33; }
 .dark .bg-slate-50 { background-color: #111b21; }
