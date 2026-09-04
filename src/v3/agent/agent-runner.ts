@@ -61,7 +61,8 @@ export class V3AgentRunner {
     const apiKey = endpointConfig.apiKey;
 
     // 3. Susun percakapan awal
-    const systemPrompt = PersonaPromptBuilder.buildSystemPrompt(session);
+    const isFollowUp = history.length > 0;
+    const systemPrompt = PersonaPromptBuilder.buildSystemPrompt(session, isFollowUp);
     const messages: any[] = [
       { role: 'system', content: systemPrompt },
       ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
