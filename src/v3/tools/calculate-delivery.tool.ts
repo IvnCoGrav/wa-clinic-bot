@@ -8,6 +8,7 @@ export interface CalculateDeliveryInput {
   locationText: string;
   streetDetail?: string;
   tenantId?: string;
+  candidateTreatmentName?: string;
 }
 
 export interface CalculateDeliveryOutput {
@@ -35,11 +36,11 @@ export const CALCULATE_DELIVERY_TOOL_SCHEMA = {
       properties: {
         locationText: {
           type: 'string',
-          description: 'Nama kelurahan, kecamatan, perumahan, atau daerah tempat tinggal customer (misal: "Trosobo Sidoarjo", "Manukan Surabaya", "Waru", "Gedangan").'
+          description: 'Nama kelurahan, desa, perumahan, patokan, atau alamat lengkap customer (misal: "Sedati Pepe", "Bulusidokare", "Perumahan Safira Juanda").'
         },
         streetDetail: {
           type: 'string',
-          description: 'Detail nama jalan, nomor rumah, atau blok perumahan jika disebutkan (opsional).'
+          description: 'Detail nomor rumah atau RT/RW jika ada.'
         }
       },
       required: ['locationText']
@@ -52,7 +53,11 @@ const OUTSIDE_CITIES_RE = /\b(malang|jakarta|bandung|semarang|yogyakarta|jogja|b
 const BROAD_REGION_RE = /^(?:rumah\s+d\s+|rumah\s+di\s+|di\s+|daerah\s+|wilayah\s+)?(?:surabaya\s+(?:barat|timur|selatan|utara|pusat)|surabaya|sidoarjo|gresik)$/i;
 
 export async function executeCalculateDelivery(input: CalculateDeliveryInput): Promise<CalculateDeliveryOutput> {
-  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID } = input;
+  const { locationText, streetDetail, tenantId = DEFAULT_TENANT_ID, candidateTreatmentName } = input;
+  const compositeQuery = streetDetail ? `${locationText} ${streetDetail}` : locationText;
+
+  // Fast check: Jika customer secara sadar menyebut kota di luar jangkauan (misal Malang, Jakarta)
+  const isExplicitOutsideCity = OUTSIDE_CITIES_RE.test(locationText);
   
   if (!locationText || locationText.trim().length < 2) {
     return {
@@ -63,13 +68,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     };
   }
 
-  const compositeQuery = streetDetail
-    ? `${streetDetail} ${locationText}`.trim()
-    : locationText.trim();
-
   // 1. Cek Wilayah Terlalu Luas (Surabaya Barat, Surabaya Timur, Sidoarjo, dll.)
-  // Jika customer hanya menyebut nama wilayah/arah mata angin tanpa nama kelurahan/perumahan,
-  // DILARANG menghitung jarak atau mengeluarkan nominal ongkir karena tidak presisi.
   if (BROAD_REGION_RE.test(compositeQuery.trim()) || BROAD_REGION_RE.test(locationText.trim())) {
     return {
       success: false,
@@ -79,14 +78,9 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
     };
   }
 
-  // 2. Fast check: Jika customer secara sadar menyebut kota di luar jangkauan (misal Malang, Jakarta)
-  const isExplicitOutsideCity = OUTSIDE_CITIES_RE.test(locationText);
-
   try {
-    // Geocode via local gazetteer & Google Maps (dengan bias Surabaya/Sidoarjo)
     let resolved = await geocodingService.geocodeText(compositeQuery);
     
-    // Second-pass jika belum presisi dan ada teks asli
     if (!resolved.isPrecise && compositeQuery !== locationText) {
       const locResolved = await geocodingService.geocodeText(locationText);
       if (locResolved.isPrecise) {
@@ -94,7 +88,6 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       }
     }
 
-    // Jika ambigu (misal hanya menyebut nama Kecamatan seperti Candi, Rungkut, Waru, Tandes)
     const ambiguityList = (resolved as any).ambiguityResults;
     if (ambiguityList && ambiguityList.length > 1 && !streetDetail) {
       const kecName = ambiguityList[0]?.Kecamatan || locationText;
@@ -128,7 +121,6 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       };
     }
 
-    // Jika geocoding mengembalikan isPrecise false dan tidak ada kelurahan spesifik
     if (!resolved.isPrecise && !resolved.kelurahan && !streetDetail) {
       return {
         success: false,
@@ -138,7 +130,6 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       };
     }
 
-    // 3. Hitung jarak dan ongkir
     const deliveryResult = await deliveryService.calculateDelivery(
       { lat: resolved.lat, lng: resolved.lng },
       { lat: clinicConfig.lat, lng: clinicConfig.lng },
@@ -157,6 +148,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
           normalPrice: ongkirNormal,
           promoPrice: ongkirPromo,
           freeTierKm: 5,
+          candidateTreatmentName,
         });
 
     return {
@@ -173,7 +165,7 @@ export async function executeCalculateDelivery(input: CalculateDeliveryInput): P
       suggestedTemplateReply,
       message: isOutOfCoverage
         ? `Jarak ${distanceKm} km melebihi batas jangkauan layanan klinik (maks 30 km). Template penolakan resmi:\n"${suggestedTemplateReply}"`
-        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.\n\nWAJIB GUNAKAN FORMAT BALASAN RESMI BIDAN YUSI BERIKUT:\n"${suggestedTemplateReply}"`
+        : `Jarak ${distanceKm} km (${resolved.kelurahan || '-'}, ${resolved.kecamatan || '-'}). Ongkir normal Rp ${ongkirNormal.toLocaleString('id-ID')}, promo Rp ${ongkirPromo.toLocaleString('id-ID')}.${candidateTreatmentName ? `\nTreatment yang sedang dibahas: ${candidateTreatmentName}. Hitungkan total biaya (treatment + ongkir promo) dan tanyakan hari kunjungan.` : ''}\n\nFormat penyampaian yang disarankan:\n"${suggestedTemplateReply}"`
     };
   } catch (error: any) {
     console.error('[V3 TOOL DELIVERY ERROR]', error);
