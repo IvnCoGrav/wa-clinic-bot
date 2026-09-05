@@ -757,6 +757,8 @@ function clearConversationDraft(convId: string) {
   const searchInputFocusedRef = useRef(false);
   const loadingMoreRef = useRef(false);
   const firstRenderRef = useRef(true);
+  const wasNearBottomRef = useRef(true);
+  const savedScrollTopRef = useRef<number | null>(null);
 
   const [allLabels, setAllLabels] = useState<CustomerLabelData[]>([]);
   const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
@@ -1377,20 +1379,17 @@ function clearConversationDraft(convId: string) {
     }
   });
 
-  const scrollToBottom = useCallback((smooth = false, forceMulti = true) => {
-    // Goyang fix: hanya scroll jika user dekat bawah (tidak ganggu saat baca history), dan kurangi multi-timeout.
-    const isNearBottom = (() => {
-      const el = chatContainerRef.current;
-      if (!el) return true;
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      return distanceFromBottom < 300; // threshold 300px
-    })();
-    if (!isNearBottom && !forceMulti) return;
+  const scrollToBottom = useCallback((smooth = false, forceMulti = false) => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isNearBottom = distanceFromBottom < 300;
+    if (!isNearBottom) return;
+    wasNearBottomRef.current = true;
     const doScroll = () => {
       if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
       }
-      // scrollIntoView hanya jika nearBottom untuk hindari fight dengan scrollTop
       if (isNearBottom && messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
       }
@@ -1398,10 +1397,21 @@ function clearConversationDraft(convId: string) {
     doScroll();
     requestAnimationFrame(doScroll);
     if (forceMulti) {
-      // kurangi dari 4 → 1 rAF tambahan untuk hemat jank
       setTimeout(doScroll, 120);
     }
   }, []);
+
+  // Track apakah user sedang di bawah (untuk preserve posisi saat kembali tab)
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      wasNearBottomRef.current = distance < 300;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [chatContainerRef.current, selectedId]);
 
   const scrollToMessage = useCallback((msgId: string, smooth = true) => {
     setHighlightedMsgId(msgId);
@@ -1631,7 +1641,7 @@ function clearConversationDraft(convId: string) {
           return;
         }
       }
-      scrollToBottom(false, true);
+      scrollToBottom(false, false);
     }
   }, [messages, selectedId, effectiveInChatQuery, scrollToBottom, scrollToMessage]);
 
@@ -2023,11 +2033,24 @@ function clearConversationDraft(convId: string) {
     }, 15000);
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadChats(true);
-        if (selectedIdRef.current) {
-          loadThread(selectedIdRef.current);
+      if (document.visibilityState === 'hidden') {
+        const el = chatContainerRef.current;
+        if (el) {
+          savedScrollTopRef.current = el.scrollTop;
+          wasNearBottomRef.current = (el.scrollHeight - el.scrollTop - el.clientHeight) < 300;
         }
+      } else if (document.visibilityState === 'visible') {
+        loadChats(true);
+        // Preserve posisi baca: hanya auto-scroll jika sebelumnya di bawah
+        setTimeout(() => {
+          const el = chatContainerRef.current;
+          if (!el) return;
+          if (wasNearBottomRef.current) {
+            scrollToBottom(true, false);
+          } else if (savedScrollTopRef.current !== null) {
+            el.scrollTop = savedScrollTopRef.current;
+          }
+        }, 100);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -2708,7 +2731,7 @@ function clearConversationDraft(convId: string) {
     }
     setSelectedImage(null);
     setReplyingTo(null);
-    setTimeout(() => scrollToBottom(true), 50);
+    setTimeout(() => scrollToBottom(true, true), 50);
 
     setSending(true);
     try {
