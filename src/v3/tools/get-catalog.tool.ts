@@ -121,16 +121,16 @@ export async function executeGetCatalog(input: GetCatalogInput): Promise<GetCata
     // Urutkan yang direkomendasikan di atas
     formattedTreatments.sort((a, b) => (b.isRecommendedForSymptoms ? 1 : 0) - (a.isRecommendedForSymptoms ? 1 : 0));
 
-    if (hasFluOrDigestiveSymptoms) {
-      recommendationReason = 'Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung) dengan double aromaterapi.';
+    if (hasFluOrDigestiveSymptoms || (specificTreatmentName && /pulih|bapil|batuk|pilek|kembung/i.test(specificTreatmentName))) {
+      recommendationReason = 'Untuk keluhan flu/batuk/pilek/kembung/rewel, paket yang paling tepat adalah Pijat Bayi Pulih Ceria (Terapi Bapil/Kembung) promo Rp 70.000 (normal Rp 90.000, durasi 40 menit).\n\nRincian yang didapatkan si kecil:\n1. Pijat stimulasi seluruh tubuh (full body massage bayi) oleh Bidan ber-STR aktif\n2. Terapi akupresur titik pernapasan (dada & punggung) khusus melegakan batuk/flu\n3. Penggunaan double aromaterapi / balsem herbal khusus bayi\n4. Opsi Tambahan (Add-on): Sinar Moksa (terapi sinar hangat inframerah 15 menit, promo +Rp 10.000) untuk membantu mengencerkan dahak & lendir. Paket Combo Pulih Ceria + Sinar Moksa total Promo Rp 80.000 (normal Rp 105.000).';
     } else if (hasEatingIssues) {
-      recommendationReason = 'Untuk keluhan susah makan / GTM, paket yang tepat adalah Pijat Lahap Juara.';
+      recommendationReason = 'Untuk keluhan susah makan / GTM, paket yang tepat adalah Pijat Lahap Juara promo Rp 75.000 (normal Rp 95.000, 40 menit). Mencakup pijat relaksasi dan stimulasi titik pencernaan untuk nafsu makan.';
     } else if (hasSleepOrRelaxationInquiry) {
-      recommendationReason = 'Untuk membantu si kecil lebih rileks dan tidur nyenyak, paket Pijat Bayi Ceria (Rileksasi) sangat cocok.';
+      recommendationReason = 'Untuk membantu si kecil lebih rileks dan tidur nyenyak, paket Pijat Bayi Ceria (Rileksasi) sangat cocok promo Rp 60.000 (normal Rp 80.000, 40 menit). Mencakup pijat relaksasi seluruh tubuh bayi sehat.';
     }
 
     const summaryList = formattedTreatments.slice(0, 4).map(t => 
-      `• *${t.name}*: Promo *Rp ${t.promoPrice.toLocaleString('id-ID')}* (Normal *Rp ${t.originalPrice.toLocaleString('id-ID')}*, ${t.durationMinutes} menit)`
+      `• *${t.name}*: Promo *Rp ${t.promoPrice.toLocaleString('id-ID')}* (Normal *Rp ${t.originalPrice.toLocaleString('id-ID')}*, ${t.durationMinutes} menit)\n  Rincian: ${t.description}`
     ).join('\n');
 
     let suggestedPriceReply: string | undefined = undefined;
