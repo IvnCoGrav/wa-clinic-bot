@@ -171,6 +171,8 @@ export class ConversationService {
       };
       if (mode !== 'all') {
         where.customer = { is_sandbox_test: mode === 'sandbox' };
+      } else if (process.env.NODE_ENV === 'production') {
+        where.customer = { is_sandbox_test: false };
       }
       if (search && search.trim()) {
         const query = search.trim();
