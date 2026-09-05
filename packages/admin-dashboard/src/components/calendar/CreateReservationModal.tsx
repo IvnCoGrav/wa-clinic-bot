@@ -525,7 +525,12 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       }
 
       setStatus(res.status === 'confirmed' ? 'confirmed' : 'pending');
-      setNotes(res.notes || '');
+      const extractedNotes = res.notes || (() => {
+        if (!res.raw_text) return '';
+        const match = res.raw_text.match(/(?:^|\n)Catatan:\s*([\s\S]*)$/i);
+        return match ? match[1].trim() : '';
+      })();
+      setNotes(extractedNotes);
 
       // Children / babies pre-fill — fallback ke baby_details untuk reservasi lama
       const rawBabies = cust?.children || res.children || (res as any).baby_details || [];
