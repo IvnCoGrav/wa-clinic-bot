@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### Feature — Integrasi Aturan Emas Klinik ke Arsitektur V3 (`persona.ts`, `sanitizer.ts`, `agent-runner.ts`, `v3-persona-rules.test.ts`) (2026-09-05)
+
+- **Latar Belakang:** Balasan V3 melanggar aturan klinik di live test (harga/durasi bocor saat tidak ditanya, English leak, todong usia, afirmasi jadwal).
+- **1. Prompt (`v3/agent/persona.ts`):** Poin 5 direkonstruksi jadi KONDISI A (keluhan saja → rekomendasi *Pijat Bayi Pulih Ceria* + manfaat 2-3 kalimat, tanpa Rp/menit/daftar nomor, tutup tanya keluhan bukan usia) vs KONDISI B (eksplisit tanya harga/rincian → 40 menit, *Rp 70.000*, rincian ID murni, opsi *Sinar Moksa*, tutup tanya hari kunjungan); daftar larangan kata asing mutlak; blok `[NEGATIVE CONSTRAINTS MUTLAK]` 13 aturan; Contoh 1-2 diselaraskan (tanpa "Homecare treatment"/"(full body massage)"/todong usia).
+- **2. Guardrail (`v3/guardrails/sanitizer.ts`):** `cleanOutboundReply(rawText, customerInput?)` + 4 method baru — `sanitizeUnsolicitedPriceAndDuration` (sapu Rp/menit bila input tanpa kata tanya harga/durasi), `truncateToMaxChars` (500, potong di akhir kalimat), `stripEnglishLeakage`, `sanitizeFirstPersonPronoun` (saya/aku→kami; grup verba dibuat capturing agar `$1` valid — formula plan memakai non-capturing yang menghasilkan literal "$1").
+- **3. Pipeline (`v3/agent/agent-runner.ts:283`):** `cleanOutboundReply(finalReply, incomingText)` — sanitizer kini tahu konteks tanya-harga.
+- **4. Tes (`tests/unit/v3-persona-rules.test.ts`):** 10 pengujian deterministik offline (axios-mock): sapaan Turn-0, lokasi, bapil ±harga, anti-afirmasi jadwal, newborn, luar katalog, + 3 unit guardrail (strip harga, truncate 500, anti-English).
+- **5. Few-Shot Chat Examples (`docs/BANK_CONTOH_CHAT_BIDAN_YUSI.md` & `persona.ts`):** Ekstraksi 9.420 pesan database riil, dikurasi 532 dialog asli manusia (tanpa bot, tanpa form booking, tanpa ongkir math, jadwal dibatasi 2 contoh) dan 10 contoh representatif ditanamkan ke prompt AI.
+- **Verifikasi:** target 10/10 ✓, `npx tsc --noEmit` ✓. Full suite: 1740 passed, 19 gagal di 6 file — terbukti pre-existing di master bersih via `git stash` (20 gagal termasuk 1 dari file tes baru tanpa implementasi), bukan regresi patch ini.
+
 #### Fix — Preservasi Posisi Scroll Live Chat Saat Pindah Menu/Page & Alt-Tab (`LiveChatMonitor.tsx`) (2026-09-05)
 
 - **Akar Masalah:**
