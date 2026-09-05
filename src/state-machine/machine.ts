@@ -265,7 +265,7 @@ export class ConversationStateMachine {
       };
     }
 
-    // --- 🚀 4. EKSEKUSI UTAMA: CONTEXT-GROUNDED SLOT-FILLING ENGINE ---
+    // --- 🚀 4. EKSEKUSI UTAMA: V3 AGENTIC (DEFAULT) / V2 SLOT-FILLING ENGINE ---
     const recentDbMsgs = await messageService.getRecentMessages(activeConversation.id, LLM_HISTORY_LIMIT, tenantId);
     const historyFormatted = recentDbMsgs.map((m) => ({
       role: m.direction === 'INBOUND' ? ('user' as const) : ('assistant' as const),
@@ -273,7 +273,50 @@ export class ConversationStateMachine {
     }));
     const handlerCtx = { ...ctx, tenantId, conversation: activeConversation, history: historyFormatted, bubbleCorrelationId };
     
-    const result: StateHandlerResult = await processSlotEngine(handlerCtx);
+    let result: StateHandlerResult;
+    const useV3 = process.env.USE_V3_AGENT !== 'false';
+
+    if (useV3) {
+      const { V3AgentRunner } = await import('../v3/agent/agent-runner');
+      let effectiveInboundText = incomingText;
+      if (hasValidLocation && loc) {
+        effectiveInboundText = `[Shared Location: ${loc.latitude}, ${loc.longitude}]`;
+      } else if (!effectiveInboundText && inboundContent) {
+        effectiveInboundText = inboundContent;
+      }
+
+      const v3Result = await V3AgentRunner.processMessage({
+        tenantId,
+        customerId: customer.id,
+        conversationId: activeConversation.id,
+        phone: customer.phone,
+        chatId: `${customer.phone}@c.us`,
+        incomingText: effectiveInboundText,
+        history: historyFormatted,
+        skipDbLogging: true,
+      });
+
+      if (v3Result.isEscalated) {
+        activeConversation.is_human_handling = true;
+        activeConversation.current_state = ConversationState.HUMAN_HANDLING;
+        await conversationService.escalateToHumanHandling(
+          activeConversation,
+          customer.phone,
+          'Eskalasi otomatis oleh V3 Agent',
+          tenantId,
+          'v3_agent_escalation'
+        );
+      }
+
+      result = {
+        nextState: v3Result.isEscalated ? ConversationState.HUMAN_HANDLING : activeConversation.current_state,
+        replyText: v3Result.replyText,
+        shouldSendReply: v3Result.shouldSendReply && !!v3Result.replyText,
+        isHumanHandling: v3Result.isEscalated,
+      };
+    } else {
+      result = await processSlotEngine(handlerCtx);
+    }
 
     // 4. Update Conversation State jika berubah
     if (result.nextState !== activeConversation.current_state) {

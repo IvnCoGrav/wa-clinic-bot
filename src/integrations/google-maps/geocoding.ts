@@ -133,7 +133,7 @@ export class GeocodingService {
         // tidak memicu kalkulasi ongkir salah.
         // =========================================================================
         try {
-          const { isClinicLocationQuestion } = await import('../../slot-engine/entity-extractor');
+          const { isClinicLocationQuestion } = await import('../../utils/location-classifier');
           const isPureQuestionOrNoise =
             isClinicLocationQuestion(locationText) ||
             locationText.toLowerCase().split(/\s+/).filter(Boolean).every((w) => INDONESIAN_STOP_WORDS.has(w));

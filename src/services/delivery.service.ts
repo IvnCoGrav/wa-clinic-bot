@@ -46,6 +46,18 @@ const HAVERSINE_CIRCUITY_FACTOR = parseFloat(process.env.HAVERSINE_CIRCUITY_FACT
  */
 const ORS_BUFFER_FACTOR = parseFloat(process.env.ORS_BUFFER_FACTOR || '1.10');
 
+/**
+ * Menghitung buffer factor adaptif:
+ * - Jarak <= 18 km: 1.10x (atau dari env ORS_BUFFER_FACTOR)
+ * - Jarak > 18 km: 1.05x (mencegah overshooting ke tier ongkir berikutnya untuk jarak menengah-jauh)
+ */
+export function getAdaptiveBufferFactor(rawDistanceKm: number, defaultFactor: number = ORS_BUFFER_FACTOR): number {
+  if (rawDistanceKm > 18) {
+    return 1.05;
+  }
+  return defaultFactor;
+}
+
 export function loadDeliveryTiers() {
   try {
     if (fs.existsSync(TIERS_FILE)) {
@@ -201,13 +213,14 @@ export class DeliveryService {
     );
 
     if (orsResult && typeof orsResult.distanceMeters === 'number') {
-      // Konversi meter ke km dengan buffer 1.1x (presisi 2 desimal)
+      // Konversi meter ke km dengan buffer adaptif (1.10x jika <= 18 km, 1.05x jika > 18 km)
       const rawDistanceKm = orsResult.distanceMeters / 1000;
-      distanceKm = parseFloat((rawDistanceKm * ORS_BUFFER_FACTOR).toFixed(2));
+      const effectiveBuffer = getAdaptiveBufferFactor(rawDistanceKm);
+      distanceKm = parseFloat((rawDistanceKm * effectiveBuffer).toFixed(2));
       isEstimated = false;
       const durationMins = orsResult.durationSeconds ? Math.round(orsResult.durationSeconds / 60) : null;
       console.log(
-        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${ORS_BUFFER_FACTOR}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+        `[DISTANCE CALC] 🛣️ Method: OpenRouteService (ORS API) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${effectiveBuffer}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
       );
     } else {
       // 2. Lapis 2 (Fallback 1): Coba hit Google Maps Distance Matrix API (Mode Motor / Hindari Tol)
@@ -220,11 +233,12 @@ export class DeliveryService {
 
       if (googleResult && typeof googleResult.distanceMeters === 'number') {
         const rawDistanceKm = googleResult.distanceMeters / 1000;
-        distanceKm = parseFloat((rawDistanceKm * ORS_BUFFER_FACTOR).toFixed(2));
+        const effectiveBuffer = getAdaptiveBufferFactor(rawDistanceKm);
+        distanceKm = parseFloat((rawDistanceKm * effectiveBuffer).toFixed(2));
         isEstimated = false;
         const durationMins = googleResult.durationSeconds ? Math.round(googleResult.durationSeconds / 60) : null;
         console.log(
-          `[DISTANCE CALC] 🗺️ Method: Google Maps Distance Matrix (Motorbike/Avoid Tolls) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${ORS_BUFFER_FACTOR}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
+          `[DISTANCE CALC] 🗺️ Method: Google Maps Distance Matrix (Motorbike/Avoid Tolls) | Raw: ${rawDistanceKm.toFixed(2)} km ──▶ Buffered (${effectiveBuffer}x): ${distanceKm} km${durationMins ? ` (est. travel: ${durationMins} mins)` : ''} | Clinic: [${clinicCoords.lat}, ${clinicCoords.lng}] ──▶ Customer: [${customerCoords.lat}, ${customerCoords.lng}]`
         );
       } else {
         // 3. Lapis 3 (Fallback 2): Rumus Matematis Haversine + circuity factor
