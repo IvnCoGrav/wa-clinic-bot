@@ -776,3 +776,34 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     babies,
   };
 }
+
+/**
+ * Ekstraksi catatan manual admin dari raw_text.
+ * Pola standar: "... \nCatatan: [isi catatan]"
+ */
+export function extractNotesFromRawText(rawText: string | null | undefined): string | null {
+  if (!rawText) return null;
+  const match = rawText.match(/(?:^|\n)Catatan:\s*([\s\S]*)$/i);
+  return match && match[1].trim().length > 0 ? match[1].trim() : null;
+}
+
+/**
+ * Menggabungkan atau memperbarui catatan ke dalam raw_text.
+ * Jika notes kosong / null, blok Catatan: akan dihapus.
+ * Jika rawText belum ada, dibuat dengan fallbackTitle.
+ */
+export function mergeNotesIntoRawText(
+  rawText: string | null | undefined,
+  notes: string | null | undefined,
+  fallbackTitle: string = '[Admin Manual]'
+): string {
+  const cleanNotes = notes ? notes.trim() : '';
+  const base = (rawText || fallbackTitle)
+    .replace(/(?:^|\n)Catatan:[\s\S]*$/i, '')
+    .trim();
+
+  if (!cleanNotes) {
+    return base;
+  }
+  return `${base}\nCatatan: ${cleanNotes}`;
+}

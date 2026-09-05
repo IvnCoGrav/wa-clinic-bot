@@ -237,4 +237,108 @@ describe('Admin Create Reservation (POST /api/admin/reservation)', () => {
       targetId: reservationId,
     }));
   });
+
+  it('PATCH /api/admin/reservation/:id correctly integrates notes into raw_text without sending notes to prisma.reservation.update', async () => {
+    const reservationId = 'res-notes-test-1';
+    const customerId = 'cust-notes-1';
+    const existingRes = {
+      id: reservationId,
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: customerId,
+      treatment_category: 'BABY',
+      treatment_detail: 'Pijat Bayi',
+      purchase_value: 60000,
+      status: 'pending',
+      booking_date: null,
+      raw_text: '[Admin Manual] BABY: Pijat Bayi',
+      customer: {
+        id: customerId,
+        name: 'Bunda Jennifer',
+        phone: '628113399397',
+        children: [],
+      },
+    };
+
+    let capturedUpdateData: any = null;
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(existingRes as any);
+    vi.mocked(prisma.reservation.update).mockImplementationOnce(async ({ data }: any) => {
+      capturedUpdateData = data;
+      return {
+        ...existingRes,
+        ...data,
+      } as any;
+    });
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/reservation/${reservationId}`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        treatmentCategory: 'BABY',
+        treatmentDetail: 'Pijat Bayi & Terapi Uap',
+        notes: 'Pasien minta terapis berpengalaman',
+        status: 'pending',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.notes).toBe('Pasien minta terapis berpengalaman');
+    
+    // Pastikan updateData TIDAK mengandung kolom 'notes'
+    expect(capturedUpdateData.notes).toBeUndefined();
+    // Pastikan raw_text memuat blok Catatan
+    expect(capturedUpdateData.raw_text).toContain('Catatan: Pasien minta terapis berpengalaman');
+  });
+
+  it('PATCH /api/admin/reservation/:id returns 404 when reservation does not exist', async () => {
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(null);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/admin/reservation/non-existent-id',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        status: 'confirmed',
+      },
+    });
+
+    expect(res.statusCode).toBe(404);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Reservation not found');
+  });
+
+  it('PATCH /api/admin/reservation/:id returns 500 when database update fails (does NOT mask as 404)', async () => {
+    const reservationId = 'res-err-test-1';
+    const existingRes = {
+      id: reservationId,
+      tenant_id: DEFAULT_TENANT_ID,
+      customer_id: 'cust-err-1',
+      treatment_category: 'BABY',
+      status: 'pending',
+      customer: { id: 'cust-err-1', name: 'Bunda Test', phone: '08123456789' },
+    };
+
+    vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce(existingRes as any);
+    vi.mocked(prisma.reservation.update).mockRejectedValueOnce(new Error('Prisma database constraint error'));
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/reservation/${reservationId}`,
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: {
+        status: 'confirmed',
+      },
+    });
+
+    expect(res.statusCode).toBe(500);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('Prisma database constraint error');
+  });
 });

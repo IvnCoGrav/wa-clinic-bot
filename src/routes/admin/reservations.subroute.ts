@@ -6,7 +6,12 @@ import { customerService } from '../../services/customer.service';
 import { googleCalendarService } from '../../services/google-calendar.service';
 import { capiService, resolveTreatmentValue, extractValueByFormat, getTenantCapiFormats, resolveCanonicalLandingUrl } from '../../services/capi.service';
 import { extractRupiahAmount } from '../../services/purchase-detection.service';
-import { parseReservationText, extractBabyDetails } from '../../utils/reservation-text-parser';
+import {
+  parseReservationText,
+  extractBabyDetails,
+  extractNotesFromRawText,
+  mergeNotesIntoRawText,
+} from '../../utils/reservation-text-parser';
 import { memoryReservations } from './stores';
 import { responseCacheService } from '../../services/response-cache.service';
 
@@ -407,6 +412,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const { computeCurrentAge } = await import('../../utils/age-calculator');
         const data = rows.map((r) => ({
           ...r,
+          notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
           baby_details: extractBabyDetails(r.raw_text),
           customer: r.customer
             ? {
@@ -455,6 +461,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           const total = await prisma.reservation.count({ where });
           const data = rows.map((r) => ({
             ...r,
+            notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
             baby_details: extractBabyDetails(r.raw_text),
             customer: r.customer ? { ...r.customer, children: [] } : undefined,
           }));
@@ -473,6 +480,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           console.warn('[Admin API] Database error fetching reservations, falling back to memory:', err2.message);
           let data = Array.from(memoryReservations.values()).map((r) => ({
             ...r,
+            notes: (r as any).notes || extractNotesFromRawText(r.raw_text),
             baby_details: extractBabyDetails(r.raw_text),
           }));
 
@@ -998,15 +1006,35 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           // memory fallback
           const mem = memoryReservations.get(id);
           if (!mem) return reply.status(404).send({ success: false, error: 'Reservation tidak ditemukan' });
-          return reply.status(200).send({ success: true, data: { ...mem, baby_details: extractBabyDetails(mem.raw_text) } });
+          return reply.status(200).send({
+            success: true,
+            data: {
+              ...mem,
+              notes: (mem as any).notes || extractNotesFromRawText(mem.raw_text),
+              baby_details: extractBabyDetails(mem.raw_text),
+            },
+          });
         }
         return reply.status(200).send({
           success: true,
-          data: { ...reservation, baby_details: extractBabyDetails(reservation.raw_text) },
+          data: {
+            ...reservation,
+            notes: (reservation as any).notes || extractNotesFromRawText(reservation.raw_text),
+            baby_details: extractBabyDetails(reservation.raw_text),
+          },
         });
       } catch (err: any) {
         const mem = memoryReservations.get(id);
-        if (mem) return reply.status(200).send({ success: true, data: { ...mem, baby_details: extractBabyDetails(mem.raw_text) } });
+        if (mem) {
+          return reply.status(200).send({
+            success: true,
+            data: {
+              ...mem,
+              notes: (mem as any).notes || extractNotesFromRawText(mem.raw_text),
+              baby_details: extractBabyDetails(mem.raw_text),
+            },
+          });
+        }
         return reply.status(500).send({ success: false, error: err.message });
       }
     }
@@ -1262,16 +1290,47 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         durationMinutes: reqDurationMinutes,
       } = body;
 
+      let existing: any = null;
       try {
-        const existing = await prisma.reservation.findFirst({
+        existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: DEFAULT_TENANT_ID },
           include: { customer: { include: { children: true } } },
         });
+      } catch (dbErr: any) {
+        console.warn(`[Admin API] DB query failed for reservation ${id}, checking in-memory store:`, dbErr.message);
+      }
 
-        if (!existing) {
-          throw new Error('Reservation not found');
+      if (!existing) {
+        const mock = memoryReservations.get(id);
+        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
+          if (treatmentCategory !== undefined) mock.treatment_category = treatmentCategory;
+          if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
+          if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
+          if (status !== undefined) mock.status = status;
+          if (notes !== undefined) {
+            mock.notes = notes;
+            const fallbackTitle = `[Admin Manual] ${treatmentCategory || mock.treatment_category}: ${treatmentDetail || mock.treatment_detail || ''}`;
+            mock.raw_text = mergeNotesIntoRawText(mock.raw_text, notes, fallbackTitle);
+          }
+          if (rawText !== undefined) mock.raw_text = rawText;
+          if (paymentMethod !== undefined) mock.payment_method = paymentMethod;
+          if (assignedStaffId !== undefined) mock.assigned_staff_id = assignedStaffId;
+          if (bookingDate !== undefined) mock.booking_date = bookingDate ? new Date(bookingDate) : null;
+          mock.updated_at = new Date();
+          memoryReservations.set(id, mock);
+          return reply.status(200).send({
+            success: true,
+            data: {
+              ...mock,
+              notes: mock.notes || extractNotesFromRawText(mock.raw_text),
+            },
+            note: 'Fallback in-memory mode',
+          });
         }
+        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+      }
 
+      try {
         const isBecomingConfirmed = status === 'confirmed' && existing.status !== 'confirmed';
         const isBecomingCancelled = status === 'cancelled' && existing.status !== 'cancelled';
         const staffChanged = assignedStaffId !== undefined && assignedStaffId !== existing.assigned_staff_id;
@@ -1281,8 +1340,14 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
         if (purchaseValue !== undefined) updateData.purchase_value = purchaseValue;
         if (status !== undefined) updateData.status = status;
-        if (notes !== undefined) updateData.notes = notes;
-        if (rawText !== undefined) updateData.raw_text = rawText;
+        
+        // Handle notes via raw_text: TIDAK menugaskan updateData.notes karena model Reservation tidak punya kolom notes di Prisma
+        if (rawText !== undefined) {
+          updateData.raw_text = rawText;
+        } else if (notes !== undefined) {
+          const fallbackTitle = `[Admin Manual] ${treatmentCategory || existing.treatment_category}: ${treatmentDetail || existing.treatment_detail || ''}`;
+          updateData.raw_text = mergeNotesIntoRawText(existing.raw_text, notes, fallbackTitle);
+        }
         if (paymentMethod !== undefined) updateData.payment_method = paymentMethod;
         if (reqDurationMinutes !== undefined) {
           if (reqDurationMinutes === null || (reqDurationMinutes as unknown) === '') {
@@ -1481,24 +1546,19 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        return reply.status(200).send({ success: true, data: updated });
+        return reply.status(200).send({
+          success: true,
+          data: {
+            ...updated,
+            notes: extractNotesFromRawText(updated.raw_text),
+          },
+        });
       } catch (error: any) {
-        const mock = memoryReservations.get(id);
-        if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
-          if (treatmentCategory !== undefined) mock.treatment_category = treatmentCategory;
-          if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
-          if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
-          if (status !== undefined) mock.status = status;
-          if (notes !== undefined) mock.notes = notes;
-          if (rawText !== undefined) mock.raw_text = rawText;
-          if (paymentMethod !== undefined) mock.payment_method = paymentMethod;
-          if (assignedStaffId !== undefined) mock.assigned_staff_id = assignedStaffId;
-          if (bookingDate !== undefined) mock.booking_date = bookingDate ? new Date(bookingDate) : null;
-          mock.updated_at = new Date();
-          memoryReservations.set(id, mock);
-          return reply.status(200).send({ success: true, data: mock, note: 'Fallback in-memory mode' });
-        }
-        return reply.status(404).send({ success: false, error: 'Reservation not found' });
+        console.error(`[Admin API] Failed to update reservation ${id}:`, error);
+        return reply.status(500).send({
+          success: false,
+          error: error?.message || 'Gagal memperbarui reservasi',
+        });
       }
     }
   );
