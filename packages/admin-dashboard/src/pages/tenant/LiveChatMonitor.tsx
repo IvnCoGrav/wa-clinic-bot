@@ -433,7 +433,7 @@ export const LiveChatMonitor: React.FC = () => {
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'reservation'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
@@ -1213,7 +1213,8 @@ function clearConversationDraft(convId: string) {
       const offset = reset ? 0 : chatsRef.current.length;
       const searchParam = search && search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
       const labelParam = labelFilter !== 'all' ? `&label=${encodeURIComponent(labelFilter)}` : '';
-      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${sourceFilter}${searchParam}${labelParam}`, {
+      const backendMode = sourceFilter === 'reservation' ? 'all' : sourceFilter;
+      const res = await apiRequest(`/api/admin/live-chat/conversations?limit=50&offset=${offset}&mode=${backendMode}${searchParam}${labelParam}`, {
         signal: abortController.signal,
         timeoutMs: isSearchOperation ? 8000 : 10000,
       });
@@ -2856,6 +2857,11 @@ function clearConversationDraft(convId: string) {
   };
 
   const filteredChats = useMemo(() => chats.filter((chat) => {
+    // 0. Filter reservasi aktif (pending/hold/terjadwal)
+    if (sourceFilter === 'reservation') {
+      const hasRes = !!(chat as any).hasActiveHold || !!(chat as any).hasUpcomingBooking || !!(chat as any).hasPendingBooking;
+      if (!hasRes) return false;
+    }
     // 1. Filter label
     if (labelFilter !== 'all' && getChatLabel(chat) !== labelFilter) {
       return false;
@@ -2879,7 +2885,7 @@ function clearConversationDraft(convId: string) {
     }
 
     return true;
-  }), [chats, labelFilter, searchQuery]);
+  }), [chats, labelFilter, searchQuery, sourceFilter]);
 
   const getElapsedTime = (sinceStr: string | null) => {
     if (!sinceStr) return '';
@@ -3078,11 +3084,11 @@ function clearConversationDraft(convId: string) {
                   {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
                   <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
                     {[
-                      { value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone },
                       { value: 'all', title: 'Semua Percakapan', icon: Layers },
-                      { value: 'sandbox', title: 'Sandbox QA Test', icon: FlaskConical },
+                      { value: 'reservation', title: 'Reservasi Aktif (Pending/Hold/Terjadwal)', icon: ShoppingBag },
                     ].map((opt) => {
                       const Icon = opt.icon;
+                      const isActive = sourceFilter === opt.value;
                       return (
                         <button
                           key={opt.value}
@@ -3097,13 +3103,7 @@ function clearConversationDraft(convId: string) {
                           }}
                           title={opt.title}
                           className={`p-1.5 rounded-md transition flex items-center justify-center cursor-pointer relative ${
-                            sourceFilter === opt.value
-                              ? opt.value === 'sandbox'
-                                ? 'bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs'
-                                : opt.value === 'real'
-                                  ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs'
-                                  : 'bg-[#111b21] text-white shadow-2xs'
-                              : 'text-[#667781] hover:text-[#111b21]'
+                            isActive ? 'bg-[#e8f5f2] text-[#008069] border border-[#c2e7e0] shadow-2xs' : 'text-[#667781] hover:text-[#111b21]'
                           }`}
                         >
                           <Icon size={13} />
