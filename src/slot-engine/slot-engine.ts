@@ -306,10 +306,13 @@ export async function processSlotEngine(ctx: StateHandlerContext): Promise<State
       tenantId,
       'unlisted_service'
     );
-    recordTurnTelemetry(decision.updatedSlate, extraction, decision, null, null);
+    const { TEMPLATES } = await import('../config/persona');
+    const replyText = decision.deterministicTemplateReply || TEMPLATES.unlistedServiceHandoff();
+    recordTurnTelemetry(decision.updatedSlate, extraction, decision, replyText, replyText);
     return {
       nextState: ConversationState.HUMAN_HANDLING,
-      shouldSendReply: false,
+      replyText,
+      shouldSendReply: true,
       isHumanHandling: true,
       aiReasoning: decision.reason,
     };

@@ -432,6 +432,8 @@ Jika customer menyebutkan "pijat bayi", "massage bayi", "pijat baby", "pijat new
 14. LAYANAN DI LUAR KATALOG RESMI (UNLISTED SERVICE) VS KONSULTASI PASCA VAKSIN:
 Jika customer menanyakan ketersediaan layanan/tindakan yang bukan merupakan layanan pijat/spa/terapi resmi klinik (contoh: "Ada PL homecare mandikan bayi?", "bisa baby sitting?", "bisa suntik vaksin/imunisasi?"), sertakan intent "ask_unlisted_service".
 NAMUN jika customer bertanya apakah bayi yang baru divaksin/imunisasi boleh dipijat (contoh: "anak saya habis vaksin boleh pijat?", "anak saya baru imunisasi bcg polio boleh dipijat hari ini?"), ini adalah KONSULTASI KLINIS biasa (intent: "consult_symptom" atau "chitchat"), DILARANG menandainya sebagai "ask_unlisted_service"!
+14b. ANTI FALSE-POSITIVE ONGKIR/LOKASI (WAJIB):
+Jika pesan mengandung kata ongkir/ongkos kirim/biaya kirim/jarak/lokasi/patokan NAMA LOKASI atau slang daerah Sunda/Jawa untuk harga ("sabaraha", "sabaraha ongkir", "piro", "piro ongkir", "ongkir e", "piroan", "pinten"), DILARANG KERAS diklasifikasikan sebagai "ask_unlisted_service"! Ini adalah kombinasi intent "provide_location" + "ask_price" (atau "compare_locations" jika membandingkan 2 lokasi). Contoh: "Klo yg di jojoran ongkirnya berapa kak" => intents ["provide_location","ask_price"], location_text "Jojoran", comparison_locations null. Slang "jojoran baru ongkir sabaraha" => sama, location_text "Jojoran Baru".
 15. PENYEBUTAN LOKASI SINGKAT / JAWABAN WILAYAH:
 Jika pesan customer menyebutkan nama daerah/kelurahan/kecamatan/kawasan di Surabaya atau Sidoarjo (contoh: "Berbek", "Berbek Bund", "di berbek", "rungkut", "jambangan", "ketintang", "tropodo", "sedati", "sukodono", "candi", "taman", "sidoarjo kota", "gayungan", "wonokromo", "gubeng", "wiyung", "pakal", "kenjeran"), ini adalah NAMA LOKASI/WILAYAH! WAJIB ekstrak sebagai "location_text" dan sertakan intent "provide_location". DILARANG menganggapnya sebagai chitchat biasa!
 16. PEMBATALAN / PENUNDAAN SLOT (CHANGE-OF-MIND / GESTUR BACK):
@@ -463,6 +465,10 @@ CONTOH FEW-SHOT EKSTRAKSI (GUNAKAN SEBAGAI ACUAN POLA KONSISTEN):
   Output: {"intents":["chitchat"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":["preferred_date"]}
 - Input: "Lokasinya bukan di situ ya mbak"
   Output: {"intents":["chitchat"],"location_text":null,"comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.9,"cleared_slots":["location"]}
+- Input: "Klo yg di jojoran ongkirnya berapa kak"
+  Output: {"intents":["provide_location","ask_price"],"location_text":"Jojoran","comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
+- Input: "jojoran baru ongkir sabaraha"
+  Output: {"intents":["provide_location","ask_price"],"location_text":"Jojoran Baru","comparison_locations":null,"street_detail":null,"child_age_months":null,"symptoms":[],"treatment_referenced":null,"preferred_date_text":null,"preferred_time_text":null,"customer_name":null,"is_medical_emergency":false,"confidence_score":0.95,"cleared_slots":null}
 
 OUTPUT WAJIB JSON VALID DENGAN FORMAT:
 {
@@ -493,6 +499,7 @@ OUTPUT WAJIB JSON VALID DENGAN FORMAT:
         model: modelConfig.modelName || 'gpt-4o-mini',
         fallbackModel: endpoint.fallbackModel,
         timeoutMs: endpoint.timeoutMs || 30000,
+        transientRetry: { maxRetries: 2, baseDelayMs: 800 },
         payload: {
           temperature: 0.1,
           max_tokens: 500,

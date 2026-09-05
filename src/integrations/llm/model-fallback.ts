@@ -21,14 +21,15 @@ export function getFallbackModel(): string {
 
 /**
  * Rantai fallback DALAM provider yang sama (mis. SumoPod), dipisah koma.
- * Default urutan: MiniMax-M2.7-highspeed -> mimo-v2.5 -> qwen3.7-flash-2026-07-15 -> deepseek-v4-flash
+ * Menggunakan DEFAULT_FALLBACK_CHAIN (gpt-4o-mini -> deepseek-v4-flash -> MiniMax -> mimo)
+ * sebagai sumber kebenaran; env hanya override jika terisi.
  */
 export function getFallbackChain(): string[] {
   const envChain = (process.env.AI_MODEL_FALLBACK_CHAIN || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  return envChain.length > 0 ? envChain : DEFAULT_FALLBACK_CHAIN;
+  return envChain.length > 0 ? envChain : [...DEFAULT_FALLBACK_CHAIN];
 }
 
 export interface ChatCompletionsWithFallbackCall {
@@ -140,13 +141,16 @@ export async function callChatCompletionsWithFallback(
   try {
     return { data: (await attemptWithFormatRetry(call.model)).data, model: call.model, usedFallback: false, baseUrl: call.baseUrl };
   } catch (err: any) {
-    const chain = getFallbackChain().filter((m) => m !== call.model);
+    let chain = getFallbackChain().filter((m) => m !== call.model);
+    // Jika chain kosong karena env hanya berisi call.model, isi otomatis dari DEFAULT_FALLBACK_CHAIN
+    if (chain.length === 0) {
+      chain = DEFAULT_FALLBACK_CHAIN.filter((m) => m !== call.model);
+    }
     let lastErr: any = err;
 
     // 0) Transient retry: 429/5xx/timeout bisa pulih tanpa ganti model.
-    //    Retry terbatas (maks 2) dengan backoff eksponensial singkat, JANGAN
-    //    menutup circuit breaker (error tetap diteruskan bila tak kunjung pulih).
-    const retryConfig = call.transientRetry ?? { maxRetries: 0, baseDelayMs: 400 };
+    //    Default 2x retry dengan backoff 1s (sebelum ganti model), bedakan 429 transient vs quota habis.
+    const retryConfig = call.transientRetry ?? { maxRetries: 2, baseDelayMs: 1000 };
     const maxRetries = retryConfig.maxRetries ?? 0;
     const baseDelayMs = retryConfig.baseDelayMs ?? 400;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
