@@ -1017,6 +1017,8 @@ function clearConversationDraft(convId: string) {
   useEffect(() => {
     selectedIdRef.current = selectedId;
     isInitialMessagesLoadRef.current = true;
+    wasNearBottomRef.current = true;
+    savedScrollTopRef.current = null;
     setReplyingTo(null);
     setEmojiPickerOpen(false);
 
@@ -1381,39 +1383,28 @@ function clearConversationDraft(convId: string) {
     }
   });
 
-  const scrollToBottom = useCallback((smooth = false, forceMulti = false) => {
+  const scrollToBottom = useCallback((smooth = false, force = false) => {
     const el = chatContainerRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     const isNearBottom = distanceFromBottom < 300;
-    if (!isNearBottom) return;
+    if (!isNearBottom && !force) return;
     wasNearBottomRef.current = true;
     const doScroll = () => {
       if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
       }
-      if (isNearBottom && messagesEndRef.current) {
+      if ((isNearBottom || force) && messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
       }
     };
     doScroll();
     requestAnimationFrame(doScroll);
-    if (forceMulti) {
-      setTimeout(doScroll, 120);
+    if (force) {
+      setTimeout(doScroll, 60);
+      setTimeout(doScroll, 150);
     }
   }, []);
-
-  // Track apakah user sedang di bawah (untuk preserve posisi saat kembali tab)
-  useEffect(() => {
-    const el = chatContainerRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-      wasNearBottomRef.current = distance < 300;
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [chatContainerRef.current, selectedId]);
 
   const scrollToMessage = useCallback((msgId: string, smooth = true) => {
     setHighlightedMsgId(msgId);
@@ -1625,7 +1616,7 @@ function clearConversationDraft(convId: string) {
     setMatchingMessageIds([]);
     setCurrentMatchIndex(-1);
     setHighlightedMsgId(null);
-    scrollToBottom(true);
+    scrollToBottom(true, true);
   };
 
   useEffect(() => {
@@ -2053,7 +2044,7 @@ function clearConversationDraft(convId: string) {
           const el = chatContainerRef.current;
           if (!el) return;
           if (wasNearBottomRef.current) {
-            scrollToBottom(true, false);
+            scrollToBottom(true, true);
           } else if (savedScrollTopRef.current !== null) {
             el.scrollTop = savedScrollTopRef.current;
           }
@@ -3861,6 +3852,11 @@ function clearConversationDraft(convId: string) {
                 <div 
                   key={selectedChat?.conversationId || 'empty'}
                   ref={chatContainerRef} 
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                    wasNearBottomRef.current = distance < 300;
+                  }}
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-[#e9edef] bg-[#efeae2]"
                   style={{
                     backgroundImage: currentTheme === 'dark'
