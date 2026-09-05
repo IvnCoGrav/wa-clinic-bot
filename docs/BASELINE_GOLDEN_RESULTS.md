@@ -1,4 +1,4 @@
-# Baseline Golden Corpus — Hasil Awal (2026-09-03T08:41:43.517Z)
+# Baseline Golden Corpus — Hasil Awal (2026-09-05T01:38:36.651Z)
 
 > **Total Skenario:** 50 (50 terbobot empiris)
 > **Total Turn:** 68
