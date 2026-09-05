@@ -53,6 +53,26 @@ export interface LiveChatConversationItem {
     notes?: string | null;
     customer_id?: string | null;
   } | null;
+  activeConfirmedReservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category?: string | null;
+    treatment_detail?: string | null;
+    assigned_staff_id?: string | null;
+    assigned_staff?: { id: string; name: string } | null;
+    notes?: string | null;
+    customer_id?: string | null;
+  } | null;
+  activePendingReservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category?: string | null;
+    treatment_detail?: string | null;
+    assigned_staff_id?: string | null;
+    assigned_staff?: { id: string; name: string } | null;
+    notes?: string | null;
+    customer_id?: string | null;
+  } | null;
 }
 
 /** Deteksi sumber traffic dari baris ad_clicks. */
@@ -106,7 +126,14 @@ export class LiveChatService {
     try {
       const rows = await prisma.customer.findMany({
         where: { id: { in: customerIds }, tenant_id: tenantId },
-        include: { adClick: true, reservations: true, labels: { include: { label: true } } },
+        include: {
+          adClick: true,
+          reservations: {
+            include: { assigned_staff: { select: { id: true, name: true } } },
+            orderBy: { created_at: 'desc' },
+          },
+          labels: { include: { label: true } },
+        },
       });
       customers = new Map(rows.map((c) => [c.id, c]));
     } catch (error) {
@@ -882,43 +909,34 @@ export class LiveChatService {
     const reservations: any[] = c.customer?.reservations || [];
     const isHoldValid = (r: any) => r.status === 'hold';
     const hasActiveHold = reservations.some((r: any) => isHoldValid(r));
-    let hasUpcomingBooking = false;
-    try {
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      hasUpcomingBooking = reservations.some((r: any) => {
-        if (r.status !== 'confirmed') return false;
-        if (!r.booking_date) return false;
-        const d = new Date(r.booking_date);
-        if (isNaN(d.getTime())) return false;
-        return d >= startOfToday;
-      });
-    } catch (_) {
-      hasUpcomingBooking = false;
-    }
-    let hasPendingBooking = false;
-    try {
-      hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
-    } catch (_) {
-      hasPendingBooking = false;
-    }
+    const hasUpcomingBooking = reservations.some((r: any) => r.status === 'confirmed');
+    const hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
+
+    const formatReservationItem = (res: any) => {
+      if (!res) return null;
+      return {
+        id: res.id,
+        booking_date: res.booking_date
+          ? typeof res.booking_date === 'string'
+            ? res.booking_date
+            : (res.booking_date as Date).toISOString()
+          : null,
+        treatment_category: res.treatment_category || 'BABY',
+        treatment_detail: res.treatment_detail || null,
+        assigned_staff_id: res.assigned_staff_id || null,
+        assigned_staff: res.assigned_staff ? { id: res.assigned_staff.id, name: res.assigned_staff.name } : null,
+        notes: res.notes || null,
+        customer_id: res.customer_id || c.customer_id,
+      };
+    };
+
     const activeHold = reservations.find((r: any) => isHoldValid(r)) || null;
-    const activeHoldReservation = activeHold
-      ? {
-          id: activeHold.id,
-          booking_date: activeHold.booking_date
-            ? typeof activeHold.booking_date === 'string'
-              ? activeHold.booking_date
-              : (activeHold.booking_date as Date).toISOString()
-            : null,
-          treatment_category: activeHold.treatment_category || 'BABY',
-          treatment_detail: activeHold.treatment_detail || null,
-          assigned_staff_id: activeHold.assigned_staff_id || null,
-          assigned_staff: activeHold.assigned_staff ? { id: activeHold.assigned_staff.id, name: activeHold.assigned_staff.name } : null,
-          notes: activeHold.notes || null,
-          customer_id: activeHold.customer_id || c.customer_id,
-        }
-      : null;
+    const activeConfirmed = reservations.find((r: any) => r.status === 'confirmed') || null;
+    const activePending = reservations.find((r: any) => r.status === 'pending') || null;
+
+    const activeHoldReservation = formatReservationItem(activeHold);
+    const activeConfirmedReservation = formatReservationItem(activeConfirmed);
+    const activePendingReservation = formatReservationItem(activePending);
 
     return {
       conversationId: c.id,
@@ -955,6 +973,8 @@ export class LiveChatService {
       hasUpcomingBooking,
       hasPendingBooking,
       activeHoldReservation,
+      activeConfirmedReservation,
+      activePendingReservation,
     };
   }
 
