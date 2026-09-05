@@ -479,21 +479,22 @@ export const LiveChatMonitor: React.FC = () => {
     }, 1500);
   };
 
-  // 🛑 Global Bot Cut-Off (Emergency Kill-Switch) — instant hydration dari cache biar tidak flicker
-  const [globalBotCutoff, setGlobalBotCutoff] = useState(() => {
+  // 🤖 Internal Chatbot AI ON/OFF (bukan Emergency Kill-Switch)
+  const [chatBotActive, setChatBotActive] = useState(() => {
     try {
-      return localStorage.getItem('wa_bot_cutoff_state') === 'true';
-    } catch { return false; }
+      const cached = localStorage.getItem('wa_chatbot_active_state');
+      return cached ? cached === 'true' : true;
+    } catch { return true; }
   });
   const [togglingBotCutoff, setTogglingBotCutoff] = useState(false);
 
   const loadBotCutoffStatus = async () => {
     try {
-      const data = await apiRequest('/api/admin/whatsapp-provider');
-      const cutoff = (data as any)?.data?.wahaOutboundCutoff ?? (data as any)?.wahaOutboundCutoff;
-      if (typeof cutoff === 'boolean') {
-        setGlobalBotCutoff(cutoff);
-        try { localStorage.setItem('wa_bot_cutoff_state', String(cutoff)); } catch {}
+      const data = await apiRequest('/api/admin/settings');
+      const active = (data as any)?.globalBotActive ?? (data as any)?.data?.globalBotActive;
+      if (typeof active === 'boolean') {
+        setChatBotActive(active);
+        try { localStorage.setItem('wa_chatbot_active_state', String(active)); } catch {}
       }
     } catch (_) {}
   };
@@ -503,37 +504,35 @@ export const LiveChatMonitor: React.FC = () => {
   }, []);
 
   const handleToggleGlobalBot = async (enableBot: boolean) => {
-    const nextCutOff = !enableBot;
-
     const isConfirm = await confirm({
-      title: nextCutOff ? 'Matikan Seluruh Bot & Pesan Keluar?' : 'Aktifkan Kembali Seluruh Bot?',
-      message: nextCutOff
-        ? 'PERINGATAN: Mematikan bot global akan menghentikan SEMUA pesan keluar dari sistem (Bot AI, Follow-Up otomatis, Reminder, Broadcast, & balasan Live Chat). Sesi WhatsApp di HP tetap aktif dan pesan masuk tetap tersimpan.'
-        : 'Aktifkan kembali seluruh pengiriman pesan bot otomatis dan sistem WhatsApp?',
-      confirmText: nextCutOff ? 'Ya, Matikan Bot Global' : 'Ya, Aktifkan Bot',
-      danger: nextCutOff,
+      title: enableBot ? 'Aktifkan Chatbot AI?' : 'Nonaktifkan Chatbot AI?',
+      message: enableBot
+        ? 'Chatbot AI akan kembali membalas pesan customer secara otomatis. Follow-Up & balasan Live Chat manual tetap bisa dikirim.'
+        : 'Chatbot AI akan dinonaktifkan — AI tidak membalas, percakapan dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif. Emergency Kill-Switch ada di Settings → WhatsApp Provider.',
+      confirmText: enableBot ? 'Ya, Aktifkan Chatbot' : 'Ya, Nonaktifkan AI',
+      danger: !enableBot,
     });
     if (!isConfirm) return;
 
     setTogglingBotCutoff(true);
     try {
-      const res = await apiRequest('/api/admin/whatsapp-provider/cutoff', {
+      const res = await apiRequest('/api/admin/settings', {
         method: 'PATCH',
-        body: JSON.stringify({ cutOff: nextCutOff }),
+        body: JSON.stringify({ globalBotActive: enableBot }),
       });
       if (res && res.success) {
-        const newCutoff = Boolean((res as any)?.wahaOutboundCutoff ?? (res as any)?.data?.wahaOutboundCutoff ?? nextCutOff);
-        setGlobalBotCutoff(newCutoff);
-        try { localStorage.setItem('wa_bot_cutoff_state', String(newCutoff)); } catch {}
+        const newActive = Boolean((res as any)?.globalBotActive ?? (res as any)?.data?.globalBotActive ?? enableBot);
+        setChatBotActive(newActive);
+        try { localStorage.setItem('wa_chatbot_active_state', String(newActive)); } catch {}
         toast(
-          nextCutOff
-            ? 'Bot Global DINONAKTIFKAN (Kill-Switch AKTIF). Seluruh pesan keluar sistem dimatikan.'
-            : 'Bot Global DIAKTIFKAN KEMBALI. Seluruh pesan keluar sistem normal.',
-          nextCutOff ? 'info' : 'success'
+          newActive
+            ? 'Chatbot AI DIAKTIFKAN — AI kembali membalas otomatis.'
+            : 'Chatbot AI DINONAKTIFKAN — AI diam, dialihkan ke CS manual.',
+          newActive ? 'success' : 'info'
         );
       }
     } catch (err: any) {
-      toast(`Gagal mengubah status Bot Global: ${err?.message || err}`, 'error');
+      toast(`Gagal mengubah status Chatbot: ${err?.message || err}`, 'error');
     } finally {
       setTogglingBotCutoff(false);
     }
@@ -1809,10 +1808,15 @@ function clearConversationDraft(convId: string) {
       },
       onEvent: (type, payload) => {
         if (type === 'bot.cutoff_changed' || type === 'BOT_CUTOFF_CHANGED') {
-          const cutoff = (payload as any)?.wahaOutboundCutoff;
-          if (typeof cutoff === 'boolean') {
-            setGlobalBotCutoff(cutoff);
-            try { localStorage.setItem('wa_bot_cutoff_state', String(cutoff)); } catch {}
+          // Emergency cut-off change tidak lagi ditampilkan di LiveChat header (internal chatbot)
+          // Tetap sync cache untuk Settings panel jika ada
+          return;
+        }
+        if (type === 'bot.active_changed' || type === 'BOT_ACTIVE_CHANGED') {
+          const active = (payload as any)?.globalBotActive;
+          if (typeof active === 'boolean') {
+            setChatBotActive(active);
+            try { localStorage.setItem('wa_chatbot_active_state', String(active)); } catch {}
           }
           return;
         }
@@ -2904,21 +2908,21 @@ function clearConversationDraft(convId: string) {
           </div>
         </div>
 
-        {/* Controls: Global Bot Switch + Sync */}
+        {/* Controls: Internal Chatbot Toggle */}
         <div className="flex items-center space-x-2">
           <ToggleSwitch
-            checked={!globalBotCutoff}
+            checked={chatBotActive}
             onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
             disabled={togglingBotCutoff}
             loading={togglingBotCutoff}
-            variant={globalBotCutoff ? 'rose' : 'emerald'}
+            variant={chatBotActive ? 'emerald' : 'rose'}
             onLabel="BOT ON"
             offLabel="BOT OFF"
             size="sm"
             title={
-              globalBotCutoff
-                ? 'Status: Bot & Semua Pesan Keluar Sistem Nonaktif (Cut-Off Aktif). Klik untuk mengaktifkan kembali.'
-                : 'Status: Bot & Pesan Sistem Aktif (Normal). Klik untuk mematikan semua bot & pesan keluar.'
+              chatBotActive
+                ? 'Status: Chatbot AI Aktif (Normal). Klik untuk menonaktifkan AI.'
+                : 'Status: Chatbot AI Nonaktif (AI diam, CS manual). Klik untuk mengaktifkan kembali.'
             }
           />
           <button
@@ -2932,22 +2936,22 @@ function clearConversationDraft(convId: string) {
         </div>
       </div>
 
-      {/* Global Bot Cut-Off Active Warning Banner */}
-      {globalBotCutoff && (
-        <div className="p-2 sm:p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
+      {/* Internal Chatbot OFF Warning Banner */}
+      {!chatBotActive && (
+        <div className="p-2 sm:p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between shadow-2xs shrink-0 animate-fadeIn">
           <div className="flex items-center space-x-2 min-w-0">
-            <ShieldAlert size={16} className="text-rose-600 shrink-0" />
+            <ShieldAlert size={16} className="text-amber-600 shrink-0" />
             <div className="truncate">
-              <span className="font-bold text-rose-700">BOT GLOBAL NONAKTIF (CUT-OFF AKTIF):</span>{' '}
-              <span className="text-rose-800">Seluruh pesan bot otomatis, follow-up, reminder, dan pesan keluar sistem dimatikan.</span>
+              <span className="font-bold text-amber-700">CHATBOT AI NONAKTIF:</span>{' '}
+              <span className="text-amber-800">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
             </div>
           </div>
           <button
             onClick={() => handleToggleGlobalBot(true)}
             disabled={togglingBotCutoff}
-            className="px-2.5 py-1 text-[11px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+            className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
           >
-            Aktifkan Bot
+            Aktifkan AI
           </button>
         </div>
       )}
@@ -3026,15 +3030,15 @@ function clearConversationDraft(convId: string) {
 
                 <div className="flex items-center space-x-1.5">
                   <ToggleSwitch
-                    checked={!globalBotCutoff}
+                    checked={chatBotActive}
                     onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
                     disabled={togglingBotCutoff}
                     loading={togglingBotCutoff}
-                    variant={globalBotCutoff ? 'rose' : 'emerald'}
+                    variant={chatBotActive ? 'emerald' : 'rose'}
                     onLabel="ON"
                     offLabel="OFF"
                     size="sm"
-                    title="Toggle Bot Global"
+                    title={chatBotActive ? 'Chatbot AI Aktif' : 'Chatbot AI Nonaktif'}
                   />
                   <button
                     onClick={() => setShowSyncInfoModal(true)}
@@ -3738,7 +3742,7 @@ function clearConversationDraft(convId: string) {
                 {/* Active Hold Slot Alert Banner - Ultra-Pressed Single-Line (ultra-compact saat banner cut-off merah ikut tampil) */}
                 {activeHoldReservation && (
                   <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
-                    globalBotCutoff
+                    chatBotActive
                       ? 'py-0.5 min-h-[22px] bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-500/40 text-amber-950 dark:text-amber-100'
                       : 'py-1 min-h-[26px] bg-amber-50 dark:bg-amber-950/50 border-amber-300/70 dark:border-amber-500/50 text-amber-950 dark:text-amber-100'
                   }`}>
@@ -3769,7 +3773,7 @@ function clearConversationDraft(convId: string) {
                         onClick={() => {
                           setHoldToConfirmReservation(activeHoldReservation);
                         }}
-                        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${globalBotCutoff ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
+                        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
                         title="Konfirmasi & Lengkapi Data"
                       >
                         Konfirmasi

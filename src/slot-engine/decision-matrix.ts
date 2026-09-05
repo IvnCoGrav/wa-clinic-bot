@@ -104,8 +104,13 @@ export class DecisionMatrix {
       /\b(habis|setelah|pasca|baru|selesai)\s+(?:vaksin|imunisasi|imun)\b/i.test(rawText) ||
       /\b(?:vaksin|imunisasi|imun)\b.*?\b(berpengaruh|boleh\s*(?:kah|ga|gak|nggak|ta)|aman\s*(?:kah|ga|gak)|bisa\s+pijat|pijatnya)\b/i.test(rawText);
 
+    // Ongkir, Location & Core Service guard: jangan bajak pertanyaan ongkir/lokasi/home treatment sebagai layanan asing
+    const hasOngkirLocationGuard =
+      /\b(ongkir|ongkos\s*kirim|biaya\s*kirim|jarak|lokasi|home\s*(?:treatment|service|care))\b/i.test(rawText) || Boolean(extraction.locationText);
+
     const isUnlistedServiceQuery =
       !isPostVaccineConsultation &&
+      !hasOngkirLocationGuard &&
       (extraction.intents.includes('ask_unlisted_service') ||
         /\b(mandikan\s*bayi|mandiin\s*bayi|jasa\s*mandi|paket\s*mandi|baby\s*sitting|penitipan\s*(anak|bayi)|tindik(\s*telinga)?|jasa\s*(?:imunisasi|vaksin)|layanan\s*(?:imunisasi|vaksin)|suntik\s*(?:imunisasi|vaksin)|sunat|rawat\s*tali\s*pusat|rawat\s*luka|fisioterapi|paket\s*newborn|perawatan\s*newborn)\b/i.test(rawText));
 
@@ -135,9 +140,10 @@ export class DecisionMatrix {
       updatedSlate.humanHandlingReason = 'unlisted_service';
       return {
         action: 'ESCALATE_HUMAN_UNLISTED_SERVICE',
-        reason: 'Customer menanyakan layanan di luar pricelist/katalog resmi -> Silent escalation ke CS.',
+        reason: 'Customer menanyakan layanan di luar pricelist/katalog resmi -> Handoff ke CS dengan template sopan.',
         updatedSlate,
         shouldSendPricelistImage: false,
+        deterministicTemplateReply: TEMPLATES.unlistedServiceHandoff(),
       };
     }
 

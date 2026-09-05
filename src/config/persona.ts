@@ -370,6 +370,9 @@ Apakah treatment-nya masih di alamat yang sama ya bund di *Kelurahan ${params.ke
   rescheduleOrCancel: () =>
     `Baik Bunda, untuk perubahan atau pembatalan jadwal sedang kami teruskan ke tim Admin yaa. Mohon ditunggu sebentar, tim kami akan segera memeriksa kalender dan membantu konfirmasi kembali ya Bunda 😊🙏🏻`,
 
+  unlistedServiceHandoff: () =>
+    `Baik Bunda, terkait layanan tersebut kami koordinasikan terlebih dahulu dengan Bidan/tim admin kami yaa. Mohon ditunggu sebentar, tim kami akan segera membantu Bunda 😊🙏`,
+
   locationEscalation: () => `Baik Bunda, saya bantu cek ongkirnya ya bund, mohon ditunggu sebentar 😊`,
 
   // =======================================================================
