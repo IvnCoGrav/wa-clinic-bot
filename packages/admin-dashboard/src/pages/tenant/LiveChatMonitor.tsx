@@ -433,7 +433,12 @@ export const LiveChatMonitor: React.FC = () => {
   const sseConnectedRef = useRef(false);
   const [showSyncInfoModal, setShowSyncInfoModal] = useState(false);
   const [labelFilter, setLabelFilter] = useState<'all' | 'medical_concern' | 'unresolved_faq' | 'human_request'>('all');
+  // Live server (production build) default 'real' dan opsi sandbox disembunyikan — cegah QA test bocor ke CS
+  const isLiveServer = typeof import.meta !== 'undefined' && (import.meta as any).env?.PROD;
   const [sourceFilter, setSourceFilter] = useState<'all' | 'real' | 'sandbox'>('real');
+  useEffect(() => {
+    if (isLiveServer && sourceFilter !== 'real') setSourceFilter('real');
+  }, [isLiveServer]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceTimerRef = useRef<any>(null);
@@ -1828,6 +1833,8 @@ function clearConversationDraft(convId: string) {
         }
 
         if (type === 'message.created') {
+          // Live server: abaikan SSE sandbox agar tidak bocor ke list CS
+          if ((import.meta as any).env?.PROD && (payload as any).isSandboxTest) return;
           const conversationId = payload.conversationId;
           const msgTime = payload.createdAt || payload.created_at || new Date().toISOString();
           const msg: ChatMessage = {
@@ -3052,11 +3059,13 @@ function clearConversationDraft(convId: string) {
                 <div className="flex items-center justify-between gap-1.5">
                   {/* Filter sumber percakapan: WhatsApp Asli, Semua, Sandbox (Ikon Saja + Press Hold Tooltip) */}
                   <div className="relative flex items-center space-x-0.5 p-0.5 bg-[#f0f2f5] border border-[#e9edef] rounded-lg shrink-0">
-                    {[
-                      { value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone },
-                      { value: 'all', title: 'Semua Percakapan', icon: Layers },
-                      { value: 'sandbox', title: 'Sandbox QA Test', icon: FlaskConical },
-                    ].map((opt) => {
+                    {(isLiveServer
+                      ? [{ value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone }]
+                      : [
+                          { value: 'real', title: 'WhatsApp Asli (Live)', icon: Smartphone },
+                          { value: 'all', title: 'Semua Percakapan', icon: Layers },
+                          { value: 'sandbox', title: 'Sandbox QA Test', icon: FlaskConical },
+                        ]).map((opt) => {
                       const Icon = opt.icon;
                       return (
                         <button
