@@ -67,11 +67,10 @@ caveman/
 skills-lock.json
 # Local runtime storage & scratch
 storage/
-# Local runtime storage & scratch
-storage/
 scratch/
 temp/
 exports/
+data/
 
 
 
