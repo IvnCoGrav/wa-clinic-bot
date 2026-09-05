@@ -65,9 +65,12 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           modeRaw === 'real' || modeRaw === 'sandbox' ? modeRaw : 'all';
         const search = request.query.search?.trim();
         const label = request.query.label?.trim();
+        // Live server: mode 'all' (= campur sandbox) tidak pernah diekspos ke CS — paksa ke 'real' di production
+        const effectiveMode: 'all' | 'real' | 'sandbox' =
+          process.env.NODE_ENV === 'production' && mode === 'all' ? 'real' : mode;
 
         // Check server-side cache (hanya untuk list tanpa pencarian teks spesifik & tanpa filter label)
-        const cacheKey = !search && !label ? `livechat:list:${DEFAULT_TENANT_ID}:${mode}:${limit}:${offset}` : null;
+        const cacheKey = !search && !label ? `livechat:list:${DEFAULT_TENANT_ID}:${effectiveMode}:${limit}:${offset}` : null;
         if (cacheKey) {
           const cached = responseCacheService.get(cacheKey);
           if (cached) {
@@ -78,8 +81,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           }
         }
 
-        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, mode, search, label as any);
-        const payload = { success: true, count: items.length, hasMore, mode, data: items };
+        const { items, hasMore } = await liveChatService.getConversationList(DEFAULT_TENANT_ID, limit, offset, effectiveMode, search, label as any);
+        const payload = { success: true, count: items.length, hasMore, mode: effectiveMode, data: items };
         if (cacheKey) {
           responseCacheService.set(cacheKey, payload, 5); // 5s TTL
         }
