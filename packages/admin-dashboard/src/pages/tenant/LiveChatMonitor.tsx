@@ -244,6 +244,26 @@ interface LiveChatItem {
     notes?: string | null;
     customer_id?: string | null;
   } | null;
+  activeConfirmedReservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category?: string | null;
+    treatment_detail?: string | null;
+    assigned_staff_id?: string | null;
+    assigned_staff?: { id: string; name: string } | null;
+    notes?: string | null;
+    customer_id?: string | null;
+  } | null;
+  activePendingReservation?: {
+    id: string;
+    booking_date: string | null;
+    treatment_category?: string | null;
+    treatment_detail?: string | null;
+    assigned_staff_id?: string | null;
+    assigned_staff?: { id: string; name: string } | null;
+    notes?: string | null;
+    customer_id?: string | null;
+  } | null;
 }
 
 const DEFAULT_FAVORITE_EMOJIS = [
@@ -2437,10 +2457,12 @@ function clearConversationDraft(convId: string) {
       try {
         const res = await apiRequest(`/api/admin/customers/${cid}`);
         const reservations = res?.data?.reservations || [];
-        const hasUpcomingBooking = reservations.some((r: any) => r.status === 'confirmed');
-        const hasPendingBooking = reservations.some((r: any) => r.status === 'pending');
         const activeHold = reservations.find((r: any) => r.status === 'hold') || null;
+        const activeConfirmed = reservations.find((r: any) => r.status === 'confirmed') || null;
+        const activePending = reservations.find((r: any) => r.status === 'pending') || null;
         const hasActiveHold = Boolean(activeHold);
+        const hasUpcomingBooking = Boolean(activeConfirmed);
+        const hasPendingBooking = Boolean(activePending);
         setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, reservations }));
         if (selectedChat) {
           setChats((prev) => {
@@ -2452,6 +2474,8 @@ function clearConversationDraft(convId: string) {
                 hasPendingBooking,
                 hasActiveHold,
                 activeHoldReservation: activeHold ? { ...activeHold } : null,
+                activeConfirmedReservation: activeConfirmed ? { ...activeConfirmed } : null,
+                activePendingReservation: activePending ? { ...activePending } : null,
                 purchaseCount: reservations.length,
               };
             });
@@ -2535,6 +2559,26 @@ function clearConversationDraft(convId: string) {
     }
     // Fallback awal (0ms) sebelum customer detail selesai di-fetch
     const fromChat = (selectedChat as any).activeHoldReservation;
+    if (fromChat) return fromChat;
+    return null;
+  }, [selectedChat, customerDetailData]);
+
+  const activeConfirmedReservation = useMemo(() => {
+    if (!selectedChat) return null;
+    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
+      return customerDetailData.reservations?.find((r: any) => r.status === 'confirmed') || null;
+    }
+    const fromChat = (selectedChat as any).activeConfirmedReservation;
+    if (fromChat) return fromChat;
+    return null;
+  }, [selectedChat, customerDetailData]);
+
+  const activePendingReservation = useMemo(() => {
+    if (!selectedChat) return null;
+    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
+      return customerDetailData.reservations?.find((r: any) => r.status === 'pending') || null;
+    }
+    const fromChat = (selectedChat as any).activePendingReservation;
     if (fromChat) return fromChat;
     return null;
   }, [selectedChat, customerDetailData]);
@@ -3409,12 +3453,12 @@ function clearConversationDraft(convId: string) {
                                   ⏳ HOLD
                                 </span>
                               )}
-                              {!(chat as any).hasActiveHold && (chat as any).hasUpcomingBooking && (
+                              {(chat as any).hasUpcomingBooking && (
                                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
                                   📅 Terjadwal
                                 </span>
                               )}
-                              {!(chat as any).hasActiveHold && !(chat as any).hasUpcomingBooking && (chat as any).hasPendingBooking && (
+                              {(chat as any).hasPendingBooking && (
                                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
                                   🕓 Pending
                                 </span>
@@ -3678,6 +3722,23 @@ function clearConversationDraft(convId: string) {
                               />
                             ))}
 
+                            {/* Active Reservation Badges in Chat Header */}
+                            {Boolean((selectedChat as any).hasActiveHold || activeHoldReservation) && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-slate-950 ring-1 ring-amber-300 dark:ring-amber-300/60 shadow-xs tracking-wide">
+                                ⏳ HOLD
+                              </span>
+                            )}
+                            {Boolean((selectedChat as any).hasUpcomingBooking || activeConfirmedReservation) && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white ring-1 ring-emerald-300 dark:ring-emerald-400/60 shadow-xs">
+                                📅 Terjadwal
+                              </span>
+                            )}
+                            {Boolean((selectedChat as any).hasPendingBooking || activePendingReservation) && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-600 text-white ring-1 ring-sky-300 dark:ring-sky-400/60 shadow-xs">
+                                🕓 Pending
+                              </span>
+                            )}
+
                             {/* Add / Manage Label Button (+) right next to phone & dots */}
                             <div className="relative inline-flex items-center" ref={labelPopoverRef} onClick={(e) => e.stopPropagation()}>
                               <button
@@ -3843,6 +3904,91 @@ function clearConversationDraft(convId: string) {
                         title="Lepas"
                       >
                         ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Confirmed / Terjadwal Alert Banner */}
+                {!activeHoldReservation && activeConfirmedReservation && (
+                  <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
+                    chatBotActive
+                      ? 'py-0.5 min-h-[22px] bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/40 text-emerald-950 dark:text-emerald-100'
+                      : 'py-1 min-h-[26px] bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300/70 dark:border-emerald-500/50 text-emerald-950 dark:text-emerald-100'
+                  }`}>
+                    <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="font-extrabold text-emerald-900 dark:text-emerald-300 shrink-0 tracking-wide text-[10px]">TERJADWAL:</span>
+                      <span className="font-medium truncate text-emerald-950 dark:text-emerald-100 text-[10px] min-w-0">
+                        {activeConfirmedReservation.booking_date
+                          ? new Date(activeConfirmedReservation.booking_date).toLocaleDateString('id-ID', {
+                              weekday: 'short',
+                              day: 'numeric',
+                              month: 'short',
+                            }) +
+                            ' ' +
+                            new Date(activeConfirmedReservation.booking_date).toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }) +
+                            ' WIB'
+                          : 'Jadwal terkonfirmasi'}
+                        {activeConfirmedReservation.treatment_detail ? ` • ${activeConfirmedReservation.treatment_detail}` : ''}
+                        {activeConfirmedReservation.assigned_staff?.name ? ` • ${activeConfirmedReservation.assigned_staff.name}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHoldToConfirmReservation(activeConfirmedReservation);
+                        }}
+                        className={`bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
+                        title="Lihat / Kelola Reservasi"
+                      >
+                        Kelola
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Pending Alert Banner */}
+                {!activeHoldReservation && !activeConfirmedReservation && activePendingReservation && (
+                  <div className={`mx-1 mb-1 px-2 rounded-md border flex items-center gap-2 text-[10px] leading-none shadow-2xs shrink-0 animate-fadeIn overflow-hidden ${
+                    chatBotActive
+                      ? 'py-0.5 min-h-[22px] bg-sky-50/70 dark:bg-sky-950/40 border-sky-200 dark:border-sky-500/40 text-sky-950 dark:text-sky-100'
+                      : 'py-1 min-h-[26px] bg-sky-50 dark:bg-sky-950/50 border-sky-300/70 dark:border-sky-500/50 text-sky-950 dark:text-sky-100'
+                  }`}>
+                    <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse shrink-0" />
+                      <span className="font-extrabold text-sky-900 dark:text-sky-300 shrink-0 tracking-wide text-[10px]">PENDING:</span>
+                      <span className="font-medium truncate text-sky-950 dark:text-sky-100 text-[10px] min-w-0">
+                        {activePendingReservation.booking_date
+                          ? new Date(activePendingReservation.booking_date).toLocaleDateString('id-ID', {
+                              weekday: 'short',
+                              day: 'numeric',
+                              month: 'short',
+                            }) +
+                            ' ' +
+                            new Date(activePendingReservation.booking_date).toLocaleTimeString('id-ID', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }) +
+                            ' WIB'
+                          : 'Menunggu konfirmasi jadwal'}
+                        {activePendingReservation.treatment_detail ? ` • ${activePendingReservation.treatment_detail}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHoldToConfirmReservation(activePendingReservation);
+                        }}
+                        className={`bg-sky-600 hover:bg-sky-700 text-white font-bold rounded leading-none transition shadow-2xs cursor-pointer whitespace-nowrap shrink-0 ${chatBotActive ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}
+                        title="Konfirmasi / Proses Reservasi"
+                      >
+                        Konfirmasi
                       </button>
                     </div>
                   </div>
@@ -5141,8 +5287,21 @@ function clearConversationDraft(convId: string) {
             if (updatedRes && selectedChat) {
               const isConfirmed = updatedRes.status === 'confirmed';
               const isPending = updatedRes.status === 'pending';
+              const isHold = updatedRes.status === 'hold';
               setChats((prev) => {
-                const updated = prev.map((c) => c.conversationId === selectedChat.conversationId ? { ...c, hasActiveHold: false, activeHoldReservation: null, hasUpcomingBooking: isConfirmed ? true : c.hasUpcomingBooking, hasPendingBooking: isPending ? true : c.hasPendingBooking } : c);
+                const updated = prev.map((c) =>
+                  c.conversationId === selectedChat.conversationId
+                    ? {
+                        ...c,
+                        hasActiveHold: isHold,
+                        activeHoldReservation: isHold ? updatedRes : null,
+                        hasUpcomingBooking: isConfirmed,
+                        activeConfirmedReservation: isConfirmed ? updatedRes : null,
+                        hasPendingBooking: isPending,
+                        activePendingReservation: isPending ? updatedRes : null,
+                      }
+                    : c
+                );
                 chatsRef.current = updated;
                 return updated;
               });
