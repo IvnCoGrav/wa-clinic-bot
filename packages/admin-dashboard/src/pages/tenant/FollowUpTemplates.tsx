@@ -310,16 +310,16 @@ export const FollowUpTemplates: React.FC = () => {
       </div>
 
       {/* Quick Guide & Interactive Placeholder Library */}
-      <div className="bg-gradient-to-r from-[#f0fdf4] to-[#e8f5f2] border border-[#c2e7e0] rounded-2xl p-4.5 shadow-xs">
+      <div className="bg-gradient-to-r from-[#f0fdf4] to-[#e8f5f2] dark:from-[#0f1f1b] dark:to-[#0c1317] border border-[#c2e7e0] dark:border-[#00a884]/25 rounded-2xl p-4.5 shadow-xs">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
           <div className="flex items-start space-x-3">
-            <div className="p-2 rounded-xl bg-white/80 border border-[#c2e7e0] text-[#008069] mt-0.5 shadow-xs">
+            <div className="p-2 rounded-xl bg-white/80 dark:bg-[#202c33] border border-[#c2e7e0] dark:border-[#00a884]/30 text-[#008069] dark:text-[#00a884] mt-0.5 shadow-xs">
               <Sparkles size={16} />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-[#111b21] uppercase tracking-wide flex items-center gap-1.5">
+              <h4 className="text-xs font-bold text-[#111b21] dark:text-[#e9edef] uppercase tracking-wide flex items-center gap-1.5">
                 <span>Variabel Pintar (Placeholder)</span>
-                <span className="text-[10px] font-normal text-[#54656f] normal-case bg-white px-2 py-0.5 rounded-full border border-[#c2e7e0]">
+                <span className="text-[10px] font-normal text-[#54656f] dark:text-[#aebac1] normal-case bg-white dark:bg-[#202c33] px-2 py-0.5 rounded-full border border-[#c2e7e0] dark:border-[#00a884]/30">
                   Klik chip di bawah untuk menyisipkan
                 </span>
               </h4>
@@ -327,17 +327,17 @@ export const FollowUpTemplates: React.FC = () => {
                 {AVAILABLE_PLACEHOLDERS.map((p) => (
                   <div
                     key={p.tag}
-                    className="inline-flex items-center bg-white px-2.5 py-1.5 rounded-xl border border-[#c2e7e0] shadow-xs text-xs"
+                    className="inline-flex items-center bg-white dark:bg-[#202c33] px-2.5 py-1.5 rounded-xl border border-[#c2e7e0] dark:border-[#00a884]/30 shadow-xs text-xs"
                   >
-                    <code className="text-[#008069] font-bold font-mono mr-1.5">{p.tag}</code>
-                    <span className="text-[#54656f] text-[11px]">({p.label})</span>
+                    <code className="text-[#008069] dark:text-[#00a884] font-bold font-mono mr-1.5">{p.tag}</code>
+                    <span className="text-[#54656f] dark:text-[#aebac1] text-[11px]">({p.label})</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-          <div className="text-[11px] text-[#54656f] bg-white/70 p-2.5 rounded-xl border border-[#c2e7e0]/60 max-w-sm">
-            <span className="font-semibold text-[#111b21]">💡 Tips Format WhatsApp:</span> Gunakan <code className="text-[#008069]">*tebal*</code>, <code className="text-[#008069]">_miring_</code>, atau emoji ramah untuk meningkatkan kenyamanan pasien.
+          <div className="text-[11px] text-[#54656f] dark:text-[#aebac1] bg-white/70 dark:bg-[#202c33] p-2.5 rounded-xl border border-[#c2e7e0]/60 dark:border-[#00a884]/25 max-w-sm">
+            <span className="font-semibold text-[#111b21] dark:text-[#e9edef]">💡 Tips Format WhatsApp:</span> Gunakan <code className="text-[#008069] dark:text-[#00a884]">*tebal*</code>, <code className="text-[#008069] dark:text-[#00a884]">_miring_</code>, atau emoji ramah untuk meningkatkan kenyamanan pasien.
           </div>
         </div>
       </div>

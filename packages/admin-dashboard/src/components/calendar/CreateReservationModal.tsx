@@ -1051,7 +1051,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
     // Overall category: if both mom & baby exist
     const hasBaby = selectedTreatments.some((t) => t.category === 'BABY' || t.category === 'KIDS');
     const hasMoms = selectedTreatments.some((t) => t.category === 'MOMS');
-    const computedCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
+    const rawCategory = hasBaby && hasMoms ? 'BOTH' : selectedTreatments[0]?.category || treatmentCategory;
+    const computedCategory: 'BABY' | 'MOMS' | 'BOTH' =
+      rawCategory === 'BUNDLE' ? 'BOTH' :
+      rawCategory === 'KIDS' ? 'BABY' :
+      (rawCategory as any) || 'BABY';
 
     setSubmitting(true);
     try {
@@ -1992,7 +1996,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
           )}
 
           {/* Section: Rincian Biaya & Total Pembayaran */}
-          <div className="p-3.5 bg-gradient-to-br from-[#f8fafc] to-emerald-50/40 border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-3 shadow-2xs">
+          <div className="p-3.5 bg-gradient-to-br from-[#f8fafc] to-emerald-50/40 dark:from-[#141e24] dark:to-[#00a884]/10 border border-[#e9edef] dark:border-[#2a3942] rounded-xl space-y-3 shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-[#008069] uppercase tracking-wider flex items-center space-x-1.5">
                 <Receipt size={14} />
@@ -2032,7 +2036,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
 
               {/* Diskon / Promo */}
               <div>
-                <label className="block text-[11px] font-semibold text-rose-600 mb-1 flex items-center gap-1">
+                <label className="block text-[11px] font-semibold text-rose-600 dark:text-rose-300 mb-1 flex items-center gap-1">
                   <Percent size={11} />
                   <span>Diskon / Promo (Rp)</span>
                 </label>
@@ -2043,7 +2047,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
                   step={5000}
                   min={0}
                   placeholder="0"
-                  className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-600 focus:border-rose-500 focus:outline-none transition font-mono"
+                  className="w-full px-3 py-1.5 bg-white border border-rose-200 dark:border-rose-800/40 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-300 placeholder-[#8696a0] focus:border-rose-500 focus:outline-none transition font-mono"
                 />
               </div>
             </div>
@@ -2080,7 +2084,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
               </div>
 
               <div className="flex items-center gap-1.5">
-                <span className="text-rose-600 font-semibold">Promo:</span>
+                <span className="text-rose-600 dark:text-rose-300 font-semibold">Promo:</span>
                 <button
                   type="button"
                   onClick={() => setDiscount(0)}
