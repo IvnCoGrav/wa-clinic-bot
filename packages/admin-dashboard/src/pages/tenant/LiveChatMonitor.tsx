@@ -759,6 +759,7 @@ function clearConversationDraft(convId: string) {
   const firstRenderRef = useRef(true);
   const wasNearBottomRef = useRef(true);
   const savedScrollTopRef = useRef<number | null>(null);
+  const isInitialMessagesLoadRef = useRef(true);
 
   const [allLabels, setAllLabels] = useState<CustomerLabelData[]>([]);
   const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
@@ -1015,6 +1016,7 @@ function clearConversationDraft(convId: string) {
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
+    isInitialMessagesLoadRef.current = true;
     setReplyingTo(null);
     setEmojiPickerOpen(false);
 
@@ -1641,7 +1643,12 @@ function clearConversationDraft(convId: string) {
           return;
         }
       }
-      scrollToBottom(false, false);
+      if (isInitialMessagesLoadRef.current) {
+        scrollToBottom(false, true);
+        isInitialMessagesLoadRef.current = false;
+      } else {
+        scrollToBottom(false, false);
+      }
     }
   }, [messages, selectedId, effectiveInChatQuery, scrollToBottom, scrollToMessage]);
 
