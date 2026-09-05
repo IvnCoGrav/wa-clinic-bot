@@ -67,7 +67,8 @@ export class HumanBackgroundEnrichmentService {
       if (!customer.kelurahan) {
         try {
           const { geocodingService } = await import('../integrations/google-maps/geocoding');
-          const { EntityExtractor, isClinicLocationQuestion } = await import('../slot-engine/entity-extractor');
+          const { isClinicLocationQuestion } = await import('../utils/location-classifier');
+          const { EntityExtractor } = await import('../slot-engine/entity-extractor');
 
           const adminLoc = parseAdminChatLocation(text);
           if (adminLoc) {
