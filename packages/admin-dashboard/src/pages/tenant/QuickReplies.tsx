@@ -32,16 +32,22 @@ const CATEGORIES = ['Semua', 'Pembayaran', 'Lokasi', 'Reservasi', 'Umum'];
 const PLACEHOLDERS = [
   { tag: '{name}', label: 'Nama Customer' },
   { tag: '{phone}', label: 'No WhatsApp' },
+  { tag: '{kec}', label: 'Kecamatan' },
+  { tag: '{kota}', label: 'Kota' },
+  { tag: '{alamat}', label: 'Alamat / Kelurahan' },
   { tag: '{clinic_name}', label: 'Nama Klinik' },
   { tag: '{admin_name}', label: 'Nama Admin/Bidan' },
 ];
 
 function interpolatePreview(content: string): string {
   return content
-    .replace(/\{name\}/g, 'Bunda Retno')
-    .replace(/\{phone\}/g, '628123456789')
-    .replace(/\{clinic_name\}/g, BRAND.businessName)
-    .replace(/\{admin_name\}/g, 'Kak Sinta');
+    .replace(/\{(?:name|nama|nama_bunda)\}/gi, 'Bunda Retno')
+    .replace(/\{(?:phone|hp|no_hp)\}/gi, '628123456789')
+    .replace(/\{(?:kec|kecamatan)\}/gi, 'Rungkut')
+    .replace(/\{kota\}/gi, 'Surabaya')
+    .replace(/\{(?:alamat|address)\}/gi, 'Jl. Rungkut Asri Timur No. 12')
+    .replace(/\{clinic_name\}/gi, BRAND.businessName)
+    .replace(/\{admin_name\}/gi, 'Kak Sinta');
 }
 
 export const QuickReplies: React.FC = () => {

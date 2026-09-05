@@ -1300,16 +1300,26 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         console.warn(`[Admin API] DB query failed for reservation ${id}, checking in-memory store:`, dbErr.message);
       }
 
+      const normalizeTreatmentCategory = (cat?: string): 'BABY' | 'MOMS' | 'BOTH' | undefined => {
+        if (!cat) return undefined;
+        const upper = String(cat).toUpperCase();
+        if (upper === 'BUNDLE' || upper === 'BOTH') return 'BOTH';
+        if (upper === 'MOMS') return 'MOMS';
+        if (upper === 'KIDS' || upper === 'BABY') return 'BABY';
+        return 'BABY';
+      };
+      const normalizedCat = treatmentCategory !== undefined ? normalizeTreatmentCategory(treatmentCategory) : undefined;
+
       if (!existing) {
         const mock = memoryReservations.get(id);
         if (mock && mock.tenant_id === DEFAULT_TENANT_ID) {
-          if (treatmentCategory !== undefined) mock.treatment_category = treatmentCategory;
+          if (normalizedCat !== undefined) mock.treatment_category = normalizedCat;
           if (treatmentDetail !== undefined) mock.treatment_detail = treatmentDetail;
           if (purchaseValue !== undefined) mock.purchase_value = purchaseValue;
           if (status !== undefined) mock.status = status;
           if (notes !== undefined) {
             mock.notes = notes;
-            const fallbackTitle = `[Admin Manual] ${treatmentCategory || mock.treatment_category}: ${treatmentDetail || mock.treatment_detail || ''}`;
+            const fallbackTitle = `[Admin Manual] ${normalizedCat || mock.treatment_category}: ${treatmentDetail || mock.treatment_detail || ''}`;
             mock.raw_text = mergeNotesIntoRawText(mock.raw_text, notes, fallbackTitle);
           }
           if (rawText !== undefined) mock.raw_text = rawText;
@@ -1336,7 +1346,7 @@ export async function reservationAdminRoutes(fastify: FastifyInstance) {
         const staffChanged = assignedStaffId !== undefined && assignedStaffId !== existing.assigned_staff_id;
 
         const updateData: any = {};
-        if (treatmentCategory !== undefined) updateData.treatment_category = treatmentCategory;
+        if (normalizedCat !== undefined) updateData.treatment_category = normalizedCat;
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
         if (purchaseValue !== undefined) updateData.purchase_value = purchaseValue;
         if (status !== undefined) updateData.status = status;

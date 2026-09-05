@@ -85,13 +85,39 @@ export function isValidShortcut(s: string): string | null {
 
 export function interpolateQuickReply(
   content: string,
-  vars: { name?: string; phone?: string; clinic_name?: string; admin_name?: string }
+  vars: {
+    name?: string;
+    nama?: string;
+    nama_bunda?: string;
+    phone?: string;
+    hp?: string;
+    no_hp?: string;
+    kec?: string;
+    kecamatan?: string;
+    kota?: string;
+    alamat?: string;
+    address?: string;
+    clinic_name?: string;
+    admin_name?: string;
+    [key: string]: string | undefined;
+  }
 ): string {
   let out = content;
-  out = out.replace(/\{name\}/g, vars.name || 'Bunda');
-  out = out.replace(/\{phone\}/g, vars.phone || '-');
-  out = out.replace(/\{clinic_name\}/g, vars.clinic_name || 'Klinik Kami');
-  out = out.replace(/\{admin_name\}/g, vars.admin_name || 'Admin');
+  const nameVal = vars.name || vars.nama || vars.nama_bunda || 'Bunda';
+  const phoneVal = vars.phone || vars.hp || vars.no_hp || '-';
+  const kecVal = vars.kec || vars.kecamatan || '';
+  const kotaVal = vars.kota || '';
+  const alamatVal = vars.alamat || vars.address || '';
+  const clinicNameVal = vars.clinic_name || 'Klinik Kami';
+  const adminNameVal = vars.admin_name || 'Admin';
+
+  out = out.replace(/\{(?:name|nama|nama_bunda)\}/gi, nameVal);
+  out = out.replace(/\{(?:phone|hp|no_hp)\}/gi, phoneVal);
+  out = out.replace(/\{(?:kec|kecamatan)\}/gi, kecVal);
+  out = out.replace(/\{kota\}/gi, kotaVal);
+  out = out.replace(/\{(?:alamat|address)\}/gi, alamatVal);
+  out = out.replace(/\{clinic_name\}/gi, clinicNameVal);
+  out = out.replace(/\{admin_name\}/gi, adminNameVal);
   return out;
 }
 
